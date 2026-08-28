@@ -1,261 +1,81 @@
-use eframe::egui::{pos2, Color32, Pos2, Rect, Stroke, Vec2};
+//! Hybrid document: vector and raster layers, command history, hit testing.
+
+use crate::color::{Blend, Rgba};
+use crate::geom::{Bounds, Geom, Pt};
+use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-pub type ShapeId = u64;
+static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
-static SHAPE_ID: AtomicU64 = AtomicU64::new(1);
-
-pub fn next_shape_id() -> ShapeId {
-    SHAPE_ID.fetch_add(1, Ordering::Relaxed)
+pub fn next_id() -> u64 {
+    NEXT_ID.fetch_add(1, Ordering::Relaxed)
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Anchor {
-    pub pt: Pos2,
-    pub h_in: Vec2,
-    pub h_out: Vec2,
+pub fn bump_id(seen: u64) {
+    NEXT_ID.fetch_max(seen + 1, Ordering::Relaxed);
 }
 
-impl Anchor {
-    pub fn corner(pt: Pos2) -> Self {
-        Self {
-            pt,
-            h_in: Vec2::ZERO,
-            h_out: Vec2::ZERO,
-        }
-    }
-
-    pub fn smooth(pt: Pos2, drag: Vec2) -> Self {
-        Self {
-            pt,
-            h_in: -drag,
-            h_out: drag,
-        }
-    }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Cap {
+    Butt,
+    Round,
+    Square,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum Geometry {
-    Rect { origin: Pos2, size: Vec2 },
-    Ellipse { center: Pos2, radii: Vec2 },
-    Polyline { points: Vec<Pos2>, closed: bool },
-    Path {
-        anchors: Vec<Anchor>,
-        closed: bool,
-    },
-    Text {
-        subpaths: Vec<Vec<Pos2>>,
-        content: String,
-        px: f32,
-    },
-    MultiPolygon { contours: Vec<Vec<Pos2>> },
-}
-
-const CUBIC_STEPS: usize = 16;
-
-fn flatten_cubic(p0: Pos2, c1: Pos2, c2: Pos2, p1: Pos2, out: &mut Vec<Pos2>) {
-    for i in 1..=CUBIC_STEPS {
-        let t = i as f32 / CUBIC_STEPS as f32;
-        let a = (1.0 - t) * (1.0 - t) * (1.0 - t);
-        let b = 3.0 * (1.0 - t) * (1.0 - t) * t;
-        let d = 3.0 * (1.0 - t) * t * t;
-        let e = t * t * t;
-        out.push(pos2(
-            a * p0.x + b * c1.x + d * c2.x + e * p1.x,
-            a * p0.y + b * c1.y + d * c2.y + e * p1.y,
-        ));
-    }
-}
-
-impl Geometry {
-    pub fn contours(&self, segments: usize) -> Vec<Vec<Pos2>> {
+impl Cap {
+    pub fn name(self) -> &'static str {
         match self {
-            Geometry::Rect { origin, size } => vec![vec![
-                pos2(origin.x, origin.y),
-                pos2(origin.x + size.x, origin.y),
-                pos2(origin.x + size.x, origin.y + size.y),
-                pos2(origin.x, origin.y + size.y),
-            ]],
-            Geometry::Ellipse { center, radii } => vec![(0..segments.max(3))
-                .map(|i| {
-                    let a = std::f32::consts::TAU * i as f32 / segments as f32;
-                    pos2(center.x + radii.x * a.cos(), center.y + radii.y * a.sin())
-                })
-                .collect()],
-            Geometry::Polyline { points, .. } => vec![points.clone()],
-            Geometry::Path { anchors, closed } => {
-                if anchors.len() < 2 {
-                    return vec![];
-                }
-                let mut pts = vec![anchors[0].pt];
-                let segs = if *closed { anchors.len() } else { anchors.len() - 1 };
-                for i in 0..segs {
-                    let a = &anchors[i % anchors.len()];
-                    let b = &anchors[(i + 1) % anchors.len()];
-                    flatten_cubic(a.pt, a.pt + a.h_out, b.pt + b.h_in, b.pt, &mut pts);
-                }
-                vec![pts]
-            }
-            Geometry::Text { subpaths, .. } => subpaths.clone(),
-            Geometry::MultiPolygon { contours } => contours.clone(),
+            Cap::Butt => "Butt",
+            Cap::Round => "Round",
+            Cap::Square => "Square",
         }
     }
-
-    pub fn translate(&mut self, d: Vec2) {
+    pub fn to_skia(self) -> tiny_skia::LineCap {
         match self {
-            Geometry::Rect { origin, .. } => {
-                *origin += d;
-            }
-            Geometry::Ellipse { center, .. } => {
-                *center += d;
-            }
-            Geometry::Polyline { points, .. } => {
-                for p in points.iter_mut() {
-                    *p += d;
-                }
-            }
-            Geometry::Path { anchors, .. } => {
-                for a in anchors.iter_mut() {
-                    a.pt += d;
-                }
-            }
-            Geometry::Text { subpaths, .. } => {
-                for sp in subpaths.iter_mut() {
-                    for p in sp.iter_mut() {
-                        *p += d;
-                    }
-                }
-            }
-            Geometry::MultiPolygon { contours } => {
-                for c in contours.iter_mut() {
-                    for p in c.iter_mut() {
-                        *p += d;
-                    }
-                }
-            }
-        };
-    }
-
-    pub fn bbox(&self) -> Rect {
-        let first = |pts: &[Pos2]| Rect::from_min_max(pts[0], pts[0]);
-        match self {
-            Geometry::Rect { origin, size } => Rect::from_min_size(*origin, *size),
-            Geometry::Ellipse { center, radii } => Rect::from_min_max(
-                pos2(center.x - radii.x, center.y - radii.y),
-                pos2(center.x + radii.x, center.y + radii.y),
-            ),
-            Geometry::Polyline { points, .. } => {
-                let mut r = first(points);
-                for p in points.iter().skip(1) {
-                    r.extend_with(*p);
-                }
-                r
-            }
-            Geometry::Path { anchors, .. } => {
-                let mut r = Rect::from_min_max(anchors[0].pt, anchors[0].pt);
-                for a in anchors {
-                    r.extend_with(a.pt);
-                    r.extend_with(a.pt + a.h_out);
-                    r.extend_with(a.pt + a.h_in);
-                }
-                r
-            }
-            Geometry::Text { subpaths, .. } => {
-                let mut r = first(&subpaths[0]);
-                for sp in subpaths {
-                    for p in sp {
-                        r.extend_with(*p);
-                    }
-                }
-                r
-            }
-            Geometry::MultiPolygon { contours } => {
-                let mut r = first(&contours[0]);
-                for c in contours {
-                    for p in c {
-                        r.extend_with(*p);
-                    }
-                }
-                r
-            }
+            Cap::Butt => tiny_skia::LineCap::Butt,
+            Cap::Round => tiny_skia::LineCap::Round,
+            Cap::Square => tiny_skia::LineCap::Square,
         }
-    }
-
-    pub fn is_closed_outline(&self) -> bool {
-        match self {
-            Geometry::Polyline { closed, .. } => *closed,
-            Geometry::Path { closed, .. } => *closed,
-            _ => true,
-        }
-    }
-
-    pub fn contains(&self, p: Pos2) -> bool {
-        if !self.is_closed_outline() {
-            return false;
-        }
-        for pts in self.contours(96) {
-            let n = pts.len();
-            if n < 3 {
-                continue;
-            }
-            let mut inside = false;
-            for i in 0..n {
-                let a = pts[i];
-                let b = pts[(i + 1) % n];
-                if (a.y > p.y) != (b.y > p.y) {
-                    let x_int = a.x + (p.y - a.y) / (b.y - a.y) * (b.x - a.x);
-                    if p.x < x_int {
-                        inside = !inside;
-                    }
-                }
-            }
-            if inside {
-                return true;
-            }
-        }
-        false
-    }
-
-    pub fn dist_to_outline(&self, p: Pos2) -> f32 {
-        let mut best = f32::INFINITY;
-        let closed = self.is_closed_outline();
-        for pts in self.contours(96) {
-            let n = pts.len();
-            if n < 2 {
-                continue;
-            }
-            let segs = if closed { n } else { n - 1 };
-            for i in 0..segs {
-                let a = pts[i];
-                let b = pts[(i + 1) % n];
-                best = best.min(seg_dist(p, a, b));
-            }
-        }
-        best
     }
 }
 
-fn seg_dist(p: Pos2, a: Pos2, b: Pos2) -> f32 {
-    let ab = b - a;
-    let ap = p - a;
-    let len_sq = ab.length_sq();
-    let t = if len_sq < 1e-9 {
-        0.0
-    } else {
-        (ap.dot(ab) / len_sq).clamp(0.0, 1.0)
-    };
-    (p - (a + ab * t)).length()
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Join {
+    Miter,
+    Round,
+    Bevel,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+impl Join {
+    pub fn name(self) -> &'static str {
+        match self {
+            Join::Miter => "Miter",
+            Join::Round => "Round",
+            Join::Bevel => "Bevel",
+        }
+    }
+    pub fn to_skia(self) -> tiny_skia::LineJoin {
+        match self {
+            Join::Miter => tiny_skia::LineJoin::Miter,
+            Join::Round => tiny_skia::LineJoin::Round,
+            Join::Bevel => tiny_skia::LineJoin::Bevel,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Fill {
     None,
-    Solid(Color32),
+    Solid(Rgba),
     Linear {
         from: [f32; 2],
         to: [f32; 2],
-        c0: Color32,
-        c1: Color32,
+        c0: Rgba,
+        c1: Rgba,
+    },
+    Radial {
+        c0: Rgba,
+        c1: Rgba,
     },
 }
 
@@ -263,9 +83,38 @@ impl Fill {
     pub fn is_none(&self) -> bool {
         matches!(self, Fill::None)
     }
+
+    pub fn solid_or(self, fallback: Rgba) -> Rgba {
+        match self {
+            Fill::Solid(c) => c,
+            Fill::Linear { c0, .. } | Fill::Radial { c0, .. } => c0,
+            Fill::None => fallback,
+        }
+    }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Stroke {
+    pub color: Rgba,
+    pub width: f32,
+    pub cap: Cap,
+    pub join: Join,
+    pub dash: Option<(f32, f32)>,
+}
+
+impl Default for Stroke {
+    fn default() -> Self {
+        Self {
+            color: Rgba::rgb(0x1B, 0x24, 0x33),
+            width: 2.0,
+            cap: Cap::Round,
+            join: Join::Round,
+            dash: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Style {
     pub fill: Fill,
     pub stroke: Option<Stroke>,
@@ -274,240 +123,324 @@ pub struct Style {
 impl Default for Style {
     fn default() -> Self {
         Self {
-            fill: Fill::Solid(Color32::from_rgb(0x4F, 0x8C, 0xFF)),
-            stroke: Some(Stroke::new(2.0, Color32::from_rgb(0x1B, 0x24, 0x33))),
+            fill: Fill::Solid(Rgba::rgb(0x4F, 0x8C, 0xFF)),
+            stroke: Some(Stroke::default()),
         }
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Shape {
-    pub id: ShapeId,
-    pub geom: Geometry,
+    pub id: u64,
+    pub name: String,
+    pub geom: Geom,
     pub style: Style,
+    pub rotation: f32,
+    pub opacity: f32,
 }
 
-#[derive(Clone)]
-pub struct VectorLayer {
-    pub shapes: Vec<Shape>,
+impl Shape {
+    pub fn new(geom: Geom, style: Style) -> Self {
+        let name = geom.kind_name().to_string();
+        Self {
+            id: next_id(),
+            name,
+            geom,
+            style,
+            rotation: 0.0,
+            opacity: 1.0,
+        }
+    }
+
+    pub fn world_contours(&self, segs: usize) -> Vec<Vec<Pt>> {
+        let mut cs = self.geom.contours(segs);
+        if self.rotation.abs() > 1e-5 {
+            let c = self.geom.bbox().center();
+            for contour in &mut cs {
+                for p in contour {
+                    *p = p.rotate_about(c, self.rotation);
+                }
+            }
+        }
+        cs
+    }
+
+    pub fn world_bbox(&self) -> Bounds {
+        let mut b = None;
+        for c in self.world_contours(32) {
+            for p in c {
+                match &mut b {
+                    None => b = Some(Bounds::from_pt(p)),
+                    Some(bb) => bb.union_pt(p),
+                }
+            }
+        }
+        b.unwrap_or_else(|| self.geom.bbox())
+    }
+
+    pub fn contains_world(&self, p: Pt) -> bool {
+        let q = if self.rotation.abs() > 1e-5 {
+            p.rotate_about(self.geom.bbox().center(), -self.rotation)
+        } else {
+            p
+        };
+        self.geom.contains(q)
+    }
+
+    pub fn dist_world(&self, p: Pt) -> f32 {
+        let q = if self.rotation.abs() > 1e-5 {
+            p.rotate_about(self.geom.bbox().center(), -self.rotation)
+        } else {
+            p
+        };
+        self.geom.dist_to_outline(q)
+    }
 }
 
-#[derive(Clone)]
-pub struct RasterLayer {
-    pub pixmap: tiny_skia::Pixmap,
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Pixels {
+    pub w: u32,
+    pub h: u32,
+    pub data: Vec<u8>,
+    #[serde(skip)]
     pub version: u64,
 }
 
-impl RasterLayer {
-    pub fn new(w: u32, h: u32) -> Option<Self> {
-        Some(Self {
-            pixmap: tiny_skia::Pixmap::new(w, h)?,
+impl Pixels {
+    pub fn new(w: u32, h: u32) -> Self {
+        Self {
+            w: w.max(1),
+            h: h.max(1),
+            data: vec![0u8; w.max(1) as usize * h.max(1) as usize * 4],
             version: 0,
+        }
+    }
+
+    pub fn from_rgba(w: u32, h: u32, data: Vec<u8>) -> Option<Self> {
+        if data.len() != w as usize * h as usize * 4 {
+            return None;
+        }
+        Some(Self {
+            w,
+            h,
+            data,
+            version: 1,
         })
     }
 
     pub fn touch(&mut self) {
         self.version += 1;
     }
-}
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LayerBlend {
-    Normal,
-    Multiply,
-    Screen,
-    Overlay,
-    Darken,
-    Lighten,
-    Difference,
-    Exclusion,
-    HardLight,
-    SoftLight,
-}
-
-impl LayerBlend {
-    pub const ALL: [LayerBlend; 10] = [
-        LayerBlend::Normal,
-        LayerBlend::Multiply,
-        LayerBlend::Screen,
-        LayerBlend::Overlay,
-        LayerBlend::Darken,
-        LayerBlend::Lighten,
-        LayerBlend::Difference,
-        LayerBlend::Exclusion,
-        LayerBlend::HardLight,
-        LayerBlend::SoftLight,
-    ];
-
-    pub fn name(&self) -> &'static str {
-        match self {
-            LayerBlend::Normal => "Normal",
-            LayerBlend::Multiply => "Multiply",
-            LayerBlend::Screen => "Screen",
-            LayerBlend::Overlay => "Overlay",
-            LayerBlend::Darken => "Darken",
-            LayerBlend::Lighten => "Lighten",
-            LayerBlend::Difference => "Difference",
-            LayerBlend::Exclusion => "Exclusion",
-            LayerBlend::HardLight => "Hard Light",
-            LayerBlend::SoftLight => "Soft Light",
+    pub fn to_pixmap(&self) -> Option<tiny_skia::Pixmap> {
+        let mut pm = tiny_skia::Pixmap::new(self.w, self.h)?;
+        for (i, src) in self.data.chunks_exact(4).enumerate() {
+            let a = src[3] as u32;
+            let (r, g, b) = if a == 0 || a == 255 {
+                (src[0], src[1], src[2])
+            } else {
+                (
+                    ((src[0] as u32 * 255 + a - 1) / a).min(255) as u8,
+                    ((src[1] as u32 * 255 + a - 1) / a).min(255) as u8,
+                    ((src[2] as u32 * 255 + a - 1) / a).min(255) as u8,
+                )
+            };
+            pm.data_mut()[i * 4..i * 4 + 4].copy_from_slice(&[r, g, b, src[3]]);
         }
+        Some(pm)
     }
 
-    pub fn to_skia(self) -> tiny_skia::BlendMode {
-        use tiny_skia::BlendMode as B;
-        match self {
-            LayerBlend::Normal => B::SourceOver,
-            LayerBlend::Multiply => B::Multiply,
-            LayerBlend::Screen => B::Screen,
-            LayerBlend::Overlay => B::Overlay,
-            LayerBlend::Darken => B::Darken,
-            LayerBlend::Lighten => B::Lighten,
-            LayerBlend::Difference => B::Difference,
-            LayerBlend::Exclusion => B::Exclusion,
-            LayerBlend::HardLight => B::HardLight,
-            LayerBlend::SoftLight => B::SoftLight,
+    pub fn from_pixmap(pm: &tiny_skia::Pixmap) -> Self {
+        let mut data = vec![0u8; pm.data().len()];
+        for (i, src) in pm.data().chunks_exact(4).enumerate() {
+            let a = src[3] as u32;
+            let (r, g, b) = if a == 0 || a == 255 {
+                (src[0], src[1], src[2])
+            } else {
+                (
+                    ((src[0] as u32 * 255) / a).min(255) as u8,
+                    ((src[1] as u32 * 255) / a).min(255) as u8,
+                    ((src[2] as u32 * 255) / a).min(255) as u8,
+                )
+            };
+            data[i * 4..i * 4 + 4].copy_from_slice(&[r, g, b, src[3]]);
+        }
+        Self {
+            w: pm.width(),
+            h: pm.height(),
+            data,
+            version: 1,
         }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum LayerKind {
-    Vector(VectorLayer),
-    Raster(RasterLayer),
+    Vector { shapes: Vec<Shape> },
+    Raster { pixels: Pixels },
 }
 
 impl LayerKind {
     pub fn tag(&self) -> &'static str {
         match self {
-            LayerKind::Vector(_) => "V",
-            LayerKind::Raster(_) => "PX",
+            LayerKind::Vector { .. } => "V",
+            LayerKind::Raster { .. } => "Px",
         }
     }
 
-    pub fn vector_shapes_mut(&mut self) -> Option<&mut Vec<Shape>> {
+    pub fn shapes(&self) -> Option<&[Shape]> {
         match self {
-            LayerKind::Vector(v) => Some(&mut v.shapes),
+            LayerKind::Vector { shapes } => Some(shapes),
             _ => None,
         }
     }
 
-    pub fn raster_mut(&mut self) -> Option<&mut RasterLayer> {
+    pub fn shapes_mut(&mut self) -> Option<&mut Vec<Shape>> {
         match self {
-            LayerKind::Raster(r) => Some(r),
+            LayerKind::Vector { shapes } => Some(shapes),
+            _ => None,
+        }
+    }
+
+    pub fn pixels_mut(&mut self) -> Option<&mut Pixels> {
+        match self {
+            LayerKind::Raster { pixels } => Some(pixels),
+            _ => None,
+        }
+    }
+
+    pub fn pixels(&self) -> Option<&Pixels> {
+        match self {
+            LayerKind::Raster { pixels } => Some(pixels),
             _ => None,
         }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Layer {
+    pub id: u64,
     pub name: String,
     pub visible: bool,
     pub locked: bool,
     pub opacity: f32,
-    pub blend: LayerBlend,
-    pub mask: Option<RasterLayer>,
+    pub blend: Blend,
+    pub mask: Option<Pixels>,
     pub kind: LayerKind,
 }
 
 impl Layer {
-    pub fn find_shape_by_id(&self, id: u64) -> Option<&Shape> {
-        match &self.kind {
-            LayerKind::Vector(v) => v.shapes.iter().find(|s| s.id == id),
-            _ => None,
+    pub fn vector(name: impl Into<String>) -> Self {
+        Self {
+            id: next_id(),
+            name: name.into(),
+            visible: true,
+            locked: false,
+            opacity: 1.0,
+            blend: Blend::Normal,
+            mask: None,
+            kind: LayerKind::Vector { shapes: vec![] },
         }
     }
 
-    pub fn find_shape_by_id_mut(&mut self, id: u64) -> Option<&mut Shape> {
-        match &mut self.kind {
-            LayerKind::Vector(v) => v.shapes.iter_mut().find(|s| s.id == id),
-            _ => None,
+    pub fn raster(name: impl Into<String>, w: u32, h: u32) -> Self {
+        Self {
+            id: next_id(),
+            name: name.into(),
+            visible: true,
+            locked: false,
+            opacity: 1.0,
+            blend: Blend::Normal,
+            mask: None,
+            kind: LayerKind::Raster {
+                pixels: Pixels::new(w, h),
+            },
         }
     }
 
-    #[cfg(test)]
-    pub fn vector_len(&self) -> usize {
-        match &self.kind {
-            LayerKind::Vector(v) => v.shapes.len(),
-            _ => 0,
-        }
+    pub fn find(&self, id: u64) -> Option<&Shape> {
+        self.kind.shapes()?.iter().find(|s| s.id == id)
     }
 
-    #[cfg(test)]
-    pub fn kind_vector(&self) -> Option<&Vec<Shape>> {
-        match &self.kind {
-            LayerKind::Vector(v) => Some(&v.shapes),
-            _ => None,
-        }
+    pub fn find_mut(&mut self, id: u64) -> Option<&mut Shape> {
+        self.kind.shapes_mut()?.iter_mut().find(|s| s.id == id)
     }
+}
 
-    #[cfg(test)]
-    pub fn raster(&self) -> Option<&RasterLayer> {
-        match &self.kind {
-            LayerKind::Raster(r) => Some(r),
-            _ => None,
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct Guide {
+    pub vertical: bool,
+    pub pos: f32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Grid {
+    pub visible: bool,
+    pub snap: bool,
+    pub size: f32,
+    pub subdivisions: u32,
+}
+
+impl Default for Grid {
+    fn default() -> Self {
+        Self {
+            visible: false,
+            snap: true,
+            size: 8.0,
+            subdivisions: 1,
         }
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Document {
+    pub name: String,
     pub width: f32,
     pub height: f32,
+    pub dpi: f32,
     pub layers: Vec<Layer>,
+    pub guides: Vec<Guide>,
+    pub grid: Grid,
 }
 
 impl Document {
-    pub fn size(&self) -> Vec2 {
-        Vec2::new(self.width, self.height)
-    }
-
-    pub fn new(width: f32, height: f32) -> Self {
-        let px_w = width.max(1.0) as u32;
-        let px_h = height.max(1.0) as u32;
+    pub fn new(name: impl Into<String>, width: f32, height: f32, dpi: f32) -> Self {
+        let w = width.max(1.0) as u32;
+        let h = height.max(1.0) as u32;
         Self {
+            name: name.into(),
             width,
             height,
+            dpi,
             layers: vec![
-                Layer {
-                    name: "Pixel 1".into(),
-                    visible: true,
-                    locked: false,
-                    opacity: 1.0,
-                    blend: LayerBlend::Normal,
-                    mask: None,
-                    kind: LayerKind::Raster(RasterLayer::new(px_w, px_h).unwrap()),
-                },
-                Layer {
-                    name: "Vector 1".into(),
-                    visible: true,
-                    locked: false,
-                    opacity: 1.0,
-                    blend: LayerBlend::Normal,
-                    mask: None,
-                    kind: LayerKind::Vector(VectorLayer { shapes: vec![] }),
-                },
+                Layer::raster("Background", w, h),
+                Layer::vector("Layer 1"),
             ],
+            guides: vec![],
+            grid: Grid::default(),
         }
     }
 
-    pub fn find_shape_mut(&mut self, layer_idx: usize, id: ShapeId) -> Option<&mut Shape> {
-        self.layers
-            .get_mut(layer_idx)?
-            .kind
-            .vector_shapes_mut()?
-            .iter_mut()
-            .find(|s| s.id == id)
+    pub fn size(&self) -> Pt {
+        Pt::new(self.width, self.height)
     }
 
-    pub fn hit_test(&self, p: Pos2, stroke_slack: f32) -> Option<(usize, ShapeId)> {
+    pub fn find_shape(&self, layer: usize, id: u64) -> Option<&Shape> {
+        self.layers.get(layer)?.find(id)
+    }
+
+    pub fn find_shape_mut(&mut self, layer: usize, id: u64) -> Option<&mut Shape> {
+        self.layers.get_mut(layer)?.find_mut(id)
+    }
+
+    pub fn hit_test(&self, p: Pt, stroke_slack: f32) -> Option<(usize, u64)> {
         for (li, layer) in self.layers.iter().enumerate().rev() {
             if !layer.visible || layer.locked {
                 continue;
             }
-            if let LayerKind::Vector(v) = &layer.kind {
-                for shape in v.shapes.iter().rev() {
-                    if shape.geom.contains(p) || shape.geom.dist_to_outline(p) <= stroke_slack {
+            if let Some(shapes) = layer.kind.shapes() {
+                for shape in shapes.iter().rev() {
+                    if shape.contains_world(p) || shape.dist_world(p) <= stroke_slack {
                         return Some((li, shape.id));
                     }
                 }
@@ -515,168 +448,270 @@ impl Document {
         }
         None
     }
-}
 
-pub mod history {
-    use super::{Geometry, Layer, Shape};
-    use eframe::egui::Vec2;
-
-    #[derive(Clone)]
-    pub enum Cmd {
-        AddShape { layer: usize, shape: Shape },
-        AddShapes { layer: usize, shapes: Vec<Shape> },
-        RemoveShapes { layer: usize, shapes: Vec<Shape> },
-        TranslateShape { layer: usize, id: u64, delta: Vec2 },
-        SetGeometry {
-            layer: usize,
-            id: u64,
-            before: Geometry,
-            after: Geometry,
-        },
-        SetStyle {
-            layer: usize,
-            id: u64,
-            before: super::Style,
-            after: super::Style,
-        },
-        AddLayer { index: usize, layer: Layer },
-        RemoveLayer { index: usize, layer: Layer },
-        BrushStroke {
-            layer: usize,
-            before: Vec<u8>,
-            after: Vec<u8>,
-        },
-    }
-
-    impl Cmd {
-        pub fn invert(self) -> Cmd {
-            match self {
-                Cmd::AddShape { layer, shape } => Cmd::RemoveShapes {
-                    layer,
-                    shapes: vec![shape],
-                },
-                Cmd::AddShapes { layer, shapes } => Cmd::RemoveShapes { layer, shapes },
-                Cmd::RemoveShapes { layer, shapes } => Cmd::AddShapes { layer, shapes },
-                Cmd::TranslateShape { layer, id, delta } => Cmd::TranslateShape {
-                    layer,
-                    id,
-                    delta: -delta,
-                },
-                Cmd::SetGeometry {
-                    layer,
-                    id,
-                    before,
-                    after,
-                } => Cmd::SetGeometry {
-                    layer,
-                    id,
-                    before: after,
-                    after: before,
-                },
-                Cmd::SetStyle {
-                    layer,
-                    id,
-                    before,
-                    after,
-                } => Cmd::SetStyle {
-                    layer,
-                    id,
-                    before: after,
-                    after: before,
-                },
-                Cmd::AddLayer { index, layer } => Cmd::RemoveLayer { index, layer },
-                Cmd::RemoveLayer { index, layer } => Cmd::AddLayer { index, layer },
-                Cmd::BrushStroke {
-                    layer,
-                    before,
-                    after,
-                } => Cmd::BrushStroke {
-                    layer,
-                    before: after,
-                    after: before,
-                },
+    pub fn hits_in_rect(&self, r: Bounds) -> Vec<(usize, u64)> {
+        let mut out = vec![];
+        for (li, layer) in self.layers.iter().enumerate() {
+            if !layer.visible || layer.locked {
+                continue;
+            }
+            if let Some(shapes) = layer.kind.shapes() {
+                for shape in shapes {
+                    if shape.world_bbox().intersects(r) {
+                        out.push((li, shape.id));
+                    }
+                }
             }
         }
+        out
     }
 
-    const MAX_HISTORY: usize = 40;
-
-    #[derive(Default)]
-    pub struct History {
-        undo_stack: Vec<Cmd>,
-        redo_stack: Vec<Cmd>,
-    }
-
-    impl History {
-        pub fn push(&mut self, cmd: Cmd) {
-            self.undo_stack.push(cmd);
-            self.redo_stack.clear();
-            if self.undo_stack.len() > MAX_HISTORY {
-                self.undo_stack.remove(0);
+    pub fn ensure_ids(&mut self) {
+        let mut max = 0u64;
+        for l in &self.layers {
+            max = max.max(l.id);
+            if let Some(ss) = l.kind.shapes() {
+                for s in ss {
+                    max = max.max(s.id);
+                }
             }
         }
-
-        pub fn can_undo(&self) -> bool {
-            !self.undo_stack.is_empty()
-        }
-
-        pub fn can_redo(&self) -> bool {
-            !self.redo_stack.is_empty()
-        }
-
-        pub fn undo(&mut self) -> Option<Cmd> {
-            let inv = self.undo_stack.pop()?.invert();
-            self.redo_stack.push(inv.clone());
-            Some(inv)
-        }
-
-        pub fn redo(&mut self) -> Option<Cmd> {
-            let inv = self.redo_stack.pop()?.invert();
-            self.undo_stack.push(inv.clone());
-            Some(inv)
-        }
-
-        pub fn clear(&mut self) {
-            self.undo_stack.clear();
-            self.redo_stack.clear();
-        }
+        bump_id(max);
     }
 }
 
-pub fn apply_cmd(doc: &mut Document, cmd: &history::Cmd) {
+#[derive(Clone, Debug)]
+pub enum Cmd {
+    AddShape {
+        layer: usize,
+        shape: Shape,
+    },
+    RestoreShapes {
+        layer: usize,
+        shapes: Vec<Shape>,
+    },
+    RemoveShapes {
+        layer: usize,
+        shapes: Vec<Shape>,
+    },
+    SetGeom {
+        layer: usize,
+        id: u64,
+        before: Geom,
+        after: Geom,
+        rot_before: f32,
+        rot_after: f32,
+    },
+    SetStyle {
+        layer: usize,
+        id: u64,
+        before: Style,
+        after: Style,
+    },
+    SetOpacity {
+        layer: usize,
+        id: u64,
+        before: f32,
+        after: f32,
+    },
+    AddLayer {
+        index: usize,
+        layer: Layer,
+    },
+    RemoveLayer {
+        index: usize,
+        layer: Layer,
+    },
+    ReorderLayer {
+        from: usize,
+        to: usize,
+    },
+    SetLayerMeta {
+        index: usize,
+        name: String,
+        visible: bool,
+        locked: bool,
+        opacity: f32,
+        blend: Blend,
+        before: (String, bool, bool, f32, Blend),
+    },
+    Pixels {
+        layer: usize,
+        mask: bool,
+        before: Vec<u8>,
+        after: Vec<u8>,
+    },
+    AddGuide {
+        guide: Guide,
+    },
+    RemoveGuide {
+        index: usize,
+        guide: Guide,
+    },
+}
+
+const MAX_HISTORY: usize = 80;
+
+#[derive(Default)]
+pub struct History {
+    undo: Vec<Cmd>,
+    redo: Vec<Cmd>,
+}
+
+impl History {
+    pub fn push(&mut self, cmd: Cmd) {
+        self.undo.push(cmd);
+        self.redo.clear();
+        if self.undo.len() > MAX_HISTORY {
+            self.undo.remove(0);
+        }
+    }
+
+    pub fn can_undo(&self) -> bool {
+        !self.undo.is_empty()
+    }
+    pub fn can_redo(&self) -> bool {
+        !self.redo.is_empty()
+    }
+
+    pub fn undo(&mut self) -> Option<Cmd> {
+        let cmd = self.undo.pop()?;
+        let inv = invert_cmd(cmd.clone());
+        self.redo.push(cmd);
+        Some(inv)
+    }
+
+    pub fn redo(&mut self) -> Option<Cmd> {
+        let cmd = self.redo.pop()?;
+        self.undo.push(cmd.clone());
+        Some(cmd)
+    }
+
+    pub fn clear(&mut self) {
+        self.undo.clear();
+        self.redo.clear();
+    }
+
+    pub fn len(&self) -> usize {
+        self.undo.len()
+    }
+}
+
+fn invert_cmd(cmd: Cmd) -> Cmd {
     match cmd {
-        history::Cmd::AddShape { layer, shape } => {
-            if let Some(vs) = doc.layers.get_mut(*layer).and_then(|l| l.kind.vector_shapes_mut()) {
+        Cmd::AddShape { layer, shape } => Cmd::RemoveShapes {
+            layer,
+            shapes: vec![shape],
+        },
+        Cmd::RemoveShapes { layer, shapes } => Cmd::RestoreShapes { layer, shapes },
+        Cmd::SetGeom {
+            layer,
+            id,
+            before,
+            after,
+            rot_before,
+            rot_after,
+        } => Cmd::SetGeom {
+            layer,
+            id,
+            before: after,
+            after: before,
+            rot_before: rot_after,
+            rot_after: rot_before,
+        },
+        Cmd::SetStyle {
+            layer,
+            id,
+            before,
+            after,
+        } => Cmd::SetStyle {
+            layer,
+            id,
+            before: after,
+            after: before,
+        },
+        Cmd::SetOpacity {
+            layer,
+            id,
+            before,
+            after,
+        } => Cmd::SetOpacity {
+            layer,
+            id,
+            before: after,
+            after: before,
+        },
+        Cmd::AddLayer { index, layer } => Cmd::RemoveLayer { index, layer },
+        Cmd::RemoveLayer { index, layer } => Cmd::AddLayer { index, layer },
+        Cmd::ReorderLayer { from, to } => Cmd::ReorderLayer { from: to, to: from },
+        Cmd::SetLayerMeta {
+            index,
+            name,
+            visible,
+            locked,
+            opacity,
+            blend,
+            before,
+        } => Cmd::SetLayerMeta {
+            index,
+            name: before.0.clone(),
+            visible: before.1,
+            locked: before.2,
+            opacity: before.3,
+            blend: before.4,
+            before: (name, visible, locked, opacity, blend),
+        },
+        Cmd::Pixels {
+            layer,
+            mask,
+            before,
+            after,
+        } => Cmd::Pixels {
+            layer,
+            mask,
+            before: after,
+            after: before,
+        },
+        Cmd::AddGuide { guide } => Cmd::RemoveGuide {
+            index: usize::MAX,
+            guide,
+        },
+        Cmd::RemoveGuide { index: _, guide } => Cmd::AddGuide { guide },
+        Cmd::RestoreShapes { layer, shapes } => Cmd::RemoveShapes { layer, shapes },
+    }
+}
+
+pub fn apply(doc: &mut Document, cmd: &Cmd) {
+    match cmd {
+        Cmd::AddShape { layer, shape } => {
+            if let Some(vs) = doc.layers.get_mut(*layer).and_then(|l| l.kind.shapes_mut()) {
                 vs.push(shape.clone());
             }
         }
-        history::Cmd::AddShapes { layer, shapes } => {
-            if let Some(vs) = doc.layers.get_mut(*layer).and_then(|l| l.kind.vector_shapes_mut()) {
+        Cmd::RestoreShapes { layer, shapes } => {
+            if let Some(vs) = doc.layers.get_mut(*layer).and_then(|l| l.kind.shapes_mut()) {
                 vs.extend(shapes.iter().cloned());
             }
         }
-        history::Cmd::RemoveShapes { layer, shapes } => {
+        Cmd::RemoveShapes { layer, shapes } => {
             let ids: Vec<u64> = shapes.iter().map(|s| s.id).collect();
-            if let Some(vs) = doc.layers.get_mut(*layer).and_then(|l| l.kind.vector_shapes_mut()) {
+            if let Some(vs) = doc.layers.get_mut(*layer).and_then(|l| l.kind.shapes_mut()) {
                 vs.retain(|s| !ids.contains(&s.id));
             }
         }
-        history::Cmd::TranslateShape { layer, id, delta } => {
-            if let Some(s) = doc.find_shape_mut(*layer, *id) {
-                s.geom.translate(*delta);
-            }
-        }
-        history::Cmd::SetGeometry {
+        Cmd::SetGeom {
             layer,
             id,
             after,
+            rot_after,
             ..
         } => {
             if let Some(s) = doc.find_shape_mut(*layer, *id) {
                 s.geom = after.clone();
+                s.rotation = *rot_after;
             }
         }
-        history::Cmd::SetStyle {
+        Cmd::SetStyle {
             layer,
             id,
             after,
@@ -686,22 +721,135 @@ pub fn apply_cmd(doc: &mut Document, cmd: &history::Cmd) {
                 s.style = after.clone();
             }
         }
-        history::Cmd::AddLayer { index, layer } => {
-            let idx = (*index).min(doc.layers.len());
-            doc.layers.insert(idx, layer.clone());
+        Cmd::SetOpacity {
+            layer,
+            id,
+            after,
+            ..
+        } => {
+            if let Some(s) = doc.find_shape_mut(*layer, *id) {
+                s.opacity = *after;
+            }
         }
-        history::Cmd::RemoveLayer { index, .. } => {
-            if *index < doc.layers.len() {
+        Cmd::AddLayer { index, layer } => {
+            let i = (*index).min(doc.layers.len());
+            doc.layers.insert(i, layer.clone());
+        }
+        Cmd::RemoveLayer { index, .. } => {
+            if *index < doc.layers.len() && doc.layers.len() > 1 {
                 doc.layers.remove(*index);
             }
         }
-        history::Cmd::BrushStroke { layer, after, .. } => {
-            if let Some(r) = doc.layers.get_mut(*layer).and_then(|l| l.kind.raster_mut()) {
-                if r.pixmap.data().len() == after.len() {
-                    r.pixmap.data_mut().copy_from_slice(after);
-                    r.touch();
+        Cmd::ReorderLayer { from, to } => {
+            if *from < doc.layers.len() {
+                let layer = doc.layers.remove(*from);
+                let t = (*to).min(doc.layers.len());
+                doc.layers.insert(t, layer);
+            }
+        }
+        Cmd::SetLayerMeta {
+            index,
+            name,
+            visible,
+            locked,
+            opacity,
+            blend,
+            ..
+        } => {
+            if let Some(l) = doc.layers.get_mut(*index) {
+                l.name = name.clone();
+                l.visible = *visible;
+                l.locked = *locked;
+                l.opacity = *opacity;
+                l.blend = *blend;
+            }
+        }
+        Cmd::Pixels {
+            layer,
+            mask,
+            after,
+            ..
+        } => {
+            let apply_px = |px: &mut Pixels| {
+                if px.data.len() == after.len() {
+                    px.data.copy_from_slice(after);
+                    px.touch();
+                }
+            };
+            if let Some(l) = doc.layers.get_mut(*layer) {
+                if *mask {
+                    if let Some(m) = l.mask.as_mut() {
+                        apply_px(m);
+                    }
+                } else if let Some(px) = l.kind.pixels_mut() {
+                    apply_px(px);
                 }
             }
         }
+        Cmd::AddGuide { guide } => doc.guides.push(*guide),
+        Cmd::RemoveGuide { index, guide } => {
+            if *index < doc.guides.len() {
+                doc.guides.remove(*index);
+            } else if let Some(i) = doc.guides.iter().position(|g| {
+                g.vertical == guide.vertical && (g.pos - guide.pos).abs() < 0.01
+            }) {
+                doc.guides.remove(i);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn add_and_undo_shape() {
+        let mut doc = Document::new("t", 200.0, 100.0, 72.0);
+        let mut hist = History::default();
+        let s = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(10.0, 10.0),
+                size: Pt::new(20.0, 20.0),
+                radius: 0.0,
+            },
+            Style::default(),
+        );
+        let cmd = Cmd::AddShape {
+            layer: 1,
+            shape: s,
+        };
+        apply(&mut doc, &cmd);
+        hist.push(cmd);
+        assert_eq!(doc.layers[1].kind.shapes().unwrap().len(), 1);
+        let inv = hist.undo().unwrap();
+        apply(&mut doc, &inv);
+        assert_eq!(doc.layers[1].kind.shapes().unwrap().len(), 0);
+        let redo = hist.redo().unwrap();
+        apply(&mut doc, &redo);
+        assert_eq!(doc.layers[1].kind.shapes().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn hit_test_finds_rect() {
+        let mut doc = Document::new("t", 200.0, 100.0, 72.0);
+        let s = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(10.0, 10.0),
+                size: Pt::new(20.0, 20.0),
+                radius: 0.0,
+            },
+            Style::default(),
+        );
+        let id = s.id;
+        apply(
+            &mut doc,
+            &Cmd::AddShape {
+                layer: 1,
+                shape: s,
+            },
+        );
+        assert_eq!(doc.hit_test(Pt::new(20.0, 20.0), 2.0), Some((1, id)));
+        assert_eq!(doc.hit_test(Pt::new(90.0, 90.0), 2.0), None);
     }
 }

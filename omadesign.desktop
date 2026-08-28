@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=omadesign
+GenericName=Design Studio
+Comment=Design, paint, and photograph
+Exec=/home/michael/.local/bin/omadesign
+Icon=applications-graphics
+Terminal=false
+Categories=Graphics;2DGraphics;RasterGraphics;VectorGraphics;Photography;
+MimeType=image/png;image/jpeg;image/webp;image/tiff;image/svg+xml;
+Keywords=affinity;design;vector;paint;photo;illustration;
+StartupNotify=true

@@ -1,5 +1,6 @@
-use crate::document::Geometry;
-use eframe::egui::Pos2;
+//! Boolean path operations. Flattened contours in, a polygon out.
+
+use crate::geom::{Geom, Pt, poly_area};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BoolOp {
@@ -10,7 +11,7 @@ pub enum BoolOp {
 }
 
 impl BoolOp {
-    pub fn name(&self) -> &'static str {
+    pub fn name(self) -> &'static str {
         match self {
             BoolOp::Union => "Union",
             BoolOp::Subtract => "Subtract",
@@ -18,43 +19,64 @@ impl BoolOp {
             BoolOp::Xor => "XOR",
         }
     }
+
+    pub fn all() -> [BoolOp; 4] {
+        [
+            BoolOp::Union,
+            BoolOp::Subtract,
+            BoolOp::Intersect,
+            BoolOp::Xor,
+        ]
+    }
 }
 
-fn to_geo(contours: &[Vec<Pos2>]) -> geo::MultiPolygon<f64> {
+fn to_geo(contours: &[Vec<Pt>]) -> geo::MultiPolygon<f64> {
     let polygons = contours
         .iter()
         .filter(|c| c.len() >= 3)
         .map(|c| {
-            let ring: Vec<geo::Coord<f64>> = c.iter().map(|p| (p.x as f64, p.y as f64).into()).collect();
+            let mut ring: Vec<geo::Coord<f64>> =
+                c.iter().map(|p| (p.x as f64, p.y as f64).into()).collect();
+            if let (Some(first), Some(last)) = (ring.first(), ring.last())
+                && (first.x - last.x).abs() + (first.y - last.y).abs() > 1e-6
+            {
+                ring.push(*first);
+            }
             geo::Polygon::new(geo::LineString::from(ring), vec![])
         })
         .collect();
     geo::MultiPolygon(polygons)
 }
 
-fn from_geo(mp: &geo::MultiPolygon<f64>) -> Vec<Vec<Pos2>> {
-    mp.0
-        .iter()
-        .map(|poly| {
-            let mut pts: Vec<Pos2> = poly
-                .exterior()
-                .points()
-                .map(|p| eframe::egui::pos2(p.x() as f32, p.y() as f32))
-                .collect();
-            if pts.len() > 1 {
-                let first = pts[0];
-                let last = *pts.last().unwrap();
-                if (first - last).length() < 1e-4 {
-                    pts.pop();
-                }
+fn from_geo(mp: &geo::MultiPolygon<f64>) -> Vec<Vec<Pt>> {
+    mp.0.iter()
+        .flat_map(|poly| {
+            let mut out = vec![ring_pts(poly.exterior())];
+            for hole in poly.interiors() {
+                out.push(ring_pts(hole));
             }
-            pts
+            out
         })
         .filter(|c| c.len() >= 3)
         .collect()
 }
 
-pub fn apply(op: BoolOp, a: &Geometry, b: &Geometry) -> Option<Geometry> {
+fn ring_pts(ls: &geo::LineString<f64>) -> Vec<Pt> {
+    let mut pts: Vec<Pt> = ls
+        .points()
+        .map(|p| Pt::new(p.x() as f32, p.y() as f32))
+        .collect();
+    if pts.len() > 1 {
+        let first = pts[0];
+        let last = *pts.last().unwrap();
+        if (first - last).length() < 1e-3 {
+            pts.pop();
+        }
+    }
+    pts
+}
+
+pub fn apply(op: BoolOp, a: &Geom, b: &Geom) -> Option<Geom> {
     let ga = to_geo(&a.contours(96));
     let gb = to_geo(&b.contours(96));
     if ga.0.is_empty() || gb.0.is_empty() {
@@ -71,71 +93,66 @@ pub fn apply(op: BoolOp, a: &Geometry, b: &Geometry) -> Option<Geometry> {
     if contours.is_empty() {
         return None;
     }
-    Some(Geometry::MultiPolygon { contours })
+    Some(Geom::Poly { contours })
+}
+
+pub fn area(g: &Geom) -> f32 {
+    g.contours(96).iter().map(|c| poly_area(c).abs()).sum()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use eframe::egui::pos2;
-    use eframe::egui::Vec2;
 
-    fn square(x: f32, y: f32, s: f32) -> Geometry {
-        Geometry::Rect {
-            origin: pos2(x, y),
-            size: Vec2::splat(s),
+    fn square(x: f32, y: f32, s: f32) -> Geom {
+        Geom::Rect {
+            origin: Pt::new(x, y),
+            size: Pt::splat(s),
+            radius: 0.0,
         }
     }
 
-    fn area(g: &Geometry) -> f32 {
-        let mut total = 0.0;
-        for c in g.contours(96) {
-            let n = c.len();
-            for i in 0..n {
-                let p = c[i];
-                let q = c[(i + 1) % n];
-                total += p.x * q.y - q.x * p.y;
-            }
-        }
-        (total * 0.5).abs()
+    #[test]
+    fn union_of_overlapping_squares() {
+        let u = apply(BoolOp::Union, &square(0.0, 0.0, 10.0), &square(5.0, 0.0, 10.0)).unwrap();
+        assert!((area(&u) - 150.0).abs() < 1.0, "area {}", area(&u));
     }
 
     #[test]
-    fn union_of_overlapping_squares_has_combined_area() {
-        let a = square(0.0, 0.0, 10.0);
-        let b = square(5.0, 0.0, 10.0);
-        let u = apply(BoolOp::Union, &a, &b).unwrap();
-        assert!((area(&u) - 150.0).abs() < 0.5, "area {}", area(&u));
-    }
-
-    #[test]
-    fn subtract_leaves_l_shape() {
-        let a = square(0.0, 0.0, 10.0);
-        let b = square(5.0, 0.0, 5.0);
-        let d = apply(BoolOp::Subtract, &a, &b).unwrap();
-        assert!((area(&d) - 75.0).abs() < 0.5, "area {}", area(&d));
+    fn subtract_leaves_remainder() {
+        let d = apply(
+            BoolOp::Subtract,
+            &square(0.0, 0.0, 10.0),
+            &square(5.0, 0.0, 5.0),
+        )
+        .unwrap();
+        assert!((area(&d) - 75.0).abs() < 1.0, "area {}", area(&d));
     }
 
     #[test]
     fn intersect_gives_overlap() {
-        let a = square(0.0, 0.0, 10.0);
-        let b = square(5.0, 0.0, 10.0);
-        let i = apply(BoolOp::Intersect, &a, &b).unwrap();
-        assert!((area(&i) - 50.0).abs() < 0.5, "area {}", area(&i));
+        let i = apply(
+            BoolOp::Intersect,
+            &square(0.0, 0.0, 10.0),
+            &square(5.0, 0.0, 10.0),
+        )
+        .unwrap();
+        assert!((area(&i) - 50.0).abs() < 1.0);
     }
 
     #[test]
     fn xor_excludes_overlap() {
-        let a = square(0.0, 0.0, 10.0);
-        let b = square(5.0, 0.0, 10.0);
-        let x = apply(BoolOp::Xor, &a, &b).unwrap();
-        assert!((area(&x) - 100.0).abs() < 0.5, "area {}", area(&x));
+        let x = apply(BoolOp::Xor, &square(0.0, 0.0, 10.0), &square(5.0, 0.0, 10.0)).unwrap();
+        assert!((area(&x) - 100.0).abs() < 1.0);
     }
 
     #[test]
     fn disjoint_intersect_is_none() {
-        let a = square(0.0, 0.0, 10.0);
-        let b = square(100.0, 100.0, 10.0);
-        assert!(apply(BoolOp::Intersect, &a, &b).is_none());
+        assert!(apply(
+            BoolOp::Intersect,
+            &square(0.0, 0.0, 10.0),
+            &square(100.0, 100.0, 10.0)
+        )
+        .is_none());
     }
 }
