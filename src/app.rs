@@ -7,7 +7,7 @@ use crate::compositor::{self, View};
 use crate::document::{
     apply as apply_cmd, Cmd, Document, Fill, History, Layer, LayerKind, Shape, Stroke, Style,
 };
-use crate::geom::{Anchor, Bounds, Geom, Pt};
+use crate::geom::{Anchor, Bounds, Geom, Pt, TypeRun};
 use crate::paint::{self, Brush};
 use crate::photo::{self, Histogram, PhotoImage, RgbaImage};
 use crate::presets::Preset;
@@ -240,6 +240,16 @@ pub enum Op {
     },
 }
 
+/// On-canvas type session. History is one SetGeom at commit, not per key.
+#[derive(Clone)]
+pub struct TypeEdit {
+    pub layer: usize,
+    pub id: u64,
+    pub caret: usize,
+    pub anchor: usize,
+    pub before: Geom,
+}
+
 pub struct Studio {
     pub doc: Document,
     pub path: Option<PathBuf>,
@@ -269,8 +279,15 @@ pub struct Studio {
     pub show_shortcuts: bool,
     pub show_rulers: bool,
     pub show_grid: bool,
-    pub text_buf: String,
     pub text_px: f32,
+    pub text_tracking: f32,
+    pub text_leading: f32,
+    pub text_font: String,
+    pub text_kern: bool,
+    pub text_liga: bool,
+    pub text_tnum: bool,
+    pub text_smcp: bool,
+    pub type_edit: Option<TypeEdit>,
     pub polygon_sides: u32,
     pub star_points: u32,
     pub star_inner: f32,
@@ -314,8 +331,15 @@ impl Studio {
             show_shortcuts: false,
             show_rulers: true,
             show_grid: false,
-            text_buf: "Type".into(),
             text_px: 72.0,
+            text_tracking: 0.0,
+            text_leading: 0.0,
+            text_font: String::new(),
+            text_kern: true,
+            text_liga: true,
+            text_tnum: false,
+            text_smcp: false,
+            type_edit: None,
             polygon_sides: 6,
             star_points: 5,
             star_inner: 0.4,
@@ -406,56 +430,38 @@ impl Studio {
         });
 
         let mut word = Shape::new(
-            Geom::Text {
+            Geom::Text(TypeRun {
                 origin: Pt::new(560.0, 460.0),
                 content: "omadesign".into(),
                 px: 96.0,
                 tracking: -1.0,
-                contours: vec![],
-            },
+                ..TypeRun::default()
+            }),
             Style {
                 fill: Fill::Solid(cream),
                 stroke: None,
             },
         );
-        if let Geom::Text {
-            origin,
-            content,
-            px,
-            tracking,
-            contours,
-        } = &mut word.geom
-        {
-            *contours = crate::text::shape(content, *px, *origin, *tracking, None);
-        }
+        crate::text::fill_contours(&mut word.geom);
         self.commit(Cmd::AddShape {
             layer: 1,
             shape: word,
         });
 
         let mut tag = Shape::new(
-            Geom::Text {
+            Geom::Text(TypeRun {
                 origin: Pt::new(564.0, 520.0),
                 content: "design  ·  paint  ·  photograph".into(),
                 px: 28.0,
                 tracking: 1.5,
-                contours: vec![],
-            },
+                ..TypeRun::default()
+            }),
             Style {
                 fill: Fill::Solid(teal),
                 stroke: None,
             },
         );
-        if let Geom::Text {
-            origin,
-            content,
-            px,
-            tracking,
-            contours,
-        } = &mut tag.geom
-        {
-            *contours = crate::text::shape(content, *px, *origin, *tracking, None);
-        }
+        crate::text::fill_contours(&mut tag.geom);
         self.commit(Cmd::AddShape {
             layer: 1,
             shape: tag,
@@ -505,6 +511,11 @@ impl Studio {
     }
 
     fn sanitize(&mut self) {
+        if let Some(e) = &self.type_edit
+            && self.doc.find_shape(e.layer, e.id).is_none()
+        {
+            self.type_edit = None;
+        }
         self.selection.retain(|(li, id)| {
             self.doc
                 .layers
@@ -589,6 +600,7 @@ impl Studio {
     }
 
     pub fn delete_selection(&mut self) {
+        self.type_edit = None;
         let mut by_layer: std::collections::BTreeMap<usize, Vec<Shape>> =
             std::collections::BTreeMap::new();
         for (li, id) in self.selection.clone() {
@@ -634,31 +646,313 @@ impl Studio {
         }
     }
 
+    pub fn type_defaults(&self) -> TypeRun {
+        TypeRun {
+            origin: Pt::ZERO,
+            content: String::new(),
+            px: self.text_px,
+            tracking: self.text_tracking,
+            leading: self.text_leading,
+            font: self.text_font.clone(),
+            kern: self.text_kern,
+            liga: self.text_liga,
+            tnum: self.text_tnum,
+            smcp: self.text_smcp,
+            contours: vec![],
+        }
+    }
+
+    pub fn sync_type_defaults(&mut self, run: &TypeRun) {
+        self.text_px = run.px;
+        self.text_tracking = run.tracking;
+        self.text_leading = run.leading;
+        self.text_font = run.font.clone();
+        self.text_kern = run.kern;
+        self.text_liga = run.liga;
+        self.text_tnum = run.tnum;
+        self.text_smcp = run.smcp;
+    }
+
     pub fn place_text(&mut self, at: Pt) {
+        self.commit_type_edit();
         let Some(li) = self.vector_target() else {
             self.status = "add a vector layer first".into();
             return;
         };
-        let content = if self.text_buf.trim().is_empty() {
-            "Type".to_string()
-        } else {
-            self.text_buf.clone()
-        };
-        let contours = crate::text::shape(&content, self.text_px, at, 0.0, None);
-        let shape = Shape::new(
-            Geom::Text {
-                origin: at,
-                content,
-                px: self.text_px,
-                tracking: 0.0,
-                contours,
-            },
-            self.style.clone(),
-        );
+        let mut run = self.type_defaults();
+        run.origin = at;
+        run.content = "Type".into();
+        let mut geom = Geom::Text(run);
+        crate::text::fill_contours(&mut geom);
+        let shape = Shape::new(geom.clone(), self.style.clone());
         let id = shape.id;
         self.commit(Cmd::AddShape { layer: li, shape });
         self.selection = vec![(li, id)];
-        self.tool = Tool::Select;
+        let n = 4; // "Type"
+        self.type_edit = Some(TypeEdit {
+            layer: li,
+            id,
+            caret: n,
+            anchor: 0,
+            before: geom,
+        });
+        self.status = "type — click or Esc to finish, Enter for a new line".into();
+    }
+
+    pub fn begin_type_edit(&mut self, hit: (usize, u64), world: Pt) {
+        if self.editing_text(hit.0, hit.1) {
+            let caret = self
+                .doc
+                .find_shape(hit.0, hit.1)
+                .and_then(|s| match &s.geom {
+                    Geom::Text(run) => Some(crate::text::hit_char(run, world)),
+                    _ => None,
+                });
+            if let (Some(c), Some(e)) = (caret, self.type_edit.as_mut()) {
+                e.caret = c;
+                e.anchor = c;
+            }
+            return;
+        }
+        self.commit_type_edit();
+        let Some(s) = self.doc.find_shape(hit.0, hit.1) else {
+            return;
+        };
+        let Geom::Text(run) = &s.geom else {
+            return;
+        };
+        let caret = crate::text::hit_char(run, world);
+        let defaults = run.clone();
+        let before = s.geom.clone();
+        self.sync_type_defaults(&defaults);
+        self.selection = vec![hit];
+        self.active_layer = Some(hit.0);
+        self.type_edit = Some(TypeEdit {
+            layer: hit.0,
+            id: hit.1,
+            caret,
+            anchor: caret,
+            before,
+        });
+        self.status = "type — click or Esc to finish, Enter for a new line".into();
+    }
+
+    pub fn editing_text(&self, layer: usize, id: u64) -> bool {
+        self.type_edit
+            .as_ref()
+            .is_some_and(|e| e.layer == layer && e.id == id)
+    }
+
+    pub fn commit_type_edit(&mut self) {
+        let Some(edit) = self.type_edit.take() else {
+            return;
+        };
+        let Some(s) = self.doc.find_shape_mut(edit.layer, edit.id) else {
+            return;
+        };
+        if let Geom::Text(run) = &mut s.geom
+            && run.content.trim().is_empty()
+        {
+            run.content = "Type".into();
+            crate::text::fill_contours(&mut s.geom);
+        }
+        let after = s.geom.clone();
+        let rot = s.rotation;
+        if after != edit.before {
+            self.history.push(Cmd::SetGeom {
+                layer: edit.layer,
+                id: edit.id,
+                before: edit.before,
+                after,
+                rot_before: rot,
+                rot_after: rot,
+            });
+            self.dirty = true;
+        }
+        self.status = "type committed".into();
+    }
+
+    fn live_type_mut(&mut self) -> Option<&mut TypeRun> {
+        let edit = self.type_edit.as_ref()?;
+        let s = self.doc.find_shape_mut(edit.layer, edit.id)?;
+        match &mut s.geom {
+            Geom::Text(run) => Some(run),
+            _ => None,
+        }
+    }
+
+    fn reshape_live_type(&mut self) {
+        let Some(edit) = &self.type_edit else {
+            return;
+        };
+        let (li, id) = (edit.layer, edit.id);
+        if let Some(s) = self.doc.find_shape_mut(li, id) {
+            crate::text::fill_contours(&mut s.geom);
+        }
+    }
+
+    fn type_sel_range(&self) -> (usize, usize) {
+        let Some(e) = &self.type_edit else {
+            return (0, 0);
+        };
+        (e.caret.min(e.anchor), e.caret.max(e.anchor))
+    }
+
+    fn type_delete_range(&mut self, lo: usize, hi: usize) {
+        let Some(run) = self.live_type_mut() else {
+            return;
+        };
+        let a = crate::text::char_to_byte(&run.content, lo);
+        let b = crate::text::char_to_byte(&run.content, hi);
+        if a < b {
+            run.content.replace_range(a..b, "");
+        }
+        if let Some(e) = &mut self.type_edit {
+            e.caret = lo;
+            e.anchor = lo;
+        }
+        self.reshape_live_type();
+    }
+
+    pub fn type_insert(&mut self, s: &str) {
+        if s.is_empty() {
+            return;
+        }
+        let (lo, hi) = self.type_sel_range();
+        if lo != hi {
+            self.type_delete_range(lo, hi);
+        }
+        let caret = self.type_edit.as_ref().map(|e| e.caret).unwrap_or(0);
+        if let Some(run) = self.live_type_mut() {
+            let byte = crate::text::char_to_byte(&run.content, caret);
+            run.content.insert_str(byte, s);
+        }
+        let n = s.chars().count();
+        if let Some(e) = &mut self.type_edit {
+            e.caret += n;
+            e.anchor = e.caret;
+        }
+        self.reshape_live_type();
+    }
+
+    fn type_backspace(&mut self) {
+        let (lo, hi) = self.type_sel_range();
+        if lo != hi {
+            self.type_delete_range(lo, hi);
+            return;
+        }
+        if lo == 0 {
+            return;
+        }
+        self.type_delete_range(lo - 1, lo);
+    }
+
+    fn type_delete_fwd(&mut self) {
+        let (lo, hi) = self.type_sel_range();
+        if lo != hi {
+            self.type_delete_range(lo, hi);
+            return;
+        }
+        let n = self
+            .live_type_mut()
+            .map(|r| r.content.chars().count())
+            .unwrap_or(0);
+        if lo >= n {
+            return;
+        }
+        self.type_delete_range(lo, lo + 1);
+    }
+
+    fn type_move_caret(&mut self, to: usize, shift: bool) {
+        let n = {
+            let Some(edit) = &self.type_edit else {
+                return;
+            };
+            self.doc
+                .find_shape(edit.layer, edit.id)
+                .and_then(|s| match &s.geom {
+                    Geom::Text(r) => Some(r.content.chars().count()),
+                    _ => None,
+                })
+                .unwrap_or(0)
+        };
+        let to = to.min(n);
+        if let Some(e) = &mut self.type_edit {
+            e.caret = to;
+            if !shift {
+                e.anchor = to;
+            }
+        }
+    }
+
+    pub fn patch_type(&mut self, f: impl FnOnce(&mut TypeRun)) {
+        if self.type_edit.is_some() {
+            let mut snap = None;
+            if let Some(run) = self.live_type_mut() {
+                f(run);
+                snap = Some(run.clone());
+            }
+            if let Some(r) = &snap {
+                self.sync_type_defaults(r);
+            }
+            self.reshape_live_type();
+            return;
+        }
+        if let Some((li, id)) = self.primary()
+            && let Some(s) = self.doc.find_shape(li, id)
+            && matches!(s.geom, Geom::Text(_))
+        {
+            let mut after = s.geom.clone();
+            let before = s.geom.clone();
+            let rot = s.rotation;
+            if let Geom::Text(run) = &mut after {
+                f(run);
+            }
+            let defaults = match &after {
+                Geom::Text(run) => Some(run.clone()),
+                _ => None,
+            };
+            crate::text::fill_contours(&mut after);
+            if let Some(d) = &defaults {
+                self.sync_type_defaults(d);
+            }
+            self.commit(Cmd::SetGeom {
+                layer: li,
+                id,
+                before,
+                after,
+                rot_before: rot,
+                rot_after: rot,
+            });
+            return;
+        }
+        let mut d = self.type_defaults();
+        f(&mut d);
+        self.sync_type_defaults(&d);
+    }
+
+    pub fn selected_type(&self) -> Option<TypeRun> {
+        if let Some(e) = &self.type_edit
+            && let Some(s) = self.doc.find_shape(e.layer, e.id)
+            && let Geom::Text(run) = &s.geom
+        {
+            return Some(run.clone());
+        }
+        let (li, id) = self.primary()?;
+        let s = self.doc.find_shape(li, id)?;
+        match &s.geom {
+            Geom::Text(run) => Some(run.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn set_tool(&mut self, t: Tool) {
+        if self.tool != t {
+            self.commit_type_edit();
+            self.last_tool = self.tool;
+            self.tool = t;
+            self.op = None;
+        }
     }
 
     pub fn finish_create(&mut self, kind: CreateKind, start: Pt, cur: Pt) {
@@ -858,6 +1152,7 @@ impl Studio {
     }
 
     pub fn save(&mut self) {
+        self.commit_type_edit();
         let path = if let Some(p) = &self.path {
             Some(p.clone())
         } else {
@@ -975,6 +1270,9 @@ impl Studio {
     }
 
     pub fn handle_shortcuts(&mut self, ctx: &egui::Context) {
+        if self.handle_type_keys(ctx) {
+            return;
+        }
         let wants_text = ctx.egui_wants_keyboard_input();
         ctx.input(|i| {
             let mods = i.modifiers;
@@ -1108,12 +1406,221 @@ impl Studio {
         });
     }
 
+    fn handle_type_keys(&mut self, ctx: &egui::Context) -> bool {
+        if self.type_edit.is_none() {
+            return false;
+        }
+        ctx.request_repaint();
+        if ctx.egui_wants_keyboard_input() {
+            return true;
+        }
+        let mut insert = String::new();
+        let mut backspace = false;
+        let mut delete = false;
+        let mut newline = false;
+        let mut escape = false;
+        let mut select_all = false;
+        let mut undo = false;
+        let mut redo = false;
+        let mut left = false;
+        let mut right = false;
+        let mut up = false;
+        let mut down = false;
+        let mut home = false;
+        let mut end = false;
+        let mut shift = false;
+        let mut save = false;
+        ctx.input(|i| {
+            shift = i.modifiers.shift;
+            let ctrl = i.modifiers.command || i.modifiers.ctrl;
+            if ctrl && i.key_pressed(Key::S) {
+                save = true;
+                return;
+            }
+            if ctrl && i.key_pressed(Key::Z) {
+                if i.modifiers.shift {
+                    redo = true;
+                } else {
+                    undo = true;
+                }
+                return;
+            }
+            if ctrl && i.key_pressed(Key::A) {
+                select_all = true;
+                return;
+            }
+            if i.key_pressed(Key::Escape) {
+                escape = true;
+                return;
+            }
+            if i.key_pressed(Key::Enter) {
+                newline = true;
+            }
+            if i.key_pressed(Key::Backspace) {
+                backspace = true;
+            }
+            if i.key_pressed(Key::Delete) {
+                delete = true;
+            }
+            if i.key_pressed(Key::ArrowLeft) {
+                left = true;
+            }
+            if i.key_pressed(Key::ArrowRight) {
+                right = true;
+            }
+            if i.key_pressed(Key::ArrowUp) {
+                up = true;
+            }
+            if i.key_pressed(Key::ArrowDown) {
+                down = true;
+            }
+            if i.key_pressed(Key::Home) {
+                home = true;
+            }
+            if i.key_pressed(Key::End) {
+                end = true;
+            }
+            if !ctrl {
+                for ev in &i.events {
+                    if let egui::Event::Text(t) = ev {
+                        insert.push_str(t);
+                    }
+                }
+            }
+        });
+        if save {
+            self.commit_type_edit();
+            self.save();
+            return true;
+        }
+        if undo {
+            self.commit_type_edit();
+            self.undo();
+            return true;
+        }
+        if redo {
+            self.commit_type_edit();
+            self.redo();
+            return true;
+        }
+        if escape {
+            self.commit_type_edit();
+            self.tool = Tool::Select;
+            return true;
+        }
+        if select_all {
+            let n = self
+                .live_type_mut()
+                .map(|r| r.content.chars().count())
+                .unwrap_or(0);
+            if let Some(e) = &mut self.type_edit {
+                e.anchor = 0;
+                e.caret = n;
+            }
+            return true;
+        }
+        if newline {
+            self.type_insert("\n");
+        }
+        if backspace {
+            self.type_backspace();
+        }
+        if delete {
+            self.type_delete_fwd();
+        }
+        if !insert.is_empty() {
+            self.type_insert(&insert);
+        }
+        let caret = self.type_edit.as_ref().map(|e| e.caret).unwrap_or(0);
+        if left {
+            self.type_move_caret(caret.saturating_sub(1), shift);
+        }
+        if right {
+            self.type_move_caret(caret + 1, shift);
+        }
+        if home || up {
+            let Some(edit) = &self.type_edit else {
+                return true;
+            };
+            let start = self
+                .doc
+                .find_shape(edit.layer, edit.id)
+                .and_then(|s| match &s.geom {
+                    Geom::Text(r) => {
+                        let (line, _) = {
+                            let mut line = 0usize;
+                            let mut col = 0usize;
+                            let mut start_of_line = 0usize;
+                            for (i, ch) in r.content.chars().enumerate() {
+                                if i == caret {
+                                    break;
+                                }
+                                if ch == '\n' {
+                                    line += 1;
+                                    col = 0;
+                                    start_of_line = i + 1;
+                                } else {
+                                    col += 1;
+                                    let _ = col;
+                                }
+                            }
+                            (line, start_of_line)
+                        };
+                        let _ = line;
+                        Some({
+                            let mut start_of_line = 0usize;
+                            for (i, ch) in r.content.chars().enumerate() {
+                                if i == caret {
+                                    break;
+                                }
+                                if ch == '\n' {
+                                    start_of_line = i + 1;
+                                }
+                            }
+                            start_of_line
+                        })
+                    }
+                    _ => None,
+                });
+            if let Some(s) = start {
+                self.type_move_caret(s, shift);
+            }
+        }
+        if end || down {
+            let Some(edit) = &self.type_edit else {
+                return true;
+            };
+            let end_i = self
+                .doc
+                .find_shape(edit.layer, edit.id)
+                .and_then(|s| match &s.geom {
+                    Geom::Text(r) => {
+                        let mut i = 0usize;
+                        let mut hit = false;
+                        for ch in r.content.chars() {
+                            if i == caret {
+                                hit = true;
+                            }
+                            if hit && ch == '\n' {
+                                return Some(i);
+                            }
+                            i += 1;
+                        }
+                        Some(i)
+                    }
+                    _ => None,
+                });
+            if let Some(s) = end_i {
+                self.type_move_caret(s, shift);
+            }
+        }
+        true
+    }
+
     fn tool_from_key(&mut self, i: &egui::InputState) {
         let set = |s: &mut Studio, t: Tool| {
             if t.in_persona(s.persona) {
-                s.last_tool = s.tool;
-                s.tool = t;
-                s.op = None;
+                s.set_tool(t);
             }
         };
         if i.key_pressed(Key::V) {
@@ -1287,5 +1794,28 @@ mod tests {
             .map(|ss| ss.len())
             .sum();
         assert_eq!(n, 1);
+    }
+
+    #[test]
+    fn place_text_starts_live_edit_and_typing_replaces_placeholder() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        s.place_text(Pt::new(80.0, 120.0));
+        assert!(s.type_edit.is_some(), "click should start a type session");
+        match s.doc.find_shape(s.type_edit.as_ref().unwrap().layer, s.type_edit.as_ref().unwrap().id) {
+            Some(sh) => match &sh.geom {
+                Geom::Text(t) => assert_eq!(t.content, "Type"),
+                _ => panic!("expected text"),
+            },
+            None => panic!("missing shape"),
+        }
+        s.type_insert("Hello");
+        let edit = s.type_edit.as_ref().unwrap();
+        let sh = s.doc.find_shape(edit.layer, edit.id).unwrap();
+        let Geom::Text(t) = &sh.geom else { panic!("text") };
+        assert_eq!(t.content, "Hello");
+        assert!(!t.contours.is_empty());
+        s.commit_type_edit();
+        assert!(s.type_edit.is_none());
     }
 }

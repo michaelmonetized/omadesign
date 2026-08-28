@@ -1,7 +1,6 @@
 //! `.oma` project files: JSON with PNG-packed rasters.
 
 use crate::document::{Document, Pixels};
-use crate::geom::Geom;
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -43,16 +42,7 @@ pub fn decode(s: &str) -> Result<Document, String> {
         }
         if let Some(shapes) = layer.kind.shapes_mut() {
             for s in shapes {
-                if let Geom::Text {
-                    origin,
-                    content,
-                    px,
-                    tracking,
-                    contours,
-                } = &mut s.geom
-                {
-                    *contours = crate::text::shape(content, *px, *origin, *tracking, None);
-                }
+                crate::text::fill_contours(&mut s.geom);
             }
         }
     }
@@ -110,7 +100,10 @@ pub fn dialog_save(name: &str) -> Option<PathBuf> {
 pub fn dialog_open() -> Option<PathBuf> {
     rfd::FileDialog::new()
         .add_filter("omadesign", &["oma"])
-        .add_filter("Images", &["png", "jpg", "jpeg", "webp", "tif", "tiff", "bmp"])
+        .add_filter(
+            "Images",
+            &["png", "jpg", "jpeg", "webp", "tif", "tiff", "bmp"],
+        )
         .pick_file()
 }
 
@@ -128,7 +121,7 @@ pub fn dialog_folder() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::document::{Cmd, Shape, Style, apply};
+    use crate::document::{apply, Cmd, Shape, Style};
     use crate::geom::{Geom, Pt};
 
     #[test]

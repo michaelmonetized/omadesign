@@ -3,7 +3,7 @@ use crate::boolean::BoolOp;
 use crate::tools::{Persona, Tool};
 use crate::ui::icons;
 use crate::ui::theme::{ACCENT, ACCENT_DIM, FG_WEAK};
-use eframe::egui::{Button, Color32, Layout, Panel, RichText, Ui, vec2};
+use eframe::egui::{vec2, Button, Color32, Layout, Panel, RichText, Ui};
 
 pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
     Panel::top("top").exact_size(40.0).show(ui, |ui| {
@@ -39,11 +39,20 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
                 }
             });
             ui.menu_button("Edit", |ui| {
-                if ui.add_enabled(studio.history.can_undo(), Button::new("Undo   Ctrl+Z")).clicked() {
+                if ui
+                    .add_enabled(studio.history.can_undo(), Button::new("Undo   Ctrl+Z"))
+                    .clicked()
+                {
                     studio.undo();
                     ui.close();
                 }
-                if ui.add_enabled(studio.history.can_redo(), Button::new("Redo   Ctrl+Shift+Z")).clicked() {
+                if ui
+                    .add_enabled(
+                        studio.history.can_redo(),
+                        Button::new("Redo   Ctrl+Shift+Z"),
+                    )
+                    .clicked()
+                {
                     studio.redo();
                     ui.close();
                 }
@@ -131,7 +140,12 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
                 } else {
                     Color32::TRANSPARENT
                 });
-                if ui.add_sized(vec2(72.0, 26.0), btn).on_hover_text(p.hint()).clicked() {
+                if ui
+                    .add_sized(vec2(72.0, 26.0), btn)
+                    .on_hover_text(p.hint())
+                    .clicked()
+                {
+                    studio.commit_type_edit();
                     studio.persona = p;
                     studio.op = None;
                     studio.tool = match p {
@@ -145,10 +159,16 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
 
             ui.separator();
             if studio.persona != Persona::Photo {
-                if ui.add_enabled(studio.history.can_undo(), Button::new("Undo")).clicked() {
+                if ui
+                    .add_enabled(studio.history.can_undo(), Button::new("Undo"))
+                    .clicked()
+                {
                     studio.undo();
                 }
-                if ui.add_enabled(studio.history.can_redo(), Button::new("Redo")).clicked() {
+                if ui
+                    .add_enabled(studio.history.can_redo(), Button::new("Redo"))
+                    .clicked()
+                {
                     studio.redo();
                 }
                 eframe::egui::ComboBox::from_id_salt("export-scale")
@@ -208,8 +228,7 @@ pub fn left_toolbar(ui: &mut Ui, studio: &mut Studio) {
                 }
                 last_group = group;
                 if icons::tool_button(ui, t, studio.tool == t) {
-                    studio.tool = t;
-                    studio.op = None;
+                    studio.set_tool(t);
                 }
             }
         });

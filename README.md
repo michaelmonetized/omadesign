@@ -65,7 +65,7 @@ any time for the full list.
 - Node tool: drag points and Bézier handles, Alt-click converts corner/smooth, click a segment to insert
 - Pen: click a corner, click-drag a smooth point, Enter finishes, click the first point to close
 - Pencil, rectangle (with corner radius), ellipse, polygon, star, line
-- Type from system fonts (Liberation / Noto), editable size and tracking
+- Type: click to place, type on the canvas (caret, Enter for a new line, Esc finishes). Character studio for font, size, tracking, leading, and OpenType (kerning, ligatures, tabular figures, small caps)
 - Fill: solid, linear, radial, none. Stroke: width, cap, join, dash
 - Colour studio: HSV, hex, swatches, recent. `X` swaps fill/stroke, `D` restores defaults
 - Boolean union / subtract / intersect / XOR
@@ -110,7 +110,7 @@ src/
   paint.rs        brush, erase, smudge, clone, fill, wand
   photo.rs        develop pipeline + histograms
   boolean.rs      union / subtract / intersect / xor
-  text.rs         system-font outlines
+  text.rs         rustybuzz OpenType shaping + glyph outlines
   tools.rs        personas, tools, shortcut table
   app.rs          studio state, commands, keys
   ui/             chrome, canvas, studios, photo, welcome

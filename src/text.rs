@@ -1,9 +1,11 @@
-//! System-font text shaping. Glyph outlines become closed contours.
+//! Live type: rustybuzz shapes OpenType, ab_glyph traces outlines.
 
-use crate::geom::Pt;
-use ab_glyph::{Font as _, ScaleFont as _};
+use crate::geom::{Pt, TypeRun};
+use ab_glyph::{Font as _, GlyphId};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::Arc;
+use std::sync::{Mutex, OnceLock};
 
 const PREFERRED: &[&str] = &[
     "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
@@ -14,7 +16,10 @@ const PREFERRED: &[&str] = &[
     "/usr/share/fonts/dejavu/DejaVuSans.ttf",
 ];
 
+const FONT_CAP: usize = 200;
+
 static FONTS: OnceLock<Vec<FontFace>> = OnceLock::new();
+static BYTES: OnceLock<Mutex<HashMap<PathBuf, Arc<Vec<u8>>>>> = OnceLock::new();
 
 #[derive(Clone)]
 pub struct FontFace {
@@ -30,33 +35,46 @@ fn scan_fonts() -> Vec<FontFace> {
         if path.exists() {
             let name = path
                 .file_stem()
-                .map(|s| s.to_string_lossy().to_string())
+                .map(|s| s.to_string_lossy().replace('-', " "))
                 .unwrap_or_else(|| "Sans".into());
             seen.insert(path.clone());
             out.push(FontFace { name, path });
         }
     }
+    let home = std::env::var("HOME").unwrap_or_default();
     for root in [
+        "/usr/share/fonts",
+        "/usr/local/share/fonts",
         "/usr/share/fonts/liberation",
         "/usr/share/fonts/noto",
         "/usr/share/fonts/TTF",
         "/usr/share/fonts/truetype",
-        "/usr/local/share/fonts",
-        &format!(
-            "{}/.local/share/fonts",
-            std::env::var("HOME").unwrap_or_default()
-        ),
+        "/usr/share/fonts/adobe-source-sans-pro",
+        "/usr/share/fonts/gsfonts",
     ] {
         walk_ttfs(Path::new(root), &mut out, &mut seen, 0);
-        if out.len() > 48 {
+        if out.len() >= FONT_CAP {
             break;
         }
     }
+    walk_ttfs(
+        Path::new(&format!("{home}/.local/share/fonts")),
+        &mut out,
+        &mut seen,
+        0,
+    );
+    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    out.truncate(FONT_CAP);
     out
 }
 
-fn walk_ttfs(dir: &Path, out: &mut Vec<FontFace>, seen: &mut std::collections::HashSet<PathBuf>, depth: u8) {
-    if depth > 3 || out.len() > 48 {
+fn walk_ttfs(
+    dir: &Path,
+    out: &mut Vec<FontFace>,
+    seen: &mut std::collections::HashSet<PathBuf>,
+    depth: u8,
+) {
+    if depth > 5 || out.len() >= FONT_CAP {
         return;
     }
     let Ok(rd) = std::fs::read_dir(dir) else {
@@ -72,7 +90,9 @@ fn walk_ttfs(dir: &Path, out: &mut Vec<FontFace>, seen: &mut std::collections::H
             .extension()
             .and_then(|s| s.to_str())
             .map(|s| s.to_ascii_lowercase());
-        if matches!(ext.as_deref(), Some("ttf") | Some("otf")) && seen.insert(p.clone()) {
+        if matches!(ext.as_deref(), Some("ttf") | Some("otf") | Some("ttc"))
+            && seen.insert(p.clone())
+        {
             let name = p
                 .file_stem()
                 .map(|s| s.to_string_lossy().replace('-', " "))
@@ -90,30 +110,122 @@ pub fn default_path() -> Option<PathBuf> {
     fonts().first().map(|f| f.path.clone())
 }
 
-fn load_font(path: &Path) -> Option<ab_glyph::FontVec> {
-    let bytes = std::fs::read(path).ok()?;
-    ab_glyph::FontVec::try_from_vec(bytes).ok()
+pub fn face_for(path: &str) -> Option<&'static FontFace> {
+    if path.is_empty() {
+        return fonts().first();
+    }
+    fonts().iter().find(|f| f.path.to_string_lossy() == path)
 }
 
-fn flatten_contour(curves: &[ab_glyph::OutlineCurve]) -> Vec<Pt> {
+pub fn label_for(path: &str) -> String {
+    face_for(path).map(|f| f.name.clone()).unwrap_or_else(|| {
+        if path.is_empty() {
+            fonts()
+                .first()
+                .map(|f| f.name.clone())
+                .unwrap_or_else(|| "System sans".into())
+        } else {
+            Path::new(path)
+                .file_stem()
+                .map(|s| s.to_string_lossy().replace('-', " "))
+                .unwrap_or_else(|| "Font".into())
+        }
+    })
+}
+
+fn resolve_path(run: &TypeRun) -> Option<PathBuf> {
+    if !run.font.is_empty() {
+        let p = PathBuf::from(&run.font);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    default_path()
+}
+
+fn font_bytes(path: &Path) -> Option<Arc<Vec<u8>>> {
+    let cache = BYTES.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut map = cache.lock().ok()?;
+    if let Some(b) = map.get(path) {
+        return Some(b.clone());
+    }
+    let raw = std::fs::read(path).ok()?;
+    let arc = Arc::new(raw);
+    map.insert(path.to_path_buf(), arc.clone());
+    Some(arc)
+}
+
+fn ot_features(run: &TypeRun) -> Vec<rustybuzz::Feature> {
+    let tag = |b: &[u8; 4]| rustybuzz::ttf_parser::Tag::from_bytes(b);
+    let feat = |bytes: &[u8; 4], on: bool| rustybuzz::Feature::new(tag(bytes), u32::from(on), ..);
+    vec![
+        feat(b"kern", run.kern),
+        feat(b"liga", run.liga),
+        feat(b"clig", run.liga),
+        feat(b"tnum", run.tnum),
+        feat(b"smcp", run.smcp),
+        feat(b"c2sc", run.smcp),
+    ]
+}
+
+fn map_pt(p: ab_glyph::Point, ox: f32, oy: f32, scale: f32) -> ab_glyph::Point {
+    ab_glyph::point(ox + p.x * scale, oy - p.y * scale)
+}
+
+fn map_curves(
+    curves: &[ab_glyph::OutlineCurve],
+    ox: f32,
+    oy: f32,
+    scale: f32,
+) -> Vec<ab_glyph::OutlineCurve> {
     use ab_glyph::OutlineCurve;
-    let mut pts: Vec<Pt> = vec![];
+    curves
+        .iter()
+        .map(|c| match *c {
+            OutlineCurve::Line(p0, p1) => {
+                OutlineCurve::Line(map_pt(p0, ox, oy, scale), map_pt(p1, ox, oy, scale))
+            }
+            OutlineCurve::Quad(p0, p1, p2) => OutlineCurve::Quad(
+                map_pt(p0, ox, oy, scale),
+                map_pt(p1, ox, oy, scale),
+                map_pt(p2, ox, oy, scale),
+            ),
+            OutlineCurve::Cubic(p0, p1, p2, p3) => OutlineCurve::Cubic(
+                map_pt(p0, ox, oy, scale),
+                map_pt(p1, ox, oy, scale),
+                map_pt(p2, ox, oy, scale),
+                map_pt(p3, ox, oy, scale),
+            ),
+        })
+        .collect()
+}
+
+fn flatten_outline(curves: &[ab_glyph::OutlineCurve]) -> Vec<Vec<Pt>> {
+    use ab_glyph::OutlineCurve;
     let start_of = |c: &OutlineCurve| match c {
         OutlineCurve::Line(p0, _)
         | OutlineCurve::Quad(p0, _, _)
         | OutlineCurve::Cubic(p0, _, _, _) => *p0,
     };
-    if let Some(first) = curves.first() {
-        let s = start_of(first);
-        pts.push(Pt::new(s.x, s.y));
-    }
+    let end_of = |c: &OutlineCurve| match c {
+        OutlineCurve::Line(_, p1)
+        | OutlineCurve::Quad(_, _, p1)
+        | OutlineCurve::Cubic(_, _, _, p1) => *p1,
+    };
+    let mut out = vec![];
+    let mut pts: Vec<Pt> = vec![];
+    let mut last_end: Option<ab_glyph::Point> = None;
     for c in curves {
         let s = start_of(c);
-        let broke = pts
-            .last()
-            .map(|last| (last.x - s.x).abs() > 1e-3 || (last.y - s.y).abs() > 1e-3)
+        let broke = last_end
+            .map(|e| (e.x - s.x).abs() > 1e-3 || (e.y - s.y).abs() > 1e-3)
             .unwrap_or(true);
         if broke {
+            if pts.len() >= 3 {
+                out.push(std::mem::take(&mut pts));
+            } else {
+                pts.clear();
+            }
             pts.push(Pt::new(s.x, s.y));
         }
         match c {
@@ -144,101 +256,251 @@ fn flatten_contour(curves: &[ab_glyph::OutlineCurve]) -> Vec<Pt> {
                 }
             }
         }
+        last_end = Some(end_of(c));
     }
-    pts
-}
-
-pub fn shape(content: &str, px: f32, origin: Pt, tracking: f32, font_path: Option<&Path>) -> Vec<Vec<Pt>> {
-    let path = font_path
-        .map(|p| p.to_path_buf())
-        .or_else(default_path);
-    let Some(path) = path else {
-        return fallback_block(content, px, origin);
-    };
-    let Some(f) = load_font(&path) else {
-        return fallback_block(content, px, origin);
-    };
-    let scale = ab_glyph::PxScale::from(px.max(1.0));
-    let scaled = f.as_scaled(scale);
-    let factor = scaled.scale_factor();
-    let (fh, fv) = (factor.horizontal, -factor.vertical);
-
-    let mut subpaths = vec![];
-    let mut pen_x = origin.x;
-    let baseline = origin.y;
-    for ch in content.chars() {
-        if ch == '\n' {
-            pen_x = origin.x;
-            continue;
-        }
-        if ch == ' ' {
-            pen_x += scaled.h_advance(scaled.glyph_id(' ')) + tracking;
-            continue;
-        }
-        let gid = scaled.glyph_id(ch);
-        if let Some(outline) = f.outline(gid) {
-            let mapped: Vec<ab_glyph::OutlineCurve> = outline
-                .curves
-                .iter()
-                .map(|c| match *c {
-                    ab_glyph::OutlineCurve::Line(p0, p1) => ab_glyph::OutlineCurve::Line(
-                        ab_glyph::point(pen_x + p0.x * fh, baseline + p0.y * fv),
-                        ab_glyph::point(pen_x + p1.x * fh, baseline + p1.y * fv),
-                    ),
-                    ab_glyph::OutlineCurve::Quad(p0, p1, p2) => ab_glyph::OutlineCurve::Quad(
-                        ab_glyph::point(pen_x + p0.x * fh, baseline + p0.y * fv),
-                        ab_glyph::point(pen_x + p1.x * fh, baseline + p1.y * fv),
-                        ab_glyph::point(pen_x + p2.x * fh, baseline + p2.y * fv),
-                    ),
-                    ab_glyph::OutlineCurve::Cubic(p0, p1, p2, p3) => ab_glyph::OutlineCurve::Cubic(
-                        ab_glyph::point(pen_x + p0.x * fh, baseline + p0.y * fv),
-                        ab_glyph::point(pen_x + p1.x * fh, baseline + p1.y * fv),
-                        ab_glyph::point(pen_x + p2.x * fh, baseline + p2.y * fv),
-                        ab_glyph::point(pen_x + p3.x * fh, baseline + p3.y * fv),
-                    ),
-                })
-                .collect();
-            let pts = flatten_contour(&mapped);
-            if pts.len() >= 3 {
-                subpaths.push(pts);
-            }
-        }
-        pen_x += scaled.h_advance(gid) + tracking;
+    if pts.len() >= 3 {
+        out.push(pts);
     }
-    if subpaths.is_empty() {
-        fallback_block(content, px, origin)
-    } else {
-        subpaths
-    }
+    out
 }
 
 fn fallback_block(content: &str, px: f32, origin: Pt) -> Vec<Vec<Pt>> {
-    let w = px * 0.55 * content.len().max(1) as f32;
-    let h = px;
+    let lines = content.split('\n').count().max(1);
+    let cols = content
+        .split('\n')
+        .map(|l| l.chars().count())
+        .max()
+        .unwrap_or(1)
+        .max(1);
+    let w = px * 0.55 * cols as f32;
+    let h = px * lines as f32;
     vec![vec![
-        Pt::new(origin.x, origin.y - h),
-        Pt::new(origin.x + w, origin.y - h),
-        Pt::new(origin.x + w, origin.y),
-        Pt::new(origin.x, origin.y),
+        Pt::new(origin.x, origin.y - px),
+        Pt::new(origin.x + w, origin.y - px),
+        Pt::new(origin.x + w, origin.y - px + h),
+        Pt::new(origin.x, origin.y - px + h),
     ]]
 }
 
-pub fn measure(content: &str, px: f32, tracking: f32, font_path: Option<&Path>) -> (f32, f32) {
-    let path = font_path
-        .map(|p| p.to_path_buf())
-        .or_else(default_path);
-    let Some(path) = path else {
-        return (px * content.len() as f32 * 0.55, px);
+/// Shape `run` into closed contours in world space.
+pub fn shape(run: &TypeRun) -> Vec<Vec<Pt>> {
+    let Some(path) = resolve_path(run) else {
+        return fallback_block(&run.content, run.px, run.origin);
     };
-    let Some(f) = load_font(&path) else {
-        return (px * content.len() as f32 * 0.55, px);
+    let Some(bytes) = font_bytes(&path) else {
+        return fallback_block(&run.content, run.px, run.origin);
     };
-    let scaled = f.as_scaled(ab_glyph::PxScale::from(px.max(1.0)));
-    let mut w = 0.0;
-    for ch in content.chars() {
-        w += scaled.h_advance(scaled.glyph_id(ch)) + tracking;
+    buzz_shape(&bytes, run).unwrap_or_else(|| fallback_block(&run.content, run.px, run.origin))
+}
+
+fn buzz_shape(bytes: &[u8], run: &TypeRun) -> Option<Vec<Vec<Pt>>> {
+    let face = rustybuzz::Face::from_slice(bytes, 0)?;
+    let font = ab_glyph::FontVec::try_from_vec(bytes.to_vec()).ok()?;
+    let upem = {
+        let u = face.units_per_em();
+        if u == 0 {
+            return None;
+        }
+        u as f32
+    };
+    let scale = run.px.max(1.0) / upem;
+    let features = ot_features(run);
+    let mut subpaths = Vec::new();
+    let mut y = run.origin.y;
+    for line in run.content.split('\n') {
+        if !line.is_empty() {
+            let mut buffer = rustybuzz::UnicodeBuffer::new();
+            buffer.push_str(line);
+            buffer.set_direction(rustybuzz::Direction::LeftToRight);
+            let glyphs = rustybuzz::shape(&face, &features, buffer);
+            let mut pen = 0.0f32;
+            for (info, pos) in glyphs.glyph_infos().iter().zip(glyphs.glyph_positions()) {
+                let gid = GlyphId(info.glyph_id as u16);
+                let ox = run.origin.x + (pen + pos.x_offset as f32) * scale;
+                let oy = y - pos.y_offset as f32 * scale;
+                if let Some(outline) = font.outline(gid) {
+                    let mapped = map_curves(&outline.curves, ox, oy, scale);
+                    subpaths.extend(flatten_outline(&mapped));
+                }
+                pen += pos.x_advance as f32;
+                if run.tracking.abs() > 1e-6 {
+                    pen += run.tracking / scale;
+                }
+            }
+        }
+        y += run.line_height();
     }
-    (w, scaled.ascent() - scaled.descent())
+    if subpaths.is_empty() && !run.content.trim().is_empty() {
+        Some(fallback_block(&run.content, run.px, run.origin))
+    } else {
+        Some(subpaths)
+    }
+}
+
+pub fn fill_contours(geom: &mut crate::geom::Geom) {
+    if let crate::geom::Geom::Text(run) = geom {
+        run.contours = shape(run);
+    }
+}
+
+pub fn measure(run: &TypeRun) -> (f32, f32) {
+    let lines: Vec<&str> = run.content.split('\n').collect();
+    let n = lines.len().max(1) as f32;
+    let mut max_w = 0.0f32;
+    for line in &lines {
+        max_w = max_w.max(line_width(run, line));
+    }
+    (max_w, run.line_height() * n)
+}
+
+fn line_width(run: &TypeRun, line: &str) -> f32 {
+    if line.is_empty() {
+        return 0.0;
+    }
+    let Some(path) = resolve_path(run) else {
+        return run.px * 0.55 * line.chars().count() as f32;
+    };
+    let Some(bytes) = font_bytes(&path) else {
+        return run.px * 0.55 * line.chars().count() as f32;
+    };
+    let Some(face) = rustybuzz::Face::from_slice(&bytes, 0) else {
+        return run.px * 0.55 * line.chars().count() as f32;
+    };
+    let upem = face.units_per_em() as f32;
+    if upem < 1.0 {
+        return run.px * 0.55 * line.chars().count() as f32;
+    }
+    let scale = run.px.max(1.0) / upem;
+    let mut buffer = rustybuzz::UnicodeBuffer::new();
+    buffer.push_str(line);
+    buffer.set_direction(rustybuzz::Direction::LeftToRight);
+    let glyphs = rustybuzz::shape(&face, &ot_features(run), buffer);
+    let mut w = 0.0f32;
+    for pos in glyphs.glyph_positions() {
+        w += pos.x_advance as f32 * scale + run.tracking;
+    }
+    w
+}
+
+pub fn caret_pt(run: &TypeRun, char_idx: usize) -> Pt {
+    let idx = char_idx.min(run.content.chars().count());
+    let (line_i, col) = line_col(&run.content, idx);
+    let line = run.content.split('\n').nth(line_i).unwrap_or("");
+    let prefix: String = line.chars().take(col).collect();
+    let mut probe = run.clone();
+    probe.content = prefix;
+    let w = measure(&probe).0;
+    Pt::new(
+        run.origin.x + w,
+        run.origin.y + line_i as f32 * run.line_height(),
+    )
+}
+
+pub fn hit_char(run: &TypeRun, p: Pt) -> usize {
+    let lines: Vec<&str> = run.content.split('\n').collect();
+    if lines.is_empty() {
+        return 0;
+    }
+    let lh = run.line_height();
+    let mut line_i = ((p.y - (run.origin.y - run.px * 0.85)) / lh).floor() as i32;
+    line_i = line_i.clamp(0, lines.len() as i32 - 1);
+    let line_i = line_i as usize;
+    let mut char_base = 0usize;
+    for (i, line) in lines.iter().enumerate() {
+        if i == line_i {
+            let n = line.chars().count();
+            let mut best = 0usize;
+            let mut best_d = f32::INFINITY;
+            for col in 0..=n {
+                let prefix: String = line.chars().take(col).collect();
+                let mut probe = run.clone();
+                probe.content = prefix;
+                let x = run.origin.x + measure(&probe).0;
+                let d = (x - p.x).abs();
+                if d < best_d {
+                    best_d = d;
+                    best = col;
+                }
+            }
+            return char_base + best;
+        }
+        char_base += line.chars().count() + 1;
+    }
+    run.content.chars().count()
+}
+
+pub fn selection_rects(run: &TypeRun, a: usize, b: usize) -> Vec<(Pt, Pt)> {
+    let lo = a.min(b);
+    let hi = a.max(b);
+    if lo == hi {
+        return vec![];
+    }
+    let mut out = vec![];
+    let mut ci = 0usize;
+    for (li, line) in run.content.split('\n').enumerate() {
+        let n = line.chars().count();
+        let start = ci;
+        let end = ci + n;
+        let seg_lo = lo.max(start);
+        let seg_hi = hi.min(end);
+        if seg_lo < seg_hi {
+            let p0 = caret_pt(run, seg_lo);
+            let p1 = caret_pt(run, seg_hi);
+            let top = p0.y - run.px * 0.9;
+            let bot = p0.y + run.px * 0.25;
+            out.push((Pt::new(p0.x, top), Pt::new(p1.x.max(p0.x + 2.0), bot)));
+        }
+        let _ = (li, end);
+        ci = end + 1;
+    }
+    out
+}
+
+fn line_col(s: &str, char_idx: usize) -> (usize, usize) {
+    let mut line = 0usize;
+    let mut col = 0usize;
+    for (i, ch) in s.chars().enumerate() {
+        if i == char_idx {
+            return (line, col);
+        }
+        if ch == '\n' {
+            line += 1;
+            col = 0;
+        } else {
+            col += 1;
+        }
+    }
+    (line, col)
+}
+
+pub fn char_to_byte(s: &str, char_idx: usize) -> usize {
+    s.char_indices()
+        .nth(char_idx)
+        .map(|(i, _)| i)
+        .unwrap_or(s.len())
+}
+
+pub fn glyph_count(run: &TypeRun) -> usize {
+    let Some(path) = resolve_path(run) else {
+        return run.content.chars().filter(|c| *c != '\n').count();
+    };
+    let Some(bytes) = font_bytes(&path) else {
+        return 0;
+    };
+    let Some(face) = rustybuzz::Face::from_slice(&bytes, 0) else {
+        return 0;
+    };
+    let mut n = 0usize;
+    for line in run.content.split('\n') {
+        if line.is_empty() {
+            continue;
+        }
+        let mut buffer = rustybuzz::UnicodeBuffer::new();
+        buffer.push_str(line);
+        let glyphs = rustybuzz::shape(&face, &ot_features(run), buffer);
+        n += glyphs.glyph_infos().len();
+    }
+    n
 }
 
 pub fn available() -> bool {
@@ -248,15 +510,71 @@ pub fn available() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::geom::Geom;
+
+    fn run(content: &str) -> TypeRun {
+        TypeRun {
+            content: content.into(),
+            px: 48.0,
+            ..TypeRun::default()
+        }
+    }
 
     #[test]
     fn shapes_when_font_exists() {
-        let sub = shape("Ag", 48.0, Pt::new(0.0, 0.0), 0.0, None);
+        let r = run("Ag");
+        let sub = shape(&r);
         assert!(!sub.is_empty());
         for sp in &sub {
             assert!(sp.len() >= 3);
         }
-        let (w, h) = measure("Ag", 48.0, 0.0, None);
+        let (w, h) = measure(&r);
         assert!(w > 10.0 && h > 10.0);
+    }
+
+    #[test]
+    fn fill_contours_writes_cache() {
+        let mut g = Geom::Text(run("Type"));
+        fill_contours(&mut g);
+        let Geom::Text(t) = g else { panic!("text") };
+        assert!(!t.contours.is_empty());
+    }
+
+    #[test]
+    fn caret_walks_forward() {
+        let r = run("Hi");
+        let a = caret_pt(&r, 0);
+        let b = caret_pt(&r, 2);
+        assert!(b.x > a.x);
+        assert_eq!(hit_char(&r, a), 0);
+    }
+
+    #[test]
+    fn liga_reduces_fi_when_font_supports_it() {
+        let on = TypeRun {
+            liga: true,
+            ..run("fi")
+        };
+        let off = TypeRun {
+            liga: false,
+            ..run("fi")
+        };
+        let a = glyph_count(&on);
+        let b = glyph_count(&off);
+        assert!(a >= 1 && b >= 1);
+        // If the face has an `fi` ligature, on < off; otherwise they match.
+        assert!(a <= b);
+    }
+
+    #[test]
+    fn old_json_defaults_kern_liga_on() {
+        let g: Geom = serde_json::from_str(
+            r#"{"Text":{"origin":{"x":0.0,"y":0.0},"content":"Hi","px":24.0,"tracking":0.0}}"#,
+        )
+        .unwrap();
+        let Geom::Text(t) = g else { panic!("text") };
+        assert!(t.kern && t.liga);
+        assert!(!t.tnum && !t.smcp);
+        assert!(t.font.is_empty());
     }
 }

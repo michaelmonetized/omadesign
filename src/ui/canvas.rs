@@ -12,6 +12,9 @@ use eframe::egui::{
 pub fn show(ui: &mut Ui, studio: &mut Studio) {
     let (rect, resp) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
     studio.canvas_rect = Some(rect);
+    if studio.type_edit.is_some() {
+        resp.request_focus();
+    }
 
     if studio.need_fit {
         studio.view.fit(
@@ -45,7 +48,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         studio.cursor = Some(studio.view.to_world(local));
     }
 
-    let panning = space || studio.tool == Tool::Hand;
+    let panning = (space && studio.type_edit.is_none()) || studio.tool == Tool::Hand;
     if panning && resp.dragged_by(PointerButton::Primary)
         || resp.dragged_by(PointerButton::Middle)
     {
@@ -193,7 +196,34 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
         return;
     }
 
+    if studio.type_edit.is_some() && resp.clicked() {
+        let slack = 8.0 / studio.view.scale.max(0.01);
+        if let Some(hit) = studio.doc.hit_test(world, slack) {
+            if studio.editing_text(hit.0, hit.1) {
+                studio.begin_type_edit(hit, world);
+                return;
+            }
+            if is_text_hit(studio, hit) {
+                studio.commit_type_edit();
+                studio.begin_type_edit(hit, world);
+                return;
+            }
+        }
+        studio.commit_type_edit();
+        if studio.tool == Tool::Text {
+            studio.place_text(world);
+        }
+        return;
+    }
+
     if studio.tool == Tool::Text && resp.clicked() {
+        let slack = 8.0 / studio.view.scale.max(0.01);
+        if let Some(hit) = studio.doc.hit_test(world, slack)
+            && is_text_hit(studio, hit)
+        {
+            studio.begin_type_edit(hit, world);
+            return;
+        }
         studio.place_text(world);
         return;
     }
@@ -240,6 +270,10 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
         return;
     }
 
+    if studio.type_edit.is_some() && resp.drag_started_by(PointerButton::Primary) {
+        studio.commit_type_edit();
+    }
+
     // Drag start. The pen stays in a draft `Op`, so it must accept further
     // presses — otherwise you get one point and then nothing.
     let continue_pen = studio.tool == Tool::Pen && matches!(studio.op, Some(Op::Pen { .. }));
@@ -262,8 +296,22 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
     if resp.double_clicked() {
         if let Some(Op::Pen { anchors }) = studio.op.take() {
             studio.finish_pen(anchors, false);
+        } else {
+            let slack = 8.0 / studio.view.scale.max(0.01);
+            if let Some(hit) = studio.doc.hit_test(world, slack)
+                && is_text_hit(studio, hit)
+            {
+                studio.begin_type_edit(hit, world);
+            }
         }
     }
+}
+
+fn is_text_hit(studio: &Studio, hit: (usize, u64)) -> bool {
+    studio
+        .doc
+        .find_shape(hit.0, hit.1)
+        .is_some_and(|s| matches!(s.geom, Geom::Text(_)))
 }
 
 fn start_drag(studio: &mut Studio, world: Pt, shift: bool) {
@@ -1003,19 +1051,57 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
             let b = s.world_bbox();
             let sb = Rect::from_min_max(win(rect, v, b.min), win(rect, v, b.max));
             p.rect_stroke(sb, 0.0, Stroke::new(1.0, SELECT), eframe::egui::StrokeKind::Middle);
-            for i in 0..8 {
-                let h = win(rect, v, b.handle(i));
-                p.rect_filled(Rect::from_center_size(h, vec2(7.0, 7.0)), 0.0, SELECT);
+            let editing = studio.editing_text(*li, *id);
+            if !editing {
+                for i in 0..8 {
+                    let h = win(rect, v, b.handle(i));
+                    p.rect_filled(Rect::from_center_size(h, vec2(7.0, 7.0)), 0.0, SELECT);
+                }
+                let rh = win(rect, v, b.rotate_handle());
+                p.line_segment([sb.center_top(), rh], Stroke::new(1.0, SELECT));
+                p.circle_filled(rh, 4.0, ACCENT);
             }
-            let rh = win(rect, v, b.rotate_handle());
-            p.line_segment([sb.center_top(), rh], Stroke::new(1.0, SELECT));
-            p.circle_filled(rh, 4.0, ACCENT);
             if studio.tool == Tool::Node {
                 if let Geom::Path { anchors, .. } = &s.geom {
                     draw_nodes(p, rect, anchors, v);
                 }
             }
         }
+    }
+    if let Some(edit) = &studio.type_edit {
+        if let Some(s) = studio.doc.find_shape(edit.layer, edit.id) {
+            if let Geom::Text(run) = &s.geom {
+                draw_type_caret(p, rect, studio, run, edit.caret, edit.anchor);
+            }
+        }
+    }
+}
+
+fn draw_type_caret(
+    p: &eframe::egui::Painter,
+    rect: Rect,
+    studio: &Studio,
+    run: &crate::geom::TypeRun,
+    caret: usize,
+    anchor: usize,
+) {
+    let v = studio.view;
+    for (a, b) in crate::text::selection_rects(run, caret, anchor) {
+        let r = Rect::from_min_max(win(rect, v, a), win(rect, v, b));
+        p.rect_filled(r, 0.0, SELECT_FILL);
+    }
+    let on = (studio
+        .canvas_rect
+        .map(|_| p.ctx().input(|i| i.time))
+        .unwrap_or(0.0)
+        * 1.7)
+        .fract()
+        < 0.55;
+    if on {
+        let c = crate::text::caret_pt(run, caret);
+        let top = win(rect, v, Pt::new(c.x, c.y - run.px * 0.9));
+        let bot = win(rect, v, Pt::new(c.x, c.y + run.px * 0.2));
+        p.line_segment([top, bot], Stroke::new(1.5, SELECT));
     }
 }
 

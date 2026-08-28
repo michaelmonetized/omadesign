@@ -477,6 +477,63 @@ fn path_pts(anchors: &[Anchor], closed: bool) -> Vec<Pt> {
     pts
 }
 
+fn default_true() -> bool {
+    true
+}
+
+/// Live type: the string stays editable. Contours are a shaped cache.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TypeRun {
+    pub origin: Pt,
+    pub content: String,
+    pub px: f32,
+    pub tracking: f32,
+    /// Line height in px. `0` means auto (`px * 1.2`).
+    #[serde(default)]
+    pub leading: f32,
+    /// Absolute font path. Empty picks the first system sans.
+    #[serde(default)]
+    pub font: String,
+    #[serde(default = "default_true")]
+    pub kern: bool,
+    #[serde(default = "default_true")]
+    pub liga: bool,
+    #[serde(default)]
+    pub tnum: bool,
+    #[serde(default)]
+    pub smcp: bool,
+    #[serde(skip)]
+    pub contours: Vec<Vec<Pt>>,
+}
+
+impl Default for TypeRun {
+    fn default() -> Self {
+        Self {
+            origin: Pt::ZERO,
+            content: String::new(),
+            px: 72.0,
+            tracking: 0.0,
+            leading: 0.0,
+            font: String::new(),
+            kern: true,
+            liga: true,
+            tnum: false,
+            smcp: false,
+            contours: vec![],
+        }
+    }
+}
+
+impl TypeRun {
+    pub fn line_height(&self) -> f32 {
+        if self.leading > 0.5 {
+            self.leading
+        } else {
+            self.px.max(1.0) * 1.2
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Geom {
     Rect {
@@ -507,14 +564,7 @@ pub enum Geom {
         anchors: Vec<Anchor>,
         closed: bool,
     },
-    Text {
-        origin: Pt,
-        content: String,
-        px: f32,
-        tracking: f32,
-        #[serde(skip)]
-        contours: Vec<Vec<Pt>>,
-    },
+    Text(TypeRun),
     Poly {
         contours: Vec<Vec<Pt>>,
     },
@@ -549,7 +599,7 @@ impl Geom {
                     vec![pts]
                 }
             }
-            Geom::Text { contours, .. } => contours.clone(),
+            Geom::Text(t) => t.contours.clone(),
             Geom::Poly { contours } => contours.clone(),
         }
     }
@@ -585,6 +635,17 @@ impl Geom {
                 }
             }
         }
+        if let Geom::Text(t) = self {
+            if b.as_ref().map(|bb| bb.is_empty()).unwrap_or(true) {
+                let h = t.px.max(8.0);
+                let w = (t.px * 0.45).max(12.0);
+                let n = t.content.split('\n').count().max(1) as f32;
+                return Bounds::from_min_size(
+                    Pt::new(t.origin.x, t.origin.y - t.px),
+                    Pt::new(w, h * n.max(1.0)),
+                );
+            }
+        }
         b.unwrap_or(Bounds::from_pt(Pt::ZERO))
     }
 
@@ -603,11 +664,9 @@ impl Geom {
                     a.pt += d;
                 }
             }
-            Geom::Text {
-                origin, contours, ..
-            } => {
-                *origin += d;
-                for c in contours {
+            Geom::Text(t) => {
+                t.origin += d;
+                for c in &mut t.contours {
                     for p in c {
                         *p += d;
                     }
@@ -666,15 +725,12 @@ impl Geom {
                     a.h_out = Pt::new(a.h_out.x * sx, a.h_out.y * sy);
                 }
             }
-            Geom::Text {
-                origin,
-                px,
-                contours,
-                ..
-            } => {
-                *origin = src.map_pt(*origin, dst);
-                *px *= sy;
-                for c in contours {
+            Geom::Text(t) => {
+                t.origin = src.map_pt(t.origin, dst);
+                t.px *= sy;
+                t.tracking *= sx;
+                t.leading *= sy;
+                for c in &mut t.contours {
                     for p in c {
                         *p = src.map_pt(*p, dst);
                     }
@@ -693,7 +749,9 @@ impl Geom {
     pub fn rotate_about(&mut self, origin: Pt, angle: f32) {
         let rot = |p: &mut Pt| *p = p.rotate_about(origin, angle);
         match self {
-            Geom::Rect { origin: o, size, .. } => {
+            Geom::Rect {
+                origin: o, size, ..
+            } => {
                 // Bake into a polygon so rotation stays truthful.
                 let pts = rounded_rect(*o, *size, 0.0);
                 let mut baked: Vec<Pt> = pts;
@@ -729,13 +787,9 @@ impl Geom {
                     a.h_out = a.h_out.rotate(angle);
                 }
             }
-            Geom::Text {
-                origin: o,
-                contours,
-                ..
-            } => {
-                rot(o);
-                for c in contours {
+            Geom::Text(t) => {
+                rot(&mut t.origin);
+                for c in &mut t.contours {
                     for p in c {
                         rot(p);
                     }
@@ -752,6 +806,9 @@ impl Geom {
     }
 
     pub fn contains(&self, p: Pt) -> bool {
+        if let Geom::Text(_) = self {
+            return self.bbox().inflate(4.0).contains(p);
+        }
         if !self.is_closed() {
             return false;
         }
@@ -789,7 +846,7 @@ impl Geom {
             Geom::Line { .. } => "Line",
             Geom::Path { closed: true, .. } => "Path",
             Geom::Path { .. } => "Curve",
-            Geom::Text { .. } => "Text",
+            Geom::Text(_) => "Text",
             Geom::Poly { .. } => "Shape",
         }
     }

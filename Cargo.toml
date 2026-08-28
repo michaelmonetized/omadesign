@@ -1,6 +1,6 @@
 [package]
 name = "omadesign"
-version = "1.0.2"
+version = "1.0.3"
 edition = "2024"
 description = "Native Linux studio for design, painting, and photography"
 license = "MIT"
@@ -28,6 +28,7 @@ image = { version = "0.25", default-features = false, features = [
     "tiff",
 ] }
 rayon = "1.10"
+rustybuzz = "0.20"
 rfd = "0.15"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

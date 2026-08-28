@@ -4,7 +4,7 @@ use crate::document::{Cap, Fill, Join, Stroke as DocStroke};
 use crate::geom::Geom;
 use crate::ui::theme::{ACCENT, ACCENT_DIM, BG_WIDGET, FG_WEAK};
 use eframe::egui::{
-    Color32, ComboBox, Layout, Panel, RichText, ScrollArea, Slider, Stroke, Ui, vec2,
+    vec2, Color32, ComboBox, Layout, Panel, RichText, ScrollArea, Slider, Stroke, Ui,
 };
 
 pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
@@ -15,6 +15,8 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
         .show(ui, |ui| {
             ScrollArea::vertical().show(ui, |ui| {
                 color_studio(ui, studio);
+                ui.add_space(10.0);
+                character_studio(ui, studio);
                 ui.add_space(10.0);
                 stroke_studio(ui, studio);
                 ui.add_space(10.0);
@@ -69,7 +71,8 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
     ui.add_space(4.0);
     ui.horizontal_wrapped(|ui| {
         for c in studio.swatches.clone() {
-            let (rect, resp) = ui.allocate_exact_size(vec2(16.0, 16.0), eframe::egui::Sense::click());
+            let (rect, resp) =
+                ui.allocate_exact_size(vec2(16.0, 16.0), eframe::egui::Sense::click());
             ui.painter().rect_filled(rect, 2.0, c.to_egui());
             if resp.clicked() {
                 studio.set_fill(Fill::Solid(c));
@@ -84,7 +87,8 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
         ui.label(RichText::new("Recent").small().color(FG_WEAK));
         ui.horizontal_wrapped(|ui| {
             for c in studio.recent.clone() {
-                let (rect, resp) = ui.allocate_exact_size(vec2(16.0, 16.0), eframe::egui::Sense::click());
+                let (rect, resp) =
+                    ui.allocate_exact_size(vec2(16.0, 16.0), eframe::egui::Sense::click());
                 ui.painter().rect_filled(rect, 2.0, c.to_egui());
                 if resp.clicked() {
                     studio.set_fill(Fill::Solid(c));
@@ -178,18 +182,32 @@ fn hsv_picker(ui: &mut Ui, studio: &mut Studio) {
 fn stroke_studio(ui: &mut Ui, studio: &mut Studio) {
     section(ui, "Stroke");
     let mut width = studio.style.stroke.as_ref().map(|s| s.width).unwrap_or(0.0);
-    if ui.add(Slider::new(&mut width, 0.0..=64.0).text("Width")).changed() {
+    if ui
+        .add(Slider::new(&mut width, 0.0..=64.0).text("Width"))
+        .changed()
+    {
         let mut st = studio.style.stroke.clone().unwrap_or_default();
         st.width = width;
-        studio.style.stroke = if width <= 0.01 { None } else { Some(st.clone()) };
+        studio.style.stroke = if width <= 0.01 {
+            None
+        } else {
+            Some(st.clone())
+        };
         apply_stroke(studio, studio.style.stroke.clone());
     }
     ui.horizontal(|ui| {
-        for (cap, label) in [(Cap::Butt, "Butt"), (Cap::Round, "Round"), (Cap::Square, "Square")] {
-            if ui.selectable_label(
-                studio.style.stroke.as_ref().map(|s| s.cap) == Some(cap),
-                label,
-            ).clicked() {
+        for (cap, label) in [
+            (Cap::Butt, "Butt"),
+            (Cap::Round, "Round"),
+            (Cap::Square, "Square"),
+        ] {
+            if ui
+                .selectable_label(
+                    studio.style.stroke.as_ref().map(|s| s.cap) == Some(cap),
+                    label,
+                )
+                .clicked()
+            {
                 if let Some(st) = &mut studio.style.stroke {
                     st.cap = cap;
                 }
@@ -198,11 +216,18 @@ fn stroke_studio(ui: &mut Ui, studio: &mut Studio) {
         }
     });
     ui.horizontal(|ui| {
-        for (join, label) in [(Join::Miter, "Miter"), (Join::Round, "Round"), (Join::Bevel, "Bevel")] {
-            if ui.selectable_label(
-                studio.style.stroke.as_ref().map(|s| s.join) == Some(join),
-                label,
-            ).clicked() {
+        for (join, label) in [
+            (Join::Miter, "Miter"),
+            (Join::Round, "Round"),
+            (Join::Bevel, "Bevel"),
+        ] {
+            if ui
+                .selectable_label(
+                    studio.style.stroke.as_ref().map(|s| s.join) == Some(join),
+                    label,
+                )
+                .clicked()
+            {
                 if let Some(st) = &mut studio.style.stroke {
                     st.join = join;
                 }
@@ -235,17 +260,117 @@ fn apply_stroke(studio: &mut Studio, stroke: Option<DocStroke>) {
     }
 }
 
+fn character_studio(ui: &mut Ui, studio: &mut Studio) {
+    section(ui, "Character");
+    let live = studio.selected_type();
+    let mut font = live
+        .as_ref()
+        .map(|t| t.font.clone())
+        .unwrap_or_else(|| studio.text_font.clone());
+    let label = crate::text::label_for(&font);
+    ComboBox::from_id_salt("character-font")
+        .selected_text(label)
+        .width(220.0)
+        .show_ui(ui, |ui| {
+            for f in crate::text::fonts() {
+                let path = f.path.to_string_lossy().to_string();
+                ui.selectable_value(&mut font, path, &f.name);
+            }
+        });
+    if live
+        .as_ref()
+        .map(|t| t.font.clone())
+        .unwrap_or_else(|| studio.text_font.clone())
+        != font
+    {
+        let chosen = font.clone();
+        studio.patch_type(|t| t.font = chosen);
+    }
+
+    let mut px = live.as_ref().map(|t| t.px).unwrap_or(studio.text_px);
+    if ui
+        .add(Slider::new(&mut px, 8.0..=400.0).text("Size"))
+        .changed()
+    {
+        studio.patch_type(|t| t.px = px);
+    }
+    let mut track = live
+        .as_ref()
+        .map(|t| t.tracking)
+        .unwrap_or(studio.text_tracking);
+    if ui
+        .add(Slider::new(&mut track, -40.0..=80.0).text("Tracking"))
+        .changed()
+    {
+        studio.patch_type(|t| t.tracking = track);
+    }
+    let mut lead = live
+        .as_ref()
+        .map(|t| t.leading)
+        .unwrap_or(studio.text_leading);
+    if ui
+        .add(Slider::new(&mut lead, 0.0..=400.0).text("Leading (0 auto)"))
+        .changed()
+    {
+        studio.patch_type(|t| t.leading = lead);
+    }
+
+    ui.add_space(4.0);
+    ui.label(RichText::new("OpenType").small().color(FG_WEAK));
+    let mut kern = live.as_ref().map(|t| t.kern).unwrap_or(studio.text_kern);
+    let mut liga = live.as_ref().map(|t| t.liga).unwrap_or(studio.text_liga);
+    let mut tnum = live.as_ref().map(|t| t.tnum).unwrap_or(studio.text_tnum);
+    let mut smcp = live.as_ref().map(|t| t.smcp).unwrap_or(studio.text_smcp);
+    ui.horizontal(|ui| {
+        if ui.checkbox(&mut kern, "Kerning").changed() {
+            studio.patch_type(|t| t.kern = kern);
+        }
+        if ui.checkbox(&mut liga, "Ligatures").changed() {
+            studio.patch_type(|t| t.liga = liga);
+        }
+    });
+    ui.horizontal(|ui| {
+        if ui.checkbox(&mut tnum, "Tabular figs").changed() {
+            studio.patch_type(|t| t.tnum = tnum);
+        }
+        if ui.checkbox(&mut smcp, "Small caps").changed() {
+            studio.patch_type(|t| t.smcp = smcp);
+        }
+    });
+    if studio.type_edit.is_some() {
+        ui.label(
+            RichText::new("Typing on the canvas. Esc finishes.")
+                .small()
+                .color(ACCENT),
+        );
+    } else if live.is_none() {
+        ui.label(
+            RichText::new("Applies to the next type you place.")
+                .small()
+                .color(FG_WEAK),
+        );
+    } else {
+        ui.label(
+            RichText::new("Double-click the type to type into it.")
+                .small()
+                .color(FG_WEAK),
+        );
+    }
+}
+
 fn transform_studio(ui: &mut Ui, studio: &mut Studio) {
     section(ui, "Transform");
     if studio.selection.is_empty() {
         ui.label(RichText::new("Nothing selected").small().color(FG_WEAK));
-        ui.label(RichText::new("Polygon sides / star points apply to the next shape you draw.").small().color(FG_WEAK));
+        ui.label(
+            RichText::new("Polygon sides / star points apply to the next shape you draw.")
+                .small()
+                .color(FG_WEAK),
+        );
         ui.add(Slider::new(&mut studio.polygon_sides, 3..=12).text("Sides"));
         ui.add(Slider::new(&mut studio.star_points, 3..=12).text("Star points"));
         ui.add(Slider::new(&mut studio.star_inner, 0.15..=0.8).text("Star inner"));
         ui.add(Slider::new(&mut studio.rect_radius, 0.0..=80.0).text("Corner radius"));
-        ui.add(Slider::new(&mut studio.text_px, 8.0..=400.0).text("Type size"));
-        ui.add(eframe::egui::TextEdit::singleline(&mut studio.text_buf).hint_text("Type"));
         return;
     }
     let Some((li, id)) = studio.primary() else {
@@ -268,7 +393,10 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio) {
         .color(FG_WEAK),
     );
     let mut op = shape.opacity;
-    if ui.add(Slider::new(&mut op, 0.0..=1.0).text("Opacity")).changed() {
+    if ui
+        .add(Slider::new(&mut op, 0.0..=1.0).text("Opacity"))
+        .changed()
+    {
         studio.commit(crate::document::Cmd::SetOpacity {
             layer: li,
             id,
@@ -277,35 +405,14 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio) {
         });
     }
     match &shape.geom {
-        Geom::Text {
-            content, px, tracking, origin, ..
-        } => {
-            let mut c = content.clone();
-            let mut size = *px;
-            let mut track = *tracking;
-            let orig = *origin;
-            if ui
-                .add(eframe::egui::TextEdit::singleline(&mut c).desired_width(200.0))
-                .changed()
-                || ui.add(Slider::new(&mut size, 8.0..=400.0).text("Size")).changed()
-                || ui.add(Slider::new(&mut track, -10.0..=20.0).text("Tracking")).changed()
-            {
-                let contours = crate::text::shape(&c, size, orig, track, None);
-                studio.commit(crate::document::Cmd::SetGeom {
-                    layer: li,
-                    id,
-                    before: shape.geom.clone(),
-                    after: Geom::Text {
-                        origin: orig,
-                        content: c,
-                        px: size,
-                        tracking: track,
-                        contours,
-                    },
-                    rot_before: shape.rotation,
-                    rot_after: shape.rotation,
-                });
-            }
+        Geom::Text(_) => {
+            ui.label(
+                RichText::new(
+                    "Type lives in the Character studio. Double-click the words to edit.",
+                )
+                .small()
+                .color(FG_WEAK),
+            );
         }
         Geom::Polygon { sides, .. } => {
             let mut n = *sides;
@@ -328,7 +435,9 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio) {
             let mut n = *points;
             let mut inn = *inner;
             if ui.add(Slider::new(&mut n, 3..=16).text("Points")).changed()
-                || ui.add(Slider::new(&mut inn, 0.15..=0.85).text("Inner")).changed()
+                || ui
+                    .add(Slider::new(&mut inn, 0.15..=0.85).text("Inner"))
+                    .changed()
             {
                 let mut g = shape.geom.clone();
                 if let Geom::Star { points, inner, .. } = &mut g {
@@ -347,7 +456,10 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio) {
         }
         Geom::Rect { radius, .. } => {
             let mut r = *radius;
-            if ui.add(Slider::new(&mut r, 0.0..=200.0).text("Radius")).changed() {
+            if ui
+                .add(Slider::new(&mut r, 0.0..=200.0).text("Radius"))
+                .changed()
+            {
                 let mut g = shape.geom.clone();
                 if let Geom::Rect { radius, .. } = &mut g {
                     *radius = r;
@@ -396,7 +508,11 @@ fn brush_studio(ui: &mut Ui, studio: &mut Studio) {
     if studio.clone_source.is_some() {
         ui.label(RichText::new("Clone source set").small().color(ACCENT));
     } else {
-        ui.label(RichText::new("Alt-click sets clone source").small().color(FG_WEAK));
+        ui.label(
+            RichText::new("Alt-click sets clone source")
+                .small()
+                .color(FG_WEAK),
+        );
     }
 }
 

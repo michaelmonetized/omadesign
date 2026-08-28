@@ -123,7 +123,7 @@ impl Tool {
             Tool::Polygon => "Drag a polygon. Sides live in Transform.",
             Tool::Star => "Drag a star. Points and inner radius live in Transform.",
             Tool::Line => "Drag a straight line. Shift snaps to 45°.",
-            Tool::Text => "Click to place a line of type, then edit it in Transform.",
+            Tool::Text => "Click to place type and type into it. Character studio: font, size, OpenType. Esc finishes.",
             Tool::Gradient => "Drag across a selected shape to set a linear fill.",
             Tool::Eyedropper => "Click anywhere on the canvas to sample fill colour.",
             Tool::Brush => "Paint on the active pixel layer. [ ] size · Shift+[ ] hardness.",
