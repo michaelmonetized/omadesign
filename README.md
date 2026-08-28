@@ -71,6 +71,7 @@ any time for the full list.
 - Boolean union / subtract / intersect / XOR
 - Align and distribute
 - Snap to grid, guides, object edges, canvas centre
+- Zoom: drag a box to fill the view with that area; click zooms in, Alt-click zooms out. Scroll / Ctrl+scroll always work
 - Rulers, optional grid
 - Layers: vector or pixel, opacity, blend modes, lock, hide, reorder, masks
 

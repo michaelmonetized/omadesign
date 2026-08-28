@@ -72,6 +72,19 @@ impl View {
         self.offset = viewport.center() - scaled * 0.5;
     }
 
+    /// Fit `world` into the canvas viewport (canvas-local pixels, origin at 0).
+    pub fn zoom_to(&mut self, world: crate::geom::Bounds, viewport: crate::geom::Bounds) {
+        let ww = world.width();
+        let wh = world.height();
+        if ww < 1e-3 || wh < 1e-3 || viewport.width() < 1.0 || viewport.height() < 1.0 {
+            return;
+        }
+        self.scale = (viewport.width() / ww)
+            .min(viewport.height() / wh)
+            .clamp(0.02, 64.0);
+        self.offset = viewport.center() - world.center() * self.scale;
+    }
+
     fn transform(self) -> Transform {
         Transform::from_row(
             self.scale,
@@ -531,5 +544,26 @@ mod tests {
         let o = v.to_screen(Pt::ZERO);
         assert!(o.x >= 0.0 && o.x < 400.0, "origin x {o:?} left the canvas");
         assert!(o.y >= 0.0 && o.y < 300.0, "origin y {o:?} left the canvas");
+    }
+
+    #[test]
+    fn zoom_to_fits_the_box_in_the_viewport() {
+        let mut v = View::default();
+        let world = crate::geom::Bounds {
+            min: Pt::new(100.0, 50.0),
+            max: Pt::new(200.0, 150.0),
+        };
+        let vp = crate::geom::Bounds {
+            min: Pt::ZERO,
+            max: Pt::new(400.0, 400.0),
+        };
+        v.zoom_to(world, vp);
+        assert!((v.scale - 4.0).abs() < 1e-4, "scale {}", v.scale);
+        let c = v.to_screen(world.center());
+        assert!((c.x - 200.0).abs() < 1e-3 && (c.y - 200.0).abs() < 1e-3);
+        let tl = v.to_screen(world.min);
+        let br = v.to_screen(world.max);
+        assert!((br.x - tl.x - 400.0).abs() < 1e-3);
+        assert!((br.y - tl.y - 400.0).abs() < 1e-3);
     }
 }

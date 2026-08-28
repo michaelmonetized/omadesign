@@ -137,7 +137,7 @@ impl Tool {
             Tool::Lasso => "Draw a freehand selection.",
             Tool::Wand => "Click to select similar colour.",
             Tool::Hand => "Drag to pan. Space does this from any tool.",
-            Tool::Zoom => "Click to zoom in, Alt-click to zoom out. Scroll always works.",
+            Tool::Zoom => "Drag a box to zoom to that area. Click zooms in, Alt-click zooms out. Scroll always works.",
         }
     }
 

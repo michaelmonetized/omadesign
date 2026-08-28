@@ -185,7 +185,7 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
     let alt = resp.ctx.input(|i| i.modifiers.alt);
     let shift = resp.ctx.input(|i| i.modifiers.shift);
 
-    if studio.tool == Tool::Zoom && resp.clicked() {
+    if studio.tool == Tool::Zoom && resp.clicked() && !resp.dragged() {
         let f = if alt { 1.0 / 1.25 } else { 1.25 };
         studio.view.zoom_at(from_egui(screen) - origin, f);
         return;
@@ -489,6 +489,12 @@ fn start_drag(studio: &mut Studio, world: Pt, shift: bool) {
                 cur: world,
             })
         }
+        Tool::Zoom => {
+            studio.op = Some(Op::ZoomBox {
+                start: world,
+                cur: world,
+            })
+        }
         _ => {}
     }
 }
@@ -728,6 +734,7 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool) {
         Some(Op::Lasso { pts }) => pts.push(world),
         Some(Op::Gradient { cur, .. }) => *cur = world,
         Some(Op::CropPhoto { cur, .. }) => *cur = world,
+        Some(Op::ZoomBox { cur, .. }) => *cur = world,
         None => {}
     }
 }
@@ -877,6 +884,7 @@ fn end_drag(studio: &mut Studio, world: Pt) {
             }
         }
         Some(Op::CropPhoto { start, cur }) => studio.commit_photo_crop(start, cur),
+        Some(Op::ZoomBox { start, cur }) => studio.finish_zoom_box(start, cur),
         None => {}
     }
 }
@@ -1029,8 +1037,10 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
             p.add(eframe::egui::Shape::line(scr, Stroke::new(1.5, SELECT)));
         }
     }
-    if let Some(Op::Marquee { start, cur, .. }) | Some(Op::Gradient { start, cur }) | Some(Op::CropPhoto { start, cur }) =
-        &studio.op
+    if let Some(Op::Marquee { start, cur, .. })
+    | Some(Op::Gradient { start, cur })
+    | Some(Op::CropPhoto { start, cur })
+    | Some(Op::ZoomBox { start, cur }) = &studio.op
     {
         let a = win(rect, v, *start);
         let b = win(rect, v, *cur);

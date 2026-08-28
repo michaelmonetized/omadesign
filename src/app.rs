@@ -238,6 +238,10 @@ pub enum Op {
         start: Pt,
         cur: Pt,
     },
+    ZoomBox {
+        start: Pt,
+        cur: Pt,
+    },
 }
 
 /// On-canvas type session. History is one SetGeom at commit, not per key.
@@ -626,6 +630,32 @@ impl Studio {
             }
         }
         self.selection = neu;
+    }
+
+    pub fn finish_zoom_box(&mut self, start: Pt, cur: Pt) {
+        let world = Bounds {
+            min: Pt::new(start.x.min(cur.x), start.y.min(cur.y)),
+            max: Pt::new(start.x.max(cur.x), start.y.max(cur.y)),
+        };
+        let Some(rect) = self.canvas_rect else {
+            return;
+        };
+        let screen_w = world.width() * self.view.scale;
+        let screen_h = world.height() * self.view.scale;
+        if screen_w > 8.0 && screen_h > 8.0 {
+            self.view.zoom_to(
+                world,
+                Bounds {
+                    min: Pt::ZERO,
+                    max: Pt::new(rect.width(), rect.height()),
+                },
+            );
+            self.status = format!("zoom {:.0}%", self.view.scale * 100.0);
+        } else {
+            let mid = self.view.to_screen(world.center());
+            self.view.zoom_at(mid, 1.25);
+            self.status = format!("zoom {:.0}%", self.view.scale * 100.0);
+        }
     }
 
     pub fn nudge(&mut self, dx: f32, dy: f32) {
@@ -1817,5 +1847,15 @@ mod tests {
         assert!(!t.contours.is_empty());
         s.commit_type_edit();
         assert!(s.type_edit.is_none());
+    }
+
+    #[test]
+    fn zoom_box_fills_the_canvas() {
+        let mut s = Studio::new();
+        s.canvas_rect = Some(Rect::from_min_max(Pos2::ZERO, Pos2::new(400.0, 400.0)));
+        s.finish_zoom_box(Pt::new(100.0, 50.0), Pt::new(200.0, 150.0));
+        assert!((s.view.scale - 4.0).abs() < 1e-3, "scale {}", s.view.scale);
+        let c = s.view.to_screen(Pt::new(150.0, 100.0));
+        assert!((c.x - 200.0).abs() < 1e-2 && (c.y - 200.0).abs() < 1e-2);
     }
 }
