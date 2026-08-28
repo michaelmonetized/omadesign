@@ -9,6 +9,9 @@ use tiny_skia::{
     Transform,
 };
 
+/// Canvas camera. `offset` is in **canvas-widget pixels** (0,0 = top-left of
+/// the canvas, not the window). Mixing window coordinates here is what made
+/// selection handles sit off the filled shape.
 #[derive(Clone, Copy, Debug)]
 pub struct View {
     pub scale: f32,
@@ -37,6 +40,20 @@ impl View {
             (p.x - self.offset.x) / self.scale,
             (p.y - self.offset.y) / self.scale,
         )
+    }
+
+    /// Window-space pointer → world, given the canvas widget's top-left.
+    pub fn pointer_to_world(self, canvas_origin: Pt, pointer: Pt) -> Pt {
+        self.to_world(Pt::new(
+            pointer.x - canvas_origin.x,
+            pointer.y - canvas_origin.y,
+        ))
+    }
+
+    /// World → window-space, given the canvas widget's top-left.
+    pub fn world_to_window(self, canvas_origin: Pt, world: Pt) -> Pt {
+        let s = self.to_screen(world);
+        Pt::new(s.x + canvas_origin.x, s.y + canvas_origin.y)
     }
 
     pub fn zoom_at(&mut self, screen: Pt, factor: f32) {
@@ -483,5 +500,36 @@ mod tests {
         let img = image::load_from_memory(&bytes).unwrap();
         assert_eq!(img.width(), 64);
         assert_eq!(img.height(), 48);
+    }
+
+    #[test]
+    fn pointer_and_overlay_share_canvas_space() {
+        let v = View {
+            scale: 2.0,
+            offset: Pt::new(10.0, 20.0),
+        };
+        let canvas_origin = Pt::new(80.0, 48.0);
+        let world = Pt::new(15.0, 25.0);
+        let pix = v.to_screen(world);
+        assert!((pix.x - 40.0).abs() < 1e-4 && (pix.y - 70.0).abs() < 1e-4);
+        let win = v.world_to_window(canvas_origin, world);
+        assert!((win.x - 120.0).abs() < 1e-4 && (win.y - 118.0).abs() < 1e-4);
+        let back = v.pointer_to_world(canvas_origin, win);
+        assert!((back.x - world.x).abs() < 1e-4 && (back.y - world.y).abs() < 1e-4);
+    }
+
+    #[test]
+    fn fit_does_not_bake_in_a_window_origin() {
+        let mut v = View::default();
+        v.fit(
+            Pt::new(200.0, 100.0),
+            crate::geom::Bounds {
+                min: Pt::ZERO,
+                max: Pt::new(400.0, 300.0),
+            },
+        );
+        let o = v.to_screen(Pt::ZERO);
+        assert!(o.x >= 0.0 && o.x < 400.0, "origin x {o:?} left the canvas");
+        assert!(o.y >= 0.0 && o.y < 300.0, "origin y {o:?} left the canvas");
     }
 }

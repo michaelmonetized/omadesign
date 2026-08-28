@@ -703,6 +703,28 @@ impl Studio {
         self.status = "created".into();
     }
 
+    /// Click with the pen: add a corner, or close if you hit the first point.
+    pub fn pen_click(&mut self, world: Pt) {
+        let slack = 10.0 / self.view.scale.max(0.01);
+        if let Some(Op::Pen { anchors }) = &self.op
+            && anchors.len() >= 2
+            && (anchors[0].pt - world).length() < slack
+        {
+            let a = anchors.clone();
+            self.op = None;
+            self.finish_pen(a, true);
+            return;
+        }
+        match &mut self.op {
+            Some(Op::Pen { anchors }) => anchors.push(Anchor::corner(world)),
+            _ => {
+                self.op = Some(Op::Pen {
+                    anchors: vec![Anchor::corner(world)],
+                })
+            }
+        }
+    }
+
     pub fn finish_pen(&mut self, anchors: Vec<Anchor>, closed: bool) {
         if anchors.len() < 2 {
             return;
@@ -1236,4 +1258,34 @@ pub fn from_egui(p: Pos2) -> Pt {
 
 pub fn color32(c: Rgba) -> Color32 {
     c.to_egui()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tools::Tool;
+
+    #[test]
+    fn pen_clicks_add_points_then_close() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        s.tool = Tool::Pen;
+        s.pen_click(Pt::new(10.0, 10.0));
+        s.pen_click(Pt::new(40.0, 10.0));
+        s.pen_click(Pt::new(40.0, 40.0));
+        match &s.op {
+            Some(Op::Pen { anchors }) => assert_eq!(anchors.len(), 3),
+            other => panic!("expected pen draft, got op? {}", other.is_some()),
+        }
+        s.pen_click(Pt::new(10.0, 10.0));
+        assert!(s.op.is_none(), "clicking the first point should close");
+        let n: usize = s
+            .doc
+            .layers
+            .iter()
+            .filter_map(|l| l.kind.shapes())
+            .map(|ss| ss.len())
+            .sum();
+        assert_eq!(n, 1);
+    }
 }

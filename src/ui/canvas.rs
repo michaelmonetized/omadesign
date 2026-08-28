@@ -17,8 +17,8 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         studio.view.fit(
             studio.doc.size(),
             crate::geom::Bounds {
-                min: Pt::new(rect.min.x, rect.min.y),
-                max: Pt::new(rect.max.x, rect.max.y),
+                min: Pt::ZERO,
+                max: Pt::new(rect.width(), rect.height()),
             },
         );
         studio.need_fit = false;
@@ -29,18 +29,20 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     let scroll = ctx.input(|i| i.smooth_scroll_delta);
     let zoom_delta = ctx.input(|i| i.zoom_delta());
     let pointer = resp.hover_pos();
+    let origin = Pt::new(rect.min.x, rect.min.y);
 
     if let Some(hp) = pointer {
+        let local = from_egui(hp) - origin;
         if zoom_delta != 1.0 {
-            studio.view.zoom_at(from_egui(hp), zoom_delta);
+            studio.view.zoom_at(local, zoom_delta);
         } else if ctx.input(|i| i.modifiers.ctrl) && scroll.y.abs() > 0.0 {
             let f = if scroll.y > 0.0 { 1.08 } else { 1.0 / 1.08 };
-            studio.view.zoom_at(from_egui(hp), f);
+            studio.view.zoom_at(local, f);
         } else if scroll != Vec2::ZERO && !ctx.input(|i| i.modifiers.ctrl) {
             studio.view.offset.x += scroll.x;
             studio.view.offset.y += scroll.y;
         }
-        studio.cursor = Some(studio.view.to_world(from_egui(hp)));
+        studio.cursor = Some(studio.view.to_world(local));
     }
 
     let panning = space || studio.tool == Tool::Hand;
@@ -93,7 +95,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         draw_grid(&painter, rect, studio);
     }
     draw_guides(&painter, rect, studio);
-    draw_overlays(&painter, studio);
+    draw_overlays(&painter, rect, studio);
 
     let files: Vec<_> = ui.ctx().input(|i| i.raw.dropped_files.clone());
     for f in files {
@@ -129,6 +131,10 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
             studio.status = "image placed as pixel layer".into();
         }
     }
+}
+
+fn win(rect: Rect, view: crate::compositor::View, world: Pt) -> Pos2 {
+    to_egui(view.world_to_window(Pt::new(rect.min.x, rect.min.y), world))
 }
 
 fn preview_shape(kind: CreateKind, start: Pt, cur: Pt, studio: &Studio) -> Geom {
@@ -167,14 +173,18 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
     let Some(screen) = resp.interact_pointer_pos().or(resp.hover_pos()) else {
         return;
     };
-    let mut world = studio.view.to_world(from_egui(screen));
+    let Some(crect) = studio.canvas_rect else {
+        return;
+    };
+    let origin = Pt::new(crect.min.x, crect.min.y);
+    let mut world = studio.view.pointer_to_world(origin, from_egui(screen));
     world = studio.snap_pt(world);
     let alt = resp.ctx.input(|i| i.modifiers.alt);
     let shift = resp.ctx.input(|i| i.modifiers.shift);
 
     if studio.tool == Tool::Zoom && resp.clicked() {
         let f = if alt { 1.0 / 1.25 } else { 1.25 };
-        studio.view.zoom_at(from_egui(screen), f);
+        studio.view.zoom_at(from_egui(screen) - origin, f);
         return;
     }
 
@@ -230,8 +240,10 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
         return;
     }
 
-    // Drag start
-    if resp.drag_started_by(PointerButton::Primary) && studio.op.is_none() {
+    // Drag start. The pen stays in a draft `Op`, so it must accept further
+    // presses — otherwise you get one point and then nothing.
+    let continue_pen = studio.tool == Tool::Pen && matches!(studio.op, Some(Op::Pen { .. }));
+    if resp.drag_started_by(PointerButton::Primary) && (studio.op.is_none() || continue_pen) {
         start_drag(studio, world, shift);
     }
 
@@ -318,15 +330,7 @@ fn start_drag(studio: &mut Studio, world: Pt, shift: bool) {
                 }
             }
         }
-        Tool::Pen => {
-            if let Some(Op::Pen { anchors }) = &mut studio.op {
-                anchors.push(Anchor::corner(world));
-            } else {
-                studio.op = Some(Op::Pen {
-                    anchors: vec![Anchor::corner(world)],
-                });
-            }
-        }
+        Tool::Pen => studio.pen_click(world),
         Tool::Pencil => {
             studio.op = Some(Op::Pencil { pts: vec![world] });
         }
@@ -874,17 +878,7 @@ fn click(studio: &mut Studio, world: Pt, shift: bool) {
                 studio.selection = vec![hit];
             }
         }
-        Tool::Pen => {
-            if let Some(Op::Pen { anchors }) = &studio.op {
-                if anchors.len() >= 3 && (anchors[0].pt - world).length() < 10.0 / studio.view.scale.max(0.01)
-                {
-                    let a = anchors.clone();
-                    studio.op = None;
-                    studio.finish_pen(a, true);
-                    return;
-                }
-            }
-        }
+        Tool::Pen => studio.pen_click(world),
         _ => {}
     }
 }
@@ -895,7 +889,7 @@ fn draw_rulers(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
     p.rect_filled(Rect::from_min_size(rect.min, vec2(rect.width(), size)), 0.0, bg);
     p.rect_filled(Rect::from_min_size(rect.min, vec2(size, rect.height())), 0.0, bg);
     let step = nice_step(40.0 / studio.view.scale);
-    let origin = studio.view.to_screen(Pt::ZERO);
+    let origin = win(rect, studio.view, Pt::ZERO);
     let mut x = origin.x;
     let mut wx = 0.0f32;
     while x < rect.max.x {
@@ -946,7 +940,7 @@ fn nice_step(raw: f32) -> f32 {
 fn draw_grid(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
     let g = studio.doc.grid.size.max(1.0);
     let col = Color32::from_rgba_unmultiplied(255, 255, 255, 18);
-    let origin = studio.view.to_screen(Pt::ZERO);
+    let origin = win(rect, studio.view, Pt::ZERO);
     let mut x = origin.x;
     while x < rect.max.x {
         p.line_segment([pos2(x, rect.min.y), pos2(x, rect.max.y)], Stroke::new(1.0, col));
@@ -963,25 +957,26 @@ fn draw_guides(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
     let s = Stroke::new(1.0, Color32::from_rgb(0x2E, 0xC4, 0xB6));
     for g in &studio.doc.guides {
         if g.vertical {
-            let x = studio.view.to_screen(Pt::new(g.pos, 0.0)).x;
+            let x = win(rect, studio.view, Pt::new(g.pos, 0.0)).x;
             p.line_segment([pos2(x, rect.min.y), pos2(x, rect.max.y)], s);
         } else {
-            let y = studio.view.to_screen(Pt::new(0.0, g.pos)).y;
+            let y = win(rect, studio.view, Pt::new(0.0, g.pos)).y;
             p.line_segment([pos2(rect.min.x, y), pos2(rect.max.x, y)], s);
         }
     }
 }
 
-fn draw_overlays(p: &eframe::egui::Painter, studio: &Studio) {
+fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
+    let v = studio.view;
     if let Some(Op::Create { kind, start, cur }) = &studio.op {
         let g = preview_shape(*kind, *start, *cur, studio);
-        stroke_geom(p, &g, studio.view);
+        stroke_geom(p, rect, &g, v);
     }
     if let Some(Op::Pen { anchors }) = &studio.op {
-        draw_pen(p, anchors, studio);
+        draw_pen(p, rect, anchors, studio);
     }
     if let Some(Op::Pencil { pts }) = &studio.op {
-        let scr: Vec<Pos2> = pts.iter().map(|q| to_egui(studio.view.to_screen(*q))).collect();
+        let scr: Vec<Pos2> = pts.iter().map(|q| win(rect, v, *q)).collect();
         if scr.len() >= 2 {
             p.add(eframe::egui::Shape::line(scr, Stroke::new(1.5, SELECT)));
         }
@@ -989,14 +984,14 @@ fn draw_overlays(p: &eframe::egui::Painter, studio: &Studio) {
     if let Some(Op::Marquee { start, cur, .. }) | Some(Op::Gradient { start, cur }) | Some(Op::CropPhoto { start, cur }) =
         &studio.op
     {
-        let a = to_egui(studio.view.to_screen(*start));
-        let b = to_egui(studio.view.to_screen(*cur));
+        let a = win(rect, v, *start);
+        let b = win(rect, v, *cur);
         let r = Rect::from_two_pos(a, b);
         p.rect_filled(r, 0.0, SELECT_FILL);
         p.rect_stroke(r, 0.0, Stroke::new(1.0, SELECT), eframe::egui::StrokeKind::Middle);
     }
     if let Some(Op::Lasso { pts }) = &studio.op {
-        let scr: Vec<Pos2> = pts.iter().map(|q| to_egui(studio.view.to_screen(*q))).collect();
+        let scr: Vec<Pos2> = pts.iter().map(|q| win(rect, v, *q)).collect();
         if scr.len() >= 2 {
             p.add(eframe::egui::Shape::line(scr, Stroke::new(1.2, SELECT)));
         }
@@ -1004,41 +999,38 @@ fn draw_overlays(p: &eframe::egui::Painter, studio: &Studio) {
 
     for (li, id) in &studio.selection {
         if let Some(s) = studio.doc.find_shape(*li, *id) {
-            stroke_world(p, s, studio.view);
+            stroke_world(p, rect, s, v);
             let b = s.world_bbox();
-            let sb = Rect::from_min_max(
-                to_egui(studio.view.to_screen(b.min)),
-                to_egui(studio.view.to_screen(b.max)),
-            );
+            let sb = Rect::from_min_max(win(rect, v, b.min), win(rect, v, b.max));
             p.rect_stroke(sb, 0.0, Stroke::new(1.0, SELECT), eframe::egui::StrokeKind::Middle);
             for i in 0..8 {
-                let h = to_egui(studio.view.to_screen(b.handle(i)));
+                let h = win(rect, v, b.handle(i));
                 p.rect_filled(Rect::from_center_size(h, vec2(7.0, 7.0)), 0.0, SELECT);
             }
-            let rh = to_egui(studio.view.to_screen(b.rotate_handle()));
+            let rh = win(rect, v, b.rotate_handle());
             p.line_segment([sb.center_top(), rh], Stroke::new(1.0, SELECT));
             p.circle_filled(rh, 4.0, ACCENT);
             if studio.tool == Tool::Node {
                 if let Geom::Path { anchors, .. } = &s.geom {
-                    draw_nodes(p, anchors, studio.view);
+                    draw_nodes(p, rect, anchors, v);
                 }
             }
         }
     }
 }
 
-fn stroke_geom(p: &eframe::egui::Painter, g: &Geom, view: crate::compositor::View) {
+fn stroke_geom(p: &eframe::egui::Painter, rect: Rect, g: &Geom, view: crate::compositor::View) {
     for c in g.contours(64) {
-        let pts: Vec<Pos2> = c.iter().map(|q| to_egui(view.to_screen(*q))).collect();
+        let pts: Vec<Pos2> = c.iter().map(|q| win(rect, view, *q)).collect();
         if pts.len() >= 2 {
             p.add(eframe::egui::Shape::line(pts, Stroke::new(1.4, SELECT)));
         }
     }
 }
 
-fn stroke_world(p: &eframe::egui::Painter, s: &crate::document::Shape, view: crate::compositor::View) {
+fn stroke_world(p: &eframe::egui::Painter, rect: Rect, s: &crate::document::Shape, view: crate::compositor::View) {
     for c in s.world_contours(64) {
-        let pts: Vec<Pos2> = c.iter().map(|q| to_egui(view.to_screen(*q))).collect();
+        let pts: Vec<Pos2> = c.iter().map(|q| win(rect, view, *q)).collect();
         if pts.len() >= 2 {
             p.add(eframe::egui::Shape::line(
                 pts,
@@ -1048,27 +1040,24 @@ fn stroke_world(p: &eframe::egui::Painter, s: &crate::document::Shape, view: cra
     }
 }
 
-fn draw_pen(p: &eframe::egui::Painter, anchors: &[Anchor], studio: &Studio) {
-    draw_nodes(p, anchors, studio.view);
+fn draw_pen(p: &eframe::egui::Painter, rect: Rect, anchors: &[Anchor], studio: &Studio) {
+    draw_nodes(p, rect, anchors, studio.view);
     if let Some(c) = studio.cursor {
         if let Some(last) = anchors.last() {
             p.line_segment(
-                [
-                    to_egui(studio.view.to_screen(last.pt)),
-                    to_egui(studio.view.to_screen(c)),
-                ],
+                [win(rect, studio.view, last.pt), win(rect, studio.view, c)],
                 Stroke::new(1.0, SELECT),
             );
         }
     }
 }
 
-fn draw_nodes(p: &eframe::egui::Painter, anchors: &[Anchor], view: crate::compositor::View) {
+fn draw_nodes(p: &eframe::egui::Painter, rect: Rect, anchors: &[Anchor], view: crate::compositor::View) {
     for a in anchors {
-        let sp = to_egui(view.to_screen(a.pt));
+        let sp = win(rect, view, a.pt);
         if !a.is_corner() {
-            let hi = to_egui(view.to_screen(a.pt + a.h_in));
-            let ho = to_egui(view.to_screen(a.pt + a.h_out));
+            let hi = win(rect, view, a.pt + a.h_in);
+            let ho = win(rect, view, a.pt + a.h_out);
             p.line_segment([sp, hi], Stroke::new(1.0, Color32::from_rgb(0x8A, 0xC1, 0xFF)));
             p.line_segment([sp, ho], Stroke::new(1.0, Color32::from_rgb(0x8A, 0xC1, 0xFF)));
             p.circle_filled(hi, 3.0, Color32::from_rgb(0x8A, 0xC1, 0xFF));
