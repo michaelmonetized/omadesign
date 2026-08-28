@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Link with Zig against an older glibc than this Arch box ships.
+# 2.35 = Ubuntu 22.04; Asahi / current Arch ARM are newer than that.
+set -euo pipefail
+triple="${ZIG_GLIBC_TARGET:?set ZIG_GLIBC_TARGET, e.g. aarch64-linux-gnu.2.35}"
+zig="${ZIG:-}"
+if [[ -z "$zig" ]]; then
+  for c in \
+    "$HOME/.local/opt/zig-0.16.0/zig" \
+    "$HOME/.local/opt/zig-x86_64-linux-0.16.0/zig"
+  do
+    if [[ -x "$c" ]]; then zig="$c"; break; fi
+  done
+fi
+if [[ -z "$zig" || ! -x "$zig" ]]; then
+  echo "zig not found; expected ~/.local/opt/zig-0.16.0/zig" >&2
+  exit 1
+fi
+
+filtered=()
+for a in "$@"; do
+  case "$a" in
+    -Wl,--fix-cortex-a53-843419|--fix-cortex-a53-843419) ;;
+    -fuse-ld=*|-B*/gcc-ld) ;;
+    *) filtered+=("$a") ;;
+  esac
+done
+
+exec "$zig" cc -target "$triple" -fno-sanitize=undefined "${filtered[@]}"

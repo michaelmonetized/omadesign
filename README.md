@@ -7,7 +7,9 @@ layer stack, vector and pixels together. Built so a designer coming from macOS
 Pure Rust. No GTK app, no Electron. `cargo` is the toolchain.
 
 Binaries are built **on this machine** and uploaded to GitHub Releases. There is
-no GitHub Actions bill.
+no GitHub Actions bill. They are linked against **glibc 2.35** (Ubuntu 22.04
+era) so they run on Asahi Omarchy, current Arch ARM, and anything newer — not
+against the bleeding-edge glibc on the build box.
 
 ## Download (Asahi / Omarchy / Linux)
 
