@@ -1,0 +1,40 @@
+@import "tailwindcss";
+@import "@catppuccin/tailwindcss/mocha.css";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --font-sans: "Iosevka Aile", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background: var(--color-ctp-base);
+  color: var(--color-ctp-text);
+  font-family: var(--font-sans);
+}
+
+.latte {
+  color-scheme: light;
+}
+
+.mocha {
+  color-scheme: dark;
+}
+
+.reel-track {
+  animation: reel 28s linear infinite;
+}
+
+@keyframes reel {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}

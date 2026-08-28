@@ -1,0 +1,11 @@
+{
+  "framework": null,
+  "buildCommand": "bun run build",
+  "outputDirectory": ".output/public",
+  "headers": [
+    {
+      "source": "/install",
+      "headers": [{ "key": "Content-Type", "value": "text/plain; charset=utf-8" }]
+    }
+  ]
+}

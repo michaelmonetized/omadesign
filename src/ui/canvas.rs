@@ -4,7 +4,7 @@ use crate::document::Fill;
 use crate::geom::{insert_anchor, Anchor, Bounds, Geom, Pt};
 use crate::paint;
 use crate::tools::Tool;
-use crate::ui::theme::{ACCENT, SELECT, SELECT_FILL};
+use crate::ui::theme::{accent, bg_panel, border, fg_weak, select, select_fill};
 use eframe::egui::{
     Color32, PointerButton, Pos2, Rect, Sense, Stroke, Ui, Vec2, pos2, vec2,
 };
@@ -941,7 +941,7 @@ fn click(studio: &mut Studio, world: Pt, shift: bool) {
 
 fn draw_rulers(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
     let size = 18.0;
-    let bg = Color32::from_rgb(0x16, 0x18, 0x1E);
+    let bg = bg_panel();
     p.rect_filled(Rect::from_min_size(rect.min, vec2(rect.width(), size)), 0.0, bg);
     p.rect_filled(Rect::from_min_size(rect.min, vec2(size, rect.height())), 0.0, bg);
     let step = nice_step(40.0 / studio.view.scale);
@@ -952,14 +952,14 @@ fn draw_rulers(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
         if x > rect.min.x + size {
             p.line_segment(
                 [pos2(x, rect.min.y), pos2(x, rect.min.y + size)],
-                Stroke::new(1.0, Color32::from_rgb(0x3A, 0x40, 0x4A)),
+                Stroke::new(1.0, border()),
             );
             p.text(
                 pos2(x + 2.0, rect.min.y + 2.0),
                 eframe::egui::Align2::LEFT_TOP,
                 format!("{wx:.0}"),
                 eframe::egui::FontId::monospace(9.0),
-                Color32::from_rgb(0x8A, 0x93, 0xA6),
+                fg_weak(),
             );
         }
         x += step * studio.view.scale;
@@ -971,7 +971,7 @@ fn draw_rulers(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
         if y > rect.min.y + size {
             p.line_segment(
                 [pos2(rect.min.x, y), pos2(rect.min.x + size, y)],
-                Stroke::new(1.0, Color32::from_rgb(0x3A, 0x40, 0x4A)),
+                Stroke::new(1.0, border()),
             );
         }
         y += step * studio.view.scale;
@@ -995,7 +995,7 @@ fn nice_step(raw: f32) -> f32 {
 
 fn draw_grid(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
     let g = studio.doc.grid.size.max(1.0);
-    let col = Color32::from_rgba_unmultiplied(255, 255, 255, 18);
+    let col = crate::ui::theme::accent_soft();
     let origin = win(rect, studio.view, Pt::ZERO);
     let mut x = origin.x;
     while x < rect.max.x {
@@ -1010,7 +1010,7 @@ fn draw_grid(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
 }
 
 fn draw_guides(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
-    let s = Stroke::new(1.0, Color32::from_rgb(0x2E, 0xC4, 0xB6));
+    let s = Stroke::new(1.0, accent());
     for g in &studio.doc.guides {
         if g.vertical {
             let x = win(rect, studio.view, Pt::new(g.pos, 0.0)).x;
@@ -1034,7 +1034,7 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
     if let Some(Op::Pencil { pts }) = &studio.op {
         let scr: Vec<Pos2> = pts.iter().map(|q| win(rect, v, *q)).collect();
         if scr.len() >= 2 {
-            p.add(eframe::egui::Shape::line(scr, Stroke::new(1.5, SELECT)));
+            p.add(eframe::egui::Shape::line(scr, Stroke::new(1.5, select())));
         }
     }
     if let Some(Op::Marquee { start, cur, .. })
@@ -1045,13 +1045,13 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
         let a = win(rect, v, *start);
         let b = win(rect, v, *cur);
         let r = Rect::from_two_pos(a, b);
-        p.rect_filled(r, 0.0, SELECT_FILL);
-        p.rect_stroke(r, 0.0, Stroke::new(1.0, SELECT), eframe::egui::StrokeKind::Middle);
+        p.rect_filled(r, 0.0, select_fill());
+        p.rect_stroke(r, 0.0, Stroke::new(1.0, select()), eframe::egui::StrokeKind::Middle);
     }
     if let Some(Op::Lasso { pts }) = &studio.op {
         let scr: Vec<Pos2> = pts.iter().map(|q| win(rect, v, *q)).collect();
         if scr.len() >= 2 {
-            p.add(eframe::egui::Shape::line(scr, Stroke::new(1.2, SELECT)));
+            p.add(eframe::egui::Shape::line(scr, Stroke::new(1.2, select())));
         }
     }
 
@@ -1060,16 +1060,16 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
             stroke_world(p, rect, s, v);
             let b = s.world_bbox();
             let sb = Rect::from_min_max(win(rect, v, b.min), win(rect, v, b.max));
-            p.rect_stroke(sb, 0.0, Stroke::new(1.0, SELECT), eframe::egui::StrokeKind::Middle);
+            p.rect_stroke(sb, 0.0, Stroke::new(1.0, select()), eframe::egui::StrokeKind::Middle);
             let editing = studio.editing_text(*li, *id);
             if !editing {
                 for i in 0..8 {
                     let h = win(rect, v, b.handle(i));
-                    p.rect_filled(Rect::from_center_size(h, vec2(7.0, 7.0)), 0.0, SELECT);
+                    p.rect_filled(Rect::from_center_size(h, vec2(7.0, 7.0)), 0.0, select());
                 }
                 let rh = win(rect, v, b.rotate_handle());
-                p.line_segment([sb.center_top(), rh], Stroke::new(1.0, SELECT));
-                p.circle_filled(rh, 4.0, ACCENT);
+                p.line_segment([sb.center_top(), rh], Stroke::new(1.0, select()));
+                p.circle_filled(rh, 4.0, accent());
             }
             if studio.tool == Tool::Node {
                 if let Geom::Path { anchors, .. } = &s.geom {
@@ -1098,7 +1098,7 @@ fn draw_type_caret(
     let v = studio.view;
     for (a, b) in crate::text::selection_rects(run, caret, anchor) {
         let r = Rect::from_min_max(win(rect, v, a), win(rect, v, b));
-        p.rect_filled(r, 0.0, SELECT_FILL);
+        p.rect_filled(r, 0.0, select_fill());
     }
     let on = (studio
         .canvas_rect
@@ -1111,7 +1111,7 @@ fn draw_type_caret(
         let c = crate::text::caret_pt(run, caret);
         let top = win(rect, v, Pt::new(c.x, c.y - run.px * 0.9));
         let bot = win(rect, v, Pt::new(c.x, c.y + run.px * 0.2));
-        p.line_segment([top, bot], Stroke::new(1.5, SELECT));
+        p.line_segment([top, bot], Stroke::new(1.5, select()));
     }
 }
 
@@ -1119,7 +1119,7 @@ fn stroke_geom(p: &eframe::egui::Painter, rect: Rect, g: &Geom, view: crate::com
     for c in g.contours(64) {
         let pts: Vec<Pos2> = c.iter().map(|q| win(rect, view, *q)).collect();
         if pts.len() >= 2 {
-            p.add(eframe::egui::Shape::line(pts, Stroke::new(1.4, SELECT)));
+            p.add(eframe::egui::Shape::line(pts, Stroke::new(1.4, select())));
         }
     }
 }
@@ -1142,7 +1142,7 @@ fn draw_pen(p: &eframe::egui::Painter, rect: Rect, anchors: &[Anchor], studio: &
         if let Some(last) = anchors.last() {
             p.line_segment(
                 [win(rect, studio.view, last.pt), win(rect, studio.view, c)],
-                Stroke::new(1.0, SELECT),
+                Stroke::new(1.0, select()),
             );
         }
     }
@@ -1154,11 +1154,11 @@ fn draw_nodes(p: &eframe::egui::Painter, rect: Rect, anchors: &[Anchor], view: c
         if !a.is_corner() {
             let hi = win(rect, view, a.pt + a.h_in);
             let ho = win(rect, view, a.pt + a.h_out);
-            p.line_segment([sp, hi], Stroke::new(1.0, Color32::from_rgb(0x8A, 0xC1, 0xFF)));
-            p.line_segment([sp, ho], Stroke::new(1.0, Color32::from_rgb(0x8A, 0xC1, 0xFF)));
-            p.circle_filled(hi, 3.0, Color32::from_rgb(0x8A, 0xC1, 0xFF));
-            p.circle_filled(ho, 3.0, Color32::from_rgb(0x8A, 0xC1, 0xFF));
+            p.line_segment([sp, hi], Stroke::new(1.0, select()));
+            p.line_segment([sp, ho], Stroke::new(1.0, select()));
+            p.circle_filled(hi, 3.0, select());
+            p.circle_filled(ho, 3.0, select());
         }
-        p.rect_filled(Rect::from_center_size(sp, vec2(6.0, 6.0)), 0.0, SELECT);
+        p.rect_filled(Rect::from_center_size(sp, vec2(6.0, 6.0)), 0.0, select());
     }
 }

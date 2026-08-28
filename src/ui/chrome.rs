@@ -2,14 +2,14 @@ use crate::app::Studio;
 use crate::boolean::BoolOp;
 use crate::tools::{Persona, Tool};
 use crate::ui::icons;
-use crate::ui::theme::{ACCENT, ACCENT_DIM, FG_WEAK};
+use crate::ui::theme::{accent, accent_dim, fg_weak};
 use eframe::egui::{vec2, Button, Color32, Layout, Panel, RichText, Ui};
 
 pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
     Panel::top("top").exact_size(40.0).show(ui, |ui| {
         ui.horizontal(|ui| {
             ui.add_space(6.0);
-            ui.label(RichText::new("omadesign").strong().color(ACCENT));
+            ui.label(RichText::new("omadesign").strong().color(accent()));
             ui.separator();
             ui.menu_button("File", |ui| {
                 if ui.button("New…          Ctrl+N").clicked() {
@@ -67,7 +67,7 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
                 }
             });
             ui.menu_button("Object", |ui| {
-                ui.label(RichText::new("Boolean").small().color(FG_WEAK));
+                ui.label(RichText::new("Boolean").small().color(fg_weak()));
                 for op in BoolOp::all() {
                     if ui.button(op.name()).clicked() {
                         studio.apply_boolean(op);
@@ -136,7 +136,7 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
             for p in [Persona::Design, Persona::Pixel, Persona::Photo] {
                 let on = studio.persona == p;
                 let btn = Button::new(RichText::new(p.name()).strong()).fill(if on {
-                    ACCENT_DIM
+                    accent_dim()
                 } else {
                     Color32::TRANSPARENT
                 });
@@ -190,10 +190,10 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
                 ui.label(
                     RichText::new(format!("{:.0}%", studio.view.scale * 100.0))
                         .small()
-                        .color(FG_WEAK),
+                        .color(fg_weak()),
                 );
                 if studio.dirty {
-                    ui.label(RichText::new("•").color(ACCENT));
+                    ui.label(RichText::new("•").color(accent()));
                 }
                 ui.label(RichText::new(&studio.doc.name).small());
             });
@@ -237,14 +237,14 @@ pub fn left_toolbar(ui: &mut Ui, studio: &mut Studio) {
 pub fn status_bar(ui: &mut Ui, studio: &mut Studio) {
     Panel::bottom("status").exact_size(22.0).show(ui, |ui| {
         ui.horizontal(|ui| {
-            ui.label(RichText::new(studio.tool.hint()).small().color(FG_WEAK));
+            ui.label(RichText::new(studio.tool.hint()).small().color(fg_weak()));
             ui.with_layout(Layout::right_to_left(eframe::egui::Align::Center), |ui| {
                 if let Some(p) = studio.cursor {
                     ui.label(
                         RichText::new(format!("{:.0}  {:.0}", p.x, p.y))
                             .small()
                             .monospace()
-                            .color(FG_WEAK),
+                            .color(fg_weak()),
                     );
                 }
                 ui.label(RichText::new(&studio.status).small());

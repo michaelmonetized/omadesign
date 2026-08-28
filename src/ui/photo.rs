@@ -1,6 +1,6 @@
 use crate::app::Studio;
 use crate::photo::{self, DevelopParams, Histogram, HSL_NAMES};
-use crate::ui::theme::{ACCENT, ACCENT_DIM, BG_EXTREME, FG_WEAK};
+use crate::ui::theme::{accent, accent_dim, bg_canvas, bg_extreme, fg_weak};
 use eframe::egui::{
     Color32, ColorImage, PointerButton, Pos2, Rect, RichText, ScrollArea, Sense, Slider, Stroke,
     TextureOptions, Ui, pos2, vec2,
@@ -78,9 +78,9 @@ fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
             studio.photo.import_samples();
         }
     });
-    ui.label(RichText::new(&studio.photo.status).small().color(FG_WEAK));
+    ui.label(RichText::new(&studio.photo.status).small().color(fg_weak()));
     if !studio.photo.folder_files.is_empty() {
-        ui.label(RichText::new(&studio.photo.folder).small().color(FG_WEAK));
+        ui.label(RichText::new(&studio.photo.folder).small().color(fg_weak()));
         ScrollArea::vertical().max_height(140.0).show(ui, |ui| {
             let files = studio.photo.folder_files.clone();
             for (name, path) in files {
@@ -101,7 +101,7 @@ fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
                     ui.image((tex.id(), size));
                 }
                 let name = studio.photo.images[i].name.clone();
-                let fill = if on { ACCENT_DIM } else { Color32::TRANSPARENT };
+                let fill = if on { accent_dim() } else { Color32::TRANSPARENT };
                 if ui
                     .add(eframe::egui::Button::new(RichText::new(name).size(12.0)).fill(fill))
                     .clicked()
@@ -117,9 +117,9 @@ fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
 
 fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
     ScrollArea::vertical().show(ui, |ui| {
-        ui.label(RichText::new("Develop").strong().color(ACCENT));
+        ui.label(RichText::new("Develop").strong().color(accent()));
         if studio.photo.selected().is_none() {
-            ui.label(RichText::new("Open a photo or load samples.").color(FG_WEAK));
+            ui.label(RichText::new("Open a photo or load samples.").color(fg_weak()));
             return;
         }
         ui.horizontal(|ui| {
@@ -151,18 +151,18 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
         changed |= slider(ui, "Whites", &mut p.whites, -1.0, 1.0);
         changed |= slider(ui, "Blacks", &mut p.blacks, -1.0, 1.0);
         ui.add_space(6.0);
-        ui.label(RichText::new("White balance").small().color(FG_WEAK));
+        ui.label(RichText::new("White balance").small().color(fg_weak()));
         changed |= slider(ui, "Temp", &mut p.temperature, -100.0, 100.0);
         changed |= slider(ui, "Tint", &mut p.tint, -100.0, 100.0);
         ui.add_space(6.0);
-        ui.label(RichText::new("Presence").small().color(FG_WEAK));
+        ui.label(RichText::new("Presence").small().color(fg_weak()));
         changed |= slider(ui, "Clarity", &mut p.clarity, -1.0, 1.0);
         changed |= slider(ui, "Dehaze", &mut p.dehaze, -1.0, 1.0);
         changed |= slider(ui, "Vibrance", &mut p.vibrance, 0.0, 2.0);
         changed |= slider(ui, "Saturation", &mut p.saturation, 0.0, 2.0);
         changed |= slider(ui, "Hue", &mut p.hue, -180.0, 180.0);
         ui.add_space(6.0);
-        ui.label(RichText::new("Tone curve").small().color(FG_WEAK));
+        ui.label(RichText::new("Tone curve").small().color(fg_weak()));
         for (i, label) in ["Blacks", "Shadows", "Mid", "Highlights", "Whites"]
             .iter()
             .enumerate()
@@ -170,7 +170,7 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
             changed |= slider(ui, label, &mut p.curve[i], 0.0, 1.0);
         }
         ui.add_space(6.0);
-        ui.label(RichText::new("Split tone").small().color(FG_WEAK));
+        ui.label(RichText::new("Split tone").small().color(fg_weak()));
         changed |= slider(ui, "Shadow red", &mut p.split_shadow[0], -0.4, 0.4);
         changed |= slider(ui, "Shadow green", &mut p.split_shadow[1], -0.4, 0.4);
         changed |= slider(ui, "Shadow blue", &mut p.split_shadow[2], -0.4, 0.4);
@@ -179,7 +179,7 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
         changed |= slider(ui, "Highlight blue", &mut p.split_highlight[2], -0.4, 0.4);
         changed |= slider(ui, "Balance", &mut p.split_balance, -1.0, 1.0);
         ui.add_space(6.0);
-        ui.label(RichText::new("HSL").small().color(FG_WEAK));
+        ui.label(RichText::new("HSL").small().color(fg_weak()));
         for (i, name) in HSL_NAMES.iter().enumerate() {
             ui.label(RichText::new(*name).small());
             changed |= slider(ui, "  hue", &mut p.hsl[i].hue, -40.0, 40.0);
@@ -226,7 +226,7 @@ fn slider(ui: &mut Ui, label: &str, v: &mut f32, lo: f32, hi: f32) -> bool {
 
 fn draw_hist(ui: &mut Ui, hists: &[Histogram; 4]) {
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 64.0), Sense::hover());
-    ui.painter().rect_filled(rect, 3.0, BG_EXTREME);
+    ui.painter().rect_filled(rect, 3.0, bg_extreme());
     let cols = [
         Color32::from_rgba_unmultiplied(220, 70, 70, 140),
         Color32::from_rgba_unmultiplied(70, 200, 90, 140),
@@ -248,7 +248,7 @@ fn draw_hist(ui: &mut Ui, hists: &[Histogram; 4]) {
 
 fn viewer(ui: &mut Ui, studio: &mut Studio) {
     let (rect, resp) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
-    ui.painter().rect_filled(rect, 0.0, Color32::from_rgb(0x10, 0x12, 0x16));
+    ui.painter().rect_filled(rect, 0.0, bg_canvas());
     let tex = if studio.photo.show_original {
         studio.photo.orig_tex.as_ref()
     } else {
@@ -260,7 +260,7 @@ fn viewer(ui: &mut Ui, studio: &mut Studio) {
             eframe::egui::Align2::CENTER_CENTER,
             "Drop photos here, or load samples",
             eframe::egui::FontId::proportional(16.0),
-            FG_WEAK,
+            fg_weak(),
         );
         handle_drops(ui, studio);
         return;
@@ -289,7 +289,7 @@ fn viewer(ui: &mut Ui, studio: &mut Studio) {
             ui.painter().rect_stroke(
                 Rect::from_two_pos(ra, rb),
                 0.0,
-                Stroke::new(1.0, ACCENT),
+                Stroke::new(1.0, accent()),
                 eframe::egui::StrokeKind::Middle,
             );
         }

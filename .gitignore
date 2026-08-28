@@ -1,5 +1,12 @@
 /target
 /dist
+site/node_modules
+site/.output
+site/.vercel
+site/.vinxi
+site/.nitro
+site/dist
+site/src/routeTree.gen.ts
 atelier-demo-export.png
 atelier-export.svg
 omadesign-demo-export.png

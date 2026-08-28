@@ -2,7 +2,7 @@ use crate::app::Studio;
 use crate::color::{Blend, Rgba};
 use crate::document::{Cap, Fill, Join, Stroke as DocStroke};
 use crate::geom::Geom;
-use crate::ui::theme::{ACCENT, ACCENT_DIM, BG_WIDGET, FG_WEAK};
+use crate::ui::theme::{accent, accent_dim, bg_widget, fg_weak};
 use eframe::egui::{
     vec2, Color32, ComboBox, Layout, Panel, RichText, ScrollArea, Slider, Stroke, Ui,
 };
@@ -30,7 +30,7 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
 }
 
 fn section(ui: &mut Ui, title: &str) {
-    ui.label(RichText::new(title).strong().size(12.0).color(ACCENT));
+    ui.label(RichText::new(title).strong().size(12.0).color(accent()));
     ui.add_space(4.0);
 }
 
@@ -40,7 +40,7 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
         fill_well(ui, studio);
         stroke_well(ui, studio);
         ui.vertical(|ui| {
-            ui.label(RichText::new("Fill / Stroke").small().color(FG_WEAK));
+            ui.label(RichText::new("Fill / Stroke").small().color(fg_weak()));
             if ui.small_button("Swap  X").clicked() {
                 if let Fill::Solid(f) = studio.style.fill {
                     if let Some(st) = &studio.style.stroke {
@@ -84,7 +84,7 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
         }
     });
     if !studio.recent.is_empty() {
-        ui.label(RichText::new("Recent").small().color(FG_WEAK));
+        ui.label(RichText::new("Recent").small().color(fg_weak()));
         ui.horizontal_wrapped(|ui| {
             for c in studio.recent.clone() {
                 let (rect, resp) =
@@ -130,12 +130,12 @@ fn fill_well(ui: &mut Ui, studio: &mut Studio) {
         Fill::None => Color32::TRANSPARENT,
     };
     let (rect, _) = ui.allocate_exact_size(vec2(36.0, 36.0), eframe::egui::Sense::hover());
-    ui.painter().rect_filled(rect, 4.0, BG_WIDGET);
+    ui.painter().rect_filled(rect, 4.0, bg_widget());
     ui.painter().rect_filled(rect.shrink(4.0), 3.0, c);
     ui.painter().rect_stroke(
         rect,
         4.0,
-        Stroke::new(1.0, ACCENT_DIM),
+        Stroke::new(1.0, accent_dim()),
         eframe::egui::StrokeKind::Middle,
     );
 }
@@ -316,7 +316,7 @@ fn character_studio(ui: &mut Ui, studio: &mut Studio) {
     }
 
     ui.add_space(4.0);
-    ui.label(RichText::new("OpenType").small().color(FG_WEAK));
+    ui.label(RichText::new("OpenType").small().color(fg_weak()));
     let mut kern = live.as_ref().map(|t| t.kern).unwrap_or(studio.text_kern);
     let mut liga = live.as_ref().map(|t| t.liga).unwrap_or(studio.text_liga);
     let mut tnum = live.as_ref().map(|t| t.tnum).unwrap_or(studio.text_tnum);
@@ -341,19 +341,19 @@ fn character_studio(ui: &mut Ui, studio: &mut Studio) {
         ui.label(
             RichText::new("Typing on the canvas. Esc finishes.")
                 .small()
-                .color(ACCENT),
+                .color(accent()),
         );
     } else if live.is_none() {
         ui.label(
             RichText::new("Applies to the next type you place.")
                 .small()
-                .color(FG_WEAK),
+                .color(fg_weak()),
         );
     } else {
         ui.label(
             RichText::new("Double-click the type to type into it.")
                 .small()
-                .color(FG_WEAK),
+                .color(fg_weak()),
         );
     }
 }
@@ -361,11 +361,11 @@ fn character_studio(ui: &mut Ui, studio: &mut Studio) {
 fn transform_studio(ui: &mut Ui, studio: &mut Studio) {
     section(ui, "Transform");
     if studio.selection.is_empty() {
-        ui.label(RichText::new("Nothing selected").small().color(FG_WEAK));
+        ui.label(RichText::new("Nothing selected").small().color(fg_weak()));
         ui.label(
             RichText::new("Polygon sides / star points apply to the next shape you draw.")
                 .small()
-                .color(FG_WEAK),
+                .color(fg_weak()),
         );
         ui.add(Slider::new(&mut studio.polygon_sides, 3..=12).text("Sides"));
         ui.add(Slider::new(&mut studio.star_points, 3..=12).text("Star points"));
@@ -390,7 +390,7 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio) {
             b.min.y
         ))
         .small()
-        .color(FG_WEAK),
+        .color(fg_weak()),
     );
     let mut op = shape.opacity;
     if ui
@@ -411,7 +411,7 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio) {
                     "Type lives in the Character studio. Double-click the words to edit.",
                 )
                 .small()
-                .color(FG_WEAK),
+                .color(fg_weak()),
             );
         }
         Geom::Polygon { sides, .. } => {
@@ -506,12 +506,12 @@ fn brush_studio(ui: &mut Ui, studio: &mut Studio) {
     ui.add(Slider::new(&mut studio.brush.flow, 0.05..=1.0).text("Flow"));
     ui.add(Slider::new(&mut studio.fill_tolerance, 0.0..=180.0).text("Fill / wand tolerance"));
     if studio.clone_source.is_some() {
-        ui.label(RichText::new("Clone source set").small().color(ACCENT));
+        ui.label(RichText::new("Clone source set").small().color(accent()));
     } else {
         ui.label(
             RichText::new("Alt-click sets clone source")
                 .small()
-                .color(FG_WEAK),
+                .color(fg_weak()),
         );
     }
 }
@@ -551,7 +551,7 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                 if ui.small_button(lock_s).clicked() {
                     lock = Some(i);
                 }
-                let fill = if on { ACCENT_DIM } else { Color32::TRANSPARENT };
+                let fill = if on { accent_dim() } else { Color32::TRANSPARENT };
                 let label = format!("{}  {}", layer.kind.tag(), layer.name);
                 if ui
                     .add(eframe::egui::Button::new(RichText::new(label).size(12.0)).fill(fill))
