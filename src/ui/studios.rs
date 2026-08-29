@@ -427,11 +427,20 @@ fn character_studio(ui: &mut Ui, studio: &mut Studio) {
                 .color(accent()),
         );
     } else if live.is_none() {
-        ui.label(
-            RichText::new("Applies to the next type you place.")
-                .small()
-                .color(fg_weak()),
-        );
+        if let Some(fam) = crate::text::preferred_default_family_name() {
+            let cur = crate::text::label_for(&studio.text_font);
+            ui.label(
+                RichText::new(format!("Default: {cur} (from {fam} in web apps)"))
+                    .small()
+                    .color(fg_weak()),
+            );
+        } else {
+            ui.label(
+                RichText::new("Applies to the next type you place.")
+                    .small()
+                    .color(fg_weak()),
+            );
+        }
     } else {
         ui.label(
             RichText::new("Double-click the type to type into it.")
