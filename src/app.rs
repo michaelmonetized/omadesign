@@ -309,6 +309,22 @@ pub struct Studio {
     pub palettes: Vec<crate::palette::Palette>,
     pub palette_idx: usize,
     pub palette_name_buf: String,
+    // Welcome / new document options
+    pub new_doc_group: String,
+    pub new_doc_transparent: bool,
+    pub new_doc_bleed: bool,
+    pub new_doc_safe: bool,
+    pub new_doc_artboards: u32,
+    // Browsers
+    pub show_shape_browser: bool,
+    pub show_asset_browser: bool,
+    pub shape_query: String,
+    pub shape_lib: String,
+    pub shape_status: String,
+    pub asset_query: String,
+    pub asset_provider: String,
+    pub asset_status: String,
+    pub asset_results: Vec<crate::asset_browser::AssetHit>,
 }
 
 impl Studio {
@@ -371,6 +387,20 @@ impl Studio {
             palettes: crate::palette::load(),
             palette_idx: 0,
             palette_name_buf: String::new(),
+            new_doc_group: "All".into(),
+            new_doc_transparent: false,
+            new_doc_bleed: false,
+            new_doc_safe: false,
+            new_doc_artboards: 1,
+            show_shape_browser: false,
+            show_asset_browser: false,
+            shape_query: String::new(),
+            shape_lib: "Phosphor".into(),
+            shape_status: String::new(),
+            asset_query: String::new(),
+            asset_provider: "All".into(),
+            asset_status: String::new(),
+            asset_results: Vec::new(),
         };
         s.doc.grid.visible = false;
         if !s.palettes.is_empty() {
@@ -390,7 +420,17 @@ impl Studio {
     }
 
     pub fn new_from_preset(&mut self, p: Preset) {
-        self.doc = Document::new(p.name, p.w, p.h, p.dpi);
+        let art = self.new_doc_artboards.max(1);
+        self.doc = Document::new_with_options(
+            p.name,
+            p.w,
+            p.h,
+            p.dpi,
+            self.new_doc_transparent,
+            art,
+            self.new_doc_bleed,
+            self.new_doc_safe,
+        );
         self.path = None;
         self.dirty = false;
         self.history.clear();
@@ -399,7 +439,14 @@ impl Studio {
         self.need_fit = true;
         self.show_welcome = false;
         self.op = None;
-        self.status = format!("{} · {:.0}×{:.0} @ {} dpi", p.name, p.w, p.h, p.dpi);
+        let transp = if self.new_doc_transparent { " transparent" } else { "" };
+        let bleed = if self.new_doc_bleed { " + bleed" } else { "" };
+        let safe = if self.new_doc_safe { " + safe" } else { "" };
+        let arts = if art > 1 { format!(" ×{} artboards", art) } else { String::new() };
+        self.status = format!(
+            "{} · {:.0}×{:.0} @ {} dpi{}{}{}{}",
+            p.name, p.w, p.h, p.dpi, arts, transp, bleed, safe
+        );
     }
 
     pub fn seed_demo(&mut self) {

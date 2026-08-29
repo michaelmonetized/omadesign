@@ -98,6 +98,8 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         draw_grid(&painter, rect, studio);
     }
     draw_guides(&painter, rect, studio);
+    draw_artboard_frames(&painter, rect, studio);
+    draw_bleed_safe(&painter, rect, studio);
     draw_overlays(&painter, rect, studio);
 
     let files: Vec<_> = ui.ctx().input(|i| i.raw.dropped_files.clone());
@@ -1133,6 +1135,101 @@ fn draw_guides(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
         } else {
             let y = win(rect, studio.view, Pt::new(0.0, g.pos)).y;
             p.line_segment([pos2(rect.min.x, y), pos2(rect.max.x, y)], s);
+        }
+    }
+}
+
+fn draw_artboard_frames(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
+    let doc = &studio.doc;
+    let art = doc.artboards.max(1);
+    if art <= 1 {
+        return;
+    }
+    let total_gutter = 48.0 * (art as f32 - 1.0);
+    let single_w = (doc.width - total_gutter) / art as f32;
+    let single_h = doc.height;
+    for i in 0..art {
+        let x0 = i as f32 * (single_w + 48.0);
+        let r = Rect::from_min_max(
+            win(rect, studio.view, Pt::new(x0, 0.0)),
+            win(rect, studio.view, Pt::new(x0 + single_w, single_h)),
+        );
+        p.rect_stroke(
+            r,
+            0.0,
+            Stroke::new(1.0, Color32::from_rgb(120, 130, 150)),
+            eframe::egui::StrokeKind::Middle,
+        );
+        p.text(
+            r.left_top() + vec2(4.0, 2.0),
+            eframe::egui::Align2::LEFT_TOP,
+            format!("Artboard {}", i + 1),
+            eframe::egui::FontId::monospace(10.0),
+            fg_weak(),
+        );
+    }
+}
+
+fn draw_bleed_safe(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
+    let doc = &studio.doc;
+    if !doc.show_bleed && !doc.show_safe {
+        return;
+    }
+    let bleed = doc.bleed.max(1.0);
+    let art = doc.artboards.max(1);
+    let total_gutter = 48.0 * (art as f32 - 1.0);
+    let single_w = (doc.width - total_gutter) / art as f32;
+    let single_h = doc.height;
+    for i in 0..art {
+        let x0 = i as f32 * (single_w + 48.0);
+        if doc.show_bleed {
+            let br = Rect::from_min_max(
+                win(rect, studio.view, Pt::new(x0 - bleed, -bleed)),
+                win(rect, studio.view, Pt::new(x0 + single_w + bleed, single_h + bleed)),
+            );
+            p.rect_stroke(
+                br,
+                0.0,
+                Stroke::new(1.0, Color32::from_rgba_unmultiplied(220, 38, 38, 120)),
+                eframe::egui::StrokeKind::Middle,
+            );
+            // corner crop marks
+            let inset = 8.0;
+            let tl = win(rect, studio.view, Pt::new(x0, 0.0));
+            let tr = win(rect, studio.view, Pt::new(x0 + single_w, 0.0));
+            let bl = win(rect, studio.view, Pt::new(x0, single_h));
+            let brp = win(rect, studio.view, Pt::new(x0 + single_w, single_h));
+            let red = Color32::from_rgb(220, 38, 38);
+            // TL
+            p.line_segment([pos2(tl.x - bleed, tl.y), pos2(tl.x - bleed + inset, tl.y)], Stroke::new(1.0, red));
+            p.line_segment([pos2(tl.x, tl.y - bleed), pos2(tl.x, tl.y - bleed + inset)], Stroke::new(1.0, red));
+            // TR
+            p.line_segment([pos2(tr.x + bleed - inset, tr.y), pos2(tr.x + bleed, tr.y)], Stroke::new(1.0, red));
+            p.line_segment([pos2(tr.x, tr.y - bleed), pos2(tr.x, tr.y - bleed + inset)], Stroke::new(1.0, red));
+            // BL
+            p.line_segment([pos2(bl.x - bleed, bl.y), pos2(bl.x - bleed + inset, bl.y)], Stroke::new(1.0, red));
+            p.line_segment([pos2(bl.x, bl.y + bleed - inset), pos2(bl.x, bl.y + bleed)], Stroke::new(1.0, red));
+            // BR
+            p.line_segment([pos2(brp.x + bleed - inset, brp.y), pos2(brp.x + bleed, brp.y)], Stroke::new(1.0, red));
+            p.line_segment([pos2(brp.x, brp.y + bleed - inset), pos2(brp.x, brp.y + bleed)], Stroke::new(1.0, red));
+        }
+        if doc.show_safe {
+            let inset = bleed + 18.0;
+            let sr = Rect::from_min_max(
+                win(rect, studio.view, Pt::new(x0 + inset, inset)),
+                win(
+                    rect,
+                    studio.view,
+                    Pt::new(x0 + single_w - inset, single_h - inset),
+                ),
+            );
+            p.rect_stroke(
+                sr,
+                0.0,
+                Stroke::new(1.0, Color32::from_rgba_unmultiplied(34, 197, 94, 140)),
+                eframe::egui::StrokeKind::Middle,
+            );
+            p.rect_filled(sr, 0.0, Color32::from_rgba_unmultiplied(34, 197, 94, 16));
         }
     }
 }

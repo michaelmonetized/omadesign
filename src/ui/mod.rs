@@ -1,3 +1,4 @@
+mod browsers;
 mod chrome;
 mod canvas;
 mod icons;
@@ -33,6 +34,9 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     studios::right_panel(ui, studio);
     chrome::status_bar(ui, studio);
     canvas::show(ui, studio);
+
+    browsers::show_shape_browser(ui, studio);
+    browsers::show_asset_browser(ui, studio);
 
     if studio.show_shortcuts {
         egui_shortcuts(ui, studio);

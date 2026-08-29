@@ -168,6 +168,21 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
             }
 
             ui.separator();
+            if ui
+                .small_button("◇ Shapes")
+                .on_hover_text("Shape browser (Phosphor, LineIcons…)")
+                .clicked()
+            {
+                studio.show_shape_browser = !studio.show_shape_browser;
+            }
+            if ui
+                .small_button("⬙ Assets")
+                .on_hover_text("Free asset browser (Pixabay, Pexels…)")
+                .clicked()
+            {
+                studio.show_asset_browser = !studio.show_asset_browser;
+            }
+            ui.separator();
             if studio.persona != Persona::Photo {
                 if ui
                     .add_enabled(studio.history.can_undo(), Button::new("Undo"))

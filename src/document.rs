@@ -392,6 +392,10 @@ impl Default for Grid {
     }
 }
 
+fn default_artboards() -> u32 {
+    1
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Document {
     pub name: String,
@@ -401,24 +405,88 @@ pub struct Document {
     pub layers: Vec<Layer>,
     pub guides: Vec<Guide>,
     pub grid: Grid,
+    #[serde(default)]
+    pub transparent: bool,
+    #[serde(default = "default_artboards")]
+    pub artboards: u32,
+    #[serde(default)]
+    pub show_bleed: bool,
+    #[serde(default)]
+    pub show_safe: bool,
+    #[serde(default)]
+    pub bleed: f32,
 }
 
 impl Document {
     pub fn new(name: impl Into<String>, width: f32, height: f32, dpi: f32) -> Self {
+        Self::new_with_options(name, width, height, dpi, false, 1, false, false)
+    }
+
+    pub fn new_with_options(
+        name: impl Into<String>,
+        width: f32,
+        height: f32,
+        dpi: f32,
+        transparent: bool,
+        artboards: u32,
+        show_bleed: bool,
+        show_safe: bool,
+    ) -> Self {
         let w = width.max(1.0) as u32;
         let h = height.max(1.0) as u32;
-        Self {
+        let art = artboards.max(1);
+        // For multiple artboards we tile them horizontally with a 48px gutter.
+        let total_w = if art > 1 {
+            w * art + 48 * (art - 1)
+        } else {
+            w
+        };
+        let mut doc = Self {
             name: name.into(),
-            width,
+            width: if art > 1 { total_w as f32 } else { width },
             height,
             dpi,
             layers: vec![
-                Layer::raster("Background", w, h),
+                Layer::raster("Background", total_w, h),
                 Layer::vector("Layer 1"),
             ],
             guides: vec![],
             grid: Grid::default(),
+            transparent,
+            artboards: art,
+            show_bleed,
+            show_safe,
+            bleed: 36.0, // 0.125" at 300dpi or 0.5" at 72dpi ~ 36px
+        };
+        // Fill background white when not transparent
+        if !transparent {
+            if let Some(px) = doc.layers[0].kind.pixels_mut() {
+                let white = crate::color::Rgba::WHITE;
+                for chunk in px.data.chunks_mut(4) {
+                    chunk[0] = white.r;
+                    chunk[1] = white.g;
+                    chunk[2] = white.b;
+                    chunk[3] = 255;
+                }
+                px.touch();
+            }
         }
+        if art > 1 {
+            // Vertical artboard separators as guides
+            for i in 1..art {
+                let x = (w as f32 + 48.0) * i as f32 - 24.0;
+                doc.guides.push(Guide { vertical: true, pos: x });
+            }
+        }
+        if show_bleed {
+            // Outer bleed rect guides
+            let b = doc.bleed;
+            doc.guides.push(Guide { vertical: true, pos: -b });
+            doc.guides.push(Guide { vertical: true, pos: doc.width + b });
+            doc.guides.push(Guide { vertical: false, pos: -b });
+            doc.guides.push(Guide { vertical: false, pos: doc.height + b });
+        }
+        doc
     }
 
     pub fn size(&self) -> Pt {
