@@ -47,7 +47,7 @@ tailwind.config = {
         }
       },
       fontFamily: {
-        sans: ['Iosevka Aile', 'IBM Plex Sans', 'ui-sans-serif', 'system-ui'],
+        sans: ['max', 'Iosevka Aile', 'IBM Plex Sans', 'ui-sans-serif', 'system-ui'],
         mono: ['JetBrains Mono', 'ui-monospace']
       }
     }
@@ -56,28 +56,49 @@ tailwind.config = {
 </script>
 <style>
 /* Palette + site styles – distilled from src/styles.css */
+@font-face {
+  font-family: 'max';
+  src: url('media/max/max55.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'max';
+  src: url('media/max/max65.woff') format('woff');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'max';
+  src: url('media/max/max95.woff') format('woff');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
 :root {
   --ctp-base: #1e1e2e;
   --ctp-mantle: #181825;
   --ctp-crust: #11111b;
   --ctp-text: #cdd6f4;
   --ctp-subtext0: #a6adc8;
-  --ctp-subtext1: #bac2de;
-  --ctp-surface0: #313244;
-  --ctp-surface1: #45475a;
-  --ctp-overlay0: #6c7086;
-  --ctp-overlay1: #7f849c;
-  --ctp-lavender: #b4befe;
-  --ctp-blue: #89b4fa;
-  --ctp-green: #a6e3a1;
-  --ctp-red: #f38ba8;
-  --ctp-yellow: #f9e2af;
-  --ctp-peach: #fab387;
-  --ctp-teal: #94e2d5;
+  --ctp-subtext1: '#bac2de';
+  --ctp-surface0: '#313244';
+  --ctp-surface1: '#45475a';
+  --ctp-overlay0: '#6c7086';
+  --ctp-overlay1: '#7f849c';
+  --ctp-lavender: '#b4befe';
+  --ctp-blue: '#89b4fa';
+  --ctp-green: '#a6e3a1';
+  --ctp-red: '#f38ba8';
+  --ctp-yellow: '#f9e2af';
+  --ctp-peach: '#fab387';
+  --ctp-teal: '#94e2d5';
 }
 html, body { min-height: 100%; }
-body { background: var(--ctp-base); color: var(--ctp-text); font-family: "Iosevka Aile", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; }
-.latte { color-scheme: light; }
+body { background: var(--ctp-base); color: var(--ctp-text); font-family: "max", "Iosevka Aile", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; }
+.lat { color-scheme: light; }
 .mocha { color-scheme: dark; }
 .reel-track { animation: reel 28s linear infinite; }
 @keyframes reel { from { transform: translateX(0); } to { transform: translateX(-50%); } }
@@ -86,7 +107,7 @@ body { background: var(--ctp-base); color: var(--ctp-text); font-family: "Iosevk
 <body class="bg-ctp-base text-ctp-text antialiased">
 <header class="sticky top-0 z-30 border-b border-ctp-surface0/80 bg-ctp-base/80 backdrop-blur-md">
   <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-    <a href="./" class="font-semibold tracking-tight text-ctp-text">omadesign</a>
+    <a href="./" class="font-bold tracking-tight text-ctp-text">omadesign</a>
     <nav class="flex items-center gap-5 text-sm text-ctp-subtext0">
       <a href="https://github.com/michaelmonetized/omadesign/tree/master/docs" class="hover:text-ctp-text">Docs</a>
       <a href="https://github.com/michaelmonetized/omadesign/blob/master/docs/ROADMAP.md" class="hover:text-ctp-text">Roadmap</a>
@@ -99,7 +120,7 @@ body { background: var(--ctp-base); color: var(--ctp-text); font-family: "Iosevk
 <main>
   <section class="mx-auto max-w-6xl px-6 pb-8 pt-16 md:pt-24">
     <p class="mb-4 text-sm uppercase tracking-[0.2em] text-ctp-overlay1">Updated with v0.0.0.0alpha-rc — 7 stacked PRs merged</p>
-    <h1 class="max-w-4xl text-5xl font-semibold leading-[1.05] tracking-tight text-ctp-text md:text-7xl">Your Linux, for making things.</h1>
+    <h1 class="max-w-4xl text-5xl font-bold leading-[1.05] tracking-tight text-ctp-text md:text-7xl">Your Linux, for making things.</h1>
     <p class="mt-6 max-w-2xl text-lg text-ctp-subtext0 md:text-xl">A native studio. Design, paint, photograph. One document, one layer stack. Theme from ~/.config. Type you can type into. Now with shape &amp; asset browsers and a big welcome.</p>
     <ul class="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-ctp-subtext1">
       <li>Free, MIT</li>
@@ -116,18 +137,17 @@ body { background: var(--ctp-base); color: var(--ctp-text); font-family: "Iosevk
   <section class="mx-auto max-w-6xl px-6 pb-20">
     <div class="overflow-hidden rounded-3xl border border-ctp-surface0 bg-ctp-mantle shadow-2xl shadow-ctp-crust/40">
       <video class="aspect-video w-full bg-ctp-crust object-cover" autoplay muted loop playsinline poster="media/design.jpg">
-        <source src="media/hero.mp4" type="video/mp4">
+<source src="media/hero.mp4" type="video/mp4">
       </video>
     </div>
-    <p class="mt-3 text-center text-xs text-ctp-overlay1">New in alpha-rc — drag any handle to resize (Shift uniform, Alt from centre), Google Fonts on tap, palettes, compound, shape &amp; asset browsers, and the big welcome with tabs. Remotion-generated hero (45 s, 1920×1080, 2.5 MB, 1350f).</p>
+    <p class="mt-3 text-center text-xs text-ctp-overlay1">New in alpha-rc — Google Fonts on tap, palettes, compound, shape & asset browsers, and the big welcome with tabs. Remotion-generated hero (39 s, 1920×1080, 2.2 MB, 1170f) with real UI screenshots.</p>
   </section>
 
   <section class="mx-auto max-w-6xl px-6 pb-16">
     <div class="rounded-3xl border border-ctp-surface0 bg-ctp-mantle p-8">
-      <h2 class="text-2xl font-semibold tracking-tight">What&apos;s new in v0.0.0.0alpha-rc</h2>
+      <h2 class="text-2xl font-bold tracking-tight">What&apos;s new in v0.0.0.0alpha-rc</h2>
       <p class="mt-2 text-sm text-ctp-subtext0">7 commits, 6 stacked PRs → fast-forward to master, built locally with zig cc (glibc 2.35).</p>
       <div class="mt-6 grid gap-4 md:grid-cols-3">
-        <div class="rounded-2xl border border-ctp-surface0 bg-ctp-base p-4"><h3 class="text-sm font-semibold">Resize anywhere</h3><p class="mt-1 text-sm leading-snug text-ctp-subtext0">Handles now work from Rect/Ellipse/Star/Line. Group bbox + precise X/Y/W/H/Rotate/Flip in Transform.</p></div>
         <div class="rounded-2xl border border-ctp-surface0 bg-ctp-base p-4"><h3 class="text-sm font-semibold">Fonts, full</h3><p class="mt-1 text-sm leading-snug text-ctp-subtext0">fontconfig + ttf_parser, 2000 cap. Google Fonts browser (30 bundled, ureq → ~/.local/share/fonts/omadesign/google).</p></div>
         <div class="rounded-2xl border border-ctp-surface0 bg-ctp-base p-4"><h3 class="text-sm font-semibold">Max font</h3><p class="mt-1 text-sm leading-snug text-ctp-subtext0">Scans ~/Projects next/font/google, most frequent wins (Inter). Shown as default.</p></div>
         <div class="rounded-2xl border border-ctp-surface0 bg-ctp-base p-4"><h3 class="text-sm font-semibold">Palettes</h3><p class="mt-1 text-sm leading-snug text-ctp-subtext0">Custom palettes at ~/.config/omadesign/palettes.json — New/Rename/Delete, +Fill/+Stroke, Import/Export.</p></div>
@@ -135,14 +155,13 @@ body { background: var(--ctp-base); color: var(--ctp-text); font-family: "Iosevk
         <div class="rounded-2xl border border-ctp-surface0 bg-ctp-base p-4"><h3 class="text-sm font-semibold">Browsers</h3><p class="mt-1 text-sm leading-snug text-ctp-subtext0">◇ Shapes (Phosphor/LineIcons/Heroicons/Feather) + ⬙ Assets (Pixabay/Pexels/Picsum fallback).</p></div>
         <div class="rounded-2xl border border-ctp-surface0 bg-ctp-base p-4"><h3 class="text-sm font-semibold">Welcome 2.0</h3><p class="mt-1 text-sm leading-snug text-ctp-subtext0">Big 720 px square, tabs All/Web/Print/Social/Photo/Identity, 210×112 cards, transparent/bleed/safe/artboards ×1–16.</p></div>
         <div class="rounded-2xl border border-ctp-surface0 bg-ctp-base p-4"><h3 class="text-sm font-semibold">Canvas</h3><p class="mt-1 text-sm leading-snug text-ctp-subtext0">Artboard frames, bleed red + crop marks, safe green inset. Checker when transparent.</p></div>
-        <div class="rounded-2xl border border-ctp-surface0 bg-ctp-base p-4"><h3 class="text-sm font-semibold">Lander</h3><p class="mt-1 text-sm leading-snug text-ctp-subtext0">Regenerated 6 screenshots via gen_media + Remotion 4.0.518 hero.mp4 (45 s, mock panes for shape/asset/fonts). Now distilled to single HTML.</p></div>
       </div>
     </div>
   </section>
 
   <section class="border-y border-ctp-surface0 bg-ctp-mantle/40 py-16">
     <div class="mx-auto max-w-6xl px-6">
-      <h2 class="text-3xl font-semibold tracking-tight md:text-4xl">Three rooms, one house.</h2>
+      <h2 class="text-3xl font-bold tracking-tight md:text-4xl">Three rooms, one house.</h2>
       <p class="mt-3 max-w-2xl text-ctp-subtext0">Switch persona from the top bar. Keys stay where they already live in your fingers.</p>
       <div class="mt-10 grid gap-6 md:grid-cols-3">
         <div class="rounded-2xl border border-ctp-surface0 bg-ctp-base p-6"><h3 class="text-xl font-medium text-ctp-lavender">Design</h3><p class="mt-1 font-mono text-xs text-ctp-overlay1">V · P · R · T</p><p class="mt-4 text-ctp-subtext0">Marks, posters, boolean, live type.</p></div>
@@ -153,7 +172,7 @@ body { background: var(--ctp-base); color: var(--ctp-text); font-family: "Iosevk
   </section>
 
   <section class="mx-auto max-w-6xl px-6 py-20">
-    <h2 class="text-3xl font-semibold tracking-tight md:text-4xl">Just some of the highlights</h2>
+    <h2 class="text-3xl font-bold tracking-tight md:text-4xl">Just some of the highlights</h2>
     <p class="mt-2 text-sm text-ctp-subtext0">Screenshots regenerated headless via <code class="rounded bg-ctp-surface0 px-1 py-0.5 font-mono text-xs">cargo run --bin gen_media</code> + <code class="rounded bg-ctp-surface0 px-1 py-0.5 font-mono text-xs">compositor::export_png</code> → JPEG.</p>
     <div class="mt-10 grid gap-6 md:grid-cols-3">
       <figure><img src="media/design.jpg" alt="Design — resize from any tool, compound, boolean" class="aspect-[16/9] w-full rounded-2xl border border-ctp-surface0 object-cover"><figcaption class="mt-3 text-sm leading-snug text-ctp-subtext1">Design — resize from any tool, compound, boolean</figcaption></figure>
@@ -167,7 +186,7 @@ body { background: var(--ctp-base); color: var(--ctp-text); font-family: "Iosevk
 
   <section class="border-y border-ctp-surface0 py-16">
     <div class="mx-auto max-w-6xl px-6">
-      <h2 class="text-3xl font-semibold tracking-tight">Built like desktop software.</h2>
+      <h2 class="text-3xl font-bold tracking-tight">Built like desktop software.</h2>
       <div class="mt-8 grid gap-6 md:grid-cols-2">
         <div><h3 class="font-medium">Your chrome, not ours</h3><p class="mt-2 text-ctp-subtext0">Colours from the Omarchy theme on disk. Font from fontconfig. No baked orange.</p></div>
         <div><h3 class="font-medium">Asahi is first class</h3><p class="mt-2 text-ctp-subtext0">aarch64 tarball, zig-linked to glibc 2.35. Same release as x86_64.</p></div>
@@ -178,7 +197,7 @@ body { background: var(--ctp-base); color: var(--ctp-text); font-family: "Iosevk
   </section>
 
   <section class="mx-auto max-w-6xl px-6 py-20">
-    <h2 class="text-3xl font-semibold tracking-tight">Take this with you</h2>
+    <h2 class="text-3xl font-bold tracking-tight">Take this with you</h2>
     <p class="mt-3 text-ctp-subtext0">Manual, contributing, roadmap. The site is Catppuccin mocha until you ask for light.</p>
     <div class="mt-8 flex flex-wrap gap-4">
       <a class="rounded-xl border border-ctp-surface1 px-4 py-2 text-sm" href="https://github.com/michaelmonetized/omadesign/blob/master/docs/MANUAL.md">User manual</a>

@@ -21,7 +21,7 @@ function Home() {
         <p className="mb-4 text-sm uppercase tracking-[0.2em] text-ctp-overlay1">
           Updated with v0.0.0.0alpha-rc — 7 stacked PRs merged
         </p>
-        <h1 className="max-w-4xl text-5xl font-semibold leading-[1.05] tracking-tight text-ctp-text md:text-7xl">
+        <h1 className="max-w-4xl text-5xl font-bold leading-[1.05] tracking-tight text-ctp-text md:text-7xl">
           Your Linux, for making things.
         </h1>
         <p className="mt-6 max-w-2xl text-lg text-ctp-subtext0 md:text-xl">
@@ -62,17 +62,16 @@ function Home() {
           </video>
         </div>
         <p className="mt-3 text-center text-xs text-ctp-overlay1">
-          New in alpha-rc — drag any handle to resize (Shift uniform, Alt from centre), Google Fonts on tap, palettes, compound, shape & asset browsers, and the big welcome with tabs. Remotion 4.0.518 hero (45 s, 1920×1080, 2.5 MB, 1350f) with in-app pane mocks.
+          New in alpha-rc — Google Fonts on tap, palettes, compound, shape & asset browsers, and the big welcome with tabs. Remotion 4.0.518 hero (39 s, 1920×1080, 2.2 MB, 1170f) with real UI screenshots.
         </p>
       </section>
 
       <section className="mx-auto max-w-6xl px-6 pb-16">
         <div className="rounded-3xl border border-ctp-surface0 bg-ctp-mantle p-8">
-          <h2 className="text-2xl font-semibold tracking-tight">What&apos;s new in v0.0.0.0alpha-rc</h2>
+          <h2 className="text-2xl font-bold tracking-tight">What&apos;s new in v0.0.0.0alpha-rc</h2>
           <p className="mt-2 text-sm text-ctp-subtext0">7 commits, 6 stacked PRs → fast-forward to master, built locally with zig cc (glibc 2.35).</p>
           <div className="mt-6 grid gap-4 md:grid-cols-3">
             {[
-              ["Resize anywhere", "Handles now work from Rect/Ellipse/Star/Line. Group bbox + precise X/Y/W/H/Rotate/Flip in Transform."],
               ["Fonts, full", "fontconfig + ttf_parser, 2000 cap. Google Fonts browser (30 bundled, ureq → ~/.local/share/fonts/omadesign/google)."],
               ["Max font", "Scans ~/Projects next/font/google, most frequent wins (Inter). Shown as default."],
               ["Palettes", "Custom palettes at ~/.config/omadesign/palettes.json — New/Rename/Delete, +Fill/+Stroke, Import/Export."],
@@ -80,7 +79,6 @@ function Home() {
               ["Browsers", "◇ Shapes (Phosphor/LineIcons/Heroicons/Feather) + ⬙ Assets (Pixabay/Pexels/Picsum fallback)."],
               ["Welcome 2.0", "Big 720 px square, tabs All/Web/Print/Social/Photo/Identity, 210×112 cards, transparent/bleed/safe/artboards ×1–16."],
               ["Canvas", "Artboard frames, bleed red + crop marks, safe green inset. Checker when transparent."],
-              ["Lander", "Regenerated 6 screenshots via gen_media + Remotion 4.0.518 hero.mp4 (45 s, mock panes for shape/asset/fonts)."],
             ].map(([t, d]) => (
               <div key={t} className="rounded-2xl border border-ctp-surface0 bg-ctp-base p-4">
                 <h3 className="text-sm font-semibold text-ctp-text">{t}</h3>
@@ -93,7 +91,7 @@ function Home() {
 
       <section className="border-y border-ctp-surface0 bg-ctp-mantle/40 py-16">
         <div className="mx-auto max-w-6xl px-6">
-          <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">
+          <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
             Three rooms, one house.
           </h2>
           <p className="mt-3 max-w-2xl text-ctp-subtext0">
@@ -120,7 +118,7 @@ function Home() {
       </section>
 
       <section className="mx-auto max-w-6xl px-6 py-20">
-        <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">
+        <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
           Just some of the highlights
         </h2>
         <p className="mt-2 text-sm text-ctp-subtext0">Screenshots regenerated headless via <code className="rounded bg-ctp-surface0 px-1 py-0.5 font-mono text-xs">cargo run --bin gen_media</code> + <code className="rounded bg-ctp-surface0 px-1 py-0.5 font-mono text-xs">compositor::export_png</code> → JPEG.</p>
@@ -140,7 +138,7 @@ function Home() {
 
       <section className="border-y border-ctp-surface0 py-16">
         <div className="mx-auto max-w-6xl px-6">
-          <h2 className="text-3xl font-semibold tracking-tight">
+          <h2 className="text-3xl font-bold tracking-tight">
             Built like desktop software.
           </h2>
           <div className="mt-8 grid gap-6 md:grid-cols-2">
@@ -172,7 +170,7 @@ function Home() {
       </section>
 
       <section className="mx-auto max-w-6xl px-6 py-20">
-        <h2 className="text-3xl font-semibold tracking-tight">Take this with you</h2>
+        <h2 className="text-3xl font-bold tracking-tight">Take this with you</h2>
         <p className="mt-3 text-ctp-subtext0">
           Manual, contributing, roadmap. The site is Catppuccin mocha until you
           ask for light.

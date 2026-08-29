@@ -732,7 +732,11 @@ fn extract_google_imports(text: &str) -> Vec<String> {
 /// Resolve the preferred default font file by looking at the max font from web
 /// apps, then omarchy font, then Inter, then the first system font.
 pub fn preferred_default_path() -> Option<PathBuf> {
-    // 1. Max font from Projects
+    // 1. Custom max font from uncap.us (max95 for headings/type tool)
+    if let Some(p) = find_installed_for_family("max") {
+        return Some(p);
+    }
+    // 2. Max font from Projects
     if let Some(fam) = detect_max_font_family() {
         if let Some(p) = find_installed_for_family(&fam) {
             return Some(p);
@@ -740,7 +744,7 @@ pub fn preferred_default_path() -> Option<PathBuf> {
         // If the family is a Google Font but not installed, still return None so
         // the caller can suggest a download. The UI will show “Inter not installed”.
     }
-    // 2. Omarchy desktop font (e.g. “JetBrainsMono Nerd Font”) – try to find its file.
+    // 3. Omarchy desktop font (e.g. "JetBrainsMono Nerd Font") – try to find its file.
     if let Ok(out) = std::process::Command::new("omarchy")
         .args(["font", "current"])
         .output()
@@ -754,11 +758,11 @@ pub fn preferred_default_path() -> Option<PathBuf> {
             }
         }
     }
-    // 3. Hard-coded Inter – the most common branding sans in the user's repos.
+    // 4. Hard-coded Inter – the most common branding sans in the user's repos.
     if let Some(p) = find_installed_for_family("Inter") {
         return Some(p);
     }
-    // 4. First system font
+    // 5. First system font
     default_path()
 }
 
