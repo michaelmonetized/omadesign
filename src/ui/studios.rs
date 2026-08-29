@@ -884,6 +884,42 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio) {
             studio.align_sel(crate::align::Align::Bottom);
         }
     });
+    // Compound / Pathfinder
+    ui.add_space(6.0);
+    ui.label(RichText::new("Compound / Pathfinder").small().color(fg_weak()));
+    let n = studio.selection.len();
+    let is_compound = matches!(&shape.geom, crate::geom::Geom::Poly { contours } if contours.len() > 1);
+    ui.horizontal_wrapped(|ui| {
+        let can_bool = n >= 2;
+        ui.add_enabled(can_bool, eframe::egui::Button::new("Union")).clicked().then(|| studio.apply_boolean_multi(crate::boolean::BoolOp::Union));
+        if !can_bool {
+            ui.label(RichText::new("needs ≥2").small().color(fg_weak()));
+        }
+    });
+    ui.horizontal_wrapped(|ui| {
+        let can_bool = n >= 2;
+        if ui.add_enabled(can_bool, eframe::egui::Button::new("Subtract")).clicked() {
+            studio.apply_boolean_multi(crate::boolean::BoolOp::Subtract);
+        }
+        if ui.add_enabled(can_bool, eframe::egui::Button::new("Intersect")).clicked() {
+            studio.apply_boolean_multi(crate::boolean::BoolOp::Intersect);
+        }
+        if ui.add_enabled(can_bool, eframe::egui::Button::new("Xor")).clicked() {
+            studio.apply_boolean_multi(crate::boolean::BoolOp::Xor);
+        }
+    });
+    ui.horizontal(|ui| {
+        let can_combine = n >= 2;
+        if ui.add_enabled(can_combine, eframe::egui::Button::new("Combine")).on_hover_text("Even-odd compound (Ctrl+E)").clicked() {
+            studio.combine_selected();
+        }
+        if ui.add_enabled(is_compound, eframe::egui::Button::new("Release")).on_hover_text("Explode compound (Ctrl+Shift+E)").clicked() {
+            studio.release_compound();
+        }
+        if !can_combine && !is_compound {
+            ui.label(RichText::new("select ≥2 or a compound").small().color(fg_weak()));
+        }
+    });
 }
 
 fn brush_studio(ui: &mut Ui, studio: &mut Studio) {

@@ -1127,6 +1127,11 @@ impl Studio {
             self.status = "select two shapes, then boolean".into();
             return;
         }
+        // If more than 2 selected, delegate to the multi version which folds the op.
+        if self.selection.len() > 2 {
+            self.apply_boolean_multi(op);
+            return;
+        }
         let (la, ia) = self.selection[0];
         let (lb, ib) = self.selection[1];
         if la != lb {
@@ -1156,6 +1161,119 @@ impl Studio {
             }
             None => self.status = "boolean produced nothing".into(),
         }
+    }
+
+    pub fn apply_boolean_multi(&mut self, op: BoolOp) {
+        if self.selection.len() < 2 {
+            self.status = "select at least two shapes".into();
+            return;
+        }
+        // All on same layer and sorted by z-order (selection order is already z-sorted
+        // from hits_in_rect/selection; we keep it).
+        let layer = self.selection[0].0;
+        if !self.selection.iter().all(|(li, _)| *li == layer) {
+            self.status = "boolean needs all shapes on the same layer".into();
+            return;
+        }
+        let shapes: Vec<Shape> = self
+            .selection
+            .iter()
+            .filter_map(|(li, id)| self.doc.find_shape(*li, *id).cloned())
+            .collect();
+        if shapes.len() < 2 {
+            return;
+        }
+        let geoms: Vec<Geom> = shapes.iter().map(|s| s.geom.clone()).collect();
+        let Some(result) = crate::compound::apply_multi(op, &geoms) else {
+            self.status = "boolean produced nothing".into();
+            return;
+        };
+        let mut new_shape = shapes[0].clone();
+        new_shape.id = crate::document::next_id();
+        new_shape.geom = result;
+        new_shape.name = format!("{} ({} shapes)", op.name(), shapes.len());
+        let old = shapes.clone();
+        self.commit(Cmd::RemoveShapes {
+            layer,
+            shapes: old,
+        });
+        let id = new_shape.id;
+        self.commit(Cmd::AddShape {
+            layer,
+            shape: new_shape,
+        });
+        self.selection = vec![(layer, id)];
+        self.status = format!("{} on {} shapes", op.name(), shapes.len());
+    }
+
+    pub fn combine_selected(&mut self) {
+        if self.selection.len() < 2 {
+            self.status = "select at least two shapes to combine".into();
+            return;
+        }
+        let layer = self.selection[0].0;
+        if !self.selection.iter().all(|(li, _)| *li == layer) {
+            self.status = "combine needs all shapes on the same layer".into();
+            return;
+        }
+        let shapes: Vec<Shape> = self
+            .selection
+            .iter()
+            .filter_map(|(li, id)| self.doc.find_shape(*li, *id).cloned())
+            .collect();
+        let refs: Vec<&Shape> = shapes.iter().collect();
+        let Some(geom) = crate::compound::combine_into_poly(&refs) else {
+            self.status = "combine produced nothing".into();
+            return;
+        };
+        let mut combined = shapes[0].clone();
+        combined.id = crate::document::next_id();
+        combined.geom = geom;
+        combined.name = "Compound".into();
+        self.commit(Cmd::RemoveShapes {
+            layer,
+            shapes: shapes.clone(),
+        });
+        let id = combined.id;
+        self.commit(Cmd::AddShape {
+            layer,
+            shape: combined,
+        });
+        self.selection = vec![(layer, id)];
+        self.status = "combined into compound (even-odd)".into();
+    }
+
+    pub fn release_compound(&mut self) {
+        let Some((li, id)) = self.primary() else {
+            self.status = "select a compound shape to release".into();
+            return;
+        };
+        if self.selection.len() != 1 {
+            self.status = "select a single compound shape to release".into();
+            return;
+        }
+        let Some(shape) = self.doc.find_shape(li, id).cloned() else {
+            return;
+        };
+        let Some(parts) = crate::compound::explode_poly(&shape.geom) else {
+            self.status = "not a compound (needs Poly with >1 contour)".into();
+            return;
+        };
+        // Remove compound, add parts as separate shapes
+        self.commit(Cmd::RemoveShapes {
+            layer: li,
+            shapes: vec![shape],
+        });
+        let mut new_ids = Vec::new();
+        for g in parts {
+            let mut s = Shape::new(g, self.style.clone());
+            s.name = "Part".into();
+            let nid = s.id;
+            new_ids.push((li, nid));
+            self.commit(Cmd::AddShape { layer: li, shape: s });
+        }
+        self.selection = new_ids;
+        self.status = "compound released".into();
     }
 
     pub fn align_sel(&mut self, how: Align) {
@@ -1351,7 +1469,13 @@ impl Studio {
                 return;
             }
             if ctrl && i.key_pressed(Key::E) {
-                self.export_png();
+                if mods.shift && self.selection.len() == 1 {
+                    self.release_compound();
+                } else if self.selection.len() >= 2 {
+                    self.combine_selected();
+                } else {
+                    self.export_png();
+                }
                 return;
             }
             if ctrl && i.key_pressed(Key::Z) {

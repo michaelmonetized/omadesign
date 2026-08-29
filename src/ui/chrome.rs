@@ -75,6 +75,16 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
                     }
                 }
                 ui.separator();
+                ui.label(RichText::new("Compound").small().color(fg_weak()));
+                if ui.button("Combine  Ctrl+E").clicked() {
+                    studio.combine_selected();
+                    ui.close();
+                }
+                if ui.button("Release  Ctrl+Shift+E").clicked() {
+                    studio.release_compound();
+                    ui.close();
+                }
+                ui.separator();
                 if ui.button("Align left").clicked() {
                     studio.align_sel(crate::align::Align::Left);
                     ui.close();
