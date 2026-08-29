@@ -19,6 +19,7 @@ CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="$ROOT/scripts/zig-cc-aarch64" \
   cargo build --release --target aarch64-unknown-linux-gnu
 
 echo "building x86_64-unknown-linux-gnu (glibc 2.35)..."
+CC_x86_64_unknown_linux_gnu="$ROOT/scripts/zig-cc-x86_64" \
 CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER="$ROOT/scripts/zig-cc-x86_64" \
   cargo build --release --target x86_64-unknown-linux-gnu
 

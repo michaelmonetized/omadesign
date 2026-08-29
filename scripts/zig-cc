@@ -22,8 +22,22 @@ for a in "$@"; do
   case "$a" in
     -Wl,--fix-cortex-a53-843419|--fix-cortex-a53-843419) ;;
     -fuse-ld=*|-B*/gcc-ld) ;;
+    --target=*|-target*|--target) ;;
     *) filtered+=("$a") ;;
   esac
 done
+# Also strip a bare --target value that follows a filtered --target
+# (cc-rs may pass --target x86_64-unknown-linux-gnu as two args)
+filtered2=()
+skip_next=false
+for a in "${filtered[@]}"; do
+  if $skip_next; then
+    skip_next=false
+    continue
+  fi
+  # cc-rs should not emit bare target after filtering, but be safe
+  filtered2+=("$a")
+done
+filtered=("${filtered2[@]}")
 
 exec "$zig" cc -target "$triple" -fno-sanitize=undefined "${filtered[@]}"
