@@ -62,7 +62,7 @@ function Home() {
           </video>
         </div>
         <p className="mt-3 text-center text-xs text-ctp-overlay1">
-          New in alpha-rc — drag any handle to resize (Shift uniform, Alt from centre), Google Fonts on tap, palettes, compound, shape & asset browsers, and the big welcome with tabs. FFMPEG-generated hero (12 s, 1920×1080, 235 KB).
+          New in alpha-rc — drag any handle to resize (Shift uniform, Alt from centre), Google Fonts on tap, palettes, compound, shape & asset browsers, and the big welcome with tabs. Remotion 4.0.518 hero (45 s, 1920×1080, 2.5 MB, 1350f) with in-app pane mocks.
         </p>
       </section>
 
@@ -80,7 +80,7 @@ function Home() {
               ["Browsers", "◇ Shapes (Phosphor/LineIcons/Heroicons/Feather) + ⬙ Assets (Pixabay/Pexels/Picsum fallback)."],
               ["Welcome 2.0", "Big 720 px square, tabs All/Web/Print/Social/Photo/Identity, 210×112 cards, transparent/bleed/safe/artboards ×1–16."],
               ["Canvas", "Artboard frames, bleed red + crop marks, safe green inset. Checker when transparent."],
-              ["Lander", "Regenerated 6 screenshots via gen_media + ffmpeg hero.mp4 (remotion-style)."],
+              ["Lander", "Regenerated 6 screenshots via gen_media + Remotion 4.0.518 hero.mp4 (45 s, mock panes for shape/asset/fonts)."],
             ].map(([t, d]) => (
               <div key={t} className="rounded-2xl border border-ctp-surface0 bg-ctp-base p-4">
                 <h3 className="text-sm font-semibold text-ctp-text">{t}</h3>
