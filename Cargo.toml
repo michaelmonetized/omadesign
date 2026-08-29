@@ -14,6 +14,10 @@ path = "src/lib.rs"
 name = "omadesign"
 path = "src/main.rs"
 
+[[bin]]
+name = "gen_media"
+path = "src/bin/gen_media.rs"
+
 [dependencies]
 ab_glyph = "0.2.32"
 base64 = "0.22"

@@ -6,10 +6,12 @@ export const Route = createFileRoute("/")({
 });
 
 const shots = [
-  { src: "/media/design.jpg", cap: "Design — marks, type, boolean" },
-  { src: "/media/paint.jpg", cap: "Pixel — a brush that lives on a layer" },
-  { src: "/media/photo.jpg", cap: "Photo — develop, then Place in Design" },
-  { src: "/media/type.jpg", cap: "Type — caret, Character, OpenType" },
+  { src: "/media/design.jpg", cap: "Design — resize from any tool, compound, boolean" },
+  { src: "/media/paint.jpg", cap: "Pixel — brush, clone, wand on a raster layer" },
+  { src: "/media/photo.jpg", cap: "Photo — develop, crop, Place in Design" },
+  { src: "/media/type.jpg", cap: "Type — caret + Google Fonts on-demand + max font default + palettes" },
+  { src: "/media/shapes.jpg", cap: "Shapes — Phosphor / LineIcons / Heroicons / Feather live SVG browser" },
+  { src: "/media/assets.jpg", cap: "Assets — Pixabay / Pexels / Vecteezy / Picsum free browser" },
 ];
 
 function Home() {
@@ -17,14 +19,15 @@ function Home() {
     <main>
       <section className="mx-auto max-w-6xl px-6 pb-8 pt-16 md:pt-24">
         <p className="mb-4 text-sm uppercase tracking-[0.2em] text-ctp-overlay1">
-          Updated with 1.0.4
+          Updated with v0.0.0.0alpha-rc — 7 stacked PRs merged
         </p>
         <h1 className="max-w-4xl text-5xl font-semibold leading-[1.05] tracking-tight text-ctp-text md:text-7xl">
           Your Linux, for making things.
         </h1>
         <p className="mt-6 max-w-2xl text-lg text-ctp-subtext0 md:text-xl">
           A native studio. Design, paint, photograph. One document, one layer
-          stack. Theme from ~/.config. Type you can type into.
+          stack. Theme from ~/.config. Type you can type into. Now with shape &
+          asset browsers and a big welcome.
         </p>
         <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-ctp-subtext1">
           <li>Free, MIT</li>
@@ -59,8 +62,33 @@ function Home() {
           </video>
         </div>
         <p className="mt-3 text-center text-xs text-ctp-overlay1">
-          Drag a box to zoom. Click T and type. The well is Phosphor Light.
+          New in alpha-rc — drag any handle to resize (Shift uniform, Alt from centre), Google Fonts on tap, palettes, compound, shape & asset browsers, and the big welcome with tabs. FFMPEG-generated hero (12 s, 1920×1080, 235 KB).
         </p>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-6 pb-16">
+        <div className="rounded-3xl border border-ctp-surface0 bg-ctp-mantle p-8">
+          <h2 className="text-2xl font-semibold tracking-tight">What&apos;s new in v0.0.0.0alpha-rc</h2>
+          <p className="mt-2 text-sm text-ctp-subtext0">7 commits, 6 stacked PRs → fast-forward to master, built locally with zig cc (glibc 2.35).</p>
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            {[
+              ["Resize anywhere", "Handles now work from Rect/Ellipse/Star/Line. Group bbox + precise X/Y/W/H/Rotate/Flip in Transform."],
+              ["Fonts, full", "fontconfig + ttf_parser, 2000 cap. Google Fonts browser (30 bundled, ureq → ~/.local/share/fonts/omadesign/google)."],
+              ["Max font", "Scans ~/Projects next/font/google, most frequent wins (Inter). Shown as default."],
+              ["Palettes", "Custom palettes at ~/.config/omadesign/palettes.json — New/Rename/Delete, +Fill/+Stroke, Import/Export."],
+              ["Compound", "Combine (even-odd) / Release + multi-boolean Union/Subtract/Intersect/Xor."],
+              ["Browsers", "◇ Shapes (Phosphor/LineIcons/Heroicons/Feather) + ⬙ Assets (Pixabay/Pexels/Picsum fallback)."],
+              ["Welcome 2.0", "Big 720 px square, tabs All/Web/Print/Social/Photo/Identity, 210×112 cards, transparent/bleed/safe/artboards ×1–16."],
+              ["Canvas", "Artboard frames, bleed red + crop marks, safe green inset. Checker when transparent."],
+              ["Lander", "Regenerated 6 screenshots via gen_media + ffmpeg hero.mp4 (remotion-style)."],
+            ].map(([t, d]) => (
+              <div key={t} className="rounded-2xl border border-ctp-surface0 bg-ctp-base p-4">
+                <h3 className="text-sm font-semibold text-ctp-text">{t}</h3>
+                <p className="mt-1 text-sm leading-snug text-ctp-subtext0">{d}</p>
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
 
       <section className="border-y border-ctp-surface0 bg-ctp-mantle/40 py-16">
@@ -95,15 +123,16 @@ function Home() {
         <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">
           Just some of the highlights
         </h2>
-        <div className="mt-10 grid gap-10 md:grid-cols-2">
+        <p className="mt-2 text-sm text-ctp-subtext0">Screenshots regenerated headless via <code className="rounded bg-ctp-surface0 px-1 py-0.5 font-mono text-xs">cargo run --bin gen_media</code> + <code className="rounded bg-ctp-surface0 px-1 py-0.5 font-mono text-xs">compositor::export_png</code> → JPEG.</p>
+        <div className="mt-10 grid gap-6 md:grid-cols-3">
           {shots.map((s) => (
             <figure key={s.src}>
               <img
                 src={s.src}
                 alt={s.cap}
-                className="aspect-video w-full rounded-2xl border border-ctp-surface0 object-cover"
+                className="aspect-[16/9] w-full rounded-2xl border border-ctp-surface0 object-cover"
               />
-              <figcaption className="mt-3 text-sm text-ctp-subtext1">{s.cap}</figcaption>
+              <figcaption className="mt-3 text-sm leading-snug text-ctp-subtext1">{s.cap}</figcaption>
             </figure>
           ))}
         </div>
