@@ -181,7 +181,11 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
     };
     let origin = Pt::new(crect.min.x, crect.min.y);
     let mut world = studio.view.pointer_to_world(origin, from_egui(screen));
-    world = studio.snap_pt(world);
+    // Don't snap when placing or editing type — the caret should be exact.
+    let is_text = studio.tool == Tool::Text || studio.type_edit.is_some();
+    if !is_text {
+        world = studio.snap_pt(world);
+    }
     let alt = resp.ctx.input(|i| i.modifiers.alt);
     let shift = resp.ctx.input(|i| i.modifiers.shift);
 
@@ -270,19 +274,49 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
         return;
     }
 
-    if studio.type_edit.is_some() && resp.drag_started_by(PointerButton::Primary) {
-        studio.commit_type_edit();
+    // Text edit drag: selecting a range should not commit, but update the caret.
+    if studio.type_edit.is_some() {
+        if resp.drag_started_by(PointerButton::Primary) {
+            let slack = 8.0 / studio.view.scale.max(0.01);
+            if let Some(hit) = studio.doc.hit_test(world, slack) {
+                if studio.editing_text(hit.0, hit.1) {
+                    let caret = studio.doc.find_shape(hit.0, hit.1).and_then(|s| match &s.geom {
+                        Geom::Text(run) => Some(crate::text::hit_char(run, world)),
+                        _ => None,
+                    });
+                    if let (Some(c), Some(e)) = (caret, studio.type_edit.as_mut()) {
+                        e.anchor = c;
+                        e.caret = c;
+                    }
+                    return;
+                }
+            }
+            studio.commit_type_edit();
+        } else if resp.dragged_by(PointerButton::Primary) {
+            if let Some(edit) = studio.type_edit.as_ref() {
+                let (li, id) = (edit.layer, edit.id);
+                if let Some(shape) = studio.doc.find_shape(li, id) {
+                    if let Geom::Text(run) = &shape.geom {
+                        let new_caret = crate::text::hit_char(run, world);
+                        if let Some(e) = studio.type_edit.as_mut() {
+                            e.caret = new_caret;
+                        }
+                    }
+                }
+            }
+            return;
+        }
     }
 
     // Drag start. The pen stays in a draft `Op`, so it must accept further
     // presses — otherwise you get one point and then nothing.
     let continue_pen = studio.tool == Tool::Pen && matches!(studio.op, Some(Op::Pen { .. }));
     if resp.drag_started_by(PointerButton::Primary) && (studio.op.is_none() || continue_pen) {
-        start_drag(studio, world, shift);
+        start_drag(studio, world, shift, alt);
     }
 
     if resp.dragged_by(PointerButton::Primary) {
-        continue_drag(studio, world, shift);
+        continue_drag(studio, world, shift, alt);
     }
 
     if resp.drag_stopped() {
@@ -314,29 +348,39 @@ fn is_text_hit(studio: &Studio, hit: (usize, u64)) -> bool {
         .is_some_and(|s| matches!(s.geom, Geom::Text(_)))
 }
 
-fn start_drag(studio: &mut Studio, world: Pt, shift: bool) {
+fn start_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
+    let _ = alt;
+    // Handle hit takes priority from any design tool so a freshly drawn object
+    // can be resized immediately without first pressing V. Text editing, Hand
+    // and Zoom are excluded to keep their own pointer semantics.
+    if studio.type_edit.is_none()
+        && !matches!(studio.tool, Tool::Hand | Tool::Zoom)
+        && !studio.selection.is_empty()
+    {
+        if let Some(sel) = hit_handle(studio, world) {
+            match sel {
+                HandleKind::Rotate(center) => {
+                    let orig = snapshot(studio);
+                    studio.op = Some(Op::Rotate {
+                        orig,
+                        center,
+                        start_angle: (world - center).y.atan2((world - center).x),
+                    });
+                    return;
+                }
+                HandleKind::Scale(i, b) => {
+                    studio.op = Some(Op::Resize {
+                        orig: snapshot(studio),
+                        handle: i,
+                        start_box: b,
+                    });
+                    return;
+                }
+            }
+        }
+    }
     match studio.tool {
         Tool::Select => {
-            if let Some(sel) = hit_handle(studio, world) {
-                match sel {
-                    HandleKind::Rotate(center) => {
-                        let orig = snapshot(studio);
-                        studio.op = Some(Op::Rotate {
-                            orig,
-                            center,
-                            start_angle: (world - center).y.atan2((world - center).x),
-                        });
-                    }
-                    HandleKind::Scale(i, b) => {
-                        studio.op = Some(Op::Resize {
-                            orig: snapshot(studio),
-                            handle: i,
-                            start_box: b,
-                        });
-                    }
-                }
-                return;
-            }
             if let Some(hit) = studio.doc.hit_test(world, 6.0 / studio.view.scale.max(0.01)) {
                 if !studio.selection.contains(&hit) {
                     if shift {
@@ -555,7 +599,7 @@ fn hit_node(anchors: &[Anchor], world: Pt, slack: f32) -> Option<NodeHit> {
     None
 }
 
-fn continue_drag(studio: &mut Studio, world: Pt, shift: bool) {
+fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
     match &mut studio.op {
         Some(Op::Create { start, cur, kind }) => {
             let mut c = world;
@@ -614,21 +658,88 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool) {
             };
             let mut min = start_box.min;
             let mut max = start_box.max;
-            if hx == 0.0 {
-                min.x = world.x;
-            } else if hx == 1.0 {
-                max.x = world.x;
-            }
-            if hy == 0.0 {
-                min.y = world.y;
-            } else if hy == 1.0 {
-                max.y = world.y;
-            }
-            if max.x - min.x < 1.0 {
-                max.x = min.x + 1.0;
-            }
-            if max.y - min.y < 1.0 {
-                max.y = min.y + 1.0;
+            if alt {
+                // Scale about centre.
+                let c = start_box.center();
+                let hw = if hx == 0.5 {
+                    start_box.width() * 0.5
+                } else {
+                    (world.x - c.x).abs().max(0.5)
+                };
+                let hh = if hy == 0.5 {
+                    start_box.height() * 0.5
+                } else {
+                    (world.y - c.y).abs().max(0.5)
+                };
+                let mut dst_w = hw * 2.0;
+                let mut dst_h = hh * 2.0;
+                if shift && hx != 0.5 && hy != 0.5 {
+                    // Uniform about centre: keep aspect.
+                    let asp = start_box.width().max(1.0) / start_box.height().max(1.0);
+                    if dst_w / asp > dst_h {
+                        dst_w = dst_h * asp;
+                    } else {
+                        dst_h = dst_w / asp;
+                    }
+                }
+                min = Pt::new(c.x - dst_w * 0.5, c.y - dst_h * 0.5);
+                max = Pt::new(c.x + dst_w * 0.5, c.y + dst_h * 0.5);
+            } else {
+                if hx == 0.0 {
+                    min.x = world.x;
+                } else if hx == 1.0 {
+                    max.x = world.x;
+                }
+                if hy == 0.0 {
+                    min.y = world.y;
+                } else if hy == 1.0 {
+                    max.y = world.y;
+                }
+                if shift && hx != 0.5 && hy != 0.5 {
+                    // Uniform corner drag – preserve aspect ratio.
+                    let asp = start_box.width().max(1.0) / start_box.height().max(1.0);
+                    let w = (max.x - min.x).abs().max(1.0);
+                    let h = (max.y - min.y).abs().max(1.0);
+                    // Decide which axis drives scaling – the larger relative change.
+                    let use_w = w / start_box.width() > h / start_box.height();
+                    if use_w {
+                        let nh = w / asp;
+                        if hy == 0.0 {
+                            min.y = max.y - nh;
+                        } else {
+                            max.y = min.y + nh;
+                        }
+                    } else {
+                        let nw = h * asp;
+                        if hx == 0.0 {
+                            min.x = max.x - nw;
+                        } else {
+                            max.x = min.x + nw;
+                        }
+                    }
+                }
+                // Ensure valid size and handle inversion gracefully.
+                if max.x - min.x < 1.0 {
+                    if hx == 0.0 {
+                        min.x = max.x - 1.0;
+                    } else {
+                        max.x = min.x + 1.0;
+                    }
+                }
+                if max.y - min.y < 1.0 {
+                    if hy == 0.0 {
+                        min.y = max.y - 1.0;
+                    } else {
+                        max.y = min.y + 1.0;
+                    }
+                }
+                // If the drag inverted (min > max), swap.
+                if min.x > max.x {
+                    std::mem::swap(&mut min.x, &mut max.x);
+                }
+                if min.y > max.y {
+                    std::mem::swap(&mut min.y, &mut max.y);
+                }
             }
             let dst = Bounds { min, max };
             for (li, id, geom, rot) in orig.clone() {
@@ -644,7 +755,11 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool) {
             center,
             start_angle,
         }) => {
-            let ang = (world - *center).y.atan2((world - *center).x) - *start_angle;
+            let mut ang = (world - *center).y.atan2((world - *center).x) - *start_angle;
+            if shift {
+                let step = std::f32::consts::PI / 12.0; // 15°
+                ang = (ang / step).round() * step;
+            }
             for (li, id, geom, rot) in orig.clone() {
                 if let Some(s) = studio.doc.find_shape_mut(li, id) {
                     s.geom = geom;
@@ -1055,13 +1170,28 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
         }
     }
 
+    // Draw selection outlines. For multi-selection we show a single group bbox;
+    // otherwise per-shape bbox is the same as group, but we still use group
+    // so handles are in the right place for rotated boxes.
     for (li, id) in &studio.selection {
         if let Some(s) = studio.doc.find_shape(*li, *id) {
             stroke_world(p, rect, s, v);
-            let b = s.world_bbox();
+            if studio.tool == Tool::Node {
+                if let Geom::Path { anchors, .. } = &s.geom {
+                    draw_nodes(p, rect, anchors, v);
+                }
+            }
+        }
+    }
+    if !studio.selection.is_empty() {
+        let shapes = studio.selected_shapes();
+        if let Some(b) = crate::align::selection_bounds(&shapes) {
             let sb = Rect::from_min_max(win(rect, v, b.min), win(rect, v, b.max));
             p.rect_stroke(sb, 0.0, Stroke::new(1.0, select()), eframe::egui::StrokeKind::Middle);
-            let editing = studio.editing_text(*li, *id);
+            let editing = studio
+                .selection
+                .iter()
+                .any(|(li, id)| studio.editing_text(*li, *id));
             if !editing {
                 for i in 0..8 {
                     let h = win(rect, v, b.handle(i));
@@ -1070,11 +1200,6 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
                 let rh = win(rect, v, b.rotate_handle());
                 p.line_segment([sb.center_top(), rh], Stroke::new(1.0, select()));
                 p.circle_filled(rh, 4.0, accent());
-            }
-            if studio.tool == Tool::Node {
-                if let Geom::Path { anchors, .. } = &s.geom {
-                    draw_nodes(p, rect, anchors, v);
-                }
             }
         }
     }

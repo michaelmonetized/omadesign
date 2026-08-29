@@ -392,6 +392,104 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio) {
         .small()
         .color(fg_weak()),
     );
+    // Precise numeric transform – works for every geom kind.
+    {
+        let mut x = b.min.x;
+        let mut y = b.min.y;
+        let mut w = b.width().max(1.0);
+        let mut h = b.height().max(1.0);
+        let mut changed = false;
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("X").small().color(fg_weak()));
+            changed |= ui
+                .add(eframe::egui::DragValue::new(&mut x).speed(1.0).prefix("X: "))
+                .changed();
+            ui.label(RichText::new("Y").small().color(fg_weak()));
+            changed |= ui
+                .add(eframe::egui::DragValue::new(&mut y).speed(1.0).prefix("Y: "))
+                .changed();
+        });
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("W").small().color(fg_weak()));
+            changed |= ui
+                .add(eframe::egui::DragValue::new(&mut w).speed(1.0).range(1.0..=10000.0).prefix("W: "))
+                .changed();
+            ui.label(RichText::new("H").small().color(fg_weak()));
+            changed |= ui
+                .add(eframe::egui::DragValue::new(&mut h).speed(1.0).range(1.0..=10000.0).prefix("H: "))
+                .changed();
+        });
+        if changed {
+            let dst = crate::geom::Bounds {
+                min: crate::geom::Pt::new(x, y),
+                max: crate::geom::Pt::new(x + w, y + h),
+            };
+            let mut g = shape.geom.clone();
+            g.map_into(b, dst);
+            studio.commit(crate::document::Cmd::SetGeom {
+                layer: li,
+                id,
+                before: shape.geom.clone(),
+                after: g,
+                rot_before: shape.rotation,
+                rot_after: shape.rotation,
+            });
+        }
+        let mut deg = shape.rotation.to_degrees();
+        if ui
+            .add(Slider::new(&mut deg, -180.0..=180.0).text("Rotate°"))
+            .changed()
+        {
+            let delta = (deg - shape.rotation.to_degrees()).to_radians();
+            let mut g = shape.geom.clone();
+            g.rotate_about(b.center(), delta);
+            let rot_after = deg.to_radians();
+            studio.commit(crate::document::Cmd::SetGeom {
+                layer: li,
+                id,
+                before: shape.geom.clone(),
+                after: g,
+                rot_before: shape.rotation,
+                rot_after,
+            });
+        }
+        ui.horizontal(|ui| {
+            if ui.small_button("Flip H").on_hover_text("Mirror horizontally").clicked() {
+                let mut g = shape.geom.clone();
+                let src = b;
+                let dst = crate::geom::Bounds {
+                    min: crate::geom::Pt::new(b.max.x, b.min.y),
+                    max: crate::geom::Pt::new(b.min.x, b.max.y),
+                };
+                g.map_into(src, dst);
+                studio.commit(crate::document::Cmd::SetGeom {
+                    layer: li,
+                    id,
+                    before: shape.geom.clone(),
+                    after: g,
+                    rot_before: shape.rotation,
+                    rot_after: shape.rotation,
+                });
+            }
+            if ui.small_button("Flip V").on_hover_text("Mirror vertically").clicked() {
+                let mut g = shape.geom.clone();
+                let src = b;
+                let dst = crate::geom::Bounds {
+                    min: crate::geom::Pt::new(b.min.x, b.max.y),
+                    max: crate::geom::Pt::new(b.max.x, b.min.y),
+                };
+                g.map_into(src, dst);
+                studio.commit(crate::document::Cmd::SetGeom {
+                    layer: li,
+                    id,
+                    before: shape.geom.clone(),
+                    after: g,
+                    rot_before: shape.rotation,
+                    rot_after: shape.rotation,
+                });
+            }
+        });
+    }
     let mut op = shape.opacity;
     if ui
         .add(Slider::new(&mut op, 0.0..=1.0).text("Opacity"))

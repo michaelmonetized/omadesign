@@ -1441,9 +1441,6 @@ impl Studio {
             return false;
         }
         ctx.request_repaint();
-        if ctx.egui_wants_keyboard_input() {
-            return true;
-        }
         let mut insert = String::new();
         let mut backspace = false;
         let mut delete = false;
@@ -1460,6 +1457,8 @@ impl Studio {
         let mut end = false;
         let mut shift = false;
         let mut save = false;
+        let mut copy = false;
+        let mut cut = false;
         ctx.input(|i| {
             shift = i.modifiers.shift;
             let ctrl = i.modifiers.command || i.modifiers.ctrl;
@@ -1510,14 +1509,44 @@ impl Studio {
             if i.key_pressed(Key::End) {
                 end = true;
             }
-            if !ctrl {
-                for ev in &i.events {
-                    if let egui::Event::Text(t) = ev {
-                        insert.push_str(t);
-                    }
+            if ctrl && i.key_pressed(Key::C) {
+                copy = true;
+            }
+            if ctrl && i.key_pressed(Key::X) {
+                cut = true;
+            }
+            // Text and paste events: Text when !ctrl, Paste always (Ctrl+V generates Paste)
+            for ev in &i.events {
+                match ev {
+                    egui::Event::Text(t) if !ctrl => insert.push_str(t),
+                    egui::Event::Paste(t) => insert.push_str(t),
+                    _ => {}
                 }
             }
         });
+        if copy || cut {
+            if let Some(run) = self
+                .type_edit
+                .as_ref()
+                .and_then(|e| self.doc.find_shape(e.layer, e.id))
+                .and_then(|s| match &s.geom {
+                    Geom::Text(r) => Some(r.clone()),
+                    _ => None,
+                })
+            {
+                let (lo, hi) = self.type_sel_range();
+                if lo != hi {
+                    let a = crate::text::char_to_byte(&run.content, lo);
+                    let b = crate::text::char_to_byte(&run.content, hi);
+                    let selected = run.content[a..b].to_owned();
+                    ctx.copy_text(selected);
+                    if cut {
+                        self.type_delete_range(lo, hi);
+                    }
+                }
+            }
+            return true;
+        }
         if save {
             self.commit_type_edit();
             self.save();
