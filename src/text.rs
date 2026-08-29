@@ -186,6 +186,38 @@ pub fn fonts() -> &'static [FontFace] {
     FONTS.get_or_init(scan_fonts)
 }
 
+static DYNAMIC_FONTS: OnceLock<Mutex<Vec<FontFace>>> = OnceLock::new();
+
+pub fn register_font(face: FontFace) {
+    let m = DYNAMIC_FONTS.get_or_init(|| Mutex::new(Vec::new()));
+    if let Ok(mut g) = m.lock() {
+        if !g.iter().any(|f| f.path == face.path) {
+            g.push(face);
+        }
+    }
+    // Invalidate cached bytes so the new file can be read.
+    if let Some(cache) = BYTES.get() {
+        if let Ok(mut m) = cache.lock() {
+            m.clear();
+        }
+    }
+}
+
+pub fn all_fonts() -> Vec<FontFace> {
+    let mut v = fonts().to_vec();
+    if let Some(m) = DYNAMIC_FONTS.get() {
+        if let Ok(g) = m.lock() {
+            for f in g.iter() {
+                if !v.iter().any(|e| e.path == f.path) {
+                    v.push(f.clone());
+                }
+            }
+        }
+    }
+    v.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    v
+}
+
 pub fn default_path() -> Option<PathBuf> {
     fonts().first().map(|f| f.path.clone())
 }

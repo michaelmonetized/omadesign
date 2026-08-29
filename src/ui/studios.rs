@@ -272,7 +272,7 @@ fn character_studio(ui: &mut Ui, studio: &mut Studio) {
         .selected_text(label)
         .width(220.0)
         .show_ui(ui, |ui| {
-            for f in crate::text::fonts() {
+            for f in crate::text::all_fonts() {
                 let path = f.path.to_string_lossy().to_string();
                 ui.selectable_value(&mut font, path, &f.name);
             }
@@ -286,6 +286,89 @@ fn character_studio(ui: &mut Ui, studio: &mut Studio) {
         let chosen = font.clone();
         studio.patch_type(|t| t.font = chosen);
     }
+    // Google Fonts on-demand
+    ui.collapsing("Google Fonts  ⤓", |ui| {
+        if !studio.google_catalog_loaded {
+            studio.google_catalog = crate::google_fonts::catalog();
+            studio.google_catalog_loaded = true;
+            if studio.google_catalog.is_empty() {
+                studio.google_status = "offline – bundled list".into();
+            } else {
+                studio.google_status = format!("catalogue: {} families", studio.google_catalog.len());
+            }
+        }
+        ui.horizontal(|ui| {
+            ui.add(
+                eframe::egui::TextEdit::singleline(&mut studio.google_query)
+                    .hint_text("Search Inter, mono…")
+                    .desired_width(140.0),
+            );
+            if ui.small_button("⟳").on_hover_text("Refresh catalogue").clicked() {
+                studio.google_catalog = crate::google_fonts::catalog();
+                studio.google_status = format!("refreshed: {} families", studio.google_catalog.len());
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("Variant").small().color(fg_weak()));
+            ComboBox::from_id_salt("google-variant")
+                .selected_text(studio.google_variant.clone())
+                .width(100.0)
+                .show_ui(ui, |ui| {
+                    for v in ["regular", "italic", "700", "700italic"] {
+                        ui.selectable_value(&mut studio.google_variant, v.to_string(), v);
+                    }
+                });
+        });
+        let filtered: Vec<crate::google_fonts::GoogleFont> = crate::google_fonts::search(&studio.google_catalog, &studio.google_query)
+            .into_iter()
+            .cloned()
+            .collect();
+        ScrollArea::vertical()
+            .max_height(160.0)
+            .show(ui, |ui| {
+                for f in filtered {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(&f.family).small());
+                        ui.label(RichText::new(&f.category).small().color(fg_weak()));
+                        let installed = crate::google_fonts::is_installed(&f.family, &studio.google_variant);
+                        if installed {
+                            if ui.small_button("Use").clicked() {
+                                // Prefer the dynamically registered font, else the installed file.
+                                let found = crate::text::all_fonts()
+                                    .iter()
+                                    .find(|ff| ff.name.to_ascii_lowercase().contains(&f.family.to_ascii_lowercase()))
+                                    .map(|ff| ff.path.to_string_lossy().to_string());
+                                let chosen = found.unwrap_or_else(|| {
+                                    crate::google_fonts::installed_path(&f.family, &studio.google_variant)
+                                        .to_string_lossy()
+                                        .to_string()
+                                });
+                                studio.patch_type(|t| t.font = chosen);
+                                studio.google_status = format!("using {}", f.family);
+                            }
+                        } else if ui.small_button("Download").clicked() {
+                            studio.google_status = format!("Downloading {} {}…", f.family, studio.google_variant);
+                            let fam = f.family.clone();
+                            let var = studio.google_variant.clone();
+                            let cat = studio.google_catalog.clone();
+                            match crate::google_fonts::download(&fam, &var, &cat) {
+                                Ok(p) => {
+                                    let chosen = p.to_string_lossy().to_string();
+                                    studio.patch_type(|t| t.font = chosen);
+                                    studio.google_status = format!("Installed {} → {}", fam, p.display());
+                                }
+                                Err(e) => {
+                                    studio.google_status = e;
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+        if !studio.google_status.is_empty() {
+            ui.label(RichText::new(&studio.google_status).small().color(accent()));
+        }
+    });
 
     let mut px = live.as_ref().map(|t| t.px).unwrap_or(studio.text_px);
     if ui

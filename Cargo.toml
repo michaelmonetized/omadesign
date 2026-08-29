@@ -19,6 +19,7 @@ ab_glyph = "0.2.32"
 base64 = "0.22"
 eframe = "0.36.1"
 geo = "0.33.1"
+ureq = { version = "2.10", features = ["tls"] }
 image = { version = "0.25", default-features = false, features = [
     "png",
     "jpeg",

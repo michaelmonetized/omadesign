@@ -301,6 +301,11 @@ pub struct Studio {
     pub hex_buf: String,
     pub swatches: Vec<Rgba>,
     pub bool_pick: Option<BoolOp>,
+    pub google_query: String,
+    pub google_status: String,
+    pub google_catalog: Vec<crate::google_fonts::GoogleFont>,
+    pub google_variant: String,
+    pub google_catalog_loaded: bool,
 }
 
 impl Studio {
@@ -353,6 +358,11 @@ impl Studio {
             hex_buf: "#4F8CFF".into(),
             swatches: default_swatches(),
             bool_pick: None,
+            google_query: String::new(),
+            google_status: String::new(),
+            google_catalog: Vec::new(),
+            google_variant: "regular".into(),
+            google_catalog_loaded: false,
         };
         s.doc.grid.visible = false;
         s
