@@ -4,6 +4,7 @@ pub mod boolean;
 pub mod color;
 pub mod compositor;
 pub mod document;
+pub mod compound;
 pub mod geom;
 pub mod google_fonts;
 pub mod palette;
