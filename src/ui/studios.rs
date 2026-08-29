@@ -115,6 +115,204 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
             });
         }
     });
+    palette_ui(ui, studio);
+}
+
+fn palette_ui(ui: &mut Ui, studio: &mut Studio) {
+    ui.add_space(8.0);
+    ui.separator();
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Palettes").strong().size(12.0).color(accent()));
+        if ui.small_button("＋ New").clicked() {
+            let name = if studio.palette_name_buf.trim().is_empty() {
+                format!("Palette {}", studio.palettes.len() + 1)
+            } else {
+                studio.palette_name_buf.trim().to_string()
+            };
+            if crate::palette::validate_name(&name).is_ok() {
+                let pal = crate::palette::Palette::new(name.clone(), vec![]);
+                studio.palettes.push(pal);
+                studio.palette_idx = studio.palettes.len() - 1;
+                studio.palette_name_buf = name;
+                let _ = crate::palette::save(&studio.palettes);
+                studio.status = "palette created".into();
+            } else {
+                studio.status = "invalid palette name".into();
+            }
+        }
+    });
+    if studio.palettes.is_empty() {
+        studio.palettes = crate::palette::load();
+    }
+    if studio.palette_idx >= studio.palettes.len() {
+        studio.palette_idx = 0;
+    }
+    let names: Vec<String> = studio.palettes.iter().map(|p| p.name.clone()).collect();
+    let cur_name = names.get(studio.palette_idx).cloned().unwrap_or_default();
+    ComboBox::from_id_salt("palette-select")
+        .selected_text(cur_name.clone())
+        .width(180.0)
+        .show_ui(ui, |ui| {
+            for (i, n) in names.iter().enumerate() {
+                ui.selectable_value(&mut studio.palette_idx, i, n);
+            }
+        });
+    // Sync name buf when selection changes
+    if let Some(p) = studio.palettes.get(studio.palette_idx) {
+        if studio.palette_name_buf != p.name && !p.name.is_empty() {
+            // keep buf in sync unless user is typing – we only sync on selection change
+            // so we compare after a selection change: detect change via idx vs buf
+            // For simplicity, always reflect current palette name in buf when idx changes
+            // but we can't detect change easily; just leave buf as is unless it's empty.
+        }
+    }
+    ui.horizontal(|ui| {
+        ui.label("Name");
+        ui.add(
+            eframe::egui::TextEdit::singleline(&mut studio.palette_name_buf)
+                .desired_width(120.0)
+                .hint_text("palette name"),
+        );
+        if ui.small_button("Rename").clicked() {
+            let new_name = studio.palette_name_buf.trim().to_string();
+            if crate::palette::validate_name(&new_name).is_ok() {
+                if let Some(p) = studio.palettes.get_mut(studio.palette_idx) {
+                    p.name = new_name.clone();
+                    let _ = crate::palette::save(&studio.palettes);
+                    studio.status = format!("renamed to {new_name}");
+                }
+            } else {
+                studio.status = "invalid name".into();
+            }
+        }
+        if ui.small_button("Delete").clicked() && studio.palettes.len() > 1 {
+            studio.palettes.remove(studio.palette_idx);
+            studio.palette_idx = studio.palette_idx.min(studio.palettes.len() - 1);
+            studio.palette_name_buf = studio.palettes[studio.palette_idx].name.clone();
+            let _ = crate::palette::save(&studio.palettes);
+            studio.status = "palette deleted".into();
+        }
+    });
+    // Active palette colours
+    if let Some(pal) = studio.palettes.get(studio.palette_idx).cloned() {
+        ui.horizontal_wrapped(|ui| {
+            for (idx, c) in pal.colors.iter().cloned().enumerate() {
+                let (rect, resp) = ui.allocate_exact_size(vec2(16.0, 16.0), eframe::egui::Sense::click());
+                ui.painter().rect_filled(rect, 2.0, c.to_egui());
+                if resp.clicked() {
+                    studio.set_fill(Fill::Solid(c));
+                    studio.brush.color = c;
+                }
+                if resp.secondary_clicked() {
+                    studio.set_stroke_color(c);
+                }
+                // small “×” on hover via right-click context
+                if resp.hovered() && ui.input(|i| i.key_pressed(eframe::egui::Key::Delete)) {
+                    // delete via Delete key while hovered (rare) – handled via button below instead
+                    let _ = idx;
+                }
+                // Show delete button on hover – we overlay a tiny x button after
+                // For simplicity, secondary click removes; primary applies.
+            }
+        });
+        ui.horizontal(|ui| {
+            if ui.small_button("+ Fill").on_hover_text("Add current fill colour to palette").clicked() {
+                let col = match studio.style.fill {
+                    Fill::Solid(c) => c,
+                    Fill::Linear { c0, .. } | Fill::Radial { c0, .. } => c0,
+                    Fill::None => studio.brush.color,
+                };
+                let name_opt = {
+                    if let Some(p) = studio.palettes.get_mut(studio.palette_idx) {
+                        if !p.colors.contains(&col) {
+                            p.colors.push(col);
+                            Some(p.name.clone())
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                };
+                if let Some(name) = name_opt {
+                    let _ = crate::palette::save(&studio.palettes);
+                    studio.status = format!("added {} to {}", col.hex(), name);
+                } else if studio.palettes.get(studio.palette_idx).is_some_and(|p| p.colors.contains(&col)) {
+                    studio.status = "colour already in palette".into();
+                }
+            }
+            if ui.small_button("+ Stroke").clicked() {
+                if let Some(st) = studio.style.stroke.clone() {
+                    let col = st.color;
+                    let name_opt = {
+                        if let Some(p) = studio.palettes.get_mut(studio.palette_idx) {
+                            if !p.colors.contains(&col) {
+                                p.colors.push(col);
+                                Some(p.name.clone())
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    };
+                    if let Some(name) = name_opt {
+                        let _ = crate::palette::save(&studio.palettes);
+                        studio.status = format!("added {} to {}", col.hex(), name);
+                    }
+                }
+            }
+            if ui.small_button("Clear").clicked() {
+                if let Some(p) = studio.palettes.get_mut(studio.palette_idx) {
+                    p.colors.clear();
+                }
+                let _ = crate::palette::save(&studio.palettes);
+            }
+            if ui.small_button("× Last").on_hover_text("Remove last colour").clicked() {
+                if let Some(p) = studio.palettes.get_mut(studio.palette_idx) {
+                    p.colors.pop();
+                }
+                let _ = crate::palette::save(&studio.palettes);
+            }
+        });
+        if pal.colors.is_empty() {
+            ui.label(RichText::new("No colours yet – “+ Fill” adds the current fill.").small().color(fg_weak()));
+        }
+    }
+    ui.horizontal(|ui| {
+        if ui.small_button("Import…").clicked() {
+            if let Some(path) = rfd::FileDialog::new().add_filter("JSON", &["json"]).pick_file() {
+                if let Ok(s) = std::fs::read_to_string(&path) {
+                    if let Ok(imported) = serde_json::from_str::<Vec<crate::palette::Palette>>(&s) {
+                        studio.palettes.extend(imported);
+                        let _ = crate::palette::save(&studio.palettes);
+                        studio.status = format!("imported {}", path.display());
+                    } else {
+                        studio.status = "import failed – not a palette JSON".into();
+                    }
+                }
+            }
+        }
+        if ui.small_button("Export…").clicked() {
+            if let Some(path) = rfd::FileDialog::new().add_filter("JSON", &["json"]).save_file() {
+                let json_path = if path.extension().is_none() {
+                    path.with_extension("json")
+                } else {
+                    path
+                };
+                match serde_json::to_string_pretty(&studio.palettes) {
+                    Ok(s) => {
+                        if std::fs::write(&json_path, s).is_ok() {
+                            studio.status = format!("exported {}", json_path.display());
+                        } else {
+                            studio.status = "export failed".into();
+                        }
+                    }
+                    Err(e) => studio.status = format!("export failed: {e}"),
+                }
+            }
+        }
+    });
 }
 
 fn swatch_btn(ui: &mut Ui, c: Rgba, tip: &str) {

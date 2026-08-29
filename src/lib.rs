@@ -6,6 +6,7 @@ pub mod compositor;
 pub mod document;
 pub mod geom;
 pub mod google_fonts;
+pub mod palette;
 pub mod paint;
 pub mod photo;
 pub mod presets;

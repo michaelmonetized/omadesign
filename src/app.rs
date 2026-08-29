@@ -306,6 +306,9 @@ pub struct Studio {
     pub google_catalog: Vec<crate::google_fonts::GoogleFont>,
     pub google_variant: String,
     pub google_catalog_loaded: bool,
+    pub palettes: Vec<crate::palette::Palette>,
+    pub palette_idx: usize,
+    pub palette_name_buf: String,
 }
 
 impl Studio {
@@ -365,8 +368,14 @@ impl Studio {
             google_catalog: Vec::new(),
             google_variant: "regular".into(),
             google_catalog_loaded: false,
+            palettes: crate::palette::load(),
+            palette_idx: 0,
+            palette_name_buf: String::new(),
         };
         s.doc.grid.visible = false;
+        if !s.palettes.is_empty() {
+            s.palette_name_buf = s.palettes[0].name.clone();
+        }
         // Hint the max-font default in the status line so it is discoverable
         // before any type is placed. The Character studio also shows it.
         if let Some(fam) = crate::text::preferred_default_family_name() {
