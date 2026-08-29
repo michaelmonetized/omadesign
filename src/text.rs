@@ -16,7 +16,7 @@ const PREFERRED: &[&str] = &[
     "/usr/share/fonts/dejavu/DejaVuSans.ttf",
 ];
 
-const FONT_CAP: usize = 200;
+const FONT_CAP: usize = 2000;
 
 static FONTS: OnceLock<Vec<FontFace>> = OnceLock::new();
 static BYTES: OnceLock<Mutex<HashMap<PathBuf, Arc<Vec<u8>>>>> = OnceLock::new();
@@ -27,42 +27,125 @@ pub struct FontFace {
     pub path: PathBuf,
 }
 
+fn family_name(path: &Path) -> String {
+    // Try to read the OpenType name table for a human family + style.
+    if let Ok(bytes) = std::fs::read(path) {
+        if let Ok(face) = rustybuzz::ttf_parser::Face::parse(&bytes, 0) {
+            let mut family: Option<String> = None;
+            let mut style: Option<String> = None;
+            for n in face.names() {
+                if n.name_id == 1 && n.is_unicode() {
+                    if let Some(s) = n.to_string() {
+                        let s = s.trim().to_string();
+                        if !s.is_empty() {
+                            family = Some(s);
+                        }
+                    }
+                }
+                if n.name_id == 2 && n.is_unicode() {
+                    if let Some(s) = n.to_string() {
+                        let s = s.trim().to_string();
+                        if !s.is_empty() && s.to_ascii_lowercase() != "regular" {
+                            style = Some(s);
+                        }
+                    }
+                }
+            }
+            if let Some(fam) = family {
+                if let Some(st) = style {
+                    // Avoid duplicating family when style already contains it.
+                    if st.to_lowercase().contains(&fam.to_lowercase()) {
+                        return st;
+                    }
+                    return format!("{fam} {st}");
+                }
+                return fam;
+            }
+        }
+    }
+    path.file_stem()
+        .map(|s| s.to_string_lossy().replace(['-', '_'], " ").trim().to_string())
+        .unwrap_or_else(|| "Font".into())
+}
+
+fn fc_font_files() -> Vec<PathBuf> {
+    let output = std::process::Command::new("fc-list")
+        .args(["-f", "%{file}\n", ":"])
+        .output();
+    let Ok(out) = output else {
+        return Vec::new();
+    };
+    if !out.status.success() {
+        return Vec::new();
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut v = Vec::new();
+    for line in text.lines() {
+        let t = line.trim();
+        if t.is_empty() {
+            continue;
+        }
+        let p = PathBuf::from(t);
+        if p.extension()
+            .and_then(|e| e.to_str())
+            .map(|e| matches!(e.to_ascii_lowercase().as_str(), "ttf" | "otf" | "ttc" | "otc"))
+            .unwrap_or(false)
+        {
+            v.push(p);
+        }
+    }
+    v.sort();
+    v.dedup();
+    v
+}
+
 fn scan_fonts() -> Vec<FontFace> {
     let mut out = Vec::new();
     let mut seen = std::collections::HashSet::new();
+    // Preferred still first so the initial sort is stable for bundled fallbacks.
     for p in PREFERRED {
         let path = PathBuf::from(p);
-        if path.exists() {
-            let name = path
-                .file_stem()
-                .map(|s| s.to_string_lossy().replace('-', " "))
-                .unwrap_or_else(|| "Sans".into());
-            seen.insert(path.clone());
+        if path.exists() && seen.insert(path.clone()) {
+            let name = family_name(&path);
+            out.push(FontFace { name, path });
+        }
+    }
+    // Canonical set from fontconfig – this is the broadest and respects the
+    // user's fontconfig excludes/substitutes.
+    for path in fc_font_files() {
+        if out.len() >= FONT_CAP {
+            break;
+        }
+        if seen.insert(path.clone()) {
+            let name = family_name(&path);
             out.push(FontFace { name, path });
         }
     }
     let home = std::env::var("HOME").unwrap_or_default();
+    // Fallback recursive walk for directories fontconfig may not yet know
+    // (e.g. freshly downloaded Google Fonts before fc-cache).
     for root in [
         "/usr/share/fonts",
         "/usr/local/share/fonts",
+        "/home/michael/.local/share/fonts",
+        &format!("{home}/.local/share/fonts"),
+        &format!("{home}/.fonts"),
         "/usr/share/fonts/liberation",
         "/usr/share/fonts/noto",
         "/usr/share/fonts/TTF",
         "/usr/share/fonts/truetype",
-        "/usr/share/fonts/adobe-source-sans-pro",
+        "/usr/share/fonts/adobe-source-code-pro",
         "/usr/share/fonts/gsfonts",
+        "/usr/share/fonts/ttf-ia-writer",
     ] {
+        if root.is_empty() {
+            continue;
+        }
         walk_ttfs(Path::new(root), &mut out, &mut seen, 0);
         if out.len() >= FONT_CAP {
             break;
         }
     }
-    walk_ttfs(
-        Path::new(&format!("{home}/.local/share/fonts")),
-        &mut out,
-        &mut seen,
-        0,
-    );
     out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     out.truncate(FONT_CAP);
     out
@@ -74,7 +157,7 @@ fn walk_ttfs(
     seen: &mut std::collections::HashSet<PathBuf>,
     depth: u8,
 ) {
-    if depth > 5 || out.len() >= FONT_CAP {
+    if depth > 8 || out.len() >= FONT_CAP {
         return;
     }
     let Ok(rd) = std::fs::read_dir(dir) else {
@@ -90,13 +173,10 @@ fn walk_ttfs(
             .extension()
             .and_then(|s| s.to_str())
             .map(|s| s.to_ascii_lowercase());
-        if matches!(ext.as_deref(), Some("ttf") | Some("otf") | Some("ttc"))
+        if matches!(ext.as_deref(), Some("ttf") | Some("otf") | Some("ttc") | Some("otc"))
             && seen.insert(p.clone())
         {
-            let name = p
-                .file_stem()
-                .map(|s| s.to_string_lossy().replace('-', " "))
-                .unwrap_or_else(|| "Font".into());
+            let name = family_name(&p);
             out.push(FontFace { name, path: p });
         }
     }
