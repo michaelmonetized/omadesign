@@ -343,7 +343,9 @@ impl Studio {
             text_px: 72.0,
             text_tracking: 0.0,
             text_leading: 0.0,
-            text_font: String::new(),
+            text_font: crate::text::preferred_default_path()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default(),
             text_kern: true,
             text_liga: true,
             text_tnum: false,
@@ -365,6 +367,16 @@ impl Studio {
             google_catalog_loaded: false,
         };
         s.doc.grid.visible = false;
+        // Hint the max-font default in the status line so it is discoverable
+        // before any type is placed. The Character studio also shows it.
+        if let Some(fam) = crate::text::preferred_default_family_name() {
+            if !s.text_font.is_empty() {
+                let label = crate::text::label_for(&s.text_font);
+                s.status = format!("Default font: {label} (from {fam})");
+            } else {
+                s.status = format!("Default font: {fam} not installed — open Character → Google Fonts to install");
+            }
+        }
         s
     }
 

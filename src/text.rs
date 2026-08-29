@@ -615,6 +615,199 @@ pub fn glyph_count(run: &TypeRun) -> usize {
     n
 }
 
+/// Scan ~/Projects for `next/font/google` imports and return the most frequent
+/// family (e.g. “Inter”). Underscores in the identifier are turned into spaces
+/// so `Noto_Sans_Mono` → “Noto Sans Mono”.
+pub fn detect_max_font_family() -> Option<String> {
+    detect_max_font_family_in(&projects_root())
+}
+
+fn projects_root() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+    PathBuf::from(format!("{home}/Projects"))
+}
+
+fn detect_max_font_family_in(root: &Path) -> Option<String> {
+    if !root.exists() {
+        return None;
+    }
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    walk_for_font_imports(root, &mut counts, 0);
+    if counts.is_empty() {
+        return None;
+    }
+    // Prefer the family with highest count; tie-break by preferring sans over mono,
+    // then alphabetically – this makes Inter (sans) win over Noto_Sans_Mono (mono)
+    // when counts are equal, matching hustlelaunch.com's primary sans.
+    let mut best: Option<(String, usize)> = None;
+    for (fam, cnt) in counts {
+        let entry = best.get_or_insert((fam.clone(), cnt));
+        if cnt > entry.1
+            || (cnt == entry.1 && is_preferred_over(&fam, &entry.0))
+        {
+            *entry = (fam, cnt);
+        }
+    }
+    best.map(|(f, _)| f)
+}
+
+fn is_preferred_over(a: &str, b: &str) -> bool {
+    // Sans is preferred over mono for a design default.
+    let a_mono = a.to_ascii_lowercase().contains("mono");
+    let b_mono = b.to_ascii_lowercase().contains("mono");
+    if a_mono != b_mono {
+        return !a_mono && b_mono;
+    }
+    a.to_ascii_lowercase() < b.to_ascii_lowercase()
+}
+
+fn walk_for_font_imports(dir: &Path, counts: &mut HashMap<String, usize>, depth: u8) {
+    if depth > 6 {
+        return;
+    }
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for e in rd.flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            // Skip heavy dirs
+            let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
+            if matches!(name, "node_modules" | ".git" | "target" | ".next" | "dist" | "build") {
+                continue;
+            }
+            walk_for_font_imports(&p, counts, depth + 1);
+            continue;
+        }
+        let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
+        if !matches!(ext.as_str(), "ts" | "tsx" | "js" | "jsx") {
+            continue;
+        }
+        // Only inspect files that could contain next/font
+        if let Ok(text) = std::fs::read_to_string(&p) {
+            if !text.contains("next/font/google") {
+                continue;
+            }
+            // Extract `import { Inter, Foo } from "next/font/google"` identifiers.
+            // We do a light parse: find the substring between "import {" and "} from".
+            for import in extract_google_imports(&text) {
+                for ident in import.split(',') {
+                    let raw = ident.trim().split_whitespace().next().unwrap_or("").trim_matches(|c| c == '{' || c == '}');
+                    // Handle `Inter as MyInter` – take before “as”.
+                    let base = raw.split(" as ").next().unwrap_or(raw).trim();
+                    if base.is_empty() || base.starts_with("/*") {
+                        continue;
+                    }
+                    // Convert `Noto_Sans_Mono` → “Noto Sans Mono”
+                    let family = base.replace('_', " ").trim().to_string();
+                    if !family.is_empty() {
+                        *counts.entry(family).or_insert(0) += 1;
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn extract_google_imports(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut pos = 0;
+    while let Some(start) = text[pos..].find("next/font/google") {
+        let abs = pos + start;
+        // Walk backwards to find the opening “{” of the import.
+        let before = &text[..abs];
+        if let Some(brace_start) = before.rfind("import") {
+            let segment = &before[brace_start..abs];
+            if let Some(l) = segment.find('{') {
+                if let Some(r) = segment[l..].find('}') {
+                    out.push(segment[l + 1..l + r].to_string());
+                }
+            }
+        }
+        pos = abs + "next/font/google".len();
+    }
+    out
+}
+
+/// Resolve the preferred default font file by looking at the max font from web
+/// apps, then omarchy font, then Inter, then the first system font.
+pub fn preferred_default_path() -> Option<PathBuf> {
+    // 1. Max font from Projects
+    if let Some(fam) = detect_max_font_family() {
+        if let Some(p) = find_installed_for_family(&fam) {
+            return Some(p);
+        }
+        // If the family is a Google Font but not installed, still return None so
+        // the caller can suggest a download. The UI will show “Inter not installed”.
+    }
+    // 2. Omarchy desktop font (e.g. “JetBrainsMono Nerd Font”) – try to find its file.
+    if let Ok(out) = std::process::Command::new("omarchy")
+        .args(["font", "current"])
+        .output()
+    {
+        if out.status.success() {
+            let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !name.is_empty() {
+                if let Some(p) = find_installed_for_family(&name) {
+                    return Some(p);
+                }
+            }
+        }
+    }
+    // 3. Hard-coded Inter – the most common branding sans in the user's repos.
+    if let Some(p) = find_installed_for_family("Inter") {
+        return Some(p);
+    }
+    // 4. First system font
+    default_path()
+}
+
+fn find_installed_for_family(family: &str) -> Option<PathBuf> {
+    let q = family.to_ascii_lowercase();
+    // Prefer exact family name match, then substring.
+    let all = all_fonts();
+    if let Some(f) = all.iter().find(|f| f.name.to_ascii_lowercase() == q) {
+        return Some(f.path.clone());
+    }
+    if let Some(f) = all.iter().find(|f| f.name.to_ascii_lowercase().contains(&q)) {
+        return Some(f.path.clone());
+    }
+    // Also try file-stem contains.
+    for f in all {
+        let stem = f
+            .path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_ascii_lowercase())
+            .unwrap_or_default();
+        if stem.contains(&q.replace(' ', "").to_ascii_lowercase())
+            || stem.contains(&q.replace(' ', "_").to_ascii_lowercase())
+            || q.contains(&stem.replace('-', " "))
+        {
+            return Some(f.path);
+        }
+    }
+    None
+}
+
+pub fn preferred_default_family_name() -> Option<String> {
+    detect_max_font_family().or_else(|| {
+        // fallback to omarchy font name for display
+        std::process::Command::new("omarchy")
+            .args(["font", "current"])
+            .output()
+            .ok()
+            .and_then(|o| {
+                if o.status.success() {
+                    let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
+                    if !s.is_empty() {
+                        return Some(s);
+                    }
+                }
+                None
+            })
+    })
+}
+
 pub fn available() -> bool {
     default_path().is_some()
 }
@@ -688,5 +881,25 @@ mod tests {
         assert!(t.kern && t.liga);
         assert!(!t.tnum && !t.smcp);
         assert!(t.font.is_empty());
+    }
+
+    #[test]
+    fn max_font_detection_prefers_inter() {
+        let tmp = std::env::temp_dir().join(format!("omadesign-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(tmp.join("proj/app")).unwrap();
+        std::fs::write(
+            tmp.join("proj/app/layout.tsx"),
+            r#"import { Inter, Noto_Sans_Mono } from "next/font/google";"#,
+        )
+        .unwrap();
+        std::fs::write(
+            tmp.join("proj/app/page.tsx"),
+            r#"import { Inter } from "next/font/google";"#,
+        )
+        .unwrap();
+        let fam = detect_max_font_family_in(&tmp).unwrap();
+        assert_eq!(fam, "Inter", "Inter appears twice, Noto once");
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }
