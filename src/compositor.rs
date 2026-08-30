@@ -308,7 +308,7 @@ fn draw_content(
 }
 
 fn draw_shape(pm: &mut Pixmap, shape: &Shape, t: Transform, opacity: f32, blend: tiny_skia::BlendMode) {
-    let Some(path) = shape_path(shape) else {
+    let Some(path) = shape.get_cached_path(96) else {
         return;
     };
     let op = (opacity * shape.opacity).clamp(0.0, 1.0);

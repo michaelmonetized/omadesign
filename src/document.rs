@@ -3,6 +3,7 @@
 use crate::color::{Blend, Rgba};
 use crate::geom::{Bounds, Geom, Pt};
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
@@ -137,6 +138,10 @@ pub struct Shape {
     pub style: Style,
     pub rotation: f32,
     pub opacity: f32,
+    #[serde(skip)]
+    cached_path: std::cell::RefCell<Option<tiny_skia::Path>>,
+    #[serde(skip)]
+    cached_path_rotation: std::cell::RefCell<f32>,
 }
 
 impl Shape {
@@ -149,6 +154,8 @@ impl Shape {
             style,
             rotation: 0.0,
             opacity: 1.0,
+            cached_path: RefCell::new(None),
+            cached_path_rotation: RefCell::new(0.0),
         }
     }
 
@@ -194,6 +201,36 @@ impl Shape {
             p
         };
         self.geom.dist_to_outline(q)
+    }
+
+    pub fn get_cached_path(&self, segs: usize) -> Option<tiny_skia::Path> {
+        let cached_rot = *self.cached_path_rotation.borrow();
+        if self.cached_path.borrow().is_some() && (cached_rot - self.rotation).abs() < 1e-5 {
+            return self.cached_path.borrow().clone();
+        }
+        let mut pb = tiny_skia::PathBuilder::new();
+        let mut any = false;
+        for contour in self.geom.contours(segs) {
+            if contour.len() < 2 {
+                continue;
+            }
+            pb.move_to(contour[0].x, contour[0].y);
+            for p in contour.iter().skip(1) {
+                pb.line_to(p.x, p.y);
+            }
+            if self.geom.is_closed() {
+                pb.close();
+            }
+            any = true;
+        }
+        if any {
+            let path = pb.finish();
+            *self.cached_path.borrow_mut() = path.clone();
+            *self.cached_path_rotation.borrow_mut() = self.rotation;
+            path
+        } else {
+            None
+        }
     }
 }
 

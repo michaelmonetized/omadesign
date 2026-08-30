@@ -28,6 +28,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
 }
 
 fn upload_textures(ui: &mut Ui, studio: &mut Studio) {
+    // Thumbnails: only upload new ones when images are added
     if studio.photo.thumbs.len() != studio.photo.images.len() {
         studio.photo.thumbs.clear();
         for (i, img) in studio.photo.images.iter().enumerate() {
@@ -42,22 +43,47 @@ fn upload_textures(ui: &mut Ui, studio: &mut Studio) {
             studio.photo.thumbs.push(tex);
         }
     }
-    if let Some(adj) = &studio.photo.adjusted {
-        studio.photo.tex = Some(ui.ctx().load_texture(
-            format!("dev-{}", studio.photo.sel_version),
-            ColorImage::from_rgba_unmultiplied([adj.w as usize, adj.h as usize], &adj.data),
-            TextureOptions::LINEAR,
-        ));
+    // Adjusted image: only re-upload when sel_version changes
+    if studio.photo.built_version != studio.photo.sel_version {
+        if let Some(adj) = &studio.photo.adjusted {
+            let tex = if let Some(mut existing) = studio.photo.tex.take()
+                && existing.size() == [adj.w as usize, adj.h as usize]
+            {
+                existing.set(
+                    ColorImage::from_rgba_unmultiplied([adj.w as usize, adj.h as usize], &adj.data),
+                    TextureOptions::LINEAR,
+                );
+                existing
+            } else {
+                ui.ctx().load_texture(
+                    format!("dev-{}", studio.photo.sel_version),
+                    ColorImage::from_rgba_unmultiplied([adj.w as usize, adj.h as usize], &adj.data),
+                    TextureOptions::LINEAR,
+                )
+            };
+            studio.photo.tex = Some(tex);
+        }
+        studio.photo.built_version = studio.photo.sel_version;
     }
-    if let Some(img) = studio.photo.selected() {
-        studio.photo.orig_tex = Some(ui.ctx().load_texture(
-            format!("orig-{}", studio.photo.sel_version),
-            ColorImage::from_rgba_unmultiplied(
-                [img.preview.w as usize, img.preview.h as usize],
-                &img.preview.data,
-            ),
-            TextureOptions::LINEAR,
-        ));
+    // Original preview: only re-upload when sel_version changes
+    let orig_data = studio.photo.selected().map(|img| (img.preview.w, img.preview.h, img.preview.data.clone()));
+    if let Some((pw, ph, data)) = orig_data {
+        let tex = if let Some(mut existing) = studio.photo.orig_tex.take()
+            && existing.size() == [pw as usize, ph as usize]
+        {
+            existing.set(
+                ColorImage::from_rgba_unmultiplied([pw as usize, ph as usize], &data),
+                TextureOptions::LINEAR,
+            );
+            existing
+        } else {
+            ui.ctx().load_texture(
+                format!("orig-{}", studio.photo.sel_version),
+                ColorImage::from_rgba_unmultiplied([pw as usize, ph as usize], &data),
+                TextureOptions::LINEAR,
+            )
+        };
+        studio.photo.orig_tex = Some(tex);
     }
 }
 
