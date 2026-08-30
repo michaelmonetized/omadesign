@@ -80,7 +80,14 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
             [pm.width() as usize, pm.height() as usize],
             pm.data(),
         );
-        let tex = ui.ctx().load_texture("canvas", image, eframe::egui::TextureOptions::LINEAR);
+        let tex = if let Some(mut existing) = studio.screen_tex.take()
+            && existing.size() == [pm.width() as usize, pm.height() as usize]
+        {
+            existing.set(image, eframe::egui::TextureOptions::LINEAR);
+            existing
+        } else {
+            ui.ctx().load_texture("canvas", image, eframe::egui::TextureOptions::LINEAR)
+        };
         ui.painter().image(
             tex.id(),
             rect,

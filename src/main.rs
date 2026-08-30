@@ -11,6 +11,10 @@ fn main() -> eframe::Result {
             .with_inner_size([1440.0, 900.0])
             .with_min_inner_size([960.0, 640.0])
             .with_title("omadesign"),
+        renderer: eframe::Renderer::Wgpu,
+        multisampling: 0,
+        depth_buffer: 0,
+        stencil_buffer: 0,
         ..Default::default()
     };
     eframe::run_native(
@@ -18,6 +22,7 @@ fn main() -> eframe::Result {
         options,
         Box::new(|cc| {
             theme::apply(&cc.egui_ctx);
+            cc.egui_ctx.set_pixels_per_point(1.0);
             Ok(Box::new(Studio::new()))
         }),
     )
