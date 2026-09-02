@@ -141,7 +141,7 @@ pub struct Shape {
     #[serde(skip)]
     cached_path: std::cell::RefCell<Option<tiny_skia::Path>>,
     #[serde(skip)]
-    cached_path_rotation: std::cell::RefCell<f32>,
+    cached_path_sig: std::cell::RefCell<u64>,
 }
 
 impl Shape {
@@ -155,7 +155,7 @@ impl Shape {
             rotation: 0.0,
             opacity: 1.0,
             cached_path: RefCell::new(None),
-            cached_path_rotation: RefCell::new(0.0),
+            cached_path_sig: RefCell::new(0),
         }
     }
 
@@ -203,9 +203,117 @@ impl Shape {
         self.geom.dist_to_outline(q)
     }
 
+    fn path_sig(&self) -> u64 {
+        fn mix(h: u64, x: u32) -> u64 {
+            h.wrapping_mul(1_099_511_628_211).wrapping_add(x as u64)
+        }
+        fn fbits(h: u64, v: f32) -> u64 {
+            mix(h, v.to_bits())
+        }
+        let mut h = mix(0xC0FFEE, self.rotation.to_bits());
+        h = fbits(h, self.opacity);
+        let b = self.geom.bbox();
+        h = fbits(h, b.min.x);
+        h = fbits(h, b.min.y);
+        h = fbits(h, b.max.x);
+        h = fbits(h, b.max.y);
+        match &self.geom {
+            Geom::Rect {
+                origin,
+                size,
+                radius,
+            } => {
+                h = mix(h, 1);
+                h = fbits(h, origin.x);
+                h = fbits(h, origin.y);
+                h = fbits(h, size.x);
+                h = fbits(h, size.y);
+                h = fbits(h, *radius);
+            }
+            Geom::Ellipse { center, radii } => {
+                h = mix(h, 2);
+                h = fbits(h, center.x);
+                h = fbits(h, center.y);
+                h = fbits(h, radii.x);
+                h = fbits(h, radii.y);
+            }
+            Geom::Polygon {
+                center,
+                radii,
+                sides,
+            } => {
+                h = mix(h, 3);
+                h = fbits(h, center.x);
+                h = fbits(h, radii.x);
+                h = mix(h, *sides);
+            }
+            Geom::Star {
+                center,
+                outer,
+                inner,
+                points,
+            } => {
+                h = mix(h, 4);
+                h = fbits(h, center.x);
+                h = fbits(h, outer.x);
+                h = fbits(h, *inner);
+                h = mix(h, *points);
+            }
+            Geom::Line { a, b } => {
+                h = mix(h, 5);
+                h = fbits(h, a.x);
+                h = fbits(h, a.y);
+                h = fbits(h, b.x);
+                h = fbits(h, b.y);
+            }
+            Geom::Path { anchors, closed } => {
+                h = mix(h, 6);
+                h = mix(h, anchors.len() as u32);
+                h = mix(h, u32::from(*closed));
+                for a in anchors {
+                    h = fbits(h, a.pt.x);
+                    h = fbits(h, a.pt.y);
+                    h = fbits(h, a.h_in.x);
+                    h = fbits(h, a.h_in.y);
+                    h = fbits(h, a.h_out.x);
+                    h = fbits(h, a.h_out.y);
+                }
+            }
+            Geom::Text(t) => {
+                h = mix(h, 7);
+                h = fbits(h, t.origin.x);
+                h = fbits(h, t.origin.y);
+                h = fbits(h, t.px);
+                h = fbits(h, t.tracking);
+                h = fbits(h, t.leading);
+                h = mix(h, t.content.len() as u32);
+                for (i, b) in t.content.as_bytes().iter().take(48).enumerate() {
+                    h = mix(h, *b as u32 + i as u32 * 7);
+                }
+            }
+            Geom::Poly { contours, winding } => {
+                h = mix(h, u32::from(*winding));
+                h = mix(h, 8);
+                h = mix(h, contours.len() as u32);
+                for c in contours {
+                    h = mix(h, c.len() as u32);
+                    if let Some(p) = c.first() {
+                        h = fbits(h, p.x);
+                        h = fbits(h, p.y);
+                    }
+                    if let Some(p) = c.last() {
+                        h = fbits(h, p.x);
+                        h = fbits(h, p.y);
+                    }
+                }
+            }
+        }
+        h
+    }
+
     pub fn get_cached_path(&self, segs: usize) -> Option<tiny_skia::Path> {
-        let cached_rot = *self.cached_path_rotation.borrow();
-        if self.cached_path.borrow().is_some() && (cached_rot - self.rotation).abs() < 1e-5 {
+        let sig = self.path_sig();
+        if self.cached_path.borrow().is_some() && *self.cached_path_sig.borrow() == sig {
             return self.cached_path.borrow().clone();
         }
         let mut pb = tiny_skia::PathBuilder::new();
@@ -226,7 +334,7 @@ impl Shape {
         if any {
             let path = pb.finish();
             *self.cached_path.borrow_mut() = path.clone();
-            *self.cached_path_rotation.borrow_mut() = self.rotation;
+            *self.cached_path_sig.borrow_mut() = sig;
             path
         } else {
             None
@@ -241,6 +349,8 @@ pub struct Pixels {
     pub data: Vec<u8>,
     #[serde(skip)]
     pub version: u64,
+    #[serde(skip)]
+    pub(crate) cached_pm: RefCell<Option<(u64, tiny_skia::Pixmap)>>,
 }
 
 impl Pixels {
@@ -250,6 +360,7 @@ impl Pixels {
             h: h.max(1),
             data: vec![0u8; w.max(1) as usize * h.max(1) as usize * 4],
             version: 0,
+            cached_pm: RefCell::new(None),
         }
     }
 
@@ -262,14 +373,16 @@ impl Pixels {
             h,
             data,
             version: 1,
+            cached_pm: RefCell::new(None),
         })
     }
 
     pub fn touch(&mut self) {
-        self.version += 1;
+        self.version = self.version.wrapping_add(1);
+        self.cached_pm.borrow_mut().take();
     }
 
-    pub fn to_pixmap(&self) -> Option<tiny_skia::Pixmap> {
+    fn build_pm(&self) -> Option<tiny_skia::Pixmap> {
         let mut pm = tiny_skia::Pixmap::new(self.w, self.h)?;
         for (i, src) in self.data.chunks_exact(4).enumerate() {
             let a = src[3] as u32;
@@ -285,6 +398,28 @@ impl Pixels {
             pm.data_mut()[i * 4..i * 4 + 4].copy_from_slice(&[r, g, b, src[3]]);
         }
         Some(pm)
+    }
+
+    fn ensure_pm(&self) {
+        let mut slot = self.cached_pm.borrow_mut();
+        if let Some((v, pm)) = slot.as_ref()
+            && *v == self.version
+            && pm.width() == self.w
+            && pm.height() == self.h
+        {
+            return;
+        }
+        *slot = self.build_pm().map(|pm| (self.version, pm));
+    }
+
+    pub fn with_pm<R>(&self, f: impl FnOnce(&tiny_skia::Pixmap) -> R) -> Option<R> {
+        self.ensure_pm();
+        let slot = self.cached_pm.borrow();
+        slot.as_ref().map(|(_, pm)| f(pm))
+    }
+
+    pub fn to_pixmap(&self) -> Option<tiny_skia::Pixmap> {
+        self.with_pm(|pm| pm.clone())
     }
 
     pub fn from_pixmap(pm: &tiny_skia::Pixmap) -> Self {
@@ -307,6 +442,7 @@ impl Pixels {
             h: pm.height(),
             data,
             version: 1,
+            cached_pm: RefCell::new(Some((1, pm.clone()))),
         }
     }
 }
@@ -452,6 +588,8 @@ pub struct Document {
     pub show_safe: bool,
     #[serde(default)]
     pub bleed: f32,
+    #[serde(default)]
+    pub motion: crate::motion::Motion,
 }
 
 impl Document {
@@ -494,6 +632,7 @@ impl Document {
             show_bleed,
             show_safe,
             bleed: 36.0, // 0.125" at 300dpi or 0.5" at 72dpi ~ 36px
+            motion: crate::motion::Motion::default(),
         };
         // Fill background white when not transparent
         if !transparent {
@@ -631,6 +770,14 @@ pub enum Cmd {
         from: usize,
         to: usize,
     },
+    ReorderShape {
+        layer: usize,
+        from: usize,
+        to: usize,
+    },
+    SetGeoms {
+        items: Vec<(usize, u64, Geom, Geom, f32, f32)>,
+    },
     SetLayerMeta {
         index: usize,
         name: String,
@@ -653,9 +800,13 @@ pub enum Cmd {
         index: usize,
         guide: Guide,
     },
+    SetMotion {
+        before: crate::motion::Motion,
+        after: crate::motion::Motion,
+    },
 }
 
-const MAX_HISTORY: usize = 80;
+const MAX_HISTORY: usize = 200;
 
 #[derive(Default)]
 pub struct History {
@@ -665,6 +816,12 @@ pub struct History {
 
 impl History {
     pub fn push(&mut self, cmd: Cmd) {
+        if let Some(prev) = self.undo.last_mut()
+            && coalesce(prev, &cmd)
+        {
+            self.redo.clear();
+            return;
+        }
         self.undo.push(cmd);
         self.redo.clear();
         if self.undo.len() > MAX_HISTORY {
@@ -699,6 +856,80 @@ impl History {
 
     pub fn len(&self) -> usize {
         self.undo.len()
+    }
+}
+
+fn coalesce(prev: &mut Cmd, next: &Cmd) -> bool {
+    match (prev, next) {
+        (
+            Cmd::SetStyle {
+                layer,
+                id,
+                after,
+                ..
+            },
+            Cmd::SetStyle {
+                layer: l2,
+                id: i2,
+                after: a2,
+                ..
+            },
+        ) if *layer == *l2 && *id == *i2 => {
+            *after = a2.clone();
+            true
+        }
+        (
+            Cmd::SetOpacity {
+                layer,
+                id,
+                after,
+                ..
+            },
+            Cmd::SetOpacity {
+                layer: l2,
+                id: i2,
+                after: a2,
+                ..
+            },
+        ) if *layer == *l2 && *id == *i2 => {
+            *after = *a2;
+            true
+        }
+        (
+            Cmd::SetLayerMeta {
+                index,
+                name,
+                visible,
+                locked,
+                opacity,
+                blend,
+                ..
+            },
+            Cmd::SetLayerMeta {
+                index: i2,
+                name: n2,
+                visible: v2,
+                locked: k2,
+                opacity: o2,
+                blend: b2,
+                ..
+            },
+        ) if *index == *i2 => {
+            *name = n2.clone();
+            *visible = *v2;
+            *locked = *k2;
+            *opacity = *o2;
+            *blend = *b2;
+            true
+        }
+        (
+            Cmd::SetMotion { after, .. },
+            Cmd::SetMotion { after: a2, .. },
+        ) => {
+            *after = a2.clone();
+            true
+        }
+        _ => false,
     }
 }
 
@@ -749,6 +980,17 @@ fn invert_cmd(cmd: Cmd) -> Cmd {
         Cmd::AddLayer { index, layer } => Cmd::RemoveLayer { index, layer },
         Cmd::RemoveLayer { index, layer } => Cmd::AddLayer { index, layer },
         Cmd::ReorderLayer { from, to } => Cmd::ReorderLayer { from: to, to: from },
+        Cmd::ReorderShape { layer, from, to } => Cmd::ReorderShape {
+            layer,
+            from: to,
+            to: from,
+        },
+        Cmd::SetGeoms { items } => Cmd::SetGeoms {
+            items: items
+                .into_iter()
+                .map(|(layer, id, before, after, rb, ra)| (layer, id, after, before, ra, rb))
+                .collect(),
+        },
         Cmd::SetLayerMeta {
             index,
             name,
@@ -783,6 +1025,10 @@ fn invert_cmd(cmd: Cmd) -> Cmd {
         },
         Cmd::RemoveGuide { index: _, guide } => Cmd::AddGuide { guide },
         Cmd::RestoreShapes { layer, shapes } => Cmd::RemoveShapes { layer, shapes },
+        Cmd::SetMotion { before, after } => Cmd::SetMotion {
+            before: after,
+            after: before,
+        },
     }
 }
 
@@ -803,6 +1049,7 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
             if let Some(vs) = doc.layers.get_mut(*layer).and_then(|l| l.kind.shapes_mut()) {
                 vs.retain(|s| !ids.contains(&s.id));
             }
+            doc.motion.drop_shapes(&ids);
         }
         Cmd::SetGeom {
             layer,
@@ -852,6 +1099,23 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
                 doc.layers.insert(t, layer);
             }
         }
+        Cmd::ReorderShape { layer, from, to } => {
+            if let Some(vs) = doc.layers.get_mut(*layer).and_then(|l| l.kind.shapes_mut())
+                && *from < vs.len()
+            {
+                let shape = vs.remove(*from);
+                let t = (*to).min(vs.len());
+                vs.insert(t, shape);
+            }
+        }
+        Cmd::SetGeoms { items } => {
+            for (layer, id, _, after, _, rot_after) in items {
+                if let Some(s) = doc.find_shape_mut(*layer, *id) {
+                    s.geom = after.clone();
+                    s.rotation = *rot_after;
+                }
+            }
+        }
         Cmd::SetLayerMeta {
             index,
             name,
@@ -890,6 +1154,9 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
                     apply_px(px);
                 }
             }
+        }
+        Cmd::SetMotion { after, .. } => {
+            doc.motion = after.clone();
         }
         Cmd::AddGuide { guide } => doc.guides.push(*guide),
         Cmd::RemoveGuide { index, guide } => {
@@ -956,5 +1223,21 @@ mod tests {
         );
         assert_eq!(doc.hit_test(Pt::new(20.0, 20.0), 2.0), Some((1, id)));
         assert_eq!(doc.hit_test(Pt::new(90.0, 90.0), 2.0), None);
+    }
+
+    #[test]
+    fn path_cache_follows_geom() {
+        let mut s = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(0.0, 0.0),
+                size: Pt::new(10.0, 10.0),
+                radius: 0.0,
+            },
+            Style::default(),
+        );
+        let a = s.get_cached_path(8).unwrap();
+        s.geom.translate(Pt::new(40.0, 0.0));
+        let b = s.get_cached_path(8).unwrap();
+        assert_ne!(a.bounds(), b.bounds(), "moved shape must rebuild its path");
     }
 }

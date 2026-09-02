@@ -65,25 +65,25 @@ fn upload_textures(ui: &mut Ui, studio: &mut Studio) {
         }
         studio.photo.built_version = studio.photo.sel_version;
     }
-    // Original preview: only re-upload when sel_version changes
-    let orig_data = studio.photo.selected().map(|img| (img.preview.w, img.preview.h, img.preview.data.clone()));
-    if let Some((pw, ph, data)) = orig_data {
-        let tex = if let Some(mut existing) = studio.photo.orig_tex.take()
-            && existing.size() == [pw as usize, ph as usize]
-        {
-            existing.set(
-                ColorImage::from_rgba_unmultiplied([pw as usize, ph as usize], &data),
-                TextureOptions::LINEAR,
-            );
-            existing
-        } else {
-            ui.ctx().load_texture(
-                format!("orig-{}", studio.photo.sel_version),
-                ColorImage::from_rgba_unmultiplied([pw as usize, ph as usize], &data),
-                TextureOptions::LINEAR,
-            )
-        };
-        studio.photo.orig_tex = Some(tex);
+    if studio.photo.orig_built != studio.photo.sel_version {
+        if let Some(img) = studio.photo.selected() {
+            let (pw, ph) = (img.preview.w as usize, img.preview.h as usize);
+            let image = ColorImage::from_rgba_unmultiplied([pw, ph], &img.preview.data);
+            let tex = if let Some(mut existing) = studio.photo.orig_tex.take()
+                && existing.size() == [pw, ph]
+            {
+                existing.set(image, TextureOptions::LINEAR);
+                existing
+            } else {
+                ui.ctx().load_texture(
+                    format!("orig-{}", studio.photo.sel_version),
+                    image,
+                    TextureOptions::LINEAR,
+                )
+            };
+            studio.photo.orig_tex = Some(tex);
+            studio.photo.orig_built = studio.photo.sel_version;
+        }
     }
 }
 

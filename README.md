@@ -1,8 +1,8 @@
 # omadesign
 
-A native Linux studio for **design, paint, and photograph**. One document, one
-layer stack. Built so a designer coming from macOS can sit down and start
-working.
+A native Linux studio for **design, paint, photograph, and motion**. One
+document, one layer stack. Built so a designer coming from macOS can sit down
+and start working.
 
 Pure Rust. No GTK app, no Electron. `cargo` is the toolchain.
 
@@ -37,6 +37,7 @@ Tarball by hand:
 | **Design** | drawing a logo, a poster, a mark | Move `V`, Pen `P`, Rectangle `R`, Type `T` |
 | **Pixel**  | painting or retouching | Brush `B`, Eraser `E`, Clone `J`, Wand `W` |
 | **Photo**  | grading a photograph | Crop `C`, develop sliders, Place in Design |
+| **Motion** | a mark that moves | Space plays, `K` keys, File → Lottie |
 
 Press **F1** for the full key list.
 
@@ -47,11 +48,15 @@ Press **F1** for the full key list.
 - Pen: click a corner, click-drag a smooth point, Enter finishes, click the first point to close
 - Type: click, type on the canvas, Character studio (font, size, tracking, leading, OpenType)
 - Zoom: drag a box to that area; click zooms in, Alt-click out
-- Fill / stroke, boolean, align, snap, layers
+- Fill / stroke, boolean, align, snap, layers, copy/paste, z-order
 
 ## Pixel / Photo
 
 Brush, eraser, clone, fill, marquees, wand. Photo: develop sliders, histogram, crop, Place in Design.
+
+## Motion
+
+Timeline under the canvas. Rest pose stays in Design. Keys are X, Y, rotation, scale, opacity. Export animated SVG or Lottie JSON. Import a shape-layer Lottie.
 
 ## Docs
 

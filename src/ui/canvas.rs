@@ -3,7 +3,7 @@ use crate::compositor::{self, Draft};
 use crate::document::Fill;
 use crate::geom::{insert_anchor, Anchor, Bounds, Geom, Pt};
 use crate::paint;
-use crate::tools::Tool;
+use crate::tools::{Persona, Tool};
 use crate::ui::theme::{accent, bg_panel, border, fg_weak, select, select_fill};
 use eframe::egui::{
     Color32, PointerButton, Pos2, Rect, Sense, Stroke, Ui, Vec2, pos2, vec2,
@@ -29,6 +29,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
 
     let ctx = ui.ctx().clone();
     let space = ctx.input(|i| i.key_down(eframe::egui::Key::Space));
+    let space_pan = space && !studio.is_motion();
     let scroll = ctx.input(|i| i.smooth_scroll_delta);
     let zoom_delta = ctx.input(|i| i.zoom_delta());
     let pointer = resp.hover_pos();
@@ -48,53 +49,96 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         studio.cursor = Some(studio.view.to_world(local));
     }
 
-    let panning = (space && studio.type_edit.is_none()) || studio.tool == Tool::Hand;
+    let panning = (space_pan && studio.type_edit.is_none()) || studio.tool == Tool::Hand;
     if panning && resp.dragged_by(PointerButton::Primary)
         || resp.dragged_by(PointerButton::Middle)
     {
         let d = resp.drag_delta();
         studio.view.offset.x += d.x;
         studio.view.offset.y += d.y;
+    } else if studio.show_rulers
+        && resp
+            .interact_pointer_pos()
+            .is_some_and(|p| p.x < rect.min.x + 18.0 || p.y < rect.min.y + 18.0)
+    {
+        // Clicks on the ruler add guides; don't start a tool drag.
     } else {
-        handle_pointer(studio, &resp, space);
+        handle_pointer(studio, &resp, space_pan);
     }
 
     let w = rect.width().max(1.0) as u32;
     let h = rect.height().max(1.0) as u32;
-    let draft = match &studio.op {
-        Some(Op::Create { kind, start, cur }) => {
-            let preview = preview_shape(*kind, *start, *cur, studio);
-            // Can't hold ref; render without preview geom via overlay instead
-            let _ = preview;
-            Draft::none()
-        }
-        Some(Op::Brush { layer, buf, .. }) => Draft {
-            preview: None,
-            brush: Some((*layer, buf, studio.brush.opacity)),
-        },
-        _ => Draft::none(),
+    let op_tag: u8 = match &studio.op {
+        Some(Op::Brush { .. }) => 1,
+        Some(Op::Smudge { .. } | Op::Clone { .. }) => 2,
+        _ => 0,
     };
-
-    if let Some(pm) = compositor::render_view(&studio.doc, studio.view, w, h, draft) {
-        let image = eframe::egui::ColorImage::from_rgba_unmultiplied(
-            [pm.width() as usize, pm.height() as usize],
-            pm.data(),
-        );
-        let tex = if let Some(mut existing) = studio.screen_tex.take()
-            && existing.size() == [pm.width() as usize, pm.height() as usize]
-        {
-            existing.set(image, eframe::egui::TextureOptions::LINEAR);
-            existing
-        } else {
-            ui.ctx().load_texture("canvas", image, eframe::egui::TextureOptions::LINEAR)
+    let play_bits = if studio.is_motion() {
+        studio.playhead.to_bits()
+    } else {
+        0
+    };
+    let key = (
+        w,
+        h,
+        studio.view.scale.to_bits(),
+        studio.view.offset.x.to_bits(),
+        studio.view.offset.y.to_bits(),
+        studio.canvas_gen,
+        op_tag,
+        play_bits,
+    );
+    let reuse = studio.canvas_key == Some(key)
+        && studio
+            .screen_tex
+            .as_ref()
+            .is_some_and(|t| t.size() == [w as usize, h as usize]);
+    if !reuse {
+        let draft = match &studio.op {
+            Some(Op::Brush { layer, buf, .. }) => Draft {
+                preview: None,
+                brush: Some((*layer, buf, studio.brush.opacity)),
+            },
+            _ => Draft::none(),
         };
+        let pm = if studio.is_motion() {
+            compositor::render_view_posed(
+                &studio.doc,
+                studio.view,
+                w,
+                h,
+                draft,
+                Some(studio.playhead),
+                Some(&studio.pose_drag),
+            )
+        } else {
+            compositor::render_view(&studio.doc, studio.view, w, h, draft)
+        };
+        if let Some(pm) = pm {
+            let image = eframe::egui::ColorImage::from_rgba_unmultiplied(
+                [pm.width() as usize, pm.height() as usize],
+                pm.data(),
+            );
+            let tex = if let Some(mut existing) = studio.screen_tex.take()
+                && existing.size() == [pm.width() as usize, pm.height() as usize]
+            {
+                existing.set(image, eframe::egui::TextureOptions::LINEAR);
+                existing
+            } else {
+                ui.ctx()
+                    .load_texture("canvas", image, eframe::egui::TextureOptions::LINEAR)
+            };
+            studio.screen_tex = Some(tex);
+            studio.canvas_key = Some(key);
+        }
+    }
+    if let Some(tex) = &studio.screen_tex {
         ui.painter().image(
             tex.id(),
             rect,
             Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
             Color32::WHITE,
         );
-        studio.screen_tex = Some(tex);
     }
 
     let painter = ui.painter_at(rect);
@@ -108,6 +152,9 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     draw_artboard_frames(&painter, rect, studio);
     draw_bleed_safe(&painter, rect, studio);
     draw_overlays(&painter, rect, studio);
+    set_cursor(ui, studio, &resp);
+    context_menu(&resp, studio);
+    ruler_guides(studio, &resp, rect);
 
     let files: Vec<_> = ui.ctx().input(|i| i.raw.dropped_files.clone());
     for f in files {
@@ -211,7 +258,7 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
 
     if studio.type_edit.is_some() && resp.clicked() {
         let slack = 8.0 / studio.view.scale.max(0.01);
-        if let Some(hit) = studio.doc.hit_test(world, slack) {
+        if let Some(hit) = hit_shape(studio, world, slack) {
             if studio.editing_text(hit.0, hit.1) {
                 studio.begin_type_edit(hit, world);
                 return;
@@ -231,7 +278,7 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
 
     if studio.tool == Tool::Text && resp.clicked() {
         let slack = 8.0 / studio.view.scale.max(0.01);
-        if let Some(hit) = studio.doc.hit_test(world, slack)
+        if let Some(hit) = hit_shape(studio, world, slack)
             && is_text_hit(studio, hit)
         {
             studio.begin_type_edit(hit, world);
@@ -287,7 +334,7 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
     if studio.type_edit.is_some() {
         if resp.drag_started_by(PointerButton::Primary) {
             let slack = 8.0 / studio.view.scale.max(0.01);
-            if let Some(hit) = studio.doc.hit_test(world, slack) {
+            if let Some(hit) = hit_shape(studio, world, slack) {
                 if studio.editing_text(hit.0, hit.1) {
                     let caret = studio.doc.find_shape(hit.0, hit.1).and_then(|s| match &s.geom {
                         Geom::Text(run) => Some(crate::text::hit_char(run, world)),
@@ -341,7 +388,7 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
             studio.finish_pen(anchors, false);
         } else {
             let slack = 8.0 / studio.view.scale.max(0.01);
-            if let Some(hit) = studio.doc.hit_test(world, slack)
+            if let Some(hit) = hit_shape(studio, world, slack)
                 && is_text_hit(studio, hit)
             {
                 studio.begin_type_edit(hit, world);
@@ -359,6 +406,9 @@ fn is_text_hit(studio: &Studio, hit: (usize, u64)) -> bool {
 
 fn start_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
     let _ = alt;
+    if studio.is_motion() {
+        studio.playing = false;
+    }
     // Handle hit takes priority from any design tool so a freshly drawn object
     // can be resized immediately without first pressing V. Text editing, Hand
     // and Zoom are excluded to keep their own pointer semantics.
@@ -390,7 +440,7 @@ fn start_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
     }
     match studio.tool {
         Tool::Select => {
-            if let Some(hit) = studio.doc.hit_test(world, 6.0 / studio.view.scale.max(0.01)) {
+            if let Some(hit) = hit_shape(studio, world, 6.0 / studio.view.scale.max(0.01)) {
                 if !studio.selection.contains(&hit) {
                     if shift {
                         studio.selection.push(hit);
@@ -577,9 +627,49 @@ enum HandleKind {
     Rotate(Pt),
 }
 
+fn posed_bounds(studio: &Studio) -> Option<Bounds> {
+    let mut b: Option<Bounds> = None;
+    for (li, id) in &studio.selection {
+        let Some(s) = studio.doc.find_shape(*li, *id) else {
+            continue;
+        };
+        let bb = if studio.is_motion() {
+            studio.live_pose(*id).map_bounds(s.world_bbox())
+        } else {
+            s.world_bbox()
+        };
+        match &mut b {
+            None => b = Some(bb),
+            Some(acc) => {
+                acc.union_pt(bb.min);
+                acc.union_pt(bb.max);
+            }
+        }
+    }
+    b
+}
+
+fn hit_shape(studio: &Studio, world: Pt, slack: f32) -> Option<(usize, u64)> {
+    if studio.is_motion() {
+        crate::motion::hit_test(
+            &studio.doc,
+            studio.playhead,
+            &studio.pose_drag,
+            world,
+            slack,
+        )
+    } else {
+        studio.doc.hit_test(world, slack)
+    }
+}
+
 fn hit_handle(studio: &Studio, world: Pt) -> Option<HandleKind> {
-    let shapes = studio.selected_shapes();
-    let b = crate::align::selection_bounds(&shapes)?;
+    let b = if studio.is_motion() {
+        posed_bounds(studio)?
+    } else {
+        let shapes = studio.selected_shapes();
+        crate::align::selection_bounds(&shapes)?
+    };
     let slack = 8.0 / studio.view.scale.max(0.01);
     let rh = b.rotate_handle();
     if (rh - world).length() <= slack {
@@ -609,6 +699,20 @@ fn hit_node(anchors: &[Anchor], world: Pt, slack: f32) -> Option<NodeHit> {
 }
 
 fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
+    if matches!(
+        studio.op,
+        Some(
+            Op::Move { .. }
+                | Op::Resize { .. }
+                | Op::Rotate { .. }
+                | Op::Node { .. }
+                | Op::Brush { .. }
+                | Op::Smudge { .. }
+                | Op::Clone { .. }
+        )
+    ) {
+        studio.mark();
+    }
     match &mut studio.op {
         Some(Op::Create { start, cur, kind }) => {
             let mut c = world;
@@ -642,11 +746,21 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
         }
         Some(Op::Move { orig, start }) => {
             let d = world - *start;
-            for (li, id, geom, rot) in orig.clone() {
-                if let Some(s) = studio.doc.find_shape_mut(li, id) {
-                    s.geom = geom;
-                    s.geom.translate(d);
-                    s.rotation = rot;
+            if studio.persona == Persona::Motion {
+                studio.playing = false;
+                for (_, id, _, _) in orig.clone() {
+                    let mut pose = studio.doc.motion.pose(id, studio.playhead);
+                    pose.dx += d.x;
+                    pose.dy += d.y;
+                    studio.pose_drag.insert(id, pose);
+                }
+            } else {
+                for (li, id, geom, rot) in orig.clone() {
+                    if let Some(s) = studio.doc.find_shape_mut(li, id) {
+                        s.geom = geom;
+                        s.geom.translate(d);
+                        s.rotation = rot;
+                    }
                 }
             }
         }
@@ -751,11 +865,23 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                 }
             }
             let dst = Bounds { min, max };
-            for (li, id, geom, rot) in orig.clone() {
-                if let Some(s) = studio.doc.find_shape_mut(li, id) {
-                    s.geom = geom;
-                    s.geom.map_into(*start_box, dst);
-                    s.rotation = rot;
+            if studio.persona == Persona::Motion {
+                studio.playing = false;
+                let sx = dst.width() / start_box.width().max(1.0);
+                let sy = dst.height() / start_box.height().max(1.0);
+                let f = if shift { sx.max(sy) } else { (sx + sy) * 0.5 };
+                for (_, id, _, _) in orig.clone() {
+                    let mut pose = studio.doc.motion.pose(id, studio.playhead);
+                    pose.scale = (pose.scale * f).clamp(0.05, 32.0);
+                    studio.pose_drag.insert(id, pose);
+                }
+            } else {
+                for (li, id, geom, rot) in orig.clone() {
+                    if let Some(s) = studio.doc.find_shape_mut(li, id) {
+                        s.geom = geom;
+                        s.geom.map_into(*start_box, dst);
+                        s.rotation = rot;
+                    }
                 }
             }
         }
@@ -769,11 +895,20 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                 let step = std::f32::consts::PI / 12.0; // 15°
                 ang = (ang / step).round() * step;
             }
-            for (li, id, geom, rot) in orig.clone() {
-                if let Some(s) = studio.doc.find_shape_mut(li, id) {
-                    s.geom = geom;
-                    s.geom.rotate_about(*center, ang);
-                    s.rotation = rot;
+            if studio.persona == Persona::Motion {
+                studio.playing = false;
+                for (_, id, _, _) in orig.clone() {
+                    let mut pose = studio.doc.motion.pose(id, studio.playhead);
+                    pose.rotation += ang;
+                    studio.pose_drag.insert(id, pose);
+                }
+            } else {
+                for (li, id, geom, rot) in orig.clone() {
+                    if let Some(s) = studio.doc.find_shape_mut(li, id) {
+                        s.geom = geom;
+                        s.geom.rotate_about(*center, ang);
+                        s.rotation = rot;
+                    }
                 }
             }
         }
@@ -872,13 +1007,36 @@ fn end_drag(studio: &mut Studio, world: Pt) {
             studio.op = Some(Op::Pen { anchors });
         }
         Some(Op::Move { orig, start }) => {
-            let d = world - start;
-            if d.length() > 0.2 {
-                for (li, id, geom, rot) in orig {
-                    if let Some(s) = studio.doc.find_shape(li, id) {
+            if studio.is_motion() {
+                commit_pose_drag(studio);
+            } else {
+                let d = world - start;
+                if d.length() > 0.2 {
+                    for (li, id, geom, rot) in orig {
+                        if let Some(s) = studio.doc.find_shape(li, id) {
+                            studio.history.push(crate::document::Cmd::SetGeom {
+                                layer: li,
+                                id,
+                                before: geom,
+                                after: s.geom.clone(),
+                                rot_before: rot,
+                                rot_after: s.rotation,
+                            });
+                        }
+                    }
+                    studio.dirty = true;
+                }
+            }
+        }
+        Some(Op::Resize { orig, .. }) | Some(Op::Rotate { orig, .. }) => {
+            if studio.is_motion() {
+                commit_pose_drag(studio);
+            } else {
+                for (li, sid, geom, rot) in orig {
+                    if let Some(s) = studio.doc.find_shape(li, sid) {
                         studio.history.push(crate::document::Cmd::SetGeom {
                             layer: li,
-                            id,
+                            id: sid,
                             before: geom,
                             after: s.geom.clone(),
                             rot_before: rot,
@@ -888,21 +1046,6 @@ fn end_drag(studio: &mut Studio, world: Pt) {
                 }
                 studio.dirty = true;
             }
-        }
-        Some(Op::Resize { orig, .. }) | Some(Op::Rotate { orig, .. }) => {
-            for (li, sid, geom, rot) in orig {
-                if let Some(s) = studio.doc.find_shape(li, sid) {
-                    studio.history.push(crate::document::Cmd::SetGeom {
-                        layer: li,
-                        id: sid,
-                        before: geom,
-                        after: s.geom.clone(),
-                        rot_before: rot,
-                        rot_after: s.rotation,
-                    });
-                }
-            }
-            studio.dirty = true;
         }
         Some(Op::Node { layer, id, orig, .. }) => {
             if let Some(s) = studio.doc.find_shape(layer, id) {
@@ -960,7 +1103,16 @@ fn end_drag(studio: &mut Studio, world: Pt) {
                     max: Pt::new(start.x.max(cur.x), start.y.max(cur.y)),
                 };
                 if b.width() > 4.0 && b.height() > 4.0 {
-                    studio.selection = studio.doc.hits_in_rect(b);
+                    studio.selection = if studio.is_motion() {
+                        crate::motion::hits_in_rect(
+                            &studio.doc,
+                            studio.playhead,
+                            &studio.pose_drag,
+                            b,
+                        )
+                    } else {
+                        studio.doc.hits_in_rect(b)
+                    };
                 }
             } else if let Some(li) = studio.raster_target() {
                 if let Some(px) = studio.doc.layers[li].kind.pixels() {
@@ -1016,7 +1168,7 @@ fn end_drag(studio: &mut Studio, world: Pt) {
 fn click(studio: &mut Studio, world: Pt, shift: bool) {
     match studio.tool {
         Tool::Select => {
-            if let Some(hit) = studio.doc.hit_test(world, 6.0 / studio.view.scale.max(0.01)) {
+            if let Some(hit) = hit_shape(studio, world, 6.0 / studio.view.scale.max(0.01)) {
                 if shift {
                     if let Some(i) = studio.selection.iter().position(|x| *x == hit) {
                         studio.selection.remove(i);
@@ -1054,7 +1206,7 @@ fn click(studio: &mut Studio, world: Pt, shift: bool) {
                         }
                     }
                 }
-            } else if let Some(hit) = studio.doc.hit_test(world, 6.0 / studio.view.scale.max(0.01)) {
+            } else if let Some(hit) = hit_shape(studio, world, 6.0 / studio.view.scale.max(0.01)) {
                 studio.selection = vec![hit];
             }
         }
@@ -1279,7 +1431,7 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
     // so handles are in the right place for rotated boxes.
     for (li, id) in &studio.selection {
         if let Some(s) = studio.doc.find_shape(*li, *id) {
-            stroke_world(p, rect, s, v);
+            stroke_world_posed(p, rect, s, v, studio.live_pose(*id));
             if studio.tool == Tool::Node {
                 if let Geom::Path { anchors, .. } = &s.geom {
                     draw_nodes(p, rect, anchors, v);
@@ -1288,8 +1440,7 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
         }
     }
     if !studio.selection.is_empty() {
-        let shapes = studio.selected_shapes();
-        if let Some(b) = crate::align::selection_bounds(&shapes) {
+        if let Some(b) = posed_bounds(studio) {
             let sb = Rect::from_min_max(win(rect, v, b.min), win(rect, v, b.max));
             p.rect_stroke(sb, 0.0, Stroke::new(1.0, select()), eframe::egui::StrokeKind::Middle);
             let editing = studio
@@ -1348,14 +1499,161 @@ fn stroke_geom(p: &eframe::egui::Painter, rect: Rect, g: &Geom, view: crate::com
     for c in g.contours(64) {
         let pts: Vec<Pos2> = c.iter().map(|q| win(rect, view, *q)).collect();
         if pts.len() >= 2 {
-            p.add(eframe::egui::Shape::line(pts, Stroke::new(1.4, select())));
+            if g.is_closed() {
+                p.add(eframe::egui::epaint::PathShape {
+                    points: pts,
+                    closed: true,
+                    fill: select_fill(),
+                    stroke: Stroke::new(1.4, select()).into(),
+                });
+            } else {
+                p.add(eframe::egui::Shape::line(pts, Stroke::new(1.4, select())));
+            }
         }
     }
 }
 
-fn stroke_world(p: &eframe::egui::Painter, rect: Rect, s: &crate::document::Shape, view: crate::compositor::View) {
-    for c in s.world_contours(64) {
-        let pts: Vec<Pos2> = c.iter().map(|q| win(rect, view, *q)).collect();
+fn set_cursor(ui: &mut Ui, studio: &Studio, resp: &eframe::egui::Response) {
+    use eframe::egui::CursorIcon;
+    let icon = if studio.type_edit.is_some() {
+        CursorIcon::Text
+    } else if (ui.ctx().input(|i| i.key_down(eframe::egui::Key::Space)) && !studio.is_motion())
+        || studio.tool == Tool::Hand
+    {
+        if resp.dragged() {
+            CursorIcon::Grabbing
+        } else {
+            CursorIcon::Grab
+        }
+    } else {
+        match studio.tool {
+            Tool::Text => CursorIcon::Text,
+            Tool::Zoom => CursorIcon::ZoomIn,
+            Tool::Pen | Tool::Pencil | Tool::Brush | Tool::Eraser | Tool::Clone | Tool::Smudge => {
+                CursorIcon::Crosshair
+            }
+            Tool::Eyedropper => CursorIcon::Crosshair,
+            Tool::Crop | Tool::Marquee | Tool::EllipseMarquee | Tool::Lasso => CursorIcon::Crosshair,
+            Tool::Select => {
+                if studio.selection.is_empty() {
+                    CursorIcon::Default
+                } else {
+                    CursorIcon::Default
+                }
+            }
+            _ => CursorIcon::Crosshair,
+        }
+    };
+    ui.ctx().set_cursor_icon(icon);
+}
+
+fn context_menu(resp: &eframe::egui::Response, studio: &mut Studio) {
+    resp.context_menu(|ui| {
+        if ui.button("Cut                    Ctrl+X").clicked() {
+            studio.cut_selection(ui.ctx());
+            ui.close();
+        }
+        if ui.button("Copy                   Ctrl+C").clicked() {
+            studio.copy_selection(ui.ctx());
+            ui.close();
+        }
+        if ui.button("Paste                  Ctrl+V").clicked() {
+            studio.paste_clipboard(None);
+            ui.close();
+        }
+        if ui.button("Duplicate              Ctrl+D").clicked() {
+            studio.duplicate_selection();
+            ui.close();
+        }
+        if ui.button("Delete").clicked() {
+            studio.delete_selection();
+            ui.close();
+        }
+        ui.separator();
+        if ui.button("Bring to front").clicked() {
+            studio.bring_to_front();
+            ui.close();
+        }
+        if ui.button("Send to back").clicked() {
+            studio.send_to_back();
+            ui.close();
+        }
+        ui.separator();
+        if ui
+            .add_enabled(studio.selection.len() >= 2, eframe::egui::Button::new("Combine"))
+            .clicked()
+        {
+            studio.combine_selected();
+            ui.close();
+        }
+    });
+}
+
+fn ruler_guides(studio: &mut Studio, resp: &eframe::egui::Response, rect: Rect) {
+    if !studio.show_rulers || !resp.clicked() {
+        return;
+    }
+    let Some(p) = resp.interact_pointer_pos() else {
+        return;
+    };
+    let size = 18.0;
+    let top = Rect::from_min_size(rect.min, vec2(rect.width(), size));
+    let left = Rect::from_min_size(rect.min, vec2(size, rect.height()));
+    let origin = Pt::new(rect.min.x, rect.min.y);
+    if top.contains(p) && p.x > rect.min.x + size {
+        let world = studio.view.pointer_to_world(origin, from_egui(p));
+        studio.add_guide(true, world.x);
+    } else if left.contains(p) && p.y > rect.min.y + size {
+        let world = studio.view.pointer_to_world(origin, from_egui(p));
+        studio.add_guide(false, world.y);
+    }
+}
+
+fn commit_pose_drag(studio: &mut Studio) {
+    if studio.pose_drag.is_empty() {
+        return;
+    }
+    let t = studio.playhead;
+    let drag = studio.pose_drag.clone();
+    let mut after = studio.doc.motion.clone();
+    for (id, pose) in &drag {
+        after.set_key(*id, crate::motion::Prop::X, t, pose.dx, crate::motion::Ease::EaseInOut);
+        after.set_key(*id, crate::motion::Prop::Y, t, pose.dy, crate::motion::Ease::EaseInOut);
+        after.set_key(
+            *id,
+            crate::motion::Prop::Rotation,
+            t,
+            pose.rotation,
+            crate::motion::Ease::EaseInOut,
+        );
+        after.set_key(
+            *id,
+            crate::motion::Prop::Scale,
+            t,
+            pose.scale,
+            crate::motion::Ease::EaseInOut,
+        );
+        if let Some(op) = pose.opacity {
+            after.set_key(*id, crate::motion::Prop::Opacity, t, op, crate::motion::Ease::EaseInOut);
+        }
+    }
+    studio.pose_drag.clear();
+    studio.commit_motion(after);
+}
+
+fn stroke_world_posed(
+    p: &eframe::egui::Painter,
+    rect: Rect,
+    s: &crate::document::Shape,
+    view: crate::compositor::View,
+    pose: crate::motion::Pose,
+) {
+    let c = s.world_bbox().center();
+    for contour in s.world_contours(64) {
+        let pts: Vec<Pos2> = contour
+            .iter()
+            .map(|q| win(rect, view, pose.map(c, *q)))
+            .collect();
         if pts.len() >= 2 {
             p.add(eframe::egui::Shape::line(
                 pts,

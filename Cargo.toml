@@ -2,7 +2,7 @@
 name = "omadesign"
 version = "0.0.1-alpha.rc"
 edition = "2024"
-description = "Native Linux studio for design, painting, and photography"
+description = "Native Linux studio for design, painting, photography, and motion"
 license = "MIT"
 repository = "https://github.com/michaelmonetized/omadesign"
 

@@ -3,8 +3,10 @@
 use crate::color::Rgba;
 use crate::document::{Document, Fill, Layer, LayerKind, Shape};
 use crate::geom::{Geom, Pt};
+use crate::motion::Pose;
+use std::collections::HashMap;
 use tiny_skia::{
-    FillRule, GradientStop, LineCap, LineJoin, LinearGradient, Paint, Path, PathBuilder, Pixmap,
+    FillRule, GradientStop, LineCap, LineJoin, LinearGradient, Paint, PathBuilder, Pixmap,
     PixmapPaint, Point, RadialGradient, Shader, SpreadMode, Stroke as SkStroke, StrokeDash,
     Transform,
 };
@@ -109,12 +111,25 @@ const CHECKER_B: Rgba = Rgba {
     b: 0xCF,
     a: 255,
 };
-const CANVAS_BG: Rgba = Rgba {
-    r: 0x22,
-    g: 0x26,
-    b: 0x2C,
-    a: 255,
-};
+
+static CANVAS_BG_PACKED: std::sync::atomic::AtomicU32 =
+    std::sync::atomic::AtomicU32::new(0x00_22_26_2C);
+
+pub fn set_canvas_bg(r: u8, g: u8, b: u8) {
+    CANVAS_BG_PACKED.store(
+        ((r as u32) << 16) | ((g as u32) << 8) | b as u32,
+        std::sync::atomic::Ordering::Relaxed,
+    );
+}
+
+fn canvas_bg() -> Rgba {
+    let n = CANVAS_BG_PACKED.load(std::sync::atomic::Ordering::Relaxed);
+    Rgba::rgb(
+        ((n >> 16) & 0xFF) as u8,
+        ((n >> 8) & 0xFF) as u8,
+        (n & 0xFF) as u8,
+    )
+}
 
 pub struct Draft<'a> {
     pub preview: Option<&'a Shape>,
@@ -137,8 +152,20 @@ pub fn render_view(
     screen_h: u32,
     draft: Draft<'_>,
 ) -> Option<Pixmap> {
+    render_view_posed(doc, view, screen_w, screen_h, draft, None, None)
+}
+
+pub fn render_view_posed(
+    doc: &Document,
+    view: View,
+    screen_w: u32,
+    screen_h: u32,
+    draft: Draft<'_>,
+    motion_t: Option<f32>,
+    overrides: Option<&HashMap<u64, Pose>>,
+) -> Option<Pixmap> {
     let mut pm = Pixmap::new(screen_w, screen_h)?;
-    fill_solid(&mut pm, 0.0, 0.0, screen_w as f32, screen_h as f32, CANVAS_BG);
+    fill_solid(&mut pm, 0.0, 0.0, screen_w as f32, screen_h as f32, canvas_bg());
 
     let origin = view.to_screen(Pt::ZERO);
     let size = Pt::new(doc.width * view.scale, doc.height * view.scale);
@@ -159,7 +186,16 @@ pub fn render_view(
         let brush = draft
             .brush
             .and_then(|(bl, buf, flow)| (bl == li).then_some((buf, flow)));
-        draw_layer(&mut pm, layer, t, brush, draft.preview);
+        draw_layer(
+            &mut pm,
+            layer,
+            t,
+            brush,
+            draft.preview,
+            motion_t,
+            doc,
+            overrides,
+        );
     }
     Some(pm)
 }
@@ -179,7 +215,7 @@ pub fn export_png(doc: &Document, scale: u32) -> Result<Vec<u8>, String> {
         if !layer.visible || layer.opacity <= 0.0 {
             continue;
         }
-        draw_layer(&mut pm, layer, t, None, None);
+        draw_layer(&mut pm, layer, t, None, None, None, doc, None);
     }
     pm.encode_png().map_err(|e| e.to_string())
 }
@@ -206,12 +242,26 @@ fn draw_layer(
     t: Transform,
     brush: Option<(&Pixmap, f32)>,
     preview: Option<&Shape>,
+    motion_t: Option<f32>,
+    doc: &Document,
+    overrides: Option<&HashMap<u64, Pose>>,
 ) {
     if layer.mask.is_some() {
         let Some(mut temp) = Pixmap::new(pm.width(), pm.height()) else {
             return;
         };
-        draw_content(&mut temp, layer, t, brush, preview, 1.0, tiny_skia::BlendMode::SourceOver);
+        draw_content(
+            &mut temp,
+            layer,
+            t,
+            brush,
+            preview,
+            1.0,
+            tiny_skia::BlendMode::SourceOver,
+            motion_t,
+            doc,
+            overrides,
+        );
         if let Some(mask) = &layer.mask {
             if let Some(mask_pm) = mask.to_pixmap() {
                 let mut placed = Pixmap::new(pm.width(), pm.height()).unwrap();
@@ -251,6 +301,9 @@ fn draw_layer(
             preview,
             layer.opacity,
             layer.blend.to_skia(),
+            motion_t,
+            doc,
+            overrides,
         );
     }
 }
@@ -263,18 +316,23 @@ fn draw_content(
     preview: Option<&Shape>,
     opacity: f32,
     blend: tiny_skia::BlendMode,
+    motion_t: Option<f32>,
+    doc: &Document,
+    overrides: Option<&HashMap<u64, Pose>>,
 ) {
     match &layer.kind {
         LayerKind::Vector { shapes } => {
             for s in shapes {
-                draw_shape(pm, s, t, opacity, blend);
+                let pose = pose_of(s.id, motion_t, doc, overrides);
+                draw_shape(pm, s, t, opacity, blend, pose);
             }
             if let Some(p) = preview {
-                draw_shape(pm, p, t, opacity * 0.85, blend);
+                let pose = pose_of(p.id, motion_t, doc, overrides);
+                draw_shape(pm, p, t, opacity * 0.85, blend, pose);
             }
         }
         LayerKind::Raster { pixels } => {
-            if let Some(src) = pixels.to_pixmap() {
+            let _ = pixels.with_pm(|src| {
                 pm.draw_pixmap(
                     0,
                     0,
@@ -288,7 +346,7 @@ fn draw_content(
                     t,
                     None,
                 );
-            }
+            });
             if let Some((buf, flow)) = brush {
                 pm.draw_pixmap(
                     0,
@@ -307,11 +365,39 @@ fn draw_content(
     }
 }
 
-fn draw_shape(pm: &mut Pixmap, shape: &Shape, t: Transform, opacity: f32, blend: tiny_skia::BlendMode) {
+fn pose_of(
+    id: u64,
+    motion_t: Option<f32>,
+    doc: &Document,
+    overrides: Option<&HashMap<u64, Pose>>,
+) -> Pose {
+    if let Some(p) = overrides.and_then(|m| m.get(&id)).copied() {
+        return p;
+    }
+    if let Some(t) = motion_t {
+        return doc.motion.pose(id, t);
+    }
+    Pose::identity()
+}
+
+fn draw_shape(
+    pm: &mut Pixmap,
+    shape: &Shape,
+    t: Transform,
+    opacity: f32,
+    blend: tiny_skia::BlendMode,
+    pose: Pose,
+) {
     let Some(path) = shape.get_cached_path(96) else {
         return;
     };
-    let op = (opacity * shape.opacity).clamp(0.0, 1.0);
+    let shape_op = pose.opacity.unwrap_or(shape.opacity);
+    let op = (opacity * shape_op).clamp(0.0, 1.0);
+    let xf = if pose.is_identity() {
+        t
+    } else {
+        t.pre_concat(pose.to_skia(shape.world_bbox().center()))
+    };
     if !shape.style.fill.is_none() && shape.geom.is_closed() {
         let mut paint = fill_paint(&shape.style.fill, &shape.geom);
         paint.blend_mode = blend;
@@ -320,7 +406,11 @@ fn draw_shape(pm: &mut Pixmap, shape: &Shape, t: Transform, opacity: f32, blend:
             col.set_alpha(col.alpha() * op);
             paint.set_color(*col);
         }
-        pm.fill_path(&path, &paint, FillRule::EvenOdd, t, None);
+        let rule = match &shape.geom {
+            crate::geom::Geom::Poly { winding: true, .. } => FillRule::Winding,
+            _ => FillRule::EvenOdd,
+        };
+        pm.fill_path(&path, &paint, rule, xf, None);
     }
     if let Some(stroke) = &shape.style.stroke
         && stroke.width > 0.0
@@ -342,7 +432,7 @@ fn draw_shape(pm: &mut Pixmap, shape: &Shape, t: Transform, opacity: f32, blend:
         if let Some((on, off)) = stroke.dash {
             sk.dash = StrokeDash::new(vec![on, off], 0.0);
         }
-        pm.stroke_path(&path, &paint, &sk, t, None);
+        pm.stroke_path(&path, &paint, &sk, xf, None);
     }
 }
 
@@ -410,25 +500,6 @@ fn fill_paint<'a>(fill: &Fill, geom: &Geom) -> Paint<'a> {
     paint
 }
 
-fn shape_path(shape: &Shape) -> Option<Path> {
-    let mut pb = PathBuilder::new();
-    let mut any = false;
-    for contour in shape.world_contours(96) {
-        if contour.len() < 2 {
-            continue;
-        }
-        pb.move_to(contour[0].x, contour[0].y);
-        for p in contour.iter().skip(1) {
-            pb.line_to(p.x, p.y);
-        }
-        if shape.geom.is_closed() {
-            pb.close();
-        }
-        any = true;
-    }
-    if any { pb.finish() } else { None }
-}
-
 fn fill_solid(pm: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, c: Rgba) {
     let Some(rect) = tiny_skia::Rect::from_xywh(x, y, w, h) else {
         return;
@@ -490,6 +561,44 @@ mod tests {
     use super::*;
     use crate::document::{Cmd, Document, Shape, Style, apply};
     use crate::geom::Geom;
+
+    #[test]
+    fn posed_draw_moves_pixels() {
+        use crate::document::{Cmd, Shape, Style, apply};
+        use crate::geom::Geom;
+        use crate::motion::{Ease, Prop};
+        let mut doc = Document::new("t", 80.0, 80.0, 72.0);
+        let shape = Shape::new(
+            Geom::Rect {
+                origin: crate::geom::Pt::new(10.0, 10.0),
+                size: crate::geom::Pt::new(20.0, 20.0),
+                radius: 0.0,
+            },
+            Style::default(),
+        );
+        let id = shape.id;
+        apply(
+            &mut doc,
+            &Cmd::AddShape {
+                layer: 1,
+                shape,
+            },
+        );
+        doc.motion.set_key(id, Prop::X, 0.0, 0.0, Ease::Linear);
+        doc.motion.set_key(id, Prop::X, 1.0, 30.0, Ease::Linear);
+        let rest = render_view(&doc, View::default(), 80, 80, Draft::none()).unwrap();
+        let posed = render_view_posed(
+            &doc,
+            View::default(),
+            80,
+            80,
+            Draft::none(),
+            Some(1.0),
+            None,
+        )
+        .unwrap();
+        assert_ne!(rest.data(), posed.data(), "a keyed translate must redraw");
+    }
 
     #[test]
     fn export_png_is_valid() {

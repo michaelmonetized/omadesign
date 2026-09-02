@@ -16,6 +16,7 @@ omadesign 1.0 is a working Design / Pixel / Photo studio. This is what comes nex
 - Better boolean (holes that survive a second subtract)
 - RAW develop (libraw) in Photo
 - Recorded brush dynamics (tilt if the tablet talks)
+- [x] Motion timeline, animated SVG, Lottie in/out
 
 ## Next
 

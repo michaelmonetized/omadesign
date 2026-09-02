@@ -59,6 +59,7 @@ fn compress_pixels(px: &Pixels) -> Result<Pixels, String> {
         h: px.h,
         data: b64.into_bytes(),
         version: px.version,
+        cached_pm: std::cell::RefCell::new(None),
     })
 }
 
@@ -116,6 +117,46 @@ pub fn dialog_export(kind: &str, ext: &str) -> Option<PathBuf> {
 
 pub fn dialog_folder() -> Option<PathBuf> {
     rfd::FileDialog::new().pick_folder()
+}
+
+fn recents_path() -> PathBuf {
+    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME")
+        && !xdg.is_empty()
+    {
+        return PathBuf::from(format!("{xdg}/omadesign/recent.json"));
+    }
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+    PathBuf::from(format!("{home}/.config/omadesign/recent.json"))
+}
+
+pub fn load_recents() -> Vec<PathBuf> {
+    let Ok(s) = std::fs::read_to_string(recents_path()) else {
+        return vec![];
+    };
+    serde_json::from_str::<Vec<String>>(&s)
+        .unwrap_or_default()
+        .into_iter()
+        .map(PathBuf::from)
+        .filter(|p| p.exists())
+        .take(12)
+        .collect()
+}
+
+pub fn push_recent(path: &Path) {
+    let mut v = load_recents();
+    v.retain(|p| p != path);
+    v.insert(0, path.to_path_buf());
+    v.truncate(12);
+    let strings: Vec<String> = v
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    if let Some(dir) = recents_path().parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    if let Ok(s) = serde_json::to_string_pretty(&strings) {
+        let _ = std::fs::write(recents_path(), s);
+    }
 }
 
 #[cfg(test)]

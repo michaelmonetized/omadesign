@@ -93,7 +93,10 @@ pub fn apply(op: BoolOp, a: &Geom, b: &Geom) -> Option<Geom> {
     if contours.is_empty() {
         return None;
     }
-    Some(Geom::Poly { contours })
+    Some(Geom::Poly {
+        contours,
+        winding: false,
+    })
 }
 
 pub fn area(g: &Geom) -> f32 {

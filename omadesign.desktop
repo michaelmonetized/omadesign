@@ -2,7 +2,7 @@
 Type=Application
 Name=omadesign
 GenericName=Design Studio
-Comment=Design, paint, and photograph
+Comment=Design, paint, photograph, and motion
 Exec=/home/michael/.local/bin/omadesign
 Icon=applications-graphics
 Terminal=false

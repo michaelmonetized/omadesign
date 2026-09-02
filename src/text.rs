@@ -127,7 +127,6 @@ fn scan_fonts() -> Vec<FontFace> {
     for root in [
         "/usr/share/fonts",
         "/usr/local/share/fonts",
-        "/home/michael/.local/share/fonts",
         &format!("{home}/.local/share/fonts"),
         &format!("{home}/.fonts"),
         "/usr/share/fonts/liberation",

@@ -11,6 +11,7 @@ const shots = [
   { src: "/media/photo.jpg", cap: "Photo — develop, crop, Place in Design" },
   { src: "/media/type.jpg", cap: "Type — caret + Google Fonts on-demand + max font default + palettes" },
   { src: "/media/shapes.jpg", cap: "Shapes — Phosphor / LineIcons / Heroicons / Feather live SVG browser" },
+  { src: "/media/motion.jpg", cap: "Motion — timeline, keys, Lottie in and out" },
   { src: "/media/assets.jpg", cap: "Assets — Pixabay / Pexels / Vecteezy / Picsum free browser" },
 ];
 
@@ -19,15 +20,15 @@ function Home() {
     <main>
       <section className="mx-auto max-w-6xl px-6 pb-8 pt-16 md:pt-24">
         <p className="mb-4 text-sm uppercase tracking-[0.2em] text-ctp-overlay1">
-          Updated with v0.0.0.0alpha-rc — 7 stacked PRs merged
+          Updated with v0.0.1-alpha.rc — Motion, Lottie, a welcome that fits
         </p>
         <h1 className="max-w-4xl text-5xl font-bold leading-[1.05] tracking-tight text-ctp-text md:text-7xl">
           Your Linux, for making things.
         </h1>
         <p className="mt-6 max-w-2xl text-lg text-ctp-subtext0 md:text-xl">
-          A native studio. Design, paint, photograph. One document, one layer
-          stack. Theme from ~/.config. Type you can type into. Now with shape &
-          asset browsers and a big welcome.
+          A native studio. Design, paint, photograph, motion. One document, one
+          layer stack. Theme from ~/.config. Type you can type into. Timeline
+          and Lottie, no After Effects tab open.
         </p>
         <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-ctp-subtext1">
           <li>Free, MIT</li>

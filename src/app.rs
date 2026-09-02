@@ -8,12 +8,14 @@ use crate::document::{
     apply as apply_cmd, Cmd, Document, Fill, History, Layer, LayerKind, Shape, Stroke, Style,
 };
 use crate::geom::{Anchor, Bounds, Geom, Pt, TypeRun};
+use crate::motion::{self, Ease, Motion, Pose, Prop};
 use crate::paint::{self, Brush};
 use crate::photo::{self, Histogram, PhotoImage, RgbaImage};
 use crate::presets::Preset;
 use crate::snap::{self, SnapSettings};
 use crate::tools::{Persona, Tool};
 use eframe::egui::{self, Color32, Key, Pos2, Rect};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use tiny_skia::Pixmap;
 
@@ -32,6 +34,7 @@ pub struct PhotoSession {
     pub thumbs: Vec<egui::TextureHandle>,
     pub sel_version: u64,
     pub built_version: u64,
+    pub orig_built: u64,
     pub dirty: bool,
     pub samples_loaded: bool,
     pub status: String,
@@ -54,6 +57,7 @@ impl PhotoSession {
             thumbs: vec![],
             sel_version: 0,
             built_version: 0,
+            orig_built: u64::MAX,
             dirty: true,
             samples_loaded: false,
             status: "Open a folder, drop photos, or load samples".into(),
@@ -153,7 +157,6 @@ impl PhotoSession {
         let out = photo::develop(src, &img.develop);
         self.hists = photo::histograms(&out);
         self.adjusted = Some(out);
-        self.built_version = self.sel_version;
         self.dirty = false;
     }
 }
@@ -325,6 +328,48 @@ pub struct Studio {
     pub asset_provider: String,
     pub asset_status: String,
     pub asset_results: Vec<crate::asset_browser::AssetHit>,
+    pub clipboard: Vec<Shape>,
+    pub style_clip: Option<Style>,
+    pub recents: Vec<PathBuf>,
+    pub fill_active: bool,
+    pub custom_w: f32,
+    pub custom_h: f32,
+    pub custom_dpi: f32,
+    pub canvas_gen: u64,
+    pub canvas_key: Option<(u32, u32, u32, u32, u32, u64, u8, u32)>,
+    pub layer_rename: Option<(usize, String)>,
+    pub section_open: SectionOpen,
+    pub paste_nudge: u32,
+    pub playhead: f32,
+    pub playing: bool,
+    pub play_clock: f64,
+    pub pose_drag: HashMap<u64, Pose>,
+    pub selected_key: Option<(u64, Prop, usize)>,
+}
+
+#[derive(Clone, Copy)]
+pub struct SectionOpen {
+    pub color: bool,
+    pub character: bool,
+    pub stroke: bool,
+    pub transform: bool,
+    pub brush: bool,
+    pub layers: bool,
+    pub palettes: bool,
+}
+
+impl Default for SectionOpen {
+    fn default() -> Self {
+        Self {
+            color: true,
+            character: true,
+            stroke: true,
+            transform: true,
+            brush: true,
+            layers: true,
+            palettes: false,
+        }
+    }
 }
 
 impl Studio {
@@ -401,6 +446,23 @@ impl Studio {
             asset_provider: "All".into(),
             asset_status: String::new(),
             asset_results: Vec::new(),
+            clipboard: Vec::new(),
+            style_clip: None,
+            recents: crate::project::load_recents(),
+            fill_active: true,
+            custom_w: 1280.0,
+            custom_h: 800.0,
+            custom_dpi: 72.0,
+            canvas_gen: 1,
+            canvas_key: None,
+            layer_rename: None,
+            section_open: SectionOpen::default(),
+            paste_nudge: 0,
+            playhead: 0.0,
+            playing: false,
+            play_clock: 0.0,
+            pose_drag: HashMap::new(),
+            selected_key: None,
         };
         s.doc.grid.visible = false;
         if !s.palettes.is_empty() {
@@ -439,6 +501,12 @@ impl Studio {
         self.need_fit = true;
         self.show_welcome = false;
         self.op = None;
+        self.canvas_key = None;
+        self.playhead = 0.0;
+        self.playing = false;
+        self.pose_drag.clear();
+        self.selected_key = None;
+        self.mark();
         let transp = if self.new_doc_transparent { " transparent" } else { "" };
         let bleed = if self.new_doc_bleed { " + bleed" } else { "" };
         let safe = if self.new_doc_safe { " + safe" } else { "" };
@@ -566,13 +634,94 @@ impl Studio {
 
         self.selection.clear();
         self.need_fit = true;
+        self.canvas_key = None;
+        self.mark();
         self.status = "demo".into();
+    }
+
+    pub fn mark(&mut self) {
+        self.canvas_gen = self.canvas_gen.wrapping_add(1);
+    }
+
+    pub fn is_motion(&self) -> bool {
+        self.persona == Persona::Motion
+    }
+
+    pub fn live_pose(&self, id: u64) -> Pose {
+        if let Some(p) = self.pose_drag.get(&id).copied() {
+            return p;
+        }
+        if self.is_motion() {
+            self.doc.motion.pose(id, self.playhead)
+        } else {
+            Pose::identity()
+        }
+    }
+
+    pub fn tick_motion(&mut self, ctx: &egui::Context) {
+        if !self.is_motion() {
+            self.playing = false;
+            return;
+        }
+        let now = ctx.input(|i| i.time);
+        if self.playing {
+            let dt = (now - self.play_clock).max(0.0) as f32;
+            self.playhead += dt;
+            let dur = self.doc.motion.duration.max(0.05);
+            if self.playhead > dur {
+                if self.doc.motion.looped {
+                    self.playhead %= dur;
+                } else {
+                    self.playhead = dur;
+                    self.playing = false;
+                }
+            }
+            ctx.request_repaint();
+        }
+        self.play_clock = now;
+    }
+
+    pub fn commit_motion(&mut self, after: Motion) {
+        let before = self.doc.motion.clone();
+        if before == after {
+            return;
+        }
+        self.commit(Cmd::SetMotion { before, after });
+    }
+
+    pub fn key_selection(&mut self, ease: Ease) {
+        let t = self.playhead;
+        let sel = self.selection.clone();
+        if sel.is_empty() {
+            self.status = "select a shape to key".into();
+            return;
+        }
+        let mut after = self.doc.motion.clone();
+        for (_, id) in sel {
+            let pose = self.live_pose(id);
+            after.set_key(id, Prop::X, t, pose.dx, ease);
+            after.set_key(id, Prop::Y, t, pose.dy, ease);
+            after.set_key(id, Prop::Rotation, t, pose.rotation, ease);
+            after.set_key(id, Prop::Scale, t, pose.scale, ease);
+            if let Some(op) = pose.opacity {
+                after.set_key(id, Prop::Opacity, t, op, ease);
+            }
+        }
+        self.commit_motion(after);
+        self.status = format!("keyed at {:.2}s", t);
+    }
+
+    pub fn key_prop(&mut self, id: u64, prop: Prop, value: f32) {
+        let mut after = self.doc.motion.clone();
+        after.set_key(id, prop, self.playhead, value, Ease::EaseInOut);
+        self.commit_motion(after);
     }
 
     pub fn commit(&mut self, cmd: Cmd) {
         apply_cmd(&mut self.doc, &cmd);
         self.history.push(cmd);
         self.dirty = true;
+        self.mark();
         self.sanitize();
     }
 
@@ -580,6 +729,7 @@ impl Studio {
         if let Some(inv) = self.history.undo() {
             apply_cmd(&mut self.doc, &inv);
             self.sanitize();
+            self.mark();
             self.status = "undo".into();
         }
     }
@@ -588,6 +738,7 @@ impl Studio {
         if let Some(cmd) = self.history.redo() {
             apply_cmd(&mut self.doc, &cmd);
             self.sanitize();
+            self.mark();
             self.status = "redo".into();
         }
     }
@@ -682,6 +833,15 @@ impl Studio {
     }
 
     pub fn delete_selection(&mut self) {
+        if self.is_motion()
+            && let Some((id, prop, index)) = self.selected_key.take()
+        {
+            let mut after = self.doc.motion.clone();
+            after.remove_key(id, prop, index);
+            self.commit_motion(after);
+            self.status = "key removed".into();
+            return;
+        }
         self.type_edit = None;
         let mut by_layer: std::collections::BTreeMap<usize, Vec<Shape>> =
             std::collections::BTreeMap::new();
@@ -737,6 +897,18 @@ impl Studio {
     }
 
     pub fn nudge(&mut self, dx: f32, dy: f32) {
+        if self.is_motion() {
+            let sel = self.selection.clone();
+            let t = self.playhead;
+            let mut after = self.doc.motion.clone();
+            for (_, id) in sel {
+                let pose = self.live_pose(id);
+                after.set_key(id, Prop::X, t, pose.dx + dx, Ease::EaseInOut);
+                after.set_key(id, Prop::Y, t, pose.dy + dy, Ease::EaseInOut);
+            }
+            self.commit_motion(after);
+            return;
+        }
         let d = Pt::new(dx, dy);
         for (li, id) in self.selection.clone() {
             if let Some(s) = self.doc.find_shape(li, id) {
@@ -920,6 +1092,7 @@ impl Studio {
             e.anchor = lo;
         }
         self.reshape_live_type();
+        self.mark();
     }
 
     pub fn type_insert(&mut self, s: &str) {
@@ -941,6 +1114,7 @@ impl Studio {
             e.anchor = e.caret;
         }
         self.reshape_live_type();
+        self.mark();
     }
 
     fn type_backspace(&mut self) {
@@ -1325,16 +1499,364 @@ impl Studio {
 
     pub fn align_sel(&mut self, how: Align) {
         let ids = self.selection.clone();
-        align::align(&mut self.doc, &ids, how);
-        self.dirty = true;
+        let deltas = align::align_deltas(&self.doc, &ids, how);
+        self.apply_deltas(&deltas);
         self.status = "aligned".into();
     }
 
     pub fn distribute_sel(&mut self, how: Distribute) {
         let ids = self.selection.clone();
-        align::distribute(&mut self.doc, &ids, how);
-        self.dirty = true;
+        let deltas = align::distribute_deltas(&self.doc, &ids, how);
+        self.apply_deltas(&deltas);
         self.status = "distributed".into();
+    }
+
+    fn apply_deltas(&mut self, deltas: &[(usize, u64, Pt)]) {
+        if deltas.is_empty() {
+            return;
+        }
+        let mut items = Vec::new();
+        for (li, id, d) in deltas {
+            if let Some(s) = self.doc.find_shape(*li, *id) {
+                let before = s.geom.clone();
+                let mut after = before.clone();
+                after.translate(*d);
+                let rot = s.rotation;
+                items.push((*li, *id, before, after, rot, rot));
+            }
+        }
+        if !items.is_empty() {
+            self.commit(Cmd::SetGeoms { items });
+        }
+    }
+
+    const CLIP_PREFIX: &'static str = "omadesign-shapes:";
+
+    pub fn copy_selection(&mut self, ctx: &egui::Context) {
+        let shapes: Vec<Shape> = self
+            .selection
+            .iter()
+            .filter_map(|(li, id)| self.doc.find_shape(*li, *id).cloned())
+            .collect();
+        if shapes.is_empty() {
+            self.status = "nothing to copy".into();
+            return;
+        }
+        self.clipboard = shapes.clone();
+        self.paste_nudge = 0;
+        if let Ok(s) = serde_json::to_string(&shapes) {
+            ctx.copy_text(format!("{}{s}", Self::CLIP_PREFIX));
+        }
+        self.status = format!(
+            "copied {} {}",
+            shapes.len(),
+            if shapes.len() == 1 { "shape" } else { "shapes" }
+        );
+    }
+
+    pub fn cut_selection(&mut self, ctx: &egui::Context) {
+        self.copy_selection(ctx);
+        if !self.clipboard.is_empty() {
+            self.delete_selection();
+            self.status = "cut".into();
+        }
+    }
+
+    pub fn paste_clipboard(&mut self, payload: Option<&str>) {
+        let mut shapes = None;
+        if let Some(p) = payload
+            && let Some(json) = p.strip_prefix(Self::CLIP_PREFIX)
+            && let Ok(v) = serde_json::from_str::<Vec<Shape>>(json)
+            && !v.is_empty()
+        {
+            shapes = Some(v);
+        }
+        let shapes = shapes.unwrap_or_else(|| self.clipboard.clone());
+        if shapes.is_empty() {
+            self.status = "clipboard is empty".into();
+            return;
+        }
+        let Some(li) = self.vector_target() else {
+            self.status = "add a vector layer first".into();
+            return;
+        };
+        self.paste_nudge += 1;
+        let nudge = Pt::new(
+            16.0 * self.paste_nudge as f32,
+            16.0 * self.paste_nudge as f32,
+        );
+        let mut neu = Vec::new();
+        for mut s in shapes {
+            s.id = crate::document::next_id();
+            s.geom.translate(nudge);
+            crate::text::fill_contours(&mut s.geom);
+            neu.push((li, s.id));
+            self.commit(Cmd::AddShape { layer: li, shape: s });
+        }
+        self.selection = neu;
+        self.status = "pasted".into();
+    }
+
+    pub fn copy_style(&mut self) {
+        if let Some((li, id)) = self.primary()
+            && let Some(s) = self.doc.find_shape(li, id)
+        {
+            self.style_clip = Some(s.style.clone());
+            self.style = s.style.clone();
+            self.status = "style copied".into();
+        } else {
+            self.style_clip = Some(self.style.clone());
+            self.status = "style copied".into();
+        }
+    }
+
+    pub fn paste_style(&mut self) {
+        let Some(style) = self.style_clip.clone() else {
+            self.status = "no style on the clipboard".into();
+            return;
+        };
+        self.style = style.clone();
+        for (li, id) in self.selection.clone() {
+            if let Some(s) = self.doc.find_shape(li, id) {
+                self.commit(Cmd::SetStyle {
+                    layer: li,
+                    id,
+                    before: s.style.clone(),
+                    after: style.clone(),
+                });
+            }
+        }
+        self.status = "style pasted".into();
+    }
+
+    pub fn swap_fill_stroke(&mut self) {
+        let fill = self.style.fill.clone();
+        let stroke = self.style.stroke.clone();
+        match (fill, stroke) {
+            (Fill::Solid(f), Some(mut st)) => {
+                let sc = st.color;
+                st.color = f;
+                self.style.fill = Fill::Solid(sc);
+                self.style.stroke = Some(st);
+            }
+            (Fill::None, Some(st)) => {
+                self.style.fill = Fill::Solid(st.color);
+                self.style.stroke = None;
+            }
+            (Fill::Solid(f), None) => {
+                let mut st = crate::document::Stroke::default();
+                st.color = f;
+                self.style.fill = Fill::None;
+                self.style.stroke = Some(st);
+            }
+            (Fill::Linear { c0, .. } | Fill::Radial { c0, .. }, Some(mut st)) => {
+                let sc = st.color;
+                st.color = c0;
+                self.style.fill = Fill::Solid(sc);
+                self.style.stroke = Some(st);
+            }
+            _ => return,
+        }
+        for (li, id) in self.selection.clone() {
+            if let Some(s) = self.doc.find_shape(li, id) {
+                self.commit(Cmd::SetStyle {
+                    layer: li,
+                    id,
+                    before: s.style.clone(),
+                    after: self.style.clone(),
+                });
+            }
+        }
+        if let Fill::Solid(c) = self.style.fill {
+            self.push_recent(c);
+        }
+        self.status = "swapped fill / stroke".into();
+    }
+
+    pub fn bring_to_front(&mut self) {
+        self.reorder_selected(true, true);
+    }
+
+    pub fn send_to_back(&mut self) {
+        self.reorder_selected(false, true);
+    }
+
+    pub fn bring_forward(&mut self) {
+        self.reorder_selected(true, false);
+    }
+
+    pub fn send_backward(&mut self) {
+        self.reorder_selected(false, false);
+    }
+
+    fn reorder_selected(&mut self, forward: bool, extreme: bool) {
+        if self.selection.is_empty() {
+            return;
+        }
+        let mut by_layer: std::collections::BTreeMap<usize, Vec<u64>> =
+            std::collections::BTreeMap::new();
+        for (li, id) in &self.selection {
+            by_layer.entry(*li).or_default().push(*id);
+        }
+        for (layer, ids) in by_layer {
+            let index_of = |studio: &Studio, id: u64| {
+                studio
+                    .doc
+                    .layers
+                    .get(layer)
+                    .and_then(|l| l.kind.shapes())
+                    .and_then(|s| s.iter().position(|sh| sh.id == id))
+            };
+            let last_of = |studio: &Studio| {
+                studio
+                    .doc
+                    .layers
+                    .get(layer)
+                    .and_then(|l| l.kind.shapes())
+                    .map(|s| s.len().saturating_sub(1))
+                    .unwrap_or(0)
+            };
+            let mut ordered: Vec<(usize, u64)> = ids
+                .iter()
+                .filter_map(|id| index_of(self, *id).map(|i| (i, *id)))
+                .collect();
+            ordered.sort_by_key(|(i, _)| *i);
+            ordered.dedup_by_key(|(i, _)| *i);
+            if ordered.is_empty() {
+                continue;
+            }
+            if forward {
+                if extreme {
+                    for (_, id) in ordered {
+                        if let Some(from) = index_of(self, id) {
+                            let last = last_of(self);
+                            if from < last {
+                                self.commit(Cmd::ReorderShape {
+                                    layer,
+                                    from,
+                                    to: last,
+                                });
+                            }
+                        }
+                    }
+                } else {
+                    for (_, id) in ordered.into_iter().rev() {
+                        if let Some(from) = index_of(self, id) {
+                            let last = last_of(self);
+                            if from < last {
+                                self.commit(Cmd::ReorderShape {
+                                    layer,
+                                    from,
+                                    to: from + 1,
+                                });
+                            }
+                        }
+                    }
+                }
+            } else if extreme {
+                for (_, id) in ordered.into_iter().rev() {
+                    if let Some(from) = index_of(self, id)
+                        && from > 0
+                    {
+                        self.commit(Cmd::ReorderShape {
+                            layer,
+                            from,
+                            to: 0,
+                        });
+                    }
+                }
+            } else {
+                for (_, id) in ordered {
+                    if let Some(from) = index_of(self, id)
+                        && from > 0
+                    {
+                        self.commit(Cmd::ReorderShape {
+                            layer,
+                            from,
+                            to: from - 1,
+                        });
+                    }
+                }
+            }
+        }
+        self.status = if forward {
+            if extreme { "brought to front" } else { "brought forward" }
+        } else if extreme {
+            "sent to back"
+        } else {
+            "sent backward"
+        }
+        .into();
+    }
+
+    pub fn add_guide(&mut self, vertical: bool, pos: f32) {
+        self.commit(Cmd::AddGuide {
+            guide: crate::document::Guide { vertical, pos },
+        });
+        self.status = if vertical {
+            format!("guide x = {pos:.0}")
+        } else {
+            format!("guide y = {pos:.0}")
+        };
+    }
+
+    pub fn remember_path(&mut self, path: &std::path::Path) {
+        crate::project::push_recent(path);
+        self.recents = crate::project::load_recents();
+    }
+
+    pub fn save_as(&mut self) {
+        self.commit_type_edit();
+        if let Some(path) = crate::project::dialog_save(&self.doc.name) {
+            self.path = Some(path);
+            self.save();
+        }
+    }
+
+    pub fn open_path(&mut self, path: PathBuf) {
+        let ext = path
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if ext == "oma" {
+            match crate::project::load_from(&path) {
+                Ok(doc) => {
+                    self.doc = doc;
+                    self.remember_path(&path);
+                    self.path = Some(path);
+                    self.history.clear();
+                    self.selection.clear();
+                    self.active_layer = Some(0);
+                    self.need_fit = true;
+                    self.playhead = 0.0;
+                    self.playing = false;
+                    self.pose_drag.clear();
+                    self.selected_key = None;
+                    self.show_welcome = false;
+                    self.op = None;
+                    self.type_edit = None;
+                    self.mark();
+                    self.status = "opened".into();
+                }
+                Err(e) => self.status = format!("open failed: {e}"),
+            }
+        } else {
+            self.photo.import_file(&path);
+            self.persona = Persona::Photo;
+            self.show_welcome = false;
+        }
+    }
+
+    pub fn new_custom(&mut self) {
+        let p = Preset {
+            group: "Custom",
+            name: "Custom",
+            w: self.custom_w.max(1.0),
+            h: self.custom_h.max(1.0),
+            dpi: self.custom_dpi.max(1.0),
+        };
+        self.new_from_preset(p);
     }
 
     pub fn snap_pt(&self, p: Pt) -> Pt {
@@ -1389,6 +1911,7 @@ impl Studio {
                 Ok(()) => {
                     self.path = Some(path.clone());
                     self.dirty = false;
+                    self.remember_path(&path);
                     self.status = format!("saved {}", path.display());
                 }
                 Err(e) => self.status = format!("save failed: {e}"),
@@ -1398,30 +1921,7 @@ impl Studio {
 
     pub fn open(&mut self) {
         if let Some(path) = crate::project::dialog_open() {
-            let ext = path
-                .extension()
-                .and_then(|s| s.to_str())
-                .unwrap_or("")
-                .to_ascii_lowercase();
-            if ext == "oma" {
-                match crate::project::load_from(&path) {
-                    Ok(doc) => {
-                        self.doc = doc;
-                        self.path = Some(path);
-                        self.history.clear();
-                        self.selection.clear();
-                        self.active_layer = Some(0);
-                        self.need_fit = true;
-                        self.show_welcome = false;
-                        self.status = "opened".into();
-                    }
-                    Err(e) => self.status = format!("open failed: {e}"),
-                }
-            } else {
-                self.photo.import_file(&path);
-                self.persona = Persona::Photo;
-                self.show_welcome = false;
-            }
+            self.open_path(path);
         }
     }
 
@@ -1464,6 +1964,77 @@ impl Studio {
         }
     }
 
+    pub fn export_animated_svg(&mut self) {
+        if let Some(path) = crate::project::dialog_export("Animated SVG", "svg") {
+            match crate::svg::export_animated(&self.doc) {
+                Ok(s) => {
+                    let _ = std::fs::write(&path, s);
+                    self.status = format!("exported {}", path.display());
+                }
+                Err(e) => self.status = format!("export failed: {e}"),
+            }
+        }
+    }
+
+    pub fn export_lottie(&mut self) {
+        if let Some(path) = crate::project::dialog_export("Lottie JSON", "json") {
+            match motion::export_lottie(&self.doc) {
+                Ok(s) => {
+                    let _ = std::fs::write(&path, s);
+                    self.status = format!("exported {}", path.display());
+                }
+                Err(e) => self.status = format!("export failed: {e}"),
+            }
+        }
+    }
+
+    pub fn import_lottie(&mut self) {
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("Lottie", &["json", "lottie"])
+            .pick_file()
+        else {
+            return;
+        };
+        match std::fs::read_to_string(&path) {
+            Ok(s) => self.import_lottie_str(&s),
+            Err(e) => self.status = format!("read failed: {e}"),
+        }
+    }
+
+    pub fn import_lottie_str(&mut self, json: &str) {
+        match motion::import_lottie(json) {
+            Ok(imp) => {
+                let empty = self
+                    .doc
+                    .layers
+                    .iter()
+                    .filter_map(|l| l.kind.shapes())
+                    .all(|s| s.is_empty());
+                if empty {
+                    self.doc.width = imp.width.max(1.0);
+                    self.doc.height = imp.height.max(1.0);
+                }
+                let Some(li) = self.vector_target() else {
+                    self.status = "add a vector layer first".into();
+                    return;
+                };
+                let mut neu = vec![];
+                for s in imp.shapes {
+                    neu.push((li, s.id));
+                    self.commit(Cmd::AddShape { layer: li, shape: s });
+                }
+                self.commit_motion(imp.motion);
+                self.selection = neu;
+                self.persona = Persona::Motion;
+                self.tool = Tool::Select;
+                self.playhead = 0.0;
+                self.need_fit = true;
+                self.status = "Lottie on the timeline".into();
+            }
+            Err(e) => self.status = format!("Lottie: {e}"),
+        }
+    }
+
     pub fn export_demo_png(&self, path: &str) -> Result<(), String> {
         let bytes = compositor::export_png(&self.doc, 1)?;
         std::fs::write(path, bytes).map_err(|e| e.to_string())
@@ -1500,11 +2071,18 @@ impl Studio {
             return;
         }
         let wants_text = ctx.egui_wants_keyboard_input();
+        let mut do_copy = false;
+        let mut do_cut = false;
+        let mut paste_payload: Option<String> = None;
         ctx.input(|i| {
             let mods = i.modifiers;
             let ctrl = mods.command || mods.ctrl;
             if ctrl && i.key_pressed(Key::S) {
-                self.save();
+                if mods.shift {
+                    self.save_as();
+                } else {
+                    self.save();
+                }
                 return;
             }
             if ctrl && i.key_pressed(Key::O) {
@@ -1516,12 +2094,14 @@ impl Studio {
                 return;
             }
             if ctrl && i.key_pressed(Key::E) {
-                if mods.shift && self.selection.len() == 1 {
+                self.export_png();
+                return;
+            }
+            if ctrl && i.key_pressed(Key::G) {
+                if mods.shift {
                     self.release_compound();
-                } else if self.selection.len() >= 2 {
-                    self.combine_selected();
                 } else {
-                    self.export_png();
+                    self.combine_selected();
                 }
                 return;
             }
@@ -1539,6 +2119,49 @@ impl Studio {
             }
             if ctrl && i.key_pressed(Key::D) {
                 self.duplicate_selection();
+                return;
+            }
+            if ctrl && i.key_pressed(Key::C) && mods.alt {
+                self.copy_style();
+                return;
+            }
+            if ctrl && i.key_pressed(Key::V) && mods.alt {
+                self.paste_style();
+                return;
+            }
+            if ctrl && i.key_pressed(Key::C) && !wants_text {
+                do_copy = true;
+                return;
+            }
+            if ctrl && i.key_pressed(Key::X) && !wants_text {
+                do_cut = true;
+                return;
+            }
+            if ctrl && i.key_pressed(Key::V) && !wants_text {
+                for ev in &i.events {
+                    if let egui::Event::Paste(t) = ev {
+                        paste_payload = Some(t.clone());
+                    }
+                }
+                if paste_payload.is_none() {
+                    paste_payload = Some(String::new());
+                }
+                return;
+            }
+            if ctrl && i.key_pressed(Key::CloseBracket) {
+                if mods.shift {
+                    self.bring_to_front();
+                } else {
+                    self.bring_forward();
+                }
+                return;
+            }
+            if ctrl && i.key_pressed(Key::OpenBracket) {
+                if mods.shift {
+                    self.send_to_back();
+                } else {
+                    self.send_backward();
+                }
                 return;
             }
             if ctrl && i.key_pressed(Key::A) {
@@ -1571,6 +2194,27 @@ impl Studio {
             }
             if wants_text {
                 return;
+            }
+            if self.persona == Persona::Motion {
+                if i.key_pressed(Key::Space) {
+                    self.playing = !self.playing;
+                    self.status = if self.playing { "play" } else { "pause" }.into();
+                    return;
+                }
+                if i.key_pressed(Key::K) {
+                    self.key_selection(Ease::EaseInOut);
+                    return;
+                }
+                if i.key_pressed(Key::Home) {
+                    self.playhead = 0.0;
+                    self.playing = false;
+                    return;
+                }
+                if i.key_pressed(Key::End) {
+                    self.playhead = self.doc.motion.duration;
+                    self.playing = false;
+                    return;
+                }
             }
             if i.key_pressed(Key::Delete) || i.key_pressed(Key::Backspace) {
                 self.delete_selection();
@@ -1605,15 +2249,7 @@ impl Studio {
                 self.nudge(0.0, step);
             }
             if i.key_pressed(Key::X) {
-                if let Fill::Solid(f) = self.style.fill {
-                    if let Some(st) = &self.style.stroke {
-                        let sc = st.color;
-                        self.style.fill = Fill::Solid(sc);
-                        if let Some(st) = &mut self.style.stroke {
-                            st.color = f;
-                        }
-                    }
-                }
+                self.swap_fill_stroke();
             }
             if i.key_pressed(Key::D) {
                 self.style = Style::default();
@@ -1636,6 +2272,15 @@ impl Studio {
                 self.tool_from_key(i);
             }
         });
+        if do_copy {
+            self.copy_selection(ctx);
+        }
+        if do_cut {
+            self.cut_selection(ctx);
+        }
+        if let Some(p) = paste_payload {
+            self.paste_clipboard(if p.is_empty() { None } else { Some(p.as_str()) });
+        }
     }
 
     fn handle_type_keys(&mut self, ctx: &egui::Context) -> bool {
@@ -2088,5 +2733,100 @@ mod tests {
         assert!((s.view.scale - 4.0).abs() < 1e-3, "scale {}", s.view.scale);
         let c = s.view.to_screen(Pt::new(150.0, 100.0));
         assert!((c.x - 200.0).abs() < 1e-2 && (c.y - 200.0).abs() < 1e-2);
+    }
+
+    #[test]
+    fn copy_paste_reids_and_offsets() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        s.place_text(Pt::new(40.0, 80.0));
+        s.commit_type_edit();
+        let orig = s.selection.clone();
+        assert_eq!(orig.len(), 1);
+        s.clipboard = s
+            .selection
+            .iter()
+            .filter_map(|(li, id)| s.doc.find_shape(*li, *id).cloned())
+            .collect();
+        s.paste_clipboard(None);
+        assert_eq!(s.selection.len(), 1);
+        assert_ne!(s.selection[0].1, orig[0].1);
+        let n: usize = s
+            .doc
+            .layers
+            .iter()
+            .filter_map(|l| l.kind.shapes())
+            .map(|ss| ss.len())
+            .sum();
+        assert_eq!(n, 2);
+    }
+
+    #[test]
+    fn align_is_undoable() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        let a = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(40.0, 10.0),
+                size: Pt::new(10.0, 10.0),
+                radius: 0.0,
+            },
+            Style::default(),
+        );
+        let b = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(10.0, 40.0),
+                size: Pt::new(10.0, 10.0),
+                radius: 0.0,
+            },
+            Style::default(),
+        );
+        let ia = a.id;
+        let ib = b.id;
+        s.commit(Cmd::AddShape { layer: 1, shape: a });
+        s.commit(Cmd::AddShape { layer: 1, shape: b });
+        s.selection = vec![(1, ia), (1, ib)];
+        s.align_sel(Align::Left);
+        let xa = s.doc.find_shape(1, ia).unwrap().world_bbox().min.x;
+        let xb = s.doc.find_shape(1, ib).unwrap().world_bbox().min.x;
+        assert!((xa - xb).abs() < 0.1);
+        s.undo();
+        let xa2 = s.doc.find_shape(1, ia).unwrap().world_bbox().min.x;
+        assert!((xa2 - 40.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn z_order_bring_to_front() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        let a = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(0.0, 0.0),
+                size: Pt::new(10.0, 10.0),
+                radius: 0.0,
+            },
+            Style::default(),
+        );
+        let b = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(20.0, 0.0),
+                size: Pt::new(10.0, 10.0),
+                radius: 0.0,
+            },
+            Style::default(),
+        );
+        let ia = a.id;
+        s.commit(Cmd::AddShape { layer: 1, shape: a });
+        s.commit(Cmd::AddShape { layer: 1, shape: b });
+        s.selection = vec![(1, ia)];
+        s.bring_to_front();
+        let ids: Vec<u64> = s.doc.layers[1]
+            .kind
+            .shapes()
+            .unwrap()
+            .iter()
+            .map(|sh| sh.id)
+            .collect();
+        assert_eq!(ids.last().copied(), Some(ia));
     }
 }

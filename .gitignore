@@ -1,5 +1,7 @@
 /target
 /dist
+/remotion/node_modules
+/remotion/out
 site/node_modules
 site/.output
 site/.vercel

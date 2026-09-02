@@ -567,6 +567,9 @@ pub enum Geom {
     Text(TypeRun),
     Poly {
         contours: Vec<Vec<Pt>>,
+        /// True = nonzero winding (fonts, SVG default). False = even-odd.
+        #[serde(default)]
+        winding: bool,
     },
 }
 
@@ -600,7 +603,7 @@ impl Geom {
                 }
             }
             Geom::Text(t) => t.contours.clone(),
-            Geom::Poly { contours } => contours.clone(),
+            Geom::Poly { contours, .. } => contours.clone(),
         }
     }
 
@@ -672,7 +675,7 @@ impl Geom {
                     }
                 }
             }
-            Geom::Poly { contours } => {
+            Geom::Poly { contours, .. } => {
                 for c in contours {
                     for p in c {
                         *p += d;
@@ -736,7 +739,7 @@ impl Geom {
                     }
                 }
             }
-            Geom::Poly { contours } => {
+            Geom::Poly { contours, .. } => {
                 for c in contours {
                     for p in c {
                         *p = src.map_pt(*p, dst);
@@ -760,6 +763,7 @@ impl Geom {
                 }
                 *self = Geom::Poly {
                     contours: vec![baked],
+                    winding: false,
                 };
             }
             Geom::Ellipse { center, radii } => {
@@ -772,6 +776,7 @@ impl Geom {
                     }
                     *self = Geom::Poly {
                         contours: vec![pts],
+                        winding: false,
                     };
                 }
             }
@@ -795,7 +800,7 @@ impl Geom {
                     }
                 }
             }
-            Geom::Poly { contours } => {
+            Geom::Poly { contours, .. } => {
                 for c in contours {
                     for p in c {
                         rot(p);

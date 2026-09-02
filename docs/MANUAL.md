@@ -29,6 +29,7 @@ Chrome follows your desktop: Omarchy theme colours and the font from `omarchy fo
 | **Design** | a mark, a poster, a layout | Move `V`, Pen `P`, Rectangle `R`, Type `T` |
 | **Pixel**  | painting or retouching | Brush `B`, Eraser `E`, Clone `J`, Wand `W` |
 | **Photo**  | grading a photograph | Crop `C`, develop sliders, Place in Design |
+| **Motion** | animating the artboard | Space play, `K` key, File → Lottie |
 
 ## Design
 
@@ -45,7 +46,7 @@ Chrome follows your desktop: Omarchy theme colours and the font from `omarchy fo
 
 Colour studio: HSV, hex, swatches, recent. `X` swaps fill/stroke. `D` restores defaults.
 
-Boolean (Object menu): union, subtract, intersect, XOR. Align and distribute. Snap to grid, guides, objects, canvas centre.
+Boolean (Object menu): union, subtract, intersect, XOR. Combine `Ctrl+G`, release `Ctrl+Shift+G`. Align and distribute. Bring to front / send to back. Snap to grid, guides, objects. Click a ruler to drop a guide.
 
 ## Pixel
 
@@ -59,11 +60,24 @@ Paint lives on a **pixel layer**. Add one from the Layers studio if the document
 
 Open a folder, drop files, or load samples. Develop: exposure, contrast, highlights/shadows/whites/blacks, temp/tint, presence, tone curve, split tone, HSL, grain, vignette, rotate, crop. Histogram and before/after. **Place in Design** drops the developed image as a pixel layer.
 
+## Motion
+
+The artboard you drew is the rest pose. Motion does not rewrite it. Tracks are offsets: X, Y, rotation, scale, opacity.
+
+- Open the **Motion** persona. The timeline sits under the canvas.
+- Select a shape. Drag it — that writes keys at the playhead. First key at t > 0 also plants rest at 0, so it animates from where you drew it.
+- `K` keys X/Y/rotate/scale for the selection. Diamonds on the row are keys. Drag a diamond to retime. Click it, Delete removes it. Cycle ease on a selected key.
+- Space plays. Home / End jump. Loop is the repeat icon.
+- **File → Export animated SVG…** writes CSS `@keyframes`. **Export Lottie…** writes Bodymovin 5.x JSON that lottie-web and dotLottie play. **Import Lottie…** brings a shape-layer Lottie onto the timeline.
+
+PNG/JPEG/static SVG stay the rest pose. The clip lives in the `.oma`.
+
 ## Files
 
-- Project: `.oma` (JSON, rasters PNG-packed)
-- Export: PNG (1×/2×/3×), JPEG, SVG
-- Native file dialogs. Drag a photo onto the canvas to place it.
+- Project: `.oma` (JSON, rasters PNG-packed, motion clip)
+- Export: PNG (1×/2×/3×), JPEG, SVG, animated SVG, Lottie JSON
+- Copy / cut / paste shapes. Copy style `Ctrl+Alt+C`, paste style `Ctrl+Alt+V`.
+- Native file dialogs. Drag a photo onto the canvas to place it. Right-click the canvas for the same edits.
 
 ## Keys
 
@@ -73,8 +87,11 @@ Rectangle R · Ellipse O · Polygon Y · Star S · Line L
 Type T · Gradient G · Eyedropper I · Brush B · Eraser E
 Fill K · Clone J · Smudge M · Crop C · Wand W · Hand H · Zoom Z
 Undo Ctrl+Z · Redo Ctrl+Shift+Z · Duplicate Ctrl+D
-Save Ctrl+S · Open Ctrl+O · New Ctrl+N · Export Ctrl+E
+Copy Ctrl+C · Paste Ctrl+V · Cut Ctrl+X · Select all Ctrl+A
+Save Ctrl+S · Save as Ctrl+Shift+S · Open Ctrl+O · New Ctrl+N · Export Ctrl+E
+Combine Ctrl+G · Release Ctrl+Shift+G · Front Ctrl+Shift+] · Back Ctrl+Shift+[
 Fit Ctrl+0 · 100% Ctrl+1 · Pan Space · Zoom Ctrl+scroll
+Motion: Space play · K key · Home start · End end
 ```
 
 ## Theme and font

@@ -30,9 +30,26 @@ fn hex_css(c: Rgba) -> String {
 }
 
 pub fn export(doc: &Document) -> Result<String, String> {
+    export_inner(doc, false)
+}
+
+pub fn export_animated(doc: &Document) -> Result<String, String> {
+    export_inner(doc, true)
+}
+
+fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
     let mut body = String::new();
     let mut defs = String::new();
     let mut grad_id = 0usize;
+    let mut css = String::new();
+    let motion = &doc.motion;
+    let looping = if motion.looped { "infinite" } else { "1" };
+    if animate && !motion.is_empty() {
+        css.push_str(&format!(
+            ".oma-a {{ animation-duration: {:.3}s; animation-iteration-count: {looping}; animation-fill-mode: both; transform-box: fill-box; transform-origin: center; }}\n",
+            motion.duration.max(0.05)
+        ));
+    }
 
     for layer in &doc.layers {
         if !layer.visible || layer.opacity <= 0.0 {
@@ -96,8 +113,19 @@ pub fn export(doc: &Document) -> Result<String, String> {
                         }
                         _ => String::new(),
                     };
+                    let mut extra = String::new();
+                    if animate
+                        && let Some(kf) = motion.css_keyframes(shape.id, &format!("oma-{}", shape.id))
+                    {
+                        css.push_str(&kf);
+                        extra = format!(
+                            " class=\"oma-a\" style=\"animation-name: oma-{}\"",
+                            shape.id
+                        );
+                    }
                     body.push_str(&format!(
-                        "  <path d=\"{d}\" {fill_attr}{stroke_attr} opacity=\"{:.3}\"/>\n",
+                        "  <path id=\"oma-{}\" d=\"{d}\" {fill_attr}{stroke_attr} opacity=\"{:.3}\"{extra}/>\n",
+                        shape.id,
                         shape.opacity
                     ));
                 }
@@ -120,8 +148,13 @@ pub fn export(doc: &Document) -> Result<String, String> {
         body.push_str("</g>\n");
     }
 
+    let style = if css.is_empty() {
+        String::new()
+    } else {
+        format!("<style>\n{css}</style>\n")
+    };
     Ok(format!(
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\">\n<defs>\n{defs}</defs>\n{body}</svg>\n",
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\">\n{style}<defs>\n{defs}</defs>\n{body}</svg>\n",
         doc.width, doc.height, doc.width, doc.height
     ))
 }

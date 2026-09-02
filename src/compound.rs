@@ -26,7 +26,10 @@ pub fn combine_into_poly(shapes: &[&Shape]) -> Option<Geom> {
     if contours.is_empty() {
         return None;
     }
-    Some(Geom::Poly { contours })
+    Some(Geom::Poly {
+        contours,
+        winding: false,
+    })
 }
 
 /// Fold a boolean op across N geoms. The first geom is the accumulator.
@@ -59,11 +62,12 @@ pub fn apply_multi(op: BoolOp, geoms: &[Geom]) -> Option<Geom> {
 /// Explode a Poly with >1 contour into separate Poly shapes (one contour each).
 pub fn explode_poly(poly: &Geom) -> Option<Vec<Geom>> {
     match poly {
-        Geom::Poly { contours } if contours.len() > 1 => {
+        Geom::Poly { contours, winding } if contours.len() > 1 => {
             let geoms = contours
                 .iter()
                 .map(|c| Geom::Poly {
                     contours: vec![c.clone()],
+                    winding: *winding,
                 })
                 .collect();
             Some(geoms)
@@ -95,7 +99,7 @@ mod tests {
         let b = rect(20.0, 0.0, 10.0);
         let g = combine_into_poly(&[&a, &b]).unwrap();
         match g {
-            Geom::Poly { contours } => assert_eq!(contours.len(), 2),
+            Geom::Poly { contours, .. } => assert_eq!(contours.len(), 2),
             _ => panic!("expected poly"),
         }
     }

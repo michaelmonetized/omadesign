@@ -1,6 +1,6 @@
 use crate::app::Studio;
-use crate::document::{Cmd, Layer, Shape, Style};
-use crate::geom::{Geom, Pt};
+use crate::document::{Cmd, Layer, Shape};
+use crate::geom::Pt;
 use eframe::egui::{self, RichText, ScrollArea};
 
 pub fn show_shape_browser(ui: &mut egui::Ui, studio: &mut Studio) {
@@ -33,7 +33,7 @@ pub fn show_shape_browser(ui: &mut egui::Ui, studio: &mut Studio) {
             });
             ui.add_space(4.0);
             ui.label(
-                RichText::new("Popular OSS libs: Phosphor (Light), LineIcons, Heroicons, Feather, Lucide. Click Add to pull the SVG onto the artboard.")
+                RichText::new("Phosphor, LineIcons, Heroicons, Feather, Lucide. Click a name to place it.")
                     .small()
                     .color(crate::ui::theme::fg_weak()),
             );
@@ -44,14 +44,13 @@ pub fn show_shape_browser(ui: &mut egui::Ui, studio: &mut Studio) {
                         ui.vertical(|ui| {
                             ui.label(RichText::new(ic.lib).small().color(crate::ui::theme::fg_weak()));
                             if ui
-                                .add_sized([120.0, 28.0], egui::Button::new(format!("{}  +", ic.name)))
-                                .on_hover_text(format!("{}/{} – click to add", ic.lib, ic.name))
+                                .add_sized([120.0, 28.0], egui::Button::new(ic.name))
+                                .on_hover_text(format!("{}/{}", ic.lib, ic.name))
                                 .clicked()
                             {
-                                studio.shape_status = format!("Fetching {}…", ic.name);
-                                match crate::shape_browser::fetch_svg(ic) {
-                                    Ok(svg) => match crate::shape_browser::svg_to_geom(&svg, 256.0) {
-                                        Ok(mut geom) => {
+                                studio.shape_status = format!("Placing {}…", ic.name);
+                                match crate::shape_browser::icon_to_geom(ic, 256.0) {
+                                    Ok(mut geom) => {
                                             // Place at document centre
                                             let doc = &studio.doc;
                                             let centre = Pt::new(doc.width * 0.5, doc.height * 0.5);
@@ -59,8 +58,14 @@ pub fn show_shape_browser(ui: &mut egui::Ui, studio: &mut Studio) {
                                             let bbox = geom.bbox();
                                             let off = centre - bbox.center();
                                             geom.translate(off);
-                                            // Style uses current fill/stroke
-                                            let shape = Shape::new(geom, studio.style.clone());
+                                            // Phosphor etc. are filled outlines. A leftover stroke
+                                            // around every hole is what made them look chopped.
+                                            let mut style = studio.style.clone();
+                                            style.stroke = None;
+                                            if style.fill.is_none() {
+                                                style.fill = crate::document::Fill::Solid(studio.brush.color);
+                                            }
+                                            let shape = Shape::new(geom, style);
                                             let id = shape.id;
                                             if let Some(li) = studio.vector_target() {
                                                 studio.commit(Cmd::AddShape { layer: li, shape });
@@ -72,8 +77,6 @@ pub fn show_shape_browser(ui: &mut egui::Ui, studio: &mut Studio) {
                                                 studio.shape_status = "add a vector layer first".into();
                                             }
                                         }
-                                        Err(e) => studio.shape_status = format!("SVG parse failed: {e}"),
-                                    },
                                     Err(e) => studio.shape_status = e,
                                 }
                             }
@@ -136,7 +139,7 @@ pub fn show_asset_browser(ui: &mut egui::Ui, studio: &mut Studio) {
                 }
             });
             ui.label(
-                RichText::new("Free libs: Pixabay, Pexels, Vecteezy, Vexels (Picsum fallback). Set PIXABAY_API_KEY / PEXELS_API_KEY or ~/.config/omadesign/assets.toml to enable live search.")
+                RichText::new("Pixabay, Pexels, Picsum. Keys in PIXABAY_API_KEY / PEXELS_API_KEY or ~/.config/omadesign/assets.toml.")
                     .small()
                     .color(crate::ui::theme::fg_weak()),
             );

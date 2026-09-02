@@ -33,10 +33,11 @@ fn bbox_of(doc: &Document, ids: &[(usize, u64)]) -> Option<Bounds> {
     b
 }
 
-pub fn align(doc: &mut Document, ids: &[(usize, u64)], how: Align) {
+pub fn align_deltas(doc: &Document, ids: &[(usize, u64)], how: Align) -> Vec<(usize, u64, Pt)> {
     let Some(all) = bbox_of(doc, ids) else {
-        return;
+        return vec![];
     };
+    let mut out = Vec::new();
     for (li, id) in ids {
         let Some(shape) = doc.find_shape(*li, *id) else {
             continue;
@@ -50,15 +51,28 @@ pub fn align(doc: &mut Document, ids: &[(usize, u64)], how: Align) {
             Align::CenterY => Pt::new(0.0, all.center().y - b.center().y),
             Align::Bottom => Pt::new(0.0, all.max.y - b.max.y),
         };
-        if let Some(s) = doc.find_shape_mut(*li, *id) {
-            s.geom.translate(delta);
+        if delta.length_sq() > 1e-8 {
+            out.push((*li, *id, delta));
+        }
+    }
+    out
+}
+
+pub fn align(doc: &mut Document, ids: &[(usize, u64)], how: Align) {
+    for (li, id, d) in align_deltas(doc, ids, how) {
+        if let Some(s) = doc.find_shape_mut(li, id) {
+            s.geom.translate(d);
         }
     }
 }
 
-pub fn distribute(doc: &mut Document, ids: &[(usize, u64)], how: Distribute) {
+pub fn distribute_deltas(
+    doc: &Document,
+    ids: &[(usize, u64)],
+    how: Distribute,
+) -> Vec<(usize, u64, Pt)> {
     if ids.len() < 3 {
-        return;
+        return vec![];
     }
     let mut items: Vec<(usize, u64, Bounds)> = ids
         .iter()
@@ -68,12 +82,17 @@ pub fn distribute(doc: &mut Document, ids: &[(usize, u64)], how: Distribute) {
         })
         .collect();
     match how {
-        Distribute::Horizontal => items.sort_by(|a, b| a.2.center().x.partial_cmp(&b.2.center().x).unwrap()),
-        Distribute::Vertical => items.sort_by(|a, b| a.2.center().y.partial_cmp(&b.2.center().y).unwrap()),
+        Distribute::Horizontal => {
+            items.sort_by(|a, b| a.2.center().x.partial_cmp(&b.2.center().x).unwrap())
+        }
+        Distribute::Vertical => {
+            items.sort_by(|a, b| a.2.center().y.partial_cmp(&b.2.center().y).unwrap())
+        }
     }
     let first = items.first().unwrap().2;
     let last = items.last().unwrap().2;
     let n = items.len() as f32;
+    let mut out = Vec::new();
     match how {
         Distribute::Horizontal => {
             let start = first.center().x;
@@ -82,8 +101,8 @@ pub fn distribute(doc: &mut Document, ids: &[(usize, u64)], how: Distribute) {
             for (i, (li, id, b)) in items.iter().enumerate() {
                 let target = start + step * i as f32;
                 let d = Pt::new(target - b.center().x, 0.0);
-                if let Some(s) = doc.find_shape_mut(*li, *id) {
-                    s.geom.translate(d);
+                if d.length_sq() > 1e-8 {
+                    out.push((*li, *id, d));
                 }
             }
         }
@@ -94,10 +113,19 @@ pub fn distribute(doc: &mut Document, ids: &[(usize, u64)], how: Distribute) {
             for (i, (li, id, b)) in items.iter().enumerate() {
                 let target = start + step * i as f32;
                 let d = Pt::new(0.0, target - b.center().y);
-                if let Some(s) = doc.find_shape_mut(*li, *id) {
-                    s.geom.translate(d);
+                if d.length_sq() > 1e-8 {
+                    out.push((*li, *id, d));
                 }
             }
+        }
+    }
+    out
+}
+
+pub fn distribute(doc: &mut Document, ids: &[(usize, u64)], how: Distribute) {
+    for (li, id, d) in distribute_deltas(doc, ids, how) {
+        if let Some(s) = doc.find_shape_mut(li, id) {
+            s.geom.translate(d);
         }
     }
 }
