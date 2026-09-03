@@ -79,7 +79,7 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
 fn file_menu(ui: &mut Ui, studio: &mut Studio) {
     ui.menu_button("File", |ui| {
         if ui.button("New…                  Ctrl+N").clicked() {
-            studio.show_welcome = true;
+            studio.new_tab_welcome();
             ui.close();
         }
         if ui.button("Open…                 Ctrl+O").clicked() {
@@ -205,11 +205,17 @@ fn edit_menu(ui: &mut Ui, studio: &mut Studio) {
                 .iter()
                 .enumerate()
                 .flat_map(|(li, l)| {
-                    l.kind
+                    let mut ids: Vec<(usize, u64)> = l
+                        .kind
                         .shapes()
                         .into_iter()
                         .flatten()
                         .map(move |s| (li, s.id))
+                        .collect();
+                    if l.kind.is_placed_raster() {
+                        ids.push((li, crate::document::RASTER_ID));
+                    }
+                    ids
                 })
                 .collect();
             ui.close();
@@ -287,7 +293,7 @@ fn object_menu(ui: &mut Ui, studio: &mut Studio) {
             ui.close();
         }
         if ui
-            .add_enabled(studio.node_sel.is_some(), Button::new("Break path at point"))
+            .add_enabled(!studio.node_sel.is_empty(), Button::new("Break path at point"))
             .clicked()
         {
             studio.break_node();
@@ -298,38 +304,34 @@ fn object_menu(ui: &mut Ui, studio: &mut Studio) {
             studio.swap_fill_stroke();
             ui.close();
         }
+        ui.separator();
+        if ui
+            .add_enabled(
+                !studio.selection.is_empty(),
+                Button::new("Wrap selection in artboard"),
+            )
+            .clicked()
+        {
+            studio.wrap_selection_artboard();
+            ui.close();
+        }
+        if ui
+            .add_enabled(
+                studio.artboard_sel.len() == 1,
+                Button::new("Clone artboard"),
+            )
+            .clicked()
+        {
+            if let Some(&id) = studio.artboard_sel.first() {
+                studio.clone_artboard(id);
+            }
+            ui.close();
+        }
     });
 }
 
 fn flip(studio: &mut Studio, horizontal: bool) {
-    let Some((li, id)) = studio.primary() else {
-        return;
-    };
-    let Some(shape) = studio.doc.find_shape(li, id).cloned() else {
-        return;
-    };
-    let b = shape.world_bbox();
-    let dst = if horizontal {
-        crate::geom::Bounds {
-            min: crate::geom::Pt::new(b.max.x, b.min.y),
-            max: crate::geom::Pt::new(b.min.x, b.max.y),
-        }
-    } else {
-        crate::geom::Bounds {
-            min: crate::geom::Pt::new(b.min.x, b.max.y),
-            max: crate::geom::Pt::new(b.max.x, b.min.y),
-        }
-    };
-    let mut g = shape.geom.clone();
-    g.map_into(b, dst);
-    studio.commit(crate::document::Cmd::SetGeom {
-        layer: li,
-        id,
-        before: shape.geom.clone(),
-        after: g,
-        rot_before: shape.rotation,
-        rot_after: shape.rotation,
-    });
+    studio.flip_selection(horizontal);
 }
 
 fn arrange_menu(ui: &mut Ui, studio: &mut Studio) {
@@ -457,6 +459,59 @@ fn persona_tabs(ui: &mut Ui, studio: &mut Studio) {
     }
 }
 
+pub fn doc_tabs(ui: &mut Ui, studio: &mut Studio) {
+    studio.ensure_tabs();
+    Panel::left("doc-tabs")
+        .resizable(false)
+        .exact_size(28.0)
+        .show(ui, |ui| {
+            ui.add_space(6.0);
+            let n = studio.tab_count();
+            let mut switch = None;
+            let mut close = None;
+            for i in 0..n {
+                let (title, dirty) = studio.tab_title(i);
+                let on = i == studio.active_tab;
+                let label = if dirty {
+                    format!("• {}", title.chars().next().unwrap_or('U'))
+                } else {
+                    title.chars().next().unwrap_or('U').to_string()
+                };
+                let tip = if dirty {
+                    format!("{title} (unsaved)")
+                } else {
+                    title.clone()
+                };
+                ui.push_id(i, |ui| {
+                    let resp = ui.add_sized(
+                        vec2(22.0, 22.0),
+                        Button::new(RichText::new(label).small().strong()).fill(if on {
+                            accent_dim()
+                        } else {
+                            Color32::TRANSPARENT
+                        }),
+                    );
+                    if resp.clicked() {
+                        switch = Some(i);
+                    }
+                    if resp.secondary_clicked() {
+                        close = Some(i);
+                    }
+                    resp.on_hover_text(format!("{tip}\nRight-click closes"));
+                });
+            }
+            if icons::tiny_icon(ui, ph::PLUS, "New tab  Ctrl+N", false) {
+                studio.new_tab();
+            }
+            if let Some(i) = switch {
+                studio.switch_tab(i);
+            }
+            if let Some(i) = close {
+                studio.request_close_tab(i);
+            }
+        });
+}
+
 pub fn left_toolbar(ui: &mut Ui, studio: &mut Studio) {
     Panel::left("tools")
         .resizable(false)
@@ -474,7 +529,7 @@ pub fn left_toolbar(ui: &mut Ui, studio: &mut Studio) {
                 let group = match t {
                     Tool::Select | Tool::Node => "sel",
                     Tool::Pen | Tool::Pencil => "path",
-                    Tool::Rect | Tool::Ellipse | Tool::Polygon | Tool::Star | Tool::Line => "shape",
+                    Tool::Rect | Tool::Ellipse | Tool::Polygon | Tool::Star | Tool::Line | Tool::Artboard => "shape",
                     Tool::Text | Tool::Gradient | Tool::Eyedropper | Tool::Trace => "look",
                     Tool::Brush | Tool::Eraser | Tool::Fill | Tool::Clone | Tool::Smudge => "paint",
                     Tool::Marquee | Tool::EllipseMarquee | Tool::Lasso | Tool::Wand => "selpx",

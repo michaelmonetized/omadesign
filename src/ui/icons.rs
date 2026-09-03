@@ -46,7 +46,9 @@ pub mod ph {
     pub const ALIGN_CENTER_V: &str = "\u{E50C}";
     pub const STACK: &str = "\u{E466}";
     pub const CARET_DOWN: &str = "\u{E136}";
+    pub const CARET_RIGHT: &str = "\u{E13A}";
     pub const CARET_UP: &str = "\u{E13C}";
+    pub const FRAME_CORNERS: &str = "\u{E626}";
     pub const PLAY: &str = "\u{E3D0}";
     pub const PAUSE: &str = "\u{E39E}";
     pub const REPEAT: &str = "\u{E3F6}";
@@ -181,6 +183,7 @@ fn tool_glyph(tool: Tool) -> &'static str {
         Tool::Wand => ph::MAGIC_WAND,
         Tool::Hand => ph::HAND,
         Tool::Zoom => ph::MAGNIFYING_GLASS_PLUS,
+        Tool::Artboard => ph::FRAME_CORNERS,
     }
 }
 

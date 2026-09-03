@@ -33,9 +33,29 @@ Chrome follows your desktop: Omarchy theme colours and the font from `omarchy fo
 
 ## Design
 
-- **Move** `V` — click to select, drag to move, eight handles scale, the handle above the box rotates. Shift-click adds to the selection.
-- **Node** `A` — drag points and Bézier handles. Click a segment to insert. Alt-click converts corner/smooth. Delete removes the selected point. Object → Break path. Shapes convert to a path the first time you edit them.
-- **Pen** `P` — click a corner, click-drag a smooth point. The cubic is drawn as you go. Enter or double-click finishes an **open** path. Click the first point to close. Click an open endpoint to continue it, or to join it to the path you're drawing.
+- **Move** `V` — click to select, drag to move, eight handles scale, the handle above the box rotates. Shift-click adds to the selection. Alt-drag clones. Corner dots round a rectangle.
+- **Node** `A` — drag points and Bézier handles. Shift-click adds nodes. Drag a box around nodes to select them. Drag a segment to move the line. Click a curve to insert. Alt-click converts corner/smooth. Alt-drag a handle breaks symmetry. Delete removes selected points. Object → Break path. Shapes convert to a path the first time you edit them.
+- **Pen** `P` — click a corner, click-drag a smooth point (a twitch under 3px stays a corner). Shift constrains 45°. Alt-drag breaks handle symmetry. The cubic is drawn as you go. Enter or double-click finishes an **open** path. Esc removes the last point, then cancels. Click the first point to close. Click an open endpoint to continue it, or to join it to the path you're drawing.
+- **Artboard** `Shift+O` — draw a new board, drag to move, handles scale, the top handle rotates. Alt-drag clones. Object → Wrap selection in artboard. Click the name in Transform to rename.
+
+Pen / Node parity with Affinity, Illustrator, and Inkscape:
+
+| Gesture | Pen | Node |
+|---|---|---|
+| Click | Corner | Select (Shift adds) |
+| Click-drag | Smooth | Move selected points |
+| Alt-drag | Break handle | Break handle |
+| Shift | 45° | 45° on handles |
+| Esc | Drop last point, then cancel | — |
+| Enter / double-click | Finish open | — |
+| Click first point | Close | — |
+| Click open end | Continue / join | — |
+| Box | — | Select those nodes |
+| Drag a segment | — | Move the line |
+| Click a curve | — | Insert |
+| Alt-click a point | — | Corner ↔ smooth |
+| Delete | — | Remove selected points |
+
 - **Pencil** `N` — freehand curve.
 - **Rectangle** `R` / **Ellipse** `O` / **Polygon** `Y` / **Star** `S` / **Line** `L` — drag. Shift constrains. Corner radius, sides, and inner radius live in Transform.
 - **Type** `T` — click to place, type on the canvas. First keystroke replaces the “Type” placeholder. Enter is a new line. Esc or click away finishes. Double-click existing type to edit. Character studio: font, size, tracking, leading, OpenType (kerning, ligatures, tabular figures, small caps).
@@ -49,7 +69,13 @@ Colour studio: HSV, hex, swatches, recent. `X` swaps fill/stroke. `D` restores d
 
 Boolean (Object menu): union, subtract, intersect, XOR. Combine `Ctrl+G`, release `Ctrl+Shift+G`. Align and distribute. Bring to front / send to back. Snap to grid, guides, objects. Click a ruler to drop a guide.
 
-**FX** (right studio): SVG filter effects on the active layer — blur, drop/inner shadow, offset, dilate/erode, saturate, hue rotate, brightness, contrast, invert, color matrix, turbulence, displacement. Params are the SVG ones. They rasterise on the canvas and write `<filter>` / `fe*` on SVG export.
+**FX** (right studio): SVG filter effects on the selected object, then the layer underneath — blur, drop/inner shadow, offset, dilate/erode, saturate, hue rotate, brightness, contrast, invert, color matrix, turbulence, displacement. Params are the SVG ones. They rasterise on the canvas and write `<filter>` / `fe*` on SVG export.
+
+Layers expand to show objects. Eye and lock work per object. Click a name to select it on the canvas.
+
+Tabs sit left of the tools. Ctrl+N is a new tab. Ctrl+O opens another tab. Right-click a tab to close it. Unsaved work asks Save / Discard / Cancel.
+
+Idle for a second writes `~/.local/share/omadesign/<id>.oma.swp`. Save deletes it. The splash Recovered tab lists crash leftovers. Recents lists `.oma` files you actually opened.
 
 ## Pixel
 
@@ -78,10 +104,11 @@ PNG/JPEG/static SVG stay the rest pose. The clip lives in the `.oma`.
 ## Files
 
 - Project: `.oma` (JSON, rasters PNG-packed, motion clip)
-- **File → Place…** `Ctrl+Shift+P` — PNG/JPEG/WebP/TIFF/GIF/BMP or SVG onto the current artboard. Click to drop at native size, drag to size it. Enter places at the centre. Esc cancels.
-- Drop a file on the canvas or the welcome screen: images and SVG place, `.oma` opens, Lottie imports.
-- Export: PNG (1×/2×/3×), JPEG, SVG, animated SVG, Lottie JSON
-- Copy / cut / paste shapes. Copy style `Ctrl+Alt+C`, paste style `Ctrl+Alt+V`.
+- **File → Place…** `Ctrl+Shift+P` — PNG/JPEG/WebP/TIFF/GIF/BMP, SVG, PDF, AI, EPS, PSD onto the current artboard. Click to drop at native size, drag to size it. Enter places at the centre. Esc cancels. Placed rasters are selectable objects: move, scale, rotate.
+- Drop a file on the canvas or the welcome screen: images and SVG place, `.oma` opens, Lottie imports. Affinity `.afdesign` is not readable — export SVG or PDF from Affinity first.
+- Open/Place format matrix: native `.oma` / SVG / PNG / JPEG / WebP / GIF / BMP / TIFF. Converted with poppler / Ghostscript / ImageMagick / Inkscape: PDF, AI (PDF-based), EPS, PSD. Unsupported with a clear error: Affinity packages.
+- Export: PNG (1×/2×/3×), JPEG, SVG (cubics stay cubics, rasters keep their box, type writes `<text>`), animated SVG, Lottie JSON
+- Copy / cut / paste objects. Status bar says so. Copy style `Ctrl+Alt+C`, paste style `Ctrl+Alt+V`. Alt-drag clones.
 - Native file dialogs. Right-click the canvas for Place, Trace, and the same edits.
 
 ## Keys

@@ -171,7 +171,7 @@ pub fn show_asset_browser(ui: &mut egui::Ui, studio: &mut Studio) {
                                             Some(full) => {
                                                 let name = format!("{} {}", hit.provider, hit.tags.chars().take(20).collect::<String>());
                                                 let mut layer = Layer::raster(name.clone(), full.w, full.h);
-                                                if let crate::document::LayerKind::Raster { pixels } = &mut layer.kind {
+                                                if let crate::document::LayerKind::Raster { pixels, .. } = &mut layer.kind {
                                                     *pixels = crate::document::Pixels::from_rgba(full.w, full.h, full.data).unwrap_or_else(|| crate::document::Pixels::new(full.w, full.h));
                                                 }
                                                 let idx = studio.doc.layers.len();

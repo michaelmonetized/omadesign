@@ -327,16 +327,44 @@ fn draw_content(
     match &layer.kind {
         LayerKind::Vector { shapes } => {
             for s in shapes {
+                if !s.visible {
+                    continue;
+                }
                 let pose = pose_of(s.id, motion_t, doc, overrides);
                 draw_shape(pm, s, t, opacity, blend, pose);
             }
             if let Some(p) = preview {
-                let pose = pose_of(p.id, motion_t, doc, overrides);
-                draw_shape(pm, p, t, opacity * 0.85, blend, pose);
+                if p.visible {
+                    let pose = pose_of(p.id, motion_t, doc, overrides);
+                    draw_shape(pm, p, t, opacity * 0.85, blend, pose);
+                }
             }
         }
-        LayerKind::Raster { pixels } => {
+        LayerKind::Raster { pixels, origin, size, rotation } => {
+            let (ox, oy, dw, dh) = {
+                let native_w = pixels.w as f32;
+                let native_h = pixels.h as f32;
+                let (dw, dh) = if size.x.abs() > 0.5 && size.y.abs() > 0.5 {
+                    (size.x, size.y)
+                } else {
+                    (native_w, native_h)
+                };
+                (origin.x, origin.y, dw, dh)
+            };
             let _ = pixels.with_pm(|src| {
+                let sx = if src.width() == 0 { 1.0 } else { dw / src.width() as f32 };
+                let sy = if src.height() == 0 { 1.0 } else { dh / src.height() as f32 };
+                let mut xf = Transform::from_translate(ox, oy)
+                    .pre_scale(sx, sy);
+                if rotation.abs() > 1e-5 {
+                    let cx = ox + dw * 0.5;
+                    let cy = oy + dh * 0.5;
+                    xf = Transform::from_translate(cx, cy)
+                        .pre_concat(Transform::from_rotate(rotation.to_degrees()))
+                        .pre_concat(Transform::from_translate(-cx, -cy))
+                        .pre_concat(xf);
+                }
+                xf = t.pre_concat(xf);
                 pm.draw_pixmap(
                     0,
                     0,
@@ -347,7 +375,7 @@ fn draw_content(
                         quality: tiny_skia::FilterQuality::Bilinear,
                         ..Default::default()
                     },
-                    t,
+                    xf,
                     None,
                 );
             });
@@ -385,6 +413,43 @@ fn pose_of(
 }
 
 fn draw_shape(
+    pm: &mut Pixmap,
+    shape: &Shape,
+    t: Transform,
+    opacity: f32,
+    blend: tiny_skia::BlendMode,
+    pose: Pose,
+) {
+    if shape.filters.active() {
+        let pad = crate::filter::svg_pad(&shape.filters).ceil().max(8.0);
+        let b = shape.world_bbox().inflate(pad);
+        let tw = b.width().ceil().max(1.0) as u32;
+        let th = b.height().ceil().max(1.0) as u32;
+        if let Some(mut temp) = Pixmap::new(tw, th) {
+            let local = Transform::from_translate(-b.min.x, -b.min.y);
+            draw_shape_inner(&mut temp, shape, local, 1.0, tiny_skia::BlendMode::SourceOver, pose);
+            crate::filter::apply(&mut temp, &shape.filters);
+            let xf = t.pre_concat(Transform::from_translate(b.min.x, b.min.y));
+            pm.draw_pixmap(
+                0,
+                0,
+                temp.as_ref(),
+                &PixmapPaint {
+                    opacity: opacity.clamp(0.0, 1.0),
+                    blend_mode: blend,
+                    quality: tiny_skia::FilterQuality::Bilinear,
+                    ..Default::default()
+                },
+                xf,
+                None,
+            );
+        }
+        return;
+    }
+    draw_shape_inner(pm, shape, t, opacity, blend, pose);
+}
+
+fn draw_shape_inner(
     pm: &mut Pixmap,
     shape: &Shape,
     t: Transform,

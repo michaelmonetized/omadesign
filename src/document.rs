@@ -2,9 +2,12 @@
 
 use crate::color::{Blend, Rgba};
 use crate::geom::{Bounds, Geom, Pt};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicU64, Ordering};
+
+/// Selection id for a raster layer treated as an object (placed image).
+pub const RASTER_ID: u64 = 0;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -130,6 +133,10 @@ impl Default for Style {
     }
 }
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Shape {
     pub id: u64,
@@ -138,6 +145,15 @@ pub struct Shape {
     pub style: Style,
     pub rotation: f32,
     pub opacity: f32,
+    #[serde(default = "default_true")]
+    pub visible: bool,
+    #[serde(default)]
+    pub locked: bool,
+    #[serde(default)]
+    pub filters: crate::filter::FilterStack,
+    /// Per-corner radii (TL, TR, BR, BL). All zero → use `Geom::Rect.radius`.
+    #[serde(default)]
+    pub corners: [f32; 4],
     #[serde(skip)]
     cached_path: std::cell::RefCell<Option<tiny_skia::Path>>,
     #[serde(skip)]
@@ -154,13 +170,36 @@ impl Shape {
             style,
             rotation: 0.0,
             opacity: 1.0,
+            visible: true,
+            locked: false,
+            filters: crate::filter::FilterStack::default(),
+            corners: [0.0; 4],
             cached_path: RefCell::new(None),
             cached_path_sig: RefCell::new(0),
         }
     }
 
+    pub fn effective_corners(&self) -> [f32; 4] {
+        if self.corners.iter().any(|c| *c > 0.05) {
+            return self.corners;
+        }
+        if let Geom::Rect { radius, .. } = self.geom {
+            [radius; 4]
+        } else {
+            [0.0; 4]
+        }
+    }
+
     pub fn world_contours(&self, segs: usize) -> Vec<Vec<Pt>> {
-        let mut cs = self.geom.contours(segs);
+        let mut cs = if let Geom::Rect { origin, size, .. } = self.geom {
+            vec![crate::geom::rounded_rect_corners(
+                origin,
+                size,
+                self.effective_corners(),
+            )]
+        } else {
+            self.geom.contours(segs)
+        };
         if self.rotation.abs() > 1e-5 {
             let c = self.geom.bbox().center();
             for contour in &mut cs {
@@ -212,6 +251,9 @@ impl Shape {
         }
         let mut h = mix(0xC0FFEE, self.rotation.to_bits());
         h = fbits(h, self.opacity);
+        for c in self.corners {
+            h = fbits(h, c);
+        }
         let b = self.geom.bbox();
         h = fbits(h, b.min.x);
         h = fbits(h, b.min.y);
@@ -277,6 +319,7 @@ impl Shape {
                     h = fbits(h, a.h_in.y);
                     h = fbits(h, a.h_out.x);
                     h = fbits(h, a.h_out.y);
+                    h = fbits(h, a.radius);
                 }
             }
             Geom::Text(t) => {
@@ -318,7 +361,7 @@ impl Shape {
         }
         let mut pb = tiny_skia::PathBuilder::new();
         let mut any = false;
-        for contour in self.geom.contours(segs) {
+        for contour in self.world_contours(segs) {
             if contour.len() < 2 {
                 continue;
             }
@@ -450,7 +493,17 @@ impl Pixels {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum LayerKind {
     Vector { shapes: Vec<Shape> },
-    Raster { pixels: Pixels },
+    Raster {
+        pixels: Pixels,
+        /// Display origin. `(0,0)` + zero size = full-buffer paint layer.
+        #[serde(default)]
+        origin: Pt,
+        /// Display size. Zero means native `pixels.w/h`.
+        #[serde(default)]
+        size: Pt,
+        #[serde(default)]
+        rotation: f32,
+    },
 }
 
 impl LayerKind {
@@ -477,16 +530,110 @@ impl LayerKind {
 
     pub fn pixels_mut(&mut self) -> Option<&mut Pixels> {
         match self {
-            LayerKind::Raster { pixels } => Some(pixels),
+            LayerKind::Raster { pixels, .. } => Some(pixels),
             _ => None,
         }
     }
 
     pub fn pixels(&self) -> Option<&Pixels> {
         match self {
-            LayerKind::Raster { pixels } => Some(pixels),
+            LayerKind::Raster { pixels, .. } => Some(pixels),
             _ => None,
         }
+    }
+
+    pub fn is_placed_raster(&self) -> bool {
+        match self {
+            LayerKind::Raster { size, origin, .. } => {
+                size.x.abs() > 0.5 && size.y.abs() > 0.5 || origin.x.abs() > 0.5 || origin.y.abs() > 0.5
+            }
+            _ => false,
+        }
+    }
+
+    pub fn raster_xform(&self) -> Option<(Pt, Pt, f32)> {
+        match self {
+            LayerKind::Raster {
+                pixels,
+                origin,
+                size,
+                rotation,
+            } => {
+                let sz = if size.x.abs() > 0.5 && size.y.abs() > 0.5 {
+                    *size
+                } else {
+                    Pt::new(pixels.w as f32, pixels.h as f32)
+                };
+                Some((*origin, sz, *rotation))
+            }
+            _ => None,
+        }
+    }
+
+    pub fn raster_bounds(&self) -> Option<Bounds> {
+        let (origin, size, rotation) = self.raster_xform()?;
+        let b = Bounds::from_min_size(origin, size);
+        if rotation.abs() > 1e-5 {
+            let c = b.center();
+            let mut out = Bounds::from_pt(b.min.rotate_about(c, rotation));
+            for p in [Pt::new(b.max.x, b.min.y), b.max, Pt::new(b.min.x, b.max.y)] {
+                out.union_pt(p.rotate_about(c, rotation));
+            }
+            Some(out)
+        } else {
+            Some(b)
+        }
+    }
+
+    pub fn set_raster_xform(&mut self, origin: Pt, size: Pt, rotation: f32) {
+        if let LayerKind::Raster {
+            origin: o,
+            size: s,
+            rotation: r,
+            ..
+        } = self
+        {
+            *o = origin;
+            *s = size;
+            *r = rotation;
+        }
+    }
+
+    pub fn raster_contains(&self, p: Pt) -> bool {
+        let LayerKind::Raster {
+            pixels,
+            origin,
+            size,
+            rotation,
+        } = self
+        else {
+            return false;
+        };
+        let sz = if size.x.abs() > 0.5 && size.y.abs() > 0.5 {
+            *size
+        } else {
+            Pt::new(pixels.w as f32, pixels.h as f32)
+        };
+        if sz.x.abs() < 1.0 || sz.y.abs() < 1.0 {
+            return false;
+        }
+        let c = *origin + sz * 0.5;
+        let q = if rotation.abs() > 1e-5 {
+            p.rotate_about(c, -rotation)
+        } else {
+            p
+        };
+        let local = q - *origin;
+        if local.x < 0.0 || local.y < 0.0 || local.x > sz.x || local.y > sz.y {
+            return false;
+        }
+        let px = ((local.x / sz.x) * pixels.w as f32).floor() as i32;
+        let py = ((local.y / sz.y) * pixels.h as f32).floor() as i32;
+        if px < 0 || py < 0 || px >= pixels.w as i32 || py >= pixels.h as i32 {
+            return false;
+        }
+        let i = ((py as u32 * pixels.w + px as u32) * 4) as usize;
+        pixels.data.get(i + 3).copied().unwrap_or(0) > 8
     }
 }
 
@@ -530,6 +677,28 @@ impl Layer {
             mask: None,
             kind: LayerKind::Raster {
                 pixels: Pixels::new(w, h),
+                origin: Pt::ZERO,
+                size: Pt::ZERO,
+                rotation: 0.0,
+            },
+            filters: crate::filter::FilterStack::default(),
+        }
+    }
+
+    pub fn placed_raster(name: impl Into<String>, pixels: Pixels, origin: Pt, size: Pt) -> Self {
+        Self {
+            id: next_id(),
+            name: name.into(),
+            visible: true,
+            locked: false,
+            opacity: 1.0,
+            blend: Blend::Normal,
+            mask: None,
+            kind: LayerKind::Raster {
+                pixels,
+                origin,
+                size,
+                rotation: 0.0,
             },
             filters: crate::filter::FilterStack::default(),
         }
@@ -569,8 +738,125 @@ impl Default for Grid {
     }
 }
 
-fn default_artboards() -> u32 {
-    1
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Artboard {
+    pub id: u64,
+    pub name: String,
+    pub origin: Pt,
+    pub size: Pt,
+    #[serde(default)]
+    pub rotation: f32,
+}
+
+impl Artboard {
+    pub fn new(index: usize, origin: Pt, size: Pt) -> Self {
+        Self {
+            id: next_id(),
+            name: format!("Artboard {}", index + 1),
+            origin,
+            size,
+            rotation: 0.0,
+        }
+    }
+
+    pub fn blank() -> Self {
+        Self {
+            id: 0,
+            name: String::new(),
+            origin: Pt::ZERO,
+            size: Pt::ZERO,
+            rotation: 0.0,
+        }
+    }
+
+    pub fn tiled(count: u32, page_w: f32, page_h: f32) -> Vec<Self> {
+        let n = count.max(1);
+        (0..n)
+            .map(|i| {
+                Self::new(
+                    i as usize,
+                    Pt::new((page_w + 48.0) * i as f32, 0.0),
+                    Pt::new(page_w, page_h),
+                )
+            })
+            .collect()
+    }
+
+    pub fn bounds(&self) -> Bounds {
+        let b = Bounds::from_min_size(self.origin, self.size);
+        if self.rotation.abs() < 1e-5 {
+            return b;
+        }
+        let c = b.center();
+        let mut out = Bounds::from_pt(b.min.rotate_about(c, self.rotation));
+        for p in [Pt::new(b.max.x, b.min.y), b.max, Pt::new(b.min.x, b.max.y)] {
+            out.union_pt(p.rotate_about(c, self.rotation));
+        }
+        out
+    }
+
+    pub fn contains(&self, p: Pt) -> bool {
+        let c = self.origin + self.size * 0.5;
+        let q = if self.rotation.abs() > 1e-5 {
+            p.rotate_about(c, -self.rotation)
+        } else {
+            p
+        };
+        let d = q - self.origin;
+        d.x >= 0.0 && d.y >= 0.0 && d.x <= self.size.x && d.y <= self.size.y
+    }
+
+    pub fn area(&self) -> f32 {
+        self.size.x.abs() * self.size.y.abs()
+    }
+
+    /// Distance to the frame. Inside: nearest edge. Outside: distance to rect.
+    pub fn edge_dist(&self, p: Pt) -> f32 {
+        let b = self.bounds();
+        if b.is_empty() {
+            return f32::MAX;
+        }
+        let dx = if p.x < b.min.x {
+            b.min.x - p.x
+        } else if p.x > b.max.x {
+            p.x - b.max.x
+        } else {
+            0.0
+        };
+        let dy = if p.y < b.min.y {
+            b.min.y - p.y
+        } else if p.y > b.max.y {
+            p.y - b.max.y
+        } else {
+            0.0
+        };
+        if dx > 0.0 && dy > 0.0 {
+            (dx * dx + dy * dy).sqrt()
+        } else if dx > 0.0 {
+            dx
+        } else if dy > 0.0 {
+            dy
+        } else {
+            (p.x - b.min.x)
+                .min(b.max.x - p.x)
+                .min(p.y - b.min.y)
+                .min(b.max.y - p.y)
+        }
+    }
+}
+
+fn deserialize_artboards<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<Artboard>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        Count(u32),
+        List(Vec<Artboard>),
+    }
+    match Raw::deserialize(d)? {
+        Raw::List(v) if !v.is_empty() => Ok(v),
+        Raw::List(_) => Ok(vec![Artboard::blank()]),
+        Raw::Count(n) => Ok((0..n.max(1)).map(|_| Artboard::blank()).collect()),
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -584,8 +870,8 @@ pub struct Document {
     pub grid: Grid,
     #[serde(default)]
     pub transparent: bool,
-    #[serde(default = "default_artboards")]
-    pub artboards: u32,
+    #[serde(default, deserialize_with = "deserialize_artboards")]
+    pub artboards: Vec<Artboard>,
     #[serde(default)]
     pub show_bleed: bool,
     #[serde(default)]
@@ -611,28 +897,30 @@ impl Document {
         show_bleed: bool,
         show_safe: bool,
     ) -> Self {
-        let w = width.max(1.0) as u32;
-        let h = height.max(1.0) as u32;
+        let page_w = width.max(1.0);
+        let page_h = height.max(1.0);
         let art = artboards.max(1);
-        // For multiple artboards we tile them horizontally with a 48px gutter.
+        let boards = Artboard::tiled(art, page_w, page_h);
         let total_w = if art > 1 {
-            w * art + 48 * (art - 1)
+            page_w * art as f32 + 48.0 * (art as f32 - 1.0)
         } else {
-            w
+            page_w
         };
+        let w = total_w.round().max(1.0) as u32;
+        let h = page_h.round().max(1.0) as u32;
         let mut doc = Self {
             name: name.into(),
-            width: if art > 1 { total_w as f32 } else { width },
-            height,
+            width: total_w,
+            height: page_h,
             dpi,
             layers: vec![
-                Layer::raster("Background", total_w, h),
+                Layer::raster("Background", w, h),
                 Layer::vector("Layer 1"),
             ],
             guides: vec![],
             grid: Grid::default(),
             transparent,
-            artboards: art,
+            artboards: boards,
             show_bleed,
             show_safe,
             bleed: 36.0, // 0.125" at 300dpi or 0.5" at 72dpi ~ 36px
@@ -651,13 +939,6 @@ impl Document {
                 px.touch();
             }
         }
-        if art > 1 {
-            // Vertical artboard separators as guides
-            for i in 1..art {
-                let x = (w as f32 + 48.0) * i as f32 - 24.0;
-                doc.guides.push(Guide { vertical: true, pos: x });
-            }
-        }
         if show_bleed {
             // Outer bleed rect guides
             let b = doc.bleed;
@@ -667,6 +948,76 @@ impl Document {
             doc.guides.push(Guide { vertical: false, pos: doc.height + b });
         }
         doc
+    }
+
+    pub fn migrate_artboards(&mut self) {
+        if self.artboards.is_empty() {
+            self.artboards = vec![Artboard::new(
+                0,
+                Pt::ZERO,
+                Pt::new(self.width.max(1.0), self.height.max(1.0)),
+            )];
+            return;
+        }
+        if self.artboards.iter().all(|a| a.size.x < 1.0 && a.size.y < 1.0) {
+            let n = self.artboards.len().max(1) as u32;
+            let gutter = 48.0;
+            let page_w = if n > 1 {
+                (self.width - gutter * (n as f32 - 1.0)) / n as f32
+            } else {
+                self.width
+            };
+            self.artboards = Artboard::tiled(n, page_w.max(1.0), self.height.max(1.0));
+        }
+        for (i, a) in self.artboards.iter_mut().enumerate() {
+            if a.id == 0 {
+                a.id = next_id();
+            }
+            if a.name.trim().is_empty() {
+                a.name = format!("Artboard {}", i + 1);
+            }
+        }
+    }
+
+    pub fn unique_artboard_name(&self, wanted: &str) -> String {
+        let base = wanted.trim();
+        let base = if base.is_empty() { "Artboard" } else { base };
+        if !self.artboards.iter().any(|a| a.name == base) {
+            return base.to_string();
+        }
+        for n in 2..10_000 {
+            let cand = format!("{base} {n}");
+            if !self.artboards.iter().any(|a| a.name == cand) {
+                return cand;
+            }
+        }
+        format!("{base} {}", next_id())
+    }
+
+    pub fn artboard_hit(&self, p: Pt, slack: f32) -> Option<u64> {
+        let mut best_edge: Option<(f32, f32, u64)> = None;
+        let mut best_in: Option<(f32, u64)> = None;
+        for a in &self.artboards {
+            let area = a.area().max(1.0);
+            let d = a.edge_dist(p);
+            if d <= slack {
+                let better = best_edge.is_none_or(|(bd, ba, _)| {
+                    d + 0.5 < bd || ((d - bd).abs() <= 0.5 && area < ba)
+                });
+                if better {
+                    best_edge = Some((d, area, a.id));
+                }
+            }
+            if a.contains(p) {
+                let better = best_in.is_none_or(|(ba, _)| area < ba);
+                if better {
+                    best_in = Some((area, a.id));
+                }
+            }
+        }
+        best_edge
+            .map(|(_, _, id)| id)
+            .or_else(|| best_in.map(|(_, id)| id))
     }
 
     pub fn size(&self) -> Pt {
@@ -688,10 +1039,16 @@ impl Document {
             }
             if let Some(shapes) = layer.kind.shapes() {
                 for shape in shapes.iter().rev() {
+                    if !shape.visible || shape.locked {
+                        continue;
+                    }
                     if shape.contains_world(p) || shape.dist_world(p) <= stroke_slack {
                         return Some((li, shape.id));
                     }
                 }
+            }
+            if layer.kind.is_placed_raster() && layer.kind.raster_contains(p) {
+                return Some((li, RASTER_ID));
             }
         }
         None
@@ -705,9 +1062,19 @@ impl Document {
             }
             if let Some(shapes) = layer.kind.shapes() {
                 for shape in shapes {
+                    if !shape.visible || shape.locked {
+                        continue;
+                    }
                     if shape.world_bbox().intersects(r) {
                         out.push((li, shape.id));
                     }
+                }
+            }
+            if layer.kind.is_placed_raster() {
+                if let Some(b) = layer.kind.raster_bounds()
+                    && b.intersects(r)
+                {
+                    out.push((li, RASTER_ID));
                 }
             }
         }
@@ -724,7 +1091,11 @@ impl Document {
                 }
             }
         }
+        for a in &self.artboards {
+            max = max.max(a.id);
+        }
         bump_id(max);
+        self.migrate_artboards();
     }
 }
 
@@ -813,11 +1184,42 @@ pub enum Cmd {
         before: crate::filter::FilterStack,
         after: crate::filter::FilterStack,
     },
+    SetShapeFilters {
+        layer: usize,
+        id: u64,
+        before: crate::filter::FilterStack,
+        after: crate::filter::FilterStack,
+    },
+    SetShapeMeta {
+        layer: usize,
+        id: u64,
+        name: String,
+        visible: bool,
+        locked: bool,
+        before: (String, bool, bool),
+    },
+    SetRasterXform {
+        layer: usize,
+        before: (Pt, Pt, f32),
+        after: (Pt, Pt, f32),
+    },
+    SetArtboards {
+        before: Vec<Artboard>,
+        after: Vec<Artboard>,
+    },
+    SetCorners {
+        layer: usize,
+        id: u64,
+        before: [f32; 4],
+        after: [f32; 4],
+        radius_before: f32,
+        radius_after: f32,
+    },
 }
 
 const MAX_HISTORY: usize = 200;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct History {
     undo: Vec<Cmd>,
     redo: Vec<Cmd>,
@@ -949,6 +1351,79 @@ fn coalesce(prev: &mut Cmd, next: &Cmd) -> bool {
             *after = a2.clone();
             true
         }
+        (
+            Cmd::SetShapeFilters { layer, id, after, .. },
+            Cmd::SetShapeFilters {
+                layer: l2,
+                id: i2,
+                after: a2,
+                ..
+            },
+        ) if *layer == *l2 && *id == *i2 => {
+            *after = a2.clone();
+            true
+        }
+        (
+            Cmd::SetRasterXform { layer, after, .. },
+            Cmd::SetRasterXform {
+                layer: l2,
+                after: a2,
+                ..
+            },
+        ) if *layer == *l2 => {
+            *after = *a2;
+            true
+        }
+        (
+            Cmd::SetArtboards { after, .. },
+            Cmd::SetArtboards { after: a2, .. },
+        ) => {
+            *after = a2.clone();
+            true
+        }
+        (
+            Cmd::SetCorners {
+                layer,
+                id,
+                after,
+                radius_after,
+                ..
+            },
+            Cmd::SetCorners {
+                layer: l2,
+                id: i2,
+                after: a2,
+                radius_after: r2,
+                ..
+            },
+        ) if *layer == *l2 && *id == *i2 => {
+            *after = *a2;
+            *radius_after = *r2;
+            true
+        }
+        (
+            Cmd::SetShapeMeta {
+                layer,
+                id,
+                name,
+                visible,
+                locked,
+                ..
+            },
+            Cmd::SetShapeMeta {
+                layer: l2,
+                id: i2,
+                name: n2,
+                visible: v2,
+                locked: k2,
+                ..
+            },
+        ) if *layer == *l2 && *id == *i2 => {
+            *name = n2.clone();
+            *visible = *v2;
+            *locked = *k2;
+            true
+        }
         _ => false,
     }
 }
@@ -1057,6 +1532,56 @@ fn invert_cmd(cmd: Cmd) -> Cmd {
             index,
             before: after,
             after: before,
+        },
+        Cmd::SetShapeFilters {
+            layer,
+            id,
+            before,
+            after,
+        } => Cmd::SetShapeFilters {
+            layer,
+            id,
+            before: after,
+            after: before,
+        },
+        Cmd::SetShapeMeta {
+            layer,
+            id,
+            name,
+            visible,
+            locked,
+            before,
+        } => Cmd::SetShapeMeta {
+            layer,
+            id,
+            name: before.0.clone(),
+            visible: before.1,
+            locked: before.2,
+            before: (name, visible, locked),
+        },
+        Cmd::SetRasterXform { layer, before, after } => Cmd::SetRasterXform {
+            layer,
+            before: after,
+            after: before,
+        },
+        Cmd::SetArtboards { before, after } => Cmd::SetArtboards {
+            before: after,
+            after: before,
+        },
+        Cmd::SetCorners {
+            layer,
+            id,
+            before,
+            after,
+            radius_before,
+            radius_after,
+        } => Cmd::SetCorners {
+            layer,
+            id,
+            before: after,
+            after: before,
+            radius_before: radius_after,
+            radius_after: radius_before,
         },
     }
 }
@@ -1192,6 +1717,52 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
                 l.filters = after.clone();
             }
         }
+        Cmd::SetShapeFilters {
+            layer,
+            id,
+            after,
+            ..
+        } => {
+            if let Some(s) = doc.find_shape_mut(*layer, *id) {
+                s.filters = after.clone();
+            }
+        }
+        Cmd::SetShapeMeta {
+            layer,
+            id,
+            name,
+            visible,
+            locked,
+            ..
+        } => {
+            if let Some(s) = doc.find_shape_mut(*layer, *id) {
+                s.name = name.clone();
+                s.visible = *visible;
+                s.locked = *locked;
+            }
+        }
+        Cmd::SetRasterXform { layer, after, .. } => {
+            if let Some(l) = doc.layers.get_mut(*layer) {
+                l.kind.set_raster_xform(after.0, after.1, after.2);
+            }
+        }
+        Cmd::SetArtboards { after, .. } => {
+            doc.artboards = after.clone();
+        }
+        Cmd::SetCorners {
+            layer,
+            id,
+            after,
+            radius_after,
+            ..
+        } => {
+            if let Some(s) = doc.find_shape_mut(*layer, *id) {
+                s.corners = *after;
+                if let Geom::Rect { radius, .. } = &mut s.geom {
+                    *radius = *radius_after;
+                }
+            }
+        }
         Cmd::AddGuide { guide } => doc.guides.push(*guide),
         Cmd::RemoveGuide { index, guide } => {
             if *index < doc.guides.len() {
@@ -1273,5 +1844,63 @@ mod tests {
         s.geom.translate(Pt::new(40.0, 0.0));
         let b = s.get_cached_path(8).unwrap();
         assert_ne!(a.bounds(), b.bounds(), "moved shape must rebuild its path");
+    }
+
+    #[test]
+    fn artboard_count_migrates() {
+        let json = r#"{"name":"t","width":200,"height":100,"dpi":72,"layers":[],"guides":[],"grid":{"visible":false,"snap":true,"size":8,"subdivisions":1},"artboards":3}"#;
+        let mut doc: Document = serde_json::from_str(json).unwrap();
+        doc.migrate_artboards();
+        assert_eq!(doc.artboards.len(), 3);
+        assert!(doc.artboards[0].size.x > 1.0);
+        assert_eq!(doc.artboards[0].name, "Artboard 1");
+        assert!(doc.artboards[0].id != 0);
+    }
+
+    #[test]
+    fn placed_raster_hit_test() {
+        let mut doc = Document::new("t", 200.0, 100.0, 72.0);
+        let mut data = vec![0u8; 8 * 8 * 4];
+        for px in data.chunks_mut(4) {
+            px[0] = 255;
+            px[3] = 255;
+        }
+        let pixels = Pixels::from_rgba(8, 8, data).unwrap();
+        doc.layers.push(Layer::placed_raster(
+            "photo",
+            pixels,
+            Pt::new(40.0, 20.0),
+            Pt::new(80.0, 80.0),
+        ));
+        let li = doc.layers.len() - 1;
+        assert_eq!(doc.hit_test(Pt::new(50.0, 30.0), 2.0), Some((li, RASTER_ID)));
+        assert_eq!(doc.hit_test(Pt::new(5.0, 5.0), 2.0), None);
+    }
+
+    #[test]
+    fn artboard_hit_prefers_smaller_and_edges() {
+        let mut doc = Document::new("t", 1920.0, 1080.0, 72.0);
+        doc.artboards = vec![
+            Artboard {
+                id: 1,
+                name: "A".into(),
+                origin: Pt::ZERO,
+                size: Pt::new(1920.0, 1080.0),
+                rotation: 0.0,
+            },
+            Artboard {
+                id: 2,
+                name: "B".into(),
+                origin: Pt::new(-8.0, -32.0),
+                size: Pt::new(3052.0, 1140.0),
+                rotation: 0.0,
+            },
+        ];
+        // Centre of A is inside both; smaller A wins.
+        assert_eq!(doc.artboard_hit(Pt::new(960.0, 540.0), 8.0), Some(1));
+        // A's top edge, even though B covers it.
+        assert_eq!(doc.artboard_hit(Pt::new(100.0, 0.0), 8.0), Some(1));
+        // Only B's margin.
+        assert_eq!(doc.artboard_hit(Pt::new(2500.0, 500.0), 8.0), Some(2));
     }
 }

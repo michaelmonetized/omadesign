@@ -45,7 +45,7 @@ Press **F1** for the full key list.
 
 - Move, scale (8 handles), rotate (the handle above the box)
 - Node tool: drag points and Bézier handles
-- Pen: click a corner, click-drag a smooth point, Enter finishes, click the first point to close
+- Pen: click a corner, click-drag a smooth point, Enter finishes, click the first point to close. A twitch under 3px stays a corner.
 - Type: click, type on the canvas, Character studio (font, size, tracking, leading, OpenType)
 - Zoom: drag a box to that area; click zooms in, Alt-click out
 - Fill / stroke, boolean, align, snap, layers, copy/paste, z-order

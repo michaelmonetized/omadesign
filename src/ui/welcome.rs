@@ -1,4 +1,4 @@
-use crate::app::Studio;
+use crate::app::{Studio, WelcomePage};
 use crate::presets;
 use crate::ui::theme::{accent, bg_panel, bg_widget, bg_widget_hover, bg_window, border, fg, fg_weak};
 use eframe::egui::{
@@ -71,7 +71,18 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
                     ui.set_max_width(panel_w);
                     ui.vertical(|ui| {
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new("New document").strong().size(15.0));
+                            for (page, label) in [
+                                (WelcomePage::New, "New"),
+                                (WelcomePage::Recents, "Recents"),
+                                (WelcomePage::Recovered, "Recovered"),
+                            ] {
+                                let on = studio.welcome_page == page;
+                                let btn = eframe::egui::Button::new(RichText::new(label).strong())
+                                    .selected(on);
+                                if ui.add_sized(vec2(96.0, 26.0), btn).clicked() {
+                                    studio.welcome_page = page;
+                                }
+                            }
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                 ui.label(
                                     RichText::new("F1 keys  ·  Space pans  ·  Ctrl+scroll zooms")
@@ -81,6 +92,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
                             });
                         });
                         ui.add_space(8.0);
+                        if studio.welcome_page == WelcomePage::New {
                         ui.horizontal(|ui| {
                             for tab in TAB_LABELS {
                                 let on = studio.new_doc_group == *tab;
@@ -180,28 +192,115 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
                                     .prefix("× "),
                             );
                         });
+                        } else if studio.welcome_page == WelcomePage::Recents {
+                            recents_page(ui, studio);
+                        } else {
+                            recovered_page(ui, studio);
+                        }
                     });
                 });
+        },
+    );
+}
 
-            if !studio.recents.is_empty() {
-                ui.add_space(10.0);
-                ui.set_max_width(panel_w);
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(RichText::new("Recent").small().color(fg_weak()));
-                    let recents = studio.recents.clone();
-                    for p in recents.into_iter().take(6) {
-                        let name = p
-                            .file_stem()
-                            .map(|s| s.to_string_lossy().into_owned())
-                            .unwrap_or_else(|| p.display().to_string());
-                        if ui.small_button(&name).clicked() {
-                            studio.open_path(p);
-                        }
+fn recents_page(ui: &mut Ui, studio: &mut Studio) {
+    let recents = crate::project::load_recents_all();
+    studio.recents = crate::project::load_recents();
+    if recents.is_empty() {
+        ui.label(
+            RichText::new("No recent documents yet. Save a .oma and it shows up here.")
+                .small()
+                .color(fg_weak()),
+        );
+        return;
+    }
+    let mut open = None;
+    let mut remove = None;
+    ScrollArea::vertical()
+        .id_salt("welcome-recents")
+        .max_height(ui.available_height())
+        .show(ui, |ui| {
+            for p in &recents {
+                ui.horizontal(|ui| {
+                    let name = p
+                        .file_name()
+                        .map(|s| s.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| p.display().to_string());
+                    let meta = std::fs::metadata(p)
+                        .and_then(|m| m.modified())
+                        .ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| {
+                            let secs = d.as_secs();
+                            format!("{secs}")
+                        })
+                        .unwrap_or_else(|| "missing".into());
+                    if ui.button(&name).on_hover_text(p.display().to_string()).clicked() {
+                        open = Some(p.clone());
+                    }
+                    ui.label(RichText::new(p.display().to_string()).small().color(fg_weak()));
+                    ui.label(RichText::new(meta).small().color(fg_weak()));
+                    if ui.small_button("×").clicked() {
+                        remove = Some(p.clone());
                     }
                 });
             }
-        },
-    );
+        });
+    if let Some(p) = open {
+        studio.open_path(p);
+    }
+    if let Some(p) = remove {
+        crate::project::remove_recent(&p);
+        studio.recents = crate::project::load_recents();
+    }
+}
+
+fn recovered_page(ui: &mut Ui, studio: &mut Studio) {
+    let swaps = crate::project::list_swaps();
+    if swaps.is_empty() {
+        ui.label(
+            RichText::new("Nothing to recover. Crash swaps land in ~/.local/share/omadesign.")
+                .small()
+                .color(fg_weak()),
+        );
+        return;
+    }
+    let mut open = None;
+    let mut drop = None;
+    ScrollArea::vertical()
+        .id_salt("welcome-recovered")
+        .max_height(ui.available_height())
+        .show(ui, |ui| {
+            for (path, meta) in &swaps {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(&meta.name).strong());
+                    if let Some(orig) = &meta.original {
+                        ui.label(
+                            RichText::new(orig.display().to_string())
+                                .small()
+                                .color(fg_weak()),
+                        );
+                    }
+                    ui.label(
+                        RichText::new(format!("saved {}", meta.saved_at))
+                            .small()
+                            .color(fg_weak()),
+                    );
+                    if ui.button("Open").clicked() {
+                        open = Some(path.clone());
+                    }
+                    if ui.small_button("Delete").clicked() {
+                        drop = Some(path.clone());
+                    }
+                });
+            }
+        });
+    if let Some(p) = open {
+        studio.recover_swap(p);
+    }
+    if let Some(p) = drop {
+        studio.delete_swap_file(&p);
+    }
 }
 
 fn preset_card(ui: &mut Ui, p: presets::Preset, card_w: f32) -> bool {

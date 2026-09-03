@@ -982,7 +982,12 @@ fn lottie_path_to_geom(ks: &Value) -> Option<Geom> {
             .and_then(|a| a.get(n))
             .and_then(js_pt)
             .unwrap_or(Pt::ZERO);
-        anchors.push(Anchor { pt, h_in, h_out });
+        anchors.push(Anchor {
+            pt,
+            h_in,
+            h_out,
+            radius: 0.0,
+        });
     }
     if anchors.len() < 2 {
         return None;

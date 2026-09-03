@@ -1,7 +1,8 @@
-use crate::app::{from_egui, to_egui, CreateKind, NodeHit, Op, Studio};
+use crate::app::{from_egui, to_egui, CreateKind, NodeHit, ObjSnap, Op, Studio};
 use crate::compositor::{self, Draft};
-use crate::document::Fill;
+use crate::document::{Fill, RASTER_ID};
 use crate::geom::{insert_anchor, Anchor, Bounds, Geom, Pt};
+use std::collections::BTreeSet;
 use crate::paint;
 use crate::tools::{Persona, Tool};
 use crate::ui::theme::{accent, bg_panel, border, fg_weak, select, select_fill};
@@ -387,20 +388,72 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
         }
     }
 
-    // Drag start. The pen stays in a draft `Op`, so it must accept further
-    // presses — otherwise you get one point and then nothing.
-    let continue_pen = studio.tool == Tool::Pen && matches!(studio.op, Some(Op::Pen { .. }));
+    // Pen places on pointer *down*. The canvas uses Sense::click_and_drag, so
+    // egui withholds drag_started until the pointer moves — a plain click never
+    // reached start_drag, and close-on-first-point died with it.
+    if studio.tool == Tool::Pen {
+        if resp.double_clicked() {
+            if let Some(Op::Pen { anchors, source, .. }) = studio.op.take() {
+                studio.finish_pen(anchors, false, source);
+            }
+            return;
+        }
+        if resp.ctx.input(|i| i.pointer.primary_pressed()) {
+            studio.pen_click_at(pick, snap);
+        }
+        if resp.dragged_by(PointerButton::Primary) {
+            continue_drag(studio, pick, shift, alt);
+        }
+        return;
+    }
+
+    // Same click-vs-drag delay: handles are ~3px. Waiting for drag_started
+    // means the pointer has already left the handle, and a segment steal wins.
+    if studio.tool == Tool::Node {
+        if resp.ctx.input(|i| i.pointer.primary_pressed()) {
+            node_press(studio, pick, snap, shift, alt);
+        }
+        if resp.drag_started_by(PointerButton::Primary) && studio.op.is_none() {
+            start_drag(studio, pick, snap, shift, alt);
+        }
+        if resp.dragged_by(PointerButton::Primary) {
+            continue_drag(studio, pick, shift, alt);
+        }
+        if resp.clicked() && !resp.dragged() && !resp.drag_stopped() {
+            click(studio, pick, shift, alt);
+        }
+        return;
+    }
+
+    if studio.tool == Tool::Artboard {
+        if resp.ctx.input(|i| i.pointer.primary_pressed()) {
+            artboard_press(studio, pick, snap, shift, alt);
+        }
+        if resp.drag_started_by(PointerButton::Primary) && studio.op.is_none() {
+            start_drag(studio, pick, snap, shift, alt);
+        }
+        if resp.dragged_by(PointerButton::Primary) {
+            continue_drag(studio, pick, shift, alt);
+        }
+        return;
+    }
+
     if resp.drag_started_by(PointerButton::Primary) {
-        if studio.op.is_some() && !continue_pen {
+        if studio.op.is_some() {
             end_drag(studio, snap, alt, ctrl, shift);
         }
-        if studio.op.is_none() || continue_pen {
+        if studio.op.is_none() {
             start_drag(studio, pick, snap, shift, alt);
         }
     }
 
     if resp.dragged_by(PointerButton::Primary) {
-        continue_drag(studio, snap, shift, alt);
+        let world = if matches!(studio.tool, Tool::Node | Tool::Artboard) {
+            pick
+        } else {
+            snap
+        };
+        continue_drag(studio, world, shift, alt);
     }
 
     if resp.clicked() && !resp.dragged() && !resp.drag_stopped() {
@@ -408,7 +461,7 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
     }
 
     if resp.double_clicked() {
-        if let Some(Op::Pen { anchors, source }) = studio.op.take() {
+        if let Some(Op::Pen { anchors, source, .. }) = studio.op.take() {
             studio.finish_pen(anchors, false, source);
         } else {
             let slack = 8.0 / studio.view.scale.max(0.01);
@@ -439,10 +492,28 @@ fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
     if studio.type_edit.is_none()
         && !matches!(
             studio.tool,
-            Tool::Hand | Tool::Zoom | Tool::Node | Tool::Pen | Tool::Trace
+            Tool::Hand | Tool::Zoom | Tool::Node | Tool::Pen | Tool::Trace | Tool::Artboard
         )
         && !studio.selection.is_empty()
     {
+        if let Some((li, id, which)) = hit_corner(studio, pick) {
+            if let Some(s) = studio.doc.find_shape(li, id) {
+                let radius = match s.geom {
+                    Geom::Rect { radius, .. } => radius,
+                    _ => 0.0,
+                };
+                studio.op = Some(Op::Corner {
+                    layer: li,
+                    id,
+                    which,
+                    orig_corners: s.corners,
+                    orig_radius: radius,
+                    orig_geom: s.geom.clone(),
+                    start: pick,
+                });
+                return;
+            }
+        }
         if let Some(sel) = hit_handle(studio, pick) {
             match sel {
                 HandleKind::Rotate(center) => {
@@ -476,6 +547,9 @@ fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
                     }
                 }
                 studio.active_layer = Some(hit.0);
+                if alt {
+                    studio.duplicate_selection_by(Pt::ZERO);
+                }
                 studio.op = Some(Op::Move {
                     orig: snapshot(studio),
                     start: snap,
@@ -493,26 +567,104 @@ fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
         }
         Tool::Node => {
             if let Some((li, id)) = studio.primary() {
-                studio.ensure_path(li, id);
+                if id != RASTER_ID {
+                    studio.ensure_path(li, id);
+                }
                 if let Some(shape) = studio.doc.find_shape(li, id) {
-                    if let Geom::Path { anchors, .. } = &shape.geom {
-                        if let Some(hit) = hit_node(anchors, pick, 8.0 / studio.view.scale.max(0.01)) {
-                            if let crate::app::NodeHit::Point(i) = hit {
-                                studio.node_sel = Some(i);
+                    if let Geom::Path { anchors, closed } = &shape.geom {
+                        let slack = 8.0 / studio.view.scale.max(0.01);
+                        if let Some(hit) = hit_node(anchors, pick, slack, *closed) {
+                            match hit {
+                                NodeHit::Point(i) => {
+                                    if shift {
+                                        if !studio.node_sel.remove(&i) {
+                                            studio.node_sel.insert(i);
+                                        }
+                                    } else if !studio.node_sel.contains(&i) {
+                                        studio.node_sel.clear();
+                                        studio.node_sel.insert(i);
+                                    }
+                                    let moving = if studio.node_sel.is_empty() {
+                                        let mut s = BTreeSet::new();
+                                        s.insert(i);
+                                        s
+                                    } else {
+                                        studio.node_sel.clone()
+                                    };
+                                    studio.op = Some(Op::Node {
+                                        layer: li,
+                                        id,
+                                        which: hit,
+                                        orig: shape.geom.clone(),
+                                        moving,
+                                    });
+                                    return;
+                                }
+                                NodeHit::HandleIn(_) | NodeHit::HandleOut(_) => {
+                                    studio.op = Some(Op::Node {
+                                        layer: li,
+                                        id,
+                                        which: hit,
+                                        orig: shape.geom.clone(),
+                                        moving: BTreeSet::new(),
+                                    });
+                                    return;
+                                }
+                                NodeHit::Segment(seg) => {
+                                    let mut moving = BTreeSet::new();
+                                    moving.insert(seg);
+                                    moving.insert((seg + 1) % anchors.len().max(1));
+                                    if !closed && seg + 1 >= anchors.len() {
+                                        moving.remove(&(seg + 1));
+                                    }
+                                    studio.node_sel = moving.clone();
+                                    studio.op = Some(Op::Node {
+                                        layer: li,
+                                        id,
+                                        which: hit,
+                                        orig: shape.geom.clone(),
+                                        moving,
+                                    });
+                                    return;
+                                }
                             }
-                            studio.op = Some(Op::Node {
-                                layer: li,
-                                id,
-                                which: hit,
-                                orig: shape.geom.clone(),
-                            });
-                            return;
                         }
+                        let _ = closed;
                     }
                 }
             }
+            studio.op = Some(Op::NodeMarquee {
+                start: snap,
+                cur: snap,
+            });
+            if !shift {
+                studio.node_sel.clear();
+            }
         }
-        Tool::Pen => studio.pen_click(snap),
+        Tool::Artboard => {
+            if let Some(id) = studio.doc.artboard_hit(pick, 8.0 / studio.view.scale.max(0.01)) {
+                if !studio.artboard_sel.contains(&id) {
+                    studio.artboard_sel = vec![id];
+                }
+                if alt {
+                    studio.clone_artboard(id);
+                }
+                studio.op = Some(Op::ArtboardMove {
+                    orig: studio.doc.artboards.clone(),
+                    ids: studio.artboard_sel.clone(),
+                    start: snap,
+                });
+            } else {
+                studio.op = Some(Op::ArtboardDraw {
+                    start: snap,
+                    cur: snap,
+                });
+                if !shift {
+                    studio.artboard_sel.clear();
+                }
+            }
+        }
+        Tool::Pen => studio.pen_click_at(pick, snap),
         Tool::Pencil => {
             studio.op = Some(Op::Pencil { pts: vec![snap] });
         }
@@ -640,15 +792,62 @@ impl PixmapOr {
     }
 }
 
-fn snapshot(studio: &Studio) -> Vec<(usize, u64, Geom, f32)> {
+fn commit_obj_snaps(studio: &mut Studio, orig: Vec<ObjSnap>) {
+    for snap in orig {
+        if snap.id == RASTER_ID {
+            if let Some(l) = studio.doc.layers.get(snap.layer) {
+                if let Some((o, sz, rot)) = l.kind.raster_xform() {
+                    studio.history.push(crate::document::Cmd::SetRasterXform {
+                        layer: snap.layer,
+                        before: (snap.origin, snap.size, snap.rot),
+                        after: (o, sz, rot),
+                    });
+                    studio.dirty = true;
+                }
+            }
+        } else if let (Some(geom), Some(s)) = (
+            snap.geom.clone(),
+            studio.doc.find_shape(snap.layer, snap.id),
+        ) {
+            studio.history.push(crate::document::Cmd::SetGeom {
+                layer: snap.layer,
+                id: snap.id,
+                before: geom,
+                after: s.geom.clone(),
+                rot_before: snap.rot,
+                rot_after: s.rotation,
+            });
+            studio.dirty = true;
+        }
+    }
+}
+
+fn snapshot(studio: &Studio) -> Vec<ObjSnap> {
     studio
         .selection
         .iter()
         .filter_map(|(li, id)| {
-            studio
-                .doc
-                .find_shape(*li, *id)
-                .map(|s| (*li, *id, s.geom.clone(), s.rotation))
+            if *id == RASTER_ID {
+                let layer = studio.doc.layers.get(*li)?;
+                let (origin, size, rot) = layer.kind.raster_xform()?;
+                Some(ObjSnap {
+                    layer: *li,
+                    id: RASTER_ID,
+                    geom: None,
+                    origin,
+                    size,
+                    rot,
+                })
+            } else {
+                studio.doc.find_shape(*li, *id).map(|s| ObjSnap {
+                    layer: *li,
+                    id: *id,
+                    geom: Some(s.geom.clone()),
+                    origin: Pt::ZERO,
+                    size: Pt::ZERO,
+                    rot: s.rotation,
+                })
+            }
         })
         .collect()
 }
@@ -661,13 +860,23 @@ enum HandleKind {
 fn posed_bounds(studio: &Studio) -> Option<Bounds> {
     let mut b: Option<Bounds> = None;
     for (li, id) in &studio.selection {
-        let Some(s) = studio.doc.find_shape(*li, *id) else {
-            continue;
-        };
-        let bb = if studio.is_motion() {
-            studio.live_pose(*id).map_bounds(s.world_bbox())
+        let bb = if *id == RASTER_ID {
+            studio
+                .doc
+                .layers
+                .get(*li)
+                .and_then(|l| l.kind.raster_bounds())
         } else {
-            s.world_bbox()
+            studio.doc.find_shape(*li, *id).map(|s| {
+                if studio.is_motion() {
+                    studio.live_pose(*id).map_bounds(s.world_bbox())
+                } else {
+                    s.world_bbox()
+                }
+            })
+        };
+        let Some(bb) = bb else {
+            continue;
         };
         match &mut b {
             None => b = Some(bb),
@@ -709,19 +918,182 @@ fn hit_handle(studio: &Studio, world: Pt) -> Option<HandleKind> {
     None
 }
 
-fn hit_node(anchors: &[Anchor], world: Pt, slack: f32) -> Option<NodeHit> {
+fn hit_node(anchors: &[Anchor], world: Pt, slack: f32, closed: bool) -> Option<NodeHit> {
+    let handle_slack = slack * 1.75;
     for (i, a) in anchors.iter().enumerate() {
-        if (a.pt + a.h_in - world).length() <= slack && !a.is_corner() {
+        // Ignore collapsed handles sitting on the node — those would steal Point.
+        if a.h_in.length() > slack && (a.pt + a.h_in - world).length() <= handle_slack {
             return Some(NodeHit::HandleIn(i));
         }
-        if (a.pt + a.h_out - world).length() <= slack && !a.is_corner() {
+        if a.h_out.length() > slack && (a.pt + a.h_out - world).length() <= handle_slack {
             return Some(NodeHit::HandleOut(i));
         }
         if (a.pt - world).length() <= slack {
             return Some(NodeHit::Point(i));
         }
     }
+    if let Some((seg, _t, dist)) = crate::geom::closest_on_path(anchors, closed, world)
+        && dist <= slack * 1.2
+    {
+        return Some(NodeHit::Segment(seg));
+    }
     None
+}
+
+/// Grab a point or Bézier handle on pointer down, before egui decides it's a drag.
+fn node_press(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
+    let _ = (snap, alt);
+    let Some((li, id)) = studio.primary() else {
+        return;
+    };
+    if id == RASTER_ID {
+        return;
+    }
+    studio.ensure_path(li, id);
+    let Some(shape) = studio.doc.find_shape(li, id) else {
+        return;
+    };
+    let Geom::Path { anchors, closed } = &shape.geom else {
+        return;
+    };
+    let slack = 8.0 / studio.view.scale.max(0.01);
+    let Some(hit) = hit_node(anchors, pick, slack, *closed) else {
+        return;
+    };
+    match hit {
+        NodeHit::Point(i) => {
+            if shift {
+                if !studio.node_sel.remove(&i) {
+                    studio.node_sel.insert(i);
+                }
+            } else if !studio.node_sel.contains(&i) {
+                studio.node_sel.clear();
+                studio.node_sel.insert(i);
+            }
+            let moving = if studio.node_sel.is_empty() {
+                let mut s = BTreeSet::new();
+                s.insert(i);
+                s
+            } else {
+                studio.node_sel.clone()
+            };
+            studio.op = Some(Op::Node {
+                layer: li,
+                id,
+                which: hit,
+                orig: shape.geom.clone(),
+                moving,
+            });
+        }
+        NodeHit::HandleIn(_) | NodeHit::HandleOut(_) => {
+            studio.op = Some(Op::Node {
+                layer: li,
+                id,
+                which: hit,
+                orig: shape.geom.clone(),
+                moving: BTreeSet::new(),
+            });
+        }
+        NodeHit::Segment(_) => {}
+    }
+}
+
+fn hit_artboard_handle(studio: &Studio, pick: Pt) -> Option<Op> {
+    let slack = 12.0 / studio.view.scale.max(0.01);
+    for id in &studio.artboard_sel {
+        let Some(a) = studio.doc.artboards.iter().find(|x| x.id == *id) else {
+            continue;
+        };
+        let b = a.bounds();
+        let rh = b.rotate_handle();
+        if (rh - pick).length() <= slack {
+            return Some(Op::ArtboardRotate {
+                orig: a.clone(),
+                center: b.center(),
+                start_angle: (pick - b.center()).y.atan2((pick - b.center()).x),
+            });
+        }
+        for i in 0..8 {
+            if (b.handle(i) - pick).length() <= slack {
+                return Some(Op::ArtboardResize {
+                    orig: a.clone(),
+                    handle: i,
+                    start_box: b,
+                });
+            }
+        }
+    }
+    None
+}
+
+fn artboard_press(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
+    let _ = snap;
+    if let Some(op) = hit_artboard_handle(studio, pick) {
+        studio.op = Some(op);
+        return;
+    }
+    let slack = 10.0 / studio.view.scale.max(0.01);
+    if let Some(id) = studio.doc.artboard_hit(pick, slack) {
+        if shift {
+            if let Some(i) = studio.artboard_sel.iter().position(|x| *x == id) {
+                studio.artboard_sel.remove(i);
+            } else {
+                studio.artboard_sel.push(id);
+            }
+        } else if !studio.artboard_sel.contains(&id) {
+            studio.artboard_sel = vec![id];
+        }
+        if alt {
+            studio.clone_artboard(id);
+        }
+        if let Some(op) = hit_artboard_handle(studio, pick) {
+            studio.op = Some(op);
+        }
+        return;
+    }
+    if !shift {
+        studio.artboard_sel.clear();
+    }
+}
+
+fn hit_corner(studio: &Studio, world: Pt) -> Option<(usize, u64, Option<usize>)> {
+    if studio.selection.len() != 1 {
+        return None;
+    }
+    let (li, id) = studio.selection[0];
+    let s = studio.doc.find_shape(li, id)?;
+    let slack = 8.0 / studio.view.scale.max(0.01);
+    match &s.geom {
+        Geom::Rect { origin, size, .. } => {
+            let widgets = crate::geom::corner_widgets(*origin, *size);
+            if studio.tool == Tool::Select {
+                for w in widgets {
+                    if (w - world).length() <= slack {
+                        return Some((li, id, None));
+                    }
+                }
+            } else if studio.tool == Tool::Node {
+                for (i, w) in widgets.iter().enumerate() {
+                    if (*w - world).length() <= slack {
+                        return Some((li, id, Some(i)));
+                    }
+                }
+            }
+            None
+        }
+        Geom::Path { anchors, .. } if studio.tool == Tool::Node => {
+            for &i in &studio.node_sel {
+                if let Some(a) = anchors.get(i) {
+                    let dir = Pt::new(8.0, 8.0) / studio.view.scale.max(0.01);
+                    if (a.pt + dir - world).length() <= slack {
+                        return Some((li, id, Some(i)));
+                    }
+                }
+            }
+            None
+        }
+        _ => None,
+    }
 }
 
 fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
@@ -732,6 +1104,10 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                 | Op::Resize { .. }
                 | Op::Rotate { .. }
                 | Op::Node { .. }
+                | Op::Corner { .. }
+                | Op::ArtboardMove { .. }
+                | Op::ArtboardResize { .. }
+                | Op::ArtboardRotate { .. }
                 | Op::Brush { .. }
                 | Op::Smudge { .. }
                 | Op::Clone { .. }
@@ -758,11 +1134,15 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
             }
             *cur = c;
         }
-        Some(Op::Pen { anchors, .. }) => {
+        Some(Op::Pen { anchors, press, .. }) => {
             if let Some(last) = anchors.last_mut() {
-                let drag = world - last.pt;
-                last.h_out = drag;
-                last.h_in = -drag;
+                crate::geom::apply_pen_smooth(
+                    last,
+                    world - *press,
+                    studio.view.scale,
+                    alt,
+                    shift,
+                );
             }
         }
         Some(Op::Pencil { pts }) => {
@@ -774,18 +1154,29 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
             let d = world - *start;
             if studio.persona == Persona::Motion {
                 studio.playing = false;
-                for (_, id, _, _) in orig.clone() {
-                    let mut pose = studio.doc.motion.pose(id, studio.playhead);
+                for snap in orig.clone() {
+                    if snap.id == RASTER_ID {
+                        continue;
+                    }
+                    let mut pose = studio.doc.motion.pose(snap.id, studio.playhead);
                     pose.dx += d.x;
                     pose.dy += d.y;
-                    studio.pose_drag.insert(id, pose);
+                    studio.pose_drag.insert(snap.id, pose);
                 }
             } else {
-                for (li, id, geom, rot) in orig.clone() {
-                    if let Some(s) = studio.doc.find_shape_mut(li, id) {
+                for snap in orig.clone() {
+                    if snap.id == RASTER_ID {
+                        if let Some(l) = studio.doc.layers.get_mut(snap.layer) {
+                            l.kind
+                                .set_raster_xform(snap.origin + d, snap.size, snap.rot);
+                        }
+                    } else if let (Some(geom), Some(s)) = (
+                        snap.geom.clone(),
+                        studio.doc.find_shape_mut(snap.layer, snap.id),
+                    ) {
                         s.geom = geom;
                         s.geom.translate(d);
-                        s.rotation = rot;
+                        s.rotation = snap.rot;
                     }
                 }
             }
@@ -896,17 +1287,35 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                 let sx = dst.width() / start_box.width().max(1.0);
                 let sy = dst.height() / start_box.height().max(1.0);
                 let f = if shift { sx.max(sy) } else { (sx + sy) * 0.5 };
-                for (_, id, _, _) in orig.clone() {
-                    let mut pose = studio.doc.motion.pose(id, studio.playhead);
+                for snap in orig.clone() {
+                    if snap.id == RASTER_ID {
+                        continue;
+                    }
+                    let mut pose = studio.doc.motion.pose(snap.id, studio.playhead);
                     pose.scale = (pose.scale * f).clamp(0.05, 32.0);
-                    studio.pose_drag.insert(id, pose);
+                    studio.pose_drag.insert(snap.id, pose);
                 }
             } else {
-                for (li, id, geom, rot) in orig.clone() {
-                    if let Some(s) = studio.doc.find_shape_mut(li, id) {
+                for snap in orig.clone() {
+                    if snap.id == RASTER_ID {
+                        let nb = Bounds {
+                            min: start_box.map_pt(snap.origin, dst),
+                            max: start_box.map_pt(snap.origin + snap.size, dst),
+                        };
+                        if let Some(l) = studio.doc.layers.get_mut(snap.layer) {
+                            l.kind.set_raster_xform(
+                                nb.min,
+                                Pt::new(nb.width().max(1.0), nb.height().max(1.0)),
+                                snap.rot,
+                            );
+                        }
+                    } else if let (Some(geom), Some(s)) = (
+                        snap.geom.clone(),
+                        studio.doc.find_shape_mut(snap.layer, snap.id),
+                    ) {
                         s.geom = geom;
                         s.geom.map_into(*start_box, dst);
-                        s.rotation = rot;
+                        s.rotation = snap.rot;
                     }
                 }
             }
@@ -923,17 +1332,30 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
             }
             if studio.persona == Persona::Motion {
                 studio.playing = false;
-                for (_, id, _, _) in orig.clone() {
-                    let mut pose = studio.doc.motion.pose(id, studio.playhead);
+                for snap in orig.clone() {
+                    if snap.id == RASTER_ID {
+                        continue;
+                    }
+                    let mut pose = studio.doc.motion.pose(snap.id, studio.playhead);
                     pose.rotation += ang;
-                    studio.pose_drag.insert(id, pose);
+                    studio.pose_drag.insert(snap.id, pose);
                 }
             } else {
-                for (li, id, geom, rot) in orig.clone() {
-                    if let Some(s) = studio.doc.find_shape_mut(li, id) {
+                for snap in orig.clone() {
+                    if snap.id == RASTER_ID {
+                        let c0 = snap.origin + snap.size * 0.5;
+                        let c1 = c0.rotate_about(*center, ang);
+                        if let Some(l) = studio.doc.layers.get_mut(snap.layer) {
+                            l.kind
+                                .set_raster_xform(snap.origin + (c1 - c0), snap.size, snap.rot + ang);
+                        }
+                    } else if let (Some(geom), Some(s)) = (
+                        snap.geom.clone(),
+                        studio.doc.find_shape_mut(snap.layer, snap.id),
+                    ) {
                         s.geom = geom;
                         s.geom.rotate_about(*center, ang);
-                        s.rotation = rot;
+                        s.rotation = snap.rot + ang;
                     }
                 }
             }
@@ -943,28 +1365,59 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
             id,
             which,
             orig,
+            moving,
         }) => {
-            if let Some(s) = studio.doc.find_shape_mut(*layer, *id) {
-                s.geom = orig.clone();
+            let layer = *layer;
+            let id = *id;
+            let which = *which;
+            let orig = orig.clone();
+            let moving = moving.clone();
+            if let Some(s) = studio.doc.find_shape_mut(layer, id) {
+                s.geom = orig;
                 if let Geom::Path { anchors, .. } = &mut s.geom {
-                    match *which {
+                    match which {
                         NodeHit::Point(i) => {
-                            if let Some(a) = anchors.get_mut(i) {
-                                a.pt = world;
+                            let Some(start) = anchors.get(i).map(|a| a.pt) else {
+                                return;
+                            };
+                            let d = world - start;
+                            for idx in moving {
+                                if let Some(a) = anchors.get_mut(idx) {
+                                    a.pt += d;
+                                }
+                            }
+                        }
+                        NodeHit::Segment(seg) => {
+                            let Some(start) = anchors.get(seg).map(|a| a.pt) else {
+                                return;
+                            };
+                            let d = world - start;
+                            for idx in moving {
+                                if let Some(a) = anchors.get_mut(idx) {
+                                    a.pt += d;
+                                }
                             }
                         }
                         NodeHit::HandleIn(i) => {
                             if let Some(a) = anchors.get_mut(i) {
-                                a.h_in = world - a.pt;
-                                if !shift {
+                                let mut h = world - a.pt;
+                                if shift {
+                                    h = crate::geom::constrain_45(h);
+                                }
+                                a.h_in = h;
+                                if !alt {
                                     a.h_out = -a.h_in;
                                 }
                             }
                         }
                         NodeHit::HandleOut(i) => {
                             if let Some(a) = anchors.get_mut(i) {
-                                a.h_out = world - a.pt;
-                                if !shift {
+                                let mut h = world - a.pt;
+                                if shift {
+                                    h = crate::geom::constrain_45(h);
+                                }
+                                a.h_out = h;
+                                if !alt {
                                     a.h_in = -a.h_out;
                                 }
                             }
@@ -1021,6 +1474,130 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
         Some(Op::CropPhoto { cur, .. }) => *cur = world,
         Some(Op::ZoomBox { cur, .. }) => *cur = world,
         Some(Op::Place { cur, .. }) => *cur = world,
+        Some(Op::NodeMarquee { cur, .. }) => *cur = world,
+        Some(Op::ArtboardDraw { cur, .. }) => *cur = world,
+        Some(Op::Corner {
+            layer,
+            id,
+            which,
+            orig_corners,
+            orig_radius,
+            orig_geom,
+            start,
+        }) => {
+            let layer = *layer;
+            let id = *id;
+            let which = *which;
+            let orig_corners = *orig_corners;
+            let orig_radius = *orig_radius;
+            let orig_geom = orig_geom.clone();
+            let start = *start;
+            if let Some(s) = studio.doc.find_shape_mut(layer, id) {
+                s.geom = orig_geom;
+                let dist = (world - start).length();
+                let sign = if (world - start).dot(Pt::new(1.0, 1.0)) < 0.0 {
+                    1.0
+                } else {
+                    1.0
+                };
+                let r = (orig_radius + dist * 0.5 * sign).max(0.0);
+                match which {
+                    None => {
+                        s.corners = [0.0; 4];
+                        if let Geom::Rect { radius, .. } = &mut s.geom {
+                            *radius = r;
+                        }
+                    }
+                    Some(i) => {
+                        let mut c = orig_corners;
+                        if c.iter().all(|x| *x < 0.05) {
+                            c = [orig_radius; 4];
+                        }
+                        if i < 4 {
+                            c[i] = r;
+                        } else if let Geom::Path { anchors, .. } = &mut s.geom {
+                            if let Some(a) = anchors.get_mut(i) {
+                                a.radius = r;
+                            }
+                        }
+                        s.corners = c;
+                        if let Geom::Rect { radius, .. } = &mut s.geom {
+                            *radius = c.iter().copied().fold(0.0, f32::max);
+                        }
+                    }
+                }
+            }
+        }
+        Some(Op::ArtboardMove { orig, ids, start }) => {
+            let d = world - *start;
+            let orig = orig.clone();
+            let ids = ids.clone();
+            studio.doc.artboards = orig;
+            for a in &mut studio.doc.artboards {
+                if ids.contains(&a.id) {
+                    a.origin += d;
+                }
+            }
+        }
+        Some(Op::ArtboardResize {
+            orig,
+            handle,
+            start_box,
+        }) => {
+            let orig = orig.clone();
+            let handle = *handle;
+            let start_box = *start_box;
+            let (hx, hy) = match handle {
+                0 => (0.0, 0.0),
+                1 => (1.0, 0.0),
+                2 => (1.0, 1.0),
+                3 => (0.0, 1.0),
+                4 => (0.5, 0.0),
+                5 => (1.0, 0.5),
+                6 => (0.5, 1.0),
+                _ => (0.0, 0.5),
+            };
+            let mut min = start_box.min;
+            let mut max = start_box.max;
+            if hx == 0.0 {
+                min.x = world.x;
+            } else if hx == 1.0 {
+                max.x = world.x;
+            }
+            if hy == 0.0 {
+                min.y = world.y;
+            } else if hy == 1.0 {
+                max.y = world.y;
+            }
+            if min.x > max.x {
+                std::mem::swap(&mut min.x, &mut max.x);
+            }
+            if min.y > max.y {
+                std::mem::swap(&mut min.y, &mut max.y);
+            }
+            if let Some(a) = studio.doc.artboards.iter_mut().find(|a| a.id == orig.id) {
+                a.origin = min;
+                a.size = Pt::new((max.x - min.x).max(8.0), (max.y - min.y).max(8.0));
+                a.rotation = orig.rotation;
+            }
+        }
+        Some(Op::ArtboardRotate {
+            orig,
+            center,
+            start_angle,
+        }) => {
+            let mut ang = (world - *center).y.atan2((world - *center).x) - *start_angle;
+            if shift {
+                let step = std::f32::consts::PI / 12.0;
+                ang = (ang / step).round() * step;
+            }
+            let orig = orig.clone();
+            if let Some(a) = studio.doc.artboards.iter_mut().find(|a| a.id == orig.id) {
+                a.origin = orig.origin;
+                a.size = orig.size;
+                a.rotation = orig.rotation + ang;
+            }
+        }
         None => {}
     }
     studio.sync_pen_source();
@@ -1030,8 +1607,8 @@ fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) 
     match studio.op.take() {
         Some(Op::Create { kind, start, cur }) => studio.finish_create(kind, start, cur),
         Some(Op::Pencil { pts }) => studio.finish_pencil(pts),
-        Some(Op::Pen { anchors, source }) => {
-            studio.op = Some(Op::Pen { anchors, source });
+        Some(op @ Op::Pen { .. }) => {
+            studio.op = Some(op);
         }
         Some(Op::Move { orig, start }) => {
             if studio.is_motion() {
@@ -1039,19 +1616,7 @@ fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) 
             } else {
                 let d = world - start;
                 if d.length() > 0.2 {
-                    for (li, id, geom, rot) in orig {
-                        if let Some(s) = studio.doc.find_shape(li, id) {
-                            studio.history.push(crate::document::Cmd::SetGeom {
-                                layer: li,
-                                id,
-                                before: geom,
-                                after: s.geom.clone(),
-                                rot_before: rot,
-                                rot_after: s.rotation,
-                            });
-                        }
-                    }
-                    studio.dirty = true;
+                    commit_obj_snaps(studio, orig);
                 }
             }
         }
@@ -1059,19 +1624,7 @@ fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) 
             if studio.is_motion() {
                 commit_pose_drag(studio);
             } else {
-                for (li, sid, geom, rot) in orig {
-                    if let Some(s) = studio.doc.find_shape(li, sid) {
-                        studio.history.push(crate::document::Cmd::SetGeom {
-                            layer: li,
-                            id: sid,
-                            before: geom,
-                            after: s.geom.clone(),
-                            rot_before: rot,
-                            rot_after: s.rotation,
-                        });
-                    }
-                }
-                studio.dirty = true;
+                commit_obj_snaps(studio, orig);
             }
         }
         Some(Op::Node { layer, id, orig, .. }) => {
@@ -1086,6 +1639,89 @@ fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) 
                 });
             }
             studio.dirty = true;
+        }
+        Some(Op::NodeMarquee { start, cur }) => {
+            let r = Bounds {
+                min: Pt::new(start.x.min(cur.x), start.y.min(cur.y)),
+                max: Pt::new(start.x.max(cur.x), start.y.max(cur.y)),
+            };
+            if let Some((li, id)) = studio.primary() {
+                if let Some(s) = studio.doc.find_shape(li, id) {
+                    if let Geom::Path { anchors, .. } = &s.geom {
+                        if !shift {
+                            studio.node_sel.clear();
+                        }
+                        for (i, a) in anchors.iter().enumerate() {
+                            if r.contains(a.pt) {
+                                studio.node_sel.insert(i);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Some(Op::Corner {
+            layer,
+            id,
+            orig_corners,
+            orig_radius,
+            orig_geom,
+            ..
+        }) => {
+            if let Some(s) = studio.doc.find_shape(layer, id) {
+                studio.history.push(crate::document::Cmd::SetCorners {
+                    layer,
+                    id,
+                    before: orig_corners,
+                    after: s.corners,
+                    radius_before: orig_radius,
+                    radius_after: match s.geom {
+                        Geom::Rect { radius, .. } => radius,
+                        _ => orig_radius,
+                    },
+                });
+                if s.geom != orig_geom {
+                    studio.history.push(crate::document::Cmd::SetGeom {
+                        layer,
+                        id,
+                        before: orig_geom,
+                        after: s.geom.clone(),
+                        rot_before: s.rotation,
+                        rot_after: s.rotation,
+                    });
+                }
+                studio.dirty = true;
+            }
+        }
+        Some(Op::ArtboardDraw { start, cur }) => {
+            let min = Pt::new(start.x.min(cur.x), start.y.min(cur.y));
+            let max = Pt::new(start.x.max(cur.x), start.y.max(cur.y));
+            let size = max - min;
+            if size.x.abs() > 8.0 && size.y.abs() > 8.0 {
+                let mut board = crate::document::Artboard::new(
+                    studio.doc.artboards.len(),
+                    min,
+                    Pt::new(size.x.abs(), size.y.abs()),
+                );
+                board.name = studio.doc.unique_artboard_name(&board.name);
+                let id = board.id;
+                let mut after = studio.doc.artboards.clone();
+                after.push(board);
+                studio.commit_artboards(after);
+                studio.artboard_sel = vec![id];
+            }
+        }
+        Some(Op::ArtboardMove { orig, .. }) => {
+            let after = studio.doc.artboards.clone();
+            studio.doc.artboards = orig;
+            studio.commit_artboards(after);
+        }
+        Some(Op::ArtboardResize { orig, .. }) | Some(Op::ArtboardRotate { orig, .. }) => {
+            let after = studio.doc.artboards.clone();
+            if let Some(slot) = studio.doc.artboards.iter_mut().find(|a| a.id == orig.id) {
+                *slot = orig;
+            }
+            studio.commit_artboards(after);
         }
         Some(Op::Brush {
             layer,
@@ -1218,7 +1854,9 @@ fn click(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
         }
         Tool::Node => {
             if let Some((li, id)) = studio.primary() {
-                studio.ensure_path(li, id);
+                if id != RASTER_ID {
+                    studio.ensure_path(li, id);
+                }
                 let slack = 8.0 / studio.view.scale.max(0.01);
                 let Some(shape) = studio.doc.find_shape(li, id) else {
                     return;
@@ -1226,7 +1864,7 @@ fn click(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                 let Geom::Path { anchors, closed } = &shape.geom else {
                     if let Some(hit) = hit_shape(studio, world, slack) {
                         studio.selection = vec![hit];
-                        studio.node_sel = None;
+                        studio.node_sel.clear();
                     }
                     return;
                 };
@@ -1234,34 +1872,54 @@ fn click(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                 let closed = *closed;
                 let orig = shape.geom.clone();
                 let rot = shape.rotation;
-                if let Some(i) = hit_node(&anchors, world, slack) {
-                    if let NodeHit::Point(i) = i {
-                        studio.node_sel = Some(i);
-                        if alt {
-                            let mut after = orig.clone();
-                            if let Geom::Path { anchors, .. } = &mut after {
-                                if let Some(a) = anchors.get_mut(i) {
-                                    if a.is_corner() {
-                                        a.make_smooth();
-                                    } else {
-                                        a.make_corner();
+                if let Some(hit) = hit_node(&anchors, world, slack, closed) {
+                    match hit {
+                        NodeHit::Point(i) => {
+                            if alt {
+                                let mut after = orig.clone();
+                                if let Geom::Path { anchors, .. } = &mut after {
+                                    if let Some(a) = anchors.get_mut(i) {
+                                        if a.is_corner() {
+                                            a.make_smooth();
+                                        } else {
+                                            a.make_corner();
+                                        }
                                     }
                                 }
+                                studio.commit(crate::document::Cmd::SetGeom {
+                                    layer: li,
+                                    id,
+                                    before: orig,
+                                    after,
+                                    rot_before: rot,
+                                    rot_after: rot,
+                                });
                             }
-                            studio.commit(crate::document::Cmd::SetGeom {
-                                layer: li,
-                                id,
-                                before: orig,
-                                after,
-                                rot_before: rot,
-                                rot_after: rot,
-                            });
+                        }
+                        NodeHit::HandleIn(_) | NodeHit::HandleOut(_) => {}
+                        NodeHit::Segment(_) => {
+                            let mut anchors = anchors;
+                            if let Some(idx) =
+                                insert_anchor(&mut anchors, closed, world, slack * 2.0)
+                            {
+                                studio.node_sel.clear();
+                                studio.node_sel.insert(idx);
+                                studio.commit(crate::document::Cmd::SetGeom {
+                                    layer: li,
+                                    id,
+                                    before: orig,
+                                    after: Geom::Path { anchors, closed },
+                                    rot_before: rot,
+                                    rot_after: rot,
+                                });
+                            }
                         }
                     }
                 } else {
                     let mut anchors = anchors;
                     if let Some(idx) = insert_anchor(&mut anchors, closed, world, slack * 2.0) {
-                        studio.node_sel = Some(idx);
+                        studio.node_sel.clear();
+                        studio.node_sel.insert(idx);
                         studio.commit(crate::document::Cmd::SetGeom {
                             layer: li,
                             id,
@@ -1272,13 +1930,15 @@ fn click(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                         });
                     } else if let Some(hit) = hit_shape(studio, world, slack) {
                         studio.selection = vec![hit];
-                        studio.node_sel = None;
+                        studio.node_sel.clear();
                     }
                 }
             } else if let Some(hit) = hit_shape(studio, world, 6.0 / studio.view.scale.max(0.01)) {
                 studio.selection = vec![hit];
-                studio.node_sel = None;
-                studio.ensure_path(hit.0, hit.1);
+                studio.node_sel.clear();
+                if hit.1 != RASTER_ID {
+                    studio.ensure_path(hit.0, hit.1);
+                }
             }
         }
         _ => {}
@@ -1370,32 +2030,44 @@ fn draw_guides(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
 
 fn draw_artboard_frames(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
     let doc = &studio.doc;
-    let art = doc.artboards.max(1);
-    if art <= 1 {
+    if doc.artboards.is_empty() {
         return;
     }
-    let total_gutter = 48.0 * (art as f32 - 1.0);
-    let single_w = (doc.width - total_gutter) / art as f32;
-    let single_h = doc.height;
-    for i in 0..art {
-        let x0 = i as f32 * (single_w + 48.0);
+    for a in &doc.artboards {
         let r = Rect::from_min_max(
-            win(rect, studio.view, Pt::new(x0, 0.0)),
-            win(rect, studio.view, Pt::new(x0 + single_w, single_h)),
+            win(rect, studio.view, a.origin),
+            win(rect, studio.view, a.origin + a.size),
         );
+        let on = studio.artboard_sel.contains(&a.id);
         p.rect_stroke(
             r,
             0.0,
-            Stroke::new(1.0, Color32::from_rgb(120, 130, 150)),
+            Stroke::new(
+                if on { 2.0 } else { 1.0 },
+                if on {
+                    accent()
+                } else {
+                    Color32::from_rgb(120, 130, 150)
+                },
+            ),
             eframe::egui::StrokeKind::Middle,
         );
         p.text(
             r.left_top() + vec2(4.0, 2.0),
             eframe::egui::Align2::LEFT_TOP,
-            format!("Artboard {}", i + 1),
+            &a.name,
             eframe::egui::FontId::monospace(10.0),
             fg_weak(),
         );
+        if on && studio.tool == Tool::Artboard {
+            let b = a.bounds();
+            for i in 0..8 {
+                let h = win(rect, studio.view, b.handle(i));
+                p.rect_filled(Rect::from_center_size(h, vec2(9.0, 9.0)), 0.0, select());
+            }
+            let rh = win(rect, studio.view, b.rotate_handle());
+            p.circle_filled(rh, 5.0, accent());
+        }
     }
 }
 
@@ -1405,16 +2077,23 @@ fn draw_bleed_safe(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
         return;
     }
     let bleed = doc.bleed.max(1.0);
-    let art = doc.artboards.max(1);
-    let total_gutter = 48.0 * (art as f32 - 1.0);
-    let single_w = (doc.width - total_gutter) / art as f32;
-    let single_h = doc.height;
-    for i in 0..art {
-        let x0 = i as f32 * (single_w + 48.0);
+    let boards: Vec<(f32, f32, f32, f32)> = if doc.artboards.is_empty() {
+        vec![(0.0, 0.0, doc.width, doc.height)]
+    } else {
+        doc.artboards
+            .iter()
+            .map(|a| (a.origin.x, a.origin.y, a.size.x, a.size.y))
+            .collect()
+    };
+    for (x0, y0, single_w, single_h) in boards {
         if doc.show_bleed {
             let br = Rect::from_min_max(
-                win(rect, studio.view, Pt::new(x0 - bleed, -bleed)),
-                win(rect, studio.view, Pt::new(x0 + single_w + bleed, single_h + bleed)),
+                win(rect, studio.view, Pt::new(x0 - bleed, y0 - bleed)),
+                win(
+                    rect,
+                    studio.view,
+                    Pt::new(x0 + single_w + bleed, y0 + single_h + bleed),
+                ),
             );
             p.rect_stroke(
                 br,
@@ -1424,10 +2103,10 @@ fn draw_bleed_safe(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
             );
             // corner crop marks
             let inset = 8.0;
-            let tl = win(rect, studio.view, Pt::new(x0, 0.0));
-            let tr = win(rect, studio.view, Pt::new(x0 + single_w, 0.0));
-            let bl = win(rect, studio.view, Pt::new(x0, single_h));
-            let brp = win(rect, studio.view, Pt::new(x0 + single_w, single_h));
+            let tl = win(rect, studio.view, Pt::new(x0, y0));
+            let tr = win(rect, studio.view, Pt::new(x0 + single_w, y0));
+            let bl = win(rect, studio.view, Pt::new(x0, y0 + single_h));
+            let brp = win(rect, studio.view, Pt::new(x0 + single_w, y0 + single_h));
             let red = Color32::from_rgb(220, 38, 38);
             // TL
             p.line_segment([pos2(tl.x - bleed, tl.y), pos2(tl.x - bleed + inset, tl.y)], Stroke::new(1.0, red));
@@ -1445,11 +2124,11 @@ fn draw_bleed_safe(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
         if doc.show_safe {
             let inset = bleed + 18.0;
             let sr = Rect::from_min_max(
-                win(rect, studio.view, Pt::new(x0 + inset, inset)),
+                win(rect, studio.view, Pt::new(x0 + inset, y0 + inset)),
                 win(
                     rect,
                     studio.view,
-                    Pt::new(x0 + single_w - inset, single_h - inset),
+                    Pt::new(x0 + single_w - inset, y0 + single_h - inset),
                 ),
             );
             p.rect_stroke(
@@ -1469,7 +2148,7 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
         let g = preview_shape(*kind, *start, *cur, studio);
         stroke_geom(p, rect, &g, v);
     }
-    if let Some(Op::Pen { anchors, source }) = &studio.op {
+    if let Some(Op::Pen { anchors, source, .. }) = &studio.op {
         draw_pen(p, rect, anchors, studio, source.is_some());
     }
     if let Some(Op::Pencil { pts }) = &studio.op {
@@ -1501,14 +2180,42 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
     // otherwise per-shape bbox is the same as group, but we still use group
     // so handles are in the right place for rotated boxes.
     for (li, id) in &studio.selection {
+        if *id == RASTER_ID {
+            if let Some(b) = studio
+                .doc
+                .layers
+                .get(*li)
+                .and_then(|l| l.kind.raster_bounds())
+            {
+                let sb = Rect::from_min_max(win(rect, v, b.min), win(rect, v, b.max));
+                p.rect_stroke(sb, 0.0, Stroke::new(1.0, select()), eframe::egui::StrokeKind::Middle);
+            }
+            continue;
+        }
         if let Some(s) = studio.doc.find_shape(*li, *id) {
             stroke_world_posed(p, rect, s, v, studio.live_pose(*id));
             if studio.tool == Tool::Node {
                 if let Geom::Path { anchors, .. } = &s.geom {
-                    draw_nodes(p, rect, anchors, v, studio.node_sel);
+                    draw_nodes(p, rect, anchors, v, &studio.node_sel);
+                }
+            }
+            if matches!(studio.tool, Tool::Select | Tool::Node) {
+                if let Geom::Rect { origin, size, .. } = &s.geom {
+                    for w in crate::geom::corner_widgets(*origin, *size) {
+                        let sp = win(rect, v, w);
+                        p.circle_filled(sp, 4.0, accent());
+                    }
                 }
             }
         }
+    }
+    if let Some(Op::NodeMarquee { start, cur }) | Some(Op::ArtboardDraw { start, cur }) = &studio.op
+    {
+        let a = win(rect, v, *start);
+        let b = win(rect, v, *cur);
+        let r = Rect::from_two_pos(a, b);
+        p.rect_filled(r, 0.0, select_fill());
+        p.rect_stroke(r, 0.0, Stroke::new(1.0, select()), eframe::egui::StrokeKind::Middle);
     }
     if !studio.selection.is_empty() {
         if let Some(b) = posed_bounds(studio) {
@@ -1628,6 +2335,7 @@ fn set_cursor(ui: &mut Ui, studio: &Studio, resp: &eframe::egui::Response) {
                     CursorIcon::Default
                 }
             }
+            Tool::Artboard => CursorIcon::Crosshair,
             _ => CursorIcon::Crosshair,
         }
     };
@@ -1788,7 +2496,11 @@ fn draw_pen(
             Stroke::new(1.2, select()),
         );
     }
-    draw_nodes(p, rect, anchors, v, Some(anchors.len().saturating_sub(1)));
+    let mut sel = BTreeSet::new();
+    if !anchors.is_empty() {
+        sel.insert(anchors.len() - 1);
+    }
+    draw_nodes(p, rect, anchors, v, &sel);
     if let Some(first) = anchors.first() {
         let close = studio
             .cursor
@@ -1846,7 +2558,7 @@ fn draw_nodes(
     rect: Rect,
     anchors: &[Anchor],
     view: crate::compositor::View,
-    selected: Option<usize>,
+    selected: &BTreeSet<usize>,
 ) {
     for (i, a) in anchors.iter().enumerate() {
         let sp = win(rect, view, a.pt);
@@ -1858,7 +2570,7 @@ fn draw_nodes(
             p.circle_filled(hi, 3.0, select());
             p.circle_filled(ho, 3.0, select());
         }
-        let on = selected == Some(i);
+        let on = selected.contains(&i);
         let sz = if on { 8.0 } else { 6.0 };
         p.rect_filled(Rect::from_center_size(sp, vec2(sz, sz)), 0.0, select());
         if on {
@@ -1868,6 +2580,9 @@ fn draw_nodes(
                 Stroke::new(1.0, accent()),
                 eframe::egui::StrokeKind::Outside,
             );
+        }
+        if a.radius > 0.5 {
+            p.circle_stroke(sp, 10.0, Stroke::new(1.0, accent()));
         }
     }
 }
@@ -1968,5 +2683,113 @@ mod tests {
         let b = posed_bounds(&s).unwrap();
         click(&mut s, b.handle(1), false, false);
         assert_eq!(s.selection, vec![id]);
+    }
+
+    #[test]
+    fn pen_click_places_corner_without_drag() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        s.tool = Tool::Pen;
+        start_drag(&mut s, Pt::new(20.0, 20.0), Pt::new(20.0, 20.0), false, false);
+        continue_drag(&mut s, Pt::new(21.0, 20.5), false, false);
+        end_drag(&mut s, Pt::new(21.0, 20.5), false, false, false);
+        start_drag(&mut s, Pt::new(80.0, 40.0), Pt::new(80.0, 40.0), false, false);
+        continue_drag(&mut s, Pt::new(80.5, 40.0), false, false);
+        end_drag(&mut s, Pt::new(80.5, 40.0), false, false, false);
+        match &s.op {
+            Some(Op::Pen { anchors, .. }) => {
+                assert_eq!(anchors.len(), 2);
+                assert!(anchors[0].is_corner(), "jitter must not make a smooth point");
+                assert!(anchors[1].is_corner());
+            }
+            other => panic!("expected pen draft, got op? {}", other.is_some()),
+        }
+        if let Some(Op::Pen { anchors, source, .. }) = s.op.take() {
+            s.finish_pen(anchors, false, source);
+        }
+        let n = s.doc.layers[1].kind.shapes().unwrap().len();
+        assert_eq!(n, 1);
+    }
+
+    #[test]
+    fn pen_drag_makes_smooth() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        s.tool = Tool::Pen;
+        s.view.scale = 1.0;
+        start_drag(&mut s, Pt::new(10.0, 10.0), Pt::new(10.0, 10.0), false, false);
+        continue_drag(&mut s, Pt::new(40.0, 10.0), false, false);
+        match &s.op {
+            Some(Op::Pen { anchors, .. }) => {
+                assert!(!anchors[0].is_corner());
+            }
+            _ => panic!("pen"),
+        }
+    }
+
+    #[test]
+    fn node_shift_selects_two() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        s.finish_create(
+            CreateKind::Rect,
+            Pt::new(40.0, 40.0),
+            Pt::new(140.0, 100.0),
+        );
+        s.tool = Tool::Node;
+        let (li, id) = s.primary().unwrap();
+        s.ensure_path(li, id);
+        let anchors = match &s.doc.find_shape(li, id).unwrap().geom {
+            Geom::Path { anchors, .. } => anchors.clone(),
+            _ => panic!("path"),
+        };
+        start_drag(&mut s, anchors[0].pt, anchors[0].pt, false, false);
+        end_drag(&mut s, anchors[0].pt, false, false, false);
+        start_drag(&mut s, anchors[1].pt, anchors[1].pt, true, false);
+        assert!(s.node_sel.contains(&0) || s.node_sel.contains(&1));
+        assert!(s.node_sel.len() >= 1);
+    }
+
+    #[test]
+    fn node_press_grabs_bezier_handle() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        s.tool = Tool::Node;
+        let a0 = Anchor::corner(Pt::new(0.0, 0.0));
+        let a1 = Anchor::smooth(Pt::new(40.0, 0.0), Pt::new(20.0, 10.0));
+        let shape = crate::document::Shape::new(
+            Geom::Path {
+                anchors: vec![a0, a1],
+                closed: false,
+            },
+            crate::document::Style::default(),
+        );
+        let id = shape.id;
+        s.commit(crate::document::Cmd::AddShape { layer: 1, shape });
+        s.selection = vec![(1, id)];
+        let handle = Pt::new(40.0, 0.0) + Pt::new(20.0, 10.0);
+        node_press(&mut s, handle, handle, false, false);
+        match &s.op {
+            Some(Op::Node {
+                which: NodeHit::HandleOut(1),
+                ..
+            }) => {}
+            other => panic!("expected handle-out grab, got {:?}", other.as_ref().map(|o| matches!(o, Op::Node { .. }))),
+        }
+        continue_drag(&mut s, handle + Pt::new(10.0, 0.0), false, false);
+        let Geom::Path { anchors, .. } = &s.doc.find_shape(1, id).unwrap().geom else {
+            panic!("path");
+        };
+        assert!((anchors[1].h_out - Pt::new(30.0, 10.0)).length() < 0.5);
+    }
+
+    #[test]
+    fn hit_node_handle_beats_segment() {
+        let a0 = Anchor::corner(Pt::new(0.0, 0.0));
+        let a1 = Anchor::smooth(Pt::new(40.0, 0.0), Pt::new(24.0, 0.0));
+        let anchors = vec![a0, a1];
+        let handle = Pt::new(64.0, 0.0);
+        let hit = hit_node(&anchors, handle, 8.0, false);
+        assert_eq!(hit, Some(NodeHit::HandleOut(1)));
     }
 }

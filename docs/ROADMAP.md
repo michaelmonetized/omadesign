@@ -20,7 +20,7 @@ omadesign 1.0 is a working Design / Pixel / Photo studio. This is what comes nex
 
 ## Next
 
-- Multi-page / artboards
+- [x] Multi-page / artboards
 - Shared colour books and spot colours
 - SVG import that does not flatten type
 - Scripting (a small Rust-facing command bus, not a plugin bazaar)

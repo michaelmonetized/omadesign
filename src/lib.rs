@@ -9,6 +9,7 @@ pub mod asset_browser;
 pub mod compound;
 pub mod geom;
 pub mod google_fonts;
+pub mod import;
 pub mod motion;
 pub mod palette;
 pub mod paint;

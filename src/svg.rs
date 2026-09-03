@@ -2,24 +2,55 @@
 
 use crate::color::Rgba;
 use crate::document::{Document, Fill, Layer, LayerKind, Shape};
-use crate::geom::{Bounds, Pt};
+use crate::geom::{Bounds, Geom, Pt};
 
 fn path_data(shape: &Shape) -> String {
-    let mut d = String::new();
-    for pts in shape.world_contours(96) {
-        if pts.len() < 2 {
-            continue;
+    match &shape.geom {
+        Geom::Path { anchors, closed } => crate::geom::path_svg_d(anchors, *closed),
+        Geom::Line { a, b } => format!("M {:.3} {:.3} L {:.3} {:.3}", a.x, a.y, b.x, b.y),
+        Geom::Rect { origin, size, .. } => {
+            let pts = crate::geom::rounded_rect_corners(*origin, *size, shape.effective_corners());
+            poly_d(&pts, true)
         }
-        d.push_str(&format!("M {:.2} {:.2} ", pts[0].x, pts[0].y));
-        for p in pts.iter().skip(1) {
-            d.push_str(&format!("L {:.2} {:.2} ", p.x, p.y));
+        _ => {
+            let mut d = String::new();
+            for pts in shape.geom.contours(96) {
+                if pts.len() < 2 {
+                    continue;
+                }
+                d.push_str(&poly_d(&pts, shape.geom.is_closed()));
+                d.push(' ');
+            }
+            d.trim().to_string()
         }
-        if shape.geom.is_closed() {
-            d.push('Z');
-        }
-        d.push(' ');
     }
-    d.trim().to_string()
+}
+
+fn poly_d(pts: &[Pt], closed: bool) -> String {
+    if pts.len() < 2 {
+        return String::new();
+    }
+    let mut d = format!("M {:.3} {:.3}", pts[0].x, pts[0].y);
+    for p in pts.iter().skip(1) {
+        d.push_str(&format!(" L {:.3} {:.3}", p.x, p.y));
+    }
+    if closed {
+        d.push_str(" Z");
+    }
+    d
+}
+
+fn xf_attr(shape: &Shape) -> String {
+    if shape.rotation.abs() < 1e-5 {
+        return String::new();
+    }
+    let c = shape.geom.bbox().center();
+    format!(
+        " transform=\"rotate({:.4} {:.3} {:.3})\"",
+        shape.rotation.to_degrees(),
+        c.x,
+        c.y
+    )
 }
 
 fn rgba_css(c: Rgba) -> String {
@@ -35,6 +66,9 @@ fn layer_bounds(layer: &Layer) -> Option<Bounds> {
         LayerKind::Vector { shapes } => {
             let mut b: Option<Bounds> = None;
             for s in shapes {
+                if !s.visible {
+                    continue;
+                }
                 let sb = s.world_bbox();
                 b = Some(match b {
                     None => sb,
@@ -43,11 +77,145 @@ fn layer_bounds(layer: &Layer) -> Option<Bounds> {
             }
             b
         }
-        LayerKind::Raster { pixels } => Some(Bounds::from_min_size(
-            Pt::ZERO,
-            Pt::new(pixels.w as f32, pixels.h as f32),
-        )),
+        LayerKind::Raster { .. } => layer.kind.raster_bounds().or_else(|| {
+            layer.kind.pixels().map(|pixels| {
+                Bounds::from_min_size(Pt::ZERO, Pt::new(pixels.w as f32, pixels.h as f32))
+            })
+        }),
     }
+}
+
+fn stop_color(c: Rgba) -> String {
+    if c.a >= 250 {
+        hex_css(c)
+    } else {
+        format!(
+            "{}\" stop-opacity=\"{:.3}",
+            hex_css(c),
+            c.a as f32 / 255.0
+        )
+    }
+}
+
+fn write_shape(
+    body: &mut String,
+    defs: &mut String,
+    grad_id: &mut usize,
+    shape: &Shape,
+    extra: &str,
+) {
+    let fill_attr = match &shape.style.fill {
+        Fill::None => "fill=\"none\"".to_string(),
+        Fill::Solid(c) => format!("fill=\"{}\"", rgba_css(*c)),
+        Fill::Linear { from, to, c0, c1 } => {
+            *grad_id += 1;
+            let id = format!("g{grad_id}");
+            let b = shape.geom.bbox();
+            let (w, h) = (b.width().max(1e-3), b.height().max(1e-3));
+            let (x1, y1) = (b.min.x + from[0] * w, b.min.y + from[1] * h);
+            let (x2, y2) = (b.min.x + to[0] * w, b.min.y + to[1] * h);
+            defs.push_str(&format!(
+                "<linearGradient id=\"{id}\" gradientUnits=\"userSpaceOnUse\" x1=\"{x1:.2}\" y1=\"{y1:.2}\" x2=\"{x2:.2}\" y2=\"{y2:.2}\"><stop offset=\"0\" stop-color=\"{}\"/><stop offset=\"1\" stop-color=\"{}\"/></linearGradient>\n",
+                stop_color(*c0),
+                stop_color(*c1)
+            ));
+            format!("fill=\"url(#{id})\"")
+        }
+        Fill::Radial { c0, c1 } => {
+            *grad_id += 1;
+            let id = format!("g{grad_id}");
+            let b = shape.geom.bbox();
+            let c = b.center();
+            let r = b.width().max(b.height()) * 0.5;
+            defs.push_str(&format!(
+                "<radialGradient id=\"{id}\" cx=\"{:.2}\" cy=\"{:.2}\" r=\"{:.2}\" gradientUnits=\"userSpaceOnUse\"><stop offset=\"0\" stop-color=\"{}\"/><stop offset=\"1\" stop-color=\"{}\"/></radialGradient>\n",
+                c.x, c.y, r, stop_color(*c0), stop_color(*c1)
+            ));
+            format!("fill=\"url(#{id})\"")
+        }
+    };
+    let stroke_attr = match &shape.style.stroke {
+        Some(s) if s.width > 0.0 => {
+            let dash = s
+                .dash
+                .map(|(a, b)| format!(" stroke-dasharray=\"{a} {b}\""))
+                .unwrap_or_default();
+            format!(
+                " stroke=\"{}\" stroke-width=\"{:.2}\" stroke-linecap=\"{}\" stroke-linejoin=\"{}\"{dash}",
+                rgba_css(s.color),
+                s.width,
+                s.cap.name().to_ascii_lowercase(),
+                s.join.name().to_ascii_lowercase()
+            )
+        }
+        _ => String::new(),
+    };
+    if let Geom::Text(run) = &shape.geom {
+        let family = crate::text::label_for(&run.font);
+        let fill = match &shape.style.fill {
+            Fill::Solid(c) => rgba_css(*c),
+            _ => "#111111".into(),
+        };
+        let escaped = run
+            .content
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;");
+        body.push_str(&format!(
+            "  <text id=\"oma-{}\" x=\"{:.3}\" y=\"{:.3}\" font-family=\"{}\" font-size=\"{:.2}\" fill=\"{fill}\" opacity=\"{:.3}\"{extra}>{}</text>\n",
+            shape.id,
+            run.origin.x,
+            run.origin.y,
+            xml_escape(&family),
+            run.px,
+            shape.opacity,
+            escaped
+        ));
+        return;
+    }
+    if let Geom::Ellipse { center, radii } = &shape.geom {
+        body.push_str(&format!(
+            "  <ellipse id=\"oma-{}\" cx=\"{:.3}\" cy=\"{:.3}\" rx=\"{:.3}\" ry=\"{:.3}\" {fill_attr}{stroke_attr} opacity=\"{:.3}\"{extra}/>\n",
+            shape.id, center.x, center.y, radii.x.abs(), radii.y.abs(), shape.opacity
+        ));
+        return;
+    }
+    if let Geom::Rect {
+        origin,
+        size,
+        radius,
+    } = &shape.geom
+    {
+        let corners = shape.effective_corners();
+        if corners.iter().all(|c| *c < 0.5) && *radius < 0.5 {
+            body.push_str(&format!(
+                "  <rect id=\"oma-{}\" x=\"{:.3}\" y=\"{:.3}\" width=\"{:.3}\" height=\"{:.3}\" {fill_attr}{stroke_attr} opacity=\"{:.3}\"{extra}/>\n",
+                shape.id,
+                origin.x.min(origin.x + size.x),
+                origin.y.min(origin.y + size.y),
+                size.x.abs(),
+                size.y.abs(),
+                shape.opacity
+            ));
+            return;
+        }
+    }
+    let d = path_data(shape);
+    if d.is_empty() {
+        return;
+    }
+    body.push_str(&format!(
+        "  <path id=\"oma-{}\" d=\"{d}\" {fill_attr}{stroke_attr} opacity=\"{:.3}\"{extra}/>\n",
+        shape.id,
+        shape.opacity
+    ));
+}
+
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 pub fn export(doc: &Document) -> Result<String, String> {
@@ -105,56 +273,9 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
         match &layer.kind {
             LayerKind::Vector { shapes } => {
                 for shape in shapes {
-                    let d = path_data(shape);
-                    if d.is_empty() {
+                    if !shape.visible {
                         continue;
                     }
-                    let fill_attr = match &shape.style.fill {
-                        Fill::None => "fill=\"none\"".to_string(),
-                        Fill::Solid(c) => format!("fill=\"{}\"", rgba_css(*c)),
-                        Fill::Linear { from, to, c0, c1 } => {
-                            grad_id += 1;
-                            let id = format!("g{grad_id}");
-                            let b = shape.world_bbox();
-                            let (w, h) = (b.width().max(1e-3), b.height().max(1e-3));
-                            let (x1, y1) = (b.min.x + from[0] * w, b.min.y + from[1] * h);
-                            let (x2, y2) = (b.min.x + to[0] * w, b.min.y + to[1] * h);
-                            defs.push_str(&format!(
-                                "<linearGradient id=\"{id}\" gradientUnits=\"userSpaceOnUse\" x1=\"{x1:.2}\" y1=\"{y1:.2}\" x2=\"{x2:.2}\" y2=\"{y2:.2}\"><stop offset=\"0\" stop-color=\"{}\"/><stop offset=\"1\" stop-color=\"{}\"/></linearGradient>\n",
-                                hex_css(*c0),
-                                hex_css(*c1)
-                            ));
-                            format!("fill=\"url(#{id})\"")
-                        }
-                        Fill::Radial { c0, c1 } => {
-                            grad_id += 1;
-                            let id = format!("g{grad_id}");
-                            let b = shape.world_bbox();
-                            let c = b.center();
-                            let r = b.width().max(b.height()) * 0.5;
-                            defs.push_str(&format!(
-                                "<radialGradient id=\"{id}\" cx=\"{:.2}\" cy=\"{:.2}\" r=\"{:.2}\" gradientUnits=\"userSpaceOnUse\"><stop offset=\"0\" stop-color=\"{}\"/><stop offset=\"1\" stop-color=\"{}\"/></radialGradient>\n",
-                                c.x, c.y, r, hex_css(*c0), hex_css(*c1)
-                            ));
-                            format!("fill=\"url(#{id})\"")
-                        }
-                    };
-                    let stroke_attr = match &shape.style.stroke {
-                        Some(s) if s.width > 0.0 => {
-                            let dash = s
-                                .dash
-                                .map(|(a, b)| format!(" stroke-dasharray=\"{a} {b}\""))
-                                .unwrap_or_default();
-                            format!(
-                                " stroke=\"{}\" stroke-width=\"{:.2}\" stroke-linecap=\"{}\" stroke-linejoin=\"{}\"{dash}",
-                                rgba_css(s.color),
-                                s.width,
-                                s.cap.name().to_ascii_lowercase(),
-                                s.join.name().to_ascii_lowercase()
-                            )
-                        }
-                        _ => String::new(),
-                    };
                     let mut extra = String::new();
                     if animate
                         && let Some(kf) = motion.css_keyframes(shape.id, &format!("oma-{}", shape.id))
@@ -165,14 +286,36 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
                             shape.id
                         );
                     }
-                    body.push_str(&format!(
-                        "  <path id=\"oma-{}\" d=\"{d}\" {fill_attr}{stroke_attr} opacity=\"{:.3}\"{extra}/>\n",
-                        shape.id,
-                        shape.opacity
-                    ));
+                    if shape.filters.active() {
+                        let fid = format!("oma-fx-s{}", shape.id);
+                        let b = shape.world_bbox();
+                        let pad = crate::filter::svg_pad(&shape.filters);
+                        let r = b.inflate(pad);
+                        if let Some(f) = crate::filter::svg_filter(
+                            &fid,
+                            &shape.filters,
+                            [r.min.x, r.min.y, r.width().max(1.0), r.height().max(1.0)],
+                        ) {
+                            defs.push_str(&f);
+                            extra.push_str(&format!(" filter=\"url(#{fid})\""));
+                        }
+                    }
+                    extra.push_str(&xf_attr(shape));
+                    write_shape(
+                        &mut body,
+                        &mut defs,
+                        &mut grad_id,
+                        shape,
+                        &extra,
+                    );
                 }
             }
-            LayerKind::Raster { pixels } => {
+            LayerKind::Raster {
+                pixels,
+                origin,
+                size,
+                rotation,
+            } => {
                 if let Some(pm) = pixels.to_pixmap()
                     && let Ok(png) = pm.encode_png()
                 {
@@ -180,9 +323,23 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
                         &base64::engine::general_purpose::STANDARD,
                         png,
                     );
+                    let (dw, dh) = if size.x.abs() > 0.5 && size.y.abs() > 0.5 {
+                        (size.x, size.y)
+                    } else {
+                        (pixels.w as f32, pixels.h as f32)
+                    };
+                    let mut xf = String::new();
+                    if rotation.abs() > 1e-5 {
+                        let cx = origin.x + dw * 0.5;
+                        let cy = origin.y + dh * 0.5;
+                        xf = format!(
+                            " transform=\"rotate({:.4} {cx:.3} {cy:.3})\"",
+                            rotation.to_degrees()
+                        );
+                    }
                     body.push_str(&format!(
-                        "  <image href=\"data:image/png;base64,{b64}\" x=\"0\" y=\"0\" width=\"{}\" height=\"{}\"/>\n",
-                        pixels.w, pixels.h
+                        "  <image href=\"data:image/png;base64,{b64}\" x=\"{:.3}\" y=\"{:.3}\" width=\"{:.3}\" height=\"{:.3}\"{xf}/>\n",
+                        origin.x, origin.y, dw, dh
                     ));
                 }
             }
@@ -225,7 +382,7 @@ mod tests {
             },
         );
         let s = export(&doc).unwrap();
-        assert!(s.contains("<path"));
+        assert!(s.contains("<path") || s.contains("<rect"), "{s}");
         assert!(s.contains("viewBox"));
     }
 
@@ -263,5 +420,42 @@ mod tests {
         assert!(s.contains("filter=\"url(#oma-fx-"), "{s}");
         assert!(s.contains("userSpaceOnUse"), "{s}");
         assert!(!s.contains("feDropShadow"));
+    }
+
+    #[test]
+    fn svg_path_keeps_cubics() {
+        use crate::geom::Anchor;
+        let mut doc = Document::new("t", 200.0, 200.0, 72.0);
+        apply(
+            &mut doc,
+            &Cmd::AddShape {
+                layer: 1,
+                shape: Shape::new(
+                    crate::geom::Geom::Path {
+                        anchors: vec![
+                            Anchor::corner(crate::geom::Pt::new(10.0, 10.0)),
+                            Anchor::smooth(crate::geom::Pt::new(80.0, 40.0), crate::geom::Pt::new(20.0, 10.0)),
+                        ],
+                        closed: false,
+                    },
+                    Style::default(),
+                ),
+            },
+        );
+        let s = export(&doc).unwrap();
+        assert!(s.contains(" C ") || s.contains("C "), "{s}");
+    }
+
+    #[test]
+    fn logo_oma_roundtrip_structure() {
+        let path = std::path::Path::new("media/logo.oma");
+        if !path.exists() {
+            return;
+        }
+        let doc = crate::project::load_from(path).expect("logo.oma");
+        let s = export(&doc).unwrap();
+        assert!(s.contains("<svg"));
+        assert!(s.contains("viewBox"));
+        assert!(s.contains("<path") || s.contains("<rect") || s.contains("<ellipse"));
     }
 }

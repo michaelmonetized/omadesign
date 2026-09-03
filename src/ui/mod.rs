@@ -20,6 +20,8 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     }
     studio.handle_shortcuts(&ctx);
     studio.tick_motion(&ctx);
+    studio.tick_swap();
+    unsaved_dialog(ui, studio);
 
     chrome::top_bar(ui, studio);
 
@@ -30,13 +32,17 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         for f in files {
             studio.ingest_dropped(f.path(), None);
         }
+        studio.park_active();
         return;
     }
+
+    chrome::doc_tabs(ui, studio);
 
     if studio.persona == Persona::Photo {
         chrome::left_toolbar(ui, studio);
         photo::show(ui, studio);
         chrome::status_bar(ui, studio);
+        studio.park_active();
         return;
     }
 
@@ -52,6 +58,33 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     if studio.show_shortcuts {
         egui_shortcuts(ui, studio);
     }
+    studio.park_active();
+}
+
+fn unsaved_dialog(ui: &mut Ui, studio: &mut Studio) {
+    if studio.pending_nav.is_none() {
+        return;
+    }
+    let ctx = ui.ctx().clone();
+    eframe::egui::Window::new("Unsaved changes")
+        .collapsible(false)
+        .resizable(false)
+        .anchor(eframe::egui::Align2::CENTER_CENTER, [0.0, 0.0])
+        .show(&ctx, |ui| {
+            ui.label("Save before closing? Discard throws the work away.");
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if ui.button("Save").clicked() {
+                    studio.execute_nav(&ctx, true);
+                }
+                if ui.button("Discard").clicked() {
+                    studio.execute_nav(&ctx, false);
+                }
+                if ui.button("Cancel").clicked() {
+                    studio.pending_nav = None;
+                }
+            });
+        });
 }
 
 fn egui_shortcuts(ui: &mut Ui, studio: &mut Studio) {

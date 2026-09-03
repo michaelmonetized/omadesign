@@ -448,28 +448,66 @@ fn apply_stroke(studio: &mut Studio, stroke: Option<DocStroke>) {
 fn character_studio(ui: &mut Ui, studio: &mut Studio) {
     heading(ui, "Character");
     let live = studio.selected_type();
-    let mut font = live
+    let font = live
         .as_ref()
         .map(|t| t.font.clone())
         .unwrap_or_else(|| studio.text_font.clone());
     let label = crate::text::label_for(&font);
-    ComboBox::from_id_salt("character-font")
-        .selected_text(label)
-        .width(220.0)
-        .show_ui(ui, |ui| {
-            for f in crate::text::all_fonts() {
+    ui.label(RichText::new(&label).small().strong());
+    ui.add(
+        eframe::egui::TextEdit::singleline(&mut studio.font_query)
+            .hint_text("Search fonts")
+            .desired_width(220.0),
+    );
+    let q = studio.font_query.to_ascii_lowercase();
+    let recents = studio.font_recents.clone();
+    let used = studio.used_fonts();
+    let all = crate::text::all_fonts();
+    let mut chosen = font.clone();
+    ScrollArea::vertical()
+        .id_salt("font-list")
+        .max_height(180.0)
+        .show(ui, |ui| {
+            if !recents.is_empty() {
+                ui.label(RichText::new("Recents").small().color(fg_weak()));
+                for p in recents.iter().take(5) {
+                    let name = crate::text::label_for(p);
+                    if ui.selectable_label(*p == font, &name).clicked() {
+                        chosen = p.clone();
+                    }
+                }
+            }
+            if !used.is_empty() {
+                ui.label(RichText::new("Used in document").small().color(fg_weak()));
+                for p in &used {
+                    let name = crate::text::label_for(p);
+                    if ui.selectable_label(*p == font, &name).clicked() {
+                        chosen = p.clone();
+                    }
+                }
+            }
+            ui.label(RichText::new("All").small().color(fg_weak()));
+            for f in &all {
+                if !q.is_empty() && !f.name.to_ascii_lowercase().contains(&q) {
+                    continue;
+                }
                 let path = f.path.to_string_lossy().to_string();
-                ui.selectable_value(&mut font, path, &f.name);
+                let resp = ui.selectable_label(path == font, &f.name);
+                if path == font && studio.font_scroll_once {
+                    resp.scroll_to_me(Some(eframe::egui::Align::Center));
+                    studio.font_scroll_once = false;
+                }
+                if resp.clicked() {
+                    chosen = path;
+                }
             }
         });
-    if live
-        .as_ref()
-        .map(|t| t.font.clone())
-        .unwrap_or_else(|| studio.text_font.clone())
-        != font
-    {
-        let chosen = font.clone();
-        studio.patch_type(|t| t.font = chosen);
+    if chosen != font {
+        let path = chosen.clone();
+        studio.remember_font(&path);
+        studio.patch_type(|t| t.font = path.clone());
+        studio.text_font = path;
+        studio.font_scroll_once = true;
     }
     eframe::egui::CollapsingHeader::new("Google Fonts")
         .default_open(false)
@@ -682,8 +720,122 @@ fn motion_studio(ui: &mut Ui, studio: &mut Studio) {
     });
 }
 
+fn artboard_transform(ui: &mut Ui, studio: &mut Studio) {
+    let Some(id) = studio.artboard_sel.first().copied() else {
+        ui.label(RichText::new("Draw or click an artboard").small().color(fg_weak()));
+        if ui.button("Wrap selection in artboard").clicked() {
+            studio.wrap_selection_artboard();
+        }
+        return;
+    };
+    let Some(idx) = studio.doc.artboards.iter().position(|a| a.id == id) else {
+        return;
+    };
+    let mut a = studio.doc.artboards[idx].clone();
+    if studio.artboard_rename.as_ref().map(|(i, _)| *i) == Some(id) {
+        if let Some((_, buf)) = studio.artboard_rename.as_mut() {
+            let r = ui.add(eframe::egui::TextEdit::singleline(buf).desired_width(160.0));
+            if r.lost_focus() {
+                let name = buf.trim().to_string();
+                studio.artboard_rename = None;
+                if !name.is_empty() {
+                    a.name = studio.doc.unique_artboard_name(&name);
+                    let mut after = studio.doc.artboards.clone();
+                    if let Some(slot) = after.iter_mut().find(|x| x.id == id) {
+                        *slot = a.clone();
+                    }
+                    studio.commit_artboards(after);
+                }
+            }
+        }
+    } else if ui.button(&a.name).on_hover_text("Rename").clicked() {
+        studio.artboard_rename = Some((id, a.name.clone()));
+    }
+    let mut x = a.origin.x;
+    let mut y = a.origin.y;
+    let mut w = a.size.x;
+    let mut h = a.size.y;
+    let mut deg = a.rotation.to_degrees();
+    let mut changed = false;
+    ui.horizontal(|ui| {
+        changed |= ui.add(eframe::egui::DragValue::new(&mut x).speed(1.0).prefix("X  ")).changed();
+        changed |= ui.add(eframe::egui::DragValue::new(&mut y).speed(1.0).prefix("Y  ")).changed();
+    });
+    ui.horizontal(|ui| {
+        changed |= ui
+            .add(eframe::egui::DragValue::new(&mut w).speed(1.0).range(8.0..=20000.0).prefix("W  "))
+            .changed();
+        changed |= ui
+            .add(eframe::egui::DragValue::new(&mut h).speed(1.0).range(8.0..=20000.0).prefix("H  "))
+            .changed();
+    });
+    changed |= ui.add(Slider::new(&mut deg, -180.0..=180.0).text("Rotate°")).changed();
+    if changed {
+        a.origin = crate::geom::Pt::new(x, y);
+        a.size = crate::geom::Pt::new(w, h);
+        a.rotation = deg.to_radians();
+        let mut after = studio.doc.artboards.clone();
+        if let Some(slot) = after.iter_mut().find(|x| x.id == id) {
+            *slot = a;
+        }
+        studio.commit_artboards(after);
+    }
+    ui.horizontal(|ui| {
+        if ui.button("Clone").clicked() {
+            studio.clone_artboard(id);
+        }
+        if ui.button("Delete").clicked() {
+            studio.delete_artboards();
+        }
+    });
+}
+
+fn raster_transform(ui: &mut Ui, studio: &mut Studio, li: usize) {
+    let Some(layer) = studio.doc.layers.get(li) else {
+        return;
+    };
+    let Some((origin, size, rot)) = layer.kind.raster_xform() else {
+        return;
+    };
+    ui.label(RichText::new(&layer.name).small().color(fg_weak()));
+    let mut x = origin.x;
+    let mut y = origin.y;
+    let mut w = size.x;
+    let mut h = size.y;
+    let mut deg = rot.to_degrees();
+    let mut changed = false;
+    ui.horizontal(|ui| {
+        changed |= ui.add(eframe::egui::DragValue::new(&mut x).speed(1.0).prefix("X  ")).changed();
+        changed |= ui.add(eframe::egui::DragValue::new(&mut y).speed(1.0).prefix("Y  ")).changed();
+    });
+    ui.horizontal(|ui| {
+        changed |= ui
+            .add(eframe::egui::DragValue::new(&mut w).speed(1.0).range(1.0..=20000.0).prefix("W  "))
+            .changed();
+        changed |= ui
+            .add(eframe::egui::DragValue::new(&mut h).speed(1.0).range(1.0..=20000.0).prefix("H  "))
+            .changed();
+    });
+    changed |= ui.add(Slider::new(&mut deg, -180.0..=180.0).text("Rotate°")).changed();
+    if changed {
+        studio.commit(crate::document::Cmd::SetRasterXform {
+            layer: li,
+            before: (origin, size, rot),
+            after: (
+                crate::geom::Pt::new(x, y),
+                crate::geom::Pt::new(w, h),
+                deg.to_radians(),
+            ),
+        });
+    }
+}
+
 fn transform_studio(ui: &mut Ui, studio: &mut Studio) {
     heading(ui, "Transform");
+    if studio.tool == crate::tools::Tool::Artboard || !studio.artboard_sel.is_empty() {
+        artboard_transform(ui, studio);
+        return;
+    }
     if studio.selection.is_empty() {
         ui.label(RichText::new("Nothing selected").small().color(fg_weak()));
         ui.add(Slider::new(&mut studio.polygon_sides, 3..=12).text("Sides"));
@@ -695,6 +847,10 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio) {
     let Some((li, id)) = studio.primary() else {
         return;
     };
+    if id == crate::document::RASTER_ID {
+        raster_transform(ui, studio, li);
+        return;
+    }
     let Some(shape) = studio.doc.find_shape(li, id).cloned() else {
         return;
     };
@@ -762,54 +918,21 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio) {
             .add(Slider::new(&mut deg, -180.0..=180.0).text("Rotate°"))
             .changed()
         {
-            let delta = (deg - shape.rotation.to_degrees()).to_radians();
-            let mut g = shape.geom.clone();
-            g.rotate_about(b.center(), delta);
             studio.commit(crate::document::Cmd::SetGeom {
                 layer: li,
                 id,
                 before: shape.geom.clone(),
-                after: g,
+                after: shape.geom.clone(),
                 rot_before: shape.rotation,
                 rot_after: deg.to_radians(),
             });
         }
         ui.horizontal(|ui| {
             if ui.small_button("Flip H").clicked() {
-                let mut g = shape.geom.clone();
-                g.map_into(
-                    b,
-                    crate::geom::Bounds {
-                        min: crate::geom::Pt::new(b.max.x, b.min.y),
-                        max: crate::geom::Pt::new(b.min.x, b.max.y),
-                    },
-                );
-                studio.commit(crate::document::Cmd::SetGeom {
-                    layer: li,
-                    id,
-                    before: shape.geom.clone(),
-                    after: g,
-                    rot_before: shape.rotation,
-                    rot_after: shape.rotation,
-                });
+                studio.flip_selection(true);
             }
             if ui.small_button("Flip V").clicked() {
-                let mut g = shape.geom.clone();
-                g.map_into(
-                    b,
-                    crate::geom::Bounds {
-                        min: crate::geom::Pt::new(b.min.x, b.max.y),
-                        max: crate::geom::Pt::new(b.max.x, b.min.y),
-                    },
-                );
-                studio.commit(crate::document::Cmd::SetGeom {
-                    layer: li,
-                    id,
-                    before: shape.geom.clone(),
-                    after: g,
-                    rot_before: shape.rotation,
-                    rot_after: shape.rotation,
-                });
+                studio.flip_selection(false);
             }
         });
     }
@@ -957,19 +1080,10 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio) {
     });
 }
 
-fn fx_studio(ui: &mut Ui, studio: &mut Studio) {
-    heading(ui, "FX");
-    let Some(li) = studio.active_layer else {
-        ui.label(RichText::new("Select a layer").small().color(fg_weak()));
-        return;
-    };
-    if li >= studio.doc.layers.len() {
-        return;
-    }
-    let mut stack = studio.doc.layers[li].filters.clone();
+fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &str) {
     ui.horizontal(|ui| {
         ui.checkbox(&mut stack.enabled, "Enabled");
-        ComboBox::from_id_salt("fx-add")
+        ComboBox::from_id_salt(format!("fx-add-{salt}"))
             .selected_text("Add")
             .width(72.0)
             .show_ui(ui, |ui| {
@@ -1019,16 +1133,11 @@ fn fx_studio(ui: &mut Ui, studio: &mut Studio) {
                     ui.add(Slider::new(dy, -80.0..=80.0).text("dy"));
                     ui.add(Slider::new(blur, 0.0..=80.0).text("stdDeviation"));
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new("flood").small().color(fg_weak()));
                         let mut rgb = [color.r, color.g, color.b];
                         if ui.color_edit_button_srgb(&mut rgb).changed() {
                             color.r = rgb[0];
                             color.g = rgb[1];
                             color.b = rgb[2];
-                        }
-                        let mut a = color.a as f32 / 255.0;
-                        if ui.add(Slider::new(&mut a, 0.0..=1.0).text("opacity")).changed() {
-                            color.a = (a * 255.0).round() as u8;
                         }
                     });
                 }
@@ -1037,7 +1146,7 @@ fn fx_studio(ui: &mut Ui, studio: &mut Studio) {
                     ui.add(Slider::new(dy, -200.0..=200.0).text("dy"));
                 }
                 crate::filter::Fx::Morphology { erode, radius } => {
-                    ui.checkbox(erode, "Erode (off = dilate)");
+                    ui.checkbox(erode, "Erode");
                     ui.add(Slider::new(radius, 0.0..=40.0).text("radius"));
                 }
                 crate::filter::Fx::Saturate { amount } => {
@@ -1056,23 +1165,7 @@ fn fx_studio(ui: &mut Ui, studio: &mut Studio) {
                     ui.add(Slider::new(amount, 0.0..=1.0).text("amount"));
                 }
                 crate::filter::Fx::ColorMatrix { values } => {
-                    ui.label(
-                        RichText::new("20 values, row-major 4×5")
-                            .small()
-                            .color(fg_weak()),
-                    );
-                    for row in 0..4 {
-                        ui.horizontal(|ui| {
-                            for col in 0..5 {
-                                let i = row * 5 + col;
-                                ui.add(
-                                    eframe::egui::DragValue::new(&mut values[i])
-                                        .speed(0.01)
-                                        .range(-4.0..=4.0),
-                                );
-                            }
-                        });
-                    }
+                    ui.add(Slider::new(&mut values[0], -2.0..=2.0).text("m00"));
                 }
                 crate::filter::Fx::Turbulence {
                     fractal,
@@ -1080,15 +1173,15 @@ fn fx_studio(ui: &mut Ui, studio: &mut Studio) {
                     octaves,
                     seed,
                 } => {
-                    ui.checkbox(fractal, "fractalNoise (off = turbulence)");
-                    ui.add(Slider::new(base, 0.001..=0.5).text("baseFrequency").logarithmic(true));
+                    ui.checkbox(fractal, "fractalNoise");
+                    ui.add(Slider::new(base, 0.001..=0.5).text("baseFrequency"));
                     ui.add(Slider::new(octaves, 1..=8).text("numOctaves"));
                     ui.add(Slider::new(seed, 0..=9999).text("seed"));
                 }
                 crate::filter::Fx::Displacement { scale, x_ch, y_ch } => {
                     ui.add(Slider::new(scale, 0.0..=120.0).text("scale"));
-                    ui.add(Slider::new(x_ch, 0..=3).text("xChannel 0=R"));
-                    ui.add(Slider::new(y_ch, 0..=3).text("yChannel 1=G"));
+                    ui.add(Slider::new(x_ch, 0..=3).text("xChannel"));
+                    ui.add(Slider::new(y_ch, 0..=3).text("yChannel"));
                 }
             }
         });
@@ -1102,8 +1195,45 @@ fn fx_studio(ui: &mut Ui, studio: &mut Studio) {
             stack.items.swap(i, j as usize);
         }
     }
+}
+
+fn fx_studio(ui: &mut Ui, studio: &mut Studio) {
+    heading(ui, "FX");
+    let shape_target = studio.primary().and_then(|(li, id)| {
+        if id == crate::document::RASTER_ID {
+            None
+        } else {
+            studio.doc.find_shape(li, id).map(|_| (li, id))
+        }
+    });
+    if let Some((li, id)) = shape_target {
+        ui.label(
+            RichText::new("Object")
+                .small()
+                .color(fg_weak()),
+        );
+        let mut stack = studio
+            .doc
+            .find_shape(li, id)
+            .map(|s| s.filters.clone())
+            .unwrap_or_default();
+        fx_stack_editor(ui, &mut stack, &format!("obj-{id}"));
+        studio.commit_shape_filters(li, id, stack);
+        ui.add_space(6.0);
+        ui.separator();
+        ui.label(RichText::new("Layer").small().color(fg_weak()));
+    }
+    let Some(li) = studio.active_layer else {
+        ui.label(RichText::new("Select a layer").small().color(fg_weak()));
+        return;
+    };
+    if li >= studio.doc.layers.len() {
+        return;
+    }
+    let mut stack = studio.doc.layers[li].filters.clone();
+    fx_stack_editor(ui, &mut stack, "layer");
     if stack != studio.doc.layers[li].filters {
-        studio.commit_filters(li, stack);
+        studio.commit_filters(li, stack.clone());
     }
 }
 
@@ -1167,12 +1297,38 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
     let mut up = None;
     let mut down = None;
     let mut start_rename = None;
+    let mut toggle_expand = None;
+    let mut pick_shape: Option<(usize, u64)> = None;
+    let mut vis_shape: Option<(usize, u64)> = None;
+    let mut lock_shape: Option<(usize, u64)> = None;
+    let mut start_shape_rename: Option<(usize, u64)> = None;
+    let mut shape_up: Option<(usize, usize)> = None;
+    let mut shape_down: Option<(usize, usize)> = None;
     let n = studio.doc.layers.len();
     for i in (0..n).rev() {
         ui.push_id(studio.doc.layers[i].id, |ui| {
             ui.horizontal(|ui| {
                 let layer = &studio.doc.layers[i];
                 let on = studio.active_layer == Some(i);
+                let expanded = studio.layer_expanded.contains(&layer.id);
+                let has_kids = layer.kind.shapes().map(|s| !s.is_empty()).unwrap_or(false)
+                    || layer.kind.is_placed_raster();
+                if has_kids {
+                    if icons::tiny_icon(
+                        ui,
+                        if expanded {
+                            ph::CARET_DOWN
+                        } else {
+                            ph::CARET_RIGHT
+                        },
+                        "Expand objects",
+                        expanded,
+                    ) {
+                        toggle_expand = Some(layer.id);
+                    }
+                } else {
+                    ui.add_space(22.0);
+                }
                 if icons::tiny_icon(
                     ui,
                     if layer.visible {
@@ -1233,6 +1389,90 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                     down = Some(i);
                 }
             });
+            if studio.layer_expanded.contains(&studio.doc.layers[i].id) {
+                if studio.doc.layers[i].kind.is_placed_raster() {
+                    ui.horizontal(|ui| {
+                        ui.add_space(18.0);
+                        let on = studio.selection.contains(&(i, crate::document::RASTER_ID));
+                        let fill = if on {
+                            accent_dim()
+                        } else {
+                            Color32::TRANSPARENT
+                        };
+                        if ui
+                            .add(
+                                eframe::egui::Button::new(
+                                    RichText::new(&studio.doc.layers[i].name).size(11.0),
+                                )
+                                .fill(fill),
+                            )
+                            .clicked()
+                        {
+                            pick_shape = Some((i, crate::document::RASTER_ID));
+                        }
+                    });
+                }
+                if let Some(shapes) = studio.doc.layers[i].kind.shapes() {
+                    for (si, sh) in shapes.iter().enumerate().rev() {
+                        ui.horizontal(|ui| {
+                            ui.add_space(12.0);
+                            if icons::tiny_icon(
+                                ui,
+                                if sh.visible { ph::EYE } else { ph::EYE_SLASH },
+                                "Object visibility",
+                                !sh.visible,
+                            ) {
+                                vis_shape = Some((i, sh.id));
+                            }
+                            if icons::tiny_icon(
+                                ui,
+                                if sh.locked { ph::LOCK } else { ph::LOCK_OPEN },
+                                "Object lock",
+                                sh.locked,
+                            ) {
+                                lock_shape = Some((i, sh.id));
+                            }
+                            let on = studio.selection.contains(&(i, sh.id));
+                            let fill = if on {
+                                accent_dim()
+                            } else {
+                                Color32::TRANSPARENT
+                            };
+                            if studio.shape_rename.as_ref().map(|(li, id, _)| (*li, *id))
+                                == Some((i, sh.id))
+                            {
+                                if let Some((_, _, buf)) = studio.shape_rename.as_mut() {
+                                    let r = ui.add(
+                                        eframe::egui::TextEdit::singleline(buf)
+                                            .desired_width(90.0)
+                                            .font(eframe::egui::TextStyle::Small),
+                                    );
+                                    if r.lost_focus() {
+                                        start_shape_rename = Some((usize::MAX, 0));
+                                    }
+                                }
+                            } else {
+                                let resp = ui.add(
+                                    eframe::egui::Button::new(RichText::new(&sh.name).size(11.0))
+                                        .fill(fill),
+                                );
+                                if resp.clicked() {
+                                    pick_shape = Some((i, sh.id));
+                                }
+                                if resp.double_clicked() {
+                                    start_shape_rename = Some((i, sh.id));
+                                }
+                            }
+                            if icons::tiny_icon(ui, ph::CARET_UP, "Object up", false) {
+                                shape_up = Some((i, si));
+                            }
+                            if icons::tiny_icon(ui, ph::CARET_DOWN, "Object down", false) {
+                                shape_down = Some((i, si));
+                            }
+                        });
+                    }
+                }
+            }
         });
         if studio.active_layer == Some(i) {
             let mut op = studio.doc.layers[i].opacity;
@@ -1340,5 +1580,80 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
     {
         studio.commit(crate::document::Cmd::ReorderLayer { from: i, to: i - 1 });
         studio.active_layer = Some(i - 1);
+    }
+    if let Some(id) = toggle_expand {
+        if !studio.layer_expanded.remove(&id) {
+            studio.layer_expanded.insert(id);
+        }
+    }
+    if let Some((li, id)) = pick_shape {
+        studio.selection = vec![(li, id)];
+        studio.active_layer = Some(li);
+        studio.artboard_sel.clear();
+    }
+    if let Some((li, id)) = vis_shape {
+        if let Some(s) = studio.doc.find_shape(li, id) {
+            studio.commit(crate::document::Cmd::SetShapeMeta {
+                layer: li,
+                id,
+                name: s.name.clone(),
+                visible: !s.visible,
+                locked: s.locked,
+                before: (s.name.clone(), s.visible, s.locked),
+            });
+        }
+    }
+    if let Some((li, id)) = lock_shape {
+        if let Some(s) = studio.doc.find_shape(li, id) {
+            studio.commit(crate::document::Cmd::SetShapeMeta {
+                layer: li,
+                id,
+                name: s.name.clone(),
+                visible: s.visible,
+                locked: !s.locked,
+                before: (s.name.clone(), s.visible, s.locked),
+            });
+        }
+    }
+    if let Some((li, id)) = start_shape_rename {
+        if li == usize::MAX {
+            if let Some((l, sid, name)) = studio.shape_rename.take() {
+                if let Some(s) = studio.doc.find_shape(l, sid) {
+                    let trimmed = name.trim().to_string();
+                    if !trimmed.is_empty() && trimmed != s.name {
+                        studio.commit(crate::document::Cmd::SetShapeMeta {
+                            layer: l,
+                            id: sid,
+                            name: trimmed,
+                            visible: s.visible,
+                            locked: s.locked,
+                            before: (s.name.clone(), s.visible, s.locked),
+                        });
+                    }
+                }
+            }
+        } else if let Some(s) = studio.doc.find_shape(li, id) {
+            studio.shape_rename = Some((li, id, s.name.clone()));
+        }
+    }
+    if let Some((li, from)) = shape_up {
+        if let Some(shapes) = studio.doc.layers.get(li).and_then(|l| l.kind.shapes())
+            && from + 1 < shapes.len()
+        {
+            studio.commit(crate::document::Cmd::ReorderShape {
+                layer: li,
+                from,
+                to: from + 1,
+            });
+        }
+    }
+    if let Some((li, from)) = shape_down {
+        if from > 0 {
+            studio.commit(crate::document::Cmd::ReorderShape {
+                layer: li,
+                from,
+                to: from - 1,
+            });
+        }
     }
 }

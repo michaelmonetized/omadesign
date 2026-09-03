@@ -55,6 +55,7 @@ pub enum Tool {
     Wand,
     Hand,
     Zoom,
+    Artboard,
 }
 
 impl Tool {
@@ -85,6 +86,7 @@ impl Tool {
             Tool::Wand => "Wand",
             Tool::Hand => "Hand",
             Tool::Zoom => "Zoom",
+            Tool::Artboard => "Artboard",
         }
     }
 
@@ -115,6 +117,7 @@ impl Tool {
             Tool::Wand => "W",
             Tool::Hand => "H",
             Tool::Zoom => "Z",
+            Tool::Artboard => "Shift+O",
         }
     }
 
@@ -145,6 +148,7 @@ impl Tool {
             Tool::Wand => "Click to select similar colour.",
             Tool::Hand => "Drag to pan. Space does this from any tool.",
             Tool::Zoom => "Drag a box · click in · Alt-click out · Ctrl-click artboard · Ctrl+Shift-click selection or all · pinch or scroll to zoom",
+            Tool::Artboard => "Click a board to select · drag a handle to resize · drag inside to move · drag empty to draw · Alt clones · wrap from Object",
         }
     }
 
@@ -166,6 +170,7 @@ impl Tool {
                     | Tool::Eyedropper
                     | Tool::Trace
                     | Tool::Brush
+                    | Tool::Artboard
                     | Tool::Hand
                     | Tool::Zoom
             ),
@@ -213,6 +218,7 @@ impl Tool {
             Tool::Eyedropper,
             Tool::Trace,
             Tool::Brush,
+            Tool::Artboard,
             Tool::Hand,
             Tool::Zoom,
         ]
@@ -314,6 +320,7 @@ pub fn shortcut_groups() -> &'static [(&'static str, &'static [ShortcutRow])] {
                 ShortcutRow { action: "Lasso", keys: "Q" },
                 ShortcutRow { action: "Hand", keys: "H" },
                 ShortcutRow { action: "Zoom", keys: "Z" },
+                ShortcutRow { action: "Artboard", keys: "Shift+O" },
             ],
         ),
         (
@@ -394,6 +401,7 @@ mod tests {
             Tool::Wand,
             Tool::Hand,
             Tool::Zoom,
+            Tool::Artboard,
         ];
         for t in all {
             let ok = t.in_persona(Persona::Design)

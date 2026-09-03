@@ -271,6 +271,37 @@ pub struct Anchor {
     pub pt: Pt,
     pub h_in: Pt,
     pub h_out: Pt,
+    /// Corner rounding at this node. Used by Node-mode widgets and path tessellation.
+    #[serde(default)]
+    pub radius: f32,
+}
+
+/// Screen-pixel drag needed before a pen click becomes a smooth point.
+pub const PEN_DRAG_PX: f32 = 3.0;
+
+/// Snap a vector to 45° increments.
+pub fn constrain_45(delta: Pt) -> Pt {
+    let ang = delta.y.atan2(delta.x);
+    let snapped = (ang / std::f32::consts::FRAC_PI_4).round() * std::f32::consts::FRAC_PI_4;
+    let len = delta.length();
+    Pt::new(len * snapped.cos(), len * snapped.sin())
+}
+
+/// Apply pen click-drag to the just-placed anchor.
+/// Under `PEN_DRAG_PX` screen pixels this stays a corner — click places a point.
+pub fn apply_pen_smooth(anchor: &mut Anchor, drag: Pt, scale: f32, alt: bool, shift: bool) {
+    let d = if shift { constrain_45(drag) } else { drag };
+    if d.length() * scale.max(0.01) < PEN_DRAG_PX {
+        anchor.h_in = Pt::ZERO;
+        anchor.h_out = Pt::ZERO;
+        return;
+    }
+    if alt {
+        anchor.h_out = d;
+    } else {
+        anchor.h_out = d;
+        anchor.h_in = -d;
+    }
 }
 
 impl Anchor {
@@ -279,6 +310,7 @@ impl Anchor {
             pt,
             h_in: Pt::ZERO,
             h_out: Pt::ZERO,
+            radius: 0.0,
         }
     }
 
@@ -287,6 +319,7 @@ impl Anchor {
             pt,
             h_in: -drag,
             h_out: drag,
+            radius: 0.0,
         }
     }
 
@@ -398,37 +431,83 @@ fn ellipse_pts(center: Pt, radii: Pt, segs: usize) -> Vec<Pt> {
 }
 
 fn rounded_rect(origin: Pt, size: Pt, radius: f32) -> Vec<Pt> {
-    let r = radius
-        .max(0.0)
-        .min(size.x.abs() * 0.5)
-        .min(size.y.abs() * 0.5);
-    if r < 0.5 {
-        return vec![
-            origin,
-            Pt::new(origin.x + size.x, origin.y),
-            origin + size,
-            Pt::new(origin.x, origin.y + size.y),
-        ];
-    }
+    rounded_rect_corners(origin, size, [radius; 4])
+}
+
+/// Per-corner radii: TL, TR, BR, BL.
+pub fn rounded_rect_corners(origin: Pt, size: Pt, radii: [f32; 4]) -> Vec<Pt> {
     let x0 = origin.x.min(origin.x + size.x);
     let x1 = origin.x.max(origin.x + size.x);
     let y0 = origin.y.min(origin.y + size.y);
     let y1 = origin.y.max(origin.y + size.y);
+    let w = (x1 - x0).max(0.0);
+    let h = (y1 - y0).max(0.0);
+    let mut r = radii;
+    for rr in &mut r {
+        *rr = rr.max(0.0).min(w * 0.5).min(h * 0.5);
+    }
+    if r[0] + r[1] > w {
+        let s = w / (r[0] + r[1]).max(1e-6);
+        r[0] *= s;
+        r[1] *= s;
+    }
+    if r[3] + r[2] > w {
+        let s = w / (r[3] + r[2]).max(1e-6);
+        r[3] *= s;
+        r[2] *= s;
+    }
+    if r[0] + r[3] > h {
+        let s = h / (r[0] + r[3]).max(1e-6);
+        r[0] *= s;
+        r[3] *= s;
+    }
+    if r[1] + r[2] > h {
+        let s = h / (r[1] + r[2]).max(1e-6);
+        r[1] *= s;
+        r[2] *= s;
+    }
+    if r.iter().all(|x| *x < 0.5) {
+        return vec![
+            Pt::new(x0, y0),
+            Pt::new(x1, y0),
+            Pt::new(x1, y1),
+            Pt::new(x0, y1),
+        ];
+    }
     let mut pts = Vec::new();
     let corners = [
-        (Pt::new(x1 - r, y0 + r), 1.5, 2.0),
-        (Pt::new(x1 - r, y1 - r), 0.0, 0.5),
-        (Pt::new(x0 + r, y1 - r), 0.5, 1.0),
-        (Pt::new(x0 + r, y0 + r), 1.0, 1.5),
+        (Pt::new(x1 - r[1], y0 + r[1]), r[1], 1.5, 2.0),
+        (Pt::new(x1 - r[2], y1 - r[2]), r[2], 0.0, 0.5),
+        (Pt::new(x0 + r[3], y1 - r[3]), r[3], 0.5, 1.0),
+        (Pt::new(x0 + r[0], y0 + r[0]), r[0], 1.0, 1.5),
     ];
-    for (c, a0, a1) in corners {
+    for (c, rad, a0, a1) in corners {
+        if rad < 0.5 {
+            pts.push(c);
+            continue;
+        }
         for i in 0..=6 {
             let t = i as f32 / 6.0;
             let a = (a0 + (a1 - a0) * t) * std::f32::consts::PI;
-            pts.push(Pt::new(c.x + r * a.cos(), c.y + r * a.sin()));
+            pts.push(Pt::new(c.x + rad * a.cos(), c.y + rad * a.sin()));
         }
     }
     pts
+}
+
+/// Widget positions for on-canvas corner rounding (TL, TR, BR, BL).
+pub fn corner_widgets(origin: Pt, size: Pt) -> [Pt; 4] {
+    let x0 = origin.x;
+    let y0 = origin.y;
+    let x1 = origin.x + size.x;
+    let y1 = origin.y + size.y;
+    let inset = 14.0f32.min(size.x.abs() * 0.25).min(size.y.abs() * 0.25).max(6.0);
+    [
+        Pt::new(x0 + inset.copysign(size.x), y0 + inset.copysign(size.y)),
+        Pt::new(x1 - inset.copysign(size.x), y0 + inset.copysign(size.y)),
+        Pt::new(x1 - inset.copysign(size.x), y1 - inset.copysign(size.y)),
+        Pt::new(x0 + inset.copysign(size.x), y1 - inset.copysign(size.y)),
+    ]
 }
 
 fn polygon_pts(center: Pt, radii: Pt, sides: u32) -> Vec<Pt> {
@@ -463,18 +542,112 @@ fn path_pts(anchors: &[Anchor], closed: bool) -> Vec<Pt> {
     if anchors.len() == 1 {
         return vec![anchors[0].pt];
     }
-    let mut pts = vec![anchors[0].pt];
-    let segs = if closed {
-        anchors.len()
-    } else {
-        anchors.len() - 1
-    };
+    let n = anchors.len();
+    let mut pts = Vec::new();
+    let segs = if closed { n } else { n - 1 };
     for i in 0..segs {
-        let a = &anchors[i % anchors.len()];
-        let b = &anchors[(i + 1) % anchors.len()];
-        flatten_cubic(a.pt, a.pt + a.h_out, b.pt + b.h_in, b.pt, &mut pts);
+        let (a_pt, a_out) = filleted_out(anchors, closed, i);
+        let (b_pt, b_in) = filleted_in(anchors, closed, (i + 1) % n);
+        if i == 0 {
+            pts.push(a_pt);
+        }
+        if a_out.length_sq() < 0.01 && b_in.length_sq() < 0.01 {
+            if (b_pt - *pts.last().unwrap_or(&a_pt)).length_sq() > 0.01 {
+                pts.push(b_pt);
+            }
+        } else {
+            flatten_cubic(a_pt, a_pt + a_out, b_pt + b_in, b_pt, &mut pts);
+        }
     }
     pts
+}
+
+fn filleted_out(anchors: &[Anchor], closed: bool, i: usize) -> (Pt, Pt) {
+    let a = &anchors[i];
+    if a.radius < 0.5 || !a.is_corner() {
+        return (a.pt, a.h_out);
+    }
+    let n = anchors.len();
+    let prev = if i == 0 {
+        if closed {
+            anchors[n - 1].pt
+        } else {
+            return (a.pt, a.h_out);
+        }
+    } else {
+        anchors[i - 1].pt
+    };
+    let next = anchors[(i + 1) % n].pt;
+    let (p1, p2) = fillet_pts(prev, a.pt, next, a.radius);
+    (p1, p2 - p1)
+}
+
+fn filleted_in(anchors: &[Anchor], closed: bool, i: usize) -> (Pt, Pt) {
+    let a = &anchors[i];
+    if a.radius < 0.5 || !a.is_corner() {
+        return (a.pt, a.h_in);
+    }
+    let n = anchors.len();
+    let prev = if i == 0 {
+        if closed {
+            anchors[n - 1].pt
+        } else {
+            return (a.pt, a.h_in);
+        }
+    } else {
+        anchors[i - 1].pt
+    };
+    let next = if i + 1 >= n {
+        if closed {
+            anchors[0].pt
+        } else {
+            return (a.pt, a.h_in);
+        }
+    } else {
+        anchors[i + 1].pt
+    };
+    let (p1, p2) = fillet_pts(prev, a.pt, next, a.radius);
+    (p2, p1 - p2)
+}
+
+fn fillet_pts(prev: Pt, corner: Pt, next: Pt, radius: f32) -> (Pt, Pt) {
+    let vin = corner - prev;
+    let vout = next - corner;
+    let lin = vin.length().max(1e-6);
+    let lout = vout.length().max(1e-6);
+    let r = radius.min(lin * 0.45).min(lout * 0.45);
+    (corner - vin * (r / lin), corner + vout * (r / lout))
+}
+
+/// SVG `d` that keeps cubics (`C`) instead of flattening to lines.
+pub fn path_svg_d(anchors: &[Anchor], closed: bool) -> String {
+    if anchors.is_empty() {
+        return String::new();
+    }
+    let mut d = format!("M {:.3} {:.3}", anchors[0].pt.x, anchors[0].pt.y);
+    let n = anchors.len();
+    let segs = if closed { n } else { n.saturating_sub(1) };
+    for i in 0..segs {
+        let (a_pt, a_out) = filleted_out(anchors, closed, i % n);
+        let (b_pt, b_in) = filleted_in(anchors, closed, (i + 1) % n);
+        if i == 0 && (a_pt - anchors[0].pt).length_sq() > 0.01 {
+            d = format!("M {:.3} {:.3}", a_pt.x, a_pt.y);
+        }
+        if a_out.length_sq() < 0.04 && b_in.length_sq() < 0.04 {
+            d.push_str(&format!(" L {:.3} {:.3}", b_pt.x, b_pt.y));
+        } else {
+            let c1 = a_pt + a_out;
+            let c2 = b_pt + b_in;
+            d.push_str(&format!(
+                " C {:.3} {:.3} {:.3} {:.3} {:.3} {:.3}",
+                c1.x, c1.y, c2.x, c2.y, b_pt.x, b_pt.y
+            ));
+        }
+    }
+    if closed {
+        d.push_str(" Z");
+    }
+    d
 }
 
 fn default_true() -> bool {
@@ -749,37 +922,82 @@ impl Geom {
         }
     }
 
+    /// Mirror across the bbox centre. Does not use inverted Bounds (width/height
+    /// clamp to 0 and would collapse the object to a line).
+    pub fn flip(&mut self, horizontal: bool) {
+        let c = self.bbox().center();
+        self.flip_about(c, horizontal);
+    }
+
+    pub fn flip_about(&mut self, c: Pt, horizontal: bool) {
+        let fp = |p: Pt| {
+            if horizontal {
+                Pt::new(2.0 * c.x - p.x, p.y)
+            } else {
+                Pt::new(p.x, 2.0 * c.y - p.y)
+            }
+        };
+        let fv = |v: Pt| {
+            if horizontal {
+                Pt::new(-v.x, v.y)
+            } else {
+                Pt::new(v.x, -v.y)
+            }
+        };
+        match self {
+            Geom::Rect { origin, size, .. } => {
+                let a = fp(*origin);
+                let b = fp(*origin + *size);
+                let min = a.min(b);
+                let max = a.max(b);
+                *origin = min;
+                *size = max - min;
+            }
+            Geom::Ellipse { center, .. }
+            | Geom::Polygon { center, .. }
+            | Geom::Star { center, .. } => {
+                *center = fp(*center);
+            }
+            Geom::Line { a, b } => {
+                *a = fp(*a);
+                *b = fp(*b);
+            }
+            Geom::Path { anchors, .. } => {
+                for a in anchors {
+                    a.pt = fp(a.pt);
+                    a.h_in = fv(a.h_in);
+                    a.h_out = fv(a.h_out);
+                }
+            }
+            Geom::Text(t) => {
+                t.origin = fp(t.origin);
+                for contour in &mut t.contours {
+                    for p in contour {
+                        *p = fp(*p);
+                    }
+                }
+            }
+            Geom::Poly { contours, .. } => {
+                for contour in contours {
+                    for p in contour {
+                        *p = fp(*p);
+                    }
+                }
+            }
+        }
+    }
+
     pub fn rotate_about(&mut self, origin: Pt, angle: f32) {
         let rot = |p: &mut Pt| *p = p.rotate_about(origin, angle);
         match self {
             Geom::Rect {
                 origin: o, size, ..
             } => {
-                // Bake into a polygon so rotation stays truthful.
-                let pts = rounded_rect(*o, *size, 0.0);
-                let mut baked: Vec<Pt> = pts;
-                for p in &mut baked {
-                    rot(p);
-                }
-                *self = Geom::Poly {
-                    contours: vec![baked],
-                    winding: false,
-                };
+                // Keep the primitive. Callers add the angle to Shape.rotation.
+                let c = *o + *size * 0.5;
+                *o += c.rotate_about(origin, angle) - c;
             }
-            Geom::Ellipse { center, radii } => {
-                if (radii.x - radii.y).abs() < 0.5 {
-                    rot(center);
-                } else {
-                    let mut pts = ellipse_pts(*center, *radii, 64);
-                    for p in &mut pts {
-                        rot(p);
-                    }
-                    *self = Geom::Poly {
-                        contours: vec![pts],
-                        winding: false,
-                    };
-                }
-            }
+            Geom::Ellipse { center, .. } => rot(center),
             Geom::Polygon { center, .. } | Geom::Star { center, .. } => rot(center),
             Geom::Line { a, b } => {
                 rot(a);
@@ -854,15 +1072,23 @@ impl Geom {
                 origin,
                 size,
                 radius,
-            } if *radius < 0.5 => Geom::Path {
-                anchors: vec![
+            } => {
+                let mut anchors = vec![
                     Anchor::corner(*origin),
                     Anchor::corner(Pt::new(origin.x + size.x, origin.y)),
                     Anchor::corner(Pt::new(origin.x + size.x, origin.y + size.y)),
                     Anchor::corner(Pt::new(origin.x, origin.y + size.y)),
-                ],
-                closed: true,
-            },
+                ];
+                if *radius >= 0.5 {
+                    for a in &mut anchors {
+                        a.radius = *radius;
+                    }
+                }
+                Geom::Path {
+                    anchors,
+                    closed: true,
+                }
+            }
             Geom::Ellipse { center, radii } => {
                 let k = 0.55228475;
                 let rx = radii.x;
@@ -874,21 +1100,25 @@ impl Geom {
                             pt: Pt::new(c.x + rx, c.y),
                             h_in: Pt::new(0.0, -k * ry),
                             h_out: Pt::new(0.0, k * ry),
+                            radius: 0.0,
                         },
                         Anchor {
                             pt: Pt::new(c.x, c.y + ry),
                             h_in: Pt::new(k * rx, 0.0),
                             h_out: Pt::new(-k * rx, 0.0),
+                            radius: 0.0,
                         },
                         Anchor {
                             pt: Pt::new(c.x - rx, c.y),
                             h_in: Pt::new(0.0, k * ry),
                             h_out: Pt::new(0.0, -k * ry),
+                            radius: 0.0,
                         },
                         Anchor {
                             pt: Pt::new(c.x, c.y - ry),
                             h_in: Pt::new(-k * rx, 0.0),
                             h_out: Pt::new(k * rx, 0.0),
+                            radius: 0.0,
                         },
                     ],
                     closed: true,
@@ -999,6 +1229,7 @@ pub fn insert_anchor(anchors: &mut Vec<Anchor>, closed: bool, p: Pt, slack: f32)
         pt: left[3],
         h_in: left[2] - left[3],
         h_out: right[1] - right[0],
+        radius: 0.0,
     };
     let next = (seg + 1) % anchors.len();
     if next == 0 && closed {
@@ -1109,5 +1340,84 @@ mod tests {
             Pt::new(0.0, 10.0),
         ];
         assert!((poly_area(&pts) - 100.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn pen_click_stays_corner_under_threshold() {
+        let mut a = Anchor::corner(Pt::new(10.0, 10.0));
+        apply_pen_smooth(&mut a, Pt::new(1.0, 0.0), 1.0, false, false);
+        assert!(a.is_corner(), "1px drag at 100% zoom is a corner");
+        apply_pen_smooth(&mut a, Pt::new(20.0, 0.0), 1.0, false, false);
+        assert!(!a.is_corner(), "20px drag is a smooth point");
+        assert!((a.h_out.x - 20.0).abs() < 0.01);
+        assert!((a.h_in.x + 20.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn pen_alt_breaks_handle_symmetry() {
+        let mut a = Anchor::corner(Pt::ZERO);
+        apply_pen_smooth(&mut a, Pt::new(30.0, 0.0), 1.0, true, false);
+        assert!((a.h_out.x - 30.0).abs() < 0.01);
+        assert!(a.h_in.length_sq() < 0.01);
+    }
+
+    #[test]
+    fn path_svg_emits_cubic() {
+        let anchors = vec![
+            Anchor::corner(Pt::new(0.0, 0.0)),
+            Anchor::smooth(Pt::new(40.0, 0.0), Pt::new(10.0, 8.0)),
+        ];
+        let d = path_svg_d(&anchors, false);
+        assert!(d.contains('C') || d.contains(" C"), "{d}");
+        assert!(!d.contains(" L ") || d.starts_with('M'));
+    }
+
+    #[test]
+    fn rotate_keeps_rect_primitive() {
+        let mut g = Geom::Rect {
+            origin: Pt::new(10.0, 10.0),
+            size: Pt::new(40.0, 20.0),
+            radius: 6.0,
+        };
+        g.rotate_about(Pt::new(30.0, 20.0), 0.4);
+        match g {
+            Geom::Rect { radius, .. } => assert!((radius - 6.0).abs() < 1e-4),
+            other => panic!("baked away: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn per_corner_radii_change_outline() {
+        let sharp = rounded_rect_corners(Pt::ZERO, Pt::new(80.0, 40.0), [0.0; 4]);
+        let round = rounded_rect_corners(Pt::ZERO, Pt::new(80.0, 40.0), [12.0, 0.0, 0.0, 0.0]);
+        assert!(round.len() > sharp.len());
+    }
+
+    #[test]
+    fn flip_h_keeps_path_width() {
+        let mut g = Geom::Path {
+            anchors: vec![
+                Anchor::corner(Pt::new(10.0, 10.0)),
+                Anchor::corner(Pt::new(90.0, 10.0)),
+                Anchor::corner(Pt::new(90.0, 50.0)),
+                Anchor::corner(Pt::new(10.0, 50.0)),
+            ],
+            closed: false,
+        };
+        let w = g.bbox().width();
+        g.flip(true);
+        assert!((g.bbox().width() - w).abs() < 0.01, "width {}", g.bbox().width());
+        let Geom::Path { anchors, .. } = &g else { panic!("path") };
+        assert!((anchors[0].pt.x - 90.0).abs() < 0.01);
+        assert!((anchors[1].pt.x - 10.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn inverted_bounds_width_is_zero_so_flip_must_not_use_it() {
+        let b = Bounds {
+            min: Pt::new(80.0, 10.0),
+            max: Pt::new(10.0, 50.0),
+        };
+        assert!(b.width() < 1e-3);
     }
 }
