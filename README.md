@@ -49,6 +49,7 @@ Press **F1** for the full key list.
 - Type: click, type on the canvas, Character studio (font, size, tracking, leading, OpenType)
 - Zoom: drag a box to that area; click zooms in, Alt-click out
 - Fill / stroke, boolean, align, snap, layers, copy/paste, z-order
+- File → Place, drop files on the canvas, Trace (`U`) turns a pixel layer into paths
 
 ## Pixel / Photo
 

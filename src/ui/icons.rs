@@ -7,7 +7,7 @@ use eframe::egui::{FontId, Sense, Stroke, Ui, vec2};
 pub mod ph {
     pub const CURSOR: &str = "\u{E1DC}";
     pub const PATH: &str = "\u{E39C}";
-    pub const PEN_NIB: &str = "\u{E3AC}";
+    pub const PEN: &str = "\u{E3AA}";
     pub const PENCIL: &str = "\u{E3AE}";
     pub const RECTANGLE: &str = "\u{E3F0}";
     pub const CIRCLE: &str = "\u{E18A}";
@@ -17,6 +17,7 @@ pub mod ph {
     pub const TEXT_T: &str = "\u{E48A}";
     pub const GRADIENT: &str = "\u{EB42}";
     pub const EYEDROPPER: &str = "\u{E568}";
+    pub const VECTOR_TWO: &str = "\u{EE64}";
     pub const PAINT_BRUSH: &str = "\u{E6F0}";
     pub const ERASER: &str = "\u{E21E}";
     pub const PAINT_BUCKET: &str = "\u{E392}";
@@ -157,7 +158,7 @@ fn tool_glyph(tool: Tool) -> &'static str {
     match tool {
         Tool::Select => ph::CURSOR,
         Tool::Node => ph::PATH,
-        Tool::Pen => ph::PEN_NIB,
+        Tool::Pen => ph::PEN,
         Tool::Pencil => ph::PENCIL,
         Tool::Rect => ph::RECTANGLE,
         Tool::Ellipse => ph::CIRCLE,
@@ -167,6 +168,7 @@ fn tool_glyph(tool: Tool) -> &'static str {
         Tool::Text => ph::TEXT_T,
         Tool::Gradient => ph::GRADIENT,
         Tool::Eyedropper => ph::EYEDROPPER,
+        Tool::Trace => ph::VECTOR_TWO,
         Tool::Brush => ph::PAINT_BRUSH,
         Tool::Eraser => ph::ERASER,
         Tool::Fill => ph::PAINT_BUCKET,

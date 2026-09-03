@@ -34,19 +34,22 @@ Chrome follows your desktop: Omarchy theme colours and the font from `omarchy fo
 ## Design
 
 - **Move** `V` — click to select, drag to move, eight handles scale, the handle above the box rotates. Shift-click adds to the selection.
-- **Node** `A` — drag points and Bézier handles. Alt-click converts corner/smooth. Click a segment to insert.
-- **Pen** `P` — click a corner, click-drag a smooth point. Enter or double-click finishes. Click the first point to close.
+- **Node** `A` — drag points and Bézier handles. Click a segment to insert. Alt-click converts corner/smooth. Delete removes the selected point. Object → Break path. Shapes convert to a path the first time you edit them.
+- **Pen** `P` — click a corner, click-drag a smooth point. The cubic is drawn as you go. Enter or double-click finishes an **open** path. Click the first point to close. Click an open endpoint to continue it, or to join it to the path you're drawing.
 - **Pencil** `N` — freehand curve.
 - **Rectangle** `R` / **Ellipse** `O` / **Polygon** `Y` / **Star** `S` / **Line** `L` — drag. Shift constrains. Corner radius, sides, and inner radius live in Transform.
 - **Type** `T` — click to place, type on the canvas. First keystroke replaces the “Type” placeholder. Enter is a new line. Esc or click away finishes. Double-click existing type to edit. Character studio: font, size, tracking, leading, OpenType (kerning, ligatures, tabular figures, small caps).
 - **Gradient** `G` — drag across a selected shape.
 - **Eyedropper** `I` — sample fill.
-- **Zoom** `Z` — drag a box to zoom to that area. Click zooms in, Alt-click zooms out. Ctrl+scroll always works.
+- **Trace** `U` — raster to vector on the active pixel layer. Threshold, colour count, and smoothness live in Trace. Object → Trace to vector does the same without switching tools.
+- **Zoom** `Z` — drag a box to that area. Click zooms in, Alt-click zooms out a step. Ctrl-click fits the artboard. Ctrl+Shift-click fits the selection, or every object if nothing is selected. Pinch the trackpad to zoom the canvas. Ctrl++ / Ctrl+- / Ctrl+scroll / Alt-scroll also zoom the canvas, not the chrome. With Z selected, two-finger scroll zooms.
 - **Hand** `H` / Space — pan.
 
 Colour studio: HSV, hex, swatches, recent. `X` swaps fill/stroke. `D` restores defaults.
 
 Boolean (Object menu): union, subtract, intersect, XOR. Combine `Ctrl+G`, release `Ctrl+Shift+G`. Align and distribute. Bring to front / send to back. Snap to grid, guides, objects. Click a ruler to drop a guide.
+
+**FX** (right studio): SVG filter effects on the active layer — blur, drop/inner shadow, offset, dilate/erode, saturate, hue rotate, brightness, contrast, invert, color matrix, turbulence, displacement. Params are the SVG ones. They rasterise on the canvas and write `<filter>` / `fe*` on SVG export.
 
 ## Pixel
 
@@ -75,22 +78,24 @@ PNG/JPEG/static SVG stay the rest pose. The clip lives in the `.oma`.
 ## Files
 
 - Project: `.oma` (JSON, rasters PNG-packed, motion clip)
+- **File → Place…** `Ctrl+Shift+P` — PNG/JPEG/WebP/TIFF/GIF/BMP or SVG onto the current artboard. Click to drop at native size, drag to size it. Enter places at the centre. Esc cancels.
+- Drop a file on the canvas or the welcome screen: images and SVG place, `.oma` opens, Lottie imports.
 - Export: PNG (1×/2×/3×), JPEG, SVG, animated SVG, Lottie JSON
 - Copy / cut / paste shapes. Copy style `Ctrl+Alt+C`, paste style `Ctrl+Alt+V`.
-- Native file dialogs. Drag a photo onto the canvas to place it. Right-click the canvas for the same edits.
+- Native file dialogs. Right-click the canvas for Place, Trace, and the same edits.
 
 ## Keys
 
 ```
 Move V · Node A · Pen P · Pencil N
 Rectangle R · Ellipse O · Polygon Y · Star S · Line L
-Type T · Gradient G · Eyedropper I · Brush B · Eraser E
+Type T · Gradient G · Eyedropper I · Trace U · Brush B · Eraser E
 Fill K · Clone J · Smudge M · Crop C · Wand W · Hand H · Zoom Z
 Undo Ctrl+Z · Redo Ctrl+Shift+Z · Duplicate Ctrl+D
 Copy Ctrl+C · Paste Ctrl+V · Cut Ctrl+X · Select all Ctrl+A
-Save Ctrl+S · Save as Ctrl+Shift+S · Open Ctrl+O · New Ctrl+N · Export Ctrl+E
+Save Ctrl+S · Save as Ctrl+Shift+S · Open Ctrl+O · New Ctrl+N · Place Ctrl+Shift+P · Export Ctrl+E
 Combine Ctrl+G · Release Ctrl+Shift+G · Front Ctrl+Shift+] · Back Ctrl+Shift+[
-Fit Ctrl+0 · 100% Ctrl+1 · Pan Space · Zoom Ctrl+scroll
+Fit Ctrl+0 · 100% Ctrl+1 · Zoom in Ctrl++ · Zoom out Ctrl+- · Pan Space · Pinch / Ctrl+scroll zoom
 Motion: Space play · K key · Home start · End end
 ```
 

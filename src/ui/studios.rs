@@ -37,11 +37,17 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                     || studio.selected_type().is_some();
 
                 color_studio(ui, studio);
+                if studio.tool == Tool::Trace {
+                    ui.add_space(8.0);
+                    trace_studio(ui, studio);
+                }
                 if design {
                     ui.add_space(8.0);
                     stroke_studio(ui, studio);
                     ui.add_space(8.0);
                     transform_studio(ui, studio);
+                    ui.add_space(8.0);
+                    fx_studio(ui, studio);
                 }
                 if motion {
                     ui.add_space(8.0);
@@ -949,6 +955,176 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio) {
             studio.release_compound();
         }
     });
+}
+
+fn fx_studio(ui: &mut Ui, studio: &mut Studio) {
+    heading(ui, "FX");
+    let Some(li) = studio.active_layer else {
+        ui.label(RichText::new("Select a layer").small().color(fg_weak()));
+        return;
+    };
+    if li >= studio.doc.layers.len() {
+        return;
+    }
+    let mut stack = studio.doc.layers[li].filters.clone();
+    ui.horizontal(|ui| {
+        ui.checkbox(&mut stack.enabled, "Enabled");
+        ComboBox::from_id_salt("fx-add")
+            .selected_text("Add")
+            .width(72.0)
+            .show_ui(ui, |ui| {
+                for (name, make) in crate::filter::Fx::catalog() {
+                    if ui.selectable_label(false, *name).clicked() {
+                        stack.items.push(make());
+                    }
+                }
+            });
+    });
+    let mut remove = None;
+    let mut bump = None;
+    for (i, fx) in stack.items.iter_mut().enumerate() {
+        ui.add_space(4.0);
+        ui.group(|ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(fx.name()).small().strong().color(accent()));
+                ui.with_layout(Layout::right_to_left(eframe::egui::Align::Center), |ui| {
+                    if ui.small_button("−").clicked() {
+                        remove = Some(i);
+                    }
+                    if ui.small_button("↓").clicked() {
+                        bump = Some((i, 1));
+                    }
+                    if ui.small_button("↑").clicked() {
+                        bump = Some((i, -1));
+                    }
+                });
+            });
+            match fx {
+                crate::filter::Fx::Blur { std } => {
+                    ui.add(Slider::new(std, 0.0..=80.0).text("stdDeviation"));
+                }
+                crate::filter::Fx::Shadow {
+                    dx,
+                    dy,
+                    blur,
+                    color,
+                }
+                | crate::filter::Fx::InnerShadow {
+                    dx,
+                    dy,
+                    blur,
+                    color,
+                } => {
+                    ui.add(Slider::new(dx, -80.0..=80.0).text("dx"));
+                    ui.add(Slider::new(dy, -80.0..=80.0).text("dy"));
+                    ui.add(Slider::new(blur, 0.0..=80.0).text("stdDeviation"));
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("flood").small().color(fg_weak()));
+                        let mut rgb = [color.r, color.g, color.b];
+                        if ui.color_edit_button_srgb(&mut rgb).changed() {
+                            color.r = rgb[0];
+                            color.g = rgb[1];
+                            color.b = rgb[2];
+                        }
+                        let mut a = color.a as f32 / 255.0;
+                        if ui.add(Slider::new(&mut a, 0.0..=1.0).text("opacity")).changed() {
+                            color.a = (a * 255.0).round() as u8;
+                        }
+                    });
+                }
+                crate::filter::Fx::Offset { dx, dy } => {
+                    ui.add(Slider::new(dx, -200.0..=200.0).text("dx"));
+                    ui.add(Slider::new(dy, -200.0..=200.0).text("dy"));
+                }
+                crate::filter::Fx::Morphology { erode, radius } => {
+                    ui.checkbox(erode, "Erode (off = dilate)");
+                    ui.add(Slider::new(radius, 0.0..=40.0).text("radius"));
+                }
+                crate::filter::Fx::Saturate { amount } => {
+                    ui.add(Slider::new(amount, 0.0..=3.0).text("values"));
+                }
+                crate::filter::Fx::HueRotate { degrees } => {
+                    ui.add(Slider::new(degrees, -180.0..=180.0).text("degrees"));
+                }
+                crate::filter::Fx::Brightness { amount } => {
+                    ui.add(Slider::new(amount, 0.0..=3.0).text("slope"));
+                }
+                crate::filter::Fx::Contrast { amount } => {
+                    ui.add(Slider::new(amount, 0.0..=3.0).text("slope"));
+                }
+                crate::filter::Fx::Invert { amount } => {
+                    ui.add(Slider::new(amount, 0.0..=1.0).text("amount"));
+                }
+                crate::filter::Fx::ColorMatrix { values } => {
+                    ui.label(
+                        RichText::new("20 values, row-major 4×5")
+                            .small()
+                            .color(fg_weak()),
+                    );
+                    for row in 0..4 {
+                        ui.horizontal(|ui| {
+                            for col in 0..5 {
+                                let i = row * 5 + col;
+                                ui.add(
+                                    eframe::egui::DragValue::new(&mut values[i])
+                                        .speed(0.01)
+                                        .range(-4.0..=4.0),
+                                );
+                            }
+                        });
+                    }
+                }
+                crate::filter::Fx::Turbulence {
+                    fractal,
+                    base,
+                    octaves,
+                    seed,
+                } => {
+                    ui.checkbox(fractal, "fractalNoise (off = turbulence)");
+                    ui.add(Slider::new(base, 0.001..=0.5).text("baseFrequency").logarithmic(true));
+                    ui.add(Slider::new(octaves, 1..=8).text("numOctaves"));
+                    ui.add(Slider::new(seed, 0..=9999).text("seed"));
+                }
+                crate::filter::Fx::Displacement { scale, x_ch, y_ch } => {
+                    ui.add(Slider::new(scale, 0.0..=120.0).text("scale"));
+                    ui.add(Slider::new(x_ch, 0..=3).text("xChannel 0=R"));
+                    ui.add(Slider::new(y_ch, 0..=3).text("yChannel 1=G"));
+                }
+            }
+        });
+    }
+    if let Some(i) = remove {
+        stack.items.remove(i);
+    }
+    if let Some((i, dir)) = bump {
+        let j = i as i32 + dir;
+        if j >= 0 && (j as usize) < stack.items.len() {
+            stack.items.swap(i, j as usize);
+        }
+    }
+    if stack != studio.doc.layers[li].filters {
+        studio.commit_filters(li, stack);
+    }
+}
+
+fn trace_studio(ui: &mut Ui, studio: &mut Studio) {
+    heading(ui, "Trace");
+    ui.label(
+        RichText::new("Raster to vector on the active pixel layer.")
+            .small()
+            .color(fg_weak()),
+    );
+    ui.add(Slider::new(&mut studio.trace_opts.colors, 1..=12).text("Colours"));
+    if studio.trace_opts.colors <= 1 {
+        ui.add(Slider::new(&mut studio.trace_opts.threshold, 0.05..=0.95).text("Threshold"));
+    }
+    ui.add(Slider::new(&mut studio.trace_opts.smoothness, 0.2..=8.0).text("Smoothness"));
+    ui.add(Slider::new(&mut studio.trace_opts.min_area, 1.0..=64.0).text("Min area"));
+    ui.checkbox(&mut studio.trace_opts.ignore_white, "Ignore white");
+    ui.add_space(4.0);
+    if ui.button("Trace to vector").clicked() {
+        studio.trace_active_raster();
+    }
 }
 
 fn brush_studio(ui: &mut Ui, studio: &mut Studio) {

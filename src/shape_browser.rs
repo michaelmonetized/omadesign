@@ -195,6 +195,57 @@ pub fn fetch_svg(icon: &Icon) -> Result<String, String> {
     resp.into_string().map_err(|e| e.to_string())
 }
 
+/// viewBox width and height, or 256×256 when the file does not say.
+pub fn svg_size(svg: &str) -> (f32, f32) {
+    parse_viewbox(svg)
+        .map(|(_, _, w, h)| (w.max(1.0), h.max(1.0)))
+        .unwrap_or((256.0, 256.0))
+}
+
+/// First hex fill that is not `none`. Icons without a fill fall back to the caller.
+pub fn svg_fill(svg: &str) -> Option<crate::color::Rgba> {
+    let mut pos = 0;
+    while let Some(idx) = svg[pos..].find("fill=") {
+        let start = pos + idx + 5;
+        let rest = &svg[start..];
+        let quote = rest.chars().next()?;
+        if quote != '"' && quote != '\'' {
+            pos = start;
+            continue;
+        }
+        let end = rest[1..].find(quote)?;
+        let val = rest[1..1 + end].trim();
+        pos = start + 1 + end + 1;
+        if val.eq_ignore_ascii_case("none") || val.eq_ignore_ascii_case("transparent") {
+            continue;
+        }
+        if let Some(c) = parse_svg_color(val) {
+            return Some(c);
+        }
+    }
+    None
+}
+
+fn parse_svg_color(val: &str) -> Option<crate::color::Rgba> {
+    let v = val.trim();
+    if let Some(hex) = v.strip_prefix('#') {
+        return match hex.len() {
+            3 => {
+                let r = u8::from_str_radix(&hex[0..1].repeat(2), 16).ok()?;
+                let g = u8::from_str_radix(&hex[1..2].repeat(2), 16).ok()?;
+                let b = u8::from_str_radix(&hex[2..3].repeat(2), 16).ok()?;
+                Some(crate::color::Rgba::rgb(r, g, b))
+            }
+            6 | 8 => {
+                let n = u32::from_str_radix(&hex[..6], 16).ok()?;
+                Some(crate::color::Rgba::from_hex(n))
+            }
+            _ => None,
+        };
+    }
+    None
+}
+
 /// Minimal SVG → Geom. Extracts viewBox and all `d="..."`, flattens beziers and
 /// scales to a 256×256 artboard square. Returns a Poly so it renders even when
 /// path data is imperfect; anchors could be preserved for Node editing in a follow-up.
@@ -202,10 +253,11 @@ pub fn svg_to_geom(svg: &str, target_px: f32) -> Result<Geom, String> {
     // viewBox="minX minY w h" – default to 0 0 256 256 (Phosphor's default)
     let (vb_x, vb_y, vb_w, vb_h) = parse_viewbox(svg).unwrap_or((0.0, 0.0, 256.0, 256.0));
     let scale = target_px / vb_w.max(vb_h).max(1.0);
-    let contours = extract_path_ds(svg)
+    let mut contours = extract_path_ds(svg)
         .into_iter()
         .flat_map(|d| parse_path_d(&d, vb_x, vb_y, scale))
         .collect::<Vec<Vec<Pt>>>();
+    contours.extend(extract_basic_shapes(svg, vb_x, vb_y, scale));
     if contours.is_empty() {
         return Err("no path data found".into());
     }
@@ -216,18 +268,137 @@ pub fn svg_to_geom(svg: &str, target_px: f32) -> Result<Geom, String> {
 }
 
 fn parse_viewbox(svg: &str) -> Option<(f32, f32, f32, f32)> {
-    let needle = "viewBox=\"";
-    let start = svg.find(needle)? + needle.len();
-    let end = svg[start..].find('"')?;
-    let vals: Vec<f32> = svg[start..start + end]
-        .split_whitespace()
-        .filter_map(|s| s.parse().ok())
-        .collect();
-    if vals.len() == 4 {
-        Some((vals[0], vals[1], vals[2], vals[3]))
-    } else {
-        None
+    for needle in ["viewBox=\"", "viewBox='", "viewbox=\"", "viewbox='"] {
+        if let Some(start) = svg.find(needle) {
+            let q = needle.chars().last()?;
+            let from = start + needle.len();
+            if let Some(end) = svg[from..].find(q) {
+                let vals: Vec<f32> = svg[from..from + end]
+                    .split(|c: char| c.is_whitespace() || c == ',')
+                    .filter(|s| !s.is_empty())
+                    .filter_map(|s| s.parse().ok())
+                    .collect();
+                if vals.len() == 4 {
+                    return Some((vals[0], vals[1], vals[2], vals[3]));
+                }
+            }
+        }
     }
+    None
+}
+
+fn extract_basic_shapes(svg: &str, vb_x: f32, vb_y: f32, scale: f32) -> Vec<Vec<Pt>> {
+    let mut out = Vec::new();
+    for tag in ["rect", "circle", "ellipse", "polygon", "polyline", "line"] {
+        let mut pos = 0;
+        let open = format!("<{tag}");
+        while let Some(idx) = svg[pos..].find(&open) {
+            let start = pos + idx;
+            let rest = &svg[start..];
+            let end = rest.find('>').unwrap_or(rest.len());
+            let attrs = &rest[..end];
+            pos = start + end.max(1);
+            if let Some(c) = shape_contour(tag, attrs, vb_x, vb_y, scale) {
+                out.push(c);
+            }
+        }
+    }
+    out
+}
+
+fn attr(tag: &str, name: &str) -> Option<f32> {
+    for q in ['"', '\''] {
+        let needle = format!("{name}={q}");
+        if let Some(i) = tag.find(&needle) {
+            let from = i + needle.len();
+            if let Some(end) = tag[from..].find(q) {
+                return tag[from..from + end].trim().parse().ok();
+            }
+        }
+    }
+    None
+}
+
+fn attr_str<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
+    for q in ['"', '\''] {
+        let needle = format!("{name}={q}");
+        if let Some(i) = tag.find(&needle) {
+            let from = i + needle.len();
+            if let Some(end) = tag[from..].find(q) {
+                return Some(&tag[from..from + end]);
+            }
+        }
+    }
+    None
+}
+
+fn shape_contour(kind: &str, tag: &str, vb_x: f32, vb_y: f32, scale: f32) -> Option<Vec<Pt>> {
+    let t = |x: f32, y: f32| transform_pt(x, y, vb_x, vb_y, scale);
+    match kind {
+        "rect" => {
+            let x = attr(tag, "x").unwrap_or(0.0);
+            let y = attr(tag, "y").unwrap_or(0.0);
+            let w = attr(tag, "width")?;
+            let h = attr(tag, "height")?;
+            Some(vec![t(x, y), t(x + w, y), t(x + w, y + h), t(x, y + h)])
+        }
+        "circle" => {
+            let cx = attr(tag, "cx").unwrap_or(0.0);
+            let cy = attr(tag, "cy").unwrap_or(0.0);
+            let r = attr(tag, "r")?;
+            Some(ellipse_contour(cx, cy, r, r, vb_x, vb_y, scale))
+        }
+        "ellipse" => {
+            let cx = attr(tag, "cx").unwrap_or(0.0);
+            let cy = attr(tag, "cy").unwrap_or(0.0);
+            let rx = attr(tag, "rx")?;
+            let ry = attr(tag, "ry")?;
+            Some(ellipse_contour(cx, cy, rx, ry, vb_x, vb_y, scale))
+        }
+        "polygon" | "polyline" => {
+            let pts = attr_str(tag, "points")?;
+            let nums: Vec<f32> = pts
+                .split(|c: char| c.is_whitespace() || c == ',')
+                .filter(|s| !s.is_empty())
+                .filter_map(|s| s.parse().ok())
+                .collect();
+            if nums.len() < 4 {
+                return None;
+            }
+            let mut c = Vec::new();
+            for pair in nums.chunks(2) {
+                if pair.len() == 2 {
+                    c.push(t(pair[0], pair[1]));
+                }
+            }
+            (c.len() >= 2).then_some(c)
+        }
+        "line" => {
+            let x1 = attr(tag, "x1")?;
+            let y1 = attr(tag, "y1")?;
+            let x2 = attr(tag, "x2")?;
+            let y2 = attr(tag, "y2")?;
+            Some(vec![t(x1, y1), t(x2, y2)])
+        }
+        _ => None,
+    }
+}
+
+fn ellipse_contour(
+    cx: f32,
+    cy: f32,
+    rx: f32,
+    ry: f32,
+    vb_x: f32,
+    vb_y: f32,
+    scale: f32,
+) -> Vec<Pt> {
+    (0..32)
+        .map(|i| {
+            let a = std::f32::consts::TAU * i as f32 / 32.0;
+            transform_pt(cx + rx * a.cos(), cy + ry * a.sin(), vb_x, vb_y, scale)
+        })
+        .collect()
 }
 
 fn extract_path_ds(svg: &str) -> Vec<String> {
@@ -691,6 +862,17 @@ mod tests {
             Geom::Poly { contours, .. } => assert_eq!(contours.len(), 1),
             _ => panic!("poly"),
         }
+    }
+
+    #[test]
+    fn svg_rect_without_path_still_places() {
+        let svg = r#"<svg viewBox="0 0 20 10"><rect x="1" y="2" width="8" height="6"/></svg>"#;
+        let g = svg_to_geom(svg, 20.0).unwrap();
+        let Geom::Poly { contours, .. } = g else {
+            panic!("poly");
+        };
+        assert_eq!(contours.len(), 1);
+        assert_eq!(contours[0].len(), 4);
     }
 
     #[test]

@@ -444,6 +444,7 @@ pub fn apply(ctx: &Context) {
         ctx.set_theme(eframe::egui::ThemePreference::Light);
     }
     ctx.set_visuals(visuals);
+    ctx.options_mut(|o| o.zoom_with_keyboard = false);
     crate::compositor::set_canvas_bg(pal.bg_canvas.r(), pal.bg_canvas.g(), pal.bg_canvas.b());
 
     let theme = if pal.dark { Theme::Dark } else { Theme::Light };

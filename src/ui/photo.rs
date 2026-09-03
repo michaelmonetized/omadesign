@@ -333,8 +333,15 @@ fn viewer(ui: &mut Ui, studio: &mut Studio) {
         // view_scale only for zoom; pan via scroll
     }
     let z = ui.ctx().input(|i| i.zoom_delta());
-    if z != 1.0 {
+    let scroll = ui.ctx().input(|i| i.smooth_scroll_delta);
+    let alt = ui.ctx().input(|i| i.modifiers.alt);
+    let ctrl = ui.ctx().input(|i| i.modifiers.ctrl || i.modifiers.command);
+    if (z - 1.0).abs() > 1e-4 {
         studio.photo.view_scale = (studio.photo.view_scale * z).clamp(0.1, 8.0);
+        ui.ctx().request_repaint();
+    } else if scroll.y.abs() > 0.0 && (ctrl || alt || studio.tool == crate::tools::Tool::Zoom) {
+        studio.photo.view_scale =
+            (studio.photo.view_scale * (scroll.y / 200.0).exp()).clamp(0.1, 8.0);
     }
     handle_drops(ui, studio);
 }
@@ -351,7 +358,7 @@ fn handle_drops(ui: &mut Ui, studio: &mut Studio) {
         .ctx()
         .input(|i| i.raw.dropped_files.clone());
     for f in files {
-        studio.photo.import_file(f.path());
+        studio.ingest_dropped(f.path(), None);
     }
 }
 

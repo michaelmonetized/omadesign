@@ -500,6 +500,8 @@ pub struct Layer {
     pub blend: Blend,
     pub mask: Option<Pixels>,
     pub kind: LayerKind,
+    #[serde(default)]
+    pub filters: crate::filter::FilterStack,
 }
 
 impl Layer {
@@ -513,6 +515,7 @@ impl Layer {
             blend: Blend::Normal,
             mask: None,
             kind: LayerKind::Vector { shapes: vec![] },
+            filters: crate::filter::FilterStack::default(),
         }
     }
 
@@ -528,6 +531,7 @@ impl Layer {
             kind: LayerKind::Raster {
                 pixels: Pixels::new(w, h),
             },
+            filters: crate::filter::FilterStack::default(),
         }
     }
 
@@ -804,6 +808,11 @@ pub enum Cmd {
         before: crate::motion::Motion,
         after: crate::motion::Motion,
     },
+    SetFilters {
+        index: usize,
+        before: crate::filter::FilterStack,
+        after: crate::filter::FilterStack,
+    },
 }
 
 const MAX_HISTORY: usize = 200;
@@ -929,6 +938,17 @@ fn coalesce(prev: &mut Cmd, next: &Cmd) -> bool {
             *after = a2.clone();
             true
         }
+        (
+            Cmd::SetFilters { index, after, .. },
+            Cmd::SetFilters {
+                index: i2,
+                after: a2,
+                ..
+            },
+        ) if *index == *i2 => {
+            *after = a2.clone();
+            true
+        }
         _ => false,
     }
 }
@@ -1026,6 +1046,15 @@ fn invert_cmd(cmd: Cmd) -> Cmd {
         Cmd::RemoveGuide { index: _, guide } => Cmd::AddGuide { guide },
         Cmd::RestoreShapes { layer, shapes } => Cmd::RemoveShapes { layer, shapes },
         Cmd::SetMotion { before, after } => Cmd::SetMotion {
+            before: after,
+            after: before,
+        },
+        Cmd::SetFilters {
+            index,
+            before,
+            after,
+        } => Cmd::SetFilters {
+            index,
             before: after,
             after: before,
         },
@@ -1157,6 +1186,11 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
         }
         Cmd::SetMotion { after, .. } => {
             doc.motion = after.clone();
+        }
+        Cmd::SetFilters { index, after, .. } => {
+            if let Some(l) = doc.layers.get_mut(*index) {
+                l.filters = after.clone();
+            }
         }
         Cmd::AddGuide { guide } => doc.guides.push(*guide),
         Cmd::RemoveGuide { index, guide } => {

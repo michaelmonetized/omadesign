@@ -34,19 +34,37 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     let zoom_delta = ctx.input(|i| i.zoom_delta());
     let pointer = resp.hover_pos();
     let origin = Pt::new(rect.min.x, rect.min.y);
-
+    let local = pointer
+        .map(|hp| from_egui(hp) - origin)
+        .or_else(|| studio.cursor.map(|w| studio.view.to_screen(w)))
+        .unwrap_or_else(|| Pt::new(rect.width() * 0.5, rect.height() * 0.5));
+    let alt = ctx.input(|i| i.modifiers.alt);
+    let ctrl = ctx.input(|i| i.modifiers.ctrl || i.modifiers.command);
+    // Pinch (Event::Zoom), Ctrl+scroll, Alt+scroll, or scroll while Z is active.
+    let pinch = (zoom_delta - 1.0).abs() > 1e-4;
+    let scroll_zoom = scroll.y.abs() > 0.0 && (ctrl || alt || studio.tool == Tool::Zoom);
+    if pinch {
+        studio.view.zoom_at(local, zoom_delta);
+        ctx.request_repaint();
+    } else if scroll_zoom {
+        studio.view.zoom_at(local, (scroll.y / 200.0).exp());
+    } else if scroll != Vec2::ZERO && !ctrl {
+        studio.view.offset.x += scroll.x;
+        studio.view.offset.y += scroll.y;
+    }
     if let Some(hp) = pointer {
-        let local = from_egui(hp) - origin;
-        if zoom_delta != 1.0 {
-            studio.view.zoom_at(local, zoom_delta);
-        } else if ctx.input(|i| i.modifiers.ctrl) && scroll.y.abs() > 0.0 {
-            let f = if scroll.y > 0.0 { 1.08 } else { 1.0 / 1.08 };
-            studio.view.zoom_at(local, f);
-        } else if scroll != Vec2::ZERO && !ctx.input(|i| i.modifiers.ctrl) {
-            studio.view.offset.x += scroll.x;
-            studio.view.offset.y += scroll.y;
-        }
-        studio.cursor = Some(studio.view.to_world(local));
+        studio.cursor = Some(studio.view.to_world(from_egui(hp) - origin));
+    }
+
+    let shift = ctx.input(|i| i.modifiers.shift);
+    if live_op_should_close(studio, &resp) {
+        end_drag(
+            studio,
+            studio.cursor.unwrap_or(Pt::ZERO),
+            alt,
+            ctrl,
+            shift,
+        );
     }
 
     let panning = (space_pan && studio.type_edit.is_none()) || studio.tool == Tool::Hand;
@@ -157,37 +175,10 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     ruler_guides(studio, &resp, rect);
 
     let files: Vec<_> = ui.ctx().input(|i| i.raw.dropped_files.clone());
-    for f in files {
-        let path = f.path();
-        let ext = path
-            .extension()
-            .and_then(|s| s.to_str())
-            .unwrap_or("")
-            .to_ascii_lowercase();
-        if ext == "oma" {
-            if let Ok(doc) = crate::project::load_from(path) {
-                studio.doc = doc;
-                studio.path = Some(path.to_path_buf());
-                studio.history.clear();
-                studio.need_fit = true;
-                studio.status = "opened".into();
-            }
-        } else if let Some(img) = crate::photo::load_file(path) {
-            let mut layer = crate::document::Layer::raster(
-                path.file_name()
-                    .map(|s| s.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "Image".into()),
-                img.w,
-                img.h,
-            );
-            if let crate::document::LayerKind::Raster { pixels } = &mut layer.kind {
-                *pixels = crate::document::Pixels::from_rgba(img.w, img.h, img.data)
-                    .unwrap_or_else(|| crate::document::Pixels::new(img.w, img.h));
-            }
-            let index = studio.doc.layers.len();
-            studio.commit(crate::document::Cmd::AddLayer { index, layer });
-            studio.active_layer = Some(index);
-            studio.status = "image placed as pixel layer".into();
+    if !files.is_empty() {
+        let at = studio.cursor;
+        for f in files {
+            studio.ingest_dropped(f.path(), at);
         }
     }
 }
@@ -225,6 +216,18 @@ fn preview_shape(kind: CreateKind, start: Pt, cur: Pt, studio: &Studio) -> Geom 
     }
 }
 
+fn live_op_should_close(studio: &Studio, resp: &eframe::egui::Response) -> bool {
+    match &studio.op {
+        None | Some(Op::Pen { .. }) => false,
+        _ => {
+            resp.drag_stopped()
+                || resp
+                    .ctx
+                    .input(|i| !i.pointer.button_down(PointerButton::Primary))
+        }
+    }
+}
+
 fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: bool) {
     if space {
         return;
@@ -236,55 +239,75 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
         return;
     };
     let origin = Pt::new(crect.min.x, crect.min.y);
-    let mut world = studio.view.pointer_to_world(origin, from_egui(screen));
-    // Don't snap when placing or editing type — the caret should be exact.
+    let pick = studio.view.pointer_to_world(origin, from_egui(screen));
     let is_text = studio.tool == Tool::Text || studio.type_edit.is_some();
-    if !is_text {
-        world = studio.snap_pt(world);
-    }
+    let snap = if is_text { pick } else { studio.snap_pt(pick) };
     let alt = resp.ctx.input(|i| i.modifiers.alt);
     let shift = resp.ctx.input(|i| i.modifiers.shift);
+    let ctrl = resp.ctx.input(|i| i.modifiers.ctrl || i.modifiers.command);
 
     if studio.tool == Tool::Zoom && resp.clicked() && !resp.dragged() {
-        let f = if alt { 1.0 / 1.25 } else { 1.25 };
-        studio.view.zoom_at(from_egui(screen) - origin, f);
+        studio.zoom_click(from_egui(screen) - origin, alt, ctrl, shift);
         return;
     }
 
     if studio.tool == Tool::Eyedropper && resp.clicked() {
-        studio.eyedrop(world);
+        studio.eyedrop(pick);
+        return;
+    }
+
+    if studio.pending_place.is_some() {
+        if resp.drag_started_by(PointerButton::Primary) {
+            studio.op = Some(Op::Place {
+                start: snap,
+                cur: snap,
+            });
+        }
+        if resp.dragged_by(PointerButton::Primary)
+            && let Some(Op::Place { cur, .. }) = &mut studio.op
+        {
+            *cur = snap;
+        }
+        if resp.clicked() && !resp.dragged() && !resp.drag_stopped() {
+            studio.commit_place_at(snap);
+        }
+        return;
+    }
+
+    if studio.tool == Tool::Trace && resp.clicked() {
+        studio.trace_active_raster();
         return;
     }
 
     if studio.type_edit.is_some() && resp.clicked() {
         let slack = 8.0 / studio.view.scale.max(0.01);
-        if let Some(hit) = hit_shape(studio, world, slack) {
+        if let Some(hit) = hit_shape(studio, pick, slack) {
             if studio.editing_text(hit.0, hit.1) {
-                studio.begin_type_edit(hit, world);
+                studio.begin_type_edit(hit, pick);
                 return;
             }
             if is_text_hit(studio, hit) {
                 studio.commit_type_edit();
-                studio.begin_type_edit(hit, world);
+                studio.begin_type_edit(hit, pick);
                 return;
             }
         }
         studio.commit_type_edit();
         if studio.tool == Tool::Text {
-            studio.place_text(world);
+            studio.place_text(pick);
         }
         return;
     }
 
     if studio.tool == Tool::Text && resp.clicked() {
         let slack = 8.0 / studio.view.scale.max(0.01);
-        if let Some(hit) = hit_shape(studio, world, slack)
+        if let Some(hit) = hit_shape(studio, pick, slack)
             && is_text_hit(studio, hit)
         {
-            studio.begin_type_edit(hit, world);
+            studio.begin_type_edit(hit, pick);
             return;
         }
-        studio.place_text(world);
+        studio.place_text(pick);
         return;
     }
 
@@ -297,7 +320,7 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
                         Fill::Solid(c) => c,
                         _ => studio.brush.color,
                     };
-                    paint::flood_fill(&mut pm, world, c, studio.fill_tolerance);
+                    paint::flood_fill(&mut pm, pick, c, studio.fill_tolerance);
                     *px = crate::document::Pixels::from_pixmap(&pm);
                     let after = px.data.clone();
                     studio.commit(crate::document::Cmd::Pixels {
@@ -316,7 +339,7 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
         if let Some(li) = studio.raster_target() {
             if let Some(px) = studio.doc.layers[li].kind.pixels() {
                 if let Some(pm) = px.to_pixmap() {
-                    studio.pixel_sel = Some(paint::wand_mask(&pm, world, studio.fill_tolerance));
+                    studio.pixel_sel = Some(paint::wand_mask(&pm, pick, studio.fill_tolerance));
                     studio.status = "wand selection".into();
                 }
             }
@@ -325,7 +348,7 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
     }
 
     if studio.tool == Tool::Clone && alt && resp.clicked() {
-        studio.clone_source = Some(world);
+        studio.clone_source = Some(pick);
         studio.status = "clone source set".into();
         return;
     }
@@ -334,10 +357,10 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
     if studio.type_edit.is_some() {
         if resp.drag_started_by(PointerButton::Primary) {
             let slack = 8.0 / studio.view.scale.max(0.01);
-            if let Some(hit) = hit_shape(studio, world, slack) {
+            if let Some(hit) = hit_shape(studio, pick, slack) {
                 if studio.editing_text(hit.0, hit.1) {
                     let caret = studio.doc.find_shape(hit.0, hit.1).and_then(|s| match &s.geom {
-                        Geom::Text(run) => Some(crate::text::hit_char(run, world)),
+                        Geom::Text(run) => Some(crate::text::hit_char(run, pick)),
                         _ => None,
                     });
                     if let (Some(c), Some(e)) = (caret, studio.type_edit.as_mut()) {
@@ -353,7 +376,7 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
                 let (li, id) = (edit.layer, edit.id);
                 if let Some(shape) = studio.doc.find_shape(li, id) {
                     if let Geom::Text(run) = &shape.geom {
-                        let new_caret = crate::text::hit_char(run, world);
+                        let new_caret = crate::text::hit_char(run, pick);
                         if let Some(e) = studio.type_edit.as_mut() {
                             e.caret = new_caret;
                         }
@@ -367,31 +390,32 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
     // Drag start. The pen stays in a draft `Op`, so it must accept further
     // presses — otherwise you get one point and then nothing.
     let continue_pen = studio.tool == Tool::Pen && matches!(studio.op, Some(Op::Pen { .. }));
-    if resp.drag_started_by(PointerButton::Primary) && (studio.op.is_none() || continue_pen) {
-        start_drag(studio, world, shift, alt);
+    if resp.drag_started_by(PointerButton::Primary) {
+        if studio.op.is_some() && !continue_pen {
+            end_drag(studio, snap, alt, ctrl, shift);
+        }
+        if studio.op.is_none() || continue_pen {
+            start_drag(studio, pick, snap, shift, alt);
+        }
     }
 
     if resp.dragged_by(PointerButton::Primary) {
-        continue_drag(studio, world, shift, alt);
+        continue_drag(studio, snap, shift, alt);
     }
 
-    if resp.drag_stopped() {
-        end_drag(studio, world);
-    }
-
-    if resp.clicked() && !resp.dragged() {
-        click(studio, world, shift);
+    if resp.clicked() && !resp.dragged() && !resp.drag_stopped() {
+        click(studio, pick, shift, alt);
     }
 
     if resp.double_clicked() {
-        if let Some(Op::Pen { anchors }) = studio.op.take() {
-            studio.finish_pen(anchors, false);
+        if let Some(Op::Pen { anchors, source }) = studio.op.take() {
+            studio.finish_pen(anchors, false, source);
         } else {
             let slack = 8.0 / studio.view.scale.max(0.01);
-            if let Some(hit) = hit_shape(studio, world, slack)
+            if let Some(hit) = hit_shape(studio, pick, slack)
                 && is_text_hit(studio, hit)
             {
-                studio.begin_type_edit(hit, world);
+                studio.begin_type_edit(hit, pick);
             }
         }
     }
@@ -404,7 +428,7 @@ fn is_text_hit(studio: &Studio, hit: (usize, u64)) -> bool {
         .is_some_and(|s| matches!(s.geom, Geom::Text(_)))
 }
 
-fn start_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
+fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
     let _ = alt;
     if studio.is_motion() {
         studio.playing = false;
@@ -413,17 +437,20 @@ fn start_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
     // can be resized immediately without first pressing V. Text editing, Hand
     // and Zoom are excluded to keep their own pointer semantics.
     if studio.type_edit.is_none()
-        && !matches!(studio.tool, Tool::Hand | Tool::Zoom)
+        && !matches!(
+            studio.tool,
+            Tool::Hand | Tool::Zoom | Tool::Node | Tool::Pen | Tool::Trace
+        )
         && !studio.selection.is_empty()
     {
-        if let Some(sel) = hit_handle(studio, world) {
+        if let Some(sel) = hit_handle(studio, pick) {
             match sel {
                 HandleKind::Rotate(center) => {
                     let orig = snapshot(studio);
                     studio.op = Some(Op::Rotate {
                         orig,
                         center,
-                        start_angle: (world - center).y.atan2((world - center).x),
+                        start_angle: (pick - center).y.atan2((pick - center).x),
                     });
                     return;
                 }
@@ -440,7 +467,7 @@ fn start_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
     }
     match studio.tool {
         Tool::Select => {
-            if let Some(hit) = hit_shape(studio, world, 6.0 / studio.view.scale.max(0.01)) {
+            if let Some(hit) = hit_shape(studio, pick, 6.0 / studio.view.scale.max(0.01)) {
                 if !studio.selection.contains(&hit) {
                     if shift {
                         studio.selection.push(hit);
@@ -451,12 +478,12 @@ fn start_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                 studio.active_layer = Some(hit.0);
                 studio.op = Some(Op::Move {
                     orig: snapshot(studio),
-                    start: world,
+                    start: snap,
                 });
             } else {
                 studio.op = Some(Op::Marquee {
-                    start: world,
-                    cur: world,
+                    start: snap,
+                    cur: snap,
                     ellipse: false,
                 });
                 if !shift {
@@ -466,9 +493,13 @@ fn start_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
         }
         Tool::Node => {
             if let Some((li, id)) = studio.primary() {
+                studio.ensure_path(li, id);
                 if let Some(shape) = studio.doc.find_shape(li, id) {
                     if let Geom::Path { anchors, .. } = &shape.geom {
-                        if let Some(hit) = hit_node(anchors, world, 8.0 / studio.view.scale.max(0.01)) {
+                        if let Some(hit) = hit_node(anchors, pick, 8.0 / studio.view.scale.max(0.01)) {
+                            if let crate::app::NodeHit::Point(i) = hit {
+                                studio.node_sel = Some(i);
+                            }
                             studio.op = Some(Op::Node {
                                 layer: li,
                                 id,
@@ -481,49 +512,49 @@ fn start_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                 }
             }
         }
-        Tool::Pen => studio.pen_click(world),
+        Tool::Pen => studio.pen_click(snap),
         Tool::Pencil => {
-            studio.op = Some(Op::Pencil { pts: vec![world] });
+            studio.op = Some(Op::Pencil { pts: vec![snap] });
         }
         Tool::Rect => {
             studio.op = Some(Op::Create {
                 kind: CreateKind::Rect,
-                start: world,
-                cur: world,
+                start: snap,
+                cur: snap,
             })
         }
         Tool::Ellipse => {
             studio.op = Some(Op::Create {
                 kind: CreateKind::Ellipse,
-                start: world,
-                cur: world,
+                start: snap,
+                cur: snap,
             })
         }
         Tool::Polygon => {
             studio.op = Some(Op::Create {
                 kind: CreateKind::Polygon,
-                start: world,
-                cur: world,
+                start: snap,
+                cur: snap,
             })
         }
         Tool::Star => {
             studio.op = Some(Op::Create {
                 kind: CreateKind::Star,
-                start: world,
-                cur: world,
+                start: snap,
+                cur: snap,
             })
         }
         Tool::Line => {
             studio.op = Some(Op::Create {
                 kind: CreateKind::Line,
-                start: world,
-                cur: world,
+                start: snap,
+                cur: snap,
             })
         }
         Tool::Gradient => {
             studio.op = Some(Op::Gradient {
-                start: world,
-                cur: world,
+                start: snap,
+                cur: snap,
             })
         }
         Tool::Brush | Tool::Eraser => {
@@ -531,12 +562,12 @@ fn start_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                 if let Some(px) = studio.doc.layers[li].kind.pixels() {
                     if let Some(buf) = PixmapOr::new(px.w, px.h) {
                         let mut buf = buf;
-                        paint::stamp(&mut buf, world, &studio.brush, studio.tool == Tool::Eraser);
+                        paint::stamp(&mut buf, pick, &studio.brush, studio.tool == Tool::Eraser);
                         studio.op = Some(Op::Brush {
                             layer: li,
                             erase: studio.tool == Tool::Eraser,
                             buf,
-                            last: Some(world),
+                            last: Some(pick),
                             before: px.data.clone(),
                         });
                     }
@@ -550,7 +581,7 @@ fn start_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                 if let Some(px) = studio.doc.layers[li].kind.pixels() {
                     studio.op = Some(Op::Smudge {
                         layer: li,
-                        last: Some(world),
+                        last: Some(pick),
                         before: px.data.clone(),
                     });
                 }
@@ -565,7 +596,7 @@ fn start_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                 if let Some(px) = studio.doc.layers[li].kind.pixels() {
                     studio.op = Some(Op::Clone {
                         layer: li,
-                        last: Some(world),
+                        last: Some(pick),
                         before: px.data.clone(),
                     });
                 }
@@ -573,29 +604,29 @@ fn start_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
         }
         Tool::Marquee => {
             studio.op = Some(Op::Marquee {
-                start: world,
-                cur: world,
+                start: snap,
+                cur: snap,
                 ellipse: false,
             })
         }
         Tool::EllipseMarquee => {
             studio.op = Some(Op::Marquee {
-                start: world,
-                cur: world,
+                start: snap,
+                cur: snap,
                 ellipse: true,
             })
         }
-        Tool::Lasso => studio.op = Some(Op::Lasso { pts: vec![world] }),
+        Tool::Lasso => studio.op = Some(Op::Lasso { pts: vec![snap] }),
         Tool::Crop => {
             studio.op = Some(Op::CropPhoto {
-                start: world,
-                cur: world,
+                start: snap,
+                cur: snap,
             })
         }
         Tool::Zoom => {
             studio.op = Some(Op::ZoomBox {
-                start: world,
-                cur: world,
+                start: snap,
+                cur: snap,
             })
         }
         _ => {}
@@ -664,12 +695,7 @@ fn hit_shape(studio: &Studio, world: Pt, slack: f32) -> Option<(usize, u64)> {
 }
 
 fn hit_handle(studio: &Studio, world: Pt) -> Option<HandleKind> {
-    let b = if studio.is_motion() {
-        posed_bounds(studio)?
-    } else {
-        let shapes = studio.selected_shapes();
-        crate::align::selection_bounds(&shapes)?
-    };
+    let b = posed_bounds(studio)?;
     let slack = 8.0 / studio.view.scale.max(0.01);
     let rh = b.rotate_handle();
     if (rh - world).length() <= slack {
@@ -732,7 +758,7 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
             }
             *cur = c;
         }
-        Some(Op::Pen { anchors }) => {
+        Some(Op::Pen { anchors, .. }) => {
             if let Some(last) = anchors.last_mut() {
                 let drag = world - last.pt;
                 last.h_out = drag;
@@ -994,17 +1020,18 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
         Some(Op::Gradient { cur, .. }) => *cur = world,
         Some(Op::CropPhoto { cur, .. }) => *cur = world,
         Some(Op::ZoomBox { cur, .. }) => *cur = world,
+        Some(Op::Place { cur, .. }) => *cur = world,
         None => {}
     }
+    studio.sync_pen_source();
 }
 
-fn end_drag(studio: &mut Studio, world: Pt) {
+fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) {
     match studio.op.take() {
         Some(Op::Create { kind, start, cur }) => studio.finish_create(kind, start, cur),
         Some(Op::Pencil { pts }) => studio.finish_pencil(pts),
-        Some(Op::Pen { anchors }) => {
-            // keep drafting until Enter / double-click / close
-            studio.op = Some(Op::Pen { anchors });
+        Some(Op::Pen { anchors, source }) => {
+            studio.op = Some(Op::Pen { anchors, source });
         }
         Some(Op::Move { orig, start }) => {
             if studio.is_motion() {
@@ -1160,14 +1187,20 @@ fn end_drag(studio: &mut Studio, world: Pt) {
             }
         }
         Some(Op::CropPhoto { start, cur }) => studio.commit_photo_crop(start, cur),
-        Some(Op::ZoomBox { start, cur }) => studio.finish_zoom_box(start, cur),
+        Some(Op::ZoomBox { start, cur }) => {
+            studio.finish_zoom_box_mods(start, cur, alt, ctrl, shift)
+        }
+        Some(Op::Place { start, cur }) => studio.commit_place_rect(start, cur),
         None => {}
     }
 }
 
-fn click(studio: &mut Studio, world: Pt, shift: bool) {
+fn click(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
     match studio.tool {
         Tool::Select => {
+            if hit_handle(studio, world).is_some() {
+                return;
+            }
             if let Some(hit) = hit_shape(studio, world, 6.0 / studio.view.scale.max(0.01)) {
                 if shift {
                     if let Some(i) = studio.selection.iter().position(|x| *x == hit) {
@@ -1185,32 +1218,69 @@ fn click(studio: &mut Studio, world: Pt, shift: bool) {
         }
         Tool::Node => {
             if let Some((li, id)) = studio.primary() {
-                if let Some(shape) = studio.doc.find_shape_mut(li, id) {
-                    if let Geom::Path {
-                        anchors, closed, ..
-                    } = &mut shape.geom
-                    {
-                        let slack = 8.0 / studio.view.scale.max(0.01);
-                        if let Some(i) = hit_node(anchors, world, slack) {
-                            if matches!(i, NodeHit::Point(_)) && shift {
-                                if let NodeHit::Point(i) = i {
-                                    if anchors[i].is_corner() {
-                                        anchors[i].make_smooth();
+                studio.ensure_path(li, id);
+                let slack = 8.0 / studio.view.scale.max(0.01);
+                let Some(shape) = studio.doc.find_shape(li, id) else {
+                    return;
+                };
+                let Geom::Path { anchors, closed } = &shape.geom else {
+                    if let Some(hit) = hit_shape(studio, world, slack) {
+                        studio.selection = vec![hit];
+                        studio.node_sel = None;
+                    }
+                    return;
+                };
+                let anchors = anchors.clone();
+                let closed = *closed;
+                let orig = shape.geom.clone();
+                let rot = shape.rotation;
+                if let Some(i) = hit_node(&anchors, world, slack) {
+                    if let NodeHit::Point(i) = i {
+                        studio.node_sel = Some(i);
+                        if alt {
+                            let mut after = orig.clone();
+                            if let Geom::Path { anchors, .. } = &mut after {
+                                if let Some(a) = anchors.get_mut(i) {
+                                    if a.is_corner() {
+                                        a.make_smooth();
                                     } else {
-                                        anchors[i].make_corner();
+                                        a.make_corner();
                                     }
                                 }
                             }
-                        } else {
-                            let _ = insert_anchor(anchors, *closed, world, slack * 2.0);
+                            studio.commit(crate::document::Cmd::SetGeom {
+                                layer: li,
+                                id,
+                                before: orig,
+                                after,
+                                rot_before: rot,
+                                rot_after: rot,
+                            });
                         }
+                    }
+                } else {
+                    let mut anchors = anchors;
+                    if let Some(idx) = insert_anchor(&mut anchors, closed, world, slack * 2.0) {
+                        studio.node_sel = Some(idx);
+                        studio.commit(crate::document::Cmd::SetGeom {
+                            layer: li,
+                            id,
+                            before: orig,
+                            after: Geom::Path { anchors, closed },
+                            rot_before: rot,
+                            rot_after: rot,
+                        });
+                    } else if let Some(hit) = hit_shape(studio, world, slack) {
+                        studio.selection = vec![hit];
+                        studio.node_sel = None;
                     }
                 }
             } else if let Some(hit) = hit_shape(studio, world, 6.0 / studio.view.scale.max(0.01)) {
                 studio.selection = vec![hit];
+                studio.node_sel = None;
+                studio.ensure_path(hit.0, hit.1);
             }
         }
-        Tool::Pen => studio.pen_click(world),
         _ => {}
     }
 }
@@ -1399,8 +1469,8 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
         let g = preview_shape(*kind, *start, *cur, studio);
         stroke_geom(p, rect, &g, v);
     }
-    if let Some(Op::Pen { anchors }) = &studio.op {
-        draw_pen(p, rect, anchors, studio);
+    if let Some(Op::Pen { anchors, source }) = &studio.op {
+        draw_pen(p, rect, anchors, studio, source.is_some());
     }
     if let Some(Op::Pencil { pts }) = &studio.op {
         let scr: Vec<Pos2> = pts.iter().map(|q| win(rect, v, *q)).collect();
@@ -1411,7 +1481,8 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
     if let Some(Op::Marquee { start, cur, .. })
     | Some(Op::Gradient { start, cur })
     | Some(Op::CropPhoto { start, cur })
-    | Some(Op::ZoomBox { start, cur }) = &studio.op
+    | Some(Op::ZoomBox { start, cur })
+    | Some(Op::Place { start, cur }) = &studio.op
     {
         let a = win(rect, v, *start);
         let b = win(rect, v, *cur);
@@ -1434,7 +1505,7 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
             stroke_world_posed(p, rect, s, v, studio.live_pose(*id));
             if studio.tool == Tool::Node {
                 if let Geom::Path { anchors, .. } = &s.geom {
-                    draw_nodes(p, rect, anchors, v);
+                    draw_nodes(p, rect, anchors, v, studio.node_sel);
                 }
             }
         }
@@ -1457,6 +1528,14 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
                 p.circle_filled(rh, 4.0, accent());
             }
         }
+    }
+    if studio.op.is_none()
+        && let Some(at) = studio.cursor
+        && let Some(b) = studio.pending_preview_rect(at)
+    {
+        let r = Rect::from_min_max(win(rect, v, b.min), win(rect, v, b.max));
+        p.rect_filled(r, 0.0, select_fill());
+        p.rect_stroke(r, 0.0, Stroke::new(1.0, select()), eframe::egui::StrokeKind::Middle);
     }
     if let Some(edit) = &studio.type_edit {
         if let Some(s) = studio.doc.find_shape(edit.layer, edit.id) {
@@ -1517,6 +1596,8 @@ fn set_cursor(ui: &mut Ui, studio: &Studio, resp: &eframe::egui::Response) {
     use eframe::egui::CursorIcon;
     let icon = if studio.type_edit.is_some() {
         CursorIcon::Text
+    } else if studio.pending_place.is_some() {
+        CursorIcon::Copy
     } else if (ui.ctx().input(|i| i.key_down(eframe::egui::Key::Space)) && !studio.is_motion())
         || studio.tool == Tool::Hand
     {
@@ -1528,11 +1609,17 @@ fn set_cursor(ui: &mut Ui, studio: &Studio, resp: &eframe::egui::Response) {
     } else {
         match studio.tool {
             Tool::Text => CursorIcon::Text,
-            Tool::Zoom => CursorIcon::ZoomIn,
+            Tool::Zoom => {
+                if ui.ctx().input(|i| i.modifiers.alt) {
+                    CursorIcon::ZoomOut
+                } else {
+                    CursorIcon::ZoomIn
+                }
+            }
             Tool::Pen | Tool::Pencil | Tool::Brush | Tool::Eraser | Tool::Clone | Tool::Smudge => {
                 CursorIcon::Crosshair
             }
-            Tool::Eyedropper => CursorIcon::Crosshair,
+            Tool::Eyedropper | Tool::Trace => CursorIcon::Crosshair,
             Tool::Crop | Tool::Marquee | Tool::EllipseMarquee | Tool::Lasso => CursorIcon::Crosshair,
             Tool::Select => {
                 if studio.selection.is_empty() {
@@ -1584,6 +1671,15 @@ fn context_menu(resp: &eframe::egui::Response, studio: &mut Studio) {
             .clicked()
         {
             studio.combine_selected();
+            ui.close();
+        }
+        ui.separator();
+        if ui.button("Place…").clicked() {
+            studio.begin_place();
+            ui.close();
+        }
+        if ui.button("Trace to vector").clicked() {
+            studio.trace_active_raster();
             ui.close();
         }
     });
@@ -1663,20 +1759,96 @@ fn stroke_world_posed(
     }
 }
 
-fn draw_pen(p: &eframe::egui::Painter, rect: Rect, anchors: &[Anchor], studio: &Studio) {
-    draw_nodes(p, rect, anchors, studio.view);
+fn draw_pen(
+    p: &eframe::egui::Painter,
+    rect: Rect,
+    anchors: &[Anchor],
+    studio: &Studio,
+    continuing: bool,
+) {
+    let v = studio.view;
+    let mut draft = anchors.to_vec();
     if let Some(c) = studio.cursor {
-        if let Some(last) = anchors.last() {
-            p.line_segment(
-                [win(rect, studio.view, last.pt), win(rect, studio.view, c)],
-                Stroke::new(1.0, select()),
-            );
+        draft.push(Anchor::corner(c));
+    }
+    if !continuing && draft.len() >= 2 {
+        let g = Geom::Path {
+            anchors: draft,
+            closed: false,
+        };
+        for c in g.contours(16) {
+            let pts: Vec<Pos2> = c.iter().map(|q| win(rect, v, *q)).collect();
+            if pts.len() >= 2 {
+                p.add(eframe::egui::Shape::line(pts, Stroke::new(1.6, select())));
+            }
+        }
+    } else if let (Some(last), Some(c)) = (anchors.last(), studio.cursor) {
+        p.line_segment(
+            [win(rect, v, last.pt), win(rect, v, c)],
+            Stroke::new(1.2, select()),
+        );
+    }
+    draw_nodes(p, rect, anchors, v, Some(anchors.len().saturating_sub(1)));
+    if let Some(first) = anchors.first() {
+        let close = studio
+            .cursor
+            .is_some_and(|c| (c - first.pt).length() * studio.view.scale < 12.0)
+            && anchors.len() >= 3;
+        p.circle_stroke(
+            win(rect, v, first.pt),
+            if close { 8.0 } else { 5.0 },
+            Stroke::new(1.2, if close { accent() } else { select() }),
+        );
+    }
+    if studio.tool == crate::tools::Tool::Pen {
+        draw_open_ends(p, rect, studio);
+    }
+}
+
+fn draw_open_ends(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
+    let skip = match &studio.op {
+        Some(Op::Pen {
+            source: Some((_, id, _)),
+            ..
+        }) => Some(*id),
+        _ => None,
+    };
+    for layer in &studio.doc.layers {
+        if !layer.visible {
+            continue;
+        }
+        let Some(shapes) = layer.kind.shapes() else {
+            continue;
+        };
+        for s in shapes {
+            if skip == Some(s.id) {
+                continue;
+            }
+            let Geom::Path {
+                anchors,
+                closed: false,
+            } = &s.geom
+            else {
+                continue;
+            };
+            if anchors.len() < 2 {
+                continue;
+            }
+            for pt in [anchors[0].pt, anchors.last().unwrap().pt] {
+                p.circle_filled(win(rect, studio.view, pt), 4.0, accent());
+            }
         }
     }
 }
 
-fn draw_nodes(p: &eframe::egui::Painter, rect: Rect, anchors: &[Anchor], view: crate::compositor::View) {
-    for a in anchors {
+fn draw_nodes(
+    p: &eframe::egui::Painter,
+    rect: Rect,
+    anchors: &[Anchor],
+    view: crate::compositor::View,
+    selected: Option<usize>,
+) {
+    for (i, a) in anchors.iter().enumerate() {
         let sp = win(rect, view, a.pt);
         if !a.is_corner() {
             let hi = win(rect, view, a.pt + a.h_in);
@@ -1686,6 +1858,115 @@ fn draw_nodes(p: &eframe::egui::Painter, rect: Rect, anchors: &[Anchor], view: c
             p.circle_filled(hi, 3.0, select());
             p.circle_filled(ho, 3.0, select());
         }
-        p.rect_filled(Rect::from_center_size(sp, vec2(6.0, 6.0)), 0.0, select());
+        let on = selected == Some(i);
+        let sz = if on { 8.0 } else { 6.0 };
+        p.rect_filled(Rect::from_center_size(sp, vec2(sz, sz)), 0.0, select());
+        if on {
+            p.rect_stroke(
+                Rect::from_center_size(sp, vec2(sz + 3.0, sz + 3.0)),
+                0.0,
+                Stroke::new(1.0, accent()),
+                eframe::egui::StrokeKind::Outside,
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::Studio;
+    use crate::tools::Tool;
+
+    fn oval() -> Studio {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        s.finish_create(
+            CreateKind::Ellipse,
+            Pt::new(40.0, 40.0),
+            Pt::new(140.0, 100.0),
+        );
+        s.tool = Tool::Select;
+        s
+    }
+
+    #[test]
+    fn handle_hit_survives_grid_snap() {
+        let mut s = oval();
+        s.doc.grid.snap = true;
+        s.doc.grid.size = 64.0;
+        s.snap.enabled = true;
+        s.snap.grid = true;
+        s.snap.guides = false;
+        s.snap.objects = false;
+        s.snap.threshold = 40.0;
+        let handle = posed_bounds(&s).unwrap().handle(1);
+        let snapped = s.snap_pt(handle);
+        assert!(
+            (snapped - handle).length() > 8.0,
+            "snap should pull off the handle so the pick/snap split is testable"
+        );
+        start_drag(&mut s, handle, snapped, false, false);
+        assert!(
+            matches!(s.op, Some(Op::Resize { handle: 1, .. })),
+            "handle pick must use the raw pointer, not the snapped point"
+        );
+    }
+
+    #[test]
+    fn second_handle_drag_after_release() {
+        let mut s = oval();
+        let b = posed_bounds(&s).unwrap();
+        start_drag(&mut s, b.handle(2), b.handle(2), false, false);
+        continue_drag(&mut s, Pt::new(200.0, 160.0), false, false);
+        end_drag(&mut s, Pt::new(200.0, 160.0), false, false, false);
+        assert!(s.op.is_none(), "release must clear the live resize");
+        let b2 = posed_bounds(&s).unwrap();
+        start_drag(&mut s, b2.handle(0), b2.handle(0), false, false);
+        assert!(matches!(s.op, Some(Op::Resize { handle: 0, .. })));
+    }
+
+    #[test]
+    fn second_node_after_moving_the_first() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        s.finish_create(
+            CreateKind::Rect,
+            Pt::new(40.0, 40.0),
+            Pt::new(140.0, 100.0),
+        );
+        s.tool = Tool::Node;
+        let (li, id) = s.primary().unwrap();
+        s.ensure_path(li, id);
+        let anchors = match &s.doc.find_shape(li, id).unwrap().geom {
+            Geom::Path { anchors, .. } => anchors.clone(),
+            _ => panic!("path"),
+        };
+        assert!(anchors.len() >= 2);
+        start_drag(&mut s, anchors[0].pt, anchors[0].pt, false, false);
+        continue_drag(&mut s, Pt::new(20.0, 20.0), false, false);
+        end_drag(&mut s, Pt::new(20.0, 20.0), false, false, false);
+        assert!(s.op.is_none());
+        let anchors = match &s.doc.find_shape(li, id).unwrap().geom {
+            Geom::Path { anchors, .. } => anchors.clone(),
+            _ => panic!("path"),
+        };
+        start_drag(&mut s, anchors[1].pt, anchors[1].pt, false, false);
+        match &s.op {
+            Some(Op::Node {
+                which: NodeHit::Point(1),
+                ..
+            }) => {}
+            other => panic!("expected node 1, got op? {}", other.is_some()),
+        }
+    }
+
+    #[test]
+    fn click_on_oval_handle_keeps_selection() {
+        let mut s = oval();
+        let id = s.selection[0];
+        let b = posed_bounds(&s).unwrap();
+        click(&mut s, b.handle(1), false, false);
+        assert_eq!(s.selection, vec![id]);
     }
 }

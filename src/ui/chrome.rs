@@ -1,5 +1,6 @@
 use crate::app::Studio;
 use crate::boolean::BoolOp;
+use crate::geom::Pt;
 use crate::tools::{Persona, Tool};
 use crate::ui::icons::{self, ph};
 use crate::ui::theme::{accent, accent_dim, fg, fg_weak};
@@ -108,6 +109,11 @@ fn file_menu(ui: &mut Ui, studio: &mut Studio) {
         }
         if ui.button("Save as…         Ctrl+Shift+S").clicked() {
             studio.save_as();
+            ui.close();
+        }
+        ui.separator();
+        if ui.button("Place…           Ctrl+Shift+P").clicked() {
+            studio.begin_place();
             ui.close();
         }
         ui.separator();
@@ -266,6 +272,28 @@ fn object_menu(ui: &mut Ui, studio: &mut Studio) {
             ui.close();
         }
         ui.separator();
+        if ui.button("Convert to path").clicked() {
+            if let Some((li, id)) = studio.primary() {
+                studio.ensure_path(li, id);
+            }
+            ui.close();
+        }
+        if ui
+            .button("Trace to vector")
+            .on_hover_text("Trace the active pixel layer. U selects the tool.")
+            .clicked()
+        {
+            studio.trace_active_raster();
+            ui.close();
+        }
+        if ui
+            .add_enabled(studio.node_sel.is_some(), Button::new("Break path at point"))
+            .clicked()
+        {
+            studio.break_node();
+            ui.close();
+        }
+        ui.separator();
         if ui.button("Swap fill / stroke          X").clicked() {
             studio.swap_fill_stroke();
             ui.close();
@@ -363,8 +391,22 @@ fn arrange_menu(ui: &mut Ui, studio: &mut Studio) {
 
 fn view_menu(ui: &mut Ui, studio: &mut Studio) {
     ui.menu_button("View", |ui| {
-        if ui.button("Fit                     Ctrl+0").clicked() {
+        if ui.button("Zoom in                 Ctrl++").clicked() {
+            let at = studio.cursor.map(|c| studio.view.to_screen(c)).unwrap_or(Pt::ZERO);
+            studio.zoom_by(1.25, at);
+            ui.close();
+        }
+        if ui.button("Zoom out                Ctrl+-").clicked() {
+            let at = studio.cursor.map(|c| studio.view.to_screen(c)).unwrap_or(Pt::ZERO);
+            studio.zoom_by(1.0 / 1.25, at);
+            ui.close();
+        }
+        if ui.button("Fit artboard            Ctrl+0").clicked() {
             studio.need_fit = true;
+            ui.close();
+        }
+        if ui.button("Fit selection").clicked() {
+            studio.zoom_to_objects(true);
             ui.close();
         }
         if ui.button("100%                    Ctrl+1").clicked() {
@@ -433,7 +475,7 @@ pub fn left_toolbar(ui: &mut Ui, studio: &mut Studio) {
                     Tool::Select | Tool::Node => "sel",
                     Tool::Pen | Tool::Pencil => "path",
                     Tool::Rect | Tool::Ellipse | Tool::Polygon | Tool::Star | Tool::Line => "shape",
-                    Tool::Text | Tool::Gradient | Tool::Eyedropper => "look",
+                    Tool::Text | Tool::Gradient | Tool::Eyedropper | Tool::Trace => "look",
                     Tool::Brush | Tool::Eraser | Tool::Fill | Tool::Clone | Tool::Smudge => "paint",
                     Tool::Marquee | Tool::EllipseMarquee | Tool::Lasso | Tool::Wand => "selpx",
                     Tool::Hand | Tool::Zoom | Tool::Crop => "nav",

@@ -56,13 +56,24 @@ fn main() -> eframe::Result {
         );
     }
 
+    let open: Vec<PathBuf> = args
+        .into_iter()
+        .filter(|a| !a.starts_with('-'))
+        .map(PathBuf::from)
+        .filter(|p| p.exists())
+        .collect();
+
     eframe::run_native(
         "omadesign",
         options,
-        Box::new(|cc| {
+        Box::new(move |cc| {
             theme::apply(&cc.egui_ctx);
             cc.egui_ctx.set_pixels_per_point(1.0);
-            Ok(Box::new(Studio::new()))
+            let mut studio = Studio::new();
+            for p in &open {
+                studio.open_path(p.clone());
+            }
+            Ok(Box::new(studio))
         }),
     )
 }

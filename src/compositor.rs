@@ -246,7 +246,8 @@ fn draw_layer(
     doc: &Document,
     overrides: Option<&HashMap<u64, Pose>>,
 ) {
-    if layer.mask.is_some() {
+    let filtered = layer.filters.active();
+    if layer.mask.is_some() || filtered {
         let Some(mut temp) = Pixmap::new(pm.width(), pm.height()) else {
             return;
         };
@@ -279,6 +280,9 @@ fn draw_layer(
                 let m = tiny_skia::Mask::from_pixmap(placed.as_ref(), tiny_skia::MaskType::Alpha);
                 temp.apply_mask(&m);
             }
+        }
+        if filtered {
+            crate::filter::apply(&mut temp, &layer.filters);
         }
         pm.draw_pixmap(
             0,
@@ -674,5 +678,21 @@ mod tests {
         let br = v.to_screen(world.max);
         assert!((br.x - tl.x - 400.0).abs() < 1e-3);
         assert!((br.y - tl.y - 400.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn pinch_keeps_the_point_under_the_cursor() {
+        let mut v = View {
+            scale: 1.0,
+            offset: crate::geom::Pt::new(10.0, 20.0),
+        };
+        let screen = crate::geom::Pt::new(80.0, 40.0);
+        let world = v.to_world(screen);
+        // Wayland pinch is an absolute scale from begin; we feed the ratio.
+        v.zoom_at(screen, 1.25);
+        v.zoom_at(screen, 0.8);
+        let back = v.to_world(screen);
+        assert!((back.x - world.x).abs() < 1e-4 && (back.y - world.y).abs() < 1e-4);
+        assert!((v.scale - 1.0).abs() < 1e-4);
     }
 }

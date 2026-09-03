@@ -22,6 +22,7 @@ src/
   compositor.rs   tiny-skia renderer + PNG/JPEG export
   paint.rs        brush, erase, smudge, clone, fill, wand
   photo.rs        develop pipeline + histograms
+  trace.rs        raster to vector (threshold and colour)
   boolean.rs      union / subtract / intersect / xor
   text.rs         rustybuzz OpenType + glyph outlines
   tools.rs        personas, tools, shortcut table
@@ -33,7 +34,7 @@ site/             landing page (TanStack Start)
 scripts/          local release + curl installer
 ```
 
-Mutations go through `Cmd` + `History`. Tests cover geometry, boolean, paint, develop, project round-trip, SVG, export, type, and zoom.
+Mutations go through `Cmd` + `History`. Tests cover geometry, boolean, paint, develop, project round-trip, SVG, export, type, zoom, place, and trace.
 
 ### Rules of the house
 

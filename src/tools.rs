@@ -42,6 +42,7 @@ pub enum Tool {
     Text,
     Gradient,
     Eyedropper,
+    Trace,
     Brush,
     Eraser,
     Fill,
@@ -71,6 +72,7 @@ impl Tool {
             Tool::Text => "Text",
             Tool::Gradient => "Gradient",
             Tool::Eyedropper => "Eyedropper",
+            Tool::Trace => "Trace",
             Tool::Brush => "Brush",
             Tool::Eraser => "Eraser",
             Tool::Fill => "Fill",
@@ -100,6 +102,7 @@ impl Tool {
             Tool::Text => "T",
             Tool::Gradient => "G",
             Tool::Eyedropper => "I",
+            Tool::Trace => "U",
             Tool::Brush => "B",
             Tool::Eraser => "E",
             Tool::Fill => "K",
@@ -118,8 +121,8 @@ impl Tool {
     pub fn hint(self) -> &'static str {
         match self {
             Tool::Select => "Click to select · drag to move · handles scale · the top handle rotates · Shift-click adds",
-            Tool::Node => "Click a point to select · drag handles · Alt-click converts corner/smooth · click a segment to insert",
-            Tool::Pen => "Click a corner · click-drag a smooth point · Enter or double-click finishes · click the first point to close",
+            Tool::Node => "Drag a point or handle · click a segment to add · Alt-click corner/smooth · Delete removes the point · Object → Break path",
+            Tool::Pen => "Click a corner · click-drag a smooth · Enter finishes open · click the first point to close · click an open end to continue or join",
             Tool::Pencil => "Drag a freehand curve. Release to commit.",
             Tool::Rect => "Drag a rectangle. Shift keeps it square. Corner radius lives in Transform.",
             Tool::Ellipse => "Drag an ellipse. Shift keeps it a circle.",
@@ -129,6 +132,7 @@ impl Tool {
             Tool::Text => "Click to place type and type into it. Character studio: font, size, OpenType. Esc finishes.",
             Tool::Gradient => "Drag across a selected shape to set a linear fill.",
             Tool::Eyedropper => "Click anywhere on the canvas to sample fill colour.",
+            Tool::Trace => "Click to trace the active pixel layer into vectors. Colours and smoothness live in Trace.",
             Tool::Brush => "Paint on the active pixel layer. [ ] size · Shift+[ ] hardness.",
             Tool::Eraser => "Erase on the active pixel layer.",
             Tool::Fill => "Click to flood-fill. Tolerance lives in Brush.",
@@ -140,7 +144,7 @@ impl Tool {
             Tool::Lasso => "Draw a freehand selection.",
             Tool::Wand => "Click to select similar colour.",
             Tool::Hand => "Drag to pan. Space does this from any tool.",
-            Tool::Zoom => "Drag a box to zoom to that area. Click zooms in, Alt-click zooms out. Scroll always works.",
+            Tool::Zoom => "Drag a box · click in · Alt-click out · Ctrl-click artboard · Ctrl+Shift-click selection or all · pinch or scroll to zoom",
         }
     }
 
@@ -160,6 +164,7 @@ impl Tool {
                     | Tool::Text
                     | Tool::Gradient
                     | Tool::Eyedropper
+                    | Tool::Trace
                     | Tool::Brush
                     | Tool::Hand
                     | Tool::Zoom
@@ -206,6 +211,7 @@ impl Tool {
             Tool::Text,
             Tool::Gradient,
             Tool::Eyedropper,
+            Tool::Trace,
             Tool::Brush,
             Tool::Hand,
             Tool::Zoom,
@@ -247,6 +253,7 @@ pub fn shortcut_groups() -> &'static [(&'static str, &'static [ShortcutRow])] {
             &[
                 ShortcutRow { action: "New", keys: "Ctrl+N" },
                 ShortcutRow { action: "Open", keys: "Ctrl+O" },
+                ShortcutRow { action: "Place", keys: "Ctrl+Shift+P" },
                 ShortcutRow { action: "Save", keys: "Ctrl+S" },
                 ShortcutRow { action: "Save as", keys: "Ctrl+Shift+S" },
                 ShortcutRow { action: "Export PNG", keys: "Ctrl+E" },
@@ -278,6 +285,7 @@ pub fn shortcut_groups() -> &'static [(&'static str, &'static [ShortcutRow])] {
                 ShortcutRow { action: "Release", keys: "Ctrl+Shift+G" },
                 ShortcutRow { action: "Nudge", keys: "Arrows" },
                 ShortcutRow { action: "Nudge ×10", keys: "Shift+Arrows" },
+                ShortcutRow { action: "Break path", keys: "Object menu" },
             ],
         ),
         (
@@ -295,6 +303,7 @@ pub fn shortcut_groups() -> &'static [(&'static str, &'static [ShortcutRow])] {
                 ShortcutRow { action: "Type", keys: "T" },
                 ShortcutRow { action: "Gradient", keys: "G" },
                 ShortcutRow { action: "Eyedropper", keys: "I" },
+                ShortcutRow { action: "Trace", keys: "U" },
                 ShortcutRow { action: "Brush", keys: "B" },
                 ShortcutRow { action: "Eraser", keys: "E" },
                 ShortcutRow { action: "Fill", keys: "K" },
@@ -310,8 +319,10 @@ pub fn shortcut_groups() -> &'static [(&'static str, &'static [ShortcutRow])] {
         (
             "View",
             &[
-                ShortcutRow { action: "Fit", keys: "Ctrl+0" },
+                ShortcutRow { action: "Fit artboard", keys: "Ctrl+0" },
                 ShortcutRow { action: "100%", keys: "Ctrl+1" },
+                ShortcutRow { action: "Zoom in", keys: "Ctrl++" },
+                ShortcutRow { action: "Zoom out", keys: "Ctrl+-" },
                 ShortcutRow { action: "Pan", keys: "Space" },
                 ShortcutRow { action: "Zoom", keys: "Ctrl+scroll" },
                 ShortcutRow { action: "Keys", keys: "F1" },
@@ -370,6 +381,7 @@ mod tests {
             Tool::Text,
             Tool::Gradient,
             Tool::Eyedropper,
+            Tool::Trace,
             Tool::Brush,
             Tool::Eraser,
             Tool::Fill,

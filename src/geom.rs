@@ -842,6 +842,78 @@ impl Geom {
         best
     }
 
+    /// Exact-ish conversion so the node tool can edit any vector.
+    pub fn to_path(&self) -> Geom {
+        match self {
+            Geom::Path { .. } => self.clone(),
+            Geom::Line { a, b } => Geom::Path {
+                anchors: vec![Anchor::corner(*a), Anchor::corner(*b)],
+                closed: false,
+            },
+            Geom::Rect {
+                origin,
+                size,
+                radius,
+            } if *radius < 0.5 => Geom::Path {
+                anchors: vec![
+                    Anchor::corner(*origin),
+                    Anchor::corner(Pt::new(origin.x + size.x, origin.y)),
+                    Anchor::corner(Pt::new(origin.x + size.x, origin.y + size.y)),
+                    Anchor::corner(Pt::new(origin.x, origin.y + size.y)),
+                ],
+                closed: true,
+            },
+            Geom::Ellipse { center, radii } => {
+                let k = 0.55228475;
+                let rx = radii.x;
+                let ry = radii.y;
+                let c = *center;
+                Geom::Path {
+                    anchors: vec![
+                        Anchor {
+                            pt: Pt::new(c.x + rx, c.y),
+                            h_in: Pt::new(0.0, -k * ry),
+                            h_out: Pt::new(0.0, k * ry),
+                        },
+                        Anchor {
+                            pt: Pt::new(c.x, c.y + ry),
+                            h_in: Pt::new(k * rx, 0.0),
+                            h_out: Pt::new(-k * rx, 0.0),
+                        },
+                        Anchor {
+                            pt: Pt::new(c.x - rx, c.y),
+                            h_in: Pt::new(0.0, k * ry),
+                            h_out: Pt::new(0.0, -k * ry),
+                        },
+                        Anchor {
+                            pt: Pt::new(c.x, c.y - ry),
+                            h_in: Pt::new(-k * rx, 0.0),
+                            h_out: Pt::new(k * rx, 0.0),
+                        },
+                    ],
+                    closed: true,
+                }
+            }
+            other => {
+                let closed = other.is_closed();
+                let Some(pts) = other.contours(24).into_iter().next() else {
+                    return Geom::Path {
+                        anchors: vec![],
+                        closed,
+                    };
+                };
+                let mut pts = pts;
+                if closed && pts.len() > 1 && (pts[0] - *pts.last().unwrap()).length() < 0.5 {
+                    pts.pop();
+                }
+                Geom::Path {
+                    anchors: pts.into_iter().map(Anchor::corner).collect(),
+                    closed,
+                }
+            }
+        }
+    }
+
     pub fn kind_name(&self) -> &'static str {
         match self {
             Geom::Rect { .. } => "Rectangle",
@@ -881,6 +953,36 @@ pub fn closest_on_path(anchors: &[Anchor], closed: bool, p: Pt) -> Option<(usize
         }
     }
     Some((best.1, best.2, best.0))
+}
+
+/// Break at `index`. Closed → one open path. Open (not an end) → two paths.
+pub fn break_path(
+    anchors: &[Anchor],
+    closed: bool,
+    index: usize,
+) -> Option<(Vec<Anchor>, Option<Vec<Anchor>>)> {
+    if anchors.len() < 2 || index >= anchors.len() {
+        return None;
+    }
+    if closed {
+        let mut a = anchors.to_vec();
+        a.rotate_left(index);
+        Some((a, None))
+    } else {
+        if index == 0 || index + 1 >= anchors.len() {
+            return None;
+        }
+        let left = anchors[..=index].to_vec();
+        let right = anchors[index..].to_vec();
+        Some((left, Some(right)))
+    }
+}
+
+pub fn reverse_anchors(anchors: &mut [Anchor]) {
+    anchors.reverse();
+    for a in anchors.iter_mut() {
+        std::mem::swap(&mut a.h_in, &mut a.h_out);
+    }
 }
 
 pub fn insert_anchor(anchors: &mut Vec<Anchor>, closed: bool, p: Pt, slack: f32) -> Option<usize> {
@@ -962,6 +1064,29 @@ mod tests {
         let (l, r) = split_cubic(p0, c1, c2, p1, 0.5);
         assert!((l[3].x - r[0].x).abs() < 1e-5);
         assert!((l[3].y - r[0].y).abs() < 1e-5);
+    }
+
+    #[test]
+    fn ellipse_to_path_is_closed_four() {
+        let g = Geom::Ellipse {
+            center: Pt::new(10.0, 10.0),
+            radii: Pt::new(8.0, 4.0),
+        };
+        let Geom::Path { anchors, closed } = g.to_path() else {
+            panic!("path");
+        };
+        assert!(closed);
+        assert_eq!(anchors.len(), 4);
+    }
+
+    #[test]
+    fn break_open_path_splits() {
+        let a: Vec<Anchor> = (0..4)
+            .map(|i| Anchor::corner(Pt::new(i as f32 * 10.0, 0.0)))
+            .collect();
+        let (l, r) = break_path(&a, false, 1).unwrap();
+        assert_eq!(l.len(), 2);
+        assert_eq!(r.unwrap().len(), 3);
     }
 
     #[test]

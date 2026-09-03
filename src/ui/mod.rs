@@ -14,6 +14,10 @@ use eframe::egui::Ui;
 
 pub fn run(ui: &mut Ui, studio: &mut Studio) {
     let ctx = ui.ctx().clone();
+    ctx.options_mut(|o| o.zoom_with_keyboard = false);
+    if (ctx.zoom_factor() - 1.0).abs() > 1e-3 {
+        ctx.set_zoom_factor(1.0);
+    }
     studio.handle_shortcuts(&ctx);
     studio.tick_motion(&ctx);
 
@@ -22,6 +26,10 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     if studio.show_welcome {
         welcome::show(ui, studio);
         chrome::status_bar(ui, studio);
+        let files: Vec<_> = ctx.input(|i| i.raw.dropped_files.clone());
+        for f in files {
+            studio.ingest_dropped(f.path(), None);
+        }
         return;
     }
 

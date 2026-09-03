@@ -170,6 +170,32 @@ pub enum CreateKind {
     Line,
 }
 
+pub enum PendingPlace {
+    Raster {
+        name: String,
+        image: RgbaImage,
+    },
+    Svg {
+        name: String,
+        svg: String,
+    },
+}
+
+impl PendingPlace {
+    pub fn name(&self) -> &str {
+        match self {
+            PendingPlace::Raster { name, .. } | PendingPlace::Svg { name, .. } => name,
+        }
+    }
+
+    pub fn native_size(&self) -> (f32, f32) {
+        match self {
+            PendingPlace::Raster { image, .. } => (image.w as f32, image.h as f32),
+            PendingPlace::Svg { svg, .. } => crate::shape_browser::svg_size(svg),
+        }
+    }
+}
+
 pub enum NodeHit {
     Point(usize),
     HandleIn(usize),
@@ -184,6 +210,8 @@ pub enum Op {
     },
     Pen {
         anchors: Vec<Anchor>,
+        /// Continuing an existing open path: orig geom for undo / Esc.
+        source: Option<(usize, u64, Geom)>,
     },
     Pencil {
         pts: Vec<Pt>,
@@ -242,6 +270,10 @@ pub enum Op {
         cur: Pt,
     },
     ZoomBox {
+        start: Pt,
+        cur: Pt,
+    },
+    Place {
         start: Pt,
         cur: Pt,
     },
@@ -340,11 +372,14 @@ pub struct Studio {
     pub layer_rename: Option<(usize, String)>,
     pub section_open: SectionOpen,
     pub paste_nudge: u32,
+    pub node_sel: Option<usize>,
     pub playhead: f32,
     pub playing: bool,
     pub play_clock: f64,
     pub pose_drag: HashMap<u64, Pose>,
     pub selected_key: Option<(u64, Prop, usize)>,
+    pub pending_place: Option<PendingPlace>,
+    pub trace_opts: crate::trace::TraceOpts,
 }
 
 #[derive(Clone, Copy)]
@@ -356,6 +391,7 @@ pub struct SectionOpen {
     pub brush: bool,
     pub layers: bool,
     pub palettes: bool,
+    pub fx: bool,
 }
 
 impl Default for SectionOpen {
@@ -368,6 +404,7 @@ impl Default for SectionOpen {
             brush: true,
             layers: true,
             palettes: false,
+            fx: true,
         }
     }
 }
@@ -458,11 +495,14 @@ impl Studio {
             layer_rename: None,
             section_open: SectionOpen::default(),
             paste_nudge: 0,
+            node_sel: None,
             playhead: 0.0,
             playing: false,
             play_clock: 0.0,
             pose_drag: HashMap::new(),
             selected_key: None,
+            pending_place: None,
+            trace_opts: crate::trace::TraceOpts::default(),
         };
         s.doc.grid.visible = false;
         if !s.palettes.is_empty() {
@@ -833,6 +873,10 @@ impl Studio {
     }
 
     pub fn delete_selection(&mut self) {
+        if self.tool == Tool::Node && self.node_sel.is_some() {
+            self.delete_node();
+            return;
+        }
         if self.is_motion()
             && let Some((id, prop, index)) = self.selected_key.take()
         {
@@ -871,6 +915,17 @@ impl Studio {
     }
 
     pub fn finish_zoom_box(&mut self, start: Pt, cur: Pt) {
+        self.finish_zoom_box_mods(start, cur, false, false, false);
+    }
+
+    pub fn finish_zoom_box_mods(
+        &mut self,
+        start: Pt,
+        cur: Pt,
+        alt: bool,
+        ctrl: bool,
+        shift: bool,
+    ) {
         let world = Bounds {
             min: Pt::new(start.x.min(cur.x), start.y.min(cur.y)),
             max: Pt::new(start.x.max(cur.x), start.y.max(cur.y)),
@@ -880,7 +935,7 @@ impl Studio {
         };
         let screen_w = world.width() * self.view.scale;
         let screen_h = world.height() * self.view.scale;
-        if screen_w > 8.0 && screen_h > 8.0 {
+        if screen_w > 8.0 && screen_h > 8.0 && !ctrl {
             self.view.zoom_to(
                 world,
                 Bounds {
@@ -889,10 +944,84 @@ impl Studio {
                 },
             );
             self.status = format!("zoom {:.0}%", self.view.scale * 100.0);
-        } else {
-            let mid = self.view.to_screen(world.center());
-            self.view.zoom_at(mid, 1.25);
+            return;
+        }
+        if screen_w <= 8.0 && screen_h <= 8.0 {
+            // Click without a box: the click handler already applied modifiers.
+            return;
+        }
+        let mid = self.view.to_screen(world.center());
+        self.zoom_click(mid, alt, ctrl, shift);
+    }
+
+    /// Z tool click. Alt out, Ctrl artboard, Ctrl+Shift selection or all objects.
+    pub fn zoom_click(&mut self, screen: Pt, alt: bool, ctrl: bool, shift: bool) {
+        if ctrl && shift {
+            self.zoom_to_objects(true);
+            return;
+        }
+        if ctrl {
+            self.need_fit = true;
+            self.status = "zoom artboard".into();
+            return;
+        }
+        self.zoom_by(if alt { 1.0 / 1.25 } else { 1.25 }, screen);
+    }
+
+    pub fn zoom_by(&mut self, factor: f32, screen: Pt) {
+        self.view.zoom_at(screen, factor);
+        self.status = format!("zoom {:.0}%", self.view.scale * 100.0);
+    }
+
+    fn canvas_zoom_anchor(&self) -> Pt {
+        if let Some(c) = self.cursor {
+            return self.view.to_screen(c);
+        }
+        if let Some(r) = self.canvas_rect {
+            return Pt::new(r.width() * 0.5, r.height() * 0.5);
+        }
+        Pt::ZERO
+    }
+
+    /// Fit selected shapes, or every visible vector if nothing is selected.
+    pub fn zoom_to_objects(&mut self, prefer_selection: bool) {
+        let Some(rect) = self.canvas_rect else {
+            return;
+        };
+        let viewport = Bounds {
+            min: Pt::ZERO,
+            max: Pt::new(rect.width(), rect.height()),
+        };
+        let use_sel = prefer_selection && !self.selection.is_empty();
+        let mut b: Option<Bounds> = None;
+        for (li, layer) in self.doc.layers.iter().enumerate() {
+            if !layer.visible {
+                continue;
+            }
+            let Some(shapes) = layer.kind.shapes() else {
+                continue;
+            };
+            for s in shapes {
+                if use_sel && !self.selection.contains(&(li, s.id)) {
+                    continue;
+                }
+                let bb = if self.is_motion() {
+                    self.live_pose(s.id).map_bounds(s.world_bbox())
+                } else {
+                    s.world_bbox()
+                };
+                b = Some(match b {
+                    None => bb,
+                    Some(acc) => acc.union(bb),
+                });
+            }
+        }
+        if let Some(world) = b {
+            self.view.zoom_to(world.inflate(12.0), viewport);
             self.status = format!("zoom {:.0}%", self.view.scale * 100.0);
+        } else {
+            self.need_fit = true;
+            self.status = "zoom artboard".into();
         }
     }
 
@@ -1279,45 +1408,322 @@ impl Studio {
         self.status = "created".into();
     }
 
-    /// Click with the pen: add a corner, or close if you hit the first point.
+    /// Click with the pen: add a corner, close, pick up an open end, or join.
     pub fn pen_click(&mut self, world: Pt) {
         let slack = 10.0 / self.view.scale.max(0.01);
-        if let Some(Op::Pen { anchors }) = &self.op
-            && anchors.len() >= 2
+        if let Some(Op::Pen { anchors, source }) = &self.op
+            && anchors.len() >= 3
             && (anchors[0].pt - world).length() < slack
         {
-            let a = anchors.clone();
+            let anchors = anchors.clone();
+            let source = source.clone();
             self.op = None;
-            self.finish_pen(a, true);
+            self.finish_pen(anchors, true, source);
             return;
         }
+        let skip = match &self.op {
+            Some(Op::Pen { source: Some((_, id, _)), .. }) => Some(*id),
+            _ => None,
+        };
+        if let Some((li, id, at_start)) = self.hit_open_end(world, slack, skip) {
+            if let Some(Op::Pen { anchors, .. }) = &mut self.op {
+                if let Some(s) = self.doc.find_shape(li, id)
+                    && let Geom::Path {
+                        anchors: other, ..
+                    } = &s.geom
+                {
+                    let mut other = other.clone();
+                    if !at_start {
+                        crate::geom::reverse_anchors(&mut other);
+                    }
+                    if other.len() > 1
+                        && anchors
+                            .last()
+                            .is_some_and(|a| (other[0].pt - a.pt).length() < slack * 2.0)
+                    {
+                        other.remove(0);
+                    }
+                    anchors.extend(other);
+                    self.sync_pen_source();
+                }
+                if let Some(s) = self.doc.find_shape(li, id).cloned() {
+                    self.commit(Cmd::RemoveShapes {
+                        layer: li,
+                        shapes: vec![s],
+                    });
+                }
+                self.status = "paths joined".into();
+                return;
+            }
+            if let Some(s) = self.doc.find_shape(li, id)
+                && let Geom::Path { anchors, .. } = &s.geom
+            {
+                let mut a = anchors.clone();
+                if at_start {
+                    crate::geom::reverse_anchors(&mut a);
+                }
+                self.op = Some(Op::Pen {
+                    anchors: a,
+                    source: Some((li, id, s.geom.clone())),
+                });
+                self.selection = vec![(li, id)];
+                self.status = "continuing path".into();
+                return;
+            }
+        }
         match &mut self.op {
-            Some(Op::Pen { anchors }) => anchors.push(Anchor::corner(world)),
+            Some(Op::Pen { anchors, .. }) => {
+                anchors.push(Anchor::corner(world));
+                self.sync_pen_source();
+            }
             _ => {
                 self.op = Some(Op::Pen {
                     anchors: vec![Anchor::corner(world)],
+                    source: None,
                 })
             }
         }
     }
 
-    pub fn finish_pen(&mut self, anchors: Vec<Anchor>, closed: bool) {
+    pub(crate) fn sync_pen_source(&mut self) {
+        let Some(Op::Pen {
+            anchors,
+            source: Some((li, id, _)),
+        }) = &self.op
+        else {
+            return;
+        };
+        let anchors = anchors.clone();
+        let (li, id) = (*li, *id);
+        if let Some(s) = self.doc.find_shape_mut(li, id)
+            && let Geom::Path {
+                anchors: dst,
+                closed,
+            } = &mut s.geom
+        {
+            *dst = anchors;
+            *closed = false;
+        }
+        self.mark();
+    }
+
+    fn hit_open_end(&self, world: Pt, slack: f32, skip: Option<u64>) -> Option<(usize, u64, bool)> {
+        let mut best: Option<(f32, usize, u64, bool)> = None;
+        for (li, layer) in self.doc.layers.iter().enumerate() {
+            if !layer.visible || layer.locked {
+                continue;
+            }
+            let Some(shapes) = layer.kind.shapes() else {
+                continue;
+            };
+            for s in shapes {
+                if skip == Some(s.id) {
+                    continue;
+                }
+                let Geom::Path {
+                    anchors,
+                    closed: false,
+                } = &s.geom
+                else {
+                    continue;
+                };
+                if anchors.len() < 2 {
+                    continue;
+                }
+                let ds = (anchors[0].pt - world).length();
+                if ds < slack {
+                    if best.is_none_or(|(d, ..)| ds < d) {
+                        best = Some((ds, li, s.id, true));
+                    }
+                }
+                let de = (anchors.last().unwrap().pt - world).length();
+                if de < slack {
+                    if best.is_none_or(|(d, ..)| de < d) {
+                        best = Some((de, li, s.id, false));
+                    }
+                }
+            }
+        }
+        best.map(|(_, li, id, at_start)| (li, id, at_start))
+    }
+
+    pub fn finish_pen(
+        &mut self,
+        anchors: Vec<Anchor>,
+        closed: bool,
+        source: Option<(usize, u64, Geom)>,
+    ) {
         if anchors.len() < 2 {
+            return;
+        }
+        let closed = closed && anchors.len() >= 3;
+        if let Some((li, id, orig)) = source {
+            let after = Geom::Path {
+                anchors,
+                closed,
+            };
+            let rot = self
+                .doc
+                .find_shape(li, id)
+                .map(|s| s.rotation)
+                .unwrap_or(0.0);
+            if let Some(s) = self.doc.find_shape_mut(li, id) {
+                s.geom = after.clone();
+            }
+            self.commit(Cmd::SetGeom {
+                layer: li,
+                id,
+                before: orig,
+                after,
+                rot_before: rot,
+                rot_after: rot,
+            });
+            self.selection = vec![(li, id)];
+            self.status = if closed { "path closed" } else { "path" }.into();
             return;
         }
         let Some(li) = self.vector_target() else {
             return;
         };
-        if closed && anchors.len() >= 3 {
-            // already closed by clicking first point
+        let mut style = self.style.clone();
+        if !closed {
+            style.fill = Fill::None;
+            if style.stroke.is_none() {
+                style.stroke = Some(Stroke::default());
+            }
         }
-        let shape = Shape::new(
-            Geom::Path { anchors, closed },
-            self.style.clone(),
-        );
+        let shape = Shape::new(Geom::Path { anchors, closed }, style);
         let id = shape.id;
         self.commit(Cmd::AddShape { layer: li, shape });
         self.selection = vec![(li, id)];
+        self.status = if closed {
+            "closed path"
+        } else {
+            "open path"
+        }
+        .into();
+    }
+
+    pub fn ensure_path(&mut self, li: usize, id: u64) {
+        let Some(s) = self.doc.find_shape(li, id) else {
+            return;
+        };
+        if matches!(s.geom, Geom::Path { .. } | Geom::Text(_)) {
+            return;
+        }
+        let mut after = s.geom.to_path();
+        let rot = s.rotation;
+        if rot.abs() > 1e-5 {
+            let c = after.bbox().center();
+            after.rotate_about(c, rot);
+        }
+        self.commit(Cmd::SetGeom {
+            layer: li,
+            id,
+            before: s.geom.clone(),
+            after,
+            rot_before: rot,
+            rot_after: 0.0,
+        });
+    }
+
+    pub fn delete_node(&mut self) {
+        let Some(i) = self.node_sel else {
+            return;
+        };
+        let Some((li, id)) = self.primary() else {
+            return;
+        };
+        let Some(s) = self.doc.find_shape(li, id) else {
+            return;
+        };
+        let Geom::Path { anchors, closed } = &s.geom else {
+            return;
+        };
+        if i >= anchors.len() {
+            return;
+        }
+        let mut anchors = anchors.clone();
+        let mut closed = *closed;
+        anchors.remove(i);
+        if closed && anchors.len() < 3 {
+            closed = false;
+        }
+        if anchors.len() < 2 {
+            self.node_sel = None;
+            self.delete_selection();
+            return;
+        }
+        self.node_sel = Some(i.min(anchors.len() - 1));
+        self.commit(Cmd::SetGeom {
+            layer: li,
+            id,
+            before: s.geom.clone(),
+            after: Geom::Path { anchors, closed },
+            rot_before: s.rotation,
+            rot_after: s.rotation,
+        });
+        self.status = "point deleted".into();
+    }
+
+    pub fn break_node(&mut self) {
+        let Some(i) = self.node_sel else {
+            self.status = "select a point to break".into();
+            return;
+        };
+        let Some((li, id)) = self.primary() else {
+            return;
+        };
+        let Some(s) = self.doc.find_shape(li, id).cloned() else {
+            return;
+        };
+        let Geom::Path { anchors, closed } = &s.geom else {
+            return;
+        };
+        let Some((left, right)) = crate::geom::break_path(anchors, *closed, i) else {
+            self.status = "can't break at an endpoint".into();
+            return;
+        };
+        self.commit(Cmd::SetGeom {
+            layer: li,
+            id,
+            before: s.geom.clone(),
+            after: Geom::Path {
+                anchors: left,
+                closed: false,
+            },
+            rot_before: s.rotation,
+            rot_after: s.rotation,
+        });
+        if let Some(anchors) = right {
+            let mut sh = s.clone();
+            sh.id = crate::document::next_id();
+            sh.geom = Geom::Path {
+                anchors,
+                closed: false,
+            };
+            self.commit(Cmd::AddShape {
+                layer: li,
+                shape: sh,
+            });
+        }
+        self.node_sel = Some(0);
+        self.status = "path broken".into();
+    }
+
+    pub fn commit_filters(&mut self, index: usize, after: crate::filter::FilterStack) {
+        let Some(layer) = self.doc.layers.get(index) else {
+            return;
+        };
+        let before = layer.filters.clone();
+        if before == after {
+            return;
+        }
+        self.commit(Cmd::SetFilters {
+            index,
+            before,
+            after,
+        });
     }
 
     pub fn finish_pencil(&mut self, pts: Vec<Pt>) {
@@ -1841,6 +2247,9 @@ impl Studio {
                 }
                 Err(e) => self.status = format!("open failed: {e}"),
             }
+        } else if ext == "svg" || looks_like_svg(&path) {
+            self.persona = Persona::Design;
+            self.ingest_dropped(&path, None);
         } else {
             self.photo.import_file(&path);
             self.persona = Persona::Photo;
@@ -2066,6 +2475,235 @@ impl Studio {
         self.status = "photo placed on a pixel layer".into();
     }
 
+    pub fn begin_place(&mut self) {
+        let Some(path) = crate::project::dialog_place() else {
+            return;
+        };
+        self.load_place_path(&path);
+    }
+
+    pub fn load_place_path(&mut self, path: &std::path::Path) {
+        match pending_from_path(path) {
+            Ok(pending) => {
+                self.show_welcome = false;
+                if self.persona == Persona::Photo {
+                    self.persona = Persona::Design;
+                    self.tool = Tool::Select;
+                }
+                let name = pending.name().to_string();
+                self.pending_place = Some(pending);
+                self.status = format!("click or drag to place {name}");
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
+    pub fn ingest_dropped(&mut self, path: &std::path::Path, at: Option<Pt>) {
+        let ext = path
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if ext == "oma" {
+            self.open_path(path.to_path_buf());
+            return;
+        }
+        if ext == "json" || ext == "lottie" {
+            match std::fs::read_to_string(path) {
+                Ok(s) => self.import_lottie_str(&s),
+                Err(e) => self.status = format!("read failed: {e}"),
+            }
+            return;
+        }
+        if self.persona == Persona::Photo && is_raster_ext(&ext) {
+            self.photo.import_file(path);
+            return;
+        }
+        match pending_from_path(path) {
+            Ok(pending) => {
+                self.show_welcome = false;
+                if self.persona == Persona::Photo {
+                    self.persona = Persona::Design;
+                    self.tool = Tool::Select;
+                }
+                self.pending_place = Some(pending);
+                self.commit_place_at(at.unwrap_or(Pt::new(self.doc.width * 0.5, self.doc.height * 0.5)));
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
+    pub fn cancel_place(&mut self) {
+        if self.pending_place.take().is_some() {
+            self.status = "place cancelled".into();
+        }
+    }
+
+    pub fn pending_preview_rect(&self, at: Pt) -> Option<Bounds> {
+        let pending = self.pending_place.as_ref()?;
+        let (sw, sh) = pending.native_size();
+        let (w, h) = fit_place_size(sw, sh, self.doc.width * 0.92, self.doc.height * 0.92);
+        Some(place_rect_centered(at, w, h, self.doc.width, self.doc.height))
+    }
+
+    pub fn commit_place_at(&mut self, at: Pt) {
+        let Some(pending) = self.pending_place.as_ref() else {
+            return;
+        };
+        let (sw, sh) = pending.native_size();
+        let (w, h) = fit_place_size(sw, sh, self.doc.width * 0.92, self.doc.height * 0.92);
+        let dest = place_rect_centered(at, w, h, self.doc.width, self.doc.height);
+        self.commit_place_dest(dest);
+    }
+
+    pub fn commit_place_rect(&mut self, start: Pt, cur: Pt) {
+        let Some(pending) = self.pending_place.as_ref() else {
+            return;
+        };
+        let (sw, sh) = pending.native_size();
+        let min = Pt::new(start.x.min(cur.x), start.y.min(cur.y));
+        let max = Pt::new(start.x.max(cur.x), start.y.max(cur.y));
+        let bw = (max.x - min.x).abs();
+        let bh = (max.y - min.y).abs();
+        if bw < 8.0 && bh < 8.0 {
+            self.commit_place_at(start);
+            return;
+        }
+        let s = (bw / sw.max(1.0)).min(bh / sh.max(1.0)).max(0.01);
+        let w = sw * s;
+        let h = sh * s;
+        let dest = Bounds::from_min_size(
+            Pt::new(min.x + (bw - w) * 0.5, min.y + (bh - h) * 0.5),
+            Pt::new(w, h),
+        );
+        self.commit_place_dest(dest);
+    }
+
+    fn commit_place_dest(&mut self, dest: Bounds) {
+        let Some(pending) = self.pending_place.take() else {
+            return;
+        };
+        match pending {
+            PendingPlace::Raster { name, image } => self.place_raster(name, image, dest),
+            PendingPlace::Svg { name, svg } => self.place_svg(name, &svg, dest),
+        }
+    }
+
+    fn place_raster(&mut self, name: String, image: RgbaImage, dest: Bounds) {
+        let dw = self.doc.width.max(1.0).round() as u32;
+        let dh = self.doc.height.max(1.0).round() as u32;
+        let mut layer = Layer::raster(name.clone(), dw, dh);
+        let tw = dest.width().abs().round().max(1.0) as u32;
+        let th = dest.height().abs().round().max(1.0) as u32;
+        let scaled = image.resized(tw, th);
+        if let LayerKind::Raster { pixels } = &mut layer.kind {
+            blit_rgba(
+                pixels,
+                &scaled,
+                dest.min.x.round() as i32,
+                dest.min.y.round() as i32,
+            );
+        }
+        let index = self.doc.layers.len();
+        self.commit(Cmd::AddLayer { index, layer });
+        self.active_layer = Some(index);
+        self.selection.clear();
+        self.status = format!("{name} placed");
+    }
+
+    fn place_svg(&mut self, name: String, svg: &str, dest: Bounds) {
+        let target = dest.width().abs().max(dest.height().abs()).max(1.0);
+        match crate::shape_browser::svg_to_geom(svg, target) {
+            Ok(mut geom) => {
+                let b = geom.bbox();
+                geom.map_into(b, dest);
+                let mut style = self.style.clone();
+                if let Some(c) = crate::shape_browser::svg_fill(svg) {
+                    style.fill = Fill::Solid(c);
+                } else if style.fill.is_none() {
+                    style.fill = Fill::Solid(self.brush.color);
+                }
+                style.stroke = None;
+                let shape = Shape::new(geom, style);
+                let id = shape.id;
+                let Some(li) = self.vector_target() else {
+                    let index = self.doc.layers.len();
+                    self.commit(Cmd::AddLayer {
+                        index,
+                        layer: Layer::vector(name.clone()),
+                    });
+                    self.commit(Cmd::AddShape {
+                        layer: index,
+                        shape,
+                    });
+                    self.active_layer = Some(index);
+                    self.selection = vec![(index, id)];
+                    self.status = format!("{name} placed");
+                    return;
+                };
+                self.commit(Cmd::AddShape { layer: li, shape });
+                self.selection = vec![(li, id)];
+                self.status = format!("{name} placed");
+            }
+            Err(e) => self.status = format!("{name}: {e}"),
+        }
+    }
+
+    pub fn trace_active_raster(&mut self) {
+        let Some(li) = self.raster_target() else {
+            self.status = "select a pixel layer to trace".into();
+            return;
+        };
+        let Some(px) = self.doc.layers.get(li).and_then(|l| l.kind.pixels()) else {
+            self.status = "select a pixel layer to trace".into();
+            return;
+        };
+        let name = self.doc.layers[li].name.clone();
+        let traced = crate::trace::trace(px, self.trace_opts);
+        if traced.is_empty() {
+            self.status = "nothing to trace — drop the threshold or turn off ignore white".into();
+            return;
+        }
+        let index = self.doc.layers.len();
+        self.commit(Cmd::AddLayer {
+            index,
+            layer: Layer::vector(format!("Trace {name}")),
+        });
+        let mut sel = Vec::new();
+        let fill_fallback = match &self.style.fill {
+            Fill::Solid(c) => *c,
+            _ => Rgba::rgb(0x11, 0x11, 0x11),
+        };
+        for t in traced {
+            let color = if self.trace_opts.colors <= 1 {
+                fill_fallback
+            } else {
+                t.color
+            };
+            let shape = Shape::new(
+                t.geom,
+                Style {
+                    fill: Fill::Solid(color),
+                    stroke: None,
+                },
+            );
+            sel.push((index, shape.id));
+            self.commit(Cmd::AddShape {
+                layer: index,
+                shape,
+            });
+        }
+        self.active_layer = Some(index);
+        self.selection = sel;
+        self.persona = Persona::Design;
+        self.tool = Tool::Select;
+        self.status = format!(
+            "traced {} path{}",
+            self.selection.len(),
+            if self.selection.len() == 1 { "" } else { "s" }
+        );
+    }
+
     pub fn handle_shortcuts(&mut self, ctx: &egui::Context) {
         if self.handle_type_keys(ctx) {
             return;
@@ -2087,6 +2725,10 @@ impl Studio {
             }
             if ctrl && i.key_pressed(Key::O) {
                 self.open();
+                return;
+            }
+            if ctrl && mods.shift && i.key_pressed(Key::P) {
+                self.begin_place();
                 return;
             }
             if ctrl && i.key_pressed(Key::N) {
@@ -2186,6 +2828,25 @@ impl Studio {
             }
             if ctrl && i.key_pressed(Key::Num1) {
                 self.view.scale = 1.0;
+                self.mark();
+                return;
+            }
+            if ctrl && (i.key_pressed(Key::Plus) || i.key_pressed(Key::Equals)) {
+                if self.persona == Persona::Photo {
+                    self.photo.view_scale = (self.photo.view_scale * 1.25).clamp(0.1, 8.0);
+                } else {
+                    let at = self.canvas_zoom_anchor();
+                    self.zoom_by(1.25, at);
+                }
+                return;
+            }
+            if ctrl && i.key_pressed(Key::Minus) {
+                if self.persona == Persona::Photo {
+                    self.photo.view_scale = (self.photo.view_scale / 1.25).clamp(0.1, 8.0);
+                } else {
+                    let at = self.canvas_zoom_anchor();
+                    self.zoom_by(1.0 / 1.25, at);
+                }
                 return;
             }
             if i.key_pressed(Key::F1) {
@@ -2221,13 +2882,35 @@ impl Studio {
                 return;
             }
             if i.key_pressed(Key::Escape) {
-                self.op = None;
+                if self.pending_place.is_some() {
+                    self.cancel_place();
+                    self.op = None;
+                    return;
+                }
+                if let Some(Op::Pen {
+                    source: Some((li, id, orig)),
+                    ..
+                }) = self.op.take()
+                {
+                    if let Some(s) = self.doc.find_shape_mut(li, id) {
+                        s.geom = orig;
+                    }
+                    self.mark();
+                } else {
+                    self.op = None;
+                }
                 self.bool_pick = None;
                 return;
             }
             if i.key_pressed(Key::Enter) {
+                if self.pending_place.is_some() {
+                    self.commit_place_at(Pt::new(self.doc.width * 0.5, self.doc.height * 0.5));
+                    return;
+                }
                 match self.op.take() {
-                    Some(Op::Pen { anchors }) => self.finish_pen(anchors, false),
+                    Some(Op::Pen { anchors, source }) => {
+                        self.finish_pen(anchors, false, source)
+                    }
                     Some(Op::CropPhoto { start, cur }) => {
                         self.commit_photo_crop(start, cur);
                     }
@@ -2565,6 +3248,9 @@ impl Studio {
         if i.key_pressed(Key::I) {
             set(self, Tool::Eyedropper);
         }
+        if i.key_pressed(Key::U) {
+            set(self, Tool::Trace);
+        }
         if i.key_pressed(Key::B) {
             set(self, Tool::Brush);
         }
@@ -2673,6 +3359,99 @@ pub fn color32(c: Rgba) -> Color32 {
     c.to_egui()
 }
 
+fn is_raster_ext(ext: &str) -> bool {
+    matches!(
+        ext,
+        "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" | "tif" | "tiff"
+    )
+}
+
+fn pending_from_path(path: &std::path::Path) -> Result<PendingPlace, String> {
+    let name = path
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.display().to_string());
+    let ext = path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if ext == "svg" || looks_like_svg(path) {
+        let svg = std::fs::read_to_string(path).map_err(|e| format!("read failed: {e}"))?;
+        return Ok(PendingPlace::Svg { name, svg });
+    }
+    if is_raster_ext(&ext) {
+        let image = photo::load_file(path).ok_or_else(|| format!("could not open {name}"))?;
+        return Ok(PendingPlace::Raster { name, image });
+    }
+    if let Some(image) = photo::load_file(path) {
+        return Ok(PendingPlace::Raster { name, image });
+    }
+    Err(format!("can't place {name}"))
+}
+
+fn looks_like_svg(path: &std::path::Path) -> bool {
+    let Ok(bytes) = std::fs::read(path) else {
+        return false;
+    };
+    let head = std::str::from_utf8(&bytes[..bytes.len().min(512)]).unwrap_or("");
+    let t = head.trim_start();
+    t.starts_with("<svg") || (t.starts_with("<?xml") && t.contains("<svg")) || t.contains("<svg")
+}
+
+fn fit_place_size(src_w: f32, src_h: f32, max_w: f32, max_h: f32) -> (f32, f32) {
+    let mut w = src_w.max(1.0);
+    let mut h = src_h.max(1.0);
+    if w > max_w || h > max_h {
+        let s = (max_w / w).min(max_h / h);
+        w *= s;
+        h *= s;
+    }
+    (w.max(1.0), h.max(1.0))
+}
+
+fn place_rect_centered(at: Pt, w: f32, h: f32, doc_w: f32, doc_h: f32) -> Bounds {
+    let mut x = at.x - w * 0.5;
+    let mut y = at.y - h * 0.5;
+    x = x.clamp(0.0, (doc_w - w).max(0.0));
+    y = y.clamp(0.0, (doc_h - h).max(0.0));
+    Bounds::from_min_size(Pt::new(x, y), Pt::new(w, h))
+}
+
+fn blit_rgba(dst: &mut crate::document::Pixels, src: &RgbaImage, ox: i32, oy: i32) {
+    for y in 0..src.h as i32 {
+        let dy = oy + y;
+        if dy < 0 || dy >= dst.h as i32 {
+            continue;
+        }
+        for x in 0..src.w as i32 {
+            let dx = ox + x;
+            if dx < 0 || dx >= dst.w as i32 {
+                continue;
+            }
+            let si = ((y as u32 * src.w + x as u32) * 4) as usize;
+            let di = ((dy as u32 * dst.w + dx as u32) * 4) as usize;
+            let a = src.data[si + 3] as u32;
+            if a == 0 {
+                continue;
+            }
+            if a == 255 {
+                dst.data[di..di + 4].copy_from_slice(&src.data[si..si + 4]);
+            } else {
+                let ia = 255 - a;
+                dst.data[di] =
+                    ((src.data[si] as u32 * a + dst.data[di] as u32 * ia) / 255) as u8;
+                dst.data[di + 1] =
+                    ((src.data[si + 1] as u32 * a + dst.data[di + 1] as u32 * ia) / 255) as u8;
+                dst.data[di + 2] =
+                    ((src.data[si + 2] as u32 * a + dst.data[di + 2] as u32 * ia) / 255) as u8;
+                dst.data[di + 3] = dst.data[di + 3].max(src.data[si + 3]);
+            }
+        }
+    }
+    dst.touch();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2687,7 +3466,7 @@ mod tests {
         s.pen_click(Pt::new(40.0, 10.0));
         s.pen_click(Pt::new(40.0, 40.0));
         match &s.op {
-            Some(Op::Pen { anchors }) => assert_eq!(anchors.len(), 3),
+            Some(Op::Pen { anchors, .. }) => assert_eq!(anchors.len(), 3),
             other => panic!("expected pen draft, got op? {}", other.is_some()),
         }
         s.pen_click(Pt::new(10.0, 10.0));
@@ -2700,6 +3479,29 @@ mod tests {
             .map(|ss| ss.len())
             .sum();
         assert_eq!(n, 1);
+        let Geom::Path { closed, .. } = &s.doc.layers[1].kind.shapes().unwrap()[0].geom else {
+            panic!("path");
+        };
+        assert!(closed);
+    }
+
+    #[test]
+    fn pen_enter_leaves_path_open() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        s.tool = Tool::Pen;
+        s.pen_click(Pt::new(0.0, 0.0));
+        s.pen_click(Pt::new(20.0, 0.0));
+        s.pen_click(Pt::new(20.0, 20.0));
+        let Op::Pen { anchors, source } = s.op.take().unwrap() else {
+            panic!("pen");
+        };
+        s.finish_pen(anchors, false, source);
+        let Geom::Path { closed, anchors } = &s.doc.layers[1].kind.shapes().unwrap()[0].geom else {
+            panic!("path");
+        };
+        assert!(!*closed);
+        assert_eq!(anchors.len(), 3);
     }
 
     #[test]
@@ -2733,6 +3535,16 @@ mod tests {
         assert!((s.view.scale - 4.0).abs() < 1e-3, "scale {}", s.view.scale);
         let c = s.view.to_screen(Pt::new(150.0, 100.0));
         assert!((c.x - 200.0).abs() < 1e-2 && (c.y - 200.0).abs() < 1e-2);
+    }
+
+    #[test]
+    fn zoom_click_alt_goes_out() {
+        let mut s = Studio::new();
+        s.view.scale = 2.0;
+        s.zoom_click(Pt::new(100.0, 100.0), true, false, false);
+        assert!((s.view.scale - 2.0 / 1.25).abs() < 1e-4);
+        s.zoom_click(Pt::new(100.0, 100.0), false, false, false);
+        assert!((s.view.scale - 2.0).abs() < 1e-4);
     }
 
     #[test]
@@ -2828,5 +3640,93 @@ mod tests {
             .map(|sh| sh.id)
             .collect();
         assert_eq!(ids.last().copied(), Some(ia));
+    }
+
+    #[test]
+    fn place_raster_lands_on_a_pixel_layer() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        let mut data = vec![0u8; 16 * 16 * 4];
+        for px in data.chunks_mut(4) {
+            px[0] = 200;
+            px[3] = 255;
+        }
+        s.pending_place = Some(PendingPlace::Raster {
+            name: "mark.png".into(),
+            image: RgbaImage::new(16, 16, data).unwrap(),
+        });
+        s.commit_place_at(Pt::new(s.doc.width * 0.5, s.doc.height * 0.5));
+        assert!(s.pending_place.is_none());
+        let li = s.active_layer.unwrap();
+        let px = s.doc.layers[li].kind.pixels().expect("raster layer");
+        assert_eq!(px.w, s.doc.width as u32);
+        assert_eq!(px.h, s.doc.height as u32);
+        assert!(px.data.iter().any(|b| *b == 200), "placed pixels missing");
+        let n = s.doc.layers.len();
+        s.undo();
+        assert_eq!(s.doc.layers.len(), n - 1);
+    }
+
+    #[test]
+    fn place_svg_adds_a_shape() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        let svg = r##"<svg viewBox="0 0 10 10"><path d="M0 0 L10 0 L10 10 L0 10 Z" fill="#112233"/></svg>"##;
+        s.pending_place = Some(PendingPlace::Svg {
+            name: "box.svg".into(),
+            svg: svg.into(),
+        });
+        s.commit_place_at(Pt::new(100.0, 80.0));
+        let n: usize = s
+            .doc
+            .layers
+            .iter()
+            .filter_map(|l| l.kind.shapes())
+            .map(|ss| ss.len())
+            .sum();
+        assert_eq!(n, 1);
+        assert_eq!(s.selection.len(), 1);
+    }
+
+    #[test]
+    fn drop_oma_opens_instead_of_placing() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        s.ingest_dropped(std::path::Path::new("/tmp/does-not-exist-xyz.oma"), None);
+        assert!(s.status.contains("open failed") || s.status.contains("opened"));
+    }
+
+    #[test]
+    fn trace_active_raster_makes_vectors() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        let mut data = vec![255u8; 32 * 32 * 4];
+        for y in 8..24u32 {
+            for x in 8..24u32 {
+                let i = ((y * 32 + x) * 4) as usize;
+                data[i] = 0;
+                data[i + 1] = 0;
+                data[i + 2] = 0;
+            }
+        }
+        let mut layer = Layer::raster("ink", 32, 32);
+        if let LayerKind::Raster { pixels } = &mut layer.kind {
+            *pixels = crate::document::Pixels::from_rgba(32, 32, data).unwrap();
+        }
+        let index = s.doc.layers.len();
+        s.commit(Cmd::AddLayer { index, layer });
+        s.active_layer = Some(index);
+        s.trace_active_raster();
+        assert!(!s.selection.is_empty(), "trace should select the new paths");
+        let traced = s
+            .doc
+            .layers
+            .iter()
+            .filter_map(|l| l.kind.shapes())
+            .map(|ss| ss.len())
+            .sum::<usize>();
+        assert!(traced >= 1);
+        s.undo();
+        s.undo();
     }
 }

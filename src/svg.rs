@@ -1,7 +1,8 @@
 //! SVG export of the current document.
 
 use crate::color::Rgba;
-use crate::document::{Document, Fill, LayerKind, Shape};
+use crate::document::{Document, Fill, Layer, LayerKind, Shape};
+use crate::geom::{Bounds, Pt};
 
 fn path_data(shape: &Shape) -> String {
     let mut d = String::new();
@@ -27,6 +28,26 @@ fn rgba_css(c: Rgba) -> String {
 
 fn hex_css(c: Rgba) -> String {
     format!("#{:02X}{:02X}{:02X}", c.r, c.g, c.b)
+}
+
+fn layer_bounds(layer: &Layer) -> Option<Bounds> {
+    match &layer.kind {
+        LayerKind::Vector { shapes } => {
+            let mut b: Option<Bounds> = None;
+            for s in shapes {
+                let sb = s.world_bbox();
+                b = Some(match b {
+                    None => sb,
+                    Some(acc) => acc.union(sb),
+                });
+            }
+            b
+        }
+        LayerKind::Raster { pixels } => Some(Bounds::from_min_size(
+            Pt::ZERO,
+            Pt::new(pixels.w as f32, pixels.h as f32),
+        )),
+    }
 }
 
 pub fn export(doc: &Document) -> Result<String, String> {
@@ -55,8 +76,29 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
         if !layer.visible || layer.opacity <= 0.0 {
             continue;
         }
+        let fx_id = format!("oma-fx-{}", layer.id);
+        let fx_attr = if layer.filters.active() {
+            let b = layer_bounds(layer).unwrap_or(crate::geom::Bounds {
+                min: crate::geom::Pt::ZERO,
+                max: crate::geom::Pt::new(doc.width, doc.height),
+            });
+            let pad = crate::filter::svg_pad(&layer.filters);
+            let r = b.inflate(pad);
+            if let Some(f) = crate::filter::svg_filter(
+                &fx_id,
+                &layer.filters,
+                [r.min.x, r.min.y, r.width().max(1.0), r.height().max(1.0)],
+            ) {
+                defs.push_str(&f);
+                format!(" filter=\"url(#{fx_id})\"")
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        };
         body.push_str(&format!(
-            "<g opacity=\"{:.3}\" style=\"mix-blend-mode:{}\">\n",
+            "<g opacity=\"{:.3}\" style=\"mix-blend-mode:{}\"{fx_attr}>\n",
             layer.opacity,
             layer.blend.css()
         ));
@@ -185,5 +227,41 @@ mod tests {
         let s = export(&doc).unwrap();
         assert!(s.contains("<path"));
         assert!(s.contains("viewBox"));
+    }
+
+    #[test]
+    fn svg_writes_layer_fx() {
+        let mut doc = Document::new("t", 400.0, 300.0, 72.0);
+        apply(
+            &mut doc,
+            &Cmd::AddShape {
+                layer: 1,
+                shape: Shape::new(
+                    Geom::Rect {
+                        origin: Pt::new(40.0, 40.0),
+                        size: Pt::new(120.0, 80.0),
+                        radius: 0.0,
+                    },
+                    Style::default(),
+                ),
+            },
+        );
+        doc.layers[1].filters.enabled = true;
+        doc.layers[1].filters.items = vec![
+            crate::filter::Fx::Shadow {
+                dx: 50.0,
+                dy: 55.0,
+                blur: 22.0,
+                color: crate::color::Rgba::BLACK,
+            },
+            crate::filter::Fx::Blur { std: 29.0 },
+        ];
+        let s = export(&doc).unwrap();
+        assert!(s.contains("<filter"), "defs must include a filter");
+        assert!(s.contains("feGaussianBlur"), "{s}");
+        assert!(s.contains("feOffset"), "{s}");
+        assert!(s.contains("filter=\"url(#oma-fx-"), "{s}");
+        assert!(s.contains("userSpaceOnUse"), "{s}");
+        assert!(!s.contains("feDropShadow"));
     }
 }

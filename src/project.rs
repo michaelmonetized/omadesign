@@ -108,6 +108,22 @@ pub fn dialog_open() -> Option<PathBuf> {
         .pick_file()
 }
 
+pub fn dialog_place() -> Option<PathBuf> {
+    rfd::FileDialog::new()
+        .add_filter(
+            "Place",
+            &[
+                "png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "svg",
+            ],
+        )
+        .add_filter(
+            "Images",
+            &["png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff"],
+        )
+        .add_filter("SVG", &["svg"])
+        .pick_file()
+}
+
 pub fn dialog_export(kind: &str, ext: &str) -> Option<PathBuf> {
     rfd::FileDialog::new()
         .add_filter(kind, &[ext])

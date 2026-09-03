@@ -46,6 +46,23 @@ impl RgbaImage {
         }
     }
 
+    pub fn resized(&self, w: u32, h: u32) -> RgbaImage {
+        let w = w.max(1);
+        let h = h.max(1);
+        if self.w == w && self.h == h {
+            return self.clone();
+        }
+        let Some(src) = image::RgbaImage::from_raw(self.w, self.h, self.data.clone()) else {
+            return self.clone();
+        };
+        let out = image::imageops::resize(&src, w, h, image::imageops::FilterType::Triangle);
+        RgbaImage {
+            w: out.width(),
+            h: out.height(),
+            data: out.into_raw(),
+        }
+    }
+
     fn alpha(&self, x: u32, y: u32) -> u8 {
         self.data[((y * self.w + x) as usize) * 4 + 3]
     }
