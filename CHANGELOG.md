@@ -1,5 +1,66 @@
 # Changelog
 
+## 2026-09-05 · Pass 6 — Good taste travels.
+
+Your brand can live beside your work now. Copy the folder. Take the colours.
+Bring the little leaf logo. It all travels as ordinary files.
+
+### A proper home for your colours
+
+The right sidebar now has **Inspect / Palettes / Brand** tabs. Palettes has named
+Personal and Project collections, a name-or-hex filter, transparent hex colours,
+Fill and Stroke targets, and colour collection from selected artwork. Rename,
+duplicate, remove, import, and export are all there; the old tucked-away palette
+editor has retired.
+
+Project colours live in **`.omacolors`**, a readable JSON file containing named
+palettes and hex values. Share one palette or the whole collection. Imports keep
+existing colours and resolve name collisions. Older personal palettes still load.
+
+Edits stay in their own draft until Save. Background refresh notices changes on
+disk without overwriting your work, and quitting checks for unsaved collections
+before continuing to the artwork save prompt.
+
+### The brand cupboard, without the cupboard doors
+
+**`.omabrand/`** is a filterable bank of logos, images and reusable `.oma` artwork.
+Nested folders become searchable categories. A small optional `brand.json` gives
+the bank its name. Create or load a bank, add files, rename it, and save a portable
+copy from the sidebar. Originals stay where they were; duplicate filenames get
+new names.
+
+Drag a tile onto an artboard, or double-click to place it at the centre. Each
+placement gets one Undo. Native artwork keeps its editable shapes, text, masks
+and motion tracks, with fresh object IDs. Photo offers double-click placement
+into Design. Escape cancels a pending load; switching documents cannot drop a
+late arrival into the wrong tab.
+
+Discovery, scans and image decoding run in the background. The grid lays out
+visible rows, loads only visible previews and bounds its texture cache. Libraries
+follow the active document's nearest project folder and notice files added on disk.
+
+### A kit to get your hands on
+
+[Fieldwork](examples/fieldwork) ships with three curated palettes and six original,
+editable SVG marks, illustrations and patterns. Copy its hidden sidecars into a
+project, or point the sidebar at the example folder. Two native screenshot scenes
+show the kit in context.
+
+SVG assets use the existing native import subset; advanced SVG features may not
+carry over. Palette collection saves are separate from document saves.
+
+Pass 6 verification: **259 tests passed**, including real sidebar typing, colour
+application, filtering and disk saves; native tile drag/drop and Undo; delayed
+worker cancellation; external-edit conflicts; document switching; and safe quit
+ordering. Repeated layout checks keep both populated panels near 288 pixels wide
+at compact and large sizes, including unusually long names.
+
+Formatting and Clippy completed without suppressions. Clippy reports the existing
+34 library advisories (46 including tests). All six sample assets passed native
+import and preview rendering. Release-build and installed-app screenshots cover
+both panels at 960×640 and 1600×1000. Physical keyboard and OS file-dialog use
+remain part of human QA.
+
 ## 2026-09-05 · Pass 5 — Little keys. Big confidence.
 
 The studio has a quiet co-pilot now. It knows what is in your hand.

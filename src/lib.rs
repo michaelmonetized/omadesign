@@ -2,6 +2,7 @@ pub mod align;
 pub mod app;
 pub mod asset_browser;
 pub mod boolean;
+pub mod brand;
 pub mod color;
 pub mod compositor;
 pub mod compound;

@@ -1,8 +1,10 @@
 //! Studio: document + tool state. Mutations go through commands.
 
+mod brand_assets;
 pub mod deform;
 mod guides;
 mod key_hints;
+pub mod libraries;
 mod masking;
 mod motion_presets;
 mod photo_session;
@@ -298,9 +300,7 @@ pub struct Studio {
     pub google_catalog: Vec<crate::google_fonts::GoogleFont>,
     pub google_variant: String,
     pub google_catalog_loaded: bool,
-    pub palettes: Vec<crate::palette::Palette>,
-    pub palette_idx: usize,
-    pub palette_name_buf: String,
+    pub libraries: libraries::Libraries,
     // Welcome / new document options
     pub new_doc_group: String,
     pub new_doc_transparent: bool,
@@ -457,9 +457,7 @@ impl Studio {
             google_catalog: Vec::new(),
             google_variant: "regular".into(),
             google_catalog_loaded: false,
-            palettes: crate::palette::load(),
-            palette_idx: 0,
-            palette_name_buf: String::new(),
+            libraries: libraries::Libraries::default(),
             new_doc_group: "All".into(),
             new_doc_transparent: false,
             new_doc_bleed: false,
@@ -516,9 +514,6 @@ impl Studio {
         };
         s.ensure_tabs();
         s.doc.grid.visible = false;
-        if !s.palettes.is_empty() {
-            s.palette_name_buf = s.palettes[0].name.clone();
-        }
         // Hint the max-font default in the status line so it is discoverable
         // before any type is placed. The Character studio also shows it.
         if let Some(fam) = crate::text::preferred_default_family_name() {
@@ -3376,10 +3371,12 @@ impl eframe::App for Studio {
         let ctx = ui.ctx().clone();
         if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
             self.commit_type_edit();
-            if self.has_unsaved_changes() {
-                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-                self.pending_nav = Some(PendingNav::Quit);
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            if !self.libraries.close_requested {
+                self.libraries.close_error.clear();
             }
+            self.libraries.close_requested = true;
+            self.pending_nav = None;
         }
         crate::ui::run(ui, self);
     }

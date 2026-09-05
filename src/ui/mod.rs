@@ -8,6 +8,7 @@ mod jobs;
 mod key_hud;
 #[cfg(test)]
 mod key_hud_tests;
+mod library;
 mod masking;
 mod motion_presets;
 mod photo;
@@ -29,6 +30,8 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     if (ctx.zoom_factor() - 1.0).abs() > 1e-3 {
         ctx.set_zoom_factor(1.0);
     }
+    // Give cancellable library loads Escape before canvas shortcuts consume it.
+    library::tick(&ctx, studio);
     guides::handle_shortcuts(&ctx, studio);
     studio.handle_shortcuts(&ctx);
     studio.tick_motion(&ctx);
@@ -70,9 +73,10 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
 
 /// Screenshot scenes wait for their actual template previews, not a fixed sleep.
 pub fn scene_ready(ctx: &eframe::egui::Context, studio: &Studio) -> bool {
-    (!(studio.show_templates
-        || (studio.show_welcome && studio.welcome_page == crate::app::WelcomePage::Templates)))
-        || templates::previews_ready(ctx)
+    library::ready(ctx, studio)
+        && (!(studio.show_templates
+            || (studio.show_welcome && studio.welcome_page == crate::app::WelcomePage::Templates))
+            || templates::previews_ready(ctx))
 }
 
 fn unsaved_dialog(ui: &mut Ui, studio: &mut Studio) {

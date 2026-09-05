@@ -63,20 +63,23 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         studio.cursor = Some(studio.view.to_world(from_egui(hp) - origin));
     }
 
+    let brand_input = super::library::canvas_drop(ui, studio, &resp);
     let shift = ctx.input(|i| i.modifiers.shift);
     studio.snap_override = ctrl;
-    let guide_input = studio.deformation.is_none() && super::guides::handle_input(ui, studio, rect);
-    let deform_input = if guide_input {
+    let guide_input = !brand_input
+        && studio.deformation.is_none()
+        && super::guides::handle_input(ui, studio, rect);
+    let deform_input = if guide_input || brand_input {
         false
     } else {
         super::deform::input(studio, &resp, rect, space_pan || studio.tool == Tool::Hand)
     };
-    if !guide_input && !deform_input && live_op_should_close(studio, &resp) {
+    if !brand_input && !guide_input && !deform_input && live_op_should_close(studio, &resp) {
         end_drag(studio, studio.cursor.unwrap_or(Pt::ZERO), alt, ctrl, shift);
     }
 
     let panning = (space_pan && studio.type_edit.is_none()) || studio.tool == Tool::Hand;
-    if guide_input || deform_input {
+    if guide_input || deform_input || brand_input {
         // Ruler and guide drags own this gesture.
     } else if panning && resp.dragged_by(PointerButton::Primary)
         || resp.dragged_by(PointerButton::Middle)
@@ -173,7 +176,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     draw_bleed_safe(&painter, rect, studio);
     draw_overlays(&painter, rect, studio);
     super::deform::paint(&painter, rect, studio);
-    if !guide_input && !deform_input {
+    if !brand_input && !guide_input && !deform_input {
         set_cursor(ui, studio, &resp);
         context_menu(&resp, studio);
     }

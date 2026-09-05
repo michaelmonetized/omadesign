@@ -76,6 +76,23 @@ editable vector designs fit all 20 document presets and custom dimensions. Searc
 filter, preview, and make one yours. All 52 ship locally; the
 [weekly drop plan](docs/template-drops.md) gives each one a suggested adoption idea.
 
+## Palettes and brand libraries
+
+The right sidebar's **Inspect / Palettes / Brand** tabs keep reusable colours and
+artwork close to the canvas. Create named **Personal** or **Project** palettes,
+collect colours from your selection, search names or hex values, and apply a
+swatch to Fill or Stroke. Save, import, or export one palette or a whole collection;
+imports preserve existing palettes and transparency.
+
+Load or create a **Brand** bank, add logos and imagery, then drag a tile onto the
+canvas or double-click to centre it on the selected artboard. Searchable folders,
+background previews and automatic refresh keep the collection current. Placement
+supports Undo.
+
+Project kits travel as a `.omacolors` file and a `.omabrand/` folder. Start with the
+[Fieldwork example](examples/fieldwork), or follow the
+[palette and brand library guide](docs/MANUAL.md#palettes-and-brand-libraries).
+
 ## Docs
 
 - [User manual](docs/MANUAL.md)

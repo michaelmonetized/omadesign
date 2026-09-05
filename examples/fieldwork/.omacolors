@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "palettes": [
+    {
+      "name": "Fieldwork",
+      "colors": [
+        "#E47D65",
+        "#96A58B",
+        "#D5AE55",
+        "#253A35",
+        "#F4EDDF",
+        "#C6B59E"
+      ]
+    },
+    {
+      "name": "Morning light",
+      "colors": [
+        "#F4EDDF",
+        "#EDC6AF",
+        "#E6CE93",
+        "#BDCAAB",
+        "#A6C3C4",
+        "#6B8278"
+      ]
+    },
+    {
+      "name": "After rain",
+      "colors": [
+        "#253A35",
+        "#48685F",
+        "#81958C",
+        "#B9C6BC",
+        "#C3A391",
+        "#D9C9B4"
+      ]
+    }
+  ]
+}

@@ -35,7 +35,12 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         .size_range(256.0..=420.0)
         .frame(Frame::new().fill(bg_panel()).inner_margin(Margin::same(14)))
         .show(ui, |ui| {
-            develop_panel(ui, studio);
+            super::library::tabs(ui, studio);
+            if studio.libraries.sidebar == crate::app::libraries::Sidebar::Inspector {
+                develop_panel(ui, studio);
+            } else {
+                super::library::show(ui, studio);
+            }
         });
     viewer(ui, studio);
 }
