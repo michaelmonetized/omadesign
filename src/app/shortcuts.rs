@@ -31,6 +31,7 @@ enum Shortcut {
     Help,
     ToggleGuides,
     ToggleSnapping,
+    FreeTransform,
 }
 
 impl Shortcut {
@@ -78,6 +79,7 @@ fn key_shortcut(key: Key, mods: Modifiers) -> Option<Shortcut> {
         (Key::X, false) => Cut,
         (Key::V, false) => Paste,
         (Key::D, false) => Duplicate,
+        (Key::T, false) => FreeTransform,
         (Key::A, false) => SelectAll,
         (Key::G, false) => Combine,
         (Key::G, true) => Release,
@@ -191,6 +193,7 @@ impl Studio {
     fn run_shortcut(&mut self, ctx: &egui::Context, shortcut: Shortcut, payload: Option<&str>) {
         match shortcut {
             Shortcut::ToggleGuides => self.toggle_guides(),
+            Shortcut::FreeTransform => self.free_transform(),
             Shortcut::ToggleSnapping => self.toggle_snapping(),
             Shortcut::Save => self.save(),
             Shortcut::SaveAs => self.save_as(),
@@ -273,6 +276,7 @@ impl Studio {
 
     fn type_shortcut(&mut self, ctx: &egui::Context, shortcut: Shortcut, payload: Option<&str>) {
         match shortcut {
+            Shortcut::FreeTransform => self.free_transform(),
             Shortcut::Copy | Shortcut::Cut => {
                 let (lo, hi) = self.type_sel_range();
                 if lo == hi {
@@ -583,6 +587,7 @@ mod tests {
             (Key::C, alt, CopyStyle),
             (Key::V, alt, PasteStyle),
             (Key::D, ctrl, Duplicate),
+            (Key::T, ctrl, FreeTransform),
             (Key::A, ctrl, SelectAll),
             (Key::G, ctrl, Combine),
             (Key::G, shift, Release),
@@ -678,6 +683,38 @@ mod tests {
         assert_eq!(studio.tool, Tool::Heal);
         frame(&ctx, &mut studio, vec![key(Key::J, Modifiers::NONE)]);
         assert_eq!(studio.tool, Tool::Clone);
+    }
+
+    #[test]
+    fn free_transform_chord_preserves_the_selected_artwork_and_commits_live_type() {
+        let ctx = context();
+        let mut studio = Studio::new();
+        let id = add_rectangle(&mut studio, 10.0);
+        studio.tool = Tool::Node;
+        let before = studio.doc.find_shape(1, id).unwrap().clone();
+        let history = studio.history.len();
+        frame(
+            &ctx,
+            &mut studio,
+            vec![
+                key(Key::T, Modifiers::CTRL),
+                Event::ModifiersChanged(Modifiers::NONE),
+            ],
+        );
+        assert_eq!(studio.tool, Tool::Select);
+        assert_eq!(studio.selection, vec![(1, id)]);
+        assert_eq!(studio.doc.find_shape(1, id), Some(&before));
+        assert_eq!(studio.history.len(), history);
+        studio.place_text(Pt::new(60.0, 80.0));
+        studio.type_insert("Make it yours");
+        let text = studio.primary().unwrap();
+        frame(&ctx, &mut studio, vec![key(Key::T, Modifiers::CTRL)]);
+        assert!(studio.type_edit.is_none());
+        assert_eq!(studio.tool, Tool::Select);
+        let Geom::Text(run) = &studio.doc.find_shape(text.0, text.1).unwrap().geom else {
+            panic!("live text stays text")
+        };
+        assert_eq!(run.content, "Make it yours");
     }
 
     #[test]

@@ -44,6 +44,10 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                 .max_height(properties_height)
                 .auto_shrink([false, true])
                 .show(ui, |ui| {
+                    if motion {
+                        motion_studio(ui, studio);
+                        section_gap(ui);
+                    }
                     if reshaping {
                         super::deform::inspector(ui, studio);
                         section_gap(ui);
@@ -79,7 +83,12 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                         if matches!(studio.tool, Tool::Brush | Tool::Fill) {
                             paint_color_studio(ui, studio);
                         } else if !paint {
-                            color_studio(ui, studio);
+                            if motion {
+                                eframe::egui::CollapsingHeader::new("Appearance")
+                                    .show(ui, |ui| color_studio(ui, studio));
+                            } else {
+                                color_studio(ui, studio);
+                            }
                         }
                     }
                     if studio.tool == Tool::Trace {
@@ -90,10 +99,6 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                         section_gap(ui);
                         eframe::egui::CollapsingHeader::new("Effects")
                             .show(ui, |ui| fx_studio(ui, studio));
-                    }
-                    if motion {
-                        section_gap(ui);
-                        motion_studio(ui, studio);
                     }
                 });
             ui.add_space(10.0);
@@ -1000,7 +1005,12 @@ fn google_fonts_ui(ui: &mut Ui, studio: &mut Studio) {
 }
 
 fn motion_studio(ui: &mut Ui, studio: &mut Studio) {
-    heading(ui, "Motion");
+    super::motion_presets::inspector(ui, studio);
+    section_gap(ui);
+    eframe::egui::CollapsingHeader::new("Keyframe controls").show(ui, |ui| motion_keys(ui, studio));
+}
+
+fn motion_keys(ui: &mut Ui, studio: &mut Studio) {
     ui.label(
         RichText::new("Rest pose is Design. Keys are offsets.")
             .small()
@@ -1074,6 +1084,28 @@ fn motion_studio(ui: &mut Ui, studio: &mut Studio) {
             studio.key_prop(id, crate::motion::Prop::Opacity, op);
         }
     });
+    for (property, label, value) in [
+        (
+            crate::motion::Prop::StrokeReveal,
+            "Draw stroke",
+            pose.stroke_reveal,
+        ),
+        (crate::motion::Prop::FillReveal, "Fill up", pose.fill_reveal),
+    ] {
+        if let Some(value) = value {
+            let mut percent = value * 100.0;
+            if ui
+                .add(
+                    Slider::new(&mut percent, 0.0..=100.0)
+                        .text(label)
+                        .suffix("%"),
+                )
+                .changed()
+            {
+                studio.key_prop(id, property, percent / 100.0);
+            }
+        }
+    }
 }
 
 fn artboard_transform(ui: &mut Ui, studio: &mut Studio) {
@@ -1955,9 +1987,16 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                                 }
                                             }
                                         } else {
+                                            let guide_name;
+                                            let name = if shape.guide {
+                                                guide_name = format!("Guide · {}", shape.name);
+                                                &guide_name
+                                            } else {
+                                                &shape.name
+                                            };
                                             let response = object_name(
                                                 ui,
-                                                &shape.name,
+                                                name,
                                                 name_width,
                                                 studio.selection.contains(&(i, shape.id))
                                                     && shape.visible,

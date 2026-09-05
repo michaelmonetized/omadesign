@@ -27,7 +27,9 @@ impl Studio {
                 if let Some(shapes) = l.kind.shapes() {
                     shapes
                         .iter()
-                        .filter(|s| s.visible && !s.locked)
+                        .filter(|s| {
+                            s.visible && !s.locked && (!s.guide || self.doc.ruler.guides_visible)
+                        })
                         .map(|s| (li, s.id))
                         .collect()
                 } else if l.kind.is_placed_raster() {
@@ -252,6 +254,10 @@ impl Studio {
             .iter()
             .filter_map(|(_, id)| source.iter().find(|s| s.id == *id).cloned())
             .collect();
+        if shapes.iter().any(|shape| shape.guide) && shapes.iter().any(|shape| !shape.guide) {
+            self.status = "Pathfinder needs only artwork or only guides".into();
+            return;
+        }
         let geoms: Vec<_> = shapes
             .iter()
             .map(|s| Geom::Poly {

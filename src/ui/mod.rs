@@ -6,10 +6,12 @@ mod guides;
 mod icons;
 mod jobs;
 mod masking;
+mod motion_presets;
 mod photo;
 mod retouch;
 mod selection;
 mod studios;
+mod templates;
 pub mod theme;
 mod timeline;
 mod welcome;
@@ -53,12 +55,20 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
 
     browsers::show_shape_browser(ui, studio);
     browsers::show_asset_browser(ui, studio);
+    templates::window(ui, studio);
 
     if studio.show_shortcuts {
         egui_shortcuts(ui, studio);
     }
     unsaved_dialog(ui, studio);
     studio.tick_swap(&ctx);
+}
+
+/// Screenshot scenes wait for their actual template previews, not a fixed sleep.
+pub fn scene_ready(ctx: &eframe::egui::Context, studio: &Studio) -> bool {
+    (!(studio.show_templates
+        || (studio.show_welcome && studio.welcome_page == crate::app::WelcomePage::Templates)))
+        || templates::previews_ready(ctx)
 }
 
 fn unsaved_dialog(ui: &mut Ui, studio: &mut Studio) {

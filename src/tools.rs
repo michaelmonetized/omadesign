@@ -391,6 +391,10 @@ pub fn shortcut_groups() -> &'static [(&'static str, &'static [ShortcutRow])] {
                     action: "Break path",
                     keys: "Object menu",
                 },
+                ShortcutRow {
+                    action: "Free transform",
+                    keys: "Ctrl+T",
+                },
             ],
         ),
         (

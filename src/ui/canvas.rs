@@ -2595,6 +2595,27 @@ fn context_menu(resp: &eframe::egui::Response, studio: &mut Studio) {
             ui.close();
         }
         ui.separator();
+        if ui
+            .add_enabled(
+                studio.can_convert_to_guides(),
+                eframe::egui::Button::new("Make guides"),
+            )
+            .clicked()
+        {
+            studio.convert_selection_to_guides();
+            ui.close();
+        }
+        if ui
+            .add_enabled(
+                studio.can_release_guides(),
+                eframe::egui::Button::new("Release guides"),
+            )
+            .clicked()
+        {
+            studio.release_selected_guides();
+            ui.close();
+        }
+        ui.separator();
         if ui.button("Bring to front").clicked() {
             studio.bring_to_front();
             ui.close();
@@ -2764,7 +2785,7 @@ fn draw_open_ends(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
             continue;
         };
         for s in shapes {
-            if skip == Some(s.id) {
+            if skip == Some(s.id) || !s.visible || (s.guide && !studio.doc.ruler.guides_visible) {
                 continue;
             }
             let Geom::Path {
@@ -3523,5 +3544,80 @@ mod tests {
             studio.undo();
             assert!((x(&studio) - 40.0).abs() < 0.001);
         }
+    }
+}
+
+#[cfg(test)]
+mod object_guide_interaction_tests {
+    use super::*;
+    use eframe::egui::{Context, Event, Modifiers, RawInput};
+
+    #[test]
+    fn object_guide_moves_with_the_selection_tool_and_undo_keeps_it_a_guide() {
+        let ctx = Context::default();
+        let mut studio = Studio::new();
+        studio.show_welcome = false;
+        studio.show_rulers = false;
+        studio.need_fit = false;
+        studio.view.scale = 1.0;
+        studio.view.offset = Pt::ZERO;
+        studio.snap.enabled = false;
+        studio.tool = Tool::Select;
+        studio.doc.layers = vec![crate::document::Layer::vector("Guides")];
+        let mut guide = crate::document::Shape::new(
+            Geom::Line {
+                a: Pt::new(40.0, 100.0),
+                b: Pt::new(140.0, 100.0),
+            },
+            crate::document::Style::default(),
+        );
+        guide.guide = true;
+        let id = guide.id;
+        let original = guide.geom.clone();
+        studio.doc.layers[0].kind.shapes_mut().unwrap().push(guide);
+        let frame = |studio: &mut Studio, events: Vec<Event>| {
+            let mut output = ctx.run_ui(
+                RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(400.0, 300.0))),
+                    events,
+                    ..Default::default()
+                },
+                |ui| show(ui, studio),
+            );
+            output.textures_delta.clear();
+        };
+        frame(&mut studio, vec![Event::PointerMoved(pos2(80.0, 100.0))]);
+        frame(
+            &mut studio,
+            vec![Event::PointerButton {
+                pos: pos2(80.0, 100.0),
+                button: PointerButton::Primary,
+                pressed: true,
+                modifiers: Modifiers::NONE,
+            }],
+        );
+        frame(&mut studio, vec![Event::PointerMoved(pos2(110.0, 130.0))]);
+        frame(
+            &mut studio,
+            vec![Event::PointerButton {
+                pos: pos2(110.0, 130.0),
+                button: PointerButton::Primary,
+                pressed: false,
+                modifiers: Modifiers::NONE,
+            }],
+        );
+        let moved = studio.doc.find_shape(0, id).unwrap();
+        assert!(moved.guide);
+        assert_eq!(
+            moved.geom,
+            Geom::Line {
+                a: Pt::new(70.0, 130.0),
+                b: Pt::new(170.0, 130.0)
+            }
+        );
+        studio.undo();
+        let restored = studio.doc.find_shape(0, id).unwrap();
+        assert!(restored.guide);
+        assert_eq!(restored.geom, original);
     }
 }

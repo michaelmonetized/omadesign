@@ -309,13 +309,14 @@ fn mapped_shape(source: &Source, mapper: &Mapper) -> Option<Shape> {
         let before_bounds = source.shape.geom.bbox();
         let after_bounds = after.geom.bbox();
         for endpoint in [from, to] {
-            let mapped = mapper.map(
-                before_bounds.min
-                    + Pt::new(
-                        endpoint[0] * before_bounds.width(),
-                        endpoint[1] * before_bounds.height(),
-                    ),
-            )?;
+            let local = before_bounds.min
+                + Pt::new(
+                    endpoint[0] * before_bounds.width(),
+                    endpoint[1] * before_bounds.height(),
+                );
+            // The cage maps world coordinates, just like the sampled contours.
+            let world = local.rotate_about(before_bounds.center(), source.shape.rotation);
+            let mapped = mapper.map(world)?;
             *endpoint = [
                 (mapped.x - after_bounds.min.x) / after_bounds.width().max(1e-6),
                 (mapped.y - after_bounds.min.y) / after_bounds.height().max(1e-6),
@@ -391,6 +392,50 @@ mod tests {
         let start = studio.deformation.as_ref().unwrap().cage.handles()[0];
         studio.deformation_drag_start(0, start);
         studio.deformation_drag_to(start + Pt::new(-30.0, -12.0), false);
+    }
+
+    #[test]
+    fn rotated_gradient_endpoints_follow_the_world_cage_without_clamping() {
+        let mut shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(10.0, 20.0),
+                size: Pt::new(80.0, 40.0),
+                radius: 0.0,
+            },
+            Style {
+                fill: Fill::Linear {
+                    from: [-0.25, 0.5],
+                    to: [1.25, 0.5],
+                    c0: Rgba::rgb(255, 0, 0),
+                    c1: Rgba::rgb(0, 0, 255),
+                },
+                stroke: None,
+            },
+        );
+        shape.rotation = std::f32::consts::FRAC_PI_2;
+        let source = Source {
+            layer: 0,
+            contours: shape.world_contours(96),
+            shape,
+        };
+        for mode in Mode::ALL {
+            let mut cage = Cage::new(mode, source.shape.world_bbox()).unwrap();
+            for handle in 0..cage.handles().len() {
+                cage = cage.dragged(handle, Pt::new(12.0, 9.0)).unwrap();
+            }
+            let after = mapped_shape(&source, &cage.mapper().unwrap()).unwrap();
+            assert_eq!(after.rotation, 0.0);
+            let bounds = after.geom.bbox();
+            let Fill::Linear { from, to, c0, c1 } = after.style.fill else {
+                panic!("linear gradient must stay editable");
+            };
+            assert_eq!((c0, c1), (Rgba::rgb(255, 0, 0), Rgba::rgb(0, 0, 255)));
+            for (endpoint, expected) in [(from, Pt::new(62.0, -11.0)), (to, Pt::new(62.0, 109.0))] {
+                let world = bounds.min
+                    + Pt::new(endpoint[0] * bounds.width(), endpoint[1] * bounds.height());
+                assert!((world - expected).length() < 0.001, "{mode:?}: {world:?}");
+            }
+        }
     }
 
     #[test]

@@ -14,6 +14,22 @@ pub struct Scene {
 
 pub const SCENES: &[Scene] = &[
     Scene {
+        id: "templates",
+        caption: "52 good starts. An editable design for every size.",
+    },
+    Scene {
+        id: "template-window",
+        caption: "A fresh start, without leaving your work behind.",
+    },
+    Scene {
+        id: "motion-presets",
+        caption: "Draw, pop, fill, fly. Presets become editable keys.",
+    },
+    Scene {
+        id: "object-guides",
+        caption: "Make artwork into a guide, then bring it back.",
+    },
+    Scene {
         id: "welcome",
         caption: "New document. Your sizes. Your theme. Sit down and work.",
     },
@@ -73,6 +89,16 @@ pub const SCENES: &[Scene] = &[
 
 pub fn apply(studio: &mut Studio, id: &str) -> Result<(), String> {
     match id {
+        "templates" => {
+            studio.show_welcome = true;
+            studio.welcome_page = crate::app::WelcomePage::Templates;
+        }
+        "template-window" => {
+            design(studio);
+            studio.show_templates = true;
+        }
+        "motion-presets" => motion_presets(studio),
+        "object-guides" => object_guides(studio),
         "welcome" => welcome(studio),
         "design" => design(studio),
         "reshape" => reshape(studio),
@@ -758,4 +784,201 @@ fn add_text(s: &mut Studio, origin: Pt, content: &str, px: f32, color: Rgba, tra
             },
         ),
     });
+}
+
+fn object_guides(s: &mut Studio) {
+    s.show_welcome = false;
+    s.doc = crate::document::Document::new("Outside the lines", 1280.0, 840.0, 72.0);
+    s.persona = Persona::Design;
+    s.tool = Tool::Select;
+    add_rect(s, 0.0, 0.0, 1280.0, 840.0, Rgba::from_hex(0xF5EFE7), 0.0);
+    add_text(
+        s,
+        Pt::new(88.0, 115.0),
+        "OUTSIDE THE LINES.",
+        44.0,
+        Rgba::from_hex(0x2B3B40),
+        -1.0,
+    );
+    add_text(
+        s,
+        Pt::new(92.0, 166.0),
+        "Any curve can become a guide. Every guide can become artwork again.",
+        18.0,
+        Rgba::from_hex(0x707B7A),
+        0.0,
+    );
+    add_rect(
+        s,
+        208.0,
+        354.0,
+        235.0,
+        180.0,
+        Rgba::from_hex(0xD97C5B),
+        30.0,
+    );
+    let mut first = crate::geom::Anchor::corner(Pt::new(100.0, 545.0));
+    first.h_out = Pt::new(300.0, -430.0);
+    let mut last = crate::geom::Anchor::corner(Pt::new(1150.0, 385.0));
+    last.h_in = Pt::new(-340.0, 330.0);
+    let mut guides = Vec::new();
+    for geom in [
+        Geom::Path {
+            anchors: vec![first, last],
+            closed: false,
+        },
+        Geom::Ellipse {
+            center: Pt::new(885.0, 440.0),
+            radii: Pt::new(150.0, 150.0),
+        },
+    ] {
+        let mut shape = Shape::new(
+            geom,
+            Style {
+                fill: Fill::None,
+                stroke: Some(crate::document::Stroke {
+                    color: Rgba::from_hex(0x6A9080),
+                    width: 5.0,
+                    ..Default::default()
+                }),
+            },
+        );
+        shape.name = if guides.is_empty() {
+            "A curve to follow"
+        } else {
+            "Orbit"
+        }
+        .into();
+        guides.push((1, shape.id));
+        s.commit(Cmd::AddShape { layer: 1, shape });
+    }
+    add_text(
+        s,
+        Pt::new(92.0, 746.0),
+        "NON-PRINTING. FULLY EDITABLE.",
+        16.0,
+        Rgba::from_hex(0x707B7A),
+        1.0,
+    );
+    s.selection = guides;
+    s.convert_selection_to_guides();
+    s.set_ruler_origin(Pt::new(88.0, 220.0));
+    s.need_fit = true;
+    s.status = "Object guides · original curves preserved · Object → Guides to release".into();
+}
+
+fn motion_presets(s: &mut Studio) {
+    use crate::motion_presets::Preset;
+    s.show_welcome = false;
+    s.doc = crate::document::Document::new("A little motion", 1280.0, 840.0, 72.0);
+    s.tool = Tool::Select;
+    add_rect(s, 0.0, 0.0, 1280.0, 840.0, Rgba::from_hex(0xF5EFE7), 0.0);
+    add_text(
+        s,
+        Pt::new(88.0, 118.0),
+        "GIVE IT A LITTLE LIFE.",
+        44.0,
+        Rgba::from_hex(0x2B3B40),
+        -1.0,
+    );
+    add_text(
+        s,
+        Pt::new(92.0, 169.0),
+        "Start with a motion. Make it your own.",
+        20.0,
+        Rgba::from_hex(0x707B7A),
+        0.0,
+    );
+    let mut wave = crate::geom::Anchor::corner(Pt::new(150.0, 460.0));
+    wave.h_out = Pt::new(140.0, -240.0);
+    let mut end = crate::geom::Anchor::corner(Pt::new(430.0, 400.0));
+    end.h_in = Pt::new(-120.0, 180.0);
+    let designs = [
+        (
+            Preset::DrawStroke,
+            Shape::new(
+                Geom::Path {
+                    anchors: vec![wave, end],
+                    closed: false,
+                },
+                Style {
+                    fill: Fill::None,
+                    stroke: Some(crate::document::Stroke {
+                        color: Rgba::from_hex(0xD97C5B),
+                        width: 14.0,
+                        cap: crate::document::Cap::Round,
+                        ..Default::default()
+                    }),
+                },
+            ),
+        ),
+        (
+            Preset::FillUp,
+            Shape::new(
+                Geom::Rect {
+                    origin: Pt::new(540.0, 310.0),
+                    size: Pt::new(200.0, 230.0),
+                    radius: 28.0,
+                },
+                Style {
+                    fill: Fill::Solid(Rgba::from_hex(0xAB91C1)),
+                    stroke: None,
+                },
+            ),
+        ),
+        (
+            Preset::PopIn,
+            Shape::new(
+                Geom::Star {
+                    center: Pt::new(995.0, 424.0),
+                    outer: Pt::new(122.0, 122.0),
+                    inner: 0.54,
+                    points: 8,
+                },
+                Style {
+                    fill: Fill::Solid(Rgba::from_hex(0xD8AC50)),
+                    stroke: None,
+                },
+            ),
+        ),
+    ];
+    let mut selected = Vec::new();
+    s.motion_preset_options.duration = 1.2;
+    s.motion_preset_options.stagger = 0.0;
+    for (preset, mut shape) in designs {
+        shape.name = preset.name().into();
+        let id = shape.id;
+        s.commit(Cmd::AddShape { layer: 1, shape });
+        s.selection = vec![(1, id)];
+        s.apply_motion_preset(preset);
+        selected.push((1, id));
+    }
+    for (x, title) in [
+        (182.0, "DRAW STROKE"),
+        (562.0, "FILL UP"),
+        (952.0, "POP IN"),
+    ] {
+        add_text(
+            s,
+            Pt::new(x, 618.0),
+            title,
+            17.0,
+            Rgba::from_hex(0x707B7A),
+            0.6,
+        );
+    }
+    add_text(
+        s,
+        Pt::new(92.0, 746.0),
+        "13 STARTING POINTS / ORDINARY, EDITABLE KEYS",
+        14.0,
+        Rgba::from_hex(0x707B7A),
+        0.6,
+    );
+    s.selection = selected;
+    s.persona = Persona::Motion;
+    s.playhead = 0.52;
+    s.playing = false;
+    s.need_fit = true;
+    s.status = "Draw, fill, pop · scrub the timeline or press Space to play".into();
 }

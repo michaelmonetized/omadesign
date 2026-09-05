@@ -150,6 +150,9 @@ pub struct Shape {
     pub visible: bool,
     #[serde(default)]
     pub locked: bool,
+    /// Non-printing artwork retained as an editable guide.
+    #[serde(default)]
+    pub guide: bool,
     #[serde(default)]
     pub filters: crate::filter::FilterStack,
     /// Per-corner radii (TL, TR, BR, BL). All zero → use `Geom::Rect.radius`.
@@ -179,6 +182,7 @@ impl PartialEq for Shape {
             && self.opacity == other.opacity
             && self.visible == other.visible
             && self.locked == other.locked
+            && self.guide == other.guide
             && self.filters == other.filters
             && self.corners == other.corners
     }
@@ -196,6 +200,7 @@ impl Shape {
             opacity: 1.0,
             visible: true,
             locked: false,
+            guide: false,
             filters: crate::filter::FilterStack::default(),
             corners: [0.0; 4],
             cached_path: RefCell::new(None),
@@ -1117,10 +1122,13 @@ impl Document {
             }
             if let Some(shapes) = layer.kind.shapes() {
                 for shape in shapes.iter().rev() {
-                    if !shape.visible || shape.locked {
+                    if !shape.visible || shape.locked || (shape.guide && !self.ruler.guides_visible)
+                    {
                         continue;
                     }
-                    if shape.contains_world(p) || shape.dist_world(p) <= stroke_slack {
+                    if (!shape.guide && shape.contains_world(p))
+                        || shape.dist_world(p) <= stroke_slack
+                    {
                         return Some((li, shape.id));
                     }
                 }
@@ -1140,7 +1148,8 @@ impl Document {
             }
             if let Some(shapes) = layer.kind.shapes() {
                 for shape in shapes {
-                    if !shape.visible || shape.locked {
+                    if !shape.visible || shape.locked || (shape.guide && !self.ruler.guides_visible)
+                    {
                         continue;
                     }
                     if shape.world_bbox().intersects(r) {
@@ -1178,6 +1187,12 @@ impl Document {
 
 #[derive(Clone, Debug)]
 pub enum Cmd {
+    SetShapeGuide {
+        layer: usize,
+        id: u64,
+        before: bool,
+        after: bool,
+    },
     Batch(Vec<Cmd>),
     SetLayerMask {
         index: usize,
@@ -1515,6 +1530,17 @@ fn coalesce(prev: &mut Cmd, next: &Cmd) -> bool {
 
 fn invert_cmd(cmd: Cmd) -> Cmd {
     match cmd {
+        Cmd::SetShapeGuide {
+            layer,
+            id,
+            before,
+            after,
+        } => Cmd::SetShapeGuide {
+            layer,
+            id,
+            before: after,
+            after: before,
+        },
         Cmd::SetLayerMask {
             index,
             before,
@@ -1696,6 +1722,13 @@ fn invert_cmd(cmd: Cmd) -> Cmd {
 
 pub fn apply(doc: &mut Document, cmd: &Cmd) {
     match cmd {
+        Cmd::SetShapeGuide {
+            layer, id, after, ..
+        } => {
+            if let Some(shape) = doc.find_shape_mut(*layer, *id) {
+                shape.guide = *after;
+            }
+        }
         Cmd::SetLayerMask { index, after, .. } => {
             if let Some(layer) = doc.layers.get_mut(*index) {
                 layer.mask = after.clone();

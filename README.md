@@ -43,13 +43,14 @@ Press **F1** for the full key list.
 
 ## Design
 
-- Move, scale (8 handles), rotate (the handle above the box)
+- Free transform (`Ctrl+T`): move, scale (8 handles), rotate (the handle above the box)
 - Node tool: drag points and Bézier handles
 - Pen: click a corner, click-drag a smooth point, Enter finishes, click the first point to close. A twitch under 3px stays a corner.
 - Type: click, type on the canvas, Character studio (font, size, tracking, leading, OpenType)
 - Zoom: drag a box to that area; click zooms in, Alt-click out
 - Fill / stroke, Pathfinder and Divide, stroke outlines, Select Same, align, layers, copy/paste
 - Drag-out guides, ruler origins and units, smart alignment and equal-spacing snaps
+- Convert artwork to editable object guides; release it back with its original style
 - Vector distort, skew, perspective, and a nine-handle warp mesh
 - File → Place, drop files on the canvas, Trace (`U`) turns a pixel layer into paths
 
@@ -59,7 +60,17 @@ Brush, eraser, clone, healing, fill, marquees, wand, and editable layer masks. P
 
 ## Motion
 
-Timeline under the canvas. Rest pose stays in Design. Keys are X, Y, rotation, scale, opacity. Export animated SVG or Lottie JSON. Import a shape-layer Lottie.
+13 editable presets: draw stroke, pop in, slam, shake, fill up, four slide directions,
+fly, zoom, buzz, and fade in. Set duration, delay, stagger and intensity, then adjust
+the ordinary keys in the timeline. Export animated SVG or Lottie JSON; Lottie
+reports unsupported pixels, masks and effects instead of dropping them.
+
+## Templates
+
+**Templates · 52** on the welcome screen, or **File → Template library**. Original
+editable vector designs fit all 20 document presets and custom dimensions. Search,
+filter, preview, and make one yours. All 52 ship locally; the
+[weekly drop plan](docs/template-drops.md) gives each one a suggested adoption idea.
 
 ## Docs
 
