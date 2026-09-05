@@ -1,11 +1,12 @@
 mod browsers;
-mod chrome;
 mod canvas;
+mod chrome;
 mod icons;
+mod jobs;
 mod photo;
 mod studios;
-mod timeline;
 pub mod theme;
+mod timeline;
 mod welcome;
 
 use crate::app::Studio;
@@ -20,8 +21,6 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     }
     studio.handle_shortcuts(&ctx);
     studio.tick_motion(&ctx);
-    studio.tick_swap();
-    unsaved_dialog(ui, studio);
 
     chrome::top_bar(ui, studio);
 
@@ -32,25 +31,19 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         for f in files {
             studio.ingest_dropped(f.path(), None);
         }
-        studio.park_active();
-        return;
-    }
-
-    chrome::doc_tabs(ui, studio);
-
-    if studio.persona == Persona::Photo {
+    } else if studio.persona == Persona::Photo {
+        chrome::doc_tabs(ui, studio);
         chrome::left_toolbar(ui, studio);
-        photo::show(ui, studio);
         chrome::status_bar(ui, studio);
-        studio.park_active();
-        return;
+        photo::show(ui, studio);
+    } else {
+        chrome::doc_tabs(ui, studio);
+        chrome::left_toolbar(ui, studio);
+        studios::right_panel(ui, studio);
+        chrome::status_bar(ui, studio);
+        timeline::show(ui, studio);
+        canvas::show(ui, studio);
     }
-
-    chrome::left_toolbar(ui, studio);
-    studios::right_panel(ui, studio);
-    chrome::status_bar(ui, studio);
-    timeline::show(ui, studio);
-    canvas::show(ui, studio);
 
     browsers::show_shape_browser(ui, studio);
     browsers::show_asset_browser(ui, studio);
@@ -58,7 +51,8 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     if studio.show_shortcuts {
         egui_shortcuts(ui, studio);
     }
-    studio.park_active();
+    unsaved_dialog(ui, studio);
+    studio.tick_swap(&ctx);
 }
 
 fn unsaved_dialog(ui: &mut Ui, studio: &mut Studio) {
@@ -66,65 +60,77 @@ fn unsaved_dialog(ui: &mut Ui, studio: &mut Studio) {
         return;
     }
     let ctx = ui.ctx().clone();
-    eframe::egui::Window::new("Unsaved changes")
-        .collapsible(false)
-        .resizable(false)
-        .anchor(eframe::egui::Align2::CENTER_CENTER, [0.0, 0.0])
-        .show(&ctx, |ui| {
-            ui.label("Save before closing? Discard throws the work away.");
-            ui.add_space(8.0);
+    let title = match studio.pending_nav {
+        Some(crate::app::PendingNav::CloseTab(i)) => {
+            format!("Save changes to {}?", studio.tab_title(i).0)
+        }
+        _ => "Save your changes?".into(),
+    };
+    let dialog =
+        eframe::egui::Modal::new(eframe::egui::Id::new("unsaved-changes")).show(&ctx, |ui| {
+            ui.set_width(340.0);
+            ui.heading(title);
+            ui.add_space(6.0);
+            ui.label("Your unsaved changes will be lost if you discard them.");
+            ui.add_space(16.0);
             ui.horizontal(|ui| {
-                if ui.button("Save").clicked() {
-                    studio.execute_nav(&ctx, true);
+                if ui.button("Cancel").clicked() {
+                    studio.pending_nav = None;
                 }
                 if ui.button("Discard").clicked() {
                     studio.execute_nav(&ctx, false);
                 }
-                if ui.button("Cancel").clicked() {
-                    studio.pending_nav = None;
+                if ui.button("Save").clicked() {
+                    studio.execute_nav(&ctx, true);
                 }
             });
         });
+    if dialog.should_close() {
+        studio.pending_nav = None;
+    }
 }
 
 fn egui_shortcuts(ui: &mut Ui, studio: &mut Studio) {
+    let height = (ui.ctx().viewport_rect().height() - 160.0).max(200.0);
     eframe::egui::Window::new("Keys")
         .collapsible(false)
         .resizable(true)
         .default_size([640.0, 560.0])
         .anchor(eframe::egui::Align2::CENTER_CENTER, [0.0, 0.0])
         .show(ui.ctx(), |ui| {
-            eframe::egui::ScrollArea::vertical().show(ui, |ui| {
-                let groups = crate::tools::shortcut_groups();
-                ui.columns(2, |cols| {
-                    let mid = groups.len().div_ceil(2);
-                    for (col, slice) in [(0, &groups[..mid]), (1, &groups[mid..])] {
-                        for (group, rows) in slice.iter() {
-                            cols[col].add_space(6.0);
-                            cols[col].label(
-                                eframe::egui::RichText::new(*group)
-                                    .strong()
-                                    .color(crate::ui::theme::accent()),
-                            );
-                            eframe::egui::Grid::new(*group)
-                                .num_columns(2)
-                                .spacing([16.0, 3.0])
-                                .show(&mut cols[col], |ui| {
-                                    for row in *rows {
-                                        ui.label(row.action);
-                                        ui.label(
-                                            eframe::egui::RichText::new(row.keys)
-                                                .monospace()
-                                                .small()
-                                                .color(crate::ui::theme::fg_weak()),
-                                        );
-                                        ui.end_row();
-                                    }
-                                });
+            eframe::egui::ScrollArea::vertical()
+                .max_height(height)
+                .show(ui, |ui| {
+                    let groups = crate::tools::shortcut_groups();
+                    ui.columns(2, |cols| {
+                        let mid = groups.len().div_ceil(2);
+                        for (col, slice) in [(0, &groups[..mid]), (1, &groups[mid..])] {
+                            for (group, rows) in slice.iter() {
+                                cols[col].add_space(6.0);
+                                cols[col].label(
+                                    eframe::egui::RichText::new(*group)
+                                        .strong()
+                                        .color(crate::ui::theme::accent()),
+                                );
+                                eframe::egui::Grid::new(*group)
+                                    .num_columns(2)
+                                    .spacing([16.0, 3.0])
+                                    .show(&mut cols[col], |ui| {
+                                        for row in *rows {
+                                            ui.label(row.action);
+                                            ui.label(
+                                                eframe::egui::RichText::new(row.keys)
+                                                    .monospace()
+                                                    .small()
+                                                    .color(crate::ui::theme::fg_weak()),
+                                            );
+                                            ui.end_row();
+                                        }
+                                    });
+                            }
                         }
-                    }
+                    });
                 });
-            });
             ui.add_space(8.0);
             if ui.button("Close").clicked() {
                 studio.show_shortcuts = false;

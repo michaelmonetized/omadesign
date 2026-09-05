@@ -1,8 +1,10 @@
 //! Phosphor Light glyphs in the tool well and chrome.
 
 use crate::tools::Tool;
-use crate::ui::theme::{accent, bg_widget_hover, border, fg, fg_weak};
-use eframe::egui::{FontId, Sense, Stroke, Ui, vec2};
+use crate::ui::theme::{accent, accent_soft, bg_widget_hover, border, fg, fg_weak};
+use eframe::egui::{
+    FontFamily, FontId, Response, Sense, Stroke, Ui, Vec2, WidgetInfo, WidgetType, vec2,
+};
 
 pub mod ph {
     pub const CURSOR: &str = "\u{E1DC}";
@@ -35,6 +37,8 @@ pub mod ph {
     pub const LOCK: &str = "\u{E2FA}";
     pub const LOCK_OPEN: &str = "\u{E306}";
     pub const PLUS: &str = "\u{E3D4}";
+    pub const X: &str = "\u{E4F6}";
+    pub const FOLDER_OPEN: &str = "\u{E256}";
     pub const MINUS: &str = "\u{E32A}";
     pub const IMAGES: &str = "\u{E836}";
     pub const SHAPES: &str = "\u{EC5E}";
@@ -47,7 +51,6 @@ pub mod ph {
     pub const STACK: &str = "\u{E466}";
     pub const CARET_DOWN: &str = "\u{E136}";
     pub const CARET_RIGHT: &str = "\u{E13A}";
-    pub const CARET_UP: &str = "\u{E13C}";
     pub const FRAME_CORNERS: &str = "\u{E626}";
     pub const PLAY: &str = "\u{E3D0}";
     pub const PAUSE: &str = "\u{E39E}";
@@ -56,104 +59,77 @@ pub mod ph {
     pub const SKIP_FORWARD: &str = "\u{E5A6}";
 }
 
-pub fn icon_button(ui: &mut Ui, icon: &str, tip: &str, selected: bool) -> bool {
-    let size = vec2(28.0, 26.0);
-    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
-    let hover = resp.hovered();
-    let bg = if selected {
-        accent().linear_multiply(0.22)
-    } else if hover {
-        bg_widget_hover()
-    } else {
-        eframe::egui::Color32::TRANSPARENT
-    };
-    ui.painter().rect_filled(rect.shrink(1.0), 4.0, bg);
-    if selected {
-        ui.painter().rect_stroke(
-            rect.shrink(1.0),
-            4.0,
-            Stroke::new(1.0, accent()),
-            eframe::egui::StrokeKind::Inside,
-        );
-    }
-    let color = if selected {
-        accent()
-    } else if hover {
-        fg()
-    } else {
-        fg_weak()
-    };
-    ui.painter().text(
-        rect.center(),
-        eframe::egui::Align2::CENTER_CENTER,
-        icon,
-        FontId::proportional(16.0),
-        color,
-    );
-    resp.on_hover_text(tip).clicked()
+pub fn font(size: f32) -> FontId {
+    FontId::new(size, FontFamily::Name("phosphor".into()))
 }
 
-pub fn tiny_icon(ui: &mut Ui, icon: &str, tip: &str, on: bool) -> bool {
-    let size = vec2(22.0, 20.0);
-    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
-    let hover = resp.hovered();
-    if hover || on {
-        ui.painter().rect_filled(
-            rect.shrink(1.0),
-            3.0,
-            if on {
-                accent().linear_multiply(0.18)
+fn glyph_button(
+    ui: &mut Ui,
+    icon: &str,
+    tip: &str,
+    selected: bool,
+    size: Vec2,
+    glyph_size: f32,
+) -> Response {
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    response
+        .widget_info(|| WidgetInfo::selected(WidgetType::Button, ui.is_enabled(), selected, tip));
+    if ui.is_rect_visible(rect) {
+        let active = response.hovered() || response.has_focus();
+        if selected || active {
+            ui.painter().rect_filled(
+                rect.shrink(1.0),
+                6.0,
+                if selected {
+                    accent_soft()
+                } else {
+                    bg_widget_hover()
+                },
+            );
+        }
+        if response.has_focus() {
+            ui.painter().rect_stroke(
+                rect.shrink(1.0),
+                6.0,
+                Stroke::new(1.0, accent()),
+                eframe::egui::StrokeKind::Inside,
+            );
+        }
+        ui.painter().text(
+            rect.center(),
+            eframe::egui::Align2::CENTER_CENTER,
+            icon,
+            font(glyph_size),
+            if selected {
+                accent()
+            } else if active {
+                fg()
             } else {
-                bg_widget_hover()
+                fg_weak()
             },
         );
     }
-    ui.painter().text(
-        rect.center(),
-        eframe::egui::Align2::CENTER_CENTER,
-        icon,
-        FontId::proportional(14.0),
-        if on { accent() } else if hover { fg() } else { fg_weak() },
-    );
-    resp.on_hover_text(tip).clicked()
+    response.on_hover_text(tip)
+}
+
+pub fn icon_button(ui: &mut Ui, icon: &str, tip: &str, selected: bool) -> bool {
+    glyph_button(ui, icon, tip, selected, vec2(30.0, 28.0), 18.0).clicked()
+}
+
+pub fn tiny_icon(ui: &mut Ui, icon: &str, tip: &str, selected: bool) -> bool {
+    glyph_button(ui, icon, tip, selected, vec2(22.0, 22.0), 15.0).clicked()
 }
 
 pub fn tool_button(ui: &mut Ui, tool: Tool, selected: bool) -> bool {
-    let size = vec2(36.0, 32.0);
-    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
-    let hover = resp.hovered();
-    let bg = if selected {
-        accent().linear_multiply(0.22)
-    } else if hover {
-        bg_widget_hover()
-    } else {
-        eframe::egui::Color32::TRANSPARENT
-    };
-    ui.painter().rect_filled(rect.shrink(1.0), 5.0, bg);
-    if selected {
-        ui.painter().rect_stroke(
-            rect.shrink(1.0),
-            5.0,
-            Stroke::new(1.0, accent()),
-            eframe::egui::StrokeKind::Inside,
-        );
-    }
-    let color = if selected {
-        accent()
-    } else if hover {
-        fg()
-    } else {
-        fg_weak()
-    };
-    ui.painter().text(
-        rect.center(),
-        eframe::egui::Align2::CENTER_CENTER,
+    glyph_button(
+        ui,
         tool_glyph(tool),
-        FontId::proportional(18.0),
-        color,
-    );
-    resp.on_hover_text(format!("{}  {}", tool.label(), tool.key()))
-        .clicked()
+        &format!("{}  {}", tool.label(), tool.key()),
+        selected,
+        vec2(36.0, 32.0),
+        20.0,
+    )
+    .clicked()
 }
 
 fn tool_glyph(tool: Tool) -> &'static str {
@@ -188,7 +164,10 @@ fn tool_glyph(tool: Tool) -> &'static str {
 }
 
 pub fn well_separator(ui: &mut Ui) {
-    let (rect, _) = ui.allocate_exact_size(vec2(36.0, 8.0), Sense::hover());
-    ui.painter()
-        .hline(rect.x_range(), rect.center().y, Stroke::new(1.0, border()));
+    let (rect, _) = ui.allocate_exact_size(vec2(36.0, 10.0), Sense::hover());
+    ui.painter().hline(
+        rect.shrink(9.0).x_range(),
+        rect.center().y,
+        Stroke::new(1.0, border()),
+    );
 }

@@ -29,42 +29,49 @@ pub struct FontFace {
 
 fn family_name(path: &Path) -> String {
     // Try to read the OpenType name table for a human family + style.
-    if let Ok(bytes) = std::fs::read(path) {
-        if let Ok(face) = rustybuzz::ttf_parser::Face::parse(&bytes, 0) {
-            let mut family: Option<String> = None;
-            let mut style: Option<String> = None;
-            for n in face.names() {
-                if n.name_id == 1 && n.is_unicode() {
-                    if let Some(s) = n.to_string() {
-                        let s = s.trim().to_string();
-                        if !s.is_empty() {
-                            family = Some(s);
-                        }
-                    }
-                }
-                if n.name_id == 2 && n.is_unicode() {
-                    if let Some(s) = n.to_string() {
-                        let s = s.trim().to_string();
-                        if !s.is_empty() && s.to_ascii_lowercase() != "regular" {
-                            style = Some(s);
-                        }
-                    }
+    if let Ok(bytes) = std::fs::read(path)
+        && let Ok(face) = rustybuzz::ttf_parser::Face::parse(&bytes, 0)
+    {
+        let mut family: Option<String> = None;
+        let mut style: Option<String> = None;
+        for n in face.names() {
+            if n.name_id == 1
+                && n.is_unicode()
+                && let Some(s) = n.to_string()
+            {
+                let s = s.trim().to_string();
+                if !s.is_empty() {
+                    family = Some(s);
                 }
             }
-            if let Some(fam) = family {
-                if let Some(st) = style {
-                    // Avoid duplicating family when style already contains it.
-                    if st.to_lowercase().contains(&fam.to_lowercase()) {
-                        return st;
-                    }
-                    return format!("{fam} {st}");
+            if n.name_id == 2
+                && n.is_unicode()
+                && let Some(s) = n.to_string()
+            {
+                let s = s.trim().to_string();
+                if !s.is_empty() && !s.eq_ignore_ascii_case("regular") {
+                    style = Some(s);
                 }
-                return fam;
             }
+        }
+        if let Some(fam) = family {
+            if let Some(st) = style {
+                // Avoid duplicating family when style already contains it.
+                if st.to_lowercase().contains(&fam.to_lowercase()) {
+                    return st;
+                }
+                return format!("{fam} {st}");
+            }
+            return fam;
         }
     }
     path.file_stem()
-        .map(|s| s.to_string_lossy().replace(['-', '_'], " ").trim().to_string())
+        .map(|s| {
+            s.to_string_lossy()
+                .replace(['-', '_'], " ")
+                .trim()
+                .to_string()
+        })
         .unwrap_or_else(|| "Font".into())
 }
 
@@ -88,7 +95,12 @@ fn fc_font_files() -> Vec<PathBuf> {
         let p = PathBuf::from(t);
         if p.extension()
             .and_then(|e| e.to_str())
-            .map(|e| matches!(e.to_ascii_lowercase().as_str(), "ttf" | "otf" | "ttc" | "otc"))
+            .map(|e| {
+                matches!(
+                    e.to_ascii_lowercase().as_str(),
+                    "ttf" | "otf" | "ttc" | "otc"
+                )
+            })
             .unwrap_or(false)
         {
             v.push(p);
@@ -145,7 +157,7 @@ fn scan_fonts() -> Vec<FontFace> {
             break;
         }
     }
-    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    out.sort_by_cached_key(|f| f.name.to_lowercase());
     out.truncate(FONT_CAP);
     out
 }
@@ -172,8 +184,10 @@ fn walk_ttfs(
             .extension()
             .and_then(|s| s.to_str())
             .map(|s| s.to_ascii_lowercase());
-        if matches!(ext.as_deref(), Some("ttf") | Some("otf") | Some("ttc") | Some("otc"))
-            && seen.insert(p.clone())
+        if matches!(
+            ext.as_deref(),
+            Some("ttf") | Some("otf") | Some("ttc") | Some("otc")
+        ) && seen.insert(p.clone())
         {
             let name = family_name(&p);
             out.push(FontFace { name, path: p });
@@ -186,35 +200,49 @@ pub fn fonts() -> &'static [FontFace] {
 }
 
 static DYNAMIC_FONTS: OnceLock<Mutex<Vec<FontFace>>> = OnceLock::new();
+static FONT_LIST: OnceLock<Mutex<Option<Arc<[FontFace]>>>> = OnceLock::new();
 
 pub fn register_font(face: FontFace) {
+    let path = face.path.clone();
     let m = DYNAMIC_FONTS.get_or_init(|| Mutex::new(Vec::new()));
-    if let Ok(mut g) = m.lock() {
-        if !g.iter().any(|f| f.path == face.path) {
-            g.push(face);
-        }
+    if let Ok(mut g) = m.lock()
+        && !g.iter().any(|f| f.path == face.path)
+    {
+        g.push(face);
     }
-    // Invalidate cached bytes so the new file can be read.
-    if let Some(cache) = BYTES.get() {
-        if let Ok(mut m) = cache.lock() {
-            m.clear();
-        }
+    if let Some(list) = FONT_LIST.get()
+        && let Ok(mut cached) = list.lock()
+    {
+        *cached = None;
+    }
+    // Reload only the installed face; other open documents keep their fonts.
+    if let Some(cache) = BYTES.get()
+        && let Ok(mut m) = cache.lock()
+    {
+        m.remove(&path);
     }
 }
 
-pub fn all_fonts() -> Vec<FontFace> {
+pub fn all_fonts_cached() -> Arc<[FontFace]> {
+    let cache = FONT_LIST.get_or_init(|| Mutex::new(None));
+    let mut cached = cache.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(list) = cached.as_ref() {
+        return Arc::clone(list);
+    }
     let mut v = fonts().to_vec();
-    if let Some(m) = DYNAMIC_FONTS.get() {
-        if let Ok(g) = m.lock() {
-            for f in g.iter() {
-                if !v.iter().any(|e| e.path == f.path) {
-                    v.push(f.clone());
-                }
+    if let Some(m) = DYNAMIC_FONTS.get()
+        && let Ok(g) = m.lock()
+    {
+        for f in g.iter() {
+            if !v.iter().any(|e| e.path == f.path) {
+                v.push(f.clone());
             }
         }
     }
-    v.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-    v
+    v.sort_by_cached_key(|f| f.name.to_lowercase());
+    let list: Arc<[FontFace]> = v.into();
+    *cached = Some(Arc::clone(&list));
+    list
 }
 
 pub fn default_path() -> Option<PathBuf> {
@@ -406,7 +434,7 @@ pub fn shape(run: &TypeRun) -> Vec<Vec<Pt>> {
 
 fn buzz_shape(bytes: &[u8], run: &TypeRun) -> Option<Vec<Vec<Pt>>> {
     let face = rustybuzz::Face::from_slice(bytes, 0)?;
-    let font = ab_glyph::FontVec::try_from_vec(bytes.to_vec()).ok()?;
+    let font = ab_glyph::FontRef::try_from_slice(bytes).ok()?;
     let upem = {
         let u = face.units_per_em();
         if u == 0 {
@@ -455,13 +483,13 @@ pub fn fill_contours(geom: &mut crate::geom::Geom) {
 }
 
 pub fn measure(run: &TypeRun) -> (f32, f32) {
-    let lines: Vec<&str> = run.content.split('\n').collect();
-    let n = lines.len().max(1) as f32;
     let mut max_w = 0.0f32;
-    for line in &lines {
+    let mut lines = 0;
+    for line in run.content.split('\n') {
         max_w = max_w.max(line_width(run, line));
+        lines += 1;
     }
-    (max_w, run.line_height() * n)
+    (max_w, run.line_height() * lines as f32)
 }
 
 fn line_width(run: &TypeRun, line: &str) -> f32 {
@@ -498,9 +526,7 @@ pub fn caret_pt(run: &TypeRun, char_idx: usize) -> Pt {
     let (line_i, col) = line_col(&run.content, idx);
     let line = run.content.split('\n').nth(line_i).unwrap_or("");
     let prefix: String = line.chars().take(col).collect();
-    let mut probe = run.clone();
-    probe.content = prefix;
-    let w = measure(&probe).0;
+    let w = line_width(run, &prefix);
     Pt::new(
         run.origin.x + w,
         run.origin.y + line_i as f32 * run.line_height(),
@@ -524,9 +550,7 @@ pub fn hit_char(run: &TypeRun, p: Pt) -> usize {
             let mut best_d = f32::INFINITY;
             for col in 0..=n {
                 let prefix: String = line.chars().take(col).collect();
-                let mut probe = run.clone();
-                probe.content = prefix;
-                let x = run.origin.x + measure(&probe).0;
+                let x = run.origin.x + line_width(run, &prefix);
                 let d = (x - p.x).abs();
                 if d < best_d {
                     best_d = d;
@@ -548,7 +572,7 @@ pub fn selection_rects(run: &TypeRun, a: usize, b: usize) -> Vec<(Pt, Pt)> {
     }
     let mut out = vec![];
     let mut ci = 0usize;
-    for (li, line) in run.content.split('\n').enumerate() {
+    for line in run.content.split('\n') {
         let n = line.chars().count();
         let start = ci;
         let end = ci + n;
@@ -561,7 +585,6 @@ pub fn selection_rects(run: &TypeRun, a: usize, b: usize) -> Vec<(Pt, Pt)> {
             let bot = p0.y + run.px * 0.25;
             out.push((Pt::new(p0.x, top), Pt::new(p1.x.max(p0.x + 2.0), bot)));
         }
-        let _ = (li, end);
         ci = end + 1;
     }
     out
@@ -641,9 +664,7 @@ fn detect_max_font_family_in(root: &Path) -> Option<String> {
     let mut best: Option<(String, usize)> = None;
     for (fam, cnt) in counts {
         let entry = best.get_or_insert((fam.clone(), cnt));
-        if cnt > entry.1
-            || (cnt == entry.1 && is_preferred_over(&fam, &entry.0))
-        {
+        if cnt > entry.1 || (cnt == entry.1 && is_preferred_over(&fam, &entry.0)) {
             *entry = (fam, cnt);
         }
     }
@@ -672,13 +693,20 @@ fn walk_for_font_imports(dir: &Path, counts: &mut HashMap<String, usize>, depth:
         if p.is_dir() {
             // Skip heavy dirs
             let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
-            if matches!(name, "node_modules" | ".git" | "target" | ".next" | "dist" | "build") {
+            if matches!(
+                name,
+                "node_modules" | ".git" | "target" | ".next" | "dist" | "build"
+            ) {
                 continue;
             }
             walk_for_font_imports(&p, counts, depth + 1);
             continue;
         }
-        let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
+        let ext = p
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
         if !matches!(ext.as_str(), "ts" | "tsx" | "js" | "jsx") {
             continue;
         }
@@ -691,7 +719,11 @@ fn walk_for_font_imports(dir: &Path, counts: &mut HashMap<String, usize>, depth:
             // We do a light parse: find the substring between "import {" and "} from".
             for import in extract_google_imports(&text) {
                 for ident in import.split(',') {
-                    let raw = ident.trim().split_whitespace().next().unwrap_or("").trim_matches(|c| c == '{' || c == '}');
+                    let raw = ident
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or("")
+                        .trim_matches(|c| c == '{' || c == '}');
                     // Handle `Inter as MyInter` – take before “as”.
                     let base = raw.split(" as ").next().unwrap_or(raw).trim();
                     if base.is_empty() || base.starts_with("/*") {
@@ -717,10 +749,10 @@ fn extract_google_imports(text: &str) -> Vec<String> {
         let before = &text[..abs];
         if let Some(brace_start) = before.rfind("import") {
             let segment = &before[brace_start..abs];
-            if let Some(l) = segment.find('{') {
-                if let Some(r) = segment[l..].find('}') {
-                    out.push(segment[l + 1..l + r].to_string());
-                }
+            if let Some(l) = segment.find('{')
+                && let Some(r) = segment[l..].find('}')
+            {
+                out.push(segment[l + 1..l + r].to_string());
             }
         }
         pos = abs + "next/font/google".len();
@@ -736,25 +768,24 @@ pub fn preferred_default_path() -> Option<PathBuf> {
         return Some(p);
     }
     // 2. Max font from Projects
-    if let Some(fam) = detect_max_font_family() {
-        if let Some(p) = find_installed_for_family(&fam) {
-            return Some(p);
-        }
-        // If the family is a Google Font but not installed, still return None so
-        // the caller can suggest a download. The UI will show “Inter not installed”.
+    if let Some(fam) = detect_max_font_family()
+        && let Some(p) = find_installed_for_family(&fam)
+    {
+        return Some(p);
     }
+    // If the family is a Google Font but not installed, still return None so
+    // the caller can suggest a download. The UI will show “Inter not installed”.
     // 3. Omarchy desktop font (e.g. "JetBrainsMono Nerd Font") – try to find its file.
     if let Ok(out) = std::process::Command::new("omarchy")
         .args(["font", "current"])
         .output()
+        && out.status.success()
     {
-        if out.status.success() {
-            let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            if !name.is_empty() {
-                if let Some(p) = find_installed_for_family(&name) {
-                    return Some(p);
-                }
-            }
+        let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if !name.is_empty()
+            && let Some(p) = find_installed_for_family(&name)
+        {
+            return Some(p);
         }
     }
     // 4. Hard-coded Inter – the most common branding sans in the user's repos.
@@ -768,15 +799,18 @@ pub fn preferred_default_path() -> Option<PathBuf> {
 fn find_installed_for_family(family: &str) -> Option<PathBuf> {
     let q = family.to_ascii_lowercase();
     // Prefer exact family name match, then substring.
-    let all = all_fonts();
+    let all = all_fonts_cached();
     if let Some(f) = all.iter().find(|f| f.name.to_ascii_lowercase() == q) {
         return Some(f.path.clone());
     }
-    if let Some(f) = all.iter().find(|f| f.name.to_ascii_lowercase().contains(&q)) {
+    if let Some(f) = all
+        .iter()
+        .find(|f| f.name.to_ascii_lowercase().contains(&q))
+    {
         return Some(f.path.clone());
     }
     // Also try file-stem contains.
-    for f in all {
+    for f in all.iter() {
         let stem = f
             .path
             .file_stem()
@@ -786,7 +820,7 @@ fn find_installed_for_family(family: &str) -> Option<PathBuf> {
             || stem.contains(&q.replace(' ', "_").to_ascii_lowercase())
             || q.contains(&stem.replace('-', " "))
         {
-            return Some(f.path);
+            return Some(f.path.clone());
         }
     }
     None

@@ -81,7 +81,13 @@ pub fn stamp(pm: &mut Pixmap, pos: Pt, brush: &Brush, erase: bool) {
     } else {
         paint.set_color(c);
     }
-    pm.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
+    pm.fill_path(
+        &path,
+        &paint,
+        FillRule::Winding,
+        Transform::identity(),
+        None,
+    );
 }
 
 pub fn stroke_to(pm: &mut Pixmap, from: Pt, to: Pt, brush: &Brush, erase: bool) {
@@ -147,9 +153,8 @@ pub fn smudge(pm: &mut Pixmap, from: Pt, to: Pt, brush: &Brush) {
             }
             let src = sample(pm, sx + dx, sy + dy);
             let dst = sample(pm, cx + dx, cy + dy);
-            let mix = |a: u8, b: u8| {
-                (a as f32 * (1.0 - strength) + b as f32 * strength).round() as u8
-            };
+            let mix =
+                |a: u8, b: u8| (a as f32 * (1.0 - strength) + b as f32 * strength).round() as u8;
             set_px(
                 pm,
                 cx + dx,
@@ -187,7 +192,12 @@ pub fn clone_stamp(pm: &mut Pixmap, pos: Pt, source: Pt, brush: &Brush) {
                 pm,
                 cx + dx,
                 cy + dy,
-                [mix(dst[0], src[0]), mix(dst[1], src[1]), mix(dst[2], src[2]), mix(dst[3], src[3]).max(src[3])],
+                [
+                    mix(dst[0], src[0]),
+                    mix(dst[1], src[1]),
+                    mix(dst[2], src[2]),
+                    mix(dst[3], src[3]).max(src[3]),
+                ],
             );
         }
     }
@@ -197,42 +207,17 @@ fn color_dist(a: [u8; 4], b: [u8; 4]) -> f32 {
     let dr = a[0] as f32 - b[0] as f32;
     let dg = a[1] as f32 - b[1] as f32;
     let db = a[2] as f32 - b[2] as f32;
-    (dr * dr + dg * dg + db * db).sqrt()
+    let da = a[3] as f32 - b[3] as f32;
+    (dr * dr + dg * dg + db * db + da * da).sqrt()
 }
 
 pub fn flood_fill(pm: &mut Pixmap, seed: Pt, color: Rgba, tolerance: f32) {
-    let x = seed.x.round() as i32;
-    let y = seed.y.round() as i32;
-    if x < 0 || y < 0 || x >= pm.width() as i32 || y >= pm.height() as i32 {
-        return;
-    }
-    let target = sample(pm, x, y);
-    let fill = [color.r, color.g, color.b, color.a];
-    if color_dist(target, fill) < 1.0 {
-        return;
-    }
-    let mut stack = vec![(x, y)];
-    let mut seen = vec![0u8; (pm.width() * pm.height()) as usize];
-    let w = pm.width() as i32;
-    let h = pm.height() as i32;
-    while let Some((cx, cy)) = stack.pop() {
-        if cx < 0 || cy < 0 || cx >= w || cy >= h {
-            continue;
+    let mask = wand_mask(pm, seed, tolerance);
+    let fill = tiny_skia::ColorU8::from_rgba(color.r, color.g, color.b, color.a).premultiply();
+    for (pixel, selected) in pm.pixels_mut().iter_mut().zip(mask) {
+        if selected != 0 {
+            *pixel = fill;
         }
-        let idx = (cy * w + cx) as usize;
-        if seen[idx] != 0 {
-            continue;
-        }
-        seen[idx] = 1;
-        let px = sample(pm, cx, cy);
-        if color_dist(px, target) > tolerance {
-            continue;
-        }
-        set_px(pm, cx, cy, fill);
-        stack.push((cx + 1, cy));
-        stack.push((cx - 1, cy));
-        stack.push((cx, cy + 1));
-        stack.push((cx, cy - 1));
     }
 }
 
@@ -267,21 +252,6 @@ pub fn wand_mask(pm: &Pixmap, seed: Pt, tolerance: f32) -> Vec<u8> {
         stack.push((cx, cy - 1));
     }
     mask
-}
-
-pub fn apply_selection_clip(dst: &mut Pixmap, src: &Pixmap, mask: &[u8]) {
-    let n = (dst.width() * dst.height()) as usize;
-    if mask.len() != n || src.data().len() != dst.data().len() {
-        dst.data_mut().copy_from_slice(src.data());
-        return;
-    }
-    for i in 0..n {
-        if mask[i] == 0 {
-            continue;
-        }
-        let o = i * 4;
-        dst.data_mut()[o..o + 4].copy_from_slice(&src.data()[o..o + 4]);
-    }
 }
 
 pub fn fill_rect_mask(w: u32, h: u32, x0: f32, y0: f32, x1: f32, y1: f32) -> Vec<u8> {
@@ -357,17 +327,14 @@ mod tests {
     }
 
     #[test]
-    fn flood_fills_connected() {
-        let mut pm = Pixmap::new(8, 8).unwrap();
-        flood_fill(&mut pm, Pt::new(0.0, 0.0), Rgba::rgb(0, 255, 0), 8.0);
-        assert_eq!(pm.data()[1], 255);
-        assert_eq!(pm.data()[(63 * 4) + 1], 255);
-    }
-
-    #[test]
-    fn wand_selects_whole_empty() {
-        let pm = Pixmap::new(4, 4).unwrap();
-        let m = wand_mask(&pm, Pt::new(1.0, 1.0), 4.0);
-        assert_eq!(m.iter().filter(|&&v| v == 255).count(), 16);
+    fn flood_fill_uses_connected_region_and_premultiplies_alpha() {
+        let mut pm = Pixmap::new(3, 1).unwrap();
+        pm.data_mut()[4..8].copy_from_slice(&[0, 0, 0, 255]);
+        let mask = wand_mask(&pm, Pt::ZERO, 8.0);
+        assert_eq!(mask, vec![255, 0, 0]);
+        flood_fill(&mut pm, Pt::ZERO, Rgba::new(0, 255, 0, 128), 8.0);
+        assert_eq!(pm.data(), &[0, 128, 0, 128, 0, 0, 0, 255, 0, 0, 0, 0]);
+        flood_fill(&mut pm, Pt::new(2.0, 0.0), Rgba::BLACK, 8.0);
+        assert_eq!(&pm.data()[8..], &[0, 0, 0, 255]);
     }
 }

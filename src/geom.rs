@@ -29,11 +29,7 @@ impl Pt {
 
     pub fn normalized(self) -> Self {
         let l = self.length();
-        if l < 1e-9 {
-            Self::ZERO
-        } else {
-            self / l
-        }
+        if l < 1e-9 { Self::ZERO } else { self / l }
     }
 
     pub fn dot(self, o: Self) -> f32 {
@@ -501,7 +497,10 @@ pub fn corner_widgets(origin: Pt, size: Pt) -> [Pt; 4] {
     let y0 = origin.y;
     let x1 = origin.x + size.x;
     let y1 = origin.y + size.y;
-    let inset = 14.0f32.min(size.x.abs() * 0.25).min(size.y.abs() * 0.25).max(6.0);
+    let inset = 14.0f32
+        .min(size.x.abs() * 0.25)
+        .min(size.y.abs() * 0.25)
+        .max(6.0);
     [
         Pt::new(x0 + inset.copysign(size.x), y0 + inset.copysign(size.y)),
         Pt::new(x1 - inset.copysign(size.x), y0 + inset.copysign(size.y)),
@@ -771,11 +770,7 @@ impl Geom {
             Geom::Line { a, b } => vec![vec![*a, *b]],
             Geom::Path { anchors, closed } => {
                 let pts = path_pts(anchors, *closed);
-                if pts.len() < 2 {
-                    vec![]
-                } else {
-                    vec![pts]
-                }
+                if pts.len() < 2 { vec![] } else { vec![pts] }
             }
             Geom::Text(t) => t.contours.clone(),
             Geom::Poly { contours, .. } => contours.clone(),
@@ -791,9 +786,38 @@ impl Geom {
     }
 
     pub fn bbox(&self) -> Bounds {
-        let cs = self.contours(32);
+        match self {
+            Geom::Rect { origin, size, .. } => {
+                return Bounds {
+                    min: origin.min(*origin + *size),
+                    max: origin.max(*origin + *size),
+                };
+            }
+            Geom::Ellipse { center, radii } => {
+                return Bounds {
+                    min: *center - radii.abs(),
+                    max: *center + radii.abs(),
+                };
+            }
+            Geom::Line { a, b } => {
+                return Bounds {
+                    min: a.min(*b),
+                    max: a.max(*b),
+                };
+            }
+            _ => {}
+        }
+        let generated;
+        let cs = match self {
+            Geom::Text(t) => &t.contours,
+            Geom::Poly { contours, .. } => contours,
+            _ => {
+                generated = self.contours(32);
+                &generated
+            }
+        };
         let mut b = None;
-        for c in &cs {
+        for c in cs {
             for p in c {
                 match &mut b {
                     None => b = Some(Bounds::from_pt(*p)),
@@ -813,16 +837,16 @@ impl Geom {
                 }
             }
         }
-        if let Geom::Text(t) = self {
-            if b.as_ref().map(|bb| bb.is_empty()).unwrap_or(true) {
-                let h = t.px.max(8.0);
-                let w = (t.px * 0.45).max(12.0);
-                let n = t.content.split('\n').count().max(1) as f32;
-                return Bounds::from_min_size(
-                    Pt::new(t.origin.x, t.origin.y - t.px),
-                    Pt::new(w, h * n.max(1.0)),
-                );
-            }
+        if let Geom::Text(t) = self
+            && b.as_ref().map(|bb| bb.is_empty()).unwrap_or(true)
+        {
+            let h = t.px.max(8.0);
+            let w = (t.px * 0.45).max(12.0);
+            let n = t.content.split('\n').count().max(1) as f32;
+            return Bounds::from_min_size(
+                Pt::new(t.origin.x, t.origin.y - t.px),
+                Pt::new(w, h * n.max(1.0)),
+            );
         }
         b.unwrap_or(Bounds::from_pt(Pt::ZERO))
     }
@@ -1092,7 +1116,7 @@ impl Geom {
                 }
             }
             Geom::Ellipse { center, radii } => {
-                let k = 0.55228475;
+                let k = 0.552_284_8;
                 let rx = radii.x;
                 let ry = radii.y;
                 let c = *center;
@@ -1419,8 +1443,14 @@ mod tests {
         };
         let w = g.bbox().width();
         g.flip(true);
-        assert!((g.bbox().width() - w).abs() < 0.01, "width {}", g.bbox().width());
-        let Geom::Path { anchors, .. } = &g else { panic!("path") };
+        assert!(
+            (g.bbox().width() - w).abs() < 0.01,
+            "width {}",
+            g.bbox().width()
+        );
+        let Geom::Path { anchors, .. } = &g else {
+            panic!("path")
+        };
         assert!((anchors[0].pt.x - 90.0).abs() < 0.01);
         assert!((anchors[1].pt.x - 10.0).abs() < 0.01);
     }

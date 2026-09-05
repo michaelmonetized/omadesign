@@ -15,14 +15,7 @@ struct File {
 
 pub fn encode(doc: &Document) -> Result<String, String> {
     let mut packed = doc.clone();
-    for layer in &mut packed.layers {
-        if let Some(px) = layer.kind.pixels_mut() {
-            *px = compress_pixels(px)?;
-        }
-        if let Some(mask) = layer.mask.as_mut() {
-            *mask = compress_pixels(mask)?;
-        }
-    }
+    pack_rasters(&mut packed)?;
     serde_json::to_string(&File {
         version: VERSION,
         doc: packed,
@@ -60,6 +53,7 @@ fn compress_pixels(px: &Pixels) -> Result<Pixels, String> {
         data: b64.into_bytes(),
         version: px.version,
         cached_pm: std::cell::RefCell::new(None),
+        cached_uniform: Default::default(),
     })
 }
 
@@ -109,7 +103,9 @@ pub fn dialog_open() -> Option<PathBuf> {
         .add_filter("omadesign", &["oma"])
         .add_filter(
             "Images",
-            &["png", "jpg", "jpeg", "webp", "gif", "tif", "tiff", "bmp", "psd"],
+            &[
+                "png", "jpg", "jpeg", "webp", "gif", "tif", "tiff", "bmp", "psd",
+            ],
         )
         .add_filter("Vector", &["svg", "svgz", "pdf", "ai", "eps"])
         .pick_file()
@@ -120,7 +116,9 @@ pub fn dialog_place() -> Option<PathBuf> {
         .add_filter("Place", PLACE_EXTS)
         .add_filter(
             "Images",
-            &["png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "psd"],
+            &[
+                "png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "psd",
+            ],
         )
         .add_filter("Vector", &["svg", "svgz", "pdf", "ai", "eps"])
         .pick_file()
@@ -185,10 +183,7 @@ fn load_recents_raw() -> Vec<PathBuf> {
 }
 
 fn write_recents(v: &[PathBuf]) {
-    let strings: Vec<String> = v
-        .iter()
-        .map(|p| p.to_string_lossy().into_owned())
-        .collect();
+    let strings: Vec<String> = v.iter().map(|p| p.to_string_lossy().into_owned()).collect();
     if let Some(dir) = recents_path().parent() {
         let _ = std::fs::create_dir_all(dir);
     }
@@ -233,12 +228,8 @@ pub fn swap_path(id: &str) -> PathBuf {
     swap_dir().join(format!("{id}.oma.swp"))
 }
 
-pub fn write_swap(meta: &SwapMeta) -> Result<PathBuf, String> {
-    let dir = swap_dir();
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = swap_path(&meta.id);
-    let mut packed = meta.clone();
-    for layer in &mut packed.doc.layers {
+fn pack_rasters(doc: &mut Document) -> Result<(), String> {
+    for layer in &mut doc.layers {
         if let Some(px) = layer.kind.pixels_mut() {
             *px = compress_pixels(px)?;
         }
@@ -246,9 +237,53 @@ pub fn write_swap(meta: &SwapMeta) -> Result<PathBuf, String> {
             *mask = compress_pixels(mask)?;
         }
     }
-    let s = serde_json::to_string(&packed).map_err(|e| e.to_string())?;
-    std::fs::write(&path, s).map_err(|e| e.to_string())?;
-    Ok(path)
+    Ok(())
+}
+
+/// A worker writes a temporary file; only the UI may publish it after checking
+/// that the document is still open and unsaved. Dropping it cancels the write.
+pub(crate) struct PreparedSwap {
+    temporary: PathBuf,
+    destination: PathBuf,
+}
+
+impl PreparedSwap {
+    pub(crate) fn commit(self) -> Result<PathBuf, String> {
+        std::fs::rename(&self.temporary, &self.destination).map_err(|e| e.to_string())?;
+        Ok(self.destination.clone())
+    }
+}
+
+impl Drop for PreparedSwap {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.temporary);
+    }
+}
+
+pub(crate) fn prepare_swap(
+    mut meta: SwapMeta,
+    destination: PathBuf,
+) -> Result<PreparedSwap, String> {
+    use std::io::Write;
+
+    pack_rasters(&mut meta.doc)?;
+    if let Some(dir) = destination.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    let temporary = destination.with_extension(format!("{}.tmp", new_swap_id()));
+    let file = std::fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&temporary)
+        .map_err(|e| e.to_string())?;
+    let prepared = PreparedSwap {
+        temporary,
+        destination,
+    };
+    let mut writer = std::io::BufWriter::new(file);
+    serde_json::to_writer(&mut writer, &meta).map_err(|e| e.to_string())?;
+    writer.flush().map_err(|e| e.to_string())?;
+    Ok(prepared)
 }
 
 pub fn load_swap(path: &Path) -> Result<SwapMeta, String> {
@@ -333,7 +368,7 @@ pub fn push_font_recent(path: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::document::{apply, Cmd, Shape, Style};
+    use crate::document::{Cmd, Shape, Style, apply};
     use crate::geom::{Geom, Pt};
 
     #[test]

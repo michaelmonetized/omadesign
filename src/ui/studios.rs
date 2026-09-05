@@ -4,203 +4,512 @@ use crate::document::{Cap, Fill, Join, Stroke as DocStroke};
 use crate::geom::Geom;
 use crate::tools::{Persona, Tool};
 use crate::ui::icons::{self, ph};
-use crate::ui::theme::{accent, accent_dim, bg_widget, fg_weak};
+use crate::ui::theme::{accent, accent_soft, bg_panel, bg_widget, border, fg, fg_weak};
 use eframe::egui::{
-    vec2, Color32, ComboBox, Layout, Panel, RichText, ScrollArea, Slider, Stroke, Ui,
+    Color32, ComboBox, Frame, Layout, Margin, Panel, RichText, ScrollArea, Slider, Stroke, Ui, vec2,
 };
 
 pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
     Panel::right("studios")
         .resizable(true)
-        .default_size(272.0)
-        .size_range(240.0..=420.0)
+        .default_size(288.0)
+        .size_range(256.0..=420.0)
+        .frame(
+            Frame::new()
+                .fill(bg_panel())
+                .inner_margin(Margin::symmetric(14, 14)),
+        )
         .show(ui, |ui| {
-            ScrollArea::vertical().show(ui, |ui| {
-                let design = studio.persona == Persona::Design;
-                let motion = studio.persona == Persona::Motion;
-                let pixel = studio.persona == Persona::Pixel;
-                let paint = pixel
-                    || matches!(
-                        studio.tool,
-                        Tool::Brush
-                            | Tool::Eraser
-                            | Tool::Fill
-                            | Tool::Clone
-                            | Tool::Smudge
-                            | Tool::Wand
-                            | Tool::Marquee
-                            | Tool::EllipseMarquee
-                            | Tool::Lasso
-                    );
-                let typing = studio.type_edit.is_some()
-                    || studio.tool == Tool::Text
-                    || studio.selected_type().is_some();
-
-                color_studio(ui, studio);
-                if studio.tool == Tool::Trace {
-                    ui.add_space(8.0);
-                    trace_studio(ui, studio);
-                }
-                if design {
-                    ui.add_space(8.0);
-                    stroke_studio(ui, studio);
-                    ui.add_space(8.0);
-                    transform_studio(ui, studio);
-                    ui.add_space(8.0);
-                    fx_studio(ui, studio);
-                }
-                if motion {
-                    ui.add_space(8.0);
-                    motion_studio(ui, studio);
-                }
-                if design && typing {
-                    ui.add_space(8.0);
-                    character_studio(ui, studio);
-                }
-                if paint {
-                    ui.add_space(8.0);
-                    brush_studio(ui, studio);
-                }
-                ui.add_space(8.0);
-                layers_studio(ui, studio);
-            });
+            ui.spacing_mut().item_spacing = vec2(8.0, 6.0);
+            inspector_title(ui, studio);
+            section_gap(ui);
+            let design = studio.persona == Persona::Design;
+            let motion = studio.persona == Persona::Motion;
+            let paint = studio.persona == Persona::Pixel
+                || matches!(
+                    studio.tool,
+                    Tool::Brush
+                        | Tool::Eraser
+                        | Tool::Fill
+                        | Tool::Clone
+                        | Tool::Smudge
+                        | Tool::Wand
+                );
+            let typing = studio.type_edit.is_some()
+                || studio.tool == Tool::Text
+                || studio.selected_type().is_some();
+            let properties_height = (ui.available_height() - 152.0).max(170.0);
+            ScrollArea::vertical()
+                .id_salt("properties-scroll")
+                .max_height(properties_height)
+                .auto_shrink([false, true])
+                .show(ui, |ui| {
+                    if design && typing {
+                        character_studio(ui, studio);
+                        section_gap(ui);
+                    }
+                    if design
+                        && (!studio.selection.is_empty()
+                            || !studio.artboard_sel.is_empty()
+                            || matches!(
+                                studio.tool,
+                                Tool::Rect | Tool::Polygon | Tool::Star | Tool::Artboard
+                            ))
+                    {
+                        if typing || ui.ctx().viewport_rect().height() < 760.0 {
+                            eframe::egui::CollapsingHeader::new("Layout")
+                                .show(ui, |ui| transform_studio(ui, studio, false));
+                        } else {
+                            transform_studio(ui, studio, true);
+                        }
+                        section_gap(ui);
+                    }
+                    if paint {
+                        brush_studio(ui, studio);
+                        section_gap(ui);
+                    }
+                    color_studio(ui, studio);
+                    if studio.tool == Tool::Trace {
+                        section_gap(ui);
+                        trace_studio(ui, studio);
+                    }
+                    if design {
+                        section_gap(ui);
+                        eframe::egui::CollapsingHeader::new("Effects")
+                            .show(ui, |ui| fx_studio(ui, studio));
+                    }
+                    if motion {
+                        section_gap(ui);
+                        motion_studio(ui, studio);
+                    }
+                });
+            ui.add_space(10.0);
+            ui.separator();
+            ui.add_space(8.0);
+            ScrollArea::vertical()
+                .id_salt("layers-scroll")
+                .auto_shrink([false, false])
+                .show(ui, |ui| layers_studio(ui, studio));
         });
+}
+
+fn section_gap(ui: &mut Ui) {
+    ui.add_space(12.0);
 }
 
 fn heading(ui: &mut Ui, title: &str) {
-    ui.label(RichText::new(title).strong().size(12.0).color(accent()));
-    ui.add_space(4.0);
+    ui.label(RichText::new(title).strong().size(12.0).color(fg()));
+}
+
+fn geometry_icon(geometry: &Geom) -> &'static str {
+    match geometry {
+        Geom::Rect { .. } => ph::RECTANGLE,
+        Geom::Ellipse { .. } => ph::CIRCLE,
+        Geom::Polygon { .. } => ph::HEXAGON,
+        Geom::Star { .. } => ph::STAR,
+        Geom::Line { .. } => ph::LINE_SEGMENT,
+        Geom::Text(_) => ph::TEXT_T,
+        Geom::Path { .. } | Geom::Poly { .. } => ph::PATH,
+    }
+}
+
+fn inspector_title(ui: &mut Ui, studio: &Studio) {
+    let selected = studio
+        .primary()
+        .and_then(|(li, id)| studio.doc.find_shape(li, id));
+    let (icon, name, description) = if let Some(shape) = selected {
+        (
+            geometry_icon(&shape.geom),
+            shape.name.as_str(),
+            if studio.selection.len() > 1 {
+                format!("{} objects selected", studio.selection.len())
+            } else {
+                "Object properties".into()
+            },
+        )
+    } else if !studio.artboard_sel.is_empty() {
+        (ph::FRAME_CORNERS, "Artboard", "Canvas properties".into())
+    } else if let Some(layer) = studio
+        .primary()
+        .and_then(|(li, _)| studio.doc.layers.get(li))
+    {
+        (ph::IMAGES, layer.name.as_str(), "Image properties".into())
+    } else {
+        (
+            if studio.persona == Persona::Pixel {
+                ph::PAINT_BRUSH
+            } else {
+                ph::SHAPES
+            },
+            studio.tool.label(),
+            "Defaults for new objects".into(),
+        )
+    };
+    ui.horizontal(|ui| {
+        let (rect, _) = ui.allocate_exact_size(vec2(34.0, 38.0), eframe::egui::Sense::hover());
+        ui.painter()
+            .rect_filled(rect.shrink2(vec2(0.0, 2.0)), 9.0, accent_soft());
+        ui.painter().text(
+            rect.center(),
+            eframe::egui::Align2::CENTER_CENTER,
+            icon,
+            icons::font(22.0),
+            accent(),
+        );
+        ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 3.0;
+            ui.add(eframe::egui::Label::new(RichText::new(name).size(14.0).strong()).truncate());
+            ui.label(RichText::new(description).size(10.0).color(fg_weak()));
+        });
+    });
+}
+
+fn inspected_style(studio: &Studio) -> &crate::document::Style {
+    studio
+        .primary()
+        .and_then(|(li, id)| studio.doc.find_shape(li, id))
+        .map(|shape| &shape.style)
+        .unwrap_or(&studio.style)
+}
+
+fn number_field<N: eframe::egui::emath::Numeric>(
+    ui: &mut Ui,
+    label: &str,
+    value: &mut N,
+    range: std::ops::RangeInclusive<N>,
+    suffix: &str,
+) -> bool {
+    let width = ui.available_width();
+    Frame::new()
+        .fill(bg_widget())
+        .corner_radius(6.0)
+        .inner_margin(Margin::symmetric(8, 3))
+        .show(ui, |ui| {
+            ui.set_min_width((width - 16.0).max(24.0));
+            ui.spacing_mut().interact_size.y = 20.0;
+            ui.spacing_mut().button_padding = vec2(2.0, 1.0);
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                ui.label(RichText::new(label).size(11.0).color(fg_weak()));
+                ui.with_layout(Layout::right_to_left(eframe::egui::Align::Center), |ui| {
+                    ui.add(
+                        eframe::egui::DragValue::new(value)
+                            .speed(0.5)
+                            .range(range)
+                            .max_decimals(2)
+                            .min_decimals(0)
+                            .suffix(suffix),
+                    )
+                    .changed()
+                })
+                .inner
+            })
+            .inner
+        })
+        .inner
+}
+
+fn bounds_fields(
+    ui: &mut Ui,
+    x: &mut f32,
+    y: &mut f32,
+    width: &mut f32,
+    height: &mut f32,
+    min_size: f32,
+) -> bool {
+    let mut changed = false;
+    ui.columns(2, |columns| {
+        changed |= number_field(&mut columns[0], "X", x, -100000.0..=100000.0, "");
+        changed |= number_field(&mut columns[1], "Y", y, -100000.0..=100000.0, "");
+    });
+    ui.columns(2, |columns| {
+        changed |= number_field(&mut columns[0], "W", width, min_size..=20000.0, "");
+        changed |= number_field(&mut columns[1], "H", height, min_size..=20000.0, "");
+    });
+    changed
+}
+
+fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
+    let style = inspected_style(studio);
+    let source_fill = style.fill.clone();
+    let source_stroke = style.stroke.clone();
+    let original = if fill {
+        match source_fill {
+            Fill::Solid(c) | Fill::Linear { c0: c, .. } | Fill::Radial { c0: c, .. } => Some(c),
+            Fill::None => None,
+        }
+    } else {
+        source_stroke.as_ref().map(|stroke| stroke.color)
+    };
+    if original.is_none() {
+        let label = if fill { "Add fill" } else { "Add stroke" };
+        let mut add = false;
+        ui.horizontal(|ui| {
+            add |= icons::tiny_icon(ui, ph::PLUS, label, false);
+            add |= ui
+                .add(
+                    eframe::egui::Button::new(RichText::new(label).size(11.0).color(fg_weak()))
+                        .frame(false),
+                )
+                .clicked();
+        });
+        if add {
+            let mut color = if fill {
+                source_stroke
+                    .as_ref()
+                    .map(|stroke| stroke.color)
+                    .unwrap_or(studio.brush.color)
+            } else {
+                match &source_fill {
+                    Fill::Solid(color)
+                    | Fill::Linear { c0: color, .. }
+                    | Fill::Radial { c0: color, .. } => *color,
+                    Fill::None => studio.brush.color,
+                }
+            };
+            color.a = 255;
+            studio.fill_active = fill;
+            if fill {
+                studio.set_fill(Fill::Solid(color));
+                studio.brush.color = color;
+            } else {
+                let stroke = DocStroke {
+                    color,
+                    ..Default::default()
+                };
+                studio.style.stroke = Some(stroke.clone());
+                apply_stroke(studio, Some(stroke));
+            }
+        }
+        return;
+    }
+    let mut color = original.unwrap_or(studio.brush.color);
+    let mut changed = false;
+    let mut remove = false;
+    let label = if fill { "Fill" } else { "Stroke" };
+    ui.push_id(label, |ui| {
+        let width = ui.available_width();
+        Frame::new()
+            .fill(bg_widget())
+            .corner_radius(7.0)
+            .inner_margin(Margin::symmetric(7, 3))
+            .show(ui, |ui| {
+                ui.set_min_width(width - 14.0);
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 5.0;
+                    if ui
+                        .add_sized(
+                            vec2(42.0, 22.0),
+                            eframe::egui::Button::new(RichText::new(label).size(11.0).color(
+                                if studio.fill_active == fill {
+                                    fg()
+                                } else {
+                                    fg_weak()
+                                },
+                            ))
+                            .frame(false),
+                        )
+                        .clicked()
+                    {
+                        studio.fill_active = fill;
+                    }
+                    let mut swatch = color.to_egui();
+                    ui.spacing_mut().interact_size = vec2(20.0, 20.0);
+                    if ui.color_edit_button_srgba(&mut swatch).changed() {
+                        color = Rgba::from_egui(swatch);
+                        changed = true;
+                        studio.fill_active = fill;
+                    }
+                    let input_id = ui.make_persistent_id(("hex", studio.primary()));
+                    let mut hex = ui
+                        .data(|d| d.get_temp::<(Option<Rgba>, String)>(input_id))
+                        .filter(|(source, _)| *source == original)
+                        .map(|(_, text)| text)
+                        .unwrap_or_else(|| original.map(|c| c.hex()).unwrap_or_default());
+                    let field_width = (ui.available_width() - 94.0).max(28.0);
+                    let response = ui.add(
+                        eframe::egui::TextEdit::singleline(&mut hex)
+                            .id(input_id)
+                            .desired_width(field_width)
+                            .font(eframe::egui::TextStyle::Small)
+                            .frame(Frame::NONE)
+                            .hint_text("None"),
+                    );
+                    if response.lost_focus()
+                        && let Some(value) = Rgba::parse_hex(&hex)
+                    {
+                        changed |= original != Some(value);
+                        color = value;
+                    }
+                    ui.data_mut(|d| d.insert_temp(input_id, (original, hex)));
+                    let mut opacity = f32::from(color.a) / 255.0 * 100.0;
+                    if ui
+                        .add(
+                            eframe::egui::DragValue::new(&mut opacity)
+                                .range(0.0..=100.0)
+                                .speed(0.5)
+                                .max_decimals(0)
+                                .suffix("%"),
+                        )
+                        .on_hover_text(format!("{label} opacity"))
+                        .changed()
+                    {
+                        color.a = (opacity / 100.0 * 255.0).round() as u8;
+                        changed = true;
+                    }
+                    remove = icons::tiny_icon(
+                        ui,
+                        ph::MINUS,
+                        &format!("Remove {}", label.to_lowercase()),
+                        false,
+                    );
+                });
+            });
+    });
+    if remove {
+        if fill {
+            studio.set_fill(Fill::None);
+        } else {
+            studio.style.stroke = None;
+            apply_stroke(studio, None);
+        }
+    } else if changed {
+        if fill {
+            let fill = match source_fill {
+                Fill::Linear { from, to, c1, .. } => Fill::Linear {
+                    from,
+                    to,
+                    c0: color,
+                    c1,
+                },
+                Fill::Radial { c1, .. } => Fill::Radial { c0: color, c1 },
+                _ => Fill::Solid(color),
+            };
+            studio.set_fill(fill);
+            studio.brush.color = color;
+        } else {
+            let mut stroke = source_stroke.unwrap_or_default();
+            stroke.color = color;
+            studio.style.stroke = Some(stroke.clone());
+            apply_stroke(studio, Some(stroke));
+        }
+    }
 }
 
 fn color_studio(ui: &mut Ui, studio: &mut Studio) {
-    heading(ui, "Colour");
     ui.horizontal(|ui| {
-        if fill_well(ui, studio) {
-            studio.fill_active = true;
-        }
-        if stroke_well(ui, studio) {
-            studio.fill_active = false;
-        }
-        ui.vertical(|ui| {
-            ui.label(
-                RichText::new(if studio.fill_active {
-                    "Editing fill"
-                } else {
-                    "Editing stroke"
-                })
-                .small()
-                .color(fg_weak()),
-            );
-            if ui.small_button("Swap  X").clicked() {
-                studio.swap_fill_stroke();
-            }
-            if ui.small_button("None").clicked() {
-                if studio.fill_active {
-                    studio.set_fill(Fill::None);
-                } else {
-                    studio.style.stroke = None;
-                    apply_stroke(studio, None);
+        heading(ui, "Appearance");
+        ui.with_layout(Layout::right_to_left(eframe::egui::Align::Center), |ui| {
+            ui.menu_button("···", |ui| {
+                if ui.button("Swap fill and stroke   X").clicked() {
+                    studio.style = inspected_style(studio).clone();
+                    studio.swap_fill_stroke();
+                    ui.close();
                 }
-            }
+                if ui.button("Linear gradient").clicked() {
+                    studio.set_fill(Fill::Linear {
+                        from: [0.0, 0.0],
+                        to: [1.0, 0.0],
+                        c0: studio.gradient.0,
+                        c1: studio.gradient.1,
+                    });
+                    ui.close();
+                }
+                if ui.button("Radial gradient").clicked() {
+                    studio.set_fill(Fill::Radial {
+                        c0: studio.gradient.0,
+                        c1: studio.gradient.1,
+                    });
+                    ui.close();
+                }
+                if ui.button("Solid fill").clicked() {
+                    studio.set_fill(Fill::Solid(studio.brush.color));
+                    ui.close();
+                }
+            });
         });
     });
-
-    let mut c = if studio.fill_active {
-        match studio.style.fill {
-            Fill::Solid(c) => c.to_egui(),
-            Fill::Linear { c0, .. } | Fill::Radial { c0, .. } => c0.to_egui(),
-            Fill::None => studio.brush.color.to_egui(),
-        }
-    } else {
-        studio
-            .style
-            .stroke
-            .as_ref()
-            .map(|s| s.color.to_egui())
-            .unwrap_or(Color32::BLACK)
-    };
-    if eframe::egui::widgets::color_picker::color_picker_color32(
-        ui,
-        &mut c,
-        eframe::egui::widgets::color_picker::Alpha::OnlyBlend,
-    ) {
-        let col = Rgba::from_egui(c);
-        if studio.fill_active {
-            studio.set_fill(Fill::Solid(col));
-            studio.brush.color = col;
-        } else {
-            studio.set_stroke_color(col);
-        }
-    }
-
-    ui.horizontal(|ui| {
-        ui.label("#");
-        if ui
-            .add(eframe::egui::TextEdit::singleline(&mut studio.hex_buf).desired_width(80.0))
-            .lost_focus()
-            && let Some(col) = Rgba::parse_hex(&studio.hex_buf)
-        {
-            if studio.fill_active {
-                studio.set_fill(Fill::Solid(col));
-                studio.brush.color = col;
-            } else {
-                studio.set_stroke_color(col);
+    color_row(ui, studio, true);
+    color_row(ui, studio, false);
+    let fill = inspected_style(studio).fill.clone();
+    if let Fill::Linear { c0, c1, .. } | Fill::Radial { c0, c1 } = fill {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("Gradient").small().color(fg_weak()));
+            let mut a = c0.to_egui();
+            let mut b = c1.to_egui();
+            let changed = ui.color_edit_button_srgba(&mut a).changed()
+                | ui.color_edit_button_srgba(&mut b).changed();
+            if changed {
+                let c0 = Rgba::from_egui(a);
+                let c1 = Rgba::from_egui(b);
+                studio.gradient = (c0, c1);
+                studio.set_fill(match fill {
+                    Fill::Linear { from, to, .. } => Fill::Linear { from, to, c0, c1 },
+                    _ => Fill::Radial { c0, c1 },
+                });
             }
-        }
-    });
-    ui.add_space(4.0);
+        });
+    }
     ui.horizontal_wrapped(|ui| {
-        for c in studio.swatches.clone() {
-            let (rect, resp) = ui.allocate_exact_size(vec2(16.0, 16.0), eframe::egui::Sense::click());
-            ui.painter().rect_filled(rect, 2.0, c.to_egui());
-            if resp.clicked() {
-                if studio.fill_active {
-                    studio.set_fill(Fill::Solid(c));
-                    studio.brush.color = c;
-                } else {
-                    studio.set_stroke_color(c);
-                }
+        ui.menu_button("Color library", |ui| {
+            ui.set_width(236.0);
+            heading(ui, "Quick colors");
+            color_grid(ui, studio, false);
+            if !studio.recent.is_empty() {
+                ui.add_space(8.0);
+                heading(ui, "Recently used");
+                color_grid(ui, studio, true);
             }
-            if resp.secondary_clicked() {
-                studio.set_stroke_color(c);
-            }
-        }
-    });
-    if !studio.recent.is_empty() {
-        ui.label(RichText::new("Recent").small().color(fg_weak()));
-        ui.horizontal_wrapped(|ui| {
-            for c in studio.recent.clone() {
-                let (rect, resp) =
-                    ui.allocate_exact_size(vec2(16.0, 16.0), eframe::egui::Sense::click());
-                ui.painter().rect_filled(rect, 2.0, c.to_egui());
-                if resp.clicked() {
-                    studio.set_fill(Fill::Solid(c));
-                }
-            }
+            eframe::egui::CollapsingHeader::new("Saved palettes")
+                .show(ui, |ui| palette_ui(ui, studio));
         });
-    }
-    ui.horizontal(|ui| {
-        let (a, b) = studio.gradient;
-        swatch_btn(ui, a, "Gradient A");
-        swatch_btn(ui, b, "Gradient B");
-        if ui.small_button("Linear").clicked() {
-            studio.set_fill(Fill::Linear {
-                from: [0.0, 0.0],
-                to: [1.0, 0.0],
-                c0: studio.gradient.0,
-                c1: studio.gradient.1,
-            });
-        }
-        if ui.small_button("Radial").clicked() {
-            studio.set_fill(Fill::Radial {
-                c0: studio.gradient.0,
-                c1: studio.gradient.1,
+        if inspected_style(studio).stroke.is_some() {
+            ui.menu_button("Stroke details", |ui| {
+                ui.set_width(236.0);
+                stroke_studio(ui, studio);
             });
         }
     });
-    eframe::egui::CollapsingHeader::new("Palettes")
-        .default_open(false)
-        .show(ui, |ui| palette_ui(ui, studio));
+}
+
+fn color_grid(ui: &mut Ui, studio: &mut Studio, recent: bool) {
+    let count = if recent {
+        studio.recent.len()
+    } else {
+        studio.swatches.len()
+    };
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
+        for index in 0..count {
+            let color = if recent {
+                studio.recent[index]
+            } else {
+                studio.swatches[index]
+            };
+            let (rect, response) =
+                ui.allocate_exact_size(vec2(20.0, 20.0), eframe::egui::Sense::click());
+            ui.painter().rect_filled(rect, 5.0, color.to_egui());
+            ui.painter().rect_stroke(
+                rect,
+                5.0,
+                Stroke::new(1.0, border()),
+                eframe::egui::StrokeKind::Inside,
+            );
+            let response = response.on_hover_text(color.hex());
+            if response.clicked() {
+                if studio.fill_active {
+                    studio.set_fill(Fill::Solid(color));
+                    studio.brush.color = color;
+                } else {
+                    studio.style = inspected_style(studio).clone();
+                    studio.set_stroke_color(color);
+                }
+            } else if response.secondary_clicked() {
+                studio.style = inspected_style(studio).clone();
+                studio.set_stroke_color(color);
+            }
+        }
+    });
 }
 
 fn palette_ui(ui: &mut Ui, studio: &mut Studio) {
@@ -218,7 +527,9 @@ fn palette_ui(ui: &mut Ui, studio: &mut Studio) {
                 studio.palette_name_buf.trim().to_string()
             };
             if crate::palette::validate_name(&name).is_ok() {
-                studio.palettes.push(crate::palette::Palette::new(name.clone(), vec![]));
+                studio
+                    .palettes
+                    .push(crate::palette::Palette::new(name.clone(), vec![]));
                 studio.palette_idx = studio.palettes.len() - 1;
                 studio.palette_name_buf = name;
                 let _ = crate::palette::save(&studio.palettes);
@@ -238,9 +549,7 @@ fn palette_ui(ui: &mut Ui, studio: &mut Studio) {
         .width(180.0)
         .show_ui(ui, |ui| {
             for (i, n) in names.iter().enumerate() {
-                if ui
-                    .selectable_value(&mut studio.palette_idx, i, n)
-                    .clicked()
+                if ui.selectable_value(&mut studio.palette_idx, i, n).clicked()
                     && let Some(p) = studio.palettes.get(i)
                 {
                     studio.palette_name_buf = p.name.clone();
@@ -255,11 +564,11 @@ fn palette_ui(ui: &mut Ui, studio: &mut Studio) {
         );
         if ui.small_button("Rename").clicked() {
             let new_name = studio.palette_name_buf.trim().to_string();
-            if crate::palette::validate_name(&new_name).is_ok() {
-                if let Some(p) = studio.palettes.get_mut(studio.palette_idx) {
-                    p.name = new_name;
-                    let _ = crate::palette::save(&studio.palettes);
-                }
+            if crate::palette::validate_name(&new_name).is_ok()
+                && let Some(p) = studio.palettes.get_mut(studio.palette_idx)
+            {
+                p.name = new_name;
+                let _ = crate::palette::save(&studio.palettes);
             }
         }
     });
@@ -270,14 +579,19 @@ fn palette_ui(ui: &mut Ui, studio: &mut Studio) {
                     ui.allocate_exact_size(vec2(16.0, 16.0), eframe::egui::Sense::click());
                 ui.painter().rect_filled(rect, 2.0, c.to_egui());
                 if resp.clicked() {
-                    studio.set_fill(Fill::Solid(c));
-                    studio.brush.color = c;
+                    if studio.fill_active {
+                        studio.set_fill(Fill::Solid(c));
+                        studio.brush.color = c;
+                    } else {
+                        studio.style = inspected_style(studio).clone();
+                        studio.set_stroke_color(c);
+                    }
                 }
                 if resp.secondary_clicked() {
-                    if let Some(p) = studio.palettes.get_mut(studio.palette_idx) {
-                        if idx < p.colors.len() {
-                            p.colors.remove(idx);
-                        }
+                    if let Some(p) = studio.palettes.get_mut(studio.palette_idx)
+                        && idx < p.colors.len()
+                    {
+                        p.colors.remove(idx);
                     }
                     let _ = crate::palette::save(&studio.palettes);
                 }
@@ -285,7 +599,7 @@ fn palette_ui(ui: &mut Ui, studio: &mut Studio) {
         });
         ui.horizontal(|ui| {
             if ui.small_button("+ Fill").clicked() {
-                let col = match studio.style.fill {
+                let col = match inspected_style(studio).fill {
                     Fill::Solid(c) => c,
                     Fill::Linear { c0, .. } | Fill::Radial { c0, .. } => c0,
                     Fill::None => studio.brush.color,
@@ -306,126 +620,50 @@ fn palette_ui(ui: &mut Ui, studio: &mut Studio) {
         });
         if pal.colors.is_empty() {
             ui.label(
-                RichText::new("Empty. + Fill adds the current colour. Right-click a swatch to remove.")
-                    .small()
-                    .color(fg_weak()),
+                RichText::new(
+                    "Empty. + Fill adds the current colour. Right-click a swatch to remove.",
+                )
+                .small()
+                .color(fg_weak()),
             );
         }
     }
 }
 
-fn swatch_btn(ui: &mut Ui, c: Rgba, tip: &str) {
-    let (rect, resp) = ui.allocate_exact_size(vec2(22.0, 22.0), eframe::egui::Sense::click());
-    ui.painter().rect_filled(rect, 3.0, c.to_egui());
-    let _ = resp.on_hover_text(tip);
-}
-
-fn fill_well(ui: &mut Ui, studio: &mut Studio) -> bool {
-    let c = match studio.style.fill {
-        Fill::Solid(c) => c.to_egui(),
-        Fill::Linear { c0, .. } | Fill::Radial { c0, .. } => c0.to_egui(),
-        Fill::None => Color32::TRANSPARENT,
-    };
-    let (rect, resp) = ui.allocate_exact_size(vec2(36.0, 36.0), eframe::egui::Sense::click());
-    ui.painter().rect_filled(rect, 4.0, bg_widget());
-    ui.painter().rect_filled(rect.shrink(4.0), 3.0, c);
-    let stroke_c = if studio.fill_active {
-        accent()
-    } else {
-        accent_dim()
-    };
-    ui.painter().rect_stroke(
-        rect,
-        4.0,
-        Stroke::new(if studio.fill_active { 2.0 } else { 1.0 }, stroke_c),
-        eframe::egui::StrokeKind::Middle,
-    );
-    resp.on_hover_text("Fill").clicked()
-}
-
-fn stroke_well(ui: &mut Ui, studio: &mut Studio) -> bool {
-    let c = studio
-        .style
-        .stroke
-        .as_ref()
-        .map(|s| s.color.to_egui())
-        .unwrap_or(Color32::TRANSPARENT);
-    let (rect, resp) = ui.allocate_exact_size(vec2(28.0, 28.0), eframe::egui::Sense::click());
-    ui.painter().rect_stroke(
-        rect.shrink(3.0),
-        3.0,
-        Stroke::new(3.0, c),
-        eframe::egui::StrokeKind::Middle,
-    );
-    if !studio.fill_active {
-        ui.painter().rect_stroke(
-            rect,
-            4.0,
-            Stroke::new(2.0, accent()),
-            eframe::egui::StrokeKind::Middle,
-        );
-    }
-    resp.on_hover_text("Stroke").clicked()
-}
-
 fn stroke_studio(ui: &mut Ui, studio: &mut Studio) {
-    heading(ui, "Stroke");
-    let mut width = studio.style.stroke.as_ref().map(|s| s.width).unwrap_or(0.0);
-    if ui
-        .add(Slider::new(&mut width, 0.0..=64.0).text("Width"))
-        .changed()
-    {
-        let mut st = studio.style.stroke.clone().unwrap_or_default();
-        st.width = width;
-        studio.style.stroke = if width <= 0.01 { None } else { Some(st.clone()) };
-        apply_stroke(studio, studio.style.stroke.clone());
-    }
+    let mut stroke = inspected_style(studio).stroke.clone().unwrap_or_default();
+    let mut changed = number_field(ui, "Width", &mut stroke.width, 0.0..=64.0, " px");
     ui.horizontal(|ui| {
+        ui.label(RichText::new("Ends").small().color(fg_weak()));
         for (cap, label) in [
-            (Cap::Butt, "Butt"),
+            (Cap::Butt, "Flat"),
             (Cap::Round, "Round"),
             (Cap::Square, "Square"),
         ] {
-            if ui
-                .selectable_label(
-                    studio.style.stroke.as_ref().map(|s| s.cap) == Some(cap),
-                    label,
-                )
-                .clicked()
-            {
-                if let Some(st) = &mut studio.style.stroke {
-                    st.cap = cap;
-                }
-                apply_stroke(studio, studio.style.stroke.clone());
-            }
+            changed |= ui.selectable_value(&mut stroke.cap, cap, label).changed();
         }
     });
     ui.horizontal(|ui| {
+        ui.label(RichText::new("Joins").small().color(fg_weak()));
         for (join, label) in [
-            (Join::Miter, "Miter"),
+            (Join::Miter, "Sharp"),
             (Join::Round, "Round"),
             (Join::Bevel, "Bevel"),
         ] {
-            if ui
-                .selectable_label(
-                    studio.style.stroke.as_ref().map(|s| s.join) == Some(join),
-                    label,
-                )
-                .clicked()
-            {
-                if let Some(st) = &mut studio.style.stroke {
-                    st.join = join;
-                }
-                apply_stroke(studio, studio.style.stroke.clone());
-            }
+            changed |= ui.selectable_value(&mut stroke.join, join, label).changed();
         }
     });
-    let dashed = studio.style.stroke.as_ref().and_then(|s| s.dash).is_some();
-    let mut d = dashed;
-    if ui.checkbox(&mut d, "Dashed").changed() {
-        if let Some(st) = &mut studio.style.stroke {
-            st.dash = if d { Some((6.0, 4.0)) } else { None };
-        }
+    let mut dashed = stroke.dash.is_some();
+    if ui.checkbox(&mut dashed, "Dashed line").changed() {
+        stroke.dash = if dashed { Some((6.0, 4.0)) } else { None };
+        changed = true;
+    }
+    if changed {
+        studio.style.stroke = if stroke.width <= 0.01 {
+            None
+        } else {
+            Some(stroke)
+        };
         apply_stroke(studio, studio.style.stroke.clone());
     }
 }
@@ -446,62 +684,68 @@ fn apply_stroke(studio: &mut Studio, stroke: Option<DocStroke>) {
 }
 
 fn character_studio(ui: &mut Ui, studio: &mut Studio) {
-    heading(ui, "Character");
+    heading(ui, "Typography");
     let live = studio.selected_type();
     let font = live
         .as_ref()
         .map(|t| t.font.clone())
         .unwrap_or_else(|| studio.text_font.clone());
     let label = crate::text::label_for(&font);
-    ui.label(RichText::new(&label).small().strong());
-    ui.add(
-        eframe::egui::TextEdit::singleline(&mut studio.font_query)
-            .hint_text("Search fonts")
-            .desired_width(220.0),
-    );
-    let q = studio.font_query.to_ascii_lowercase();
-    let recents = studio.font_recents.clone();
-    let used = studio.used_fonts();
-    let all = crate::text::all_fonts();
     let mut chosen = font.clone();
-    ScrollArea::vertical()
-        .id_salt("font-list")
-        .max_height(180.0)
-        .show(ui, |ui| {
-            if !recents.is_empty() {
-                ui.label(RichText::new("Recents").small().color(fg_weak()));
-                for p in recents.iter().take(5) {
-                    let name = crate::text::label_for(p);
-                    if ui.selectable_label(*p == font, &name).clicked() {
-                        chosen = p.clone();
+    let font_button = ui.add_sized(
+        vec2(ui.available_width(), 28.0),
+        eframe::egui::Button::new(RichText::new(&label).size(12.0)).truncate(),
+    );
+    eframe::egui::Popup::menu(&font_button).show(|ui| {
+        ui.set_width(260.0);
+        ui.add(
+            eframe::egui::TextEdit::singleline(&mut studio.font_query)
+                .hint_text("Search fonts")
+                .desired_width(220.0),
+        );
+        let q = studio.font_query.to_ascii_lowercase();
+        let recents = studio.font_recents.clone();
+        let used = studio.used_fonts();
+        let all = crate::text::all_fonts_cached();
+        ScrollArea::vertical()
+            .id_salt("font-list")
+            .max_height(180.0)
+            .show(ui, |ui| {
+                if !recents.is_empty() {
+                    ui.label(RichText::new("Recents").small().color(fg_weak()));
+                    for p in recents.iter().take(5) {
+                        let name = crate::text::label_for(p);
+                        if ui.selectable_label(*p == font, &name).clicked() {
+                            chosen = p.clone();
+                        }
                     }
                 }
-            }
-            if !used.is_empty() {
-                ui.label(RichText::new("Used in document").small().color(fg_weak()));
-                for p in &used {
-                    let name = crate::text::label_for(p);
-                    if ui.selectable_label(*p == font, &name).clicked() {
-                        chosen = p.clone();
+                if !used.is_empty() {
+                    ui.label(RichText::new("Used in document").small().color(fg_weak()));
+                    for p in &used {
+                        let name = crate::text::label_for(p);
+                        if ui.selectable_label(*p == font, &name).clicked() {
+                            chosen = p.clone();
+                        }
                     }
                 }
-            }
-            ui.label(RichText::new("All").small().color(fg_weak()));
-            for f in &all {
-                if !q.is_empty() && !f.name.to_ascii_lowercase().contains(&q) {
-                    continue;
+                ui.label(RichText::new("All").small().color(fg_weak()));
+                for f in all.iter() {
+                    if !q.is_empty() && !f.name.to_ascii_lowercase().contains(&q) {
+                        continue;
+                    }
+                    let path = f.path.to_string_lossy().to_string();
+                    let resp = ui.selectable_label(path == font, &f.name);
+                    if path == font && studio.font_scroll_once {
+                        resp.scroll_to_me(Some(eframe::egui::Align::Center));
+                        studio.font_scroll_once = false;
+                    }
+                    if resp.clicked() {
+                        chosen = path;
+                    }
                 }
-                let path = f.path.to_string_lossy().to_string();
-                let resp = ui.selectable_label(path == font, &f.name);
-                if path == font && studio.font_scroll_once {
-                    resp.scroll_to_me(Some(eframe::egui::Align::Center));
-                    studio.font_scroll_once = false;
-                }
-                if resp.clicked() {
-                    chosen = path;
-                }
-            }
-        });
+            });
+    });
     if chosen != font {
         let path = chosen.clone();
         studio.remember_font(&path);
@@ -514,53 +758,44 @@ fn character_studio(ui: &mut Ui, studio: &mut Studio) {
         .show(ui, |ui| google_fonts_ui(ui, studio));
 
     let mut px = live.as_ref().map(|t| t.px).unwrap_or(studio.text_px);
-    if ui
-        .add(Slider::new(&mut px, 8.0..=400.0).text("Size"))
-        .changed()
-    {
+    if number_field(ui, "Size", &mut px, 8.0..=400.0, " px") {
         studio.patch_type(|t| t.px = px);
     }
     let mut track = live
         .as_ref()
         .map(|t| t.tracking)
         .unwrap_or(studio.text_tracking);
-    if ui
-        .add(Slider::new(&mut track, -40.0..=80.0).text("Tracking"))
-        .changed()
-    {
+    if number_field(ui, "Letter spacing", &mut track, -40.0..=80.0, "") {
         studio.patch_type(|t| t.tracking = track);
     }
     let mut lead = live
         .as_ref()
         .map(|t| t.leading)
         .unwrap_or(studio.text_leading);
-    if ui
-        .add(Slider::new(&mut lead, 0.0..=400.0).text("Leading (0 auto)"))
-        .changed()
-    {
+    if number_field(ui, "Line height", &mut lead, 0.0..=400.0, "") {
         studio.patch_type(|t| t.leading = lead);
     }
-    ui.add_space(4.0);
-    ui.label(RichText::new("OpenType").small().color(fg_weak()));
-    let mut kern = live.as_ref().map(|t| t.kern).unwrap_or(studio.text_kern);
-    let mut liga = live.as_ref().map(|t| t.liga).unwrap_or(studio.text_liga);
-    let mut tnum = live.as_ref().map(|t| t.tnum).unwrap_or(studio.text_tnum);
-    let mut smcp = live.as_ref().map(|t| t.smcp).unwrap_or(studio.text_smcp);
-    ui.horizontal(|ui| {
-        if ui.checkbox(&mut kern, "Kerning").changed() {
-            studio.patch_type(|t| t.kern = kern);
-        }
-        if ui.checkbox(&mut liga, "Ligatures").changed() {
-            studio.patch_type(|t| t.liga = liga);
-        }
-    });
-    ui.horizontal(|ui| {
-        if ui.checkbox(&mut tnum, "Tabular figs").changed() {
-            studio.patch_type(|t| t.tnum = tnum);
-        }
-        if ui.checkbox(&mut smcp, "Small caps").changed() {
-            studio.patch_type(|t| t.smcp = smcp);
-        }
+    eframe::egui::CollapsingHeader::new("OpenType features").show(ui, |ui| {
+        let mut kern = live.as_ref().map(|t| t.kern).unwrap_or(studio.text_kern);
+        let mut liga = live.as_ref().map(|t| t.liga).unwrap_or(studio.text_liga);
+        let mut tnum = live.as_ref().map(|t| t.tnum).unwrap_or(studio.text_tnum);
+        let mut smcp = live.as_ref().map(|t| t.smcp).unwrap_or(studio.text_smcp);
+        ui.horizontal(|ui| {
+            if ui.checkbox(&mut kern, "Kerning").changed() {
+                studio.patch_type(|t| t.kern = kern);
+            }
+            if ui.checkbox(&mut liga, "Ligatures").changed() {
+                studio.patch_type(|t| t.liga = liga);
+            }
+        });
+        ui.horizontal(|ui| {
+            if ui.checkbox(&mut tnum, "Tabular figs").changed() {
+                studio.patch_type(|t| t.tnum = tnum);
+            }
+            if ui.checkbox(&mut smcp, "Small caps").changed() {
+                studio.patch_type(|t| t.smcp = smcp);
+            }
+        });
     });
     if studio.type_edit.is_some() {
         ui.label(
@@ -577,88 +812,135 @@ fn character_studio(ui: &mut Ui, studio: &mut Studio) {
     }
 }
 
+struct DownloadedFont {
+    path: std::path::PathBuf,
+    family: String,
+    document: String,
+    selection: Vec<(usize, u64)>,
+}
+
 fn google_fonts_ui(ui: &mut Ui, studio: &mut Studio) {
-    if !studio.google_catalog_loaded {
-        studio.google_catalog = crate::google_fonts::catalog();
-        studio.google_catalog_loaded = true;
-        studio.google_status = if studio.google_catalog.is_empty() {
-            "offline – bundled list".into()
-        } else {
-            format!("{} families", studio.google_catalog.len())
-        };
+    use crate::ui::jobs;
+    const CATALOG: &str = "google-font-catalog";
+    const DOWNLOAD: &str = "google-font-download";
+    if let Some(result) = jobs::poll::<Vec<crate::google_fonts::GoogleFont>>(ui.ctx(), CATALOG) {
+        match result {
+            Ok(catalog) => {
+                studio.google_status = format!("{} families", catalog.len());
+                studio.google_catalog = catalog;
+            }
+            Err(error) => studio.google_status = error,
+        }
     }
+    if let Some(result) = jobs::poll::<DownloadedFont>(ui.ctx(), DOWNLOAD) {
+        match result {
+            Ok(font) => {
+                if studio.swap_id == font.document && studio.selection == font.selection {
+                    let chosen = font.path.to_string_lossy().into_owned();
+                    studio.patch_type(|text| text.font = chosen.clone());
+                    studio.text_font = chosen;
+                }
+                studio.google_status = format!("Installed {}", font.family);
+            }
+            Err(error) => studio.google_status = error,
+        }
+    }
+    if !studio.google_catalog_loaded {
+        studio.google_catalog_loaded = true;
+        studio.google_status = "Loading font families…".into();
+        jobs::start(ui.ctx(), CATALOG, || Ok(crate::google_fonts::catalog()));
+    }
+    let loading = jobs::is_running::<Vec<crate::google_fonts::GoogleFont>>(ui.ctx(), CATALOG);
+    let downloading = jobs::is_running::<DownloadedFont>(ui.ctx(), DOWNLOAD);
     ui.horizontal(|ui| {
         ui.add(
             eframe::egui::TextEdit::singleline(&mut studio.google_query)
-                .hint_text("Search Inter, mono…")
+                .hint_text("Search fonts")
                 .desired_width(140.0),
         );
-        if ui.small_button("Refresh").clicked() {
-            studio.google_catalog = crate::google_fonts::catalog();
-            studio.google_status = format!("{} families", studio.google_catalog.len());
+        if ui
+            .add_enabled(!loading, eframe::egui::Button::new("Refresh"))
+            .clicked()
+        {
+            studio.google_status = "Refreshing font families…".into();
+            jobs::start(ui.ctx(), CATALOG, crate::google_fonts::fetch_catalog);
         }
     });
     ui.horizontal(|ui| {
         ui.label(RichText::new("Variant").small().color(fg_weak()));
         ComboBox::from_id_salt("google-variant")
-            .selected_text(studio.google_variant.clone())
+            .selected_text(&studio.google_variant)
             .width(100.0)
             .show_ui(ui, |ui| {
-                for v in ["regular", "italic", "700", "700italic"] {
-                    ui.selectable_value(&mut studio.google_variant, v.to_string(), v);
+                for (variant, label) in [
+                    ("regular", "Regular"),
+                    ("italic", "Italic"),
+                    ("700", "Bold"),
+                    ("700italic", "Bold italic"),
+                ] {
+                    ui.selectable_value(&mut studio.google_variant, variant.to_owned(), label);
                 }
             });
     });
-    let filtered: Vec<crate::google_fonts::GoogleFont> =
-        crate::google_fonts::search(&studio.google_catalog, &studio.google_query)
-            .into_iter()
-            .cloned()
-            .collect();
-    ScrollArea::vertical().max_height(160.0).show(ui, |ui| {
-        for f in filtered {
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(&f.family).small());
-                ui.label(RichText::new(&f.category).small().color(fg_weak()));
-                let installed =
-                    crate::google_fonts::is_installed(&f.family, &studio.google_variant);
-                if installed {
-                    if ui.small_button("Use").clicked() {
-                        let found = crate::text::all_fonts()
-                            .iter()
-                            .find(|ff| {
-                                ff.name
-                                    .to_ascii_lowercase()
-                                    .contains(&f.family.to_ascii_lowercase())
-                            })
-                            .map(|ff| ff.path.to_string_lossy().to_string());
-                        let chosen = found.unwrap_or_else(|| {
-                            crate::google_fonts::installed_path(&f.family, &studio.google_variant)
-                                .to_string_lossy()
-                                .to_string()
-                        });
-                        studio.patch_type(|t| t.font = chosen);
-                        studio.google_status = format!("using {}", f.family);
-                    }
-                } else if ui.small_button("Download").clicked() {
-                    studio.google_status =
-                        format!("Downloading {} {}…", f.family, studio.google_variant);
-                    let fam = f.family.clone();
-                    let var = studio.google_variant.clone();
-                    let cat = studio.google_catalog.clone();
-                    match crate::google_fonts::download(&fam, &var, &cat) {
-                        Ok(p) => {
-                            let chosen = p.to_string_lossy().to_string();
-                            studio.patch_type(|t| t.font = chosen);
-                            studio.google_status = format!("Installed {}", fam);
+    let mut use_font = None;
+    let mut download = None;
+    let filtered = crate::google_fonts::search(&studio.google_catalog, &studio.google_query);
+    let installed_fonts = crate::text::all_fonts_cached();
+    ScrollArea::vertical()
+        .id_salt("google-font-results")
+        .max_height(180.0)
+        .show(ui, |ui| {
+            for font in filtered {
+                ui.horizontal(|ui| {
+                    ui.add(
+                        eframe::egui::Label::new(RichText::new(&font.family).small()).truncate(),
+                    );
+                    let path =
+                        crate::google_fonts::installed_path(&font.family, &studio.google_variant);
+                    let installed = installed_fonts.iter().any(|face| face.path == path);
+                    ui.with_layout(Layout::right_to_left(eframe::egui::Align::Center), |ui| {
+                        if installed {
+                            if ui.small_button("Use").clicked() {
+                                use_font = Some((font.family.clone(), path));
+                            }
+                        } else if ui
+                            .add_enabled(!downloading, eframe::egui::Button::new("Download"))
+                            .clicked()
+                        {
+                            download = Some(font.clone());
                         }
-                        Err(e) => studio.google_status = e,
-                    }
-                }
-            });
-        }
-    });
+                    });
+                });
+            }
+        });
+    if let Some((family, path)) = use_font {
+        let chosen = path.to_string_lossy().into_owned();
+        studio.patch_type(|text| text.font = chosen.clone());
+        studio.text_font = chosen;
+        studio.google_status = format!("Using {family}");
+    }
+    if let Some(font) = download {
+        let variant = studio.google_variant.clone();
+        let document = studio.swap_id.clone();
+        let selection = studio.selection.clone();
+        studio.google_status = format!("Downloading {}…", font.family);
+        jobs::start(ui.ctx(), DOWNLOAD, move || {
+            let path =
+                crate::google_fonts::download(&font.family, &variant, std::slice::from_ref(&font))?;
+            Ok(DownloadedFont {
+                path,
+                family: font.family,
+                document,
+                selection,
+            })
+        });
+    }
     if !studio.google_status.is_empty() {
-        ui.label(RichText::new(&studio.google_status).small().color(accent()));
+        ui.label(
+            RichText::new(&studio.google_status)
+                .small()
+                .color(fg_weak()),
+        );
     }
 }
 
@@ -671,7 +953,11 @@ fn motion_studio(ui: &mut Ui, studio: &mut Studio) {
     );
     ui.add_space(4.0);
     if studio.selection.is_empty() {
-        ui.label(RichText::new("Select a shape, then Key.").small().color(fg_weak()));
+        ui.label(
+            RichText::new("Select a shape, then Key.")
+                .small()
+                .color(fg_weak()),
+        );
         return;
     }
     let Some((_, id)) = studio.primary() else {
@@ -679,13 +965,21 @@ fn motion_studio(ui: &mut Ui, studio: &mut Studio) {
     };
     let pose = studio.live_pose(id);
     ui.horizontal(|ui| {
-        ui.label(RichText::new(format!("X  {:+.1}", pose.dx)).small().monospace());
+        ui.label(
+            RichText::new(format!("X  {:+.1}", pose.dx))
+                .small()
+                .monospace(),
+        );
         if ui.small_button("Key").clicked() {
             studio.key_prop(id, crate::motion::Prop::X, pose.dx);
         }
     });
     ui.horizontal(|ui| {
-        ui.label(RichText::new(format!("Y  {:+.1}", pose.dy)).small().monospace());
+        ui.label(
+            RichText::new(format!("Y  {:+.1}", pose.dy))
+                .small()
+                .monospace(),
+        );
         if ui.small_button("Key").clicked() {
             studio.key_prop(id, crate::motion::Prop::Y, pose.dy);
         }
@@ -701,7 +995,11 @@ fn motion_studio(ui: &mut Ui, studio: &mut Studio) {
         }
     });
     ui.horizontal(|ui| {
-        ui.label(RichText::new(format!("S  {:.2}", pose.scale)).small().monospace());
+        ui.label(
+            RichText::new(format!("S  {:.2}", pose.scale))
+                .small()
+                .monospace(),
+        );
         if ui.small_button("Key").clicked() {
             studio.key_prop(id, crate::motion::Prop::Scale, pose.scale);
         }
@@ -714,7 +1012,10 @@ fn motion_studio(ui: &mut Ui, studio: &mut Studio) {
             .unwrap_or(1.0)
     });
     ui.horizontal(|ui| {
-        if ui.add(Slider::new(&mut op, 0.0..=1.0).text("Opacity")).changed() {
+        if ui
+            .add(Slider::new(&mut op, 0.0..=1.0).text("Opacity"))
+            .changed()
+        {
             studio.key_prop(id, crate::motion::Prop::Opacity, op);
         }
     });
@@ -722,7 +1023,11 @@ fn motion_studio(ui: &mut Ui, studio: &mut Studio) {
 
 fn artboard_transform(ui: &mut Ui, studio: &mut Studio) {
     let Some(id) = studio.artboard_sel.first().copied() else {
-        ui.label(RichText::new("Draw or click an artboard").small().color(fg_weak()));
+        ui.label(
+            RichText::new("Draw or click an artboard")
+                .small()
+                .color(fg_weak()),
+        );
         if ui.button("Wrap selection in artboard").clicked() {
             studio.wrap_selection_artboard();
         }
@@ -756,20 +1061,8 @@ fn artboard_transform(ui: &mut Ui, studio: &mut Studio) {
     let mut w = a.size.x;
     let mut h = a.size.y;
     let mut deg = a.rotation.to_degrees();
-    let mut changed = false;
-    ui.horizontal(|ui| {
-        changed |= ui.add(eframe::egui::DragValue::new(&mut x).speed(1.0).prefix("X  ")).changed();
-        changed |= ui.add(eframe::egui::DragValue::new(&mut y).speed(1.0).prefix("Y  ")).changed();
-    });
-    ui.horizontal(|ui| {
-        changed |= ui
-            .add(eframe::egui::DragValue::new(&mut w).speed(1.0).range(8.0..=20000.0).prefix("W  "))
-            .changed();
-        changed |= ui
-            .add(eframe::egui::DragValue::new(&mut h).speed(1.0).range(8.0..=20000.0).prefix("H  "))
-            .changed();
-    });
-    changed |= ui.add(Slider::new(&mut deg, -180.0..=180.0).text("Rotate°")).changed();
+    let mut changed = bounds_fields(ui, &mut x, &mut y, &mut w, &mut h, 8.0);
+    changed |= number_field(ui, "Rotation", &mut deg, -180.0..=180.0, "°");
     if changed {
         let orig = a.clone();
         a.origin = crate::geom::Pt::new(x, y);
@@ -801,26 +1094,13 @@ fn raster_transform(ui: &mut Ui, studio: &mut Studio, li: usize) {
     let Some((origin, size, rot)) = layer.kind.raster_xform() else {
         return;
     };
-    ui.label(RichText::new(&layer.name).small().color(fg_weak()));
     let mut x = origin.x;
     let mut y = origin.y;
     let mut w = size.x;
     let mut h = size.y;
     let mut deg = rot.to_degrees();
-    let mut changed = false;
-    ui.horizontal(|ui| {
-        changed |= ui.add(eframe::egui::DragValue::new(&mut x).speed(1.0).prefix("X  ")).changed();
-        changed |= ui.add(eframe::egui::DragValue::new(&mut y).speed(1.0).prefix("Y  ")).changed();
-    });
-    ui.horizontal(|ui| {
-        changed |= ui
-            .add(eframe::egui::DragValue::new(&mut w).speed(1.0).range(1.0..=20000.0).prefix("W  "))
-            .changed();
-        changed |= ui
-            .add(eframe::egui::DragValue::new(&mut h).speed(1.0).range(1.0..=20000.0).prefix("H  "))
-            .changed();
-    });
-    changed |= ui.add(Slider::new(&mut deg, -180.0..=180.0).text("Rotate°")).changed();
+    let mut changed = bounds_fields(ui, &mut x, &mut y, &mut w, &mut h, 1.0);
+    changed |= number_field(ui, "Rotation", &mut deg, -180.0..=180.0, "°");
     if changed {
         studio.commit(crate::document::Cmd::SetRasterXform {
             layer: li,
@@ -834,256 +1114,227 @@ fn raster_transform(ui: &mut Ui, studio: &mut Studio, li: usize) {
     }
 }
 
-fn transform_studio(ui: &mut Ui, studio: &mut Studio) {
-    heading(ui, "Transform");
-    if studio.tool == crate::tools::Tool::Artboard
+fn edit_shape_geometry(studio: &mut Studio, layer: usize, id: u64, edit: impl FnOnce(&mut Geom)) {
+    let Some(shape) = studio.doc.find_shape(layer, id) else {
+        return;
+    };
+    let mut after = shape.geom.clone();
+    edit(&mut after);
+    studio.commit(crate::document::Cmd::SetGeom {
+        layer,
+        id,
+        before: shape.geom.clone(),
+        after,
+        rot_before: shape.rotation,
+        rot_after: shape.rotation,
+    });
+}
+
+fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
+    if title {
+        heading(ui, "Layout");
+    }
+    if studio.tool == Tool::Artboard
         || (studio.selection.is_empty() && !studio.artboard_sel.is_empty())
     {
         artboard_transform(ui, studio);
         return;
     }
     if studio.selection.is_empty() {
-        ui.label(RichText::new("Nothing selected").small().color(fg_weak()));
-        ui.add(Slider::new(&mut studio.polygon_sides, 3..=12).text("Sides"));
-        ui.add(Slider::new(&mut studio.star_points, 3..=12).text("Star points"));
-        ui.add(Slider::new(&mut studio.star_inner, 0.15..=0.8).text("Star inner"));
-        ui.add(Slider::new(&mut studio.rect_radius, 0.0..=80.0).text("Corner radius"));
+        match studio.tool {
+            Tool::Polygon => {
+                number_field(ui, "Sides", &mut studio.polygon_sides, 3..=12, "");
+            }
+            Tool::Star => {
+                number_field(ui, "Points", &mut studio.star_points, 3..=12, "");
+                number_field(ui, "Inner radius", &mut studio.star_inner, 0.15..=0.8, "");
+            }
+            Tool::Rect => {
+                number_field(
+                    ui,
+                    "Corner radius",
+                    &mut studio.rect_radius,
+                    0.0..=80.0,
+                    " px",
+                );
+            }
+            _ => {}
+        }
         return;
     }
-    let Some((li, id)) = studio.primary() else {
+    let Some((layer, id)) = studio.primary() else {
         return;
     };
     if id == crate::document::RASTER_ID {
-        raster_transform(ui, studio, li);
+        raster_transform(ui, studio, layer);
         return;
     }
-    let Some(shape) = studio.doc.find_shape(li, id).cloned() else {
+    let Some(shape) = studio.doc.find_shape(layer, id) else {
         return;
     };
-    let b = shape.world_bbox();
-    ui.label(
-        RichText::new(format!(
-            "{}  {:.0} × {:.0}",
-            shape.name,
-            b.width(),
-            b.height()
-        ))
-        .small()
-        .color(fg_weak()),
-    );
-    {
-        let mut x = b.min.x;
-        let mut y = b.min.y;
-        let mut w = b.width().max(1.0);
-        let mut h = b.height().max(1.0);
-        let mut changed = false;
-        ui.horizontal(|ui| {
-            changed |= ui
-                .add(eframe::egui::DragValue::new(&mut x).speed(1.0).prefix("X  "))
-                .changed();
-            changed |= ui
-                .add(eframe::egui::DragValue::new(&mut y).speed(1.0).prefix("Y  "))
-                .changed();
-        });
-        ui.horizontal(|ui| {
-            changed |= ui
-                .add(
-                    eframe::egui::DragValue::new(&mut w)
-                        .speed(1.0)
-                        .range(1.0..=10000.0)
-                        .prefix("W  "),
-                )
-                .changed();
-            changed |= ui
-                .add(
-                    eframe::egui::DragValue::new(&mut h)
-                        .speed(1.0)
-                        .range(1.0..=10000.0)
-                        .prefix("H  "),
-                )
-                .changed();
-        });
-        if changed {
-            let dst = crate::geom::Bounds {
-                min: crate::geom::Pt::new(x, y),
-                max: crate::geom::Pt::new(x + w, y + h),
-            };
-            let mut g = shape.geom.clone();
-            g.map_into(b, dst);
-            studio.commit(crate::document::Cmd::SetGeom {
-                layer: li,
-                id,
-                before: shape.geom.clone(),
-                after: g,
-                rot_before: shape.rotation,
-                rot_after: shape.rotation,
-            });
-        }
-        let mut deg = shape.rotation.to_degrees();
-        if ui
-            .add(Slider::new(&mut deg, -180.0..=180.0).text("Rotate°"))
-            .changed()
-        {
-            studio.commit(crate::document::Cmd::SetGeom {
-                layer: li,
-                id,
-                before: shape.geom.clone(),
-                after: shape.geom.clone(),
-                rot_before: shape.rotation,
-                rot_after: deg.to_radians(),
-            });
-        }
-        ui.horizontal(|ui| {
-            if ui.small_button("Flip H").clicked() {
-                studio.flip_selection(true);
-            }
-            if ui.small_button("Flip V").clicked() {
-                studio.flip_selection(false);
-            }
+    let bounds = shape.world_bbox();
+    let rotation = shape.rotation;
+    let opacity = shape.opacity;
+    let polygon = if let Geom::Polygon { sides, .. } = shape.geom {
+        Some(sides)
+    } else {
+        None
+    };
+    let star = if let Geom::Star { points, inner, .. } = shape.geom {
+        Some((points, inner))
+    } else {
+        None
+    };
+    let radius = if let Geom::Rect { radius, .. } = shape.geom {
+        Some(radius)
+    } else {
+        None
+    };
+    let compound = matches!(&shape.geom, Geom::Poly { contours, .. } if contours.len() > 1);
+    let mut x = bounds.min.x;
+    let mut y = bounds.min.y;
+    let mut width = bounds.width().max(1.0);
+    let mut height = bounds.height().max(1.0);
+    let changed = bounds_fields(ui, &mut x, &mut y, &mut width, &mut height, 1.0);
+    if changed {
+        let destination = crate::geom::Bounds {
+            min: crate::geom::Pt::new(x, y),
+            max: crate::geom::Pt::new(x + width, y + height),
+        };
+        edit_shape_geometry(studio, layer, id, |geometry| {
+            geometry.map_into(bounds, destination)
         });
     }
-    let mut op = shape.opacity;
-    if ui
-        .add(Slider::new(&mut op, 0.0..=1.0).text("Opacity"))
-        .changed()
-    {
-        studio.commit(crate::document::Cmd::SetOpacity {
-            layer: li,
+    let mut degrees = rotation.to_degrees();
+    let mut opacity_percent = opacity * 100.0;
+    let mut rotation_changed = false;
+    let mut opacity_changed = false;
+    ui.columns(2, |columns| {
+        rotation_changed =
+            number_field(&mut columns[0], "Rotate", &mut degrees, -180.0..=180.0, "°");
+        opacity_changed = number_field(
+            &mut columns[1],
+            "Opacity",
+            &mut opacity_percent,
+            0.0..=100.0,
+            "%",
+        );
+    });
+    if rotation_changed && let Some(shape) = studio.doc.find_shape(layer, id) {
+        studio.commit(crate::document::Cmd::SetGeom {
+            layer,
             id,
-            before: shape.opacity,
-            after: op,
+            before: shape.geom.clone(),
+            after: shape.geom.clone(),
+            rot_before: rotation,
+            rot_after: degrees.to_radians(),
         });
     }
-    match &shape.geom {
-        Geom::Polygon { sides, .. } => {
-            let mut n = *sides;
-            if ui.add(Slider::new(&mut n, 3..=16).text("Sides")).changed() {
-                let mut g = shape.geom.clone();
-                if let Geom::Polygon { sides, .. } = &mut g {
-                    *sides = n;
-                }
-                studio.commit(crate::document::Cmd::SetGeom {
-                    layer: li,
-                    id,
-                    before: shape.geom.clone(),
-                    after: g,
-                    rot_before: shape.rotation,
-                    rot_after: shape.rotation,
-                });
-            }
-        }
-        Geom::Star { points, inner, .. } => {
-            let mut n = *points;
-            let mut inn = *inner;
-            if ui.add(Slider::new(&mut n, 3..=16).text("Points")).changed()
-                || ui
-                    .add(Slider::new(&mut inn, 0.15..=0.85).text("Inner"))
-                    .changed()
-            {
-                let mut g = shape.geom.clone();
-                if let Geom::Star { points, inner, .. } = &mut g {
-                    *points = n;
-                    *inner = inn;
-                }
-                studio.commit(crate::document::Cmd::SetGeom {
-                    layer: li,
-                    id,
-                    before: shape.geom.clone(),
-                    after: g,
-                    rot_before: shape.rotation,
-                    rot_after: shape.rotation,
-                });
-            }
-        }
-        Geom::Rect { radius, .. } => {
-            let mut r = *radius;
-            if ui
-                .add(Slider::new(&mut r, 0.0..=200.0).text("Radius"))
-                .changed()
-            {
-                let mut g = shape.geom.clone();
-                if let Geom::Rect { radius, .. } = &mut g {
-                    *radius = r;
-                }
-                studio.commit(crate::document::Cmd::SetGeom {
-                    layer: li,
-                    id,
-                    before: shape.geom.clone(),
-                    after: g,
-                    rot_before: shape.rotation,
-                    rot_after: shape.rotation,
-                });
-            }
-        }
-        _ => {}
+    if opacity_changed {
+        studio.commit(crate::document::Cmd::SetOpacity {
+            layer,
+            id,
+            before: opacity,
+            after: opacity_percent / 100.0,
+        });
     }
     ui.horizontal(|ui| {
-        if icons::tiny_icon(ui, ph::ALIGN_LEFT, "Align left", false) {
-            studio.align_sel(crate::align::Align::Left);
+        ui.label(RichText::new("Flip").small().color(fg_weak()));
+        if ui.small_button("Horizontal").clicked() {
+            studio.flip_selection(true);
         }
-        if icons::tiny_icon(ui, ph::ALIGN_CENTER_H, "Align centre", false) {
-            studio.align_sel(crate::align::Align::CenterX);
-        }
-        if icons::tiny_icon(ui, ph::ALIGN_RIGHT, "Align right", false) {
-            studio.align_sel(crate::align::Align::Right);
-        }
-        if icons::tiny_icon(ui, ph::ALIGN_TOP, "Align top", false) {
-            studio.align_sel(crate::align::Align::Top);
-        }
-        if icons::tiny_icon(ui, ph::ALIGN_CENTER_V, "Align middle", false) {
-            studio.align_sel(crate::align::Align::CenterY);
-        }
-        if icons::tiny_icon(ui, ph::ALIGN_BOTTOM, "Align bottom", false) {
-            studio.align_sel(crate::align::Align::Bottom);
+        if ui.small_button("Vertical").clicked() {
+            studio.flip_selection(false);
         }
     });
-    ui.add_space(4.0);
-    let n = studio.selection.len();
-    let is_compound =
-        matches!(&shape.geom, crate::geom::Geom::Poly { contours, .. } if contours.len() > 1);
-    ui.horizontal_wrapped(|ui| {
-        let can = n >= 2;
-        if ui
-            .add_enabled(can, eframe::egui::Button::new("Union"))
-            .clicked()
-        {
-            studio.apply_boolean_multi(crate::boolean::BoolOp::Union);
+    if let Some(mut count) = polygon
+        && number_field(ui, "Sides", &mut count, 3..=16, "")
+    {
+        edit_shape_geometry(studio, layer, id, |geometry| {
+            if let Geom::Polygon { sides, .. } = geometry {
+                *sides = count;
+            }
+        });
+    }
+    if let Some((mut count, mut radius)) = star {
+        let mut changed = false;
+        let mut inner_percent = radius * 100.0;
+        ui.columns(2, |columns| {
+            changed |= number_field(&mut columns[0], "Points", &mut count, 3..=16, "");
+            changed |= number_field(
+                &mut columns[1],
+                "Inner",
+                &mut inner_percent,
+                15.0..=85.0,
+                "%",
+            );
+        });
+        radius = inner_percent / 100.0;
+        if changed {
+            edit_shape_geometry(studio, layer, id, |geometry| {
+                if let Geom::Star { points, inner, .. } = geometry {
+                    *points = count;
+                    *inner = radius;
+                }
+            });
         }
-        if ui
-            .add_enabled(can, eframe::egui::Button::new("Subtract"))
-            .clicked()
-        {
-            studio.apply_boolean_multi(crate::boolean::BoolOp::Subtract);
-        }
-        if ui
-            .add_enabled(can, eframe::egui::Button::new("Intersect"))
-            .clicked()
-        {
-            studio.apply_boolean_multi(crate::boolean::BoolOp::Intersect);
-        }
-        if ui
-            .add_enabled(can, eframe::egui::Button::new("Xor"))
-            .clicked()
-        {
-            studio.apply_boolean_multi(crate::boolean::BoolOp::Xor);
-        }
-    });
-    ui.horizontal(|ui| {
-        if ui
-            .add_enabled(n >= 2, eframe::egui::Button::new("Combine"))
-            .on_hover_text("Ctrl+G")
-            .clicked()
-        {
-            studio.combine_selected();
-        }
-        if ui
-            .add_enabled(is_compound, eframe::egui::Button::new("Release"))
+    }
+    if let Some(mut value) = radius
+        && number_field(ui, "Corner radius", &mut value, 0.0..=200.0, " px")
+    {
+        edit_shape_geometry(studio, layer, id, |geometry| {
+            if let Geom::Rect { radius, .. } = geometry {
+                *radius = value;
+            }
+        });
+    }
+    if studio.selection.len() >= 2 {
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            for (icon, tip, alignment) in [
+                (ph::ALIGN_LEFT, "Align left", crate::align::Align::Left),
+                (
+                    ph::ALIGN_CENTER_H,
+                    "Align centre",
+                    crate::align::Align::CenterX,
+                ),
+                (ph::ALIGN_RIGHT, "Align right", crate::align::Align::Right),
+                (ph::ALIGN_TOP, "Align top", crate::align::Align::Top),
+                (
+                    ph::ALIGN_CENTER_V,
+                    "Align middle",
+                    crate::align::Align::CenterY,
+                ),
+                (
+                    ph::ALIGN_BOTTOM,
+                    "Align bottom",
+                    crate::align::Align::Bottom,
+                ),
+            ] {
+                if icons::tiny_icon(ui, icon, tip, false) {
+                    studio.align_sel(alignment);
+                }
+            }
+        });
+        ui.horizontal_wrapped(|ui| {
+            for operation in crate::boolean::BoolOp::all() {
+                if ui.small_button(operation.name()).clicked() {
+                    studio.apply_boolean_multi(operation);
+                }
+            }
+            if ui.small_button("Combine").on_hover_text("Ctrl+G").clicked() {
+                studio.combine_selected();
+            }
+        });
+    }
+    if compound
+        && ui
+            .small_button("Release compound")
             .on_hover_text("Ctrl+Shift+G")
             .clicked()
-        {
-            studio.release_compound();
-        }
-    });
+    {
+        studio.release_compound();
+    }
 }
 
 fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &str) {
@@ -1121,7 +1372,7 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
             });
             match fx {
                 crate::filter::Fx::Blur { std } => {
-                    ui.add(Slider::new(std, 0.0..=80.0).text("stdDeviation"));
+                    ui.add(Slider::new(std, 0.0..=80.0).text("Blur"));
                 }
                 crate::filter::Fx::Shadow {
                     dx,
@@ -1135,9 +1386,9 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
                     blur,
                     color,
                 } => {
-                    ui.add(Slider::new(dx, -80.0..=80.0).text("dx"));
-                    ui.add(Slider::new(dy, -80.0..=80.0).text("dy"));
-                    ui.add(Slider::new(blur, 0.0..=80.0).text("stdDeviation"));
+                    ui.add(Slider::new(dx, -80.0..=80.0).text("Offset X"));
+                    ui.add(Slider::new(dy, -80.0..=80.0).text("Offset Y"));
+                    ui.add(Slider::new(blur, 0.0..=80.0).text("Blur"));
                     ui.horizontal(|ui| {
                         let mut rgb = [color.r, color.g, color.b];
                         if ui.color_edit_button_srgb(&mut rgb).changed() {
@@ -1148,24 +1399,24 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
                     });
                 }
                 crate::filter::Fx::Offset { dx, dy } => {
-                    ui.add(Slider::new(dx, -200.0..=200.0).text("dx"));
-                    ui.add(Slider::new(dy, -200.0..=200.0).text("dy"));
+                    ui.add(Slider::new(dx, -200.0..=200.0).text("Offset X"));
+                    ui.add(Slider::new(dy, -200.0..=200.0).text("Offset Y"));
                 }
                 crate::filter::Fx::Morphology { erode, radius } => {
                     ui.checkbox(erode, "Erode");
-                    ui.add(Slider::new(radius, 0.0..=40.0).text("radius"));
+                    ui.add(Slider::new(radius, 0.0..=40.0).text("Radius"));
                 }
                 crate::filter::Fx::Saturate { amount } => {
-                    ui.add(Slider::new(amount, 0.0..=3.0).text("values"));
+                    ui.add(Slider::new(amount, 0.0..=3.0).text("Amount"));
                 }
                 crate::filter::Fx::HueRotate { degrees } => {
-                    ui.add(Slider::new(degrees, -180.0..=180.0).text("degrees"));
+                    ui.add(Slider::new(degrees, -180.0..=180.0).text("Angle"));
                 }
                 crate::filter::Fx::Brightness { amount } => {
-                    ui.add(Slider::new(amount, 0.0..=3.0).text("slope"));
+                    ui.add(Slider::new(amount, 0.0..=3.0).text("Amount"));
                 }
                 crate::filter::Fx::Contrast { amount } => {
-                    ui.add(Slider::new(amount, 0.0..=3.0).text("slope"));
+                    ui.add(Slider::new(amount, 0.0..=3.0).text("Amount"));
                 }
                 crate::filter::Fx::Invert { amount } => {
                     ui.add(Slider::new(amount, 0.0..=1.0).text("amount"));
@@ -1204,7 +1455,6 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
 }
 
 fn fx_studio(ui: &mut Ui, studio: &mut Studio) {
-    heading(ui, "FX");
     let shape_target = studio.primary().and_then(|(li, id)| {
         if id == crate::document::RASTER_ID {
             None
@@ -1213,11 +1463,7 @@ fn fx_studio(ui: &mut Ui, studio: &mut Studio) {
         }
     });
     if let Some((li, id)) = shape_target {
-        ui.label(
-            RichText::new("Object")
-                .small()
-                .color(fg_weak()),
-        );
+        ui.label(RichText::new("Object").small().color(fg_weak()));
         let mut stack = studio
             .doc
             .find_shape(li, id)
@@ -1239,7 +1485,7 @@ fn fx_studio(ui: &mut Ui, studio: &mut Studio) {
     let mut stack = studio.doc.layers[li].filters.clone();
     fx_stack_editor(ui, &mut stack, "layer");
     if stack != studio.doc.layers[li].filters {
-        studio.commit_filters(li, stack.clone());
+        studio.commit_filters(li, stack);
     }
 }
 
@@ -1265,32 +1511,110 @@ fn trace_studio(ui: &mut Ui, studio: &mut Studio) {
 
 fn brush_studio(ui: &mut Ui, studio: &mut Studio) {
     heading(ui, "Brush");
-    ui.add(Slider::new(&mut studio.brush.size, 1.0..=256.0).text("Size"));
-    ui.add(Slider::new(&mut studio.brush.hardness, 0.0..=1.0).text("Hardness"));
-    ui.add(Slider::new(&mut studio.brush.opacity, 0.05..=1.0).text("Opacity"));
-    ui.add(Slider::new(&mut studio.brush.flow, 0.05..=1.0).text("Flow"));
-    ui.add(Slider::new(&mut studio.fill_tolerance, 0.0..=180.0).text("Fill / wand tolerance"));
-    if studio.clone_source.is_some() {
-        ui.label(RichText::new("Clone source set").small().color(accent()));
-    } else {
+    number_field(ui, "Size", &mut studio.brush.size, 1.0..=256.0, " px");
+    let mut hardness = studio.brush.hardness * 100.0;
+    let mut opacity = studio.brush.opacity * 100.0;
+    let mut flow = studio.brush.flow * 100.0;
+    ui.columns(2, |columns| {
+        number_field(&mut columns[0], "Edge", &mut hardness, 0.0..=100.0, "%");
+        number_field(&mut columns[1], "Opacity", &mut opacity, 5.0..=100.0, "%");
+    });
+    studio.brush.hardness = hardness / 100.0;
+    studio.brush.opacity = opacity / 100.0;
+    number_field(ui, "Flow", &mut flow, 5.0..=100.0, "%");
+    studio.brush.flow = flow / 100.0;
+    if matches!(studio.tool, Tool::Fill | Tool::Wand) {
+        number_field(ui, "Tolerance", &mut studio.fill_tolerance, 0.0..=180.0, "");
+    }
+    if studio.tool == Tool::Clone {
         ui.label(
-            RichText::new("Alt-click sets clone source")
-                .small()
-                .color(fg_weak()),
+            RichText::new(if studio.clone_source.is_some() {
+                "Clone source ready"
+            } else {
+                "Alt-click to set the clone source"
+            })
+            .small()
+            .color(fg_weak()),
         );
     }
 }
 
+fn object_name(ui: &mut Ui, name: &str, width: f32, strong: bool) -> eframe::egui::Response {
+    let (rect, response) = ui.allocate_exact_size(vec2(width, 28.0), eframe::egui::Sense::click());
+    if response.hovered() {
+        ui.painter()
+            .rect_filled(rect, 4.0, crate::ui::theme::bg_widget_hover());
+    }
+    let text = RichText::new(name)
+        .size(11.0)
+        .color(if strong { fg() } else { fg_weak() });
+    let galley = eframe::egui::WidgetText::from(text).into_galley(
+        ui,
+        Some(eframe::egui::TextWrapMode::Truncate),
+        width - 4.0,
+        eframe::egui::TextStyle::Small,
+    );
+    let position = eframe::egui::pos2(rect.left() + 2.0, rect.center().y - galley.size().y / 2.0);
+    ui.painter().galley(position, galley, fg());
+    response.widget_info(|| {
+        eframe::egui::WidgetInfo::labeled(
+            eframe::egui::WidgetType::SelectableLabel,
+            ui.is_enabled(),
+            name,
+        )
+    });
+    response
+}
+
+fn object_icon(ui: &mut Ui, icon: &str, color: Color32) {
+    let (rect, _) = ui.allocate_exact_size(vec2(20.0, 24.0), eframe::egui::Sense::hover());
+    ui.painter().text(
+        rect.center(),
+        eframe::egui::Align2::CENTER_CENTER,
+        icon,
+        icons::font(15.0),
+        color,
+    );
+}
+
 fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
+    // Reveal a newly selected object once; a manual collapse stays collapsed.
+    let primary = studio.primary();
+    let reveal_id = ui.make_persistent_id("reveal-selection");
+    let previous = ui
+        .data(|d| d.get_temp::<Option<(usize, u64)>>(reveal_id))
+        .flatten();
+    if previous != primary {
+        if let Some((li, _)) = primary
+            && let Some(layer) = studio.doc.layers.get(li)
+        {
+            studio.layer_expanded.insert(layer.id);
+        }
+        ui.data_mut(|d| d.insert_temp(reveal_id, primary));
+    }
     ui.horizontal(|ui| {
         heading(ui, "Layers");
+        ui.label(
+            RichText::new(studio.doc.layers.len().to_string())
+                .size(10.0)
+                .color(fg_weak()),
+        );
         ui.with_layout(Layout::right_to_left(eframe::egui::Align::Center), |ui| {
-            if icons::tiny_icon(ui, ph::MINUS, "Delete layer", false) {
-                studio.delete_layer();
-            }
-            if icons::tiny_icon(ui, ph::STACK, "New pixel layer", false) {
-                studio.add_layer(true);
-            }
+            ui.menu_button("···", |ui| {
+                if ui.button("New vector layer").clicked() {
+                    studio.add_layer(false);
+                    ui.close();
+                }
+                if ui.button("New pixel layer").clicked() {
+                    studio.add_layer(true);
+                    ui.close();
+                }
+                ui.separator();
+                if ui.button("Delete active layer").clicked() {
+                    studio.delete_layer();
+                    ui.close();
+                }
+            });
             if icons::tiny_icon(ui, ph::PLUS, "New vector layer", false) {
                 studio.add_layer(false);
             }
@@ -1311,106 +1635,171 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
     let mut shape_up: Option<(usize, usize)> = None;
     let mut shape_down: Option<(usize, usize)> = None;
     let n = studio.doc.layers.len();
+    if let Some(i) = studio.active_layer.filter(|&i| i < n) {
+        ui.horizontal(|ui| {
+            let mut blend = studio.doc.layers[i].blend;
+            ComboBox::from_id_salt("active-layer-blend")
+                .selected_text(blend.name())
+                .width((ui.available_width() - 76.0).max(100.0))
+                .show_ui(ui, |ui| {
+                    for value in Blend::ALL {
+                        ui.selectable_value(&mut blend, value, value.name());
+                    }
+                });
+            let mut opacity = studio.doc.layers[i].opacity * 100.0;
+            ui.add(
+                eframe::egui::DragValue::new(&mut opacity)
+                    .range(0.0..=100.0)
+                    .suffix("%")
+                    .speed(0.5)
+                    .max_decimals(0),
+            )
+            .on_hover_text("Layer opacity");
+            let layer = &studio.doc.layers[i];
+            if blend != layer.blend || (opacity / 100.0 - layer.opacity).abs() > 0.0001 {
+                studio.commit(crate::document::Cmd::SetLayerMeta {
+                    index: i,
+                    name: layer.name.clone(),
+                    visible: layer.visible,
+                    locked: layer.locked,
+                    opacity: opacity / 100.0,
+                    blend,
+                    before: (
+                        layer.name.clone(),
+                        layer.visible,
+                        layer.locked,
+                        layer.opacity,
+                        layer.blend,
+                    ),
+                });
+            }
+        });
+        ui.add_space(8.0);
+    }
     for i in (0..n).rev() {
         ui.push_id(studio.doc.layers[i].id, |ui| {
-            ui.horizontal(|ui| {
-                let layer = &studio.doc.layers[i];
-                let on = studio.active_layer == Some(i);
-                let expanded = studio.layer_expanded.contains(&layer.id);
-                let has_kids = layer.kind.shapes().map(|s| !s.is_empty()).unwrap_or(false)
-                    || layer.kind.is_placed_raster();
-                if has_kids {
-                    if icons::tiny_icon(
-                        ui,
-                        if expanded {
-                            ph::CARET_DOWN
+            let active = studio.active_layer == Some(i);
+            Frame::new()
+                .fill(if active {
+                    bg_widget()
+                } else {
+                    Color32::TRANSPARENT
+                })
+                .corner_radius(5.0)
+                .inner_margin(Margin::symmetric(3, 2))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 2.0;
+                        let layer = &studio.doc.layers[i];
+                        let expanded = studio.layer_expanded.contains(&layer.id);
+                        let has_children =
+                            layer.kind.shapes().is_some_and(|shapes| !shapes.is_empty())
+                                || layer.kind.is_placed_raster();
+                        if has_children {
+                            if icons::tiny_icon(
+                                ui,
+                                if expanded {
+                                    ph::CARET_DOWN
+                                } else {
+                                    ph::CARET_RIGHT
+                                },
+                                "Show objects",
+                                false,
+                            ) {
+                                toggle_expand = Some(layer.id);
+                            }
                         } else {
-                            ph::CARET_RIGHT
-                        },
-                        "Expand objects",
-                        expanded,
-                    ) {
-                        toggle_expand = Some(layer.id);
-                    }
-                } else {
-                    ui.add_space(22.0);
-                }
-                if icons::tiny_icon(
-                    ui,
-                    if layer.visible {
-                        ph::EYE
-                    } else {
-                        ph::EYE_SLASH
-                    },
-                    "Visibility",
-                    !layer.visible,
-                ) {
-                    vis = Some(i);
-                }
-                if icons::tiny_icon(
-                    ui,
-                    if layer.locked {
-                        ph::LOCK
-                    } else {
-                        ph::LOCK_OPEN
-                    },
-                    "Lock",
-                    layer.locked,
-                ) {
-                    lock = Some(i);
-                }
-                let tag = layer.kind.tag();
-                ui.label(RichText::new(tag).small().color(fg_weak()).monospace());
-                if studio.layer_rename.as_ref().map(|(idx, _)| *idx) == Some(i) {
-                    if let Some((_, buf)) = studio.layer_rename.as_mut() {
-                        let r = ui.add(
-                            eframe::egui::TextEdit::singleline(buf)
-                                .desired_width(100.0)
-                                .font(eframe::egui::TextStyle::Small),
-                        );
-                        if r.lost_focus() {
-                            start_rename = Some(usize::MAX); // sentinel: commit
+                            ui.add_space(22.0);
                         }
-                    }
-                } else {
-                    let fill = if on {
-                        accent_dim()
-                    } else {
-                        Color32::TRANSPARENT
-                    };
-                    let resp = ui.add(
-                        eframe::egui::Button::new(RichText::new(&layer.name).size(12.0)).fill(fill),
-                    );
-                    if resp.clicked() {
-                        activate = Some(i);
-                    }
-                    if resp.double_clicked() {
-                        start_rename = Some(i);
-                    }
-                }
-                if icons::tiny_icon(ui, ph::CARET_UP, "Move up", false) {
-                    up = Some(i);
-                }
-                if icons::tiny_icon(ui, ph::CARET_DOWN, "Move down", false) {
-                    down = Some(i);
-                }
-            });
+                        object_icon(
+                            ui,
+                            if layer.kind.shapes().is_some() {
+                                ph::STACK
+                            } else {
+                                ph::IMAGES
+                            },
+                            fg_weak(),
+                        );
+                        let name_width = (ui.available_width() - 50.0).max(42.0);
+                        if studio.layer_rename.as_ref().map(|(index, _)| *index) == Some(i) {
+                            if let Some((_, buffer)) = studio.layer_rename.as_mut() {
+                                let response = ui.add(
+                                    eframe::egui::TextEdit::singleline(buffer)
+                                        .desired_width(name_width)
+                                        .font(eframe::egui::TextStyle::Small),
+                                );
+                                if response.lost_focus() {
+                                    start_rename = Some(usize::MAX);
+                                }
+                            }
+                        } else {
+                            let response = object_name(ui, &layer.name, name_width, layer.visible);
+                            if response.clicked() {
+                                activate = Some(i);
+                            }
+                            if response.double_clicked() {
+                                start_rename = Some(i);
+                            }
+                            response
+                                .on_hover_text(format!("{} · {}", layer.name, layer.kind.tag()))
+                                .context_menu(|ui| {
+                                    if ui.button("Rename").clicked() {
+                                        start_rename = Some(i);
+                                        ui.close();
+                                    }
+                                    if ui
+                                        .add_enabled(
+                                            i + 1 < n,
+                                            eframe::egui::Button::new("Move up"),
+                                        )
+                                        .clicked()
+                                    {
+                                        up = Some(i);
+                                        ui.close();
+                                    }
+                                    if ui
+                                        .add_enabled(i > 0, eframe::egui::Button::new("Move down"))
+                                        .clicked()
+                                    {
+                                        down = Some(i);
+                                        ui.close();
+                                    }
+                                });
+                        }
+                        if icons::tiny_icon(
+                            ui,
+                            if layer.visible {
+                                ph::EYE
+                            } else {
+                                ph::EYE_SLASH
+                            },
+                            "Layer visibility",
+                            !layer.visible,
+                        ) {
+                            vis = Some(i);
+                        }
+                        if icons::tiny_icon(
+                            ui,
+                            if layer.locked {
+                                ph::LOCK
+                            } else {
+                                ph::LOCK_OPEN
+                            },
+                            "Lock layer",
+                            layer.locked,
+                        ) {
+                            lock = Some(i);
+                        }
+                    });
+                });
             if studio.layer_expanded.contains(&studio.doc.layers[i].id) {
                 if studio.doc.layers[i].kind.is_placed_raster() {
                     ui.horizontal(|ui| {
-                        ui.add_space(18.0);
-                        let on = studio.selection.contains(&(i, crate::document::RASTER_ID));
-                        let fill = if on {
-                            accent_dim()
-                        } else {
-                            Color32::TRANSPARENT
-                        };
+                        ui.add_space(28.0);
                         if ui
-                            .add(
-                                eframe::egui::Button::new(
-                                    RichText::new(&studio.doc.layers[i].name).size(11.0),
-                                )
-                                .fill(fill),
+                            .selectable_label(
+                                studio.selection.contains(&(i, crate::document::RASTER_ID)),
+                                &studio.doc.layers[i].name,
                             )
                             .clicked()
                         {
@@ -1419,129 +1808,139 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                     });
                 }
                 if let Some(shapes) = studio.doc.layers[i].kind.shapes() {
-                    for (si, sh) in shapes.iter().enumerate().rev() {
-                        ui.horizontal(|ui| {
-                            ui.add_space(12.0);
-                            if icons::tiny_icon(
-                                ui,
-                                if sh.visible { ph::EYE } else { ph::EYE_SLASH },
-                                "Object visibility",
-                                !sh.visible,
-                            ) {
-                                vis_shape = Some((i, sh.id));
-                            }
-                            if icons::tiny_icon(
-                                ui,
-                                if sh.locked { ph::LOCK } else { ph::LOCK_OPEN },
-                                "Object lock",
-                                sh.locked,
-                            ) {
-                                lock_shape = Some((i, sh.id));
-                            }
-                            let on = studio.selection.contains(&(i, sh.id));
-                            let fill = if on {
-                                accent_dim()
-                            } else {
-                                Color32::TRANSPARENT
-                            };
-                            if studio.shape_rename.as_ref().map(|(li, id, _)| (*li, *id))
-                                == Some((i, sh.id))
-                            {
-                                if let Some((_, _, buf)) = studio.shape_rename.as_mut() {
-                                    let r = ui.add(
-                                        eframe::egui::TextEdit::singleline(buf)
-                                            .desired_width(90.0)
-                                            .font(eframe::egui::TextStyle::Small),
-                                    );
-                                    if r.lost_focus() {
-                                        start_shape_rename = Some((usize::MAX, 0));
-                                    }
-                                }
-                            } else {
-                                let resp = ui.add(
-                                    eframe::egui::Button::new(RichText::new(&sh.name).size(11.0))
-                                        .fill(fill),
-                                );
-                                if resp.clicked() {
-                                    pick_shape = Some((i, sh.id));
-                                }
-                                if resp.double_clicked() {
-                                    start_shape_rename = Some((i, sh.id));
-                                }
-                            }
-                            if icons::tiny_icon(ui, ph::CARET_UP, "Object up", false) {
-                                shape_up = Some((i, si));
-                            }
-                            if icons::tiny_icon(ui, ph::CARET_DOWN, "Object down", false) {
-                                shape_down = Some((i, si));
-                            }
+                    for (index, shape) in shapes.iter().enumerate().rev() {
+                        ui.push_id(shape.id, |ui| {
+                            Frame::new()
+                                .fill(if studio.selection.contains(&(i, shape.id)) {
+                                    accent_soft()
+                                } else {
+                                    Color32::TRANSPARENT
+                                })
+                                .corner_radius(5.0)
+                                .inner_margin(Margin::symmetric(3, 1))
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.spacing_mut().item_spacing.x = 2.0;
+                                        ui.add_space(24.0);
+                                        object_icon(
+                                            ui,
+                                            geometry_icon(&shape.geom),
+                                            if studio.selection.contains(&(i, shape.id)) {
+                                                accent()
+                                            } else {
+                                                fg_weak()
+                                            },
+                                        );
+                                        let name_width = (ui.available_width() - 50.0).max(42.0);
+                                        if studio
+                                            .shape_rename
+                                            .as_ref()
+                                            .map(|(layer, id, _)| (*layer, *id))
+                                            == Some((i, shape.id))
+                                        {
+                                            if let Some((_, _, buffer)) =
+                                                studio.shape_rename.as_mut()
+                                            {
+                                                let response = ui.add(
+                                                    eframe::egui::TextEdit::singleline(buffer)
+                                                        .desired_width(name_width)
+                                                        .font(eframe::egui::TextStyle::Small),
+                                                );
+                                                if response.lost_focus() {
+                                                    start_shape_rename = Some((usize::MAX, 0));
+                                                }
+                                            }
+                                        } else {
+                                            let response = object_name(
+                                                ui,
+                                                &shape.name,
+                                                name_width,
+                                                studio.selection.contains(&(i, shape.id))
+                                                    && shape.visible,
+                                            );
+                                            if response.clicked() {
+                                                pick_shape = Some((i, shape.id));
+                                            }
+                                            if response.double_clicked() {
+                                                start_shape_rename = Some((i, shape.id));
+                                            }
+                                            response.on_hover_text(&shape.name).context_menu(
+                                                |ui| {
+                                                    if ui.button("Rename").clicked() {
+                                                        start_shape_rename = Some((i, shape.id));
+                                                        ui.close();
+                                                    }
+                                                    if ui
+                                                        .add_enabled(
+                                                            index + 1 < shapes.len(),
+                                                            eframe::egui::Button::new("Move up"),
+                                                        )
+                                                        .clicked()
+                                                    {
+                                                        shape_up = Some((i, index));
+                                                        ui.close();
+                                                    }
+                                                    if ui
+                                                        .add_enabled(
+                                                            index > 0,
+                                                            eframe::egui::Button::new("Move down"),
+                                                        )
+                                                        .clicked()
+                                                    {
+                                                        shape_down = Some((i, index));
+                                                        ui.close();
+                                                    }
+                                                },
+                                            );
+                                        }
+                                        if icons::tiny_icon(
+                                            ui,
+                                            if shape.visible {
+                                                ph::EYE
+                                            } else {
+                                                ph::EYE_SLASH
+                                            },
+                                            "Object visibility",
+                                            !shape.visible,
+                                        ) {
+                                            vis_shape = Some((i, shape.id));
+                                        }
+                                        if icons::tiny_icon(
+                                            ui,
+                                            if shape.locked {
+                                                ph::LOCK
+                                            } else {
+                                                ph::LOCK_OPEN
+                                            },
+                                            "Lock object",
+                                            shape.locked,
+                                        ) {
+                                            lock_shape = Some((i, shape.id));
+                                        }
+                                    });
+                                });
                         });
                     }
                 }
             }
         });
-        if studio.active_layer == Some(i) {
-            let mut op = studio.doc.layers[i].opacity;
-            if ui
-                .add(Slider::new(&mut op, 0.0..=1.0).show_value(false))
-                .changed()
-            {
-                let l = &studio.doc.layers[i];
-                studio.commit(crate::document::Cmd::SetLayerMeta {
-                    index: i,
-                    name: l.name.clone(),
-                    visible: l.visible,
-                    locked: l.locked,
-                    opacity: op,
-                    blend: l.blend,
-                    before: (l.name.clone(), l.visible, l.locked, l.opacity, l.blend),
-                });
-            }
-            let mut blend = studio.doc.layers[i].blend;
-            ComboBox::from_id_salt(format!("blend-{i}"))
-                .selected_text(blend.name())
-                .width(140.0)
-                .show_ui(ui, |ui| {
-                    for b in Blend::ALL {
-                        ui.selectable_value(&mut blend, b, b.name());
-                    }
-                });
-            if blend != studio.doc.layers[i].blend {
-                let l = &studio.doc.layers[i];
-                studio.commit(crate::document::Cmd::SetLayerMeta {
-                    index: i,
-                    name: l.name.clone(),
-                    visible: l.visible,
-                    locked: l.locked,
-                    opacity: l.opacity,
-                    blend,
-                    before: (l.name.clone(), l.visible, l.locked, l.opacity, l.blend),
-                });
-            }
-        }
     }
     if let Some(i) = start_rename {
         if i == usize::MAX {
-            if let Some((idx, name)) = studio.layer_rename.take() {
-                if let Some(l) = studio.doc.layers.get(idx) {
-                    let trimmed = name.trim().to_string();
-                    if !trimmed.is_empty() && trimmed != l.name {
-                        studio.commit(crate::document::Cmd::SetLayerMeta {
-                            index: idx,
-                            name: trimmed,
-                            visible: l.visible,
-                            locked: l.locked,
-                            opacity: l.opacity,
-                            blend: l.blend,
-                            before: (
-                                l.name.clone(),
-                                l.visible,
-                                l.locked,
-                                l.opacity,
-                                l.blend,
-                            ),
-                        });
-                    }
+            if let Some((idx, name)) = studio.layer_rename.take()
+                && let Some(l) = studio.doc.layers.get(idx)
+            {
+                let trimmed = name.trim().to_string();
+                if !trimmed.is_empty() && trimmed != l.name {
+                    studio.commit(crate::document::Cmd::SetLayerMeta {
+                        index: idx,
+                        name: trimmed,
+                        visible: l.visible,
+                        locked: l.locked,
+                        opacity: l.opacity,
+                        blend: l.blend,
+                        before: (l.name.clone(), l.visible, l.locked, l.opacity, l.blend),
+                    });
                 }
             }
         } else {
@@ -1587,79 +1986,106 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
         studio.commit(crate::document::Cmd::ReorderLayer { from: i, to: i - 1 });
         studio.active_layer = Some(i - 1);
     }
-    if let Some(id) = toggle_expand {
-        if !studio.layer_expanded.remove(&id) {
-            studio.layer_expanded.insert(id);
-        }
+    if let Some(id) = toggle_expand
+        && !studio.layer_expanded.remove(&id)
+    {
+        studio.layer_expanded.insert(id);
     }
     if let Some((li, id)) = pick_shape {
         studio.selection = vec![(li, id)];
         studio.active_layer = Some(li);
         studio.artboard_sel.clear();
     }
-    if let Some((li, id)) = vis_shape {
-        if let Some(s) = studio.doc.find_shape(li, id) {
-            studio.commit(crate::document::Cmd::SetShapeMeta {
-                layer: li,
-                id,
-                name: s.name.clone(),
-                visible: !s.visible,
-                locked: s.locked,
-                before: (s.name.clone(), s.visible, s.locked),
-            });
-        }
+    if let Some((li, id)) = vis_shape
+        && let Some(s) = studio.doc.find_shape(li, id)
+    {
+        studio.commit(crate::document::Cmd::SetShapeMeta {
+            layer: li,
+            id,
+            name: s.name.clone(),
+            visible: !s.visible,
+            locked: s.locked,
+            before: (s.name.clone(), s.visible, s.locked),
+        });
     }
-    if let Some((li, id)) = lock_shape {
-        if let Some(s) = studio.doc.find_shape(li, id) {
-            studio.commit(crate::document::Cmd::SetShapeMeta {
-                layer: li,
-                id,
-                name: s.name.clone(),
-                visible: s.visible,
-                locked: !s.locked,
-                before: (s.name.clone(), s.visible, s.locked),
-            });
-        }
+    if let Some((li, id)) = lock_shape
+        && let Some(s) = studio.doc.find_shape(li, id)
+    {
+        studio.commit(crate::document::Cmd::SetShapeMeta {
+            layer: li,
+            id,
+            name: s.name.clone(),
+            visible: s.visible,
+            locked: !s.locked,
+            before: (s.name.clone(), s.visible, s.locked),
+        });
     }
     if let Some((li, id)) = start_shape_rename {
         if li == usize::MAX {
-            if let Some((l, sid, name)) = studio.shape_rename.take() {
-                if let Some(s) = studio.doc.find_shape(l, sid) {
-                    let trimmed = name.trim().to_string();
-                    if !trimmed.is_empty() && trimmed != s.name {
-                        studio.commit(crate::document::Cmd::SetShapeMeta {
-                            layer: l,
-                            id: sid,
-                            name: trimmed,
-                            visible: s.visible,
-                            locked: s.locked,
-                            before: (s.name.clone(), s.visible, s.locked),
-                        });
-                    }
+            if let Some((l, sid, name)) = studio.shape_rename.take()
+                && let Some(s) = studio.doc.find_shape(l, sid)
+            {
+                let trimmed = name.trim().to_string();
+                if !trimmed.is_empty() && trimmed != s.name {
+                    studio.commit(crate::document::Cmd::SetShapeMeta {
+                        layer: l,
+                        id: sid,
+                        name: trimmed,
+                        visible: s.visible,
+                        locked: s.locked,
+                        before: (s.name.clone(), s.visible, s.locked),
+                    });
                 }
             }
         } else if let Some(s) = studio.doc.find_shape(li, id) {
             studio.shape_rename = Some((li, id, s.name.clone()));
         }
     }
-    if let Some((li, from)) = shape_up {
-        if let Some(shapes) = studio.doc.layers.get(li).and_then(|l| l.kind.shapes())
-            && from + 1 < shapes.len()
-        {
-            studio.commit(crate::document::Cmd::ReorderShape {
-                layer: li,
-                from,
-                to: from + 1,
-            });
-        }
+    if let Some((li, from)) = shape_up
+        && let Some(shapes) = studio.doc.layers.get(li).and_then(|l| l.kind.shapes())
+        && from + 1 < shapes.len()
+    {
+        studio.commit(crate::document::Cmd::ReorderShape {
+            layer: li,
+            from,
+            to: from + 1,
+        });
     }
-    if let Some((li, from)) = shape_down {
-        if from > 0 {
-            studio.commit(crate::document::Cmd::ReorderShape {
-                layer: li,
-                from,
-                to: from - 1,
-            });
+    if let Some((li, from)) = shape_down
+        && from > 0
+    {
+        studio.commit(crate::document::Cmd::ReorderShape {
+            layer: li,
+            from,
+            to: from - 1,
+        });
+    }
+}
+
+#[test]
+fn inspector_keeps_its_width_across_frames_and_personas() {
+    for scene in ["design", "type", "pixel", "motion"] {
+        let ctx = eframe::egui::Context::default();
+        crate::ui::theme::apply(&ctx);
+        let mut studio = Studio::new();
+        crate::shots::apply(&mut studio, scene).unwrap();
+        for _ in 0..8 {
+            let mut width = 0.0;
+            let mut output = ctx.run_ui(
+                eframe::egui::RawInput {
+                    screen_rect: Some(eframe::egui::Rect::from_min_size(
+                        eframe::egui::Pos2::ZERO,
+                        vec2(960.0, 640.0),
+                    )),
+                    ..Default::default()
+                },
+                |ui| {
+                    right_panel(ui, &mut studio);
+                    width = 960.0 - ui.available_width();
+                },
+            );
+            output.textures_delta.clear();
+            assert!(width <= 304.0, "{scene} inspector grew to {width}px");
         }
     }
 }

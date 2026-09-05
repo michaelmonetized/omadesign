@@ -6,7 +6,7 @@ use crate::tools::Persona;
 use crate::ui::icons::{self, ph};
 use crate::ui::theme::{accent, bg_panel, bg_widget, border, fg, fg_weak, select};
 use eframe::egui::{
-    pos2, vec2, Align2, Color32, FontId, PointerButton, Pos2, Rect, Sense, Stroke, Ui,
+    Align2, Color32, FontId, PointerButton, Pos2, Rect, Sense, Stroke, Ui, pos2, vec2,
 };
 
 const ROW: f32 = 22.0;
@@ -74,10 +74,19 @@ fn transport(ui: &mut Ui, studio: &mut Studio) {
             .color(fg_weak()),
     );
     ui.separator();
-    ui.label(eframe::egui::RichText::new("Duration").small().color(fg_weak()));
+    ui.label(
+        eframe::egui::RichText::new("Duration")
+            .small()
+            .color(fg_weak()),
+    );
     let mut dur = studio.doc.motion.duration;
     if ui
-        .add(eframe::egui::DragValue::new(&mut dur).speed(0.05).range(0.2..=60.0).suffix("s"))
+        .add(
+            eframe::egui::DragValue::new(&mut dur)
+                .speed(0.05)
+                .range(0.2..=60.0)
+                .suffix("s"),
+        )
         .changed()
     {
         let mut after = studio.doc.motion.clone();
@@ -88,7 +97,11 @@ fn transport(ui: &mut Ui, studio: &mut Studio) {
     ui.label(eframe::egui::RichText::new("fps").small().color(fg_weak()));
     let mut fps = studio.doc.motion.fps;
     if ui
-        .add(eframe::egui::DragValue::new(&mut fps).speed(1.0).range(8.0..=60.0))
+        .add(
+            eframe::egui::DragValue::new(&mut fps)
+                .speed(1.0)
+                .range(8.0..=60.0),
+        )
         .changed()
     {
         let mut after = studio.doc.motion.clone();
@@ -106,33 +119,28 @@ fn transport(ui: &mut Ui, studio: &mut Studio) {
     {
         studio.key_selection(Ease::EaseInOut);
     }
-    if let Some((_, _, _)) = studio.selected_key {
-        if ui.small_button("Cycle ease").clicked() {
-            if let Some((id, prop, i)) = studio.selected_key {
-                let mut after = studio.doc.motion.clone();
-                if let Some(tr) = after
-                    .tracks
-                    .iter_mut()
-                    .find(|tr| tr.shape == id && tr.prop == prop)
-                    && let Some(k) = tr.keys.get_mut(i)
-                {
-                    k.ease = k.ease.cycle();
-                    studio.status = format!("ease {}", k.ease.name());
-                }
-                studio.commit_motion(after);
-            }
+    if let Some((_, _, _)) = studio.selected_key
+        && ui.small_button("Cycle ease").clicked()
+        && let Some((id, prop, i)) = studio.selected_key
+    {
+        let mut after = studio.doc.motion.clone();
+        if let Some(tr) = after
+            .tracks
+            .iter_mut()
+            .find(|tr| tr.shape == id && tr.prop == prop)
+            && let Some(k) = tr.keys.get_mut(i)
+        {
+            k.ease = k.ease.cycle();
+            studio.status = format!("ease {}", k.ease.name());
         }
+        studio.commit_motion(after);
     }
 }
 
 fn paint_timeline(ui: &mut Ui, studio: &mut Studio, rect: Rect, resp: &eframe::egui::Response) {
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 0.0, bg_panel());
-    painter.hline(
-        rect.x_range(),
-        rect.min.y,
-        Stroke::new(1.0, border()),
-    );
+    painter.hline(rect.x_range(), rect.min.y, Stroke::new(1.0, border()));
 
     let dur = studio.doc.motion.duration.max(0.05);
     let lane = Rect::from_min_max(
@@ -182,7 +190,9 @@ fn paint_timeline(ui: &mut Ui, studio: &mut Studio, rect: Rect, resp: &eframe::e
     let mut dragged_key: Option<(u64, Prop, usize, f32)> = None;
     let pointer = resp.interact_pointer_pos();
     let press = resp.ctx.input(|i| i.pointer.primary_pressed());
-    let down = resp.ctx.input(|i| i.pointer.button_down(PointerButton::Primary));
+    let down = resp
+        .ctx
+        .input(|i| i.pointer.button_down(PointerButton::Primary));
     if !down {
         studio.key_drag = None;
     }
@@ -213,15 +223,20 @@ fn paint_timeline(ui: &mut Ui, studio: &mut Studio, rect: Rect, resp: &eframe::e
                 let x = t_to_x(k.t);
                 let c = pos2(x, y + ROW * 0.5);
                 let on = studio.selected_key == Some((*id, tr.prop, ki));
-                diamond(&painter, c, if on { 6.0 } else { 5.0 }, if on { select() } else { col });
-                if let Some(p) = pointer {
-                    if (p - c).length() <= 8.0 {
-                        if press {
-                            studio.key_drag = Some((*id, tr.prop, ki));
-                            clicked_key = Some((*id, tr.prop, ki));
-                        } else if resp.clicked() {
-                            clicked_key = Some((*id, tr.prop, ki));
-                        }
+                diamond(
+                    &painter,
+                    c,
+                    if on { 6.0 } else { 5.0 },
+                    if on { select() } else { col },
+                );
+                if let Some(p) = pointer
+                    && (p - c).length() <= 8.0
+                {
+                    if press {
+                        studio.key_drag = Some((*id, tr.prop, ki));
+                        clicked_key = Some((*id, tr.prop, ki));
+                    } else if resp.clicked() {
+                        clicked_key = Some((*id, tr.prop, ki));
                     }
                 }
             }
@@ -245,23 +260,21 @@ fn paint_timeline(ui: &mut Ui, studio: &mut Studio, rect: Rect, resp: &eframe::e
     let head = Rect::from_center_size(pos2(px, ruler.center().y), vec2(8.0, 14.0));
     painter.rect_filled(head, 2.0, accent());
 
-    if let (Some((id, prop, i)), Some(p)) = (studio.key_drag, pointer) {
-        if resp.dragged_by(PointerButton::Primary) {
-            dragged_key = Some((id, prop, i, x_to_t(p.x)));
-        }
+    if let (Some((id, prop, i)), Some(p)) = (studio.key_drag, pointer)
+        && resp.dragged_by(PointerButton::Primary)
+    {
+        dragged_key = Some((id, prop, i, x_to_t(p.x)));
     }
 
-    if resp.clicked() || resp.dragged_by(PointerButton::Primary) {
-        if let Some(p) = pointer {
-            if dragged_key.is_none()
-                && studio.key_drag.is_none()
-                && (ruler.contains(p) || (p.x >= lane.min.x && p.y <= lane.max.y))
-                && clicked_key.is_none()
-            {
-                studio.playhead = x_to_t(p.x);
-                studio.playing = false;
-            }
-        }
+    if (resp.clicked() || resp.dragged_by(PointerButton::Primary))
+        && let Some(p) = pointer
+        && dragged_key.is_none()
+        && studio.key_drag.is_none()
+        && (ruler.contains(p) || (p.x >= lane.min.x && p.y <= lane.max.y))
+        && clicked_key.is_none()
+    {
+        studio.playhead = x_to_t(p.x);
+        studio.playing = false;
     }
     if let Some((id, prop, i)) = clicked_key {
         studio.selected_key = Some((id, prop, i));

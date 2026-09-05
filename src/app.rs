@@ -1,167 +1,34 @@
 //! Studio: document + tool state. Mutations go through commands.
 
+mod photo_session;
+mod recovery;
+mod shortcuts;
+mod tabs;
+
+pub use photo_session::PhotoSession;
+use recovery::RecoveryJob;
+use tabs::TabState;
+
 use crate::align::{self, Align, Distribute};
 use crate::boolean::{self, BoolOp};
 use crate::color::{Rgba, default_swatches};
 use crate::compositor::{self, View};
 use crate::document::{
-    apply as apply_cmd, Artboard, Cap, Cmd, Document, Fill, History, Join, Layer, LayerKind, Shape,
-    Stroke, Style, RASTER_ID,
+    Artboard, Cap, Cmd, Document, Fill, History, Join, Layer, LayerKind, RASTER_ID, Shape, Stroke,
+    Style, apply as apply_cmd,
 };
 use crate::geom::{Anchor, Bounds, Geom, Pt, TypeRun};
 use crate::motion::{self, Ease, Motion, Pose, Prop};
 use crate::paint::{self, Brush};
-use crate::photo::{self, Histogram, PhotoImage, RgbaImage};
+use crate::photo::{self, RgbaImage};
 use crate::presets::Preset;
 use crate::snap::{self, SnapSettings};
 use crate::tools::{Persona, Tool};
-use eframe::egui::{self, Color32, Key, Pos2, Rect};
+use eframe::egui::{self, Color32, Pos2, Rect};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tiny_skia::Pixmap;
-
-pub struct PhotoSession {
-    pub images: Vec<PhotoImage>,
-    pub selected: Option<usize>,
-    pub folder: String,
-    pub folder_files: Vec<(String, String)>,
-    pub view_scale: f32,
-    pub show_original: bool,
-    pub crop_drag: Option<(Pt, Pt)>,
-    pub adjusted: Option<RgbaImage>,
-    pub hists: [Histogram; 4],
-    pub tex: Option<egui::TextureHandle>,
-    pub orig_tex: Option<egui::TextureHandle>,
-    pub thumbs: Vec<egui::TextureHandle>,
-    pub sel_version: u64,
-    pub built_version: u64,
-    pub orig_built: u64,
-    pub dirty: bool,
-    pub samples_loaded: bool,
-    pub status: String,
-}
-
-impl PhotoSession {
-    pub fn new() -> Self {
-        Self {
-            images: vec![],
-            selected: None,
-            folder: String::new(),
-            folder_files: vec![],
-            view_scale: 1.0,
-            show_original: false,
-            crop_drag: None,
-            adjusted: None,
-            hists: Default::default(),
-            tex: None,
-            orig_tex: None,
-            thumbs: vec![],
-            sel_version: 0,
-            built_version: 0,
-            orig_built: u64::MAX,
-            dirty: true,
-            samples_loaded: false,
-            status: "Open a folder, drop photos, or load samples".into(),
-        }
-    }
-
-    pub fn selected(&self) -> Option<&PhotoImage> {
-        self.selected.and_then(|i| self.images.get(i))
-    }
-
-    pub fn selected_mut(&mut self) -> Option<&mut PhotoImage> {
-        self.selected.and_then(|i| self.images.get_mut(i))
-    }
-
-    pub fn import_file(&mut self, path: &std::path::Path) {
-        let name = path
-            .file_name()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_else(|| path.to_string_lossy().to_string());
-        match photo::load_file(path) {
-            Some(full) => {
-                self.images.push(PhotoImage::from_full(name, full));
-                self.selected = Some(self.images.len() - 1);
-                self.sel_version += 1;
-                self.dirty = true;
-                self.status = "imported".into();
-            }
-            None => self.status = format!("could not open {}", path.display()),
-        }
-    }
-
-    pub fn import_bytes(&mut self, name: String, bytes: &[u8]) {
-        match photo::decode_bytes(bytes) {
-            Some(full) => {
-                let name = name
-                    .split('/')
-                    .next_back()
-                    .unwrap_or(&name)
-                    .to_string();
-                self.images.push(PhotoImage::from_full(name, full));
-                self.selected = Some(self.images.len() - 1);
-                self.sel_version += 1;
-                self.dirty = true;
-                self.status = "imported".into();
-            }
-            None => self.status = "failed to decode image".into(),
-        }
-    }
-
-    pub fn import_samples(&mut self) {
-        for kind in 0..3 {
-            let (name, full) = photo::sample_photo(kind);
-            self.images.push(PhotoImage::from_full(name, full));
-        }
-        self.selected = Some(0);
-        self.sel_version += 1;
-        self.samples_loaded = true;
-        self.dirty = true;
-        self.status = "sample photos loaded".into();
-    }
-
-    pub fn set_folder(&mut self, path: &str) {
-        let mut entries = vec![];
-        if let Ok(read) = std::fs::read_dir(path) {
-            for e in read.flatten() {
-                let p = e.path();
-                if p.is_file()
-                    && let Some(ext) = p.extension().and_then(|s| s.to_str())
-                    && matches!(
-                        ext.to_ascii_lowercase().as_str(),
-                        "jpg" | "jpeg" | "png" | "webp" | "gif" | "bmp" | "tif" | "tiff"
-                    )
-                {
-                    entries.push((
-                        p.file_name()
-                            .map(|s| s.to_string_lossy().to_string())
-                            .unwrap_or_default(),
-                        p.to_string_lossy().to_string(),
-                    ));
-                }
-            }
-        }
-        entries.sort();
-        self.folder = path.to_string();
-        self.folder_files = entries;
-    }
-
-    pub fn rebuild(&mut self) {
-        let Some(img) = self.selected() else {
-            return;
-        };
-        let src = if img.preview.w * img.preview.h > 0 {
-            &img.preview
-        } else {
-            &img.full
-        };
-        let out = photo::develop(src, &img.develop);
-        self.hists = photo::histograms(&out);
-        self.adjusted = Some(out);
-        self.dirty = false;
-    }
-}
 
 #[derive(Clone, Copy)]
 pub enum CreateKind {
@@ -174,14 +41,8 @@ pub enum CreateKind {
 
 #[derive(Clone)]
 pub enum PendingPlace {
-    Raster {
-        name: String,
-        image: RgbaImage,
-    },
-    Svg {
-        name: String,
-        svg: String,
-    },
+    Raster { name: String, image: RgbaImage },
+    Svg { name: String, svg: String },
 }
 
 impl PendingPlace {
@@ -227,38 +88,6 @@ pub enum WelcomePage {
 pub enum PendingNav {
     CloseTab(usize),
     Quit,
-}
-
-#[derive(Clone)]
-pub struct TabState {
-    pub doc: Document,
-    pub path: Option<PathBuf>,
-    pub dirty: bool,
-    pub view: View,
-    pub selection: Vec<(usize, u64)>,
-    pub active_layer: Option<usize>,
-    pub history: History,
-    pub clone_source: Option<Pt>,
-    pub pixel_sel: Option<Vec<u8>>,
-    pub type_edit: Option<TypeEdit>,
-    pub need_fit: bool,
-    pub layer_rename: Option<(usize, String)>,
-    pub paste_nudge: u32,
-    pub node_sel: BTreeSet<usize>,
-    pub playhead: f32,
-    pub playing: bool,
-    pub play_clock: f64,
-    pub pose_drag: HashMap<u64, Pose>,
-    pub selected_key: Option<(u64, Prop, usize)>,
-    pub pending_place: Option<PendingPlace>,
-    pub show_welcome: bool,
-    pub artboard_sel: Vec<u64>,
-    pub layer_expanded: HashSet<u64>,
-    pub swap_id: String,
-    pub last_input: Instant,
-    pub last_swap: Option<Instant>,
-    pub shape_rename: Option<(usize, u64, String)>,
-    pub artboard_rename: Option<(u64, String)>,
 }
 
 pub enum Op {
@@ -431,7 +260,6 @@ pub struct Studio {
     pub rect_radius: f32,
     pub screen_tex: Option<egui::TextureHandle>,
     pub recent: Vec<Rgba>,
-    pub hex_buf: String,
     pub swatches: Vec<Rgba>,
     pub bool_pick: Option<BoolOp>,
     pub google_query: String,
@@ -479,7 +307,9 @@ pub struct Studio {
     pub key_drag: Option<(u64, Prop, usize)>,
     pub pending_place: Option<PendingPlace>,
     pub trace_opts: crate::trace::TraceOpts,
-    pub tabs: Vec<TabState>,
+    tabs: Vec<TabState>,
+    recovery_job: Option<RecoveryJob>,
+    recovery_retry: Option<Instant>,
     pub active_tab: usize,
     pub artboard_sel: Vec<u64>,
     pub layer_expanded: HashSet<u64>,
@@ -524,6 +354,12 @@ impl Default for SectionOpen {
     }
 }
 
+impl Default for Studio {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Studio {
     pub fn new() -> Self {
         let mut s = Self {
@@ -546,8 +382,7 @@ impl Studio {
             pixel_sel: None,
             snap: SnapSettings::default(),
             photo: PhotoSession::new(),
-            status: "Welcome home. V to move, R for a rectangle, B to paint, or open Photo."
-                .into(),
+            status: "Welcome home. V to move, R for a rectangle, B to paint, or open Photo.".into(),
             cursor: None,
             canvas_rect: None,
             need_fit: true,
@@ -573,7 +408,6 @@ impl Studio {
             rect_radius: 0.0,
             screen_tex: None,
             recent: vec![],
-            hex_buf: "#4F8CFF".into(),
             swatches: default_swatches(),
             bool_pick: None,
             google_query: String::new(),
@@ -620,6 +454,8 @@ impl Studio {
             pending_place: None,
             trace_opts: crate::trace::TraceOpts::default(),
             tabs: vec![],
+            recovery_job: None,
+            recovery_retry: None,
             active_tab: 0,
             artboard_sel: vec![],
             layer_expanded: HashSet::new(),
@@ -648,7 +484,9 @@ impl Studio {
                 let label = crate::text::label_for(&s.text_font);
                 s.status = format!("Default font: {label} (from {fam})");
             } else {
-                s.status = format!("Default font: {fam} not installed — open Character → Google Fonts to install");
+                s.status = format!(
+                    "Default font: {fam} not installed — open Character → Google Fonts to install"
+                );
             }
         }
         s
@@ -656,7 +494,7 @@ impl Studio {
 
     pub fn new_from_preset(&mut self, p: Preset) {
         let art = self.new_doc_artboards.max(1);
-        self.doc = Document::new_with_options(
+        let doc = Document::new_with_options(
             p.name,
             p.w,
             p.h,
@@ -666,28 +504,20 @@ impl Studio {
             self.new_doc_bleed,
             self.new_doc_safe,
         );
-        self.path = None;
-        self.dirty = false;
         crate::project::delete_swap(&self.swap_id);
-        self.swap_id = crate::project::new_swap_id();
-        self.last_swap = None;
-        self.history.clear();
-        self.selection.clear();
-        self.active_layer = Some(1);
-        self.need_fit = true;
-        self.show_welcome = false;
-        self.op = None;
-        self.canvas_key = None;
-        self.playhead = 0.0;
-        self.playing = false;
-        self.pose_drag.clear();
-        self.selected_key = None;
-        self.key_drag = None;
-        self.mark();
-        let transp = if self.new_doc_transparent { " transparent" } else { "" };
+        self.replace_active_tab(TabState::new(doc, None));
+        let transp = if self.new_doc_transparent {
+            " transparent"
+        } else {
+            ""
+        };
         let bleed = if self.new_doc_bleed { " + bleed" } else { "" };
         let safe = if self.new_doc_safe { " + safe" } else { "" };
-        let arts = if art > 1 { format!(" ×{} artboards", art) } else { String::new() };
+        let arts = if art > 1 {
+            format!(" ×{} artboards", art)
+        } else {
+            String::new()
+        };
         self.status = format!(
             "{} · {:.0}×{:.0} @ {} dpi{}{}{}{}",
             p.name, p.w, p.h, p.dpi, arts, transp, bleed, safe
@@ -794,19 +624,25 @@ impl Studio {
             shape: tag,
         });
 
-        if let Some(px) = self.doc.layers[0].kind.pixels_mut() {
-            if let Some(mut pm) = px.to_pixmap() {
-                let b = Brush {
-                    size: 64.0,
-                    hardness: 0.2,
-                    opacity: 0.35,
-                    flow: 0.8,
-                    spacing: 0.2,
-                    color: orange,
-                };
-                paint::stroke_to(&mut pm, Pt::new(900.0, 80.0), Pt::new(1320.0, 780.0), &b, false);
-                *px = crate::document::Pixels::from_pixmap(&pm);
-            }
+        if let Some(px) = self.doc.layers[0].kind.pixels_mut()
+            && let Some(mut pm) = px.to_pixmap()
+        {
+            let b = Brush {
+                size: 64.0,
+                hardness: 0.2,
+                opacity: 0.35,
+                flow: 0.8,
+                spacing: 0.2,
+                color: orange,
+            };
+            paint::stroke_to(
+                &mut pm,
+                Pt::new(900.0, 80.0),
+                Pt::new(1320.0, 780.0),
+                &b,
+                false,
+            );
+            *px = crate::document::Pixels::from_pixmap(&pm);
         }
 
         self.selection.clear();
@@ -821,346 +657,6 @@ impl Studio {
         self.last_input = Instant::now();
     }
 
-    fn snapshot_tab(&self) -> TabState {
-        TabState {
-            doc: self.doc.clone(),
-            path: self.path.clone(),
-            dirty: self.dirty,
-            view: self.view,
-            selection: self.selection.clone(),
-            active_layer: self.active_layer,
-            history: self.history.clone(),
-            clone_source: self.clone_source,
-            pixel_sel: self.pixel_sel.clone(),
-            type_edit: self.type_edit.clone(),
-            need_fit: self.need_fit,
-            layer_rename: self.layer_rename.clone(),
-            paste_nudge: self.paste_nudge,
-            node_sel: self.node_sel.clone(),
-            playhead: self.playhead,
-            playing: self.playing,
-            play_clock: self.play_clock,
-            pose_drag: self.pose_drag.clone(),
-            selected_key: self.selected_key,
-            pending_place: self.pending_place.clone(),
-            show_welcome: self.show_welcome,
-            artboard_sel: self.artboard_sel.clone(),
-            layer_expanded: self.layer_expanded.clone(),
-            swap_id: self.swap_id.clone(),
-            last_input: self.last_input,
-            last_swap: self.last_swap,
-            shape_rename: self.shape_rename.clone(),
-            artboard_rename: self.artboard_rename.clone(),
-        }
-    }
-
-    fn apply_tab(&mut self, t: TabState) {
-        self.doc = t.doc;
-        self.path = t.path;
-        self.dirty = t.dirty;
-        self.view = t.view;
-        self.selection = t.selection;
-        self.active_layer = t.active_layer;
-        self.history = t.history;
-        self.clone_source = t.clone_source;
-        self.pixel_sel = t.pixel_sel;
-        self.type_edit = t.type_edit;
-        self.need_fit = t.need_fit;
-        self.layer_rename = t.layer_rename;
-        self.paste_nudge = t.paste_nudge;
-        self.node_sel = t.node_sel;
-        self.playhead = t.playhead;
-        self.playing = t.playing;
-        self.play_clock = t.play_clock;
-        self.pose_drag = t.pose_drag;
-        self.selected_key = t.selected_key;
-        self.key_drag = None;
-        self.pending_place = t.pending_place;
-        self.show_welcome = t.show_welcome;
-        self.artboard_sel = t.artboard_sel;
-        self.layer_expanded = t.layer_expanded;
-        self.swap_id = t.swap_id;
-        self.last_input = t.last_input;
-        self.last_swap = t.last_swap;
-        self.shape_rename = t.shape_rename;
-        self.artboard_rename = t.artboard_rename;
-        self.op = None;
-        self.screen_tex = None;
-        self.canvas_key = None;
-        self.mark();
-    }
-
-    pub fn ensure_tabs(&mut self) {
-        if self.tabs.is_empty() {
-            self.tabs.push(self.snapshot_tab());
-            self.active_tab = 0;
-        }
-    }
-
-    pub fn park_active(&mut self) {
-        self.ensure_tabs();
-        if self.active_tab < self.tabs.len() {
-            self.tabs[self.active_tab] = self.snapshot_tab();
-        }
-    }
-
-    pub fn tab_count(&self) -> usize {
-        self.tabs.len().max(1)
-    }
-
-    pub fn tab_title(&self, i: usize) -> (String, bool) {
-        if i == self.active_tab {
-            let n = if self.doc.name.is_empty() {
-                "Untitled".into()
-            } else {
-                self.doc.name.clone()
-            };
-            return (n, self.dirty);
-        }
-        self.tabs
-            .get(i)
-            .map(|t| {
-                let n = if t.doc.name.is_empty() {
-                    "Untitled".into()
-                } else {
-                    t.doc.name.clone()
-                };
-                (n, t.dirty)
-            })
-            .unwrap_or_else(|| ("Untitled".into(), false))
-    }
-
-    pub fn switch_tab(&mut self, i: usize) {
-        self.ensure_tabs();
-        if i == self.active_tab || i >= self.tabs.len() {
-            return;
-        }
-        self.commit_type_edit();
-        self.op = None;
-        self.park_active();
-        self.active_tab = i;
-        let t = self.tabs[i].clone();
-        self.apply_tab(t);
-        self.status = format!("tab {}", i + 1);
-    }
-
-    pub fn new_tab(&mut self) {
-        if self.show_welcome && self.current_is_blank() && self.tab_count() <= 1 {
-            self.show_welcome = false;
-            self.status = "new document".into();
-            return;
-        }
-        self.commit_type_edit();
-        self.op = None;
-        self.park_active();
-        let mut fresh = Studio::blank_tab_state();
-        fresh.show_welcome = false;
-        self.active_tab = self.tabs.len();
-        self.tabs.push(fresh.clone());
-        self.apply_tab(fresh);
-        self.status = "new tab".into();
-    }
-
-    pub fn new_tab_welcome(&mut self) {
-        self.new_tab();
-        self.show_welcome = true;
-        self.welcome_page = WelcomePage::New;
-    }
-
-    fn blank_tab_state() -> TabState {
-        let mut doc = Document::new("Untitled", 1280.0, 800.0, 72.0);
-        doc.grid.visible = false;
-        TabState {
-            doc,
-            path: None,
-            dirty: false,
-            view: View::default(),
-            selection: vec![],
-            active_layer: Some(1),
-            history: History::default(),
-            clone_source: None,
-            pixel_sel: None,
-            type_edit: None,
-            need_fit: true,
-            layer_rename: None,
-            paste_nudge: 0,
-            node_sel: BTreeSet::new(),
-            playhead: 0.0,
-            playing: false,
-            play_clock: 0.0,
-            pose_drag: HashMap::new(),
-            selected_key: None,
-            pending_place: None,
-            show_welcome: false,
-            artboard_sel: vec![],
-            layer_expanded: HashSet::new(),
-            swap_id: crate::project::new_swap_id(),
-            last_input: Instant::now(),
-            last_swap: None,
-            shape_rename: None,
-            artboard_rename: None,
-        }
-    }
-
-    pub fn request_close_tab(&mut self, i: usize) {
-        self.ensure_tabs();
-        let dirty = if i == self.active_tab {
-            self.dirty
-        } else {
-            self.tabs.get(i).map(|t| t.dirty).unwrap_or(false)
-        };
-        if dirty {
-            self.pending_nav = Some(PendingNav::CloseTab(i));
-        } else {
-            self.close_tab(i);
-        }
-    }
-
-    pub fn close_tab(&mut self, i: usize) {
-        self.ensure_tabs();
-        if self.tabs.len() <= 1 {
-            let id = if i == self.active_tab {
-                self.swap_id.clone()
-            } else {
-                self.tabs.get(i).map(|t| t.swap_id.clone()).unwrap_or_default()
-            };
-            if !id.is_empty() {
-                crate::project::delete_swap(&id);
-            }
-            let fresh = Studio::blank_tab_state();
-            self.tabs = vec![fresh.clone()];
-            self.active_tab = 0;
-            self.apply_tab(fresh);
-            self.show_welcome = true;
-            return;
-        }
-        if i >= self.tabs.len() {
-            return;
-        }
-        let id = if i == self.active_tab {
-            self.swap_id.clone()
-        } else {
-            self.tabs[i].swap_id.clone()
-        };
-        crate::project::delete_swap(&id);
-        self.park_active();
-        self.tabs.remove(i);
-        if self.active_tab >= self.tabs.len() {
-            self.active_tab = self.tabs.len() - 1;
-        } else if i < self.active_tab {
-            self.active_tab -= 1;
-        }
-        let t = self.tabs[self.active_tab].clone();
-        self.apply_tab(t);
-    }
-
-    pub fn tick_swap(&mut self) {
-        if !self.dirty {
-            return;
-        }
-        let now = Instant::now();
-        if now.duration_since(self.last_input) < Duration::from_millis(1000) {
-            return;
-        }
-        if let Some(prev) = self.last_swap
-            && now.duration_since(prev) < Duration::from_millis(800)
-        {
-            return;
-        }
-        let saved_at = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        let meta = crate::project::SwapMeta {
-            id: self.swap_id.clone(),
-            original: self.path.clone(),
-            name: self.doc.name.clone(),
-            saved_at,
-            doc: self.doc.clone(),
-        };
-        if crate::project::write_swap(&meta).is_ok() {
-            self.last_swap = Some(now);
-        }
-    }
-
-    pub fn recover_swap(&mut self, path: PathBuf) {
-        match crate::project::load_swap(&path) {
-            Ok(meta) => {
-                self.park_active();
-                let mut t = Studio::blank_tab_state();
-                t.doc = meta.doc;
-                t.path = meta.original;
-                t.dirty = true;
-                t.swap_id = meta.id;
-                t.show_welcome = false;
-                t.doc.ensure_ids();
-                self.active_tab = self.tabs.len();
-                self.tabs.push(t.clone());
-                self.apply_tab(t);
-                self.status = format!("recovered {}", meta.name);
-            }
-            Err(e) => self.status = format!("recover failed: {e}"),
-        }
-    }
-
-    pub fn delete_swap_file(&mut self, path: &std::path::Path) {
-        let _ = std::fs::remove_file(path);
-        self.status = "discarded recovery".into();
-    }
-
-    pub fn execute_nav(&mut self, ctx: &egui::Context, save: bool) {
-        match self.pending_nav.take() {
-            Some(PendingNav::CloseTab(i)) => {
-                if save {
-                    if i != self.active_tab {
-                        self.switch_tab(i);
-                    }
-                    self.save();
-                    if self.dirty {
-                        self.pending_nav = Some(PendingNav::CloseTab(self.active_tab));
-                        return;
-                    }
-                    self.close_tab(self.active_tab);
-                } else {
-                    let id = if i == self.active_tab {
-                        self.swap_id.clone()
-                    } else {
-                        self.tabs.get(i).map(|t| t.swap_id.clone()).unwrap_or_default()
-                    };
-                    crate::project::delete_swap(&id);
-                    self.close_tab(i);
-                }
-            }
-            Some(PendingNav::Quit) => {
-                if save {
-                    self.park_active();
-                    let n = self.tabs.len();
-                    for i in 0..n {
-                        self.switch_tab(i);
-                        if self.dirty {
-                            self.save();
-                            if self.dirty {
-                                self.pending_nav = Some(PendingNav::Quit);
-                                return;
-                            }
-                        }
-                    }
-                } else {
-                    self.park_active();
-                    for t in &mut self.tabs {
-                        t.dirty = false;
-                        crate::project::delete_swap(&t.swap_id);
-                    }
-                    self.dirty = false;
-                    crate::project::delete_swap(&self.swap_id);
-                    self.allow_close = true;
-                }
-                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-            }
-            None => {}
-        }
-    }
-
     pub fn remember_font(&mut self, path: &str) {
         crate::project::push_font_recent(path);
         self.font_recents = crate::project::load_font_recents();
@@ -1171,10 +667,11 @@ impl Studio {
         for layer in &self.doc.layers {
             if let Some(shapes) = layer.kind.shapes() {
                 for s in shapes {
-                    if let Geom::Text(t) = &s.geom {
-                        if !t.font.is_empty() && !v.iter().any(|x| x == &t.font) {
-                            v.push(t.font.clone());
-                        }
+                    if let Geom::Text(t) = &s.geom
+                        && !t.font.is_empty()
+                        && !v.iter().any(|x| x == &t.font)
+                    {
+                        v.push(t.font.clone());
                     }
                 }
             }
@@ -1219,7 +716,12 @@ impl Studio {
         let mut b: Option<Bounds> = None;
         for (li, id) in &self.selection {
             if *id == RASTER_ID {
-                if let Some(rb) = self.doc.layers.get(*li).and_then(|l| l.kind.raster_bounds()) {
+                if let Some(rb) = self
+                    .doc
+                    .layers
+                    .get(*li)
+                    .and_then(|l| l.kind.raster_bounds())
+                {
                     b = Some(match b {
                         None => rb,
                         Some(acc) => acc.union(rb),
@@ -1290,7 +792,10 @@ impl Studio {
         for (li, mut s) in copies {
             s.id = crate::document::next_id();
             s.geom.translate(delta);
-            self.commit(Cmd::AddShape { layer: li, shape: s });
+            self.commit(Cmd::AddShape {
+                layer: li,
+                shape: s,
+            });
         }
         for mut layer in rasters {
             layer.id = crate::document::next_id();
@@ -1327,32 +832,25 @@ impl Studio {
                     }
                 }
             }
-            if layer.kind.is_placed_raster() {
-                if let Some(b) = layer.kind.raster_bounds()
-                    && board.contains(b.center())
-                {
-                    if let Some((o, sz, rot)) = layer.kind.raster_xform() {
-                        out.push(ObjSnap {
-                            layer: li,
-                            id: RASTER_ID,
-                            geom: None,
-                            origin: o,
-                            size: sz,
-                            rot,
-                        });
-                    }
-                }
+            if layer.kind.is_placed_raster()
+                && let Some(b) = layer.kind.raster_bounds()
+                && board.contains(b.center())
+                && let Some((o, sz, rot)) = layer.kind.raster_xform()
+            {
+                out.push(ObjSnap {
+                    layer: li,
+                    id: RASTER_ID,
+                    geom: None,
+                    origin: o,
+                    size: sz,
+                    rot,
+                });
             }
         }
         out
     }
 
-    pub fn apply_artboard_contents(
-        &mut self,
-        orig: &Artboard,
-        neu: &Artboard,
-        snaps: &[ObjSnap],
-    ) {
+    pub fn apply_artboard_contents(&mut self, orig: &Artboard, neu: &Artboard, snaps: &[ObjSnap]) {
         for snap in snaps {
             if snap.id == RASTER_ID {
                 let p0 = Self::map_pt_across_artboard(orig, neu, snap.origin);
@@ -1386,20 +884,19 @@ impl Studio {
     pub fn commit_mapped_contents(&mut self, snaps: Vec<ObjSnap>) {
         for snap in snaps {
             if snap.id == RASTER_ID {
-                if let Some(l) = self.doc.layers.get(snap.layer) {
-                    if let Some((o, sz, rot)) = l.kind.raster_xform() {
-                        self.history.push(Cmd::SetRasterXform {
-                            layer: snap.layer,
-                            before: (snap.origin, snap.size, snap.rot),
-                            after: (o, sz, rot),
-                        });
-                        self.dirty = true;
-                    }
+                if let Some(l) = self.doc.layers.get(snap.layer)
+                    && let Some((o, sz, rot)) = l.kind.raster_xform()
+                {
+                    self.history.push(Cmd::SetRasterXform {
+                        layer: snap.layer,
+                        before: (snap.origin, snap.size, snap.rot),
+                        after: (o, sz, rot),
+                    });
+                    self.dirty = true;
                 }
-            } else if let (Some(geom), Some(s)) = (
-                snap.geom.clone(),
-                self.doc.find_shape(snap.layer, snap.id),
-            ) {
+            } else if let (Some(geom), Some(s)) =
+                (snap.geom.clone(), self.doc.find_shape(snap.layer, snap.id))
+            {
                 self.history.push(Cmd::SetGeom {
                     layer: snap.layer,
                     id: snap.id,
@@ -1533,6 +1030,7 @@ impl Studio {
     pub fn undo(&mut self) {
         if let Some(inv) = self.history.undo() {
             apply_cmd(&mut self.doc, &inv);
+            self.dirty = true;
             self.sanitize();
             self.mark();
             self.status = "undo".into();
@@ -1542,6 +1040,7 @@ impl Studio {
     pub fn redo(&mut self) {
         if let Some(cmd) = self.history.redo() {
             apply_cmd(&mut self.doc, &cmd);
+            self.dirty = true;
             self.sanitize();
             self.mark();
             self.status = "redo".into();
@@ -1561,11 +1060,7 @@ impl Studio {
                     .get(*li)
                     .is_some_and(|l| l.kind.is_placed_raster())
             } else {
-                self.doc
-                    .layers
-                    .get(*li)
-                    .and_then(|l| l.find(*id))
-                    .is_some()
+                self.doc.layers.get(*li).and_then(|l| l.find(*id)).is_some()
             }
         });
         self.artboard_sel
@@ -1590,7 +1085,10 @@ impl Studio {
 
     pub fn vector_target(&mut self) -> Option<usize> {
         if let Some(i) = self.active_layer
-            && matches!(self.doc.layers.get(i).map(|l| &l.kind), Some(LayerKind::Vector { .. }))
+            && matches!(
+                self.doc.layers.get(i).map(|l| &l.kind),
+                Some(LayerKind::Vector { .. })
+            )
             && !self.doc.layers[i].locked
         {
             return Some(i);
@@ -1606,7 +1104,10 @@ impl Studio {
 
     pub fn raster_target(&mut self) -> Option<usize> {
         if let Some(i) = self.active_layer
-            && matches!(self.doc.layers.get(i).map(|l| &l.kind), Some(LayerKind::Raster { .. }))
+            && matches!(
+                self.doc.layers.get(i).map(|l| &l.kind),
+                Some(LayerKind::Raster { .. })
+            )
             && !self.doc.layers[i].locked
         {
             return Some(i);
@@ -1712,7 +1213,10 @@ impl Studio {
                 s.id = crate::document::next_id();
                 s.geom.translate(delta);
                 neu.push((li, s.id));
-                self.commit(Cmd::AddShape { layer: li, shape: s });
+                self.commit(Cmd::AddShape {
+                    layer: li,
+                    shape: s,
+                });
             }
         }
         let n = neu.len();
@@ -1726,14 +1230,7 @@ impl Studio {
         self.finish_zoom_box_mods(start, cur, false, false, false);
     }
 
-    pub fn finish_zoom_box_mods(
-        &mut self,
-        start: Pt,
-        cur: Pt,
-        alt: bool,
-        ctrl: bool,
-        shift: bool,
-    ) {
+    pub fn finish_zoom_box_mods(&mut self, start: Pt, cur: Pt, alt: bool, ctrl: bool, shift: bool) {
         let world = Bounds {
             min: Pt::new(start.x.min(cur.x), start.y.min(cur.y)),
             max: Pt::new(start.x.max(cur.x), start.y.max(cur.y)),
@@ -1781,7 +1278,7 @@ impl Studio {
         self.status = format!("zoom {:.0}%", self.view.scale * 100.0);
     }
 
-    fn canvas_zoom_anchor(&self) -> Pt {
+    pub(crate) fn canvas_zoom_anchor(&self) -> Pt {
         if let Some(c) = self.cursor {
             return self.view.to_screen(c);
         }
@@ -1985,6 +1482,7 @@ impl Studio {
                 rot_after: rot,
             });
             self.dirty = true;
+            self.mark();
         }
         self.status = "type committed".into();
     }
@@ -2005,6 +1503,8 @@ impl Studio {
         let (li, id) = (edit.layer, edit.id);
         if let Some(s) = self.doc.find_shape_mut(li, id) {
             crate::text::fill_contours(&mut s.geom);
+            self.dirty = true;
+            self.mark();
         }
     }
 
@@ -2029,7 +1529,6 @@ impl Studio {
             e.anchor = lo;
         }
         self.reshape_live_type();
-        self.mark();
     }
 
     pub fn type_insert(&mut self, s: &str) {
@@ -2051,7 +1550,6 @@ impl Studio {
             e.anchor = e.caret;
         }
         self.reshape_live_type();
-        self.mark();
     }
 
     fn type_backspace(&mut self) {
@@ -2228,10 +1726,11 @@ impl Studio {
     /// `pick` is the raw pointer (close / join). `place` is the snapped point.
     pub fn pen_click_at(&mut self, pick: Pt, place: Pt) {
         let slack = 12.0 / self.view.scale.max(0.01);
-        if let Some(Op::Pen { anchors, source, .. }) = &self.op
+        if let Some(Op::Pen {
+            anchors, source, ..
+        }) = &self.op
             && anchors.len() >= 3
-            && ((anchors[0].pt - pick).length() < slack
-                || (anchors[0].pt - place).length() < slack)
+            && ((anchors[0].pt - pick).length() < slack || (anchors[0].pt - place).length() < slack)
         {
             let anchors = anchors.clone();
             let source = source.clone();
@@ -2240,7 +1739,10 @@ impl Studio {
             return;
         }
         let skip = match &self.op {
-            Some(Op::Pen { source: Some((_, id, _)), .. }) => Some(*id),
+            Some(Op::Pen {
+                source: Some((_, id, _)),
+                ..
+            }) => Some(*id),
             _ => None,
         };
         if let Some((li, id, at_start)) = self
@@ -2249,9 +1751,7 @@ impl Studio {
         {
             if let Some(Op::Pen { anchors, .. }) = &mut self.op {
                 if let Some(s) = self.doc.find_shape(li, id)
-                    && let Geom::Path {
-                        anchors: other, ..
-                    } = &s.geom
+                    && let Geom::Path { anchors: other, .. } = &s.geom
                 {
                     let mut other = other.clone();
                     if !at_start {
@@ -2294,9 +1794,7 @@ impl Studio {
             }
         }
         match &mut self.op {
-            Some(Op::Pen {
-                anchors, press, ..
-            }) => {
+            Some(Op::Pen { anchors, press, .. }) => {
                 anchors.push(Anchor::corner(place));
                 *press = pick;
                 self.sync_pen_source();
@@ -2358,16 +1856,12 @@ impl Studio {
                     continue;
                 }
                 let ds = (anchors[0].pt - world).length();
-                if ds < slack {
-                    if best.is_none_or(|(d, ..)| ds < d) {
-                        best = Some((ds, li, s.id, true));
-                    }
+                if ds < slack && best.is_none_or(|(d, ..)| ds < d) {
+                    best = Some((ds, li, s.id, true));
                 }
                 let de = (anchors.last().unwrap().pt - world).length();
-                if de < slack {
-                    if best.is_none_or(|(d, ..)| de < d) {
-                        best = Some((de, li, s.id, false));
-                    }
+                if de < slack && best.is_none_or(|(d, ..)| de < d) {
+                    best = Some((de, li, s.id, false));
                 }
             }
         }
@@ -2385,10 +1879,7 @@ impl Studio {
         }
         let closed = closed && anchors.len() >= 3;
         if let Some((li, id, orig)) = source {
-            let after = Geom::Path {
-                anchors,
-                closed,
-            };
+            let after = Geom::Path { anchors, closed };
             let rot = self
                 .doc
                 .find_shape(li, id)
@@ -2423,12 +1914,7 @@ impl Studio {
         let id = shape.id;
         self.commit(Cmd::AddShape { layer: li, shape });
         self.selection = vec![(li, id)];
-        self.status = if closed {
-            "closed path"
-        } else {
-            "open path"
-        }
-        .into();
+        self.status = if closed { "closed path" } else { "open path" }.into();
     }
 
     pub fn ensure_path(&mut self, li: usize, id: u64) {
@@ -2546,7 +2032,12 @@ impl Studio {
         self.status = "path broken".into();
     }
 
-    pub fn commit_shape_filters(&mut self, layer: usize, id: u64, after: crate::filter::FilterStack) {
+    pub fn commit_shape_filters(
+        &mut self,
+        layer: usize,
+        id: u64,
+        after: crate::filter::FilterStack,
+    ) {
         let Some(s) = self.doc.find_shape(layer, id) else {
             return;
         };
@@ -2671,10 +2162,7 @@ impl Studio {
         new_shape.geom = result;
         new_shape.name = format!("{} ({} shapes)", op.name(), shapes.len());
         let old = shapes.clone();
-        self.commit(Cmd::RemoveShapes {
-            layer,
-            shapes: old,
-        });
+        self.commit(Cmd::RemoveShapes { layer, shapes: old });
         let id = new_shape.id;
         self.commit(Cmd::AddShape {
             layer,
@@ -2748,7 +2236,10 @@ impl Studio {
             s.name = "Part".into();
             let nid = s.id;
             new_ids.push((li, nid));
-            self.commit(Cmd::AddShape { layer: li, shape: s });
+            self.commit(Cmd::AddShape {
+                layer: li,
+                shape: s,
+            });
         }
         self.selection = new_ids;
         self.status = "compound released".into();
@@ -2816,10 +2307,7 @@ impl Studio {
             ctx.copy_text(format!("{}{s}", Self::CLIP_PREFIX));
         }
         let n = shapes.len() + self.clipboard_rasters.len();
-        self.status = format!(
-            "copied {n} {}",
-            if n == 1 { "object" } else { "objects" }
-        );
+        self.status = format!("copied {n} {}", if n == 1 { "object" } else { "objects" });
     }
 
     pub fn cut_selection(&mut self, ctx: &egui::Context) {
@@ -2860,7 +2348,10 @@ impl Studio {
                 s.geom.translate(nudge);
                 crate::text::fill_contours(&mut s.geom);
                 neu.push((li, s.id));
-                self.commit(Cmd::AddShape { layer: li, shape: s });
+                self.commit(Cmd::AddShape {
+                    layer: li,
+                    shape: s,
+                });
             }
         }
         for mut layer in self.clipboard_rasters.clone() {
@@ -2923,8 +2414,10 @@ impl Studio {
                 self.style.stroke = None;
             }
             (Fill::Solid(f), None) => {
-                let mut st = crate::document::Stroke::default();
-                st.color = f;
+                let st = crate::document::Stroke {
+                    color: f,
+                    ..Default::default()
+                };
                 self.style.fill = Fill::None;
                 self.style.stroke = Some(st);
             }
@@ -3037,11 +2530,7 @@ impl Studio {
                     if let Some(from) = index_of(self, id)
                         && from > 0
                     {
-                        self.commit(Cmd::ReorderShape {
-                            layer,
-                            from,
-                            to: 0,
-                        });
+                        self.commit(Cmd::ReorderShape { layer, from, to: 0 });
                     }
                 }
             } else {
@@ -3059,7 +2548,11 @@ impl Studio {
             }
         }
         self.status = if forward {
-            if extreme { "brought to front" } else { "brought forward" }
+            if extreme {
+                "brought to front"
+            } else {
+                "brought forward"
+            }
         } else if extreme {
             "sent to back"
         } else {
@@ -3130,35 +2623,12 @@ impl Studio {
 
     fn open_document(&mut self, mut doc: crate::document::Document, path: Option<PathBuf>) {
         doc.ensure_ids();
-        if !self.current_is_blank() {
-            self.park_active();
-            let mut t = Studio::blank_tab_state();
-            t.doc = doc.clone();
-            t.path = path.clone();
-            t.show_welcome = false;
-            t.need_fit = true;
-            self.active_tab = self.tabs.len();
-            self.tabs.push(t.clone());
-            self.apply_tab(t);
+        let tab = TabState::new(doc, path.clone());
+        if self.current_is_blank() {
+            crate::project::delete_swap(&self.swap_id);
+            self.replace_active_tab(tab);
         } else {
-            self.doc = doc;
-            self.path = path.clone();
-            self.history.clear();
-            self.selection.clear();
-            self.artboard_sel.clear();
-            self.active_layer = Some(self.doc.layers.len().saturating_sub(1));
-            self.need_fit = true;
-            self.playhead = 0.0;
-            self.playing = false;
-            self.pose_drag.clear();
-            self.selected_key = None;
-            self.key_drag = None;
-            self.show_welcome = false;
-            self.op = None;
-            self.type_edit = None;
-            self.dirty = false;
-            self.swap_id = crate::project::new_swap_id();
-            self.mark();
+            self.push_tab(tab);
         }
         if let Some(p) = path {
             self.remember_path(&p);
@@ -3216,7 +2686,6 @@ impl Studio {
         self.recent.retain(|x| *x != c);
         self.recent.insert(0, c);
         self.recent.truncate(16);
-        self.hex_buf = c.hex();
     }
 
     pub fn save(&mut self) {
@@ -3227,18 +2696,24 @@ impl Studio {
             crate::project::dialog_save(&self.doc.name)
         };
         if let Some(path) = path {
-            match crate::project::save_to(&self.doc, &path) {
+            match self.save_document(&path) {
                 Ok(()) => {
-                    self.path = Some(path.clone());
-                    self.dirty = false;
                     self.remember_path(&path);
-                    crate::project::delete_swap(&self.swap_id);
-                    self.last_swap = None;
                     self.status = format!("saved {}", path.display());
                 }
                 Err(e) => self.status = format!("save failed: {e}"),
             }
         }
+    }
+
+    fn save_document(&mut self, path: &std::path::Path) -> Result<(), String> {
+        crate::project::save_to(&self.doc, path)?;
+        self.path = Some(path.to_owned());
+        self.dirty = false;
+        // Manual saves supersede every recovery snapshot already in flight.
+        self.last_swap = Some(Instant::now());
+        crate::project::delete_swap(&self.swap_id);
+        Ok(())
     }
 
     pub fn open(&mut self) {
@@ -3343,7 +2818,10 @@ impl Studio {
                 let mut neu = vec![];
                 for s in imp.shapes {
                     neu.push((li, s.id));
-                    self.commit(Cmd::AddShape { layer: li, shape: s });
+                    self.commit(Cmd::AddShape {
+                        layer: li,
+                        shape: s,
+                    });
                 }
                 self.commit_motion(imp.motion);
                 self.selection = neu;
@@ -3423,6 +2901,9 @@ impl Studio {
     }
 
     pub fn ingest_dropped(&mut self, path: &std::path::Path, at: Option<Pt>) {
+        if self.pending_nav.is_some() {
+            return;
+        }
         let ext = path
             .extension()
             .and_then(|s| s.to_str())
@@ -3444,7 +2925,9 @@ impl Studio {
             return;
         }
         match crate::import::open_any(path) {
-            Ok(crate::import::Imported::Document(doc)) => self.open_document(doc, Some(path.to_path_buf())),
+            Ok(crate::import::Imported::Document(doc)) => {
+                self.open_document(doc, Some(path.to_path_buf()))
+            }
             Ok(crate::import::Imported::Raster { name, image }) => {
                 self.show_welcome = false;
                 if self.persona == Persona::Photo {
@@ -3452,7 +2935,9 @@ impl Studio {
                     self.tool = Tool::Select;
                 }
                 self.pending_place = Some(PendingPlace::Raster { name, image });
-                self.commit_place_at(at.unwrap_or(Pt::new(self.doc.width * 0.5, self.doc.height * 0.5)));
+                self.commit_place_at(
+                    at.unwrap_or(Pt::new(self.doc.width * 0.5, self.doc.height * 0.5)),
+                );
             }
             Ok(crate::import::Imported::Svg { name, svg }) => {
                 self.show_welcome = false;
@@ -3461,7 +2946,9 @@ impl Studio {
                     self.tool = Tool::Select;
                 }
                 self.pending_place = Some(PendingPlace::Svg { name, svg });
-                self.commit_place_at(at.unwrap_or(Pt::new(self.doc.width * 0.5, self.doc.height * 0.5)));
+                self.commit_place_at(
+                    at.unwrap_or(Pt::new(self.doc.width * 0.5, self.doc.height * 0.5)),
+                );
             }
             Err(e) => self.status = e,
         }
@@ -3477,7 +2964,13 @@ impl Studio {
         let pending = self.pending_place.as_ref()?;
         let (sw, sh) = pending.native_size();
         let (w, h) = fit_place_size(sw, sh, self.doc.width * 0.92, self.doc.height * 0.92);
-        Some(place_rect_centered(at, w, h, self.doc.width, self.doc.height))
+        Some(place_rect_centered(
+            at,
+            w,
+            h,
+            self.doc.width,
+            self.doc.height,
+        ))
     }
 
     pub fn commit_place_at(&mut self, at: Pt) {
@@ -3613,14 +3106,7 @@ impl Studio {
                 }
                 crate::shape_browser::SvgPaint::Unspecified => None,
             };
-            let shape = Shape::new(
-                el.geom,
-                Style {
-                    fill,
-                    stroke,
-                    ..self.style.clone()
-                },
-            );
+            let shape = Shape::new(el.geom, Style { fill, stroke });
             neu.push((li, shape.id));
             self.commit(Cmd::AddShape { layer: li, shape });
         }
@@ -3700,605 +3186,6 @@ impl Studio {
         );
     }
 
-    pub fn handle_shortcuts(&mut self, ctx: &egui::Context) {
-        if self.handle_type_keys(ctx) {
-            return;
-        }
-        let wants_text = ctx.egui_wants_keyboard_input();
-        let mut do_copy = false;
-        let mut do_cut = false;
-        let mut paste_payload: Option<String> = None;
-        ctx.input(|i| {
-            let mods = i.modifiers;
-            let ctrl = mods.command || mods.ctrl;
-            if ctrl && i.key_pressed(Key::S) {
-                if mods.shift {
-                    self.save_as();
-                } else {
-                    self.save();
-                }
-                return;
-            }
-            if ctrl && i.key_pressed(Key::O) {
-                self.open();
-                return;
-            }
-            if ctrl && mods.shift && i.key_pressed(Key::P) {
-                self.begin_place();
-                return;
-            }
-            if ctrl && i.key_pressed(Key::N) {
-                self.new_tab();
-                return;
-            }
-            if ctrl && i.key_pressed(Key::E) {
-                self.export_png();
-                return;
-            }
-            if ctrl && i.key_pressed(Key::G) {
-                if mods.shift {
-                    self.release_compound();
-                } else {
-                    self.combine_selected();
-                }
-                return;
-            }
-            if ctrl && i.key_pressed(Key::Z) {
-                if mods.shift {
-                    self.redo();
-                } else {
-                    self.undo();
-                }
-                return;
-            }
-            if ctrl && i.key_pressed(Key::Y) {
-                self.redo();
-                return;
-            }
-            if ctrl && i.key_pressed(Key::D) {
-                self.duplicate_selection();
-                return;
-            }
-            if ctrl && i.key_pressed(Key::C) && mods.alt {
-                self.copy_style();
-                return;
-            }
-            if ctrl && i.key_pressed(Key::V) && mods.alt {
-                self.paste_style();
-                return;
-            }
-            if ctrl && i.key_pressed(Key::C) {
-                do_copy = true;
-                return;
-            }
-            if ctrl && i.key_pressed(Key::X) {
-                do_cut = true;
-                return;
-            }
-            if ctrl && i.key_pressed(Key::V) {
-                for ev in &i.events {
-                    if let egui::Event::Paste(t) = ev {
-                        paste_payload = Some(t.clone());
-                    }
-                }
-                if paste_payload.is_none() {
-                    paste_payload = Some(String::new());
-                }
-                return;
-            }
-            if ctrl && i.key_pressed(Key::CloseBracket) {
-                if mods.shift {
-                    self.bring_to_front();
-                } else {
-                    self.bring_forward();
-                }
-                return;
-            }
-            if ctrl && i.key_pressed(Key::OpenBracket) {
-                if mods.shift {
-                    self.send_to_back();
-                } else {
-                    self.send_backward();
-                }
-                return;
-            }
-            if ctrl && i.key_pressed(Key::A) {
-                self.selection = self
-                    .doc
-                    .layers
-                    .iter()
-                    .enumerate()
-                    .flat_map(|(li, l)| {
-                        let mut ids: Vec<(usize, u64)> = l
-                            .kind
-                            .shapes()
-                            .into_iter()
-                            .flatten()
-                            .filter(|s| s.visible && !s.locked)
-                            .map(move |s| (li, s.id))
-                            .collect();
-                        if l.kind.is_placed_raster() && l.visible && !l.locked {
-                            ids.push((li, RASTER_ID));
-                        }
-                        ids
-                    })
-                    .collect();
-                return;
-            }
-            if ctrl && i.key_pressed(Key::Num0) {
-                self.need_fit = true;
-                return;
-            }
-            if ctrl && i.key_pressed(Key::Num1) {
-                self.view.scale = 1.0;
-                self.mark();
-                return;
-            }
-            if ctrl && (i.key_pressed(Key::Plus) || i.key_pressed(Key::Equals)) {
-                if self.persona == Persona::Photo {
-                    self.photo.view_scale = (self.photo.view_scale * 1.25).clamp(0.1, 8.0);
-                } else {
-                    let at = self.canvas_zoom_anchor();
-                    self.zoom_by(1.25, at);
-                }
-                return;
-            }
-            if ctrl && i.key_pressed(Key::Minus) {
-                if self.persona == Persona::Photo {
-                    self.photo.view_scale = (self.photo.view_scale / 1.25).clamp(0.1, 8.0);
-                } else {
-                    let at = self.canvas_zoom_anchor();
-                    self.zoom_by(1.0 / 1.25, at);
-                }
-                return;
-            }
-            if i.key_pressed(Key::F1) {
-                self.show_shortcuts = !self.show_shortcuts;
-                return;
-            }
-            if wants_text {
-                return;
-            }
-            if self.persona == Persona::Motion {
-                if i.key_pressed(Key::Space) {
-                    self.playing = !self.playing;
-                    self.status = if self.playing { "play" } else { "pause" }.into();
-                    return;
-                }
-                if i.key_pressed(Key::K) {
-                    self.key_selection(Ease::EaseInOut);
-                    return;
-                }
-                if i.key_pressed(Key::Home) {
-                    self.playhead = 0.0;
-                    self.playing = false;
-                    return;
-                }
-                if i.key_pressed(Key::End) {
-                    self.playhead = self.doc.motion.duration;
-                    self.playing = false;
-                    return;
-                }
-            }
-            if i.key_pressed(Key::Delete) || i.key_pressed(Key::Backspace) {
-                self.delete_selection();
-                return;
-            }
-            if i.key_pressed(Key::Escape) {
-                if self.pending_place.is_some() {
-                    self.cancel_place();
-                    self.op = None;
-                    return;
-                }
-                if let Some(Op::Pen { anchors, source, .. }) = &mut self.op {
-                    if anchors.len() > 1 {
-                        anchors.pop();
-                        self.sync_pen_source();
-                        self.status = "point removed".into();
-                        return;
-                    }
-                    if let Some((li, id, orig)) = source.clone() {
-                        if let Some(s) = self.doc.find_shape_mut(li, id) {
-                            s.geom = orig;
-                        }
-                    }
-                    self.op = None;
-                    self.mark();
-                    self.bool_pick = None;
-                    return;
-                }
-                self.op = None;
-                self.bool_pick = None;
-                return;
-            }
-            if i.key_pressed(Key::Enter) {
-                if self.pending_place.is_some() {
-                    self.commit_place_at(Pt::new(self.doc.width * 0.5, self.doc.height * 0.5));
-                    return;
-                }
-                match self.op.take() {
-                    Some(Op::Pen { anchors, source, .. }) => {
-                        self.finish_pen(anchors, false, source)
-                    }
-                    Some(Op::CropPhoto { start, cur }) => {
-                        self.commit_photo_crop(start, cur);
-                    }
-                    other => self.op = other,
-                }
-                return;
-            }
-            let step = if mods.shift { 10.0 } else { 1.0 };
-            if i.key_pressed(Key::ArrowLeft) {
-                self.nudge(-step, 0.0);
-            }
-            if i.key_pressed(Key::ArrowRight) {
-                self.nudge(step, 0.0);
-            }
-            if i.key_pressed(Key::ArrowUp) {
-                self.nudge(0.0, -step);
-            }
-            if i.key_pressed(Key::ArrowDown) {
-                self.nudge(0.0, step);
-            }
-            if i.key_pressed(Key::X) {
-                self.swap_fill_stroke();
-            }
-            if i.key_pressed(Key::D) {
-                self.style = Style::default();
-            }
-            if i.key_pressed(Key::OpenBracket) {
-                if mods.shift {
-                    self.brush.hardness = (self.brush.hardness - 0.08).max(0.0);
-                } else {
-                    self.brush.size = (self.brush.size - 2.0).max(1.0);
-                }
-            }
-            if i.key_pressed(Key::CloseBracket) {
-                if mods.shift {
-                    self.brush.hardness = (self.brush.hardness + 0.08).min(1.0);
-                } else {
-                    self.brush.size = (self.brush.size + 2.0).min(256.0);
-                }
-            }
-            if !ctrl {
-                self.tool_from_key(i);
-            }
-        });
-        if do_copy {
-            self.copy_selection(ctx);
-        }
-        if do_cut {
-            self.cut_selection(ctx);
-        }
-        if let Some(p) = paste_payload {
-            self.paste_clipboard(if p.is_empty() { None } else { Some(p.as_str()) });
-        }
-    }
-
-    fn handle_type_keys(&mut self, ctx: &egui::Context) -> bool {
-        if self.type_edit.is_none() {
-            return false;
-        }
-        ctx.request_repaint();
-        let mut insert = String::new();
-        let mut backspace = false;
-        let mut delete = false;
-        let mut newline = false;
-        let mut escape = false;
-        let mut select_all = false;
-        let mut undo = false;
-        let mut redo = false;
-        let mut left = false;
-        let mut right = false;
-        let mut up = false;
-        let mut down = false;
-        let mut home = false;
-        let mut end = false;
-        let mut shift = false;
-        let mut save = false;
-        let mut copy = false;
-        let mut cut = false;
-        ctx.input(|i| {
-            shift = i.modifiers.shift;
-            let ctrl = i.modifiers.command || i.modifiers.ctrl;
-            if ctrl && i.key_pressed(Key::S) {
-                save = true;
-                return;
-            }
-            if ctrl && i.key_pressed(Key::Z) {
-                if i.modifiers.shift {
-                    redo = true;
-                } else {
-                    undo = true;
-                }
-                return;
-            }
-            if ctrl && i.key_pressed(Key::A) {
-                select_all = true;
-                return;
-            }
-            if i.key_pressed(Key::Escape) {
-                escape = true;
-                return;
-            }
-            if i.key_pressed(Key::Enter) {
-                newline = true;
-            }
-            if i.key_pressed(Key::Backspace) {
-                backspace = true;
-            }
-            if i.key_pressed(Key::Delete) {
-                delete = true;
-            }
-            if i.key_pressed(Key::ArrowLeft) {
-                left = true;
-            }
-            if i.key_pressed(Key::ArrowRight) {
-                right = true;
-            }
-            if i.key_pressed(Key::ArrowUp) {
-                up = true;
-            }
-            if i.key_pressed(Key::ArrowDown) {
-                down = true;
-            }
-            if i.key_pressed(Key::Home) {
-                home = true;
-            }
-            if i.key_pressed(Key::End) {
-                end = true;
-            }
-            if ctrl && i.key_pressed(Key::C) {
-                copy = true;
-            }
-            if ctrl && i.key_pressed(Key::X) {
-                cut = true;
-            }
-            // Text and paste events: Text when !ctrl, Paste always (Ctrl+V generates Paste)
-            for ev in &i.events {
-                match ev {
-                    egui::Event::Text(t) if !ctrl => insert.push_str(t),
-                    egui::Event::Paste(t) => insert.push_str(t),
-                    _ => {}
-                }
-            }
-        });
-        if copy || cut {
-            if let Some(run) = self
-                .type_edit
-                .as_ref()
-                .and_then(|e| self.doc.find_shape(e.layer, e.id))
-                .and_then(|s| match &s.geom {
-                    Geom::Text(r) => Some(r.clone()),
-                    _ => None,
-                })
-            {
-                let (lo, hi) = self.type_sel_range();
-                if lo != hi {
-                    let a = crate::text::char_to_byte(&run.content, lo);
-                    let b = crate::text::char_to_byte(&run.content, hi);
-                    let selected = run.content[a..b].to_owned();
-                    ctx.copy_text(selected);
-                    if cut {
-                        self.type_delete_range(lo, hi);
-                    }
-                }
-            }
-            return true;
-        }
-        if save {
-            self.commit_type_edit();
-            self.save();
-            return true;
-        }
-        if undo {
-            self.commit_type_edit();
-            self.undo();
-            return true;
-        }
-        if redo {
-            self.commit_type_edit();
-            self.redo();
-            return true;
-        }
-        if escape {
-            self.commit_type_edit();
-            self.tool = Tool::Select;
-            return true;
-        }
-        if select_all {
-            let n = self
-                .live_type_mut()
-                .map(|r| r.content.chars().count())
-                .unwrap_or(0);
-            if let Some(e) = &mut self.type_edit {
-                e.anchor = 0;
-                e.caret = n;
-            }
-            return true;
-        }
-        if newline {
-            self.type_insert("\n");
-        }
-        if backspace {
-            self.type_backspace();
-        }
-        if delete {
-            self.type_delete_fwd();
-        }
-        if !insert.is_empty() {
-            self.type_insert(&insert);
-        }
-        let caret = self.type_edit.as_ref().map(|e| e.caret).unwrap_or(0);
-        if left {
-            self.type_move_caret(caret.saturating_sub(1), shift);
-        }
-        if right {
-            self.type_move_caret(caret + 1, shift);
-        }
-        if home || up {
-            let Some(edit) = &self.type_edit else {
-                return true;
-            };
-            let start = self
-                .doc
-                .find_shape(edit.layer, edit.id)
-                .and_then(|s| match &s.geom {
-                    Geom::Text(r) => {
-                        let (line, _) = {
-                            let mut line = 0usize;
-                            let mut col = 0usize;
-                            let mut start_of_line = 0usize;
-                            for (i, ch) in r.content.chars().enumerate() {
-                                if i == caret {
-                                    break;
-                                }
-                                if ch == '\n' {
-                                    line += 1;
-                                    col = 0;
-                                    start_of_line = i + 1;
-                                } else {
-                                    col += 1;
-                                    let _ = col;
-                                }
-                            }
-                            (line, start_of_line)
-                        };
-                        let _ = line;
-                        Some({
-                            let mut start_of_line = 0usize;
-                            for (i, ch) in r.content.chars().enumerate() {
-                                if i == caret {
-                                    break;
-                                }
-                                if ch == '\n' {
-                                    start_of_line = i + 1;
-                                }
-                            }
-                            start_of_line
-                        })
-                    }
-                    _ => None,
-                });
-            if let Some(s) = start {
-                self.type_move_caret(s, shift);
-            }
-        }
-        if end || down {
-            let Some(edit) = &self.type_edit else {
-                return true;
-            };
-            let end_i = self
-                .doc
-                .find_shape(edit.layer, edit.id)
-                .and_then(|s| match &s.geom {
-                    Geom::Text(r) => {
-                        let mut i = 0usize;
-                        let mut hit = false;
-                        for ch in r.content.chars() {
-                            if i == caret {
-                                hit = true;
-                            }
-                            if hit && ch == '\n' {
-                                return Some(i);
-                            }
-                            i += 1;
-                        }
-                        Some(i)
-                    }
-                    _ => None,
-                });
-            if let Some(s) = end_i {
-                self.type_move_caret(s, shift);
-            }
-        }
-        true
-    }
-
-    fn tool_from_key(&mut self, i: &egui::InputState) {
-        let set = |s: &mut Studio, t: Tool| {
-            if t.in_persona(s.persona) {
-                s.set_tool(t);
-            }
-        };
-        if i.key_pressed(Key::V) {
-            set(self, Tool::Select);
-        }
-        if i.key_pressed(Key::A) {
-            set(self, Tool::Node);
-        }
-        if i.key_pressed(Key::P) {
-            set(self, Tool::Pen);
-        }
-        if i.key_pressed(Key::N) {
-            set(self, Tool::Pencil);
-        }
-        if i.key_pressed(Key::R) {
-            set(self, Tool::Rect);
-        }
-        if i.key_pressed(Key::O) {
-            if i.modifiers.shift && self.persona == Persona::Design {
-                set(self, Tool::Artboard);
-            } else {
-                set(self, Tool::Ellipse);
-            }
-        }
-        if i.key_pressed(Key::Y) {
-            set(self, Tool::Polygon);
-        }
-        if i.key_pressed(Key::S) && self.persona == Persona::Design {
-            set(self, Tool::Star);
-        }
-        if i.key_pressed(Key::L) {
-            set(self, Tool::Line);
-        }
-        if i.key_pressed(Key::T) {
-            set(self, Tool::Text);
-        }
-        if i.key_pressed(Key::G) {
-            set(self, Tool::Gradient);
-        }
-        if i.key_pressed(Key::I) {
-            set(self, Tool::Eyedropper);
-        }
-        if i.key_pressed(Key::U) {
-            set(self, Tool::Trace);
-        }
-        if i.key_pressed(Key::B) {
-            set(self, Tool::Brush);
-        }
-        if i.key_pressed(Key::E) {
-            set(self, Tool::Eraser);
-        }
-        if i.key_pressed(Key::K) {
-            set(self, Tool::Fill);
-        }
-        if i.key_pressed(Key::J) {
-            set(self, Tool::Clone);
-        }
-        if i.key_pressed(Key::M) && self.persona == Persona::Pixel {
-            set(self, Tool::Smudge);
-        }
-        if i.key_pressed(Key::C) {
-            set(self, Tool::Crop);
-        }
-        if i.key_pressed(Key::W) {
-            set(self, Tool::Wand);
-        }
-        if i.key_pressed(Key::Q) {
-            set(self, Tool::Lasso);
-        }
-        if i.key_pressed(Key::H) {
-            set(self, Tool::Hand);
-        }
-        if i.key_pressed(Key::Z) {
-            set(self, Tool::Zoom);
-        }
-        if i.key_pressed(Key::Space) {
-            // held separately
-        }
-    }
-
     pub fn commit_photo_crop(&mut self, start: Pt, cur: Pt) {
         let Some(img) = self.photo.selected_mut() else {
             return;
@@ -4357,14 +3244,11 @@ impl Studio {
 impl eframe::App for Studio {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
-        if ctx.input(|i| i.viewport().close_requested()) {
-            if !self.allow_close {
-                self.park_active();
-                let dirty = self.dirty || self.tabs.iter().any(|t| t.dirty);
-                if dirty {
-                    ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-                    self.pending_nav = Some(PendingNav::Quit);
-                }
+        if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
+            self.commit_type_edit();
+            if self.has_unsaved_changes() {
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                self.pending_nav = Some(PendingNav::Quit);
             }
         }
         crate::ui::run(ui, self);
@@ -4464,7 +3348,11 @@ mod tests {
         let w0 = s.doc.find_shape(1, id).unwrap().geom.bbox().width();
         s.flip_selection(true);
         let g = &s.doc.find_shape(1, id).unwrap().geom;
-        assert!((g.bbox().width() - w0).abs() < 0.1, "width {}", g.bbox().width());
+        assert!(
+            (g.bbox().width() - w0).abs() < 0.1,
+            "width {}",
+            g.bbox().width()
+        );
     }
 
     #[test]
@@ -4499,7 +3387,10 @@ mod tests {
         s.pen_click(Pt::new(0.0, 0.0));
         s.pen_click(Pt::new(20.0, 0.0));
         s.pen_click(Pt::new(20.0, 20.0));
-        let Op::Pen { anchors, source, .. } = s.op.take().unwrap() else {
+        let Op::Pen {
+            anchors, source, ..
+        } = s.op.take().unwrap()
+        else {
             panic!("pen");
         };
         s.finish_pen(anchors, false, source);
@@ -4516,7 +3407,10 @@ mod tests {
         s.show_welcome = false;
         s.place_text(Pt::new(80.0, 120.0));
         assert!(s.type_edit.is_some(), "click should start a type session");
-        match s.doc.find_shape(s.type_edit.as_ref().unwrap().layer, s.type_edit.as_ref().unwrap().id) {
+        match s.doc.find_shape(
+            s.type_edit.as_ref().unwrap().layer,
+            s.type_edit.as_ref().unwrap().id,
+        ) {
             Some(sh) => match &sh.geom {
                 Geom::Text(t) => assert_eq!(t.content, "Type"),
                 _ => panic!("expected text"),
@@ -4526,10 +3420,23 @@ mod tests {
         s.type_insert("Hello");
         let edit = s.type_edit.as_ref().unwrap();
         let sh = s.doc.find_shape(edit.layer, edit.id).unwrap();
-        let Geom::Text(t) = &sh.geom else { panic!("text") };
+        let Geom::Text(t) = &sh.geom else {
+            panic!("text")
+        };
         assert_eq!(t.content, "Hello");
         assert!(!t.contours.is_empty());
         s.commit_type_edit();
+        assert!(s.type_edit.is_none());
+
+        s.dirty = false;
+        s.begin_type_edit(s.selection[0], Pt::new(80.0, 120.0));
+        s.type_insert("New ");
+        assert!(
+            s.dirty,
+            "live text changes must be recoverable before leaving the editor"
+        );
+        s.request_close_tab(s.active_tab);
+        assert!(matches!(s.pending_nav, Some(PendingNav::CloseTab(0))));
         assert!(s.type_edit.is_none());
     }
 
@@ -4669,7 +3576,9 @@ mod tests {
         assert_eq!(px.w, 16);
         assert_eq!(px.h, 16);
         assert!(px.data.iter().any(|b| *b == 200), "placed pixels missing");
-        let hit = s.doc.hit_test(Pt::new(s.doc.width * 0.5, s.doc.height * 0.5), 2.0);
+        let hit = s
+            .doc
+            .hit_test(Pt::new(s.doc.width * 0.5, s.doc.height * 0.5), 2.0);
         assert_eq!(hit, Some((li, RASTER_ID)));
         let n = s.doc.layers.len();
         s.undo();
@@ -4686,11 +3595,7 @@ mod tests {
             Pt::new(200.0, 200.0),
         )];
         let id = s.doc.artboards[0].id;
-        s.finish_create(
-            CreateKind::Rect,
-            Pt::new(20.0, 20.0),
-            Pt::new(80.0, 80.0),
-        );
+        s.finish_create(CreateKind::Rect, Pt::new(20.0, 20.0), Pt::new(80.0, 80.0));
         let before: usize = s
             .doc
             .layers
@@ -4704,7 +3609,12 @@ mod tests {
             .unwrap()
             .world_bbox()
             .center();
-        let rasters_before = s.doc.layers.iter().filter(|l| l.kind.pixels().is_some()).count();
+        let rasters_before = s
+            .doc
+            .layers
+            .iter()
+            .filter(|l| l.kind.pixels().is_some())
+            .count();
         s.clone_artboard(id);
         let after: usize = s
             .doc
@@ -4715,7 +3625,12 @@ mod tests {
             .sum();
         assert_eq!(s.doc.artboards.len(), 2);
         assert_eq!(after, before + 1, "clone must copy objects on the board");
-        let rasters_after = s.doc.layers.iter().filter(|l| l.kind.pixels().is_some()).count();
+        let rasters_after = s
+            .doc
+            .layers
+            .iter()
+            .filter(|l| l.kind.pixels().is_some())
+            .count();
         assert_eq!(
             rasters_after, rasters_before,
             "paper background must not clone onto the new board"
@@ -4741,11 +3656,7 @@ mod tests {
             Pt::ZERO,
             Pt::new(200.0, 200.0),
         )];
-        s.finish_create(
-            CreateKind::Rect,
-            Pt::new(20.0, 20.0),
-            Pt::new(80.0, 80.0),
-        );
+        s.finish_create(CreateKind::Rect, Pt::new(20.0, 20.0), Pt::new(80.0, 80.0));
         let (li, id) = s.selection[0];
         let c0 = s.doc.find_shape(li, id).unwrap().world_bbox().center();
         let orig = s.doc.artboards[0].clone();
@@ -4770,11 +3681,7 @@ mod tests {
             Pt::ZERO,
             Pt::new(200.0, 200.0),
         )];
-        s.finish_create(
-            CreateKind::Rect,
-            Pt::new(20.0, 20.0),
-            Pt::new(80.0, 80.0),
-        );
+        s.finish_create(CreateKind::Rect, Pt::new(20.0, 20.0), Pt::new(80.0, 80.0));
         let (li, id) = s.selection[0];
         let orig = s.doc.artboards[0].clone();
         let mut neu = orig.clone();
@@ -4789,63 +3696,6 @@ mod tests {
             (c1.x - 150.0).abs() < 2.0 && (c1.y - 50.0).abs() < 2.0,
             "object must orbit the artboard centre, got {c1:?}"
         );
-    }
-
-    #[test]
-    fn copy_paste_duplicates_shape() {
-        let mut s = Studio::new();
-        s.show_welcome = false;
-        let sh = Shape::new(
-            Geom::Rect {
-                origin: Pt::new(10.0, 10.0),
-                size: Pt::new(20.0, 20.0),
-                radius: 0.0,
-            },
-            Style::default(),
-        );
-        let id = sh.id;
-        s.commit(Cmd::AddShape { layer: 1, shape: sh });
-        s.selection = vec![(1, id)];
-        s.clipboard = vec![s.doc.find_shape(1, id).cloned().unwrap()];
-        s.paste_clipboard(None);
-        assert_eq!(s.selection.len(), 1);
-        assert_ne!(s.selection[0].1, id);
-        let n = s.doc.layers[1].kind.shapes().unwrap().len();
-        assert_eq!(n, 2);
-    }
-
-    #[test]
-    fn five_new_tabs() {
-        let mut s = Studio::new();
-        s.show_welcome = true;
-        for _ in 0..5 {
-            s.new_tab();
-        }
-        assert_eq!(s.tab_count(), 5);
-    }
-
-    #[test]
-    fn swap_write_and_delete() {
-        let mut s = Studio::new();
-        s.show_welcome = false;
-        s.swap_id = format!("test-{}", crate::document::next_id());
-        s.commit(Cmd::AddShape {
-            layer: 1,
-            shape: Shape::new(
-                Geom::Rect {
-                    origin: Pt::new(0.0, 0.0),
-                    size: Pt::new(10.0, 10.0),
-                    radius: 0.0,
-                },
-                Style::default(),
-            ),
-        });
-        s.last_input = Instant::now() - Duration::from_millis(1500);
-        s.tick_swap();
-        let p = crate::project::swap_path(&s.swap_id);
-        assert!(p.exists(), "swap should be written after idle");
-        crate::project::delete_swap(&s.swap_id);
-        assert!(!p.exists());
     }
 
     #[test]

@@ -1,6 +1,6 @@
 //! Align and distribute selected shapes.
 
-use crate::document::{Document, Shape};
+use crate::document::Document;
 use crate::geom::{Bounds, Pt};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -58,14 +58,6 @@ pub fn align_deltas(doc: &Document, ids: &[(usize, u64)], how: Align) -> Vec<(us
     out
 }
 
-pub fn align(doc: &mut Document, ids: &[(usize, u64)], how: Align) {
-    for (li, id, d) in align_deltas(doc, ids, how) {
-        if let Some(s) = doc.find_shape_mut(li, id) {
-            s.geom.translate(d);
-        }
-    }
-}
-
 pub fn distribute_deltas(
     doc: &Document,
     ids: &[(usize, u64)],
@@ -76,70 +68,31 @@ pub fn distribute_deltas(
     }
     let mut items: Vec<(usize, u64, Bounds)> = ids
         .iter()
-        .filter_map(|(li, id)| {
-            doc.find_shape(*li, *id)
-                .map(|s| (*li, *id, s.world_bbox()))
-        })
+        .filter_map(|(li, id)| doc.find_shape(*li, *id).map(|s| (*li, *id, s.world_bbox())))
         .collect();
-    match how {
-        Distribute::Horizontal => {
-            items.sort_by(|a, b| a.2.center().x.partial_cmp(&b.2.center().x).unwrap())
-        }
-        Distribute::Vertical => {
-            items.sort_by(|a, b| a.2.center().y.partial_cmp(&b.2.center().y).unwrap())
-        }
+    if items.len() < 3 {
+        return vec![];
     }
-    let first = items.first().unwrap().2;
-    let last = items.last().unwrap().2;
-    let n = items.len() as f32;
-    let mut out = Vec::new();
-    match how {
-        Distribute::Horizontal => {
-            let start = first.center().x;
-            let end = last.center().x;
-            let step = (end - start) / (n - 1.0);
-            for (i, (li, id, b)) in items.iter().enumerate() {
-                let target = start + step * i as f32;
-                let d = Pt::new(target - b.center().x, 0.0);
-                if d.length_sq() > 1e-8 {
-                    out.push((*li, *id, d));
-                }
-            }
-        }
-        Distribute::Vertical => {
-            let start = first.center().y;
-            let end = last.center().y;
-            let step = (end - start) / (n - 1.0);
-            for (i, (li, id, b)) in items.iter().enumerate() {
-                let target = start + step * i as f32;
-                let d = Pt::new(0.0, target - b.center().y);
-                if d.length_sq() > 1e-8 {
-                    out.push((*li, *id, d));
-                }
-            }
-        }
-    }
-    out
-}
-
-pub fn distribute(doc: &mut Document, ids: &[(usize, u64)], how: Distribute) {
-    for (li, id, d) in distribute_deltas(doc, ids, how) {
-        if let Some(s) = doc.find_shape_mut(li, id) {
-            s.geom.translate(d);
-        }
-    }
-}
-
-pub fn selection_bounds(shapes: &[&Shape]) -> Option<Bounds> {
-    let mut b: Option<Bounds> = None;
-    for s in shapes {
-        let sb = s.world_bbox();
-        b = Some(match b {
-            None => sb,
-            Some(bb) => bb.union(sb),
-        });
-    }
-    b
+    let coordinate = |bounds: Bounds| match how {
+        Distribute::Horizontal => bounds.center().x,
+        Distribute::Vertical => bounds.center().y,
+    };
+    items.sort_by(|a, b| coordinate(a.2).total_cmp(&coordinate(b.2)));
+    let start = coordinate(items[0].2);
+    let end = coordinate(items[items.len() - 1].2);
+    let step = (end - start) / (items.len() - 1) as f32;
+    items
+        .iter()
+        .enumerate()
+        .filter_map(|(i, (li, id, bounds))| {
+            let offset = start + step * i as f32 - coordinate(*bounds);
+            let delta = match how {
+                Distribute::Horizontal => Pt::new(offset, 0.0),
+                Distribute::Vertical => Pt::new(0.0, offset),
+            };
+            (delta.length_sq() > 1e-8).then_some((*li, *id, delta))
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -168,10 +121,26 @@ mod tests {
         let ib = b.id;
         apply(&mut doc, &Cmd::AddShape { layer: 1, shape: a });
         apply(&mut doc, &Cmd::AddShape { layer: 1, shape: b });
-        align(&mut doc, &[(1, ia), (1, ib)], Align::Left);
-        let ba = doc.find_shape(1, ia).unwrap().world_bbox();
-        let bb = doc.find_shape(1, ib).unwrap().world_bbox();
-        assert!((ba.min.x - bb.min.x).abs() < 0.1);
-        assert!((ba.min.x - 10.0).abs() < 0.1);
+        let deltas = align_deltas(&doc, &[(1, ia), (1, ib)], Align::Left);
+        assert_eq!(deltas, vec![(1, ia, Pt::new(-30.0, 0.0))]);
+    }
+
+    #[test]
+    fn distribute_ignores_missing_shapes_and_preserves_endpoints() {
+        let mut doc = Document::new("t", 200.0, 200.0, 72.0);
+        let shapes = [rect(0.0, 0.0), rect(20.0, 20.0), rect(100.0, 100.0)];
+        let ids: Vec<_> = shapes.iter().map(|s| (1, s.id)).collect();
+        for shape in shapes {
+            apply(&mut doc, &Cmd::AddShape { layer: 1, shape });
+        }
+        assert_eq!(
+            distribute_deltas(&doc, &ids, Distribute::Horizontal),
+            vec![(1, ids[1].1, Pt::new(30.0, 0.0))]
+        );
+        assert_eq!(
+            distribute_deltas(&doc, &ids, Distribute::Vertical),
+            vec![(1, ids[1].1, Pt::new(0.0, 30.0))]
+        );
+        assert!(distribute_deltas(&doc, &[(1, u64::MAX); 3], Distribute::Horizontal).is_empty());
     }
 }
