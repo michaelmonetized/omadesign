@@ -274,23 +274,26 @@ fn draw_layer(
             doc,
             overrides,
         );
-        if let Some(mask) = &layer.mask
-            && let Some(mask_pm) = mask.to_pixmap()
-        {
-            let mut placed = Pixmap::new(pm.width(), pm.height()).unwrap();
-            placed.draw_pixmap(
-                0,
-                0,
-                mask_pm.as_ref(),
-                &PixmapPaint {
-                    quality: tiny_skia::FilterQuality::Bilinear,
-                    ..Default::default()
-                },
-                t,
-                None,
-            );
-            let m = tiny_skia::Mask::from_pixmap(placed.as_ref(), tiny_skia::MaskType::Alpha);
-            temp.apply_mask(&m);
+        if let Some(mask) = &layer.mask {
+            let _ = mask.with_pm(|mask_pm| {
+                let Some(mut placed) = Pixmap::new(pm.width(), pm.height()) else {
+                    return;
+                };
+                placed.draw_pixmap(
+                    0,
+                    0,
+                    mask_pm.as_ref(),
+                    &PixmapPaint {
+                        quality: tiny_skia::FilterQuality::Bilinear,
+                        ..Default::default()
+                    },
+                    t.pre_concat(layer_pixel_transform(layer)),
+                    None,
+                );
+                let m =
+                    tiny_skia::Mask::from_pixmap(placed.as_ref(), tiny_skia::MaskType::Luminance);
+                temp.apply_mask(&m);
+            });
         }
         if filtered {
             crate::filter::apply(&mut temp, &layer.filters);
@@ -323,6 +326,36 @@ fn draw_layer(
     }
 }
 
+/// Map a layer's native pixels (and its mask) into document coordinates.
+pub fn layer_pixel_transform(layer: &Layer) -> Transform {
+    let LayerKind::Raster {
+        pixels,
+        origin,
+        size,
+        rotation,
+    } = &layer.kind
+    else {
+        return Transform::identity();
+    };
+    let dimensions = if size.x.abs() > 0.5 && size.y.abs() > 0.5 {
+        *size
+    } else {
+        Pt::new(pixels.w as f32, pixels.h as f32)
+    };
+    let mut transform = Transform::from_translate(origin.x, origin.y).pre_scale(
+        dimensions.x / pixels.w.max(1) as f32,
+        dimensions.y / pixels.h.max(1) as f32,
+    );
+    if rotation.abs() > 1e-5 {
+        let centre = *origin + dimensions * 0.5;
+        transform = Transform::from_translate(centre.x, centre.y)
+            .pre_concat(Transform::from_rotate(rotation.to_degrees()))
+            .pre_concat(Transform::from_translate(-centre.x, -centre.y))
+            .pre_concat(transform);
+    }
+    transform
+}
+
 fn draw_content(
     pm: &mut Pixmap,
     layer: &Layer,
@@ -351,43 +384,9 @@ fn draw_content(
                 draw_shape(pm, p, t, opacity * 0.85, blend, pose);
             }
         }
-        LayerKind::Raster {
-            pixels,
-            origin,
-            size,
-            rotation,
-        } => {
-            let (ox, oy, dw, dh) = {
-                let native_w = pixels.w as f32;
-                let native_h = pixels.h as f32;
-                let (dw, dh) = if size.x.abs() > 0.5 && size.y.abs() > 0.5 {
-                    (size.x, size.y)
-                } else {
-                    (native_w, native_h)
-                };
-                (origin.x, origin.y, dw, dh)
-            };
+        LayerKind::Raster { pixels, .. } => {
             let _ = pixels.with_pm(|src| {
-                let sx = if src.width() == 0 {
-                    1.0
-                } else {
-                    dw / src.width() as f32
-                };
-                let sy = if src.height() == 0 {
-                    1.0
-                } else {
-                    dh / src.height() as f32
-                };
-                let mut xf = Transform::from_translate(ox, oy).pre_scale(sx, sy);
-                if rotation.abs() > 1e-5 {
-                    let cx = ox + dw * 0.5;
-                    let cy = oy + dh * 0.5;
-                    xf = Transform::from_translate(cx, cy)
-                        .pre_concat(Transform::from_rotate(rotation.to_degrees()))
-                        .pre_concat(Transform::from_translate(-cx, -cy))
-                        .pre_concat(xf);
-                }
-                xf = t.pre_concat(xf);
+                let xf = t.pre_concat(layer_pixel_transform(layer));
                 pm.draw_pixmap(
                     0,
                     0,
@@ -585,6 +584,9 @@ fn fill_paint<'a>(fill: &Fill, geom: &Geom) -> Paint<'a> {
 }
 
 fn is_paper_raster(layer: &Layer) -> bool {
+    if layer.mask.is_some() {
+        return false;
+    }
     let LayerKind::Raster { pixels, size, .. } = &layer.kind else {
         return false;
     };

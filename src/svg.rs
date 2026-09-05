@@ -62,11 +62,7 @@ fn hex_css(c: Rgba) -> String {
 }
 
 fn svg_color(c: Rgba) -> String {
-    if c.a >= 250 {
-        hex_css(c)
-    } else {
-        rgba_css(c)
-    }
+    if c.a >= 250 { hex_css(c) } else { rgba_css(c) }
 }
 
 fn raster_worth_exporting(
@@ -94,6 +90,56 @@ fn raster_worth_exporting(
         }
     }
     true
+}
+
+fn pixel_image(
+    pixels: &crate::document::Pixels,
+    transform: tiny_skia::Transform,
+) -> Result<String, String> {
+    let png = pixels
+        .to_pixmap()
+        .ok_or("Invalid image pixels in SVG export")?
+        .encode_png()
+        .map_err(|error| format!("Could not encode SVG image: {error}"))?;
+    let b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, png);
+    Ok(format!(
+        "  <image href=\"data:image/png;base64,{b64}\" width=\"{}\" height=\"{}\" preserveAspectRatio=\"none\" transform=\"matrix({:.6} {:.6} {:.6} {:.6} {:.6} {:.6})\"/>\n",
+        pixels.w,
+        pixels.h,
+        transform.sx,
+        transform.ky,
+        transform.kx,
+        transform.sy,
+        transform.tx,
+        transform.ty,
+    ))
+}
+
+fn write_layer_mask(defs: &mut String, layer: &Layer) -> Result<Option<String>, String> {
+    let Some(mask) = &layer.mask else {
+        return Ok(None);
+    };
+    let transform = crate::compositor::layer_pixel_transform(layer);
+    let mut corners = [
+        tiny_skia::Point::from_xy(0.0, 0.0),
+        tiny_skia::Point::from_xy(mask.w as f32, 0.0),
+        tiny_skia::Point::from_xy(mask.w as f32, mask.h as f32),
+        tiny_skia::Point::from_xy(0.0, mask.h as f32),
+    ];
+    transform.map_points(&mut corners);
+    let mut bounds = Bounds::from_pt(Pt::new(corners[0].x, corners[0].y));
+    for point in &corners[1..] {
+        bounds.union_pt(Pt::new(point.x, point.y));
+    }
+    let bounds = bounds.inflate(1.0);
+    let id = format!("oma-mask-{}", layer.id);
+    defs.push_str(&format!(
+        "<mask id=\"{id}\" maskUnits=\"userSpaceOnUse\" maskContentUnits=\"userSpaceOnUse\" mask-type=\"luminance\" color-interpolation=\"sRGB\" x=\"{:.3}\" y=\"{:.3}\" width=\"{:.3}\" height=\"{:.3}\">\n",
+        bounds.min.x,bounds.min.y,bounds.width(),bounds.height(),
+    ));
+    defs.push_str(&pixel_image(mask, transform)?);
+    defs.push_str("</mask>\n");
+    Ok(Some(id))
 }
 
 fn layer_bounds(layer: &Layer) -> Option<Bounds> {
@@ -124,11 +170,7 @@ fn stop_color(c: Rgba) -> String {
     if c.a >= 250 {
         hex_css(c)
     } else {
-        format!(
-            "{}\" stop-opacity=\"{:.3}",
-            hex_css(c),
-            c.a as f32 / 255.0
-        )
+        format!("{}\" stop-opacity=\"{:.3}", hex_css(c), c.a as f32 / 255.0)
     }
 }
 
@@ -313,7 +355,8 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
                     }
                     let mut extra = String::new();
                     if animate
-                        && let Some(kf) = motion.css_keyframes(shape.id, &format!("oma-{}", shape.id))
+                        && let Some(kf) =
+                            motion.css_keyframes(shape.id, &format!("oma-{}", shape.id))
                     {
                         css.push_str(&kf);
                         extra = format!(
@@ -336,47 +379,22 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
                         }
                     }
                     extra.push_str(&xf_attr(shape));
-                    write_shape(
-                        &mut layer_body,
-                        &mut defs,
-                        &mut grad_id,
-                        shape,
-                        &extra,
-                    );
+                    write_shape(&mut layer_body, &mut defs, &mut grad_id, shape, &extra);
                 }
             }
             LayerKind::Raster {
                 pixels,
                 origin,
                 size,
-                rotation,
+                ..
             } => {
-                if raster_worth_exporting(pixels, *origin, *size, doc)
-                    && let Some(pm) = pixels.to_pixmap()
-                    && let Ok(png) = pm.encode_png()
+                if !pixels.is_invisible()
+                    && (layer.mask.is_some() || raster_worth_exporting(pixels, *origin, *size, doc))
                 {
-                    let b64 = base64::Engine::encode(
-                        &base64::engine::general_purpose::STANDARD,
-                        png,
-                    );
-                    let (dw, dh) = if size.x.abs() > 0.5 && size.y.abs() > 0.5 {
-                        (size.x, size.y)
-                    } else {
-                        (pixels.w as f32, pixels.h as f32)
-                    };
-                    let mut xf = String::new();
-                    if rotation.abs() > 1e-5 {
-                        let cx = origin.x + dw * 0.5;
-                        let cy = origin.y + dh * 0.5;
-                        xf = format!(
-                            " transform=\"rotate({:.4} {cx:.3} {cy:.3})\"",
-                            rotation.to_degrees()
-                        );
-                    }
-                    layer_body.push_str(&format!(
-                        "  <image href=\"data:image/png;base64,{b64}\" x=\"{:.3}\" y=\"{:.3}\" width=\"{:.3}\" height=\"{:.3}\"{xf}/>\n",
-                        origin.x, origin.y, dw, dh
-                    ));
+                    layer_body.push_str(&pixel_image(
+                        pixels,
+                        crate::compositor::layer_pixel_transform(layer),
+                    )?);
                 }
             }
         }
@@ -388,7 +406,13 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
             layer.opacity,
             layer.blend.css()
         ));
-        body.push_str(&layer_body);
+        // Canvas masks the layer before applying its effects. Keep the mask on
+        // an inner group so SVG's filter-before-mask order cannot reverse that.
+        if let Some(mask_id) = write_layer_mask(&mut defs, layer)? {
+            body.push_str(&format!("<g mask=\"url(#{mask_id})\">\n{layer_body}</g>\n"));
+        } else {
+            body.push_str(&layer_body);
+        }
         body.push_str("</g>\n");
     }
 
@@ -479,7 +503,10 @@ mod tests {
                     crate::geom::Geom::Path {
                         anchors: vec![
                             Anchor::corner(crate::geom::Pt::new(10.0, 10.0)),
-                            Anchor::smooth(crate::geom::Pt::new(80.0, 40.0), crate::geom::Pt::new(20.0, 10.0)),
+                            Anchor::smooth(
+                                crate::geom::Pt::new(80.0, 40.0),
+                                crate::geom::Pt::new(20.0, 10.0),
+                            ),
                         ],
                         closed: false,
                     },
@@ -507,7 +534,10 @@ mod tests {
             "blank paper raster must not steal the SVG thumbnail"
         );
         assert!(s.contains("fill=\"none\""), "{s}");
-        assert!(s.contains("stroke=\"#"), "opaque stroke must be hex, got {s}");
+        assert!(
+            s.contains("stroke=\"#"),
+            "opaque stroke must be hex, got {s}"
+        );
     }
 
     #[test]
@@ -533,5 +563,93 @@ mod tests {
         let s = export(&doc).unwrap();
         assert!(s.contains("fill=\"#000000\""), "{s}");
         assert!(!s.contains("rgba(0,0,0"), "{s}");
+    }
+}
+
+#[cfg(test)]
+mod mask_tests {
+    use super::*;
+    use crate::document::Pixels;
+    use base64::Engine as _;
+
+    #[test]
+    fn svg_masks_preserve_luminance_alpha_placement_and_filter_order() {
+        let mut doc = Document::new("Mask export", 160.0, 120.0, 72.0);
+        doc.transparent = true;
+        let mut layer = Layer::raster("Masked image", 4, 2);
+        if let LayerKind::Raster {
+            pixels,
+            origin,
+            size,
+            rotation,
+        } = &mut layer.kind
+        {
+            pixels.data = [255, 0, 0, 255].repeat(8);
+            *origin = Pt::new(40.0, 30.0);
+            *size = Pt::new(80.0, 40.0);
+            *rotation = std::f32::consts::FRAC_PI_2;
+        }
+        let mask_data = [
+            0, 0, 0, 255, 255, 255, 255, 64, 128, 128, 128, 128, 255, 255, 255, 255,
+        ]
+        .repeat(2);
+        layer.mask = Some(Pixels::from_rgba(4, 2, mask_data.clone()).unwrap());
+        layer
+            .filters
+            .items
+            .push(crate::filter::Fx::Blur { std: 2.0 });
+        let id = layer.id;
+        doc.layers = vec![layer];
+        let svg = export(&doc).unwrap();
+        let mask = svg
+            .split("<mask ")
+            .nth(1)
+            .unwrap()
+            .split("</mask>")
+            .next()
+            .unwrap();
+        assert!(mask.contains("mask-type=\"luminance\""));
+        assert!(mask.contains("color-interpolation=\"sRGB\""));
+        let matrix: Vec<f32> = mask
+            .split("matrix(")
+            .nth(1)
+            .unwrap()
+            .split(')')
+            .next()
+            .unwrap()
+            .split_whitespace()
+            .map(|value| value.parse().unwrap())
+            .collect();
+        assert_eq!(matrix.len(), 6);
+        for (actual, expected) in matrix.iter().zip([0.0, 20.0, -20.0, 0.0, 100.0, 10.0]) {
+            assert!(
+                (actual - expected).abs() < 0.001,
+                "mask placement: {matrix:?}"
+            );
+        }
+        let b64 = mask
+            .split("data:image/png;base64,")
+            .nth(1)
+            .unwrap()
+            .split('"')
+            .next()
+            .unwrap();
+        let png = base64::engine::general_purpose::STANDARD
+            .decode(b64)
+            .unwrap();
+        assert_eq!(
+            image::load_from_memory(&png).unwrap().to_rgba8().into_raw(),
+            mask_data
+        );
+        let filter = svg.find(&format!(" filter=\"url(#oma-fx-{id})\"")).unwrap();
+        let masking = svg
+            .find(&format!("<g mask=\"url(#oma-mask-{id})\""))
+            .unwrap();
+        assert!(
+            filter < masking,
+            "mask must be nested inside the outer filter group"
+        );
+        let decoded = crate::project::decode(&crate::project::encode(&doc).unwrap()).unwrap();
+        assert_eq!(decoded.layers[0].mask.as_ref().unwrap().data, mask_data);
     }
 }

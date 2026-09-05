@@ -1,9 +1,14 @@
 mod browsers;
 mod canvas;
 mod chrome;
+mod deform;
+mod guides;
 mod icons;
 mod jobs;
+mod masking;
 mod photo;
+mod retouch;
+mod selection;
 mod studios;
 pub mod theme;
 mod timeline;
@@ -19,6 +24,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     if (ctx.zoom_factor() - 1.0).abs() > 1e-3 {
         ctx.set_zoom_factor(1.0);
     }
+    guides::handle_shortcuts(&ctx, studio);
     studio.handle_shortcuts(&ctx);
     studio.tick_motion(&ctx);
 

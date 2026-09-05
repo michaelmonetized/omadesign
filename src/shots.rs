@@ -22,12 +22,24 @@ pub const SCENES: &[Scene] = &[
         caption: "Design — move, scale, rotate. Phosphor well. Omarchy chrome.",
     },
     Scene {
+        id: "reshape",
+        caption: "Reshape — nine handles, flowing vector contours, one undo per drag.",
+    },
+    Scene {
         id: "type",
         caption: "Type you type into. Character studio. Your fonts, live.",
     },
     Scene {
         id: "pixel",
         caption: "Pixel — brush, clone, wand. Same document, raster layer.",
+    },
+    Scene {
+        id: "masking",
+        caption: "Layer masks — hide, reveal, keep the original pixels.",
+    },
+    Scene {
+        id: "healing",
+        caption: "Healing — clean texture, blended into local colour.",
     },
     Scene {
         id: "photo",
@@ -63,8 +75,11 @@ pub fn apply(studio: &mut Studio, id: &str) -> Result<(), String> {
     match id {
         "welcome" => welcome(studio),
         "design" => design(studio),
+        "reshape" => reshape(studio),
         "type" => type_scene(studio),
         "pixel" => pixel(studio),
+        "masking" => masking(studio),
+        "healing" => healing(studio),
         "photo" => photo(studio),
         "colour" => colour(studio),
         "boolean" => boolean(studio),
@@ -98,6 +113,86 @@ fn design(s: &mut Studio) {
     }
     s.need_fit = true;
     s.status = "Move V · handles scale · the top handle rotates".into();
+}
+
+fn reshape(s: &mut Studio) {
+    s.show_welcome = false;
+    s.doc = crate::document::Document::new("A little bend", 1280.0, 840.0, 72.0);
+    s.persona = Persona::Design;
+    s.tool = Tool::Select;
+    s.show_rulers = true;
+    add_rect(s, 0.0, 0.0, 1280.0, 840.0, Rgba::from_hex(0xF5F1E9), 0.0);
+    add_text(
+        s,
+        Pt::new(90.0, 115.0),
+        "A LITTLE BEND",
+        42.0,
+        Rgba::from_hex(0x252A32),
+        -1.0,
+    );
+    add_text(
+        s,
+        Pt::new(94.0, 160.0),
+        "Pull a point. Find a new shape.",
+        19.0,
+        Rgba::from_hex(0x747775),
+        0.0,
+    );
+    let mut selected = Vec::new();
+    for i in 0..7 {
+        let shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(160.0, 260.0 + i as f32 * 53.0),
+                size: Pt::new(710.0, 29.0),
+                radius: 14.5,
+            },
+            Style {
+                fill: Fill::Solid(if i % 2 == 0 {
+                    Rgba::from_hex(0xDE765A)
+                } else {
+                    Rgba::from_hex(0xD9AF50)
+                }),
+                stroke: None,
+            },
+        );
+        selected.push((1, shape.id));
+        s.commit(Cmd::AddShape { layer: 1, shape });
+    }
+    let star = Shape::new(
+        Geom::Star {
+            center: Pt::new(1010.0, 398.0),
+            outer: Pt::new(105.0, 105.0),
+            inner: 0.56,
+            points: 8,
+        },
+        Style {
+            fill: Fill::Solid(Rgba::from_hex(0x487F6C)),
+            stroke: None,
+        },
+    );
+    selected.push((1, star.id));
+    s.commit(Cmd::AddShape {
+        layer: 1,
+        shape: star,
+    });
+    add_text(
+        s,
+        Pt::new(94.0, 748.0),
+        "LIVE VECTOR MESH  /  3 × 3",
+        15.0,
+        Rgba::from_hex(0x747775),
+        1.0,
+    );
+    s.selection = selected;
+    s.begin_deform(crate::deform::Mode::Mesh);
+    if let Some(session) = &s.deformation {
+        let center = session.cage.handles()[4];
+        s.deformation_drag_start(4, center);
+        s.deformation_drag_to(center + Pt::new(55.0, -80.0), false);
+        s.deformation_drag_finish();
+    }
+    s.need_fit = true;
+    s.status = "Warp mesh · drag a point · Ctrl inverts snapping · Enter finishes".into();
 }
 
 fn type_scene(s: &mut Studio) {
@@ -187,6 +282,161 @@ fn photo(s: &mut Studio) {
     s.tool = Tool::Hand;
     s.photo.import_samples();
     s.status = "Develop, then Place in Design".into();
+}
+
+fn masking(s: &mut Studio) {
+    s.show_welcome = false;
+    s.doc = crate::document::Document::new("Keep the good parts", 1280.0, 840.0, 72.0);
+    add_rect(s, 0.0, 0.0, 1280.0, 840.0, Rgba::from_hex(0xF5F1E9), 0.0);
+    add_text(
+        s,
+        Pt::new(88.0, 106.0),
+        "KEEP THE GOOD PARTS.",
+        46.0,
+        Rgba::from_hex(0x252A32),
+        -1.0,
+    );
+    add_text(
+        s,
+        Pt::new(92.0, 156.0),
+        "A little hiding. A little revealing. Nothing lost.",
+        20.0,
+        Rgba::from_hex(0x747775),
+        0.0,
+    );
+    let (_, image) = crate::photo::sample_photo(0);
+    let image = image.downscaled(800);
+    let selection = crate::paint::fill_ellipse_mask(
+        image.w,
+        image.h,
+        8.0,
+        8.0,
+        image.w as f32 - 8.0,
+        image.h as f32 - 8.0,
+    );
+    let pixels = crate::document::Pixels::from_rgba(image.w, image.h, image.data).unwrap();
+    let layer = crate::document::Layer::placed_raster(
+        "Landscape · editable mask",
+        pixels,
+        Pt::new(150.0, 224.0),
+        Pt::new(980.0, 440.0),
+    );
+    let index = s.doc.layers.len();
+    s.commit(Cmd::AddLayer { index, layer });
+    s.active_layer = Some(index);
+    s.pixel_sel = Some(selection);
+    s.mask_from_selection(index);
+    s.pixel_sel = None;
+    s.selection.clear();
+    s.brush.size = 64.0;
+    s.brush.hardness = 0.4;
+    s.layer_expanded.insert(s.doc.layers[index].id);
+    add_text(
+        s,
+        Pt::new(92.0, 758.0),
+        "THE ORIGINAL STAYS YOURS.",
+        19.0,
+        Rgba::from_hex(0x747775),
+        0.0,
+    );
+    s.need_fit = true;
+    s.status = "Black hides · white reveals · undo brings it back".into();
+}
+
+fn healing(s: &mut Studio) {
+    s.show_welcome = false;
+    s.doc = crate::document::Document::new("A clean finish", 1280.0, 840.0, 72.0);
+    add_rect(s, 0.0, 0.0, 1280.0, 840.0, Rgba::from_hex(0xF5F1E9), 0.0);
+    add_text(
+        s,
+        Pt::new(88.0, 106.0),
+        "A SMALL FIX. A CLEAN FINISH.",
+        42.0,
+        Rgba::from_hex(0x252A32),
+        -1.0,
+    );
+    add_text(
+        s,
+        Pt::new(92.0, 156.0),
+        "Borrow the texture. Keep the colour.",
+        20.0,
+        Rgba::from_hex(0x747775),
+        0.0,
+    );
+    add_text(
+        s,
+        Pt::new(92.0, 248.0),
+        "BEFORE",
+        17.0,
+        Rgba::from_hex(0x747775),
+        0.0,
+    );
+    add_text(
+        s,
+        Pt::new(690.0, 248.0),
+        "AFTER",
+        17.0,
+        Rgba::from_hex(0x747775),
+        0.0,
+    );
+    let (_, image) = crate::photo::sample_photo(1);
+    let image = image.downscaled(480);
+    let mut original = crate::color::rgba_to_pixmap(image.w, image.h, &image.data).unwrap();
+    let blemish = Pt::new(300.0, 190.0);
+    let source = Pt::new(220.0, 160.0);
+    crate::paint::stamp(
+        &mut original,
+        blemish,
+        &Brush {
+            size: 38.0,
+            hardness: 0.7,
+            flow: 1.0,
+            opacity: 1.0,
+            color: Rgba::from_hex(0x342225),
+            ..Default::default()
+        },
+        false,
+    );
+    let mut repaired = original.clone();
+    let brush = Brush {
+        size: 84.0,
+        hardness: 0.55,
+        flow: 1.0,
+        opacity: 1.0,
+        ..Default::default()
+    };
+    crate::paint::heal_stamp(&mut repaired, &original, blemish, source, &brush);
+    for (name, x, image) in [
+        ("Original texture", 92.0, original),
+        ("Healed texture", 690.0, repaired),
+    ] {
+        let pixels = crate::document::Pixels::from_pixmap(&image);
+        let layer = crate::document::Layer::placed_raster(
+            name,
+            pixels,
+            Pt::new(x, 284.0),
+            Pt::new(image.width() as f32, image.height() as f32),
+        );
+        let index = s.doc.layers.len();
+        s.commit(Cmd::AddLayer { index, layer });
+        s.active_layer = Some(index);
+    }
+    add_text(
+        s,
+        Pt::new(92.0, 720.0),
+        "ALT-CLICK A SOURCE. PAINT OVER THE DISTRACTION.",
+        19.0,
+        Rgba::from_hex(0x747775),
+        0.0,
+    );
+    s.persona = Persona::Pixel;
+    s.tool = Tool::Heal;
+    s.brush = brush;
+    s.clone_source = Some(source + Pt::new(690.0, 284.0));
+    s.paint_mask = false;
+    s.selection.clear();
+    s.need_fit = true;
+    s.status = "Healing keeps source texture and matches the surrounding colour".into();
 }
 
 fn colour(s: &mut Studio) {

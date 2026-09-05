@@ -72,6 +72,10 @@ impl TabState {
 
 impl Studio {
     fn exchange_tab(&mut self, i: usize) {
+        self.end_pixel_stroke(true);
+        self.end_deform(true);
+        self.reset_snap_gesture();
+        self.paint_mask = false;
         let t = &mut self.tabs[i];
         swap(&mut self.doc, &mut t.doc);
         swap(&mut self.path, &mut t.path);

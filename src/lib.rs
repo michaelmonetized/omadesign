@@ -1,23 +1,23 @@
 pub mod align;
 pub mod app;
+pub mod asset_browser;
 pub mod boolean;
 pub mod color;
 pub mod compositor;
+pub mod compound;
 pub mod document;
 pub mod filter;
-pub mod asset_browser;
-pub mod compound;
 pub mod geom;
 pub mod google_fonts;
 pub mod import;
 pub mod motion;
-pub mod palette;
 pub mod paint;
-pub mod shape_browser;
+pub mod palette;
 mod phosphor_map;
 pub mod photo;
 pub mod presets;
 pub mod project;
+pub mod shape_browser;
 pub mod shots;
 pub mod snap;
 pub mod svg;
@@ -25,3 +25,7 @@ pub mod text;
 pub mod tools;
 pub mod trace;
 pub mod ui;
+
+pub mod deform;
+
+pub mod outline;

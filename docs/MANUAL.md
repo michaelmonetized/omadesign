@@ -67,7 +67,27 @@ Pen / Node parity with Affinity, Illustrator, and Inkscape:
 
 Colour studio: HSV, hex, swatches, recent. `X` swaps fill/stroke. `D` restores defaults.
 
-Boolean (Object menu): union, subtract, intersect, XOR. Combine `Ctrl+G`, release `Ctrl+Shift+G`. Align and distribute. Bring to front / send to back. Snap to grid, guides, objects. Click a ruler to drop a guide.
+**Select** has All, None, Invert, Same Fill / Stroke / Effects, and With / Without Fill / Stroke / Effects. Matching compares the complete property, including gradient positions, stroke settings, or the effect stack. Hidden and locked objects stay out of the selection.
+
+**Object → Pathfinder** offers Union, Subtract, Intersect, XOR, and Divide. Select two or more vector objects on the same layer. Operations follow the layer stacking order; Divide makes separate pieces, with holes preserved. Each operation is one undo step. Combine `Ctrl+G` and Release `Ctrl+Shift+G` remain available.
+
+**Object → Expand stroke to outline** turns the visible stroke into filled geometry, including caps, joins, and dashes. Existing fills stay in place beneath the new outline. Compound outlines retain their holes; use Reshape to move their contours together.
+
+### Guides, rulers, and precision
+
+Drag from the top ruler for a horizontal guide or the left ruler for a vertical one. Drag an existing guide to move it. Select a guide and press Delete, drag it outside the canvas, or use its context menu to remove it. View also offers Clear Guides. `Ctrl+;` shows or hides guides.
+
+Drag the rulers' top-left intersection to set the zero point. Double-click that corner to reset it. Right-click a ruler or use View to choose pixels, millimetres, centimetres, inches, or points. Physical units follow the document DPI; changing units changes the ruler display, not the artwork.
+
+Snapping uses object and artboard edges and centres, guides, the grid, and equal spacing between nearby objects. Alignment lines and gap measurements appear as you move. `Ctrl+Shift+;` toggles snapping; hold Ctrl during the same drag to temporarily reverse that choice, then release it to return. View has individual snapping options.
+
+Hold Shift to constrain pen points and handles, pencil/brush strokes, and object or artboard movement to horizontal, vertical, or 45°. Alt-drag clones an object; combine it with Shift for a constrained copy. During a brush stroke, pressing Shift anchors the constraint at the last free point.
+
+### Reshape
+
+In Design, select vector artwork and choose **Object → Reshape → Distort, Skew, Perspective, or Warp mesh**. Drag the cage handles; the inspector switches modes and finishes the edit. The mesh has nine handles. Shift constrains movement, and Ctrl temporarily reverses snapping. Enter finishes; Esc cancels the current drag, or leaves the mode if no drag is active. Each completed drag is one undo step.
+
+The first moved handle converts live text and parameter-based shapes to paths. Undo restores their original form. Reshape currently supports vector artwork; placed photographs retain the normal move, scale, and rotate tools.
 
 **FX** (right studio): SVG filter effects on the selected object, then the layer underneath — blur, drop/inner shadow, offset, dilate/erode, saturate, hue rotate, brightness, contrast, invert, color matrix, turbulence, displacement. Params are the SVG ones. They rasterise on the canvas and write `<filter>` / `fe*` on SVG export.
 
@@ -83,7 +103,14 @@ Paint lives on a **pixel layer**. Add one from the Layers studio if the document
 
 - Brush `B` — size `[` `]`, hardness `Shift+[` `]`.
 - Eraser `E`, Fill `K`, Clone `J` (Alt-click sets source), Smudge `M`.
+- Healing brush `Shift+J` — Alt-click clean texture on the active image, then paint over a blemish. It blends sampled texture with the destination's local colour and preserves transparency. The source stays fixed for the stroke; Undo restores the whole stroke.
 - Marquee, elliptical marquee, lasso, wand. Tolerance is in Brush.
+
+### Masks
+
+Use the layer context menu's **Mask** submenu, or **Add layer mask** in Pixel, to reveal all, hide all, or start from the current pixel selection. Switch between Pixels/Artwork and Mask in the inspector. Black hides; white reveals. The Eraser hides on a mask, and Fill works on the current paint target.
+
+Masks work on pixel and vector layers and remain editable in the project. Invert flips the mask; Remove reveals the untouched layer. Apply to Pixels bakes the result into a raster layer, with one undo restoring both pixels and mask. Placed image masks follow the image's position, scale, and rotation. Choose Pixels before using the healing or clone brush.
 
 ## Photo
 
@@ -119,7 +146,7 @@ PNG/JPEG/static SVG stay the rest pose. The clip lives in the `.oma`.
 Move V · Node A · Pen P · Pencil N
 Rectangle R · Ellipse O · Polygon Y · Star S · Line L
 Type T · Gradient G · Eyedropper I · Trace U · Brush B · Eraser E
-Fill K · Clone J · Smudge M · Crop C · Wand W · Hand H · Zoom Z
+Fill K · Clone J · Heal Shift+J · Smudge M · Crop C · Wand W · Hand H · Zoom Z
 Undo Ctrl+Z · Redo Ctrl+Shift+Z · Duplicate Ctrl+D
 Copy Ctrl+C · Paste Ctrl+V · Cut Ctrl+X · Select all Ctrl+A
 Save Ctrl+S · Save as Ctrl+Shift+S · Open Ctrl+O · New Ctrl+N · Place Ctrl+Shift+P · Export Ctrl+E

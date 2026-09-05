@@ -1,8 +1,13 @@
 //! Studio: document + tool state. Mutations go through commands.
 
+pub mod deform;
+mod guides;
+mod masking;
 mod photo_session;
 mod recovery;
+pub(crate) mod selection;
 mod shortcuts;
+mod snapping;
 mod tabs;
 
 pub use photo_session::PhotoSession;
@@ -170,6 +175,17 @@ pub enum Op {
         last: Option<Pt>,
         before: Vec<u8>,
     },
+    Retouch {
+        layer: usize,
+        mask: bool,
+        erase: bool,
+        heal: bool,
+        source: Option<Pixmap>,
+        buf: Pixmap,
+        offset: Pt,
+        last: Pt,
+        before: Vec<u8>,
+    },
     Smudge {
         layer: usize,
         last: Option<Pt>,
@@ -225,6 +241,7 @@ pub struct Studio {
     pub tool: Tool,
     pub last_tool: Tool,
     pub op: Option<Op>,
+    pub deformation: Option<deform::DeformSession>,
     pub selection: Vec<(usize, u64)>,
     pub active_layer: Option<usize>,
     pub history: History,
@@ -234,7 +251,14 @@ pub struct Studio {
     pub fill_tolerance: f32,
     pub clone_source: Option<Pt>,
     pub pixel_sel: Option<Vec<u8>>,
+    pub paint_mask: bool,
     pub snap: SnapSettings,
+    pub snap_scene: Option<snap::Scene>,
+    pub(crate) snap_points: Option<snapping::PointCache>,
+    pub snap_bounds: Option<Bounds>,
+    pub snap_feedback: snap::Feedback,
+    pub snap_override: bool,
+    pub stroke_constraint: Option<Pt>,
     pub photo: PhotoSession,
     pub status: String,
     pub cursor: Option<Pt>,
@@ -371,6 +395,7 @@ impl Studio {
             tool: Tool::Select,
             last_tool: Tool::Select,
             op: None,
+            deformation: None,
             selection: vec![],
             active_layer: Some(1),
             history: History::default(),
@@ -380,7 +405,14 @@ impl Studio {
             fill_tolerance: 32.0,
             clone_source: None,
             pixel_sel: None,
+            paint_mask: false,
             snap: SnapSettings::default(),
+            snap_scene: None,
+            snap_points: None,
+            snap_bounds: None,
+            snap_feedback: snap::Feedback::default(),
+            snap_override: false,
+            stroke_constraint: None,
             photo: PhotoSession::new(),
             status: "Welcome home. V to move, R for a rectangle, B to paint, or open Photo.".into(),
             cursor: None,
@@ -1020,6 +1052,8 @@ impl Studio {
     }
 
     pub fn commit(&mut self, cmd: Cmd) {
+        self.end_pixel_stroke(false);
+        self.end_deform(false);
         apply_cmd(&mut self.doc, &cmd);
         self.history.push(cmd);
         self.dirty = true;
@@ -1028,6 +1062,18 @@ impl Studio {
     }
 
     pub fn undo(&mut self) {
+        if self.end_pixel_stroke(true) {
+            return;
+        }
+        let dragging = self
+            .deformation
+            .as_ref()
+            .is_some_and(|session| session.dragging());
+        self.end_deform(true);
+        self.reset_snap_gesture();
+        if dragging {
+            return;
+        }
         if let Some(inv) = self.history.undo() {
             apply_cmd(&mut self.doc, &inv);
             self.dirty = true;
@@ -1038,6 +1084,11 @@ impl Studio {
     }
 
     pub fn redo(&mut self) {
+        if self.end_pixel_stroke(true) {
+            return;
+        }
+        self.end_deform(true);
+        self.reset_snap_gesture();
         if let Some(cmd) = self.history.redo() {
             apply_cmd(&mut self.doc, &cmd);
             self.dirty = true;
@@ -1103,22 +1154,23 @@ impl Studio {
     }
 
     pub fn raster_target(&mut self) -> Option<usize> {
-        if let Some(i) = self.active_layer
-            && matches!(
-                self.doc.layers.get(i).map(|l| &l.kind),
-                Some(LayerKind::Raster { .. })
-            )
-            && !self.doc.layers[i].locked
-        {
-            return Some(i);
+        let editable =
+            |layer: &Layer| layer.visible && !layer.locked && layer.kind.pixels().is_some();
+        if let Some(index) = self.active_layer {
+            return self
+                .doc
+                .layers
+                .get(index)
+                .filter(|layer| editable(layer))
+                .map(|_| index);
         }
         self.doc
             .layers
             .iter()
             .enumerate()
             .rev()
-            .find(|(_, l)| matches!(l.kind, LayerKind::Raster { .. }) && !l.locked)
-            .map(|(i, _)| i)
+            .find(|(_, layer)| editable(layer))
+            .map(|(index, _)| index)
     }
 
     pub fn add_layer(&mut self, raster: bool) {
@@ -1194,35 +1246,33 @@ impl Studio {
     }
 
     pub fn duplicate_selection_by(&mut self, delta: Pt) {
-        let sel = self.selection.clone();
-        let mut neu = vec![];
-        for (li, id) in sel {
+        let mut selected = Vec::new();
+        let mut commands = Vec::new();
+        let mut new_layers = 0;
+        for (li, id) in self.selection.clone() {
             if id == RASTER_ID {
-                if let Some(layer) = self.doc.layers.get(li).cloned() {
-                    let mut layer = layer;
+                if let Some(mut layer) = self.doc.layers.get(li).cloned() {
                     layer.id = crate::document::next_id();
                     layer.name = format!("{} copy", layer.name);
-                    if let Some((o, sz, rot)) = layer.kind.raster_xform() {
-                        layer.kind.set_raster_xform(o + delta, sz, rot);
+                    if let Some((origin, size, rotation)) = layer.kind.raster_xform() {
+                        layer.kind.set_raster_xform(origin + delta, size, rotation);
                     }
-                    let index = self.doc.layers.len();
-                    self.commit(Cmd::AddLayer { index, layer });
-                    neu.push((index, RASTER_ID));
+                    let index = self.doc.layers.len() + new_layers;
+                    new_layers += 1;
+                    commands.push(Cmd::AddLayer { index, layer });
+                    selected.push((index, RASTER_ID));
                 }
-            } else if let Some(mut s) = self.doc.find_shape(li, id).cloned() {
-                s.id = crate::document::next_id();
-                s.geom.translate(delta);
-                neu.push((li, s.id));
-                self.commit(Cmd::AddShape {
-                    layer: li,
-                    shape: s,
-                });
+            } else if let Some(mut shape) = self.doc.find_shape(li, id).cloned() {
+                shape.id = crate::document::next_id();
+                shape.geom.translate(delta);
+                selected.push((li, shape.id));
+                commands.push(Cmd::AddShape { layer: li, shape });
             }
         }
-        let n = neu.len();
-        self.selection = neu;
-        if n > 0 {
-            self.status = format!("duplicated {n}");
+        if !commands.is_empty() {
+            self.commit(Cmd::Batch(commands));
+            self.selection = selected;
+            self.status = format!("Duplicated {} objects", self.selection.len());
         }
     }
 
@@ -1664,8 +1714,11 @@ impl Studio {
     }
 
     pub fn set_tool(&mut self, t: Tool) {
+        self.end_deform(true);
         if self.tool != t {
+            self.end_pixel_stroke(true);
             self.commit_type_edit();
+            self.reset_snap_gesture();
             self.last_tool = self.tool;
             self.tool = t;
             self.op = None;
@@ -1924,6 +1977,11 @@ impl Studio {
         if matches!(s.geom, Geom::Path { .. } | Geom::Text(_)) {
             return;
         }
+        if matches!(&s.geom, Geom::Poly { contours, .. } if contours.len() > 1) {
+            self.status =
+                "Compound path preserved · use Reshape to edit its contours together".into();
+            return;
+        }
         let mut after = s.geom.to_path();
         let rot = s.rotation;
         if rot.abs() > 1e-5 {
@@ -2092,84 +2150,11 @@ impl Studio {
     }
 
     pub fn apply_boolean(&mut self, op: BoolOp) {
-        if self.selection.len() < 2 {
-            self.status = "select two shapes, then boolean".into();
-            return;
-        }
-        // If more than 2 selected, delegate to the multi version which folds the op.
-        if self.selection.len() > 2 {
-            self.apply_boolean_multi(op);
-            return;
-        }
-        let (la, ia) = self.selection[0];
-        let (lb, ib) = self.selection[1];
-        if la != lb {
-            self.status = "boolean needs two shapes on the same layer".into();
-            return;
-        }
-        let Some(a) = self.doc.find_shape(la, ia).cloned() else {
-            return;
-        };
-        let Some(b) = self.doc.find_shape(lb, ib).cloned() else {
-            return;
-        };
-        match boolean::apply(op, &a.geom, &b.geom) {
-            Some(geom) => {
-                let mut shape = a.clone();
-                shape.id = crate::document::next_id();
-                shape.geom = geom;
-                shape.name = op.name().into();
-                self.commit(Cmd::RemoveShapes {
-                    layer: la,
-                    shapes: vec![a, b],
-                });
-                let id = shape.id;
-                self.commit(Cmd::AddShape { layer: la, shape });
-                self.selection = vec![(la, id)];
-                self.status = format!("{} applied", op.name());
-            }
-            None => self.status = "boolean produced nothing".into(),
-        }
+        self.pathfinder(op);
     }
 
     pub fn apply_boolean_multi(&mut self, op: BoolOp) {
-        if self.selection.len() < 2 {
-            self.status = "select at least two shapes".into();
-            return;
-        }
-        // All on same layer and sorted by z-order (selection order is already z-sorted
-        // from hits_in_rect/selection; we keep it).
-        let layer = self.selection[0].0;
-        if !self.selection.iter().all(|(li, _)| *li == layer) {
-            self.status = "boolean needs all shapes on the same layer".into();
-            return;
-        }
-        let shapes: Vec<Shape> = self
-            .selection
-            .iter()
-            .filter_map(|(li, id)| self.doc.find_shape(*li, *id).cloned())
-            .collect();
-        if shapes.len() < 2 {
-            return;
-        }
-        let geoms: Vec<Geom> = shapes.iter().map(|s| s.geom.clone()).collect();
-        let Some(result) = crate::compound::apply_multi(op, &geoms) else {
-            self.status = "boolean produced nothing".into();
-            return;
-        };
-        let mut new_shape = shapes[0].clone();
-        new_shape.id = crate::document::next_id();
-        new_shape.geom = result;
-        new_shape.name = format!("{} ({} shapes)", op.name(), shapes.len());
-        let old = shapes.clone();
-        self.commit(Cmd::RemoveShapes { layer, shapes: old });
-        let id = new_shape.id;
-        self.commit(Cmd::AddShape {
-            layer,
-            shape: new_shape,
-        });
-        self.selection = vec![(layer, id)];
-        self.status = format!("{} on {} shapes", op.name(), shapes.len());
+        self.pathfinder(op);
     }
 
     pub fn combine_selected(&mut self) {
@@ -2578,6 +2563,8 @@ impl Studio {
     }
 
     pub fn save_as(&mut self) {
+        self.end_deform(false);
+        self.end_pixel_stroke(false);
         self.commit_type_edit();
         if let Some(path) = crate::project::dialog_save(&self.doc.name) {
             self.path = Some(path);
@@ -2689,6 +2676,8 @@ impl Studio {
     }
 
     pub fn save(&mut self) {
+        self.end_deform(false);
+        self.end_pixel_stroke(false);
         self.commit_type_edit();
         let path = if let Some(p) = &self.path {
             Some(p.clone())
@@ -2723,6 +2712,8 @@ impl Studio {
     }
 
     pub fn export_png(&mut self) {
+        self.end_deform(false);
+        self.end_pixel_stroke(false);
         if let Some(path) = crate::project::dialog_export("PNG", "png") {
             match compositor::export_png(&self.doc, self.export_scale) {
                 Ok(bytes) => {
@@ -2738,6 +2729,8 @@ impl Studio {
     }
 
     pub fn export_jpeg(&mut self) {
+        self.end_deform(false);
+        self.end_pixel_stroke(false);
         if let Some(path) = crate::project::dialog_export("JPEG", "jpg") {
             match compositor::export_jpeg(&self.doc, self.export_scale, 90) {
                 Ok(bytes) => {
@@ -2750,6 +2743,8 @@ impl Studio {
     }
 
     pub fn export_svg(&mut self) {
+        self.end_deform(false);
+        self.end_pixel_stroke(false);
         if let Some(path) = crate::project::dialog_export("SVG", "svg") {
             match crate::svg::export(&self.doc) {
                 Ok(s) => {
@@ -2762,6 +2757,8 @@ impl Studio {
     }
 
     pub fn export_animated_svg(&mut self) {
+        self.end_deform(false);
+        self.end_pixel_stroke(false);
         if let Some(path) = crate::project::dialog_export("Animated SVG", "svg") {
             match crate::svg::export_animated(&self.doc) {
                 Ok(s) => {
@@ -2774,6 +2771,8 @@ impl Studio {
     }
 
     pub fn export_lottie(&mut self) {
+        self.end_deform(false);
+        self.end_pixel_stroke(false);
         if let Some(path) = crate::project::dialog_export("Lottie JSON", "json") {
             match motion::export_lottie(&self.doc) {
                 Ok(s) => {
