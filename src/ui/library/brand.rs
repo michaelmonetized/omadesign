@@ -10,12 +10,14 @@ pub(super) fn brand(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
     ui.add_space(10.);
     project_picker(ui, studio, s);
     ui.add_space(8.);
-    let busy = jobs::is_running::<BrandResult>(ui.ctx(), BRAND_ACTION);
+    let busy = jobs::is_running::<BrandResult>(ui.ctx(), BRAND_ACTION)
+        || super::typography::busy(ui.ctx());
     bank_actions(ui, studio, s, busy);
     if busy {
         ui.spinner();
     }
     note(ui, &s.brand_message);
+    super::typography::show(ui, studio, s);
     let Some(catalog) = s.catalog.clone() else {
         ui.add_space(18.);
         note(
@@ -135,6 +137,8 @@ pub(super) fn brand(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
     let mut visible = std::collections::HashSet::new();
     let grid = egui::ScrollArea::vertical()
         .id_salt("brand-bank-grid")
+        // Keep tile virtualization bounded when the surrounding controls scroll.
+        .max_height(ui.clip_rect().height().max(120.0))
         .auto_shrink([false, false])
         .show_rows(ui, 125., assets.len().div_ceil(2), |ui, rows| {
             let width = ((ui.available_width() - 8.) * 0.5).max(70.);

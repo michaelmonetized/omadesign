@@ -2,6 +2,7 @@
 mod brand;
 mod close;
 mod palettes;
+mod typography;
 use brand::brand;
 use palettes::palettes;
 
@@ -37,6 +38,7 @@ struct Snapshot {
     personal: Colours,
     project: Option<Colours>,
     catalog: Result<Option<crate::brand::Catalog>, String>,
+    typography: Result<Option<crate::typography::LoadedKit>, String>,
 }
 fn read_colours(path: &Path, personal: bool) -> Colours {
     match palette_bytes(path)? {
@@ -115,6 +117,11 @@ pub fn tick(ctx: &egui::Context, studio: &mut Studio) {
         s.source = Some(source.clone());
         s.root = None;
         s.catalog = None;
+        s.typography = None;
+        s.typography_name.clear();
+        s.typography_role.clear();
+        s.typography_message.clear();
+        s.typography_edit_stamp = None;
         s.brand_name.clear();
         s.brand_message.clear();
         s.next_sync = Instant::now();
@@ -216,6 +223,22 @@ pub fn tick(ctx: &egui::Context, studio: &mut Studio) {
                         s.brand_message = e;
                     }
                 }
+                match snapshot.typography {
+                    Ok(Some(loaded)) => {
+                        if let Err(error) = typography::receive(s, loaded) {
+                            s.typography_message = error;
+                        }
+                    }
+                    Ok(None) => {
+                        if s.typography_edit_stamp.is_none() {
+                            s.typography = None;
+                        } else {
+                            s.typography_message =
+                                "Typography changed on disk. Reload typography to continue.".into();
+                        }
+                    }
+                    Err(error) => s.typography_message = error,
+                }
             }
             Ok(_) => s.next_sync = Instant::now(),
             Err(e) => s.brand_message = e,
@@ -233,12 +256,16 @@ pub fn tick(ctx: &egui::Context, studio: &mut Studio) {
                 Some(r) if r.join(".omabrand").is_dir() => crate::brand::scan(r).map(Some),
                 _ => Ok(None),
             };
+            let typography = root
+                .as_ref()
+                .map_or(Ok(None), |root| crate::typography::load(root));
             Ok(Snapshot {
                 source,
                 root,
                 personal,
                 project,
                 catalog,
+                typography,
             })
         });
     }
@@ -271,9 +298,11 @@ pub fn tick(ctx: &egui::Context, studio: &mut Studio) {
             .filter(|f| {
                 let p = f.path();
                 p.file_name()
-                    .is_some_and(|n| n == ".omacolors" || n == ".omabrand")
+                    .is_some_and(|n| n == ".omacolors" || n == ".omabrand" || n == ".omatype")
                     || (p.is_dir()
-                        && (p.join(".omacolors").is_file() || p.join(".omabrand").is_dir()))
+                        && (p.join(".omacolors").is_file()
+                            || p.join(".omabrand").is_dir()
+                            || p.join(".omatype").is_file()))
             })
             .cloned()
             .collect()
@@ -301,6 +330,7 @@ pub fn tick(ctx: &egui::Context, studio: &mut Studio) {
                 .retain(|f| !sidecars.iter().any(|s| s.path() == f.path()))
         });
     }
+    typography::tick(ctx, studio);
     close::show(ctx, studio);
 }
 
@@ -320,7 +350,12 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     let mut state = std::mem::take(&mut studio.libraries);
     match state.sidebar {
         Sidebar::Palettes => palettes(ui, studio, &mut state),
-        Sidebar::Brand => brand(ui, studio, &mut state),
+        Sidebar::Brand => {
+            egui::ScrollArea::vertical()
+                .id_salt("brand-content")
+                .auto_shrink([false, false])
+                .show(ui, |ui| brand(ui, studio, &mut state));
+        }
         _ => {}
     }
     studio.libraries = state;

@@ -91,6 +91,20 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         handle_pointer(studio, &resp, space_pan);
     }
 
+    // The rubber band uses the exact point a click would place. Keep the raw
+    // cursor for picking/closing paths, and omit the next segment while shaping
+    // the current anchor's handles.
+    let pen_preview = if studio.tool == Tool::Pen
+        && matches!(studio.op, Some(Op::Pen { .. }))
+        && !ctx.input(|i| i.pointer.primary_down())
+    {
+        studio
+            .cursor
+            .map(|point| pen_snap_point(studio, point, ctx.input(|i| i.modifiers)))
+    } else {
+        None
+    };
+
     let w = rect.width().max(1.0) as u32;
     let h = rect.height().max(1.0) as u32;
     let op_tag: u8 = match &studio.op {
@@ -174,7 +188,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     draw_snap_feedback(&painter, rect, studio);
     draw_artboard_frames(&painter, rect, studio);
     draw_bleed_safe(&painter, rect, studio);
-    draw_overlays(&painter, rect, studio);
+    draw_overlays(&painter, rect, studio, pen_preview);
     super::deform::paint(&painter, rect, studio);
     if !brand_input && !guide_input && !deform_input {
         set_cursor(ui, studio, &resp);
@@ -235,6 +249,22 @@ fn live_op_should_close(studio: &Studio, resp: &eframe::egui::Response) -> bool 
     }
 }
 
+fn pen_snap_point(studio: &mut Studio, point: Pt, modifiers: eframe::egui::Modifiers) -> Pt {
+    let anchor = if modifiers.shift {
+        match &studio.op {
+            Some(Op::Pen { anchors, .. }) => anchors.last().map(|anchor| anchor.pt),
+            _ => None,
+        }
+    } else {
+        None
+    };
+    let previous_override = studio.snap_override;
+    studio.snap_override = modifiers.ctrl || modifiers.command;
+    let point = studio.snap_tool_point(point, anchor);
+    studio.snap_override = previous_override;
+    point
+}
+
 fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: bool) {
     if space {
         return;
@@ -255,14 +285,6 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
     if resp.ctx.input(|i| i.pointer.primary_pressed()) {
         studio.reset_snap_gesture();
     }
-    let anchor = if shift {
-        match &studio.op {
-            Some(Op::Pen { anchors, .. }) => anchors.last().map(|anchor| anchor.pt),
-            _ => None,
-        }
-    } else {
-        None
-    };
     let snap = if is_text
         || (studio.pending_place.is_none()
             && studio.op.is_some()
@@ -272,8 +294,10 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
             Tool::Brush | Tool::Eraser | Tool::Smudge | Tool::Clone | Tool::Heal
         ) {
         pick
+    } else if studio.tool == Tool::Pen {
+        pen_snap_point(studio, pick, resp.ctx.input(|i| i.modifiers))
     } else {
-        studio.snap_tool_point(pick, anchor)
+        studio.snap_tool_point(pick, None)
     };
 
     if studio.tool == Tool::Zoom && resp.clicked() && !resp.dragged() {
@@ -422,10 +446,44 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
             }
             return;
         }
-        if resp.ctx.input(|i| i.pointer.primary_pressed()) {
-            studio.pen_click_at(pick, snap);
+        let press = resp.ctx.input(|i| {
+            i.events.iter().find_map(|event| match event {
+                eframe::egui::Event::PointerButton {
+                    pos,
+                    button: PointerButton::Primary,
+                    pressed: true,
+                    modifiers,
+                } => Some((*pos, *modifiers)),
+                _ => None,
+            })
+        });
+        if let Some((at, modifiers)) = press
+            && crect.contains(at)
+            && resp.ctx.layer_id_at(at) == Some(resp.layer_id)
+        {
+            // A rapid Shift release can share this frame with the click. Use
+            // the press event's position/modifiers, not the end-of-frame state.
+            let pick = studio.view.pointer_to_world(origin, from_egui(at));
+            let place = pen_snap_point(studio, pick, modifiers);
+            studio.pen_click_at(pick, place);
         }
-        if resp.dragged_by(PointerButton::Primary) {
+        if resp.drag_stopped_by(PointerButton::Primary) {
+            let release = resp.ctx.input(|i| {
+                i.events.iter().rev().find_map(|event| match event {
+                    eframe::egui::Event::PointerButton {
+                        pos,
+                        button: PointerButton::Primary,
+                        pressed: false,
+                        modifiers,
+                    } => Some((*pos, *modifiers)),
+                    _ => None,
+                })
+            });
+            if let Some((at, modifiers)) = release {
+                let point = studio.view.pointer_to_world(origin, from_egui(at));
+                continue_drag(studio, point, modifiers.shift, modifiers.alt);
+            }
+        } else if resp.dragged_by(PointerButton::Primary) {
             continue_drag(studio, pick, shift, alt);
         }
         return;
@@ -2345,7 +2403,7 @@ fn draw_bleed_safe(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
     }
 }
 
-fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
+fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio, pen_preview: Option<Pt>) {
     let v = studio.view;
     if let Some(Op::Create { kind, start, cur }) = &studio.op {
         let g = preview_shape(*kind, *start, *cur, studio);
@@ -2355,7 +2413,7 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
         anchors, source, ..
     }) = &studio.op
     {
-        draw_pen(p, rect, anchors, studio, source.is_some());
+        draw_pen(p, rect, anchors, studio, source.is_some(), pen_preview);
     }
     if let Some(Op::Pencil { pts }) = &studio.op {
         let scr: Vec<Pos2> = pts.iter().map(|q| win(rect, v, *q)).collect();
@@ -2728,10 +2786,11 @@ fn draw_pen(
     anchors: &[Anchor],
     studio: &Studio,
     continuing: bool,
+    preview: Option<Pt>,
 ) {
     let v = studio.view;
     let mut draft = anchors.to_vec();
-    if let Some(c) = studio.cursor {
+    if let Some(c) = preview {
         draft.push(Anchor::corner(c));
     }
     if !continuing && draft.len() >= 2 {
@@ -2745,7 +2804,7 @@ fn draw_pen(
                 p.add(eframe::egui::Shape::line(pts, Stroke::new(1.6, select())));
             }
         }
-    } else if let (Some(last), Some(c)) = (anchors.last(), studio.cursor) {
+    } else if let (Some(last), Some(c)) = (anchors.last(), preview) {
         p.line_segment(
             [win(rect, v, last.pt), win(rect, v, c)],
             Stroke::new(1.2, select()),
@@ -2850,7 +2909,7 @@ mod tests {
         ctx: &eframe::egui::Context,
         studio: &mut Studio,
         events: Vec<eframe::egui::Event>,
-    ) {
+    ) -> Vec<eframe::egui::epaint::ClippedShape> {
         let mut output = ctx.run_ui(
             eframe::egui::RawInput {
                 screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(400.0, 300.0))),
@@ -2860,6 +2919,304 @@ mod tests {
             |ui| show(ui, studio),
         );
         output.textures_delta.clear();
+        output.shapes
+    }
+
+    fn pen_input_studio() -> (eframe::egui::Context, Studio) {
+        let ctx = eframe::egui::Context::default();
+        crate::ui::theme::apply(&ctx);
+        let mut studio = Studio::new();
+        studio.doc = crate::document::Document::new("Pen input", 1.0, 1.0, 72.0);
+        studio.doc.width = 400.0;
+        studio.doc.height = 300.0;
+        studio.doc.layers = vec![crate::document::Layer::vector("Drawing")];
+        studio.show_welcome = false;
+        studio.need_fit = false;
+        studio.tool = Tool::Pen;
+        studio.view.offset = Pt::new(13.0, 17.0);
+        studio.snap = crate::snap::SnapSettings {
+            enabled: false,
+            grid: false,
+            guides: true,
+            objects: false,
+            artboards: false,
+            spacing: false,
+            threshold: 6.0,
+        };
+        (ctx, studio)
+    }
+
+    fn pen_pointer_button(
+        at: Pos2,
+        pressed: bool,
+        modifiers: eframe::egui::Modifiers,
+    ) -> eframe::egui::Event {
+        eframe::egui::Event::PointerButton {
+            pos: at,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers,
+        }
+    }
+
+    fn assert_pen_preview(shapes: &[eframe::egui::epaint::ClippedShape], from: Pos2, to: Pos2) {
+        fn matches(shape: &eframe::egui::Shape, from: Pos2, to: Pos2) -> bool {
+            match shape {
+                eframe::egui::Shape::Path(path) => {
+                    path.points.first().is_some_and(|p| p.distance(from) < 0.01)
+                        && path.points.last().is_some_and(|p| p.distance(to) < 0.01)
+                }
+                eframe::egui::Shape::LineSegment { points, .. } => {
+                    points[0].distance(from) < 0.01 && points[1].distance(to) < 0.01
+                }
+                eframe::egui::Shape::Vec(shapes) => {
+                    shapes.iter().any(|shape| matches(shape, from, to))
+                }
+                _ => false,
+            }
+        }
+        assert!(
+            shapes.iter().any(|shape| matches(&shape.shape, from, to)),
+            "Pen preview did not reach {to:?} from {from:?}"
+        );
+    }
+
+    #[test]
+    fn pen_shift_hover_and_click_agree_at_horizontal_diagonal_and_vertical_angles() {
+        use eframe::egui::{Event, Modifiers};
+        for delta in [
+            Pt::new(70.0, 18.0),
+            Pt::new(70.0, 44.0),
+            Pt::new(18.0, 70.0),
+        ] {
+            let (ctx, mut studio) = pen_input_studio();
+            let start = Pt::new(60.0, 60.0);
+            let first = to_egui(studio.view.to_screen(start));
+            canvas_frame(&ctx, &mut studio, vec![Event::PointerMoved(first)]);
+            canvas_frame(
+                &ctx,
+                &mut studio,
+                vec![pen_pointer_button(first, true, Modifiers::NONE)],
+            );
+            canvas_frame(
+                &ctx,
+                &mut studio,
+                vec![pen_pointer_button(first, false, Modifiers::NONE)],
+            );
+            let raw = to_egui(studio.view.to_screen(start + delta));
+            let free = canvas_frame(&ctx, &mut studio, vec![Event::PointerMoved(raw)]);
+            assert_pen_preview(&free, first, raw);
+            let length = (delta.x * delta.x + delta.y * delta.y).sqrt();
+            let offset = if delta.y < 20.0 {
+                Pt::new(length, 0.0)
+            } else if delta.x < 20.0 {
+                Pt::new(0.0, length)
+            } else {
+                Pt::splat(length / 2.0_f32.sqrt())
+            };
+            let expected = start + offset;
+            let preview = canvas_frame(
+                &ctx,
+                &mut studio,
+                vec![Event::ModifiersChanged(Modifiers::SHIFT)],
+            );
+            assert_pen_preview(&preview, first, to_egui(studio.view.to_screen(expected)));
+            let free = canvas_frame(
+                &ctx,
+                &mut studio,
+                vec![Event::ModifiersChanged(Modifiers::NONE)],
+            );
+            assert_pen_preview(&free, first, raw);
+            // A click and quick modifier release may arrive in the same native frame.
+            canvas_frame(
+                &ctx,
+                &mut studio,
+                vec![
+                    Event::ModifiersChanged(Modifiers::SHIFT),
+                    pen_pointer_button(raw, true, Modifiers::SHIFT),
+                    pen_pointer_button(raw, false, Modifiers::SHIFT),
+                    Event::ModifiersChanged(Modifiers::NONE),
+                ],
+            );
+            let Some(Op::Pen { anchors, .. }) = &studio.op else {
+                panic!("live Pen path")
+            };
+            assert_eq!(anchors.len(), 2);
+            assert!(
+                (anchors[1].pt - expected).length() < 0.001,
+                "Shift click ignored its event modifiers: {:?} versus {expected:?}",
+                anchors[1].pt
+            );
+            assert!(
+                anchors[1].is_corner(),
+                "snapping must not turn a click into a handle drag"
+            );
+        }
+    }
+
+    #[test]
+    fn pen_shift_keeps_its_angle_when_ctrl_inverts_grid_guide_and_object_snapping() {
+        use eframe::egui::{Event, Modifiers};
+        for (target, snapped) in [("grid", 128.0), ("guide", 126.0), ("object", 126.0)] {
+            for enabled in [false, true] {
+                let (ctx, mut studio) = pen_input_studio();
+                studio.snap.enabled = enabled;
+                studio.snap.grid = true;
+                studio.snap.objects = true;
+                studio.doc.grid.snap = true;
+                studio.doc.grid.size = 8.0;
+                if target == "guide" {
+                    studio.doc.guides.push(crate::document::Guide {
+                        vertical: true,
+                        pos: 126.0,
+                    });
+                } else if target == "object" {
+                    studio.doc.layers[0].kind.shapes_mut().unwrap().push(
+                        crate::document::Shape::new(
+                            Geom::Rect {
+                                origin: Pt::new(126.0, 200.0),
+                                size: Pt::splat(20.0),
+                                radius: 0.0,
+                            },
+                            crate::document::Style::default(),
+                        ),
+                    );
+                }
+                let start = Pt::splat(64.0);
+                let first = to_egui(studio.view.to_screen(start));
+                canvas_frame(&ctx, &mut studio, vec![Event::PointerMoved(first)]);
+                canvas_frame(
+                    &ctx,
+                    &mut studio,
+                    vec![pen_pointer_button(first, true, Modifiers::NONE)],
+                );
+                canvas_frame(
+                    &ctx,
+                    &mut studio,
+                    vec![pen_pointer_button(first, false, Modifiers::NONE)],
+                );
+                let raw = to_egui(studio.view.to_screen(Pt::new(133.0, 120.0)));
+                let free = 64.0 + ((69.0_f32 * 69.0 + 56.0 * 56.0) / 2.0).sqrt();
+                let shift = Modifiers::SHIFT | Modifiers::ALT;
+                let inverted = shift | Modifiers::CTRL | Modifiers::COMMAND;
+                let preview = canvas_frame(
+                    &ctx,
+                    &mut studio,
+                    vec![Event::ModifiersChanged(shift), Event::PointerMoved(raw)],
+                );
+                let expected = Pt::splat(if enabled { snapped } else { free });
+                assert_pen_preview(&preview, first, to_egui(studio.view.to_screen(expected)));
+                let preview =
+                    canvas_frame(&ctx, &mut studio, vec![Event::ModifiersChanged(inverted)]);
+                let expected = Pt::splat(if enabled { free } else { snapped });
+                assert_pen_preview(&preview, first, to_egui(studio.view.to_screen(expected)));
+                canvas_frame(
+                    &ctx,
+                    &mut studio,
+                    vec![
+                        pen_pointer_button(raw, true, inverted),
+                        pen_pointer_button(raw, false, inverted),
+                        Event::ModifiersChanged(Modifiers::NONE),
+                    ],
+                );
+                let Some(Op::Pen { anchors, .. }) = &studio.op else {
+                    panic!("live Pen path")
+                };
+                assert_eq!(anchors.len(), 2);
+                assert!(
+                    (anchors[1].pt - expected).length() < 0.001,
+                    "{target}, enabled={enabled}: {:?} versus {expected:?}",
+                    anchors[1].pt
+                );
+                assert!(anchors[1].is_corner());
+            }
+        }
+    }
+
+    #[test]
+    fn pen_handles_follow_stationary_shift_alt_changes_and_the_release_sample() {
+        use eframe::egui::{Event, Modifiers};
+        for delta in [
+            Pt::new(50.0, 12.0),
+            Pt::new(50.0, 32.0),
+            Pt::new(12.0, 50.0),
+        ] {
+            let (ctx, mut studio) = pen_input_studio();
+            studio.view.scale = 2.0;
+            let start = Pt::new(40.0, 40.0);
+            let first = to_egui(studio.view.to_screen(start));
+            canvas_frame(&ctx, &mut studio, vec![Event::PointerMoved(first)]);
+            canvas_frame(
+                &ctx,
+                &mut studio,
+                vec![pen_pointer_button(first, true, Modifiers::NONE)],
+            );
+            let raw = to_egui(studio.view.to_screen(start + delta));
+            canvas_frame(&ctx, &mut studio, vec![Event::PointerMoved(raw)]);
+            let handles = |studio: &Studio| {
+                let Some(Op::Pen { anchors, .. }) = &studio.op else {
+                    panic!("live Pen handles")
+                };
+                (anchors[0].h_in, anchors[0].h_out)
+            };
+            let (incoming, outgoing) = handles(&studio);
+            assert!((outgoing - delta).length() < 0.001);
+            assert!((incoming + delta).length() < 0.001);
+            let length = (delta.x * delta.x + delta.y * delta.y).sqrt();
+            let constrained = if delta.y < 20.0 {
+                Pt::new(length, 0.0)
+            } else if delta.x < 20.0 {
+                Pt::new(0.0, length)
+            } else {
+                Pt::splat(length / 2.0_f32.sqrt())
+            };
+            canvas_frame(
+                &ctx,
+                &mut studio,
+                vec![Event::ModifiersChanged(Modifiers::SHIFT)],
+            );
+            let (incoming, outgoing) = handles(&studio);
+            assert!((outgoing - constrained).length() < 0.001);
+            assert!((incoming + constrained).length() < 0.001);
+            // Alt frees the outgoing handle without moving the existing incoming handle.
+            canvas_frame(
+                &ctx,
+                &mut studio,
+                vec![Event::ModifiersChanged(Modifiers::ALT)],
+            );
+            let (incoming, outgoing) = handles(&studio);
+            assert!((outgoing - delta).length() < 0.001);
+            assert!((incoming + constrained).length() < 0.001);
+            canvas_frame(
+                &ctx,
+                &mut studio,
+                vec![Event::ModifiersChanged(Modifiers::NONE)],
+            );
+            let (incoming, outgoing) = handles(&studio);
+            assert!((outgoing - delta).length() < 0.001);
+            assert!((incoming + delta).length() < 0.001);
+            // The final sample can move and release Shift before the next redraw.
+            let release = to_egui(studio.view.to_screen(start + delta * 1.1));
+            canvas_frame(
+                &ctx,
+                &mut studio,
+                vec![
+                    Event::ModifiersChanged(Modifiers::SHIFT | Modifiers::ALT),
+                    Event::PointerMoved(release),
+                    pen_pointer_button(release, false, Modifiers::SHIFT | Modifiers::ALT),
+                    Event::ModifiersChanged(Modifiers::NONE),
+                ],
+            );
+            let (incoming, outgoing) = handles(&studio);
+            assert!(
+                (outgoing - constrained * 1.1).length() < 0.001,
+                "final constrained handle sample was lost: {outgoing:?}"
+            );
+            assert!(
+                (incoming + delta).length() < 0.001,
+                "Alt release must retain the incoming handle"
+            );
+        }
     }
 
     #[test]

@@ -130,6 +130,7 @@ pub(super) fn show(ctx: &egui::Context, studio: &mut Studio) {
         return;
     }
     let busy = jobs::is_running::<Vec<Saved>>(ctx, SAVE_ALL)
+        || super::typography::busy(ctx)
         || jobs::is_running::<PaletteResult>(ctx, PALETTE_ACTION)
         || jobs::is_running::<BrandResult>(ctx, BRAND_ACTION);
     let collections = dirty_collections(&studio.libraries);

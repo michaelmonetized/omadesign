@@ -660,6 +660,17 @@ fn character_studio(ui: &mut Ui, studio: &mut Studio) {
             .id_salt("font-list")
             .max_height(180.0)
             .show(ui, |ui| {
+                if let Some(kit) = &studio.libraries.typography {
+                    ui.label(RichText::new("Project fonts").small().color(fg_weak()));
+                    for face in &kit.fonts {
+                        let name = format!("{} · {}", face.role, face.family);
+                        if (q.is_empty() || name.to_lowercase().contains(&q))
+                            && ui.selectable_label(face.id == font, name).clicked()
+                        {
+                            chosen = face.id.clone();
+                        }
+                    }
+                }
                 if !recents.is_empty() {
                     ui.label(RichText::new("Recents").small().color(fg_weak()));
                     for p in recents.iter().take(5) {

@@ -130,6 +130,7 @@ fn successful_save_retires_an_older_snapshot_instead_of_reverting_colours() {
         personal: Ok((vec![], None)),
         project: Some(Ok((old, old_stamp))),
         catalog: Ok(None),
+        typography: Ok(None),
     };
     let (release_stale, stale_done) = blocked(&ctx, SYNC, stale);
     let work_path = path.clone();
