@@ -47,6 +47,7 @@ pub enum Tool {
     Eraser,
     Fill,
     Clone,
+    Heal,
     Smudge,
     Crop,
     Marquee,
@@ -78,6 +79,7 @@ impl Tool {
             Tool::Eraser => "Eraser",
             Tool::Fill => "Fill",
             Tool::Clone => "Clone",
+            Tool::Heal => "Healing brush",
             Tool::Smudge => "Smudge",
             Tool::Crop => "Crop",
             Tool::Marquee => "Marquee",
@@ -109,6 +111,7 @@ impl Tool {
             Tool::Eraser => "E",
             Tool::Fill => "K",
             Tool::Clone => "J",
+            Tool::Heal => "Shift+J",
             Tool::Smudge => "M",
             Tool::Crop => "C",
             Tool::Marquee => "Shift+M",
@@ -152,6 +155,9 @@ impl Tool {
             Tool::Eraser => "Erase on the active pixel layer.",
             Tool::Fill => "Click to flood-fill. Tolerance lives in Brush.",
             Tool::Clone => "Alt-click sets the source, then paint to clone.",
+            Tool::Heal => {
+                "Alt-click clean texture, then paint to blend it into the surrounding colour."
+            }
             Tool::Smudge => "Drag to smear pixels along the stroke.",
             Tool::Crop => "Drag a crop on the photo, Enter commits, Esc cancels.",
             Tool::Marquee => "Drag a rectangular selection on the pixel layer.",
@@ -197,6 +203,7 @@ impl Tool {
                     | Tool::Eraser
                     | Tool::Fill
                     | Tool::Clone
+                    | Tool::Heal
                     | Tool::Smudge
                     | Tool::Marquee
                     | Tool::EllipseMarquee
@@ -247,6 +254,7 @@ impl Tool {
             Tool::Eraser,
             Tool::Fill,
             Tool::Clone,
+            Tool::Heal,
             Tool::Smudge,
             Tool::Marquee,
             Tool::EllipseMarquee,
@@ -457,6 +465,10 @@ pub fn shortcut_groups() -> &'static [(&'static str, &'static [ShortcutRow])] {
                     keys: "J",
                 },
                 ShortcutRow {
+                    action: "Healing brush",
+                    keys: "Shift+J",
+                },
+                ShortcutRow {
                     action: "Smudge",
                     keys: "M",
                 },
@@ -522,6 +534,22 @@ pub fn shortcut_groups() -> &'static [(&'static str, &'static [ShortcutRow])] {
                     keys: "Ctrl+scroll",
                 },
                 ShortcutRow {
+                    action: "Show / hide guides",
+                    keys: "Ctrl+;",
+                },
+                ShortcutRow {
+                    action: "Toggle snapping",
+                    keys: "Ctrl+Shift+;",
+                },
+                ShortcutRow {
+                    action: "Invert snapping while dragging",
+                    keys: "Hold Ctrl",
+                },
+                ShortcutRow {
+                    action: "Constrain direction to 45°",
+                    keys: "Hold Shift",
+                },
+                ShortcutRow {
                     action: "Keys",
                     keys: "F1",
                 },
@@ -567,6 +595,10 @@ pub fn shortcut_groups() -> &'static [(&'static str, &'static [ShortcutRow])] {
                     action: "Brush hardness",
                     keys: "Shift+[ ]",
                 },
+                ShortcutRow {
+                    action: "Set clone / heal source",
+                    keys: "Alt-click",
+                },
             ],
         ),
     ]
@@ -596,6 +628,7 @@ mod tests {
             Tool::Eraser,
             Tool::Fill,
             Tool::Clone,
+            Tool::Heal,
             Tool::Smudge,
             Tool::Crop,
             Tool::Marquee,

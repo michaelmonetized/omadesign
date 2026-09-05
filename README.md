@@ -35,7 +35,7 @@ Tarball by hand:
 | Persona | You are… | First tools |
 |---|---|---|
 | **Design** | drawing a logo, a poster, a mark | Move `V`, Pen `P`, Rectangle `R`, Type `T` |
-| **Pixel**  | painting or retouching | Brush `B`, Eraser `E`, Clone `J`, Wand `W` |
+| **Pixel**  | painting or retouching | Brush `B`, Eraser `E`, Heal `Shift+J`, Wand `W` |
 | **Photo**  | grading a photograph | Crop `C`, develop sliders, Place in Design |
 | **Motion** | a mark that moves | Space plays, `K` keys, File → Lottie |
 
@@ -48,12 +48,14 @@ Press **F1** for the full key list.
 - Pen: click a corner, click-drag a smooth point, Enter finishes, click the first point to close. A twitch under 3px stays a corner.
 - Type: click, type on the canvas, Character studio (font, size, tracking, leading, OpenType)
 - Zoom: drag a box to that area; click zooms in, Alt-click out
-- Fill / stroke, boolean, align, snap, layers, copy/paste, z-order
+- Fill / stroke, Pathfinder and Divide, stroke outlines, Select Same, align, layers, copy/paste
+- Drag-out guides, ruler origins and units, smart alignment and equal-spacing snaps
+- Vector distort, skew, perspective, and a nine-handle warp mesh
 - File → Place, drop files on the canvas, Trace (`U`) turns a pixel layer into paths
 
 ## Pixel / Photo
 
-Brush, eraser, clone, fill, marquees, wand. Photo: develop sliders, histogram, crop, Place in Design.
+Brush, eraser, clone, healing, fill, marquees, wand, and editable layer masks. Photo: develop sliders, histogram, crop, Place in Design.
 
 ## Motion
 

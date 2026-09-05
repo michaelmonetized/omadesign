@@ -652,10 +652,84 @@ impl Layer {
     }
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Guide {
     pub vertical: bool,
     pub pos: f32,
+}
+
+/// Ruler labels are converted from document pixels; artwork stays in pixel space.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RulerUnit {
+    #[default]
+    Pixels,
+    Millimeters,
+    Centimeters,
+    Inches,
+    Points,
+}
+
+impl RulerUnit {
+    pub const ALL: [Self; 5] = [
+        Self::Pixels,
+        Self::Millimeters,
+        Self::Centimeters,
+        Self::Inches,
+        Self::Points,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Pixels => "Pixels (px)",
+            Self::Millimeters => "Millimeters (mm)",
+            Self::Centimeters => "Centimeters (cm)",
+            Self::Inches => "Inches (in)",
+            Self::Points => "Points (pt)",
+        }
+    }
+
+    pub fn suffix(self) -> &'static str {
+        match self {
+            Self::Pixels => "px",
+            Self::Millimeters => "mm",
+            Self::Centimeters => "cm",
+            Self::Inches => "in",
+            Self::Points => "pt",
+        }
+    }
+
+    pub fn pixels_per_unit(self, dpi: f32) -> f32 {
+        let dpi = if dpi.is_finite() && dpi > 0.0 {
+            dpi
+        } else {
+            72.0
+        };
+        match self {
+            Self::Pixels => 1.0,
+            Self::Millimeters => dpi / 25.4,
+            Self::Centimeters => dpi / 2.54,
+            Self::Inches => dpi,
+            Self::Points => dpi / 72.0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RulerSettings {
+    pub origin: Pt,
+    pub unit: RulerUnit,
+    pub guides_visible: bool,
+}
+
+impl Default for RulerSettings {
+    fn default() -> Self {
+        Self {
+            origin: Pt::ZERO,
+            unit: RulerUnit::Pixels,
+            guides_visible: true,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -858,6 +932,8 @@ pub struct Document {
     pub dpi: f32,
     pub layers: Vec<Layer>,
     pub guides: Vec<Guide>,
+    #[serde(default)]
+    pub ruler: RulerSettings,
     pub grid: Grid,
     #[serde(default)]
     pub transparent: bool,
@@ -906,6 +982,7 @@ impl Document {
             dpi,
             layers: vec![Layer::raster("Background", w, h), Layer::vector("Layer 1")],
             guides: vec![],
+            ruler: RulerSettings::default(),
             grid: Grid::default(),
             transparent,
             artboards: boards,
@@ -1101,6 +1178,12 @@ impl Document {
 
 #[derive(Clone, Debug)]
 pub enum Cmd {
+    Batch(Vec<Cmd>),
+    SetLayerMask {
+        index: usize,
+        before: Option<Pixels>,
+        after: Option<Pixels>,
+    },
     AddShape {
         layer: usize,
         shape: Shape,
@@ -1174,6 +1257,18 @@ pub enum Cmd {
     RemoveGuide {
         index: usize,
         guide: Guide,
+    },
+    InsertGuide {
+        index: usize,
+        guide: Guide,
+    },
+    SetGuides {
+        before: Vec<Guide>,
+        after: Vec<Guide>,
+    },
+    SetRuler {
+        before: RulerSettings,
+        after: RulerSettings,
     },
     SetMotion {
         before: crate::motion::Motion,
@@ -1420,6 +1515,16 @@ fn coalesce(prev: &mut Cmd, next: &Cmd) -> bool {
 
 fn invert_cmd(cmd: Cmd) -> Cmd {
     match cmd {
+        Cmd::SetLayerMask {
+            index,
+            before,
+            after,
+        } => Cmd::SetLayerMask {
+            index,
+            before: after,
+            after: before,
+        },
+        Cmd::Batch(commands) => Cmd::Batch(commands.into_iter().rev().map(invert_cmd).collect()),
         Cmd::AddShape { layer, shape } => Cmd::RemoveShapes {
             layer,
             shapes: vec![shape],
@@ -1508,7 +1613,16 @@ fn invert_cmd(cmd: Cmd) -> Cmd {
             index: usize::MAX,
             guide,
         },
-        Cmd::RemoveGuide { index: _, guide } => Cmd::AddGuide { guide },
+        Cmd::RemoveGuide { index, guide } => Cmd::InsertGuide { index, guide },
+        Cmd::InsertGuide { index, guide } => Cmd::RemoveGuide { index, guide },
+        Cmd::SetGuides { before, after } => Cmd::SetGuides {
+            before: after,
+            after: before,
+        },
+        Cmd::SetRuler { before, after } => Cmd::SetRuler {
+            before: after,
+            after: before,
+        },
         Cmd::RestoreShapes { layer, shapes } => Cmd::RemoveShapes { layer, shapes },
         Cmd::SetMotion { before, after } => Cmd::SetMotion {
             before: after,
@@ -1582,6 +1696,16 @@ fn invert_cmd(cmd: Cmd) -> Cmd {
 
 pub fn apply(doc: &mut Document, cmd: &Cmd) {
     match cmd {
+        Cmd::SetLayerMask { index, after, .. } => {
+            if let Some(layer) = doc.layers.get_mut(*index) {
+                layer.mask = after.clone();
+            }
+        }
+        Cmd::Batch(commands) => {
+            for command in commands {
+                apply(doc, command);
+            }
+        }
         Cmd::AddShape { layer, shape } => {
             if let Some(vs) = doc.layers.get_mut(*layer).and_then(|l| l.kind.shapes_mut()) {
                 vs.push(shape.clone());
@@ -1745,6 +1869,11 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
                 }
             }
         }
+        Cmd::InsertGuide { index, guide } => {
+            doc.guides.insert((*index).min(doc.guides.len()), *guide)
+        }
+        Cmd::SetGuides { after, .. } => doc.guides.clone_from(after),
+        Cmd::SetRuler { after, .. } => doc.ruler = *after,
         Cmd::AddGuide { guide } => doc.guides.push(*guide),
         Cmd::RemoveGuide { index, guide } => {
             if *index < doc.guides.len() {
@@ -1752,7 +1881,7 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
             } else if let Some(i) = doc
                 .guides
                 .iter()
-                .position(|g| g.vertical == guide.vertical && (g.pos - guide.pos).abs() < 0.01)
+                .rposition(|g| g.vertical == guide.vertical && (g.pos - guide.pos).abs() < 0.01)
             {
                 doc.guides.remove(i);
             }

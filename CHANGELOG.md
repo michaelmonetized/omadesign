@@ -1,5 +1,83 @@
 # Changelog
 
+## 2026-09-05 · Pass 3 — Rulers, rubber, and a little repair
+
+The pudding has learned to park between the lines. It can also bend them.
+
+### A steadier hand
+
+- Pull guides straight out of either ruler. Grab them again to move them,
+  delete a selected guide, or drag it off the canvas to send it home.
+  Show/hide and clear controls live in View and the ruler context menus.
+- Drag the ruler corner to choose a new zero. Double-click to reset it.
+  Switch between px, mm, cm, inches, and points without resizing the artwork.
+- Smart snaps find object and artboard edges, centres, and equal gaps. Live
+  alignment lines and gap labels explain the landing. Motion uses the visible
+  animated geometry too. Point targets are cached; moving objects are excluded
+  from the frozen target set, so they cannot snap to their own shadow.
+- **Ctrl+;** toggles guides. **Ctrl+Shift+;** toggles snapping. Hold **Ctrl**
+  during a drag to reverse snapping temporarily. Hold **Shift** for horizontal,
+  vertical, or 45° movement, including pen/brush work and Alt-drag copies.
+- Moving a selection, or an artboard with its contents, now returns together
+  on Undo. Duplicating several objects also forms one undoable action.
+
+### A little bend goes a long way
+
+**Object → Reshape** adds Distort, Skew, Perspective, and a smooth nine-handle
+Warp mesh. Pull a grip, switch modes in the inspector, and finish with Enter
+or Done. Esc restores the current drag. Every released drag gets its own Undo.
+Changing tools, documents, selections, or personas safely leaves the cage.
+
+Reshape works on vector artwork in Design. Moving the first handle converts
+live type and parameter-based shapes into paths; Undo brings their original
+form back. Stroke widths stay uniform, and radial gradients stay radial.
+
+### Select with intent. Cut without collateral damage.
+
+- A dedicated **Select** menu finds objects with the same fill, stroke, or
+  effects, and objects with or without those properties. It also offers All,
+  None, and Invert. Locked/hidden artwork and canvas paper stay out of the way.
+- **Expand stroke to outline** respects caps, joins, dashes, rotation, existing
+  fills, and layer order. Compound outlines keep their holes.
+- **Pathfinder** gathers Union, Subtract, Intersect, XOR, and the new Divide.
+  Rotated artwork is processed where it actually appears. Empty intersections
+  stay empty, holes subtract area correctly, and each operation has one Undo.
+  The repeated boolean implementations now share the same geometry path.
+
+### Keep the good parts
+
+- Editable layer masks reveal, hide, start from a pixel selection, invert,
+  remove, or apply to pixels. Black hides; white reveals. Placed-image masks
+  follow the image's position, scale, and rotation. The original pixels remain
+  intact until Apply, which is itself undoable.
+- **Healing brush · Shift+J:** Alt-click clean texture, then paint over a
+  blemish. The brush blends texture into the destination's local colour and
+  shading while preserving transparency. A stroke keeps an immutable source.
+- The eraser now erases actual image pixels. Previously it erased an empty
+  preview buffer, which looked busy and accomplished nothing.
+- Brush, mask, heal, and selection controls show the settings their tool uses.
+  Pixel painting targets the chosen visible, unlocked layer instead of quietly
+  falling back to the canvas paper. Undo, Esc, tool changes, and tab changes
+  handle in-flight pixel strokes without stranding unrecorded edits.
+- Masks survive project saves and SVG export. SVG and canvas rendering agree
+  on mask luminance, alpha, placement, mirroring, and mask-before-effects order.
+
+The manual and F1 help cover the new controls. Native review scenes for
+reshaping, masking, and healing make the next round of human QA repeatable.
+
+Pass 3 verification: **207 tests passed**, including the full native command-chord
+matrix, clipboard/focus regressions, ruler pointer gestures, mid-drag modifier
+changes, animated snapping, all four reshape modes, outline/Pathfinder stacking
+and undo, mask save/apply/cancel, and real eraser/healing input. A healing seam
+regression compares the unchanged demo against its pristine image.
+
+The release build passed. Native reshape, masking, and healing layouts were
+reviewed at 1600×1000 and 960×640. Independent SVG rendering matched canvas mask
+opacity within 1/255 for vector, rotated-image, and mirrored-image fixtures.
+Clippy completed with 32 library advisories (44 including tests); existing
+structural/style warnings were not hidden. OS file-dialog interaction and the
+physical desktop keyboard remain part of human QA.
+
 ## 2026-09-05 · Pass 2 — Ctrl means control
 
 The keyboard gets its keys back, and the inspector gets room to breathe.

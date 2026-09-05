@@ -29,6 +29,8 @@ enum Shortcut {
     ZoomIn,
     ZoomOut,
     Help,
+    ToggleGuides,
+    ToggleSnapping,
 }
 
 impl Shortcut {
@@ -62,6 +64,8 @@ fn key_shortcut(key: Key, mods: Modifiers) -> Option<Shortcut> {
         };
     }
     Some(match (key, mods.shift) {
+        (Key::Semicolon, false) => ToggleGuides,
+        (Key::Semicolon | Key::Colon, true) => ToggleSnapping,
         (Key::S, false) => Save,
         (Key::S, true) => SaveAs,
         (Key::O, false) => Open,
@@ -186,6 +190,8 @@ impl Studio {
 
     fn run_shortcut(&mut self, ctx: &egui::Context, shortcut: Shortcut, payload: Option<&str>) {
         match shortcut {
+            Shortcut::ToggleGuides => self.toggle_guides(),
+            Shortcut::ToggleSnapping => self.toggle_snapping(),
             Shortcut::Save => self.save(),
             Shortcut::SaveAs => self.save_as(),
             Shortcut::Open => {
@@ -225,29 +231,7 @@ impl Studio {
                 self.paste_style();
             }
             Shortcut::Duplicate => self.duplicate_selection(),
-            Shortcut::SelectAll => {
-                self.selection = self
-                    .doc
-                    .layers
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, layer)| layer.visible && !layer.locked)
-                    .flat_map(|(li, layer)| {
-                        let mut ids: Vec<_> = layer
-                            .kind
-                            .shapes()
-                            .into_iter()
-                            .flatten()
-                            .filter(|shape| shape.visible && !shape.locked)
-                            .map(|shape| (li, shape.id))
-                            .collect();
-                        if layer.kind.is_placed_raster() {
-                            ids.push((li, RASTER_ID));
-                        }
-                        ids
-                    })
-                    .collect();
-            }
+            Shortcut::SelectAll => self.select_all(),
             Shortcut::Combine => self.combine_selected(),
             Shortcut::Release => self.release_compound(),
             Shortcut::Forward => self.bring_forward(),
@@ -401,10 +385,15 @@ impl Studio {
                 _ => {}
             }
         }
+        if self.deformation.is_some() && matches!(key, Key::Escape | Key::Enter) {
+            self.end_deform(key == Key::Escape);
+            return true;
+        }
         let step = if shift { 10.0 } else { 1.0 };
         match key {
             Key::Delete | Key::Backspace => self.delete_selection(),
             Key::Escape => {
+                self.end_pixel_stroke(true);
                 if self.pending_place.is_some() {
                     self.cancel_place();
                     self.op = None;
@@ -466,6 +455,7 @@ impl Studio {
             _ => {
                 let tool = match (key, shift, self.persona) {
                     (Key::M, true, Persona::Pixel) => Tool::Marquee,
+                    (Key::J, true, Persona::Pixel) => Tool::Heal,
                     (Key::O, true, Persona::Pixel) => Tool::EllipseMarquee,
                     (Key::O, true, Persona::Design) => Tool::Artboard,
                     (Key::V, false, _) => Tool::Select,
@@ -609,6 +599,9 @@ mod tests {
             (Key::Equals, shift, ZoomIn),
             (Key::Minus, ctrl, ZoomOut),
             (Key::F1, Modifiers::NONE, Help),
+            (Key::Semicolon, ctrl, ToggleGuides),
+            (Key::Semicolon, shift, ToggleSnapping),
+            (Key::Colon, shift, ToggleSnapping),
         ];
         for (key, modifiers, expected) in cases {
             assert_eq!(
@@ -647,6 +640,44 @@ mod tests {
                 "unassigned Alt chord must not fire {key:?}"
             );
         }
+    }
+
+    #[test]
+    fn precision_chords_toggle_state_and_healing_keeps_its_shift_variant() {
+        let ctx = context();
+        let mut studio = Studio::new();
+        studio.show_welcome = false;
+        let guides = studio.doc.ruler.guides_visible;
+        let snap = studio.snap.enabled;
+        frame(
+            &ctx,
+            &mut studio,
+            vec![
+                key(Key::Semicolon, Modifiers::CTRL),
+                Event::ModifiersChanged(Modifiers::NONE),
+            ],
+        );
+        assert_eq!(studio.doc.ruler.guides_visible, !guides);
+        frame(
+            &ctx,
+            &mut studio,
+            vec![
+                key(Key::Colon, Modifiers::CTRL | Modifiers::SHIFT),
+                Event::ModifiersChanged(Modifiers::NONE),
+            ],
+        );
+        assert_eq!(studio.snap.enabled, !snap);
+        frame(
+            &ctx,
+            &mut studio,
+            vec![key(Key::Semicolon, Modifiers::CTRL | Modifiers::SHIFT)],
+        );
+        assert_eq!(studio.snap.enabled, snap);
+        studio.persona = Persona::Pixel;
+        frame(&ctx, &mut studio, vec![key(Key::J, Modifiers::SHIFT)]);
+        assert_eq!(studio.tool, Tool::Heal);
+        frame(&ctx, &mut studio, vec![key(Key::J, Modifiers::NONE)]);
+        assert_eq!(studio.tool, Tool::Clone);
     }
 
     #[test]

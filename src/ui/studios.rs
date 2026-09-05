@@ -10,6 +10,14 @@ use eframe::egui::{
 };
 
 pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
+    if studio.paint_mask
+        && studio
+            .active_layer
+            .and_then(|index| studio.doc.layers.get(index))
+            .is_none_or(|layer| layer.mask.is_none())
+    {
+        studio.paint_mask = false;
+    }
     Panel::right("studios")
         .resizable(true)
         .default_size(288.0)
@@ -25,16 +33,8 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
             section_gap(ui);
             let design = studio.persona == Persona::Design;
             let motion = studio.persona == Persona::Motion;
-            let paint = studio.persona == Persona::Pixel
-                || matches!(
-                    studio.tool,
-                    Tool::Brush
-                        | Tool::Eraser
-                        | Tool::Fill
-                        | Tool::Clone
-                        | Tool::Smudge
-                        | Tool::Wand
-                );
+            let paint = pixel_context(studio);
+            let reshaping = studio.deformation.is_some();
             let typing = studio.type_edit.is_some()
                 || studio.tool == Tool::Text
                 || studio.selected_type().is_some();
@@ -44,11 +44,16 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                 .max_height(properties_height)
                 .auto_shrink([false, true])
                 .show(ui, |ui| {
-                    if design && typing {
+                    if reshaping {
+                        super::deform::inspector(ui, studio);
+                        section_gap(ui);
+                    }
+                    if design && typing && !reshaping {
                         character_studio(ui, studio);
                         section_gap(ui);
                     }
                     if design
+                        && !reshaping
                         && (!studio.selection.is_empty()
                             || !studio.artboard_sel.is_empty()
                             || matches!(
@@ -64,11 +69,19 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                         }
                         section_gap(ui);
                     }
-                    if paint {
+                    if paint || studio.paint_mask {
+                        super::masking::inspector(ui, studio);
+                        section_gap(ui);
                         brush_studio(ui, studio);
                         section_gap(ui);
                     }
-                    color_studio(ui, studio);
+                    if !studio.paint_mask {
+                        if matches!(studio.tool, Tool::Brush | Tool::Fill) {
+                            paint_color_studio(ui, studio);
+                        } else if !paint {
+                            color_studio(ui, studio);
+                        }
+                    }
                     if studio.tool == Tool::Trace {
                         section_gap(ui);
                         trace_studio(ui, studio);
@@ -113,19 +126,58 @@ fn geometry_icon(geometry: &Geom) -> &'static str {
     }
 }
 
+fn pixel_context(studio: &Studio) -> bool {
+    studio.persona == Persona::Pixel
+        || matches!(
+            studio.tool,
+            Tool::Brush
+                | Tool::Eraser
+                | Tool::Fill
+                | Tool::Clone
+                | Tool::Heal
+                | Tool::Smudge
+                | Tool::Wand
+        )
+}
+
 fn inspector_title(ui: &mut Ui, studio: &Studio) {
     let selected = studio
         .primary()
         .and_then(|(li, id)| studio.doc.find_shape(li, id));
-    let (icon, name, description) = if let Some(shape) = selected {
+    let selection_name =
+        (studio.selection.len() > 1).then(|| format!("{} objects", studio.selection.len()));
+    let (icon, name, description) = if studio.paint_mask {
+        (
+            ph::SELECTION,
+            "Layer mask",
+            "Paint to reveal or hide".into(),
+        )
+    } else if pixel_context(studio) {
+        let (icon, name) = match studio.tool {
+            Tool::Heal => (ph::BANDAIDS, "Healing brush"),
+            Tool::Clone => (ph::COPY, "Clone brush"),
+            Tool::Smudge => (ph::DROP, "Smudge brush"),
+            Tool::Eraser => (ph::ERASER, "Eraser"),
+            Tool::Fill => (ph::PAINT_BUCKET, "Fill"),
+            Tool::Wand => (ph::MAGIC_WAND, "Magic wand"),
+            _ => (ph::PAINT_BRUSH, studio.tool.label()),
+        };
+        let description = studio
+            .active_layer
+            .and_then(|index| studio.doc.layers.get(index))
+            .filter(|layer| layer.kind.pixels().is_some())
+            .map_or_else(
+                || "Choose a pixel layer".into(),
+                |layer| format!("Pixels · {}", layer.name),
+            );
+        (icon, name, description)
+    } else if let Some(name) = &selection_name {
+        (ph::STACK, name.as_str(), "Shared properties".into())
+    } else if let Some(shape) = selected {
         (
             geometry_icon(&shape.geom),
             shape.name.as_str(),
-            if studio.selection.len() > 1 {
-                format!("{} objects selected", studio.selection.len())
-            } else {
-                "Object properties".into()
-            },
+            "Object properties".into(),
         )
     } else if !studio.artboard_sel.is_empty() {
         (ph::FRAME_CORNERS, "Artboard", "Canvas properties".into())
@@ -159,7 +211,10 @@ fn inspector_title(ui: &mut Ui, studio: &Studio) {
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 3.0;
             ui.add(eframe::egui::Label::new(RichText::new(name).size(14.0).strong()).truncate());
-            ui.label(RichText::new(description).size(10.0).color(fg_weak()));
+            ui.add(
+                eframe::egui::Label::new(RichText::new(description).size(10.0).color(fg_weak()))
+                    .truncate(),
+            );
         });
     });
 }
@@ -1510,8 +1565,32 @@ fn trace_studio(ui: &mut Ui, studio: &mut Studio) {
 }
 
 fn brush_studio(ui: &mut Ui, studio: &mut Studio) {
-    heading(ui, "Brush");
+    if matches!(studio.tool, Tool::Fill | Tool::Wand) {
+        heading(ui, studio.tool.label());
+        number_field(ui, "Tolerance", &mut studio.fill_tolerance, 0.0..=180.0, "");
+        return;
+    }
+    if !matches!(
+        studio.tool,
+        Tool::Brush | Tool::Eraser | Tool::Clone | Tool::Heal | Tool::Smudge
+    ) {
+        return;
+    }
+    heading(
+        ui,
+        if studio.tool == Tool::Heal {
+            "Healing brush"
+        } else {
+            "Brush"
+        },
+    );
     number_field(ui, "Size", &mut studio.brush.size, 1.0..=256.0, " px");
+    if studio.tool == Tool::Smudge {
+        let mut strength = studio.brush.flow * 100.0;
+        number_field(ui, "Strength", &mut strength, 5.0..=100.0, "%");
+        studio.brush.flow = strength / 100.0;
+        return;
+    }
     let mut hardness = studio.brush.hardness * 100.0;
     let mut opacity = studio.brush.opacity * 100.0;
     let mut flow = studio.brush.flow * 100.0;
@@ -1523,20 +1602,26 @@ fn brush_studio(ui: &mut Ui, studio: &mut Studio) {
     studio.brush.opacity = opacity / 100.0;
     number_field(ui, "Flow", &mut flow, 5.0..=100.0, "%");
     studio.brush.flow = flow / 100.0;
-    if matches!(studio.tool, Tool::Fill | Tool::Wand) {
-        number_field(ui, "Tolerance", &mut studio.fill_tolerance, 0.0..=180.0, "");
-    }
-    if studio.tool == Tool::Clone {
+    super::masking::retouch_hint(ui, studio);
+}
+
+fn paint_color_studio(ui: &mut Ui, studio: &mut Studio) {
+    heading(ui, "Color");
+    let mut color = match studio.style.fill {
+        Fill::Solid(color) if studio.tool == Tool::Fill => color.to_egui(),
+        _ => studio.brush.color.to_egui(),
+    };
+    ui.horizontal(|ui| {
+        if ui.color_edit_button_srgba(&mut color).changed() {
+            studio.brush.color = Rgba::from_egui(color);
+            studio.style.fill = Fill::Solid(studio.brush.color);
+        }
         ui.label(
-            RichText::new(if studio.clone_source.is_some() {
-                "Clone source ready"
-            } else {
-                "Alt-click to set the clone source"
-            })
-            .small()
-            .color(fg_weak()),
+            RichText::new(Rgba::from_egui(color).hex())
+                .small()
+                .color(fg_weak()),
         );
-    }
+    });
 }
 
 fn object_name(ui: &mut Ui, name: &str, width: f32, strong: bool) -> eframe::egui::Response {
@@ -1622,6 +1707,7 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
     });
 
     let mut activate = None;
+    let mut mask_action = None;
     let mut vis = None;
     let mut lock = None;
     let mut up = None;
@@ -1720,7 +1806,9 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                             },
                             fg_weak(),
                         );
-                        let name_width = (ui.available_width() - 50.0).max(42.0);
+                        let name_width = (ui.available_width()
+                            - if layer.mask.is_some() { 74.0 } else { 50.0 })
+                        .max(42.0);
                         if studio.layer_rename.as_ref().map(|(index, _)| *index) == Some(i) {
                             if let Some((_, buffer)) = studio.layer_rename.as_mut() {
                                 let response = ui.add(
@@ -1764,7 +1852,23 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                         down = Some(i);
                                         ui.close();
                                     }
+                                    ui.separator();
+                                    ui.menu_button("Layer mask", |ui| {
+                                        if let Some(action) = super::masking::menu(ui, studio, i) {
+                                            mask_action = Some((i, action));
+                                        }
+                                    });
                                 });
+                        }
+                        if layer.mask.is_some()
+                            && icons::tiny_icon(
+                                ui,
+                                ph::SELECTION,
+                                "Paint layer mask",
+                                active && studio.paint_mask,
+                            )
+                        {
+                            mask_action = Some((i, super::masking::Action::Edit(true)));
                         }
                         if icons::tiny_icon(
                             ui,
@@ -1948,6 +2052,9 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
         }
     }
     if let Some(i) = activate {
+        if studio.active_layer != Some(i) {
+            studio.paint_mask = false;
+        }
         studio.active_layer = Some(i);
     }
     if let Some(i) = vis {
@@ -1992,6 +2099,9 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
         studio.layer_expanded.insert(id);
     }
     if let Some((li, id)) = pick_shape {
+        if studio.active_layer != Some(li) {
+            studio.paint_mask = false;
+        }
         studio.selection = vec![(li, id)];
         studio.active_layer = Some(li);
         studio.artboard_sel.clear();
@@ -2060,11 +2170,14 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
             to: from - 1,
         });
     }
+    if let Some((index, action)) = mask_action {
+        action.run(studio, index);
+    }
 }
 
 #[test]
 fn inspector_keeps_its_width_across_frames_and_personas() {
-    for scene in ["design", "type", "pixel", "motion"] {
+    for scene in ["design", "type", "pixel", "motion", "masking", "healing"] {
         let ctx = eframe::egui::Context::default();
         crate::ui::theme::apply(&ctx);
         let mut studio = Studio::new();

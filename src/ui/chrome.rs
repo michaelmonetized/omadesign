@@ -1,5 +1,4 @@
 use crate::app::Studio;
-use crate::boolean::BoolOp;
 use crate::geom::Pt;
 use crate::tools::{Persona, Tool};
 use crate::ui::icons::{self, ph};
@@ -25,6 +24,7 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
                     ui.visuals_mut().widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
                     file_menu(ui, studio);
                     edit_menu(ui, studio);
+                    ui.menu_button("Select", |ui| super::selection::menu(ui, studio));
                     object_menu(ui, studio);
                     arrange_menu(ui, studio);
                     view_menu(ui, studio);
@@ -271,32 +271,6 @@ fn edit_menu(ui: &mut Ui, studio: &mut Studio) {
         }
         ui.separator();
         if ui
-            .add(Button::new("Select all").shortcut_text("Ctrl+A"))
-            .clicked()
-        {
-            studio.selection = studio
-                .doc
-                .layers
-                .iter()
-                .enumerate()
-                .flat_map(|(li, l)| {
-                    let mut ids: Vec<(usize, u64)> = l
-                        .kind
-                        .shapes()
-                        .into_iter()
-                        .flatten()
-                        .map(move |s| (li, s.id))
-                        .collect();
-                    if l.kind.is_placed_raster() {
-                        ids.push((li, crate::document::RASTER_ID));
-                    }
-                    ids
-                })
-                .collect();
-            ui.close();
-        }
-        ui.separator();
-        if ui
             .add(Button::new("Copy style").shortcut_text("Ctrl+Alt+C"))
             .clicked()
         {
@@ -318,16 +292,30 @@ fn edit_menu(ui: &mut Ui, studio: &mut Studio) {
 
 fn object_menu(ui: &mut Ui, studio: &mut Studio) {
     ui.menu_button("Object", |ui| {
-        ui.label(RichText::new("Boolean").small().color(fg_weak()));
-        for op in BoolOp::all() {
-            if ui
-                .add_enabled(studio.selection.len() >= 2, Button::new(op.name()))
-                .clicked()
-            {
-                studio.apply_boolean(op);
-                ui.close();
-            }
+        if ui
+            .add_enabled(
+                !studio.selection.is_empty(),
+                Button::new("Expand stroke to outline"),
+            )
+            .clicked()
+        {
+            studio.expand_strokes();
+            ui.close();
         }
+        ui.menu_button("Pathfinder", |ui| {
+            super::selection::pathfinder_menu(ui, studio)
+        });
+        ui.menu_button("Reshape", |ui| {
+            for mode in crate::deform::Mode::ALL {
+                if ui
+                    .add_enabled(studio.can_deform(), Button::new(mode.label()))
+                    .clicked()
+                {
+                    studio.begin_deform(mode);
+                    ui.close();
+                }
+            }
+        });
         ui.separator();
         if ui
             .add_enabled(
@@ -527,12 +515,71 @@ fn view_menu(ui: &mut Ui, studio: &mut Studio) {
             ui.close();
         }
         ui.separator();
-        ui.checkbox(&mut studio.show_rulers, "Rulers");
+        ui.checkbox(&mut studio.show_rulers, "Rulers").on_hover_text(
+            "Drag down from the top ruler or right from the left ruler to add a guide. Drag the ruler corner to set zero; double-click it to reset."
+        );
         ui.checkbox(&mut studio.doc.grid.visible, "Grid");
-        ui.checkbox(&mut studio.snap.enabled, "Snapping");
+        if ui
+            .add(
+                Button::new(if studio.doc.ruler.guides_visible {
+                    "Hide guides"
+                } else {
+                    "Show guides"
+                })
+                .shortcut_text("Ctrl+;"),
+            )
+            .clicked()
+        {
+            studio.toggle_guides();
+            ui.close();
+        }
+        ui.menu_button("Ruler units", |ui| {
+            for unit in crate::document::RulerUnit::ALL {
+                if ui
+                    .selectable_label(studio.doc.ruler.unit == unit, unit.label())
+                    .clicked()
+                {
+                    studio.set_ruler_unit(unit);
+                    ui.close();
+                }
+            }
+        });
+        if ui.button("Reset ruler zero").clicked() {
+            studio.set_ruler_origin(Pt::ZERO);
+            ui.close();
+        }
+        if ui
+            .add_enabled(!studio.doc.guides.is_empty(), Button::new("Clear guides"))
+            .clicked()
+        {
+            studio.clear_guides();
+            ui.close();
+        }
+        ui.separator();
+        if ui
+            .add(
+                Button::new(if studio.snap.enabled {
+                    "Disable snapping"
+                } else {
+                    "Enable snapping"
+                })
+                .shortcut_text("Ctrl+Shift+;"),
+            )
+            .clicked()
+        {
+            studio.toggle_snapping();
+            ui.close();
+        }
+        ui.label(
+            RichText::new("Hold Ctrl during a drag to invert snapping")
+                .small()
+                .color(fg_weak()),
+        );
         ui.checkbox(&mut studio.snap.grid, "Snap to grid");
         ui.checkbox(&mut studio.snap.guides, "Snap to guides");
         ui.checkbox(&mut studio.snap.objects, "Snap to objects");
+        ui.checkbox(&mut studio.snap.artboards, "Snap to artboards");
+        ui.checkbox(&mut studio.snap.spacing, "Equal spacing");
         ui.separator();
         if ui
             .add(Button::new("Keyboard shortcuts").shortcut_text("F1"))
@@ -548,7 +595,10 @@ fn switch_persona(studio: &mut Studio, persona: Persona) {
     if studio.persona == persona {
         return;
     }
+    studio.end_deform(true);
+    studio.end_pixel_stroke(true);
     studio.commit_type_edit();
+    studio.reset_snap_gesture();
     studio.persona = persona;
     studio.op = None;
     studio.playing = false;
@@ -730,6 +780,7 @@ pub fn left_toolbar(ui: &mut Ui, studio: &mut Studio) {
                             | Tool::Eraser
                             | Tool::Fill
                             | Tool::Clone
+                            | Tool::Heal
                             | Tool::Smudge => "paint",
                             Tool::Marquee | Tool::EllipseMarquee | Tool::Lasso | Tool::Wand => {
                                 "selpx"
@@ -810,4 +861,31 @@ pub fn status_bar(ui: &mut Ui, studio: &mut Studio) {
                 });
             });
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn switching_personas_cancels_a_live_deformation_before_hiding_the_canvas() {
+        let mut studio = Studio::new();
+        studio.finish_create(
+            crate::app::CreateKind::Rect,
+            Pt::new(60.0, 60.0),
+            Pt::new(160.0, 160.0),
+        );
+        let (layer, id) = studio.selection[0];
+        let before = studio.doc.find_shape(layer, id).unwrap().clone();
+        let history = studio.history.len();
+        studio.begin_deform(crate::deform::Mode::Mesh);
+        let start = studio.deformation.as_ref().unwrap().cage.handles()[0];
+        studio.deformation_drag_start(0, start);
+        studio.deformation_drag_to(start - Pt::new(20.0, 10.0), false);
+        switch_persona(&mut studio, Persona::Photo);
+        assert!(studio.deformation.is_none());
+        assert_eq!(studio.persona, Persona::Photo);
+        assert_eq!(studio.doc.find_shape(layer, id), Some(&before));
+        assert_eq!(studio.history.len(), history);
+    }
 }
