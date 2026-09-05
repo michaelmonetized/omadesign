@@ -1,5 +1,73 @@
 # Changelog
 
+## 2026-09-05 · Pass 4 — A year of good starts
+
+The pudding has a sketchbook, a dance floor, and something fresh for every week.
+
+### The lines can change jobs
+
+- **Object → Guides** turns vector artwork into editable, non-printing guides.
+  Béziers stay Béziers, text stays text, and compound paths keep their holes.
+  Move a guide, edit its nodes, then release it back into artwork with its style
+  intact. Undo and project saves preserve the whole arrangement.
+- Snapping follows the actual guide curve, including a Shift-constrained drag.
+  Hidden guides stay out of the way; exported artwork leaves guides behind.
+  Photographs get a separate bounds guide while their pixels remain untouched.
+- Combining and separating compound paths preserve guide state, rotation,
+  linear gradients and stacking, with one Undo per operation. Mixed guide and
+  artwork inputs are rejected clearly. Radial fills stay radial and follow each
+  resulting object's bounds; the current format cannot retain a shared radial
+  centre across separated contours.
+- **Free transform · Ctrl+T** gives the existing move, scale and rotate handles
+  a clear entry in Object and F1. Distort, Skew, Perspective and the nine-handle
+  Warp mesh remain one menu away in **Object → Reshape**.
+  Reshaping rotated artwork now maps its linear gradient from the correct pose.
+
+### Give it a little life
+
+**Draw stroke, Pop in, Slam, Shake, Fill up, Slide up/down/left/right, Fly, Zoom,
+Buzz, and Fade in.** Thirteen starting points, all made from ordinary timeline
+keys. Duration stays close; delay, stagger and intensity unfold under Timing &
+energy. Each application has its own Undo and preserves unrelated animation.
+
+Draw stroke traces the path instead of fading it. Fill up reveals the interior
+from the bottom. The native canvas, animated SVG and Lottie use those reveal
+channels. Animated SVG retains masks and effects; Lottie reports unsupported
+pixels, masks or effects instead of quietly throwing them away. Moving filtered
+artwork also stops being clipped to the box it started in.
+
+The Motion inspector now opens with the presets. Appearance and manual key
+controls unfold when needed, leaving more room to choose the next move.
+
+### Fifty-two invitations to make something
+
+**Templates · 52** on the welcome screen and **File → Template library** open a
+searchable bank of original designs: events, food, culture, community, editorial,
+branding, education, wellness and products. These are editable shapes and live
+words, with 13 artwork families and 52 distinct compositions.
+
+Choose any of the 20 document sizes or your own dimensions. Portrait, square and
+landscape layouts reflow. Preview rendering happens in the background, cached
+thumbnails stay small, and the gallery only lays out visible rows. Creating a
+template keeps existing work in its own tab and starts a fresh unsaved document.
+
+All 52 ship locally. The [weekly drop plan](docs/template-drops.md) pairs every
+design with a practical remix prompt for a year of adoption campaigns. It is an
+editorial plan; posts and public releases are not scheduled automatically.
+
+Pass 4 verification: **230 tests passed**, including the full shortcut suite,
+native guide dragging, compound geometry/gradient/undo regressions, editable
+preset timing and reveal pixels, export fidelity, unsaved-document preservation,
+and compact gallery clipping. The template audit built **1,352 documents**:
+52 designs across every preset and six custom/minimum/extreme sizes.
+
+The release build passed. Welcome and floating template galleries, object guides
+and the Motion inspector were reviewed at 1600×1000 and 960×640. Portrait and
+landscape contact sheets cover all 52 templates. Browser renders of animated SVG
+and lottie-web matched the native reveal geometry at four animation stages.
+Clippy completed with 34 library advisories (46 including tests); none were hidden.
+Physical keyboard and OS dialog interaction remain part of human QA.
+
 ## 2026-09-05 · Pass 3 — Rulers, rubber, and a little repair
 
 The pudding has learned to park between the lines. It can also bend them.

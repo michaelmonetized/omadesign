@@ -116,6 +116,10 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
 
 fn file_menu(ui: &mut Ui, studio: &mut Studio) {
     ui.menu_button("File", |ui| {
+        if ui.button("Template library…").clicked() {
+            studio.show_templates = true;
+            ui.close();
+        }
         if ui
             .add(Button::new("New…").shortcut_text("Ctrl+N"))
             .clicked()
@@ -292,6 +296,38 @@ fn edit_menu(ui: &mut Ui, studio: &mut Studio) {
 
 fn object_menu(ui: &mut Ui, studio: &mut Studio) {
     ui.menu_button("Object", |ui| {
+        if ui
+            .add_enabled(
+                !studio.selection.is_empty(),
+                Button::new("Free transform").shortcut_text("Ctrl+T"),
+            )
+            .clicked()
+        {
+            studio.free_transform();
+            ui.close();
+        }
+        ui.menu_button("Guides", |ui| {
+            if ui
+                .add_enabled(
+                    studio.can_convert_to_guides(),
+                    Button::new("Convert selection to guides"),
+                )
+                .clicked()
+            {
+                studio.convert_selection_to_guides();
+                ui.close();
+            }
+            if ui
+                .add_enabled(
+                    studio.can_release_guides(),
+                    Button::new("Release guides to artwork"),
+                )
+                .clicked()
+            {
+                studio.release_selected_guides();
+                ui.close();
+            }
+        });
         if ui
             .add_enabled(
                 !studio.selection.is_empty(),
@@ -549,7 +585,7 @@ fn view_menu(ui: &mut Ui, studio: &mut Studio) {
             ui.close();
         }
         if ui
-            .add_enabled(!studio.doc.guides.is_empty(), Button::new("Clear guides"))
+            .add_enabled(!studio.doc.guides.is_empty(), Button::new("Clear ruler guides"))
             .clicked()
         {
             studio.clear_guides();

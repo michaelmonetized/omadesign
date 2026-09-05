@@ -45,6 +45,7 @@ pub struct Scene {
     objects: Vec<Bounds>,
     boards: Vec<Bounds>,
     guides: Vec<(bool, f32)>,
+    guide_paths: Vec<(Vec<Pt>, bool)>,
     grid: Option<f32>,
 }
 impl Scene {
@@ -72,6 +73,7 @@ impl Scene {
     ) -> Self {
         let excluded: HashSet<_> = excluded.iter().copied().collect();
         let mut objects = Vec::new();
+        let mut guide_paths = Vec::new();
         for (li, layer) in doc
             .layers
             .iter()
@@ -79,21 +81,30 @@ impl Scene {
             .filter(|(_, layer)| layer.visible)
         {
             if let Some(shapes) = layer.kind.shapes() {
-                objects.extend(
-                    shapes
-                        .iter()
-                        .filter(|shape| shape.visible && !excluded.contains(&(li, shape.id)))
-                        .map(|shape| {
-                            let bounds = shape.world_bbox();
-                            motion.map_or(bounds, |(time, overrides)| {
-                                overrides
-                                    .get(&shape.id)
-                                    .copied()
-                                    .unwrap_or_else(|| doc.motion.pose(shape.id, time))
-                                    .map_bounds(bounds)
-                            })
-                        }),
-                );
+                for shape in shapes
+                    .iter()
+                    .filter(|shape| shape.visible && !excluded.contains(&(li, shape.id)))
+                {
+                    let bounds = shape.world_bbox();
+                    let pose = motion.map(|(time, overrides)| {
+                        overrides
+                            .get(&shape.id)
+                            .copied()
+                            .unwrap_or_else(|| doc.motion.pose(shape.id, time))
+                    });
+                    if shape.guide {
+                        for mut contour in shape.world_contours(96) {
+                            if let Some(pose) = pose {
+                                for point in &mut contour {
+                                    *point = pose.map(bounds.center(), *point);
+                                }
+                            }
+                            guide_paths.push((contour, shape.geom.is_closed()));
+                        }
+                    } else {
+                        objects.push(pose.map_or(bounds, |pose| pose.map_bounds(bounds)));
+                    }
+                }
             } else if !excluded.contains(&(li, RASTER_ID))
                 && layer.kind.is_placed_raster()
                 && let Some(bounds) = layer.kind.raster_bounds()
@@ -121,6 +132,7 @@ impl Scene {
                 .iter()
                 .map(|guide| (guide.vertical, guide.pos))
                 .collect(),
+            guide_paths,
             grid: doc.grid.snap.then_some(doc.grid.size.max(1.0)),
         }
     }
@@ -273,7 +285,9 @@ impl Scene {
         }
         let mut output = delta;
         let mut feedback = Feedback::default();
+        let mut accepted = false;
         let mut take = |candidate: &Candidate| {
+            accepted = true;
             if let Some(line) = candidate.line {
                 feedback.lines.push(line);
             }
@@ -311,6 +325,83 @@ impl Scene {
             if let Some(candidate) = &best[1] {
                 output.y += candidate.correction;
                 take(candidate);
+            }
+        }
+        if settings.guides {
+            let probes = [
+                moved.center(),
+                moved.min,
+                moved.max,
+                Pt::new(moved.min.x, moved.max.y),
+                Pt::new(moved.max.x, moved.min.y),
+                Pt::new(moved.center().x, moved.min.y),
+                Pt::new(moved.center().x, moved.max.y),
+                Pt::new(moved.min.x, moved.center().y),
+                Pt::new(moved.max.x, moved.center().y),
+            ];
+            let probes = if moved.width() < 1e-6 && moved.height() < 1e-6 {
+                &probes[..1]
+            } else {
+                &probes[..]
+            };
+            let direction = (constrained && delta.length() > 1e-5).then(|| delta.normalized());
+            let mut closest: Option<(Pt, (Pt, Pt))> = None;
+            for (points, closed) in &self.guide_paths {
+                let count =
+                    points.len().saturating_sub(1) + usize::from(*closed && points.len() > 2);
+                for index in 0..count {
+                    let a = points[index];
+                    let b = points[(index + 1) % points.len()];
+                    if !(Bounds {
+                        min: a.min(b),
+                        max: a.max(b),
+                    })
+                    .inflate(tolerance)
+                    .intersects(moved)
+                    {
+                        continue;
+                    }
+                    let segment = b - a;
+                    for &probe in probes {
+                        let correction = if let Some(direction) = direction {
+                            let denominator = direction.cross(segment);
+                            if denominator.abs() < 1e-8 {
+                                continue;
+                            }
+                            let offset = a - probe;
+                            let along_segment = offset.cross(direction) / denominator;
+                            if !(0.0..=1.0).contains(&along_segment) {
+                                continue;
+                            }
+                            direction * (offset.cross(segment) / denominator)
+                        } else if constrained {
+                            continue;
+                        } else {
+                            let t = if segment.length_sq() > 1e-10 {
+                                (probe - a).dot(segment) / segment.length_sq()
+                            } else {
+                                0.0
+                            };
+                            a + segment * t.clamp(0.0, 1.0) - probe
+                        };
+                        if correction.length() <= tolerance
+                            && closest
+                                .as_ref()
+                                .is_none_or(|(old, _)| correction.length_sq() < old.length_sq())
+                        {
+                            closest = Some((correction, (a, b)));
+                        }
+                    }
+                }
+            }
+            if let Some((correction, line)) = closest
+                && (!accepted || correction.length_sq() <= (output - delta).length_sq() + 1e-8)
+            {
+                output = delta + correction;
+                feedback = Feedback {
+                    lines: vec![line],
+                    gaps: vec![],
+                };
             }
         }
         (output, feedback)
@@ -524,6 +615,67 @@ mod tests {
         assert_eq!(
             scene.point(grid, Pt::new(9.0, 3.0), 1.0, None).0,
             Pt::new(8.0, 0.0)
+        );
+    }
+}
+
+#[cfg(test)]
+mod object_guide_tests {
+    use super::*;
+    use crate::document::{Layer, Shape, Style};
+    use crate::geom::{Anchor, Geom};
+
+    #[test]
+    fn curved_guides_snap_to_the_rendered_curve_and_preserve_shift_direction() {
+        let mut doc = Document::new("Curved guide", 200.0, 200.0, 72.0);
+        doc.layers = vec![Layer::vector("Guides")];
+        let mut start = Anchor::corner(Pt::ZERO);
+        start.h_out = Pt::new(0.0, 100.0);
+        let mut end = Anchor::corner(Pt::new(100.0, 0.0));
+        end.h_in = Pt::new(0.0, 100.0);
+        let mut guide = Shape::new(
+            Geom::Path {
+                anchors: vec![start, end],
+                closed: false,
+            },
+            Style::default(),
+        );
+        guide.guide = true;
+        doc.layers[0].kind.shapes_mut().unwrap().push(guide.clone());
+        let settings = SnapSettings {
+            grid: false,
+            objects: false,
+            artboards: false,
+            spacing: false,
+            ..Default::default()
+        };
+        let scene = Scene::new(&doc, &[], &[]);
+        let (point, feedback) = scene.point(settings, Pt::new(50.0, 78.0), 1.0, None);
+        assert!((point - Pt::new(50.0, 75.0)).length() < 0.01);
+        assert!(!feedback.lines.is_empty());
+        let (point, _) = scene.point(settings, Pt::new(50.0, 78.0), 1.0, Some(Pt::new(0.0, 25.0)));
+        assert!((point - Pt::new(50.0, 75.0)).length() < 0.01);
+        let (point, feedback) = scene.point(
+            SnapSettings {
+                objects: true,
+                guides: false,
+                ..settings
+            },
+            Pt::new(49.0, 1.0),
+            1.0,
+            None,
+        );
+        assert_eq!(point, Pt::new(49.0, 1.0));
+        assert!(
+            feedback.lines.is_empty(),
+            "object guides must not masquerade as bbox targets"
+        );
+        let scene = Scene::new(&doc, &[(0, guide.id)], &[]);
+        let (point, _) = scene.point(settings, Pt::new(50.0, 78.0), 1.0, None);
+        assert_eq!(
+            point,
+            Pt::new(50.0, 78.0),
+            "an edited guide must not snap to itself"
         );
     }
 }

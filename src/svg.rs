@@ -147,7 +147,7 @@ fn layer_bounds(layer: &Layer) -> Option<Bounds> {
         LayerKind::Vector { shapes } => {
             let mut b: Option<Bounds> = None;
             for s in shapes {
-                if !s.visible {
+                if !s.visible || s.guide {
                     continue;
                 }
                 let sb = s.world_bbox();
@@ -180,6 +180,7 @@ fn write_shape(
     grad_id: &mut usize,
     shape: &Shape,
     extra: &str,
+    text_as_paths: bool,
 ) {
     let fill_attr = match &shape.style.fill {
         Fill::None => "fill=\"none\"".to_string(),
@@ -227,7 +228,11 @@ fn write_shape(
         }
         _ => String::new(),
     };
-    if let Geom::Text(run) = &shape.geom {
+    // Animation uses actual glyph outlines without changing the original bounds
+    // used by gradients. The document text stays editable.
+    if let Geom::Text(run) = &shape.geom
+        && !text_as_paths
+    {
         let family = crate::text::label_for(&run.font);
         let fill = match &shape.style.fill {
             Fill::Solid(c) => svg_color(*c),
@@ -282,8 +287,8 @@ fn write_shape(
         return;
     }
     let rule = match &shape.geom {
-        Geom::Poly { winding: false, .. } => " fill-rule=\"evenodd\"",
-        _ => "",
+        Geom::Poly { winding: true, .. } => "",
+        _ => " fill-rule=\"evenodd\"",
     };
     body.push_str(&format!(
         "  <path id=\"oma-{}\" d=\"{d}\" {fill_attr}{stroke_attr}{rule} opacity=\"{:.3}\"{extra}/>\n",
@@ -307,6 +312,199 @@ pub fn export_animated(doc: &Document) -> Result<String, String> {
     export_inner(doc, true)
 }
 
+fn animate_attribute(
+    attribute: &str,
+    motion: &crate::motion::Motion,
+    times: &[f32],
+    values: impl Fn(f32) -> f32,
+) -> String {
+    let duration = motion.duration.max(0.05);
+    let keys = times
+        .iter()
+        .map(|t| format!("{:.7}", (t / duration).clamp(0.0, 1.0)))
+        .collect::<Vec<_>>()
+        .join(";");
+    let values = times
+        .iter()
+        .map(|t| format!("{:.6}", values(*t)))
+        .collect::<Vec<_>>()
+        .join(";");
+    let repeat = if motion.looped { "indefinite" } else { "1" };
+    format!(
+        "<animate attributeName=\"{attribute}\" dur=\"{duration:.4}s\" repeatCount=\"{repeat}\" fill=\"freeze\" calcMode=\"linear\" keyTimes=\"{keys}\" values=\"{values}\"/>\n"
+    )
+}
+
+fn write_animated_shape(
+    body: &mut String,
+    defs: &mut String,
+    grad_id: &mut usize,
+    shape: &Shape,
+    motion: &crate::motion::Motion,
+) {
+    use crate::motion::Prop;
+    let times = motion.sample_times(shape.id);
+    let bounds = shape.world_bbox();
+    let center = bounds.center();
+    body.push_str(&format!(
+        "<g class=\"oma-a\" style=\"animation-name: oma-{}; transform-origin: {:.4}px {:.4}px\">\n",
+        shape.id, center.x, center.y
+    ));
+    let mut component = shape.clone();
+    component.opacity = 1.0;
+    if !shape.style.fill.is_none() && shape.geom.is_closed() {
+        component.style.stroke = None;
+        body.push_str(&format!(
+            "<g class=\"oma-a\" style=\"animation-name: oma-{}-opacity\">\n",
+            shape.id
+        ));
+        let reveal = motion.value(shape.id, Prop::FillReveal, 0.0).is_some();
+        if reveal {
+            let id = format!("oma-fill-reveal-{}", shape.id);
+            let initial = motion
+                .pose(shape.id, 0.0)
+                .fill_reveal
+                .unwrap_or(1.0)
+                .clamp(0.0, 1.0);
+            defs.push_str(&format!("<clipPath id=\"{id}\" clipPathUnits=\"userSpaceOnUse\"><rect x=\"{:.4}\" y=\"{:.4}\" width=\"{:.4}\" height=\"{:.4}\">\n",bounds.min.x,bounds.max.y-bounds.height()*initial,bounds.width(),bounds.height()*initial));
+            defs.push_str(&animate_attribute("y", motion, &times, |time| {
+                bounds.max.y
+                    - bounds.height()
+                        * motion
+                            .pose(shape.id, time)
+                            .fill_reveal
+                            .unwrap_or(1.0)
+                            .clamp(0.0, 1.0)
+            }));
+            defs.push_str(&animate_attribute("height", motion, &times, |time| {
+                bounds.height()
+                    * motion
+                        .pose(shape.id, time)
+                        .fill_reveal
+                        .unwrap_or(1.0)
+                        .clamp(0.0, 1.0)
+            }));
+            defs.push_str("</rect></clipPath>\n");
+            body.push_str(&format!("<g clip-path=\"url(#{id})\">\n"));
+        }
+        let mut part = String::new();
+        write_shape(
+            &mut part,
+            defs,
+            grad_id,
+            &component,
+            &xf_attr(&component),
+            true,
+        );
+        body.push_str(&part.replacen(
+            &format!("id=\"oma-{}\"", shape.id),
+            &format!("id=\"oma-{}-fill\"", shape.id),
+            1,
+        ));
+        if reveal {
+            body.push_str("</g>\n");
+        }
+        body.push_str("</g>\n");
+    }
+    if let Some(stroke) = shape
+        .style
+        .stroke
+        .as_ref()
+        .filter(|stroke| stroke.width > 0.0)
+    {
+        body.push_str(&format!(
+            "<g class=\"oma-a\" style=\"animation-name: oma-{}-opacity\">\n",
+            shape.id
+        ));
+        component.style.fill = Fill::None;
+        component.style.stroke = Some(stroke.clone());
+        let reveal = motion.value(shape.id, Prop::StrokeReveal, 0.0).is_some();
+        if reveal {
+            let id = format!("oma-stroke-reveal-{}", shape.id);
+            let mask_bounds = bounds.inflate(stroke.width * 2.0 + 2.0);
+            defs.push_str(&format!("<mask id=\"{id}\" maskUnits=\"userSpaceOnUse\" maskContentUnits=\"userSpaceOnUse\" mask-type=\"alpha\" x=\"{:.4}\" y=\"{:.4}\" width=\"{:.4}\" height=\"{:.4}\">\n",mask_bounds.min.x,mask_bounds.min.y,mask_bounds.width(),mask_bounds.height()));
+            let closed = shape.geom.is_closed();
+            let contours = shape.world_contours(128);
+            let lengths: Vec<f32> = contours
+                .iter()
+                .map(|points| {
+                    points
+                        .windows(2)
+                        .map(|pair| (pair[1] - pair[0]).length())
+                        .sum::<f32>()
+                        + if closed && points.len() > 1 {
+                            (points[0] - points[points.len() - 1]).length()
+                        } else {
+                            0.0
+                        }
+                })
+                .collect();
+            let total: f32 = lengths.iter().sum();
+            let mut passed = 0.0;
+            // Add a near-zero sample so a round start cap is absent at zero,
+            // but appears as soon as this contour begins drawing.
+            for (points, length) in contours.iter().zip(lengths) {
+                if length <= 1e-5 {
+                    continue;
+                }
+                let offset = |time| {
+                    length
+                        - (total
+                            * motion
+                                .pose(shape.id, time)
+                                .stroke_reveal
+                                .unwrap_or(1.0)
+                                .clamp(0.0, 1.0)
+                            - passed)
+                            .clamp(0.0, length)
+                };
+                defs.push_str(&format!("<path d=\"{}\" fill=\"none\" stroke=\"white\" stroke-width=\"{:.4}\" stroke-linecap=\"{}\" stroke-linejoin=\"{}\" stroke-dasharray=\"{length:.5} {length:.5}\" stroke-dashoffset=\"{:.5}\">\n",poly_d(points,closed),stroke.width+0.5,stroke.cap.name().to_ascii_lowercase(),stroke.join.name().to_ascii_lowercase(),offset(0.0)));
+                defs.push_str(&animate_attribute(
+                    "stroke-dashoffset",
+                    motion,
+                    &times,
+                    offset,
+                ));
+                let mut cap_times = times.clone();
+                for pair in times.windows(2) {
+                    cap_times.push(pair[0] + (pair[1] - pair[0]) * 0.0001);
+                }
+                cap_times.sort_by(f32::total_cmp);
+                defs.push_str(&animate_attribute("opacity", motion, &cap_times, |time| {
+                    if total * motion.pose(shape.id, time).stroke_reveal.unwrap_or(1.0) > passed {
+                        1.0
+                    } else {
+                        0.0
+                    }
+                }));
+                defs.push_str("</path>\n");
+                passed += length;
+            }
+            defs.push_str("</mask>\n");
+            body.push_str(&format!("<g mask=\"url(#{id})\">\n"));
+        }
+        let mut part = String::new();
+        write_shape(
+            &mut part,
+            defs,
+            grad_id,
+            &component,
+            &xf_attr(&component),
+            true,
+        );
+        body.push_str(&part.replacen(
+            &format!("id=\"oma-{}\"", shape.id),
+            &format!("id=\"oma-{}-stroke\"", shape.id),
+            1,
+        ));
+        if reveal {
+            body.push_str("</g>\n");
+        }
+        body.push_str("</g>\n");
+    }
+    body.push_str("</g>\n");
+}
+
 fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
     let mut body = String::new();
     let mut defs = String::new();
@@ -316,7 +514,7 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
     let looping = if motion.looped { "infinite" } else { "1" };
     if animate && !motion.is_empty() {
         css.push_str(&format!(
-            ".oma-a {{ animation-duration: {:.3}s; animation-iteration-count: {looping}; animation-fill-mode: both; transform-box: fill-box; transform-origin: center; }}\n",
+            ".oma-a {{ animation-duration: {:.3}s; animation-iteration-count: {looping}; animation-fill-mode: both; animation-timing-function: linear; transform-box: view-box; }}\n",
             motion.duration.max(0.05)
         ));
     }
@@ -350,20 +548,19 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
         match &layer.kind {
             LayerKind::Vector { shapes } => {
                 for shape in shapes {
-                    if !shape.visible {
+                    if !shape.visible || shape.guide {
                         continue;
                     }
+                    let keyframes = animate
+                        .then(|| {
+                            motion.css_keyframes(
+                                shape.id,
+                                &format!("oma-{}", shape.id),
+                                shape.opacity,
+                            )
+                        })
+                        .flatten();
                     let mut extra = String::new();
-                    if animate
-                        && let Some(kf) =
-                            motion.css_keyframes(shape.id, &format!("oma-{}", shape.id))
-                    {
-                        css.push_str(&kf);
-                        extra = format!(
-                            " class=\"oma-a\" style=\"animation-name: oma-{}\"",
-                            shape.id
-                        );
-                    }
                     if shape.filters.active() {
                         let fid = format!("oma-fx-s{}", shape.id);
                         let b = shape.world_bbox();
@@ -378,8 +575,28 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
                             extra.push_str(&format!(" filter=\"url(#{fid})\""));
                         }
                     }
-                    extra.push_str(&xf_attr(shape));
-                    write_shape(&mut layer_body, &mut defs, &mut grad_id, shape, &extra);
+                    if let Some(keyframes) = keyframes {
+                        css.push_str(&keyframes);
+                        layer_body.push_str(&format!("<g{extra}>\n"));
+                        write_animated_shape(
+                            &mut layer_body,
+                            &mut defs,
+                            &mut grad_id,
+                            shape,
+                            motion,
+                        );
+                        layer_body.push_str("</g>\n");
+                    } else {
+                        extra.push_str(&xf_attr(shape));
+                        write_shape(
+                            &mut layer_body,
+                            &mut defs,
+                            &mut grad_id,
+                            shape,
+                            &extra,
+                            false,
+                        );
+                    }
                 }
             }
             LayerKind::Raster {

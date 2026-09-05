@@ -15,7 +15,7 @@ That installs `~/.local/bin/omadesign` and a desktop entry. Binaries are glibc 2
 ## First five minutes
 
 1. Launch **omadesign**.
-2. Pick a document size, or open the demo.
+2. Pick a document size, try **Templates · 52**, or open the demo.
 3. **Design** is the default persona. `R` a rectangle, `P` the pen, `T` type.
 4. **Pixel** (`B`) paints on a raster layer.
 5. **Photo** opens a folder of pictures and grades them.
@@ -34,6 +34,7 @@ Chrome follows your desktop: Omarchy theme colours and the font from `omarchy fo
 ## Design
 
 - **Move** `V` — click to select, drag to move, eight handles scale, the handle above the box rotates. Shift-click adds to the selection. Alt-drag clones. Corner dots round a rectangle.
+- **Free transform** `Ctrl+T` — puts the current selection into Move with its scale and rotation handles ready. Also under Object. It keeps live text and shape parameters editable.
 - **Node** `A` — drag points and Bézier handles. Shift-click adds nodes. Drag a box around nodes to select them. Drag a segment to move the line. Click a curve to insert. Alt-click converts corner/smooth. Alt-drag a handle breaks symmetry. Delete removes selected points. Object → Break path. Shapes convert to a path the first time you edit them.
 - **Pen** `P` — click a corner, click-drag a smooth point (a twitch under 3px stays a corner). Shift constrains 45°. Alt-drag breaks handle symmetry. The cubic is drawn as you go. Enter or double-click finishes an **open** path. Esc removes the last point, then cancels. Click the first point to close. Click an open endpoint to continue it, or to join it to the path you're drawing.
 - **Artboard** `Shift+O` — draw a new board, drag to move, handles scale, the top handle rotates. Alt-drag clones. Object → Wrap selection in artboard. Click the name in Transform to rename.
@@ -73,9 +74,16 @@ Colour studio: HSV, hex, swatches, recent. `X` swaps fill/stroke. `D` restores d
 
 **Object → Expand stroke to outline** turns the visible stroke into filled geometry, including caps, joins, and dashes. Existing fills stay in place beneath the new outline. Compound outlines retain their holes; use Reshape to move their contours together.
 
+Combine and Release preserve guide state, rotation, stacking and linear gradients
+in one undo step. Combine and Pathfinder require either artwork or guides, with
+no mixture. Radial fills follow each resulting object's bounds when contours are
+separated; a shared radial centre is not currently represented in the document.
+
 ### Guides, rulers, and precision
 
-Drag from the top ruler for a horizontal guide or the left ruler for a vertical one. Drag an existing guide to move it. Select a guide and press Delete, drag it outside the canvas, or use its context menu to remove it. View also offers Clear Guides. `Ctrl+;` shows or hides guides.
+Drag from the top ruler for a horizontal guide or the left ruler for a vertical one. Drag an existing guide to move it. Select a guide and press Delete, drag it outside the canvas, or use its context menu to remove it. View also offers Clear ruler guides. `Ctrl+;` shows or hides ruler and object guides.
+
+**Object → Guides → Convert selection to guides** turns vector artwork into editable, non-printing contours. Curves, compound paths, shapes and live text keep their original data and style. Move, Node and Reshape still edit them; snapping follows the actual curve. **Release guides** restores them as artwork, including any geometry edits. Both actions undo normally, and guides survive project saves while staying out of PNG/JPEG/SVG/Lottie exports. A placed image creates a separate guide around its bounds and retains its pixels. Hidden guides do not capture pointer input or snapping.
 
 Drag the rulers' top-left intersection to set the zero point. Double-click that corner to reset it. Right-click a ruler or use View to choose pixels, millimetres, centimetres, inches, or points. Physical units follow the document DPI; changing units changes the ruler display, not the artwork.
 
@@ -120,15 +128,29 @@ Hold Space or choose Hand to drag the view; middle-drag and two-finger scroll al
 
 ## Motion
 
-The artboard you drew is the rest pose. Motion does not rewrite it. Tracks are offsets: X, Y, rotation, scale, opacity.
+The artboard you drew is the rest pose. Motion does not rewrite it. Tracks include X, Y, rotation, scale, opacity, stroke reveal and fill reveal.
 
 - Open the **Motion** persona. The timeline sits under the canvas.
+- Select vector artwork and choose **Draw stroke, Pop in, Slam, Shake, Fill up, Slide up/down/left/right, Fly, Zoom, Buzz, or Fade in** in the inspector. Draw stroke needs a visible stroke; Fill up needs a closed shape with a fill. Incompatible, locked, hidden and guide objects are skipped.
+- Duration sits above the presets. **Timing & energy** opens delay, stagger, intensity and start-at-playhead options. Presets become ordinary keys; each application has its own Undo. They replace only the affected channels inside their time interval and extend the clip if needed. Space previews the result.
 - Select a shape. Drag it — that writes keys at the playhead. First key at t > 0 also plants rest at 0, so it animates from where you drew it.
 - `K` keys X/Y/rotate/scale for the selection. Diamonds on the row are keys. Drag a diamond to retime. Click it, Delete removes it. Cycle ease on a selected key.
 - Space plays. Home / End jump. Loop is the repeat icon.
-- **File → Export animated SVG…** writes CSS `@keyframes`. **Export Lottie…** writes Bodymovin 5.x JSON that lottie-web and dotLottie play. **Import Lottie…** brings a shape-layer Lottie onto the timeline.
+- **File → Export animated SVG…** writes animated transforms plus stroke/fill reveals, retaining masks and effects. **Export Lottie…** writes Bodymovin 5.x shape animation with trim paths and fill masks. Pixel layers, layer masks and effects cannot be preserved by this Lottie exporter and produce a clear error; choose animated SVG for those compositions. **Import Lottie…** brings a shape-layer Lottie onto the timeline.
 
 PNG/JPEG/static SVG stay the rest pose. The clip lives in the `.oma`.
+
+Animated SVG outlines text in the exported file so glyph geometry and reveals
+match the canvas. The source text stays editable in `.oma`. Lottie import is a
+basic shape subset; use `.oma` to retain the complete editable animation.
+
+## Templates
+
+Open **Templates · 52** on the welcome screen or **File → Template library** while drawing. Search by name or idea, filter the nine categories, choose any built-in document size or enter custom width, height and DPI. Previews adapt to the chosen proportions. Click a card and **Use this template**, or double-click the card.
+
+Templates open as unsaved documents with editable paper, artwork and copy layers. Existing work stays in its tab. They use locally available fonts and need no network connection. The 52 designs include distinct artwork and layouts for portrait, square and landscape pages; very tiny sizes omit unreadable secondary copy.
+
+All 52 are available immediately. The [weekly drop plan](template-drops.md) proposes a release order and a remix prompt for each week; it does not schedule or publish marketing posts.
 
 ## Files
 
@@ -151,6 +173,7 @@ Undo Ctrl+Z · Redo Ctrl+Shift+Z · Duplicate Ctrl+D
 Copy Ctrl+C · Paste Ctrl+V · Cut Ctrl+X · Select all Ctrl+A
 Save Ctrl+S · Save as Ctrl+Shift+S · Open Ctrl+O · New Ctrl+N · Place Ctrl+Shift+P · Export Ctrl+E
 Combine Ctrl+G · Release Ctrl+Shift+G · Front Ctrl+Shift+] · Back Ctrl+Shift+[
+Free transform Ctrl+T · Guides Ctrl+; · Snapping Ctrl+Shift+; · Hold Ctrl to reverse snapping
 Fit Ctrl+0 · 100% Ctrl+1 · Zoom in Ctrl++ · Zoom out Ctrl+- · Pan Space · Pinch / Ctrl+scroll zoom
 Motion: Space play · K key · Home start · End end
 ```

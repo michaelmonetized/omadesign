@@ -7,7 +7,7 @@ use crate::color::Rgba;
 use crate::document::{Cap, Document, Fill, Join, Shape, Stroke, Style};
 use crate::geom::{Anchor, Geom, Pt};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -17,6 +17,8 @@ pub enum Prop {
     Rotation,
     Scale,
     Opacity,
+    StrokeReveal,
+    FillReveal,
 }
 
 impl Prop {
@@ -27,19 +29,29 @@ impl Prop {
             Prop::Rotation => "Rotate",
             Prop::Scale => "Scale",
             Prop::Opacity => "Opacity",
+            Prop::StrokeReveal => "Draw stroke",
+            Prop::FillReveal => "Fill reveal",
         }
     }
 
     pub fn identity(self) -> f32 {
         match self {
             Prop::Scale => 1.0,
-            Prop::Opacity => 1.0,
+            Prop::Opacity | Prop::StrokeReveal | Prop::FillReveal => 1.0,
             _ => 0.0,
         }
     }
 
-    pub fn all() -> [Prop; 5] {
-        [Prop::X, Prop::Y, Prop::Rotation, Prop::Scale, Prop::Opacity]
+    pub fn all() -> [Prop; 7] {
+        [
+            Prop::X,
+            Prop::Y,
+            Prop::Rotation,
+            Prop::Scale,
+            Prop::Opacity,
+            Prop::StrokeReveal,
+            Prop::FillReveal,
+        ]
     }
 }
 
@@ -131,6 +143,8 @@ pub struct Pose {
     pub rotation: f32,
     pub scale: f32,
     pub opacity: Option<f32>,
+    pub stroke_reveal: Option<f32>,
+    pub fill_reveal: Option<f32>,
 }
 
 impl Pose {
@@ -141,6 +155,8 @@ impl Pose {
             rotation: 0.0,
             scale: 1.0,
             opacity: None,
+            stroke_reveal: None,
+            fill_reveal: None,
         }
     }
 
@@ -150,6 +166,8 @@ impl Pose {
             && self.rotation.abs() < 1e-5
             && (self.scale - 1.0).abs() < 1e-5
             && self.opacity.is_none()
+            && self.stroke_reveal.is_none()
+            && self.fill_reveal.is_none()
     }
 
     pub fn map(self, center: Pt, p: Pt) -> Pt {
@@ -218,6 +236,8 @@ impl Motion {
             rotation: self.value(shape, Prop::Rotation, t).unwrap_or(0.0),
             scale: self.value(shape, Prop::Scale, t).unwrap_or(1.0),
             opacity: self.value(shape, Prop::Opacity, t),
+            stroke_reveal: self.value(shape, Prop::StrokeReveal, t),
+            fill_reveal: self.value(shape, Prop::FillReveal, t),
         }
     }
 
@@ -298,35 +318,47 @@ impl Motion {
         }
     }
 
-    pub fn css_keyframes(&self, shape: u64, name: &str) -> Option<String> {
-        let times = self.key_times(shape);
+    pub fn sample_times(&self, shape: u64) -> Vec<f32> {
+        let mut times = self.key_times(shape);
+        if times.is_empty() {
+            return times;
+        }
+        times.extend([0.0, self.duration.max(0.05)]);
+        for track in self.tracks.iter().filter(|track| track.shape == shape) {
+            for pair in track.keys.windows(2) {
+                if pair[0].ease != Ease::Linear {
+                    for i in 1..16 {
+                        times.push(pair[0].t + (pair[1].t - pair[0].t) * i as f32 / 16.0);
+                    }
+                }
+            }
+        }
+        times.retain(|time| time.is_finite() && *time >= 0.0 && *time <= self.duration.max(0.05));
+        times.sort_by(f32::total_cmp);
+        times.dedup_by(|a, b| (*a - *b).abs() < 1e-5);
+        times
+    }
+
+    pub fn css_keyframes(&self, shape: u64, name: &str, rest_opacity: f32) -> Option<String> {
+        let times = self.sample_times(shape);
         if times.is_empty() {
             return None;
         }
-        let dur = self.duration.max(0.05);
+        let duration = self.duration.max(0.05);
         let mut css = format!("@keyframes {name} {{\n");
-        for t in times {
-            let pose = self.pose(shape, t);
-            let pct = (t / dur * 100.0).clamp(0.0, 100.0);
-            let ease = self
-                .tracks
-                .iter()
-                .filter(|tr| tr.shape == shape)
-                .flat_map(|tr| tr.keys.iter())
-                .find(|k| (k.t - t).abs() < 1e-4)
-                .map(|k| k.ease.css())
-                .unwrap_or("ease-in-out");
-            let op = pose.opacity.unwrap_or(1.0);
-            css.push_str(&format!(
-                "  {pct:.3}% {{ transform: translate({:.3}px, {:.3}px) rotate({:.3}deg) scale({:.4}); opacity: {:.3}; animation-timing-function: {ease}; }}\n",
-                pose.dx,
-                pose.dy,
-                pose.rotation.to_degrees(),
-                pose.scale,
-                op
+        let mut opacity = format!("@keyframes {name}-opacity {{\n");
+        for time in times {
+            let pose = self.pose(shape, time);
+            let percent = (time / duration * 100.0).clamp(0.0, 100.0);
+            css.push_str(&format!("  {percent:.5}% {{ transform: translate({:.4}px, {:.4}px) rotate({:.4}deg) scale({:.5}); }}\n", pose.dx, pose.dy, pose.rotation.to_degrees(), pose.scale));
+            opacity.push_str(&format!(
+                "  {percent:.5}% {{ opacity: {:.5}; }}\n",
+                pose.opacity.unwrap_or(rest_opacity)
             ));
         }
         css.push_str("}\n");
+        opacity.push_str("}\n");
+        css.push_str(&opacity);
         Some(css)
     }
 }
@@ -353,6 +385,64 @@ fn eval_keys(keys: &[Key], t: f32, duration: f32) -> Option<f32> {
     Some(last.value)
 }
 
+/// A real path-length reveal shared by the native renderer and export helpers.
+/// Contours are traversed in document order; completed closed contours close,
+/// while the currently drawing contour keeps an open cap at its endpoint.
+pub fn trimmed_stroke_path(shape: &Shape, progress: f32) -> Option<tiny_skia::Path> {
+    let progress = progress.clamp(0.0, 1.0);
+    if progress <= 0.0 {
+        return None;
+    }
+    let contours = shape.world_contours(128);
+    let closed = shape.geom.is_closed();
+    let total: f32 = contours
+        .iter()
+        .map(|points| {
+            points
+                .windows(2)
+                .map(|pair| (pair[1] - pair[0]).length())
+                .sum::<f32>()
+                + if closed && points.len() > 1 {
+                    (points[0] - points[points.len() - 1]).length()
+                } else {
+                    0.0
+                }
+        })
+        .sum();
+    let mut remaining = total * progress;
+    let mut path = tiny_skia::PathBuilder::new();
+    for points in contours.iter().filter(|points| points.len() >= 2) {
+        if remaining <= 0.0 {
+            break;
+        }
+        path.move_to(points[0].x, points[0].y);
+        let edge_count = points.len() - usize::from(!closed);
+        let mut complete = true;
+        for index in 0..edge_count {
+            let a = points[index];
+            let b = points[(index + 1) % points.len()];
+            let length = (b - a).length();
+            if length <= 1e-6 {
+                continue;
+            }
+            if remaining + 1e-5 >= length {
+                path.line_to(b.x, b.y);
+                remaining -= length;
+            } else {
+                let endpoint = a.lerp(b, (remaining / length).clamp(0.0, 1.0));
+                path.line_to(endpoint.x, endpoint.y);
+                remaining = 0.0;
+                complete = false;
+                break;
+            }
+        }
+        if closed && complete {
+            path.close();
+        }
+    }
+    path.finish()
+}
+
 pub fn hit_test(
     doc: &Document,
     t: f32,
@@ -366,6 +456,9 @@ pub fn hit_test(
         }
         if let Some(shapes) = layer.kind.shapes() {
             for shape in shapes.iter().rev() {
+                if !shape.visible || shape.locked || (shape.guide && !doc.ruler.guides_visible) {
+                    continue;
+                }
                 let pose = overrides
                     .get(&shape.id)
                     .copied()
@@ -373,7 +466,7 @@ pub fn hit_test(
                 let c = shape.world_bbox().center();
                 let q = pose.unmap(c, p);
                 let s = slack / pose.scale.max(0.05);
-                if shape.contains_world(q) || shape.dist_world(q) <= s {
+                if (!shape.guide && shape.contains_world(q)) || shape.dist_world(q) <= s {
                     return Some((li, shape.id));
                 }
             }
@@ -395,6 +488,9 @@ pub fn hits_in_rect(
         }
         if let Some(shapes) = layer.kind.shapes() {
             for shape in shapes {
+                if !shape.visible || shape.locked || (shape.guide && !doc.ruler.guides_visible) {
+                    continue;
+                }
                 let pose = overrides
                     .get(&shape.id)
                     .copied()
@@ -409,150 +505,230 @@ pub fn hits_in_rect(
     out
 }
 
-/// Lottie 5.x JSON. Shape layers only. Playable in lottie-web / dotLottie.
+/// Lottie shape export. Unsupported raster masks/effects fail explicitly;
+/// animated SVG remains the complete document export for those compositions.
 pub fn export_lottie(doc: &Document) -> Result<String, String> {
     let fps = doc.motion.fps.clamp(1.0, 120.0);
-    let op = (doc.motion.duration * fps).round().max(1.0);
+    let op = (doc.motion.duration * fps).max(1.0);
     let mut layers = Vec::new();
+    let mut assets = Vec::new();
     let mut ind = 1i32;
     for layer in doc.layers.iter().rev() {
-        if !layer.visible {
+        if !layer.visible || layer.opacity <= 0.0 || crate::compositor::is_paper_raster(layer) {
             continue;
         }
         let Some(shapes) = layer.kind.shapes() else {
-            continue;
+            if layer
+                .kind
+                .pixels()
+                .is_some_and(|pixels| pixels.is_invisible())
+            {
+                continue;
+            }
+            return Err("Lottie cannot preserve pixel layers here. Export animated SVG to keep the complete composition.".into());
         };
-        for shape in shapes.iter().rev() {
-            if let Some(lottie_layer) = shape_layer(shape, &doc.motion, fps, op, ind) {
-                layers.push(lottie_layer);
-                ind += 1;
+        if !shapes.iter().any(|shape| shape.visible && !shape.guide) {
+            continue;
+        }
+        if layer.mask.is_some() || layer.filters.active() {
+            return Err("Lottie cannot preserve layer masks or effects here. Export animated SVG to keep them.".into());
+        }
+        let mut parts = Vec::new();
+        for shape in shapes
+            .iter()
+            .rev()
+            .filter(|shape| shape.visible && !shape.guide)
+        {
+            if shape.filters.active() {
+                return Err(
+                    "Lottie cannot preserve object effects here. Export animated SVG to keep them."
+                        .into(),
+                );
+            }
+            // Stroke sits above fill. Separate layers let a fill mask leave the outline intact.
+            for stroke in [true, false] {
+                if let Some(part) = shape_layer(shape, &doc.motion, fps, op, ind, stroke) {
+                    parts.push(part);
+                    ind += 1;
+                }
             }
         }
-    }
-    let v = json!({
-        "v": "5.7.4",
-        "fr": fps,
-        "ip": 0,
-        "op": op,
-        "w": doc.width.round() as i32,
-        "h": doc.height.round() as i32,
-        "nm": doc.name,
-        "ddd": 0,
-        "assets": [],
-        "layers": layers,
-    });
-    serde_json::to_string_pretty(&v).map_err(|e| e.to_string())
-}
-
-fn shape_layer(shape: &Shape, motion: &Motion, fps: f32, op: f32, ind: i32) -> Option<Value> {
-    let b = shape.world_bbox();
-    let c = b.center();
-    let (path_item, closed) = lottie_path(shape, c)?;
-    let mut items = vec![path_item];
-    match &shape.style.fill {
-        Fill::None => {}
-        Fill::Solid(col) => items.push(lottie_fill(*col, shape.opacity)),
-        Fill::Linear { c0, .. } | Fill::Radial { c0, .. } => {
-            items.push(lottie_fill(*c0, shape.opacity))
+        if parts.is_empty() {
+            continue;
+        }
+        if layer.opacity < 1.0 || layer.blend != crate::color::Blend::Normal {
+            let id = format!("layer-{}", layer.id);
+            assets.push(json!({"id": id, "w": doc.width, "h": doc.height, "layers": parts}));
+            let blend = crate::color::Blend::ALL
+                .iter()
+                .position(|b| *b == layer.blend)
+                .unwrap_or(0);
+            layers.push(json!({"ty":0,"ind":ind,"refId":id,"nm":layer.name,"sr":1,"ip":0,"op":op,"st":0,"w":doc.width,"h":doc.height,"bm":blend,
+                "ks":{"p":{"a":0,"k":[0,0,0]},"a":{"a":0,"k":[0,0,0]},"s":{"a":0,"k":[100,100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":layer.opacity*100.0}}}));
+            ind += 1;
+        } else {
+            layers.extend(parts);
         }
     }
-    if let Some(st) = &shape.style.stroke
-        && st.width > 0.0
-    {
-        items.push(lottie_stroke(st, shape.opacity));
-    }
-    items.push(json!({
-        "ty": "tr",
-        "p": {"a": 0, "k": [0, 0]},
-        "a": {"a": 0, "k": [0, 0]},
-        "s": {"a": 0, "k": [100, 100]},
-        "r": {"a": 0, "k": 0},
-        "o": {"a": 0, "k": 100},
-        "sk": {"a": 0, "k": 0},
-        "sa": {"a": 0, "k": 0},
-    }));
-    Some(json!({
-        "ddd": 0,
-        "ind": ind,
-        "ty": 4,
-        "nm": shape.name,
-        "sr": 1,
-        "ks": lottie_transform(shape, motion, fps, c),
-        "ao": 0,
-        "shapes": [{
-            "ty": "gr",
-            "nm": shape.name,
-            "it": items,
-            "np": items.len(),
-            "cix": 2,
-            "bm": 0,
-            "ix": 1,
-            "mn": "ADBE Vector Group",
-            "hd": false
-        }],
-        "ip": 0,
-        "op": op,
-        "st": 0,
-        "bm": 0,
-        "hasMask": false,
-        "closed": closed,
-    }))
+    serde_json::to_string_pretty(&json!({
+        "v":"5.7.4","fr":fps,"ip":0,"op":op,"w":doc.width.round() as i32,"h":doc.height.round() as i32,
+        "nm":doc.name,"ddd":0,"assets":assets,"layers":layers
+    })).map_err(|error| error.to_string())
 }
 
-fn lottie_path(shape: &Shape, center: Pt) -> Option<(Value, bool)> {
-    if let Geom::Path { anchors, closed } = &shape.geom {
-        if anchors.len() < 2 {
+fn shape_layer(
+    shape: &Shape,
+    motion: &Motion,
+    fps: f32,
+    op: f32,
+    ind: i32,
+    stroke: bool,
+) -> Option<Value> {
+    let center = shape.world_bbox().center();
+    let mut items = lottie_paths(shape, center);
+    if items.is_empty() {
+        return None;
+    }
+    if stroke {
+        let outline = shape
+            .style
+            .stroke
+            .as_ref()
+            .filter(|outline| outline.width > 0.0 && outline.color.a > 0)?;
+        items.push(lottie_stroke(outline, 1.0));
+        if motion.value(shape.id, Prop::StrokeReveal, 0.0).is_some() {
+            let times = motion.sample_times(shape.id);
+            items.push(json!({"ty":"tm","nm":"Draw stroke","s":{"a":0,"k":0},
+                "e":lottie_scalar_anim(&times,fps,|t|motion.pose(shape.id,t).stroke_reveal.unwrap_or(1.0).clamp(0.0,1.0)*100.0),
+                "o":{"a":0,"k":0},"m":2,"hd":false}));
+        }
+    } else {
+        if !shape.geom.is_closed() {
             return None;
         }
-        let mut v = Vec::new();
-        let mut i = Vec::new();
-        let mut o = Vec::new();
-        for a in anchors {
-            let p = if shape.rotation.abs() > 1e-5 {
-                a.pt.rotate_about(center, shape.rotation)
-            } else {
-                a.pt
-            };
-            v.push(json!([p.x - center.x, p.y - center.y]));
-            i.push(json!([a.h_in.x, a.h_in.y]));
-            o.push(json!([a.h_out.x, a.h_out.y]));
-        }
-        return Some((
-            json!({
-                "ty": "sh",
-                "nm": "Path",
-                "ks": {"a": 0, "k": {"c": closed, "v": v, "i": i, "o": o}},
-                "hd": false
-            }),
-            *closed,
-        ));
+        items.push(lottie_fill_style(shape, center)?);
     }
-    let contours = shape.world_contours(64);
-    let contour = contours.iter().find(|c| c.len() >= 2)?;
+    items.push(json!({"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100},"sk":{"a":0,"k":0},"sa":{"a":0,"k":0}}));
+    let mut layer = json!({"ddd":0,"ind":ind,"ty":4,"nm":format!("{} · {}",shape.name,if stroke {"Stroke"} else {"Fill"}),"sr":1,
+        "ks":lottie_transform(shape,motion,fps,center),"ao":0,"shapes":[{"ty":"gr","nm":shape.name,"it":items,"hd":false}],
+        "ip":0,"op":op,"st":0,"bm":0});
+    if !stroke && motion.value(shape.id, Prop::FillReveal, 0.0).is_some() {
+        let times = motion.sample_times(shape.id);
+        let bounds = shape.world_bbox();
+        let sample = |t| {
+            let progress = motion
+                .pose(shape.id, t)
+                .fill_reveal
+                .unwrap_or(1.0)
+                .clamp(0.0, 1.0);
+            let y = bounds.max.y - bounds.height() * progress;
+            json!({"c":true,"v":[[bounds.min.x-center.x,y-center.y],[bounds.max.x-center.x,y-center.y],[bounds.max.x-center.x,bounds.max.y-center.y],[bounds.min.x-center.x,bounds.max.y-center.y]],"i":[[0,0],[0,0],[0,0],[0,0]],"o":[[0,0],[0,0],[0,0],[0,0]]})
+        };
+        let keys: Vec<_> = times.iter().enumerate().map(|(index,time)| {
+            let mut key = json!({"t":time*fps,"s":[sample(*time)],"i":{"x":0.667,"y":0.667},"o":{"x":0.333,"y":0.333}});
+            if let Some(next) = times.get(index+1) { key["e"] = json!([sample(*next)]); }
+            key
+        }).collect();
+        layer["hasMask"] = json!(true);
+        layer["masksProperties"] = json!([{"inv":false,"nm":"Fill up","mode":"a","pt":{"a":1,"k":keys},"o":{"a":0,"k":100},"x":{"a":0,"k":0}}]);
+    }
+    Some(layer)
+}
+
+fn lottie_paths(shape: &Shape, center: Pt) -> Vec<Value> {
     let closed = shape.geom.is_closed();
-    let mut v = Vec::new();
-    let mut i = Vec::new();
-    let mut o = Vec::new();
-    let n = if closed && contour.len() > 1 && (contour[0] - *contour.last().unwrap()).length() < 0.5
-    {
-        contour.len() - 1
+    let mut paths = Vec::new();
+    if let Geom::Path { anchors, .. } = &shape.geom {
+        if anchors.len() < 2 {
+            return paths;
+        }
+        let rotation_center = shape.geom.bbox().center();
+        let vertices: Vec<_> = anchors
+            .iter()
+            .map(|anchor| {
+                let p = anchor.pt.rotate_about(rotation_center, shape.rotation) - center;
+                json!([p.x, p.y])
+            })
+            .collect();
+        let incoming: Vec<_> = anchors
+            .iter()
+            .map(|anchor| {
+                let p = anchor.h_in.rotate(shape.rotation);
+                json!([p.x, p.y])
+            })
+            .collect();
+        let outgoing: Vec<_> = anchors
+            .iter()
+            .map(|anchor| {
+                let p = anchor.h_out.rotate(shape.rotation);
+                json!([p.x, p.y])
+            })
+            .collect();
+        paths.push(json!({"ty":"sh","nm":"Path","ks":{"a":0,"k":{"c":closed,"v":vertices,"i":incoming,"o":outgoing}},"hd":false}));
     } else {
-        contour.len()
-    };
-    for p in contour.iter().take(n) {
-        v.push(json!([p.x - center.x, p.y - center.y]));
-        i.push(json!([0, 0]));
-        o.push(json!([0, 0]));
+        for contour in shape
+            .world_contours(128)
+            .into_iter()
+            .filter(|contour| contour.len() >= 2)
+        {
+            let vertices: Vec<_> = contour
+                .iter()
+                .map(|p| json!([p.x - center.x, p.y - center.y]))
+                .collect();
+            let tangents: Vec<_> = contour.iter().map(|_| json!([0, 0])).collect();
+            paths.push(json!({"ty":"sh","nm":"Path","ks":{"a":0,"k":{"c":closed,"v":vertices,"i":tangents,"o":tangents}},"hd":false}));
+        }
     }
-    Some((
-        json!({
-            "ty": "sh",
-            "nm": "Path",
-            "ks": {"a": 0, "k": {"c": closed, "v": v, "i": i, "o": o}},
-            "hd": false
-        }),
-        closed,
-    ))
+    paths
+}
+
+fn lottie_fill_style(shape: &Shape, center: Pt) -> Option<Value> {
+    let rule = if matches!(shape.geom, Geom::Poly { winding: true, .. }) {
+        1
+    } else {
+        2
+    };
+    match &shape.style.fill {
+        Fill::None => None,
+        Fill::Solid(color) => {
+            let mut fill = lottie_fill(*color, 1.0);
+            fill["r"] = json!(rule);
+            Some(fill)
+        }
+        fill => {
+            let bounds = shape.geom.bbox();
+            let (start, end, c0, c1, kind) = match fill {
+                Fill::Linear { from, to, c0, c1 } => (
+                    Pt::new(
+                        bounds.min.x + from[0] * bounds.width(),
+                        bounds.min.y + from[1] * bounds.height(),
+                    ),
+                    Pt::new(
+                        bounds.min.x + to[0] * bounds.width(),
+                        bounds.min.y + to[1] * bounds.height(),
+                    ),
+                    c0,
+                    c1,
+                    1,
+                ),
+                Fill::Radial { c0, c1 } => (
+                    bounds.center(),
+                    bounds.center() + Pt::new(bounds.width().max(bounds.height()) * 0.5, 0.0),
+                    c0,
+                    c1,
+                    2,
+                ),
+                _ => unreachable!(),
+            };
+            let start = start.rotate_about(bounds.center(), shape.rotation) - center;
+            let end = end.rotate_about(bounds.center(), shape.rotation) - center;
+            let channel = |value: u8| value as f32 / 255.0;
+            Some(
+                json!({"ty":"gf","nm":"Gradient fill","t":kind,"r":rule,"o":{"a":0,"k":100},"s":{"a":0,"k":[start.x,start.y]},"e":{"a":0,"k":[end.x,end.y]},"h":{"a":0,"k":0},"a":{"a":0,"k":0},
+                "g":{"p":2,"k":{"a":0,"k":[0,channel(c0.r),channel(c0.g),channel(c0.b),1,channel(c1.r),channel(c1.g),channel(c1.b),0,channel(c0.a),1,channel(c1.a)]}}}),
+            )
+        }
+    }
 }
 
 fn lottie_fill(c: Rgba, opacity: f32) -> Value {
@@ -578,7 +754,7 @@ fn lottie_stroke(st: &Stroke, opacity: f32) -> Value {
         Join::Round => 2,
         Join::Bevel => 3,
     };
-    json!({
+    let mut value = json!({
         "ty": "st",
         "nm": "Stroke",
         "c": {"a": 0, "k": [
@@ -594,165 +770,49 @@ fn lottie_stroke(st: &Stroke, opacity: f32) -> Value {
         "ml": 4,
         "bm": 0,
         "hd": false
-    })
+    });
+    if let Some((on, off)) = st.dash {
+        value["d"] = json!([{"n":"d","v":{"a":0,"k":on}},{"n":"g","v":{"a":0,"k":off}}]);
+    }
+    value
 }
 
 fn lottie_transform(shape: &Shape, motion: &Motion, fps: f32, center: Pt) -> Value {
-    let times = {
-        let mut ts = motion.key_times(shape.id);
-        if ts.is_empty() {
-            ts.push(0.0);
-        }
-        ts
-    };
-    let animated = !motion
-        .tracks
-        .iter()
-        .filter(|tr| tr.shape == shape.id)
-        .all(|tr| tr.keys.len() <= 1);
-    let pos = lottie_vec2_anim(
-        animated && (motion.value(shape.id, Prop::X, 0.0).is_some()
-            || motion.value(shape.id, Prop::Y, 0.0).is_some()
-            || times.len() > 1),
-        &times,
-        fps,
-        |t| {
-            let p = motion.pose(shape.id, t);
-            [center.x + p.dx, center.y + p.dy]
-        },
-        motion,
-        shape.id,
-        Prop::X,
-    );
-    let sc = lottie_vec2_anim(
-        motion.value(shape.id, Prop::Scale, 0.0).is_some(),
-        &times,
-        fps,
-        |t| {
-            let s = motion.pose(shape.id, t).scale * 100.0;
-            [s, s]
-        },
-        motion,
-        shape.id,
-        Prop::Scale,
-    );
-    let rot = lottie_scalar_anim(
-        motion.value(shape.id, Prop::Rotation, 0.0).is_some(),
-        &times,
-        fps,
-        |t| motion.pose(shape.id, t).rotation.to_degrees(),
-        motion,
-        shape.id,
-        Prop::Rotation,
-    );
-    let op = lottie_scalar_anim(
-        motion.value(shape.id, Prop::Opacity, 0.0).is_some(),
-        &times,
-        fps,
-        |t| {
-            motion
-                .pose(shape.id, t)
-                .opacity
-                .unwrap_or(shape.opacity)
-                * 100.0
-        },
-        motion,
-        shape.id,
-        Prop::Opacity,
-    );
+    let times = motion.sample_times(shape.id);
     json!({
-        "o": op,
-        "r": rot,
-        "p": pos,
-        "a": {"a": 0, "k": [0, 0, 0]},
-        "s": sc
+        "o":lottie_scalar_anim(&times,fps,|t|motion.pose(shape.id,t).opacity.unwrap_or(shape.opacity)*100.0),
+        "r":lottie_scalar_anim(&times,fps,|t|motion.pose(shape.id,t).rotation.to_degrees()),
+        "p":lottie_vec2_anim(&times,fps,|t|{let pose=motion.pose(shape.id,t);[center.x+pose.dx,center.y+pose.dy]}),
+        "a":{"a":0,"k":[0,0,0]},
+        "s":lottie_vec2_anim(&times,fps,|t|{let s=motion.pose(shape.id,t).scale*100.0;[s,s]})
     })
 }
 
-fn lottie_vec2_anim(
-    animated: bool,
-    times: &[f32],
-    fps: f32,
-    sample: impl Fn(f32) -> [f32; 2],
-    motion: &Motion,
-    shape: u64,
-    prop: Prop,
-) -> Value {
-    if !animated || times.len() < 2 {
-        let v = sample(times.first().copied().unwrap_or(0.0));
-        return json!({"a": 0, "k": [v[0], v[1], 0]});
+fn lottie_vec2_anim(times: &[f32], fps: f32, sample: impl Fn(f32) -> [f32; 2]) -> Value {
+    let initial = sample(times.first().copied().unwrap_or(0.0));
+    if times.len() < 2 || times.iter().all(|t| sample(*t) == initial) {
+        return json!({"a":0,"k":[initial[0],initial[1],0]});
     }
-    let mut keys = Vec::new();
-    for (i, t) in times.iter().enumerate() {
-        let v = sample(*t);
-        let ease = motion
-            .tracks
-            .iter()
-            .find(|tr| tr.shape == shape && tr.prop == prop)
-            .and_then(|tr| tr.keys.iter().find(|k| (k.t - *t).abs() < 1e-4))
-            .map(|k| k.ease)
-            .unwrap_or(Ease::EaseInOut);
-        let (ix, iy, ox, oy) = lottie_ease(ease);
-        let mut kf = json!({
-            "t": (*t * fps),
-            "s": [v[0], v[1], 0],
-            "i": {"x": [ix], "y": [iy]},
-            "o": {"x": [ox], "y": [oy]},
-        });
-        if i + 1 < times.len() {
-            let e = sample(times[i + 1]);
-            kf["e"] = json!([e[0], e[1], 0]);
-        }
-        keys.push(kf);
-    }
-    json!({"a": 1, "k": keys})
+    let keys:Vec<_>=times.iter().enumerate().map(|(index,time)|{
+        let value=sample(*time);
+        let mut key=json!({"t":time*fps,"s":[value[0],value[1],0],"i":{"x":[0.667],"y":[0.667]},"o":{"x":[0.333],"y":[0.333]}});
+        if let Some(next)=times.get(index+1){let end=sample(*next);key["e"]=json!([end[0],end[1],0]);}
+        key
+    }).collect();
+    json!({"a":1,"k":keys})
 }
 
-fn lottie_scalar_anim(
-    animated: bool,
-    times: &[f32],
-    fps: f32,
-    sample: impl Fn(f32) -> f32,
-    motion: &Motion,
-    shape: u64,
-    prop: Prop,
-) -> Value {
-    if !animated || times.len() < 2 {
-        let v = sample(times.first().copied().unwrap_or(0.0));
-        return json!({"a": 0, "k": v});
+fn lottie_scalar_anim(times: &[f32], fps: f32, sample: impl Fn(f32) -> f32) -> Value {
+    let initial = sample(times.first().copied().unwrap_or(0.0));
+    if times.len() < 2 || times.iter().all(|t| sample(*t) == initial) {
+        return json!({"a":0,"k":initial});
     }
-    let mut keys = Vec::new();
-    for (i, t) in times.iter().enumerate() {
-        let v = sample(*t);
-        let ease = motion
-            .tracks
-            .iter()
-            .find(|tr| tr.shape == shape && tr.prop == prop)
-            .and_then(|tr| tr.keys.iter().find(|k| (k.t - *t).abs() < 1e-4))
-            .map(|k| k.ease)
-            .unwrap_or(Ease::EaseInOut);
-        let (ix, iy, ox, oy) = lottie_ease(ease);
-        let mut kf = json!({
-            "t": (*t * fps),
-            "s": [v],
-            "i": {"x": [ix], "y": [iy]},
-            "o": {"x": [ox], "y": [oy]},
-        });
-        if i + 1 < times.len() {
-            kf["e"] = json!([sample(times[i + 1])]);
-        }
-        keys.push(kf);
-    }
-    json!({"a": 1, "k": keys})
-}
-
-fn lottie_ease(ease: Ease) -> (f32, f32, f32, f32) {
-    match ease {
-        Ease::Linear => (0.167, 0.167, 0.833, 0.833),
-        Ease::EaseIn => (0.4, 0.0, 1.0, 1.0),
-        Ease::EaseOut => (0.0, 0.0, 0.2, 1.0),
-        Ease::EaseInOut => (0.667, 1.0, 0.333, 0.0),
-    }
+    let keys:Vec<_>=times.iter().enumerate().map(|(index,time)|{
+        let mut key=json!({"t":time*fps,"s":[sample(*time)],"i":{"x":[0.667],"y":[0.667]},"o":{"x":[0.333],"y":[0.333]}});
+        if let Some(next)=times.get(index+1){key["e"]=json!([sample(*next)]);}
+        key
+    }).collect();
+    json!({"a":1,"k":keys})
 }
 
 pub struct LottieImport {
@@ -787,13 +847,7 @@ pub fn import_lottie(json: &str) -> Result<LottieImport, String> {
         let Some((geom, fill, stroke)) = layer_geom(layer) else {
             continue;
         };
-        let mut shape = Shape::new(
-            geom,
-            Style {
-                fill,
-                stroke,
-            },
-        );
+        let mut shape = Shape::new(geom, Style { fill, stroke });
         if let Some(nm) = layer["nm"].as_str() {
             shape.name = nm.to_string();
         }
@@ -871,7 +925,11 @@ fn apply_lottie_transform(
         }
     }
     let op = parse_anim_scalar(&ks["o"]);
-    if op.len() > 1 || op.first().is_some_and(|(_, v)| (*v / 100.0 - rest_opacity).abs() > 0.01) {
+    if op.len() > 1
+        || op
+            .first()
+            .is_some_and(|(_, v)| (*v / 100.0 - rest_opacity).abs() > 0.01)
+    {
         for (t, v) in &op {
             motion.set_key(
                 id,
@@ -893,7 +951,12 @@ fn layer_geom(layer: &Value) -> Option<(Geom, Fill, Option<Stroke>)> {
     let mut geom = None;
     let mut fill = Fill::Solid(Rgba::from_hex(0x4F8CFF));
     let mut stroke = None;
-    fn walk(items: &[Value], geom: &mut Option<Geom>, fill: &mut Fill, stroke: &mut Option<Stroke>) {
+    fn walk(
+        items: &[Value],
+        geom: &mut Option<Geom>,
+        fill: &mut Fill,
+        stroke: &mut Option<Stroke>,
+    ) {
         for it in items {
             match it["ty"].as_str().unwrap_or("") {
                 "gr" => {
@@ -920,7 +983,9 @@ fn layer_geom(layer: &Value) -> Option<(Geom, Fill, Option<Stroke>)> {
                     if geom.is_none() {
                         let p = js_vec2(&it["p"]).unwrap_or(Pt::ZERO);
                         let s = js_vec2(&it["s"]).unwrap_or(Pt::new(40.0, 40.0));
-                        let r = js_f32(&it["r"]["k"]).or_else(|| js_f32(&it["r"])).unwrap_or(0.0);
+                        let r = js_f32(&it["r"]["k"])
+                            .or_else(|| js_f32(&it["r"]))
+                            .unwrap_or(0.0);
                         *geom = Some(Geom::Rect {
                             origin: Pt::new(p.x - s.x.abs() * 0.5, p.y - s.y.abs() * 0.5),
                             size: Pt::new(s.x.abs(), s.y.abs()),
@@ -931,17 +996,14 @@ fn layer_geom(layer: &Value) -> Option<(Geom, Fill, Option<Stroke>)> {
                 "fl" => {
                     if let Some(c) = js_color(&it["c"]) {
                         let a = js_f32(&it["o"]["k"]).unwrap_or(100.0) / 100.0;
-                        *fill = Fill::Solid(Rgba::new(
-                            c.r,
-                            c.g,
-                            c.b,
-                            (a * 255.0).round() as u8,
-                        ));
+                        *fill = Fill::Solid(Rgba::new(c.r, c.g, c.b, (a * 255.0).round() as u8));
                     }
                 }
                 "st" => {
                     if let Some(c) = js_color(&it["c"]) {
-                        let w = js_f32(&it["w"]["k"]).or_else(|| js_f32(&it["w"])).unwrap_or(2.0);
+                        let w = js_f32(&it["w"]["k"])
+                            .or_else(|| js_f32(&it["w"]))
+                            .unwrap_or(2.0);
                         let a = js_f32(&it["o"]["k"]).unwrap_or(100.0) / 100.0;
                         *stroke = Some(Stroke {
                             color: Rgba::new(c.r, c.g, c.b, (a * 255.0).round() as u8),
@@ -999,7 +1061,11 @@ fn parse_anim_vec2(v: &Value) -> Vec<(f32, Pt)> {
     if v.is_null() {
         return vec![];
     }
-    if v["a"].as_i64() == Some(1) || v["k"].as_array().is_some_and(|a| a.first().is_some_and(|x| x.get("t").is_some())) {
+    if v["a"].as_i64() == Some(1)
+        || v["k"]
+            .as_array()
+            .is_some_and(|a| a.first().is_some_and(|x| x.get("t").is_some()))
+    {
         let mut out = vec![];
         if let Some(arr) = v["k"].as_array() {
             for kf in arr {
@@ -1021,23 +1087,27 @@ fn parse_anim_scalar(v: &Value) -> Vec<(f32, f32)> {
     if v.is_null() {
         return vec![];
     }
-    if v["a"].as_i64() == Some(1) || v["k"].as_array().is_some_and(|a| a.first().is_some_and(|x| x.get("t").is_some())) {
+    if v["a"].as_i64() == Some(1)
+        || v["k"]
+            .as_array()
+            .is_some_and(|a| a.first().is_some_and(|x| x.get("t").is_some()))
+    {
         let mut out = vec![];
         if let Some(arr) = v["k"].as_array() {
             for kf in arr {
                 let t = js_f32(&kf["t"]).unwrap_or(0.0);
-                if let Some(s) = js_f32(&kf["s"]).or_else(|| {
-                    kf["s"].as_array().and_then(|a| a.first()).and_then(js_f32)
-                }) {
+                if let Some(s) = js_f32(&kf["s"])
+                    .or_else(|| kf["s"].as_array().and_then(|a| a.first()).and_then(js_f32))
+                {
                     out.push((t, s));
                 }
             }
         }
         return out;
     }
-    if let Some(s) = js_f32(&v["k"]).or_else(|| {
-        v["k"].as_array().and_then(|a| a.first()).and_then(js_f32)
-    }) {
+    if let Some(s) =
+        js_f32(&v["k"]).or_else(|| v["k"].as_array().and_then(|a| a.first()).and_then(js_f32))
+    {
         return vec![(0.0, s)];
     }
     vec![]
@@ -1088,7 +1158,11 @@ fn js_color(v: &Value) -> Option<Rgba> {
     let r = js_f32(&a[0])?;
     let g = js_f32(&a[1])?;
     let b = js_f32(&a[2])?;
-    let scale = if r > 1.0 || g > 1.0 || b > 1.0 { 1.0 } else { 255.0 };
+    let scale = if r > 1.0 || g > 1.0 || b > 1.0 {
+        1.0
+    } else {
+        255.0
+    };
     Some(Rgba::rgb(
         (r * scale).round().clamp(0.0, 255.0) as u8,
         (g * scale).round().clamp(0.0, 255.0) as u8,
@@ -1139,6 +1213,7 @@ mod tests {
             rotation: 0.4,
             scale: 1.25,
             opacity: None,
+            ..Pose::identity()
         };
         let c = Pt::new(100.0, 80.0);
         let p = Pt::new(130.0, 60.0);
@@ -1159,17 +1234,13 @@ mod tests {
             Style::default(),
         );
         let id = shape.id;
-        apply(
-            &mut doc,
-            &Cmd::AddShape {
-                layer: 1,
-                shape,
-            },
-        );
+        apply(&mut doc, &Cmd::AddShape { layer: 1, shape });
         doc.motion.set_key(id, Prop::X, 0.0, 0.0, Ease::Linear);
         doc.motion.set_key(id, Prop::X, 2.0, 60.0, Ease::Linear);
-        doc.motion.set_key(id, Prop::Rotation, 0.0, 0.0, Ease::EaseInOut);
-        doc.motion.set_key(id, Prop::Rotation, 2.0, 0.5, Ease::EaseInOut);
+        doc.motion
+            .set_key(id, Prop::Rotation, 0.0, 0.0, Ease::EaseInOut);
+        doc.motion
+            .set_key(id, Prop::Rotation, 2.0, 0.5, Ease::EaseInOut);
         let json = export_lottie(&doc).unwrap();
         assert!(json.contains("\"ty\": 4"));
         let imported = import_lottie(&json).unwrap();
@@ -1178,32 +1249,176 @@ mod tests {
         let nid = imported.shapes[0].id;
         let p = imported.motion.pose(nid, 2.0);
         assert!(p.dx.abs() > 40.0, "expected travel, got dx={}", p.dx);
-        assert!(p.rotation.abs() > 0.3, "expected rotation, got {}", p.rotation);
+        assert!(
+            p.rotation.abs() > 0.3,
+            "expected rotation, got {}",
+            p.rotation
+        );
     }
 
     #[test]
-    fn animated_svg_has_keyframes() {
-        let mut doc = Document::new("clip", 200.0, 200.0, 72.0);
-        let shape = Shape::new(
-            Geom::Ellipse {
-                center: Pt::new(80.0, 80.0),
-                radii: Pt::new(30.0, 30.0),
+    fn export_sampling_stops_at_a_shortened_clip_and_keeps_independent_easing() {
+        let mut motion = Motion::default();
+        motion.set_key(1, Prop::X, 0.0, 0.0, Ease::EaseIn);
+        motion.set_key(1, Prop::X, 2.0, 100.0, Ease::Linear);
+        motion.set_key(1, Prop::Y, 0.0, 0.0, Ease::EaseOut);
+        motion.set_key(1, Prop::Y, 2.0, 100.0, Ease::Linear);
+        motion.duration = 1.0;
+        let times = motion.sample_times(1);
+        assert_eq!(times.first(), Some(&0.0));
+        assert_eq!(times.last(), Some(&1.0));
+        assert!(times.len() > 2);
+        let position = lottie_vec2_anim(&times, 30.0, |t| {
+            let pose = motion.pose(1, t);
+            [pose.dx, pose.dy]
+        });
+        let last = position["k"].as_array().unwrap().last().unwrap();
+        assert_eq!(last["s"], json!([25.0, 75.0, 0]));
+    }
+
+    #[test]
+    fn reveal_exports_keep_compound_paths_gradients_opacity_and_separate_channels() {
+        let mut doc = Document::new("Reveal export", 200.0, 200.0, 72.0);
+        let mut shape = Shape::new(
+            Geom::Poly {
+                contours: vec![
+                    vec![
+                        Pt::new(10.0, 10.0),
+                        Pt::new(90.0, 10.0),
+                        Pt::new(90.0, 90.0),
+                        Pt::new(10.0, 90.0),
+                    ],
+                    vec![
+                        Pt::new(30.0, 30.0),
+                        Pt::new(70.0, 30.0),
+                        Pt::new(70.0, 70.0),
+                        Pt::new(30.0, 70.0),
+                    ],
+                ],
+                winding: false,
             },
-            Style::default(),
+            Style {
+                fill: Fill::Linear {
+                    from: [0.0, 0.0],
+                    to: [1.0, 0.0],
+                    c0: Rgba::rgb(255, 0, 0),
+                    c1: Rgba::rgb(255, 255, 0),
+                },
+                stroke: Some(Stroke {
+                    width: 4.0,
+                    dash: Some((8.0, 4.0)),
+                    ..Default::default()
+                }),
+            },
         );
+        shape.opacity = 0.4;
         let id = shape.id;
+        let mut guide = shape.clone();
+        guide.id += 1000;
+        guide.guide = true;
+        apply(&mut doc, &Cmd::AddShape { layer: 1, shape });
         apply(
             &mut doc,
             &Cmd::AddShape {
                 layer: 1,
-                shape,
+                shape: guide,
             },
         );
-        doc.motion.set_key(id, Prop::Scale, 0.0, 1.0, Ease::EaseInOut);
-        doc.motion.set_key(id, Prop::Scale, 2.0, 1.4, Ease::EaseInOut);
+        for prop in [Prop::StrokeReveal, Prop::FillReveal] {
+            doc.motion.set_key(id, prop, 0.0, 0.0, Ease::EaseInOut);
+            doc.motion.set_key(id, prop, 2.0, 1.0, Ease::Linear);
+        }
+        let exported: Value = serde_json::from_str(&export_lottie(&doc).unwrap()).unwrap();
+        let layers = exported["layers"].as_array().unwrap();
+        assert_eq!(layers.len(), 2, "guides must not create paint layers");
+        let stroke = &layers[0];
+        let fill = &layers[1];
+        assert!(
+            stroke["masksProperties"].is_null(),
+            "fill reveal must not clip the stroke"
+        );
+        for layer in layers {
+            let items = layer["shapes"][0]["it"].as_array().unwrap();
+            assert_eq!(
+                items.iter().filter(|item| item["ty"] == "sh").count(),
+                2,
+                "keep holes/compound contours"
+            );
+            assert!((layer["ks"]["o"]["k"].as_f64().unwrap() - 40.0).abs() < 1e-5);
+        }
+        let stroke_items = stroke["shapes"][0]["it"].as_array().unwrap();
+        let trim = stroke_items.iter().find(|item| item["ty"] == "tm").unwrap();
+        assert_eq!(trim["m"], 2, "contours draw sequentially");
+        let middle = trim["e"]["k"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|key| key["t"] == 30.0)
+            .unwrap();
+        assert_eq!(middle["s"][0], 50.0);
+        let outline = stroke_items.iter().find(|item| item["ty"] == "st").unwrap();
+        assert_eq!(outline["d"][0]["v"]["k"], 8.0);
+        assert_eq!(
+            outline["o"]["k"], 100.0,
+            "object opacity must not be applied twice"
+        );
+        let fill_items = fill["shapes"][0]["it"].as_array().unwrap();
+        let gradient = fill_items.iter().find(|item| item["ty"] == "gf").unwrap();
+        assert_eq!(gradient["g"]["p"], 2);
+        assert_eq!(gradient["r"], 2);
+        let mask_keys = fill["masksProperties"][0]["pt"]["k"].as_array().unwrap();
+        let middle = mask_keys.iter().find(|key| key["t"] == 30.0).unwrap();
+        assert_eq!(
+            middle["s"][0]["v"][0][1], 0.0,
+            "half fill starts at object centre"
+        );
         let svg = crate::svg::export_animated(&doc).unwrap();
-        assert!(svg.contains("@keyframes"));
-        assert!(svg.contains("oma-"));
-        assert!(svg.contains("animation-name"));
+        assert!(svg.contains("<linearGradient"));
+        assert!(svg.contains("attributeName=\"height\""));
+        assert!(svg.contains("attributeName=\"stroke-dashoffset\""));
+        assert!(
+            svg.contains("stroke-dasharray=\"8 4\""),
+            "keep the actual dashed stroke beneath reveal mask"
+        );
+        assert!(
+            svg.contains("opacity: 0.40000"),
+            "transform/reveal-only tracks keep rest opacity"
+        );
+        assert!(svg.contains("transform-origin: 50.0000px 50.0000px"));
+        assert!(svg.contains("fill-rule=\"evenodd\""));
+        assert_eq!(
+            svg.matches("class=\"oma-a\"").count(),
+            3,
+            "one transform and separate fill/stroke opacity groups"
+        );
+    }
+
+    #[test]
+    fn unsupported_lottie_masks_fail_without_losing_animated_svg_layers() {
+        let mut doc = Document::new("Masked motion", 80.0, 80.0, 72.0);
+        let shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(10.0, 10.0),
+                size: Pt::new(30.0, 30.0),
+                radius: 0.0,
+            },
+            Style::default(),
+        );
+        let id = shape.id;
+        apply(&mut doc, &Cmd::AddShape { layer: 1, shape });
+        doc.layers[1].mask = Some(
+            crate::document::Pixels::from_rgba(80, 80, [255, 255, 255, 255].repeat(80 * 80))
+                .unwrap(),
+        );
+        doc.motion
+            .set_key(id, Prop::FillReveal, 0.0, 0.0, Ease::Linear);
+        doc.motion
+            .set_key(id, Prop::FillReveal, 2.0, 1.0, Ease::Linear);
+        let error = export_lottie(&doc).unwrap_err();
+        assert!(error.contains("animated SVG"));
+        let svg = crate::svg::export_animated(&doc).unwrap();
+        assert!(svg.contains("mask-type=\"luminance\""));
+        assert!(svg.contains("data:image/png;base64,"));
+        assert!(svg.contains("attributeName=\"height\""));
     }
 }

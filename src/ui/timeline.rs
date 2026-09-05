@@ -343,6 +343,8 @@ fn prop_color(p: Prop) -> Color32 {
         Prop::Rotation => Color32::from_rgb(0xFA, 0xB3, 0x87),
         Prop::Scale => Color32::from_rgb(0xCB, 0xA6, 0xF7),
         Prop::Opacity => Color32::from_rgb(0xF5, 0xC2, 0xE7),
+        Prop::StrokeReveal => accent(),
+        Prop::FillReveal => fg(),
     }
 }
 
