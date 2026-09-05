@@ -5,8 +5,8 @@ use crate::boolean::{self, BoolOp};
 use crate::color::{Rgba, default_swatches};
 use crate::compositor::{self, View};
 use crate::document::{
-    apply as apply_cmd, Artboard, Cmd, Document, Fill, History, Layer, LayerKind, Shape, Stroke,
-    Style, RASTER_ID,
+    apply as apply_cmd, Artboard, Cap, Cmd, Document, Fill, History, Join, Layer, LayerKind, Shape,
+    Stroke, Style, RASTER_ID,
 };
 use crate::geom::{Anchor, Bounds, Geom, Pt, TypeRun};
 use crate::motion::{self, Ease, Motion, Pose, Prop};
@@ -320,16 +320,19 @@ pub enum Op {
         orig: Vec<Artboard>,
         ids: Vec<u64>,
         start: Pt,
+        contents: Vec<ObjSnap>,
     },
     ArtboardResize {
         orig: Artboard,
         handle: usize,
         start_box: Bounds,
+        contents: Vec<ObjSnap>,
     },
     ArtboardRotate {
         orig: Artboard,
         center: Pt,
         start_angle: f32,
+        contents: Vec<ObjSnap>,
     },
     Brush {
         layer: usize,
@@ -473,6 +476,7 @@ pub struct Studio {
     pub play_clock: f64,
     pub pose_drag: HashMap<u64, Pose>,
     pub selected_key: Option<(u64, Prop, usize)>,
+    pub key_drag: Option<(u64, Prop, usize)>,
     pub pending_place: Option<PendingPlace>,
     pub trace_opts: crate::trace::TraceOpts,
     pub tabs: Vec<TabState>,
@@ -483,6 +487,7 @@ pub struct Studio {
     pub last_input: Instant,
     pub last_swap: Option<Instant>,
     pub pending_nav: Option<PendingNav>,
+    pub allow_close: bool,
     pub welcome_page: WelcomePage,
     pub font_query: String,
     pub font_recents: Vec<String>,
@@ -611,6 +616,7 @@ impl Studio {
             play_clock: 0.0,
             pose_drag: HashMap::new(),
             selected_key: None,
+            key_drag: None,
             pending_place: None,
             trace_opts: crate::trace::TraceOpts::default(),
             tabs: vec![],
@@ -621,6 +627,7 @@ impl Studio {
             last_input: Instant::now(),
             last_swap: None,
             pending_nav: None,
+            allow_close: false,
             welcome_page: WelcomePage::New,
             font_query: String::new(),
             font_recents: crate::project::load_font_recents(),
@@ -675,6 +682,7 @@ impl Studio {
         self.playing = false;
         self.pose_drag.clear();
         self.selected_key = None;
+        self.key_drag = None;
         self.mark();
         let transp = if self.new_doc_transparent { " transparent" } else { "" };
         let bleed = if self.new_doc_bleed { " + bleed" } else { "" };
@@ -866,6 +874,7 @@ impl Studio {
         self.play_clock = t.play_clock;
         self.pose_drag = t.pose_drag;
         self.selected_key = t.selected_key;
+        self.key_drag = None;
         self.pending_place = t.pending_place;
         self.show_welcome = t.show_welcome;
         self.artboard_sel = t.artboard_sel;
@@ -1138,10 +1147,13 @@ impl Studio {
                     }
                 } else {
                     self.park_active();
-                    for t in &self.tabs {
+                    for t in &mut self.tabs {
+                        t.dirty = false;
                         crate::project::delete_swap(&t.swap_id);
                     }
+                    self.dirty = false;
                     crate::project::delete_swap(&self.swap_id);
+                    self.allow_close = true;
                 }
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
@@ -1246,13 +1258,166 @@ impl Studio {
         let mut neu = src.clone();
         neu.id = crate::document::next_id();
         neu.name = self.doc.unique_artboard_name(&format!("{} copy", src.name));
-        neu.origin.x += src.size.x + 48.0;
+        let delta = Pt::new(src.size.x + 48.0, 0.0);
+        neu.origin += delta;
         let nid = neu.id;
         let mut after = self.doc.artboards.clone();
         after.push(neu);
         self.commit_artboards(after);
+
+        let mut copies: Vec<(usize, Shape)> = Vec::new();
+        for (li, layer) in self.doc.layers.iter().enumerate() {
+            if let Some(shapes) = layer.kind.shapes() {
+                for s in shapes {
+                    if src.contains(s.world_bbox().center()) {
+                        copies.push((li, s.clone()));
+                    }
+                }
+            }
+        }
+        let mut rasters: Vec<Layer> = Vec::new();
+        for layer in &self.doc.layers {
+            if !layer.kind.is_placed_raster() {
+                continue;
+            }
+            if let Some(b) = layer.kind.raster_bounds()
+                && src.contains(b.center())
+            {
+                rasters.push(layer.clone());
+            }
+        }
+        let n = copies.len() + rasters.len();
+        for (li, mut s) in copies {
+            s.id = crate::document::next_id();
+            s.geom.translate(delta);
+            self.commit(Cmd::AddShape { layer: li, shape: s });
+        }
+        for mut layer in rasters {
+            layer.id = crate::document::next_id();
+            layer.name = format!("{} copy", layer.name);
+            if let Some((o, sz, rot)) = layer.kind.raster_xform() {
+                layer.kind.set_raster_xform(o + delta, sz, rot);
+            }
+            let index = self.doc.layers.len();
+            self.commit(Cmd::AddLayer { index, layer });
+        }
+
         self.artboard_sel = vec![nid];
-        self.status = "artboard cloned".into();
+        self.status = if n == 0 {
+            "artboard cloned".into()
+        } else {
+            format!("artboard cloned with {n} objects")
+        };
+    }
+
+    pub fn snapshot_artboard_contents(&self, board: &Artboard) -> Vec<ObjSnap> {
+        let mut out = Vec::new();
+        for (li, layer) in self.doc.layers.iter().enumerate() {
+            if let Some(shapes) = layer.kind.shapes() {
+                for s in shapes {
+                    if board.contains(s.world_bbox().center()) {
+                        out.push(ObjSnap {
+                            layer: li,
+                            id: s.id,
+                            geom: Some(s.geom.clone()),
+                            origin: Pt::ZERO,
+                            size: Pt::ZERO,
+                            rot: s.rotation,
+                        });
+                    }
+                }
+            }
+            if layer.kind.is_placed_raster() {
+                if let Some(b) = layer.kind.raster_bounds()
+                    && board.contains(b.center())
+                {
+                    if let Some((o, sz, rot)) = layer.kind.raster_xform() {
+                        out.push(ObjSnap {
+                            layer: li,
+                            id: RASTER_ID,
+                            geom: None,
+                            origin: o,
+                            size: sz,
+                            rot,
+                        });
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    pub fn apply_artboard_contents(
+        &mut self,
+        orig: &Artboard,
+        neu: &Artboard,
+        snaps: &[ObjSnap],
+    ) {
+        for snap in snaps {
+            if snap.id == RASTER_ID {
+                let p0 = Self::map_pt_across_artboard(orig, neu, snap.origin);
+                let p1 = Self::map_pt_across_artboard(orig, neu, snap.origin + snap.size);
+                let min = Pt::new(p0.x.min(p1.x), p0.y.min(p1.y));
+                let max = Pt::new(p0.x.max(p1.x), p0.y.max(p1.y));
+                if let Some(l) = self.doc.layers.get_mut(snap.layer) {
+                    l.kind.set_raster_xform(
+                        min,
+                        Pt::new((max.x - min.x).max(1.0), (max.y - min.y).max(1.0)),
+                        snap.rot + (neu.rotation - orig.rotation),
+                    );
+                }
+                continue;
+            }
+            let Some(geom) = snap.geom.clone() else {
+                continue;
+            };
+            let Some(s) = self.doc.find_shape_mut(snap.layer, snap.id) else {
+                continue;
+            };
+            let mut g = geom;
+            g.rotate_about(orig.center(), -orig.rotation);
+            g.map_into(orig.local_bounds(), neu.local_bounds());
+            g.rotate_about(neu.center(), neu.rotation);
+            s.geom = g;
+            s.rotation = snap.rot;
+        }
+    }
+
+    pub fn commit_mapped_contents(&mut self, snaps: Vec<ObjSnap>) {
+        for snap in snaps {
+            if snap.id == RASTER_ID {
+                if let Some(l) = self.doc.layers.get(snap.layer) {
+                    if let Some((o, sz, rot)) = l.kind.raster_xform() {
+                        self.history.push(Cmd::SetRasterXform {
+                            layer: snap.layer,
+                            before: (snap.origin, snap.size, snap.rot),
+                            after: (o, sz, rot),
+                        });
+                        self.dirty = true;
+                    }
+                }
+            } else if let (Some(geom), Some(s)) = (
+                snap.geom.clone(),
+                self.doc.find_shape(snap.layer, snap.id),
+            ) {
+                self.history.push(Cmd::SetGeom {
+                    layer: snap.layer,
+                    id: snap.id,
+                    before: geom,
+                    after: s.geom.clone(),
+                    rot_before: snap.rot,
+                    rot_after: s.rotation,
+                });
+                self.dirty = true;
+            }
+        }
+        self.mark();
+    }
+
+    fn map_pt_across_artboard(orig: &Artboard, neu: &Artboard, p: Pt) -> Pt {
+        let local = p.rotate_about(orig.center(), -orig.rotation);
+        let mapped = orig.local_bounds().map_pt(local, neu.local_bounds());
+        mapped.rotate_about(neu.center(), neu.rotation)
     }
 
     pub fn delete_artboards(&mut self) {
@@ -2018,7 +2183,11 @@ impl Studio {
         let min = Pt::new(start.x.min(cur.x), start.y.min(cur.y));
         let max = Pt::new(start.x.max(cur.x), start.y.max(cur.y));
         let size = max - min;
-        if size.x.abs() < 2.0 && size.y.abs() < 2.0 && !matches!(kind, CreateKind::Line) {
+        if matches!(kind, CreateKind::Line) {
+            if (cur - start).length() < 2.0 {
+                return;
+            }
+        } else if size.x.abs() < 2.0 && size.y.abs() < 2.0 {
             return;
         }
         let geom = match kind {
@@ -2655,7 +2824,7 @@ impl Studio {
 
     pub fn cut_selection(&mut self, ctx: &egui::Context) {
         self.copy_selection(ctx);
-        if !self.clipboard.is_empty() {
+        if !self.clipboard.is_empty() || !self.clipboard_rasters.is_empty() {
             self.delete_selection();
             self.status = "cut".into();
         }
@@ -2983,6 +3152,7 @@ impl Studio {
             self.playing = false;
             self.pose_drag.clear();
             self.selected_key = None;
+            self.key_drag = None;
             self.show_welcome = false;
             self.op = None;
             self.type_edit = None;
@@ -3370,40 +3540,108 @@ impl Studio {
     }
 
     fn place_svg(&mut self, name: String, svg: &str, dest: Bounds) {
-        let target = dest.width().abs().max(dest.height().abs()).max(1.0);
-        match crate::shape_browser::svg_to_geom(svg, target) {
-            Ok(mut geom) => {
-                let b = geom.bbox();
-                geom.map_into(b, dest);
-                let mut style = self.style.clone();
-                if let Some(c) = crate::shape_browser::svg_fill(svg) {
-                    style.fill = Fill::Solid(c);
-                } else if style.fill.is_none() {
-                    style.fill = Fill::Solid(self.brush.color);
-                }
-                style.stroke = None;
-                let shape = Shape::new(geom, style);
-                let id = shape.id;
-                let Some(li) = self.vector_target() else {
-                    let index = self.doc.layers.len();
-                    self.commit(Cmd::AddLayer {
-                        index,
-                        layer: Layer::vector(name.clone()),
-                    });
-                    self.commit(Cmd::AddShape {
-                        layer: index,
-                        shape,
-                    });
-                    self.active_layer = Some(index);
-                    self.selection = vec![(index, id)];
-                    self.status = format!("{name} placed");
-                    return;
-                };
-                self.commit(Cmd::AddShape { layer: li, shape });
-                self.selection = vec![(li, id)];
-                self.status = format!("{name} placed");
-            }
+        match crate::shape_browser::svg_to_elements(svg) {
+            Ok(els) if !els.is_empty() => self.place_svg_elements(name, els, dest),
+            Ok(_) => self.status = format!("{name}: empty svg"),
             Err(e) => self.status = format!("{name}: {e}"),
+        }
+    }
+
+    fn place_svg_elements(
+        &mut self,
+        name: String,
+        mut els: Vec<crate::shape_browser::SvgElement>,
+        dest: Bounds,
+    ) {
+        let mut union: Option<Bounds> = None;
+        for el in &els {
+            let b = el.geom.bbox();
+            union = Some(match union {
+                None => b,
+                Some(acc) => acc.union(b),
+            });
+        }
+        let src = union.unwrap_or(dest);
+        for el in &mut els {
+            el.geom.map_into(src, dest);
+        }
+        let li = match self.vector_target() {
+            Some(li) => li,
+            None => {
+                let index = self.doc.layers.len();
+                self.commit(Cmd::AddLayer {
+                    index,
+                    layer: Layer::vector(name.clone()),
+                });
+                index
+            }
+        };
+        let mut neu = vec![];
+        for el in els {
+            let fill = match el.fill {
+                crate::shape_browser::SvgPaint::None => Fill::None,
+                crate::shape_browser::SvgPaint::Solid(c) => Fill::Solid(c),
+                crate::shape_browser::SvgPaint::Unspecified => {
+                    if matches!(el.stroke, crate::shape_browser::SvgPaint::Solid(_))
+                        || el.stroke_width > 0.05
+                    {
+                        Fill::None
+                    } else if self.style.fill.is_none() {
+                        Fill::Solid(self.brush.color)
+                    } else {
+                        self.style.fill.clone()
+                    }
+                }
+            };
+            let stroke = match el.stroke {
+                crate::shape_browser::SvgPaint::None => None,
+                crate::shape_browser::SvgPaint::Solid(c) => Some(Stroke {
+                    color: c,
+                    width: el.stroke_width.max(0.25),
+                    cap: Self::cap_from_svg(el.stroke_cap.as_deref()),
+                    join: Self::join_from_svg(el.stroke_join.as_deref()),
+                    dash: None,
+                }),
+                crate::shape_browser::SvgPaint::Unspecified if el.stroke_width > 0.05 => {
+                    Some(Stroke {
+                        color: Rgba::rgb(0, 0, 0),
+                        width: el.stroke_width,
+                        cap: Self::cap_from_svg(el.stroke_cap.as_deref()),
+                        join: Self::join_from_svg(el.stroke_join.as_deref()),
+                        dash: None,
+                    })
+                }
+                crate::shape_browser::SvgPaint::Unspecified => None,
+            };
+            let shape = Shape::new(
+                el.geom,
+                Style {
+                    fill,
+                    stroke,
+                    ..self.style.clone()
+                },
+            );
+            neu.push((li, shape.id));
+            self.commit(Cmd::AddShape { layer: li, shape });
+        }
+        self.active_layer = Some(li);
+        self.selection = neu;
+        self.status = format!("{name} placed");
+    }
+
+    fn cap_from_svg(s: Option<&str>) -> Cap {
+        match s.unwrap_or("").to_ascii_lowercase().as_str() {
+            "butt" => Cap::Butt,
+            "square" => Cap::Square,
+            _ => Cap::Round,
+        }
+    }
+
+    fn join_from_svg(s: Option<&str>) -> Join {
+        match s.unwrap_or("").to_ascii_lowercase().as_str() {
+            "miter" => Join::Miter,
+            "bevel" => Join::Bevel,
+            _ => Join::Round,
         }
     }
 
@@ -3529,15 +3767,15 @@ impl Studio {
                 self.paste_style();
                 return;
             }
-            if ctrl && i.key_pressed(Key::C) && !wants_text {
+            if ctrl && i.key_pressed(Key::C) {
                 do_copy = true;
                 return;
             }
-            if ctrl && i.key_pressed(Key::X) && !wants_text {
+            if ctrl && i.key_pressed(Key::X) {
                 do_cut = true;
                 return;
             }
-            if ctrl && i.key_pressed(Key::V) && !wants_text {
+            if ctrl && i.key_pressed(Key::V) {
                 for ev in &i.events {
                     if let egui::Event::Paste(t) = ev {
                         paste_payload = Some(t.clone());
@@ -4120,11 +4358,13 @@ impl eframe::App for Studio {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         if ctx.input(|i| i.viewport().close_requested()) {
-            self.park_active();
-            let dirty = self.dirty || self.tabs.iter().any(|t| t.dirty);
-            if dirty {
-                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-                self.pending_nav = Some(PendingNav::Quit);
+            if !self.allow_close {
+                self.park_active();
+                let dirty = self.dirty || self.tabs.iter().any(|t| t.dirty);
+                if dirty {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                    self.pending_nav = Some(PendingNav::Quit);
+                }
             }
         }
         crate::ui::run(ui, self);
@@ -4434,6 +4674,121 @@ mod tests {
         let n = s.doc.layers.len();
         s.undo();
         assert_eq!(s.doc.layers.len(), n - 1);
+    }
+
+    #[test]
+    fn clone_artboard_copies_shapes_inside() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        s.doc.artboards = vec![crate::document::Artboard::new(
+            0,
+            Pt::ZERO,
+            Pt::new(200.0, 200.0),
+        )];
+        let id = s.doc.artboards[0].id;
+        s.finish_create(
+            CreateKind::Rect,
+            Pt::new(20.0, 20.0),
+            Pt::new(80.0, 80.0),
+        );
+        let before: usize = s
+            .doc
+            .layers
+            .iter()
+            .filter_map(|l| l.kind.shapes())
+            .map(|ss| ss.len())
+            .sum();
+        let orig_c = s
+            .doc
+            .find_shape(s.selection[0].0, s.selection[0].1)
+            .unwrap()
+            .world_bbox()
+            .center();
+        let rasters_before = s.doc.layers.iter().filter(|l| l.kind.pixels().is_some()).count();
+        s.clone_artboard(id);
+        let after: usize = s
+            .doc
+            .layers
+            .iter()
+            .filter_map(|l| l.kind.shapes())
+            .map(|ss| ss.len())
+            .sum();
+        assert_eq!(s.doc.artboards.len(), 2);
+        assert_eq!(after, before + 1, "clone must copy objects on the board");
+        let rasters_after = s.doc.layers.iter().filter(|l| l.kind.pixels().is_some()).count();
+        assert_eq!(
+            rasters_after, rasters_before,
+            "paper background must not clone onto the new board"
+        );
+        let delta = Pt::new(200.0 + 48.0, 0.0);
+        let copied = s
+            .doc
+            .layers
+            .iter()
+            .filter_map(|l| l.kind.shapes())
+            .flatten()
+            .any(|sh| (sh.world_bbox().center() - (orig_c + delta)).length() < 1.0);
+        assert!(copied, "cloned shape must sit on the new artboard");
+        assert!(s.status.contains("cloned"));
+    }
+
+    #[test]
+    fn artboard_move_takes_contents() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        s.doc.artboards = vec![crate::document::Artboard::new(
+            0,
+            Pt::ZERO,
+            Pt::new(200.0, 200.0),
+        )];
+        s.finish_create(
+            CreateKind::Rect,
+            Pt::new(20.0, 20.0),
+            Pt::new(80.0, 80.0),
+        );
+        let (li, id) = s.selection[0];
+        let c0 = s.doc.find_shape(li, id).unwrap().world_bbox().center();
+        let orig = s.doc.artboards[0].clone();
+        let mut neu = orig.clone();
+        neu.origin.x += 120.0;
+        let snaps = s.snapshot_artboard_contents(&orig);
+        s.doc.artboards[0] = neu.clone();
+        s.apply_artboard_contents(&orig, &neu, &snaps);
+        let c1 = s.doc.find_shape(li, id).unwrap().world_bbox().center();
+        assert!(
+            (c1.x - (c0.x + 120.0)).abs() < 1.0,
+            "object must ride the artboard, got {c1:?} from {c0:?}"
+        );
+    }
+
+    #[test]
+    fn artboard_rotate_takes_contents() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        s.doc.artboards = vec![crate::document::Artboard::new(
+            0,
+            Pt::ZERO,
+            Pt::new(200.0, 200.0),
+        )];
+        s.finish_create(
+            CreateKind::Rect,
+            Pt::new(20.0, 20.0),
+            Pt::new(80.0, 80.0),
+        );
+        let (li, id) = s.selection[0];
+        let orig = s.doc.artboards[0].clone();
+        let mut neu = orig.clone();
+        neu.rotation = std::f32::consts::FRAC_PI_2;
+        let snaps = s.snapshot_artboard_contents(&orig);
+        s.doc.artboards[0] = neu.clone();
+        s.apply_artboard_contents(&orig, &neu, &snaps);
+        let c1 = s.doc.find_shape(li, id).unwrap().world_bbox().center();
+        // (50,50) around (100,100) by 90° → (100,50) wait:
+        // p-c = (-50,-50), rot 90 CCW = (50, -50), +c = (150, 50)
+        assert!(
+            (c1.x - 150.0).abs() < 2.0 && (c1.y - 50.0).abs() < 2.0,
+            "object must orbit the artboard centre, got {c1:?}"
+        );
     }
 
     #[test]

@@ -465,6 +465,28 @@ impl Pixels {
         self.with_pm(|pm| pm.clone())
     }
 
+    /// Every pixel has alpha 0.
+    pub fn is_invisible(&self) -> bool {
+        self.data.is_empty() || self.data.chunks_exact(4).all(|p| p[3] == 0)
+    }
+
+    /// `Some` when every pixel is the same rgba.
+    pub fn is_uniform(&self) -> Option<Rgba> {
+        let first = self.data.chunks_exact(4).next()?;
+        if first.len() < 4 {
+            return None;
+        }
+        if !self.data.chunks_exact(4).all(|p| p == first) {
+            return None;
+        }
+        Some(Rgba {
+            r: first[0],
+            g: first[1],
+            b: first[2],
+            a: first[3],
+        })
+    }
+
     pub fn from_pixmap(pm: &tiny_skia::Pixmap) -> Self {
         let mut data = vec![0u8; pm.data().len()];
         for (i, src) in pm.data().chunks_exact(4).enumerate() {
@@ -782,12 +804,69 @@ impl Artboard {
             .collect()
     }
 
+    pub fn local_bounds(&self) -> Bounds {
+        Bounds::from_min_size(self.origin, self.size)
+    }
+
+    pub fn center(&self) -> Pt {
+        self.origin + self.size * 0.5
+    }
+
+    pub fn corners(&self) -> [Pt; 4] {
+        let o = self.origin;
+        let s = self.size;
+        let pts = [
+            o,
+            Pt::new(o.x + s.x, o.y),
+            o + s,
+            Pt::new(o.x, o.y + s.y),
+        ];
+        let c = self.center();
+        if self.rotation.abs() < 1e-5 {
+            pts
+        } else {
+            pts.map(|p| p.rotate_about(c, self.rotation))
+        }
+    }
+
+    pub fn handle_pts(&self) -> [Pt; 8] {
+        let b = self.local_bounds();
+        let c = self.center();
+        let mut hs = [Pt::ZERO; 8];
+        for i in 0..8 {
+            let p = b.handle(i);
+            hs[i] = if self.rotation.abs() < 1e-5 {
+                p
+            } else {
+                p.rotate_about(c, self.rotation)
+            };
+        }
+        hs
+    }
+
+    pub fn rotate_handle_pt(&self) -> Pt {
+        let rh = self.local_bounds().rotate_handle();
+        if self.rotation.abs() < 1e-5 {
+            rh
+        } else {
+            rh.rotate_about(self.center(), self.rotation)
+        }
+    }
+
+    /// Artboards sit on the page. Rotation snaps to 0 / 90 / 180 / 270.
+    pub fn snap_rotation(rad: f32) -> f32 {
+        let deg = rad.to_degrees();
+        let wrapped = (deg + 180.0).rem_euclid(360.0) - 180.0;
+        let snapped = (wrapped / 90.0).round() * 90.0;
+        snapped.to_radians()
+    }
+
     pub fn bounds(&self) -> Bounds {
-        let b = Bounds::from_min_size(self.origin, self.size);
+        let b = self.local_bounds();
         if self.rotation.abs() < 1e-5 {
             return b;
         }
-        let c = b.center();
+        let c = self.center();
         let mut out = Bounds::from_pt(b.min.rotate_about(c, self.rotation));
         for p in [Pt::new(b.max.x, b.min.y), b.max, Pt::new(b.min.x, b.max.y)] {
             out.union_pt(p.rotate_about(c, self.rotation));
@@ -1844,6 +1923,23 @@ mod tests {
         s.geom.translate(Pt::new(40.0, 0.0));
         let b = s.get_cached_path(8).unwrap();
         assert_ne!(a.bounds(), b.bounds(), "moved shape must rebuild its path");
+    }
+
+    #[test]
+    fn artboard_rotation_snaps_to_cardinals() {
+        let q = std::f32::consts::FRAC_PI_2;
+        let s = |d: f32| Artboard::snap_rotation(d.to_radians()).to_degrees().round();
+        assert_eq!(s(10.0), 0.0);
+        assert_eq!(s(44.0), 0.0);
+        assert_eq!(s(46.0), 90.0);
+        assert_eq!(s(90.0), 90.0);
+        assert_eq!(s(135.0), 180.0);
+        assert_eq!(s(-10.0), 0.0);
+        assert_eq!(s(-46.0), -90.0);
+        let r = Artboard::snap_rotation(q * 0.4);
+        assert!((r - 0.0).abs() < 1e-5);
+        let r = Artboard::snap_rotation(q * 0.6);
+        assert!((r - q).abs() < 1e-4);
     }
 
     #[test]

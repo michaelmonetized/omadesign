@@ -463,7 +463,7 @@ pub fn doc_tabs(ui: &mut Ui, studio: &mut Studio) {
     studio.ensure_tabs();
     Panel::left("doc-tabs")
         .resizable(false)
-        .exact_size(28.0)
+        .exact_size(150.0)
         .show(ui, |ui| {
             ui.add_space(6.0);
             let n = studio.tab_count();
@@ -472,11 +472,14 @@ pub fn doc_tabs(ui: &mut Ui, studio: &mut Studio) {
             for i in 0..n {
                 let (title, dirty) = studio.tab_title(i);
                 let on = i == studio.active_tab;
-                let label = if dirty {
-                    format!("• {}", title.chars().next().unwrap_or('U'))
+                let mut label = if dirty {
+                    format!("• {title}")
                 } else {
-                    title.chars().next().unwrap_or('U').to_string()
+                    title.clone()
                 };
+                if label.chars().count() > 18 {
+                    label = format!("{}…", label.chars().take(16).collect::<String>());
+                }
                 let tip = if dirty {
                     format!("{title} (unsaved)")
                 } else {
@@ -484,7 +487,7 @@ pub fn doc_tabs(ui: &mut Ui, studio: &mut Studio) {
                 };
                 ui.push_id(i, |ui| {
                     let resp = ui.add_sized(
-                        vec2(22.0, 22.0),
+                        vec2(138.0, 22.0),
                         Button::new(RichText::new(label).small().strong()).fill(if on {
                             accent_dim()
                         } else {

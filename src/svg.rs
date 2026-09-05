@@ -61,6 +61,41 @@ fn hex_css(c: Rgba) -> String {
     format!("#{:02X}{:02X}{:02X}", c.r, c.g, c.b)
 }
 
+fn svg_color(c: Rgba) -> String {
+    if c.a >= 250 {
+        hex_css(c)
+    } else {
+        rgba_css(c)
+    }
+}
+
+fn raster_worth_exporting(
+    pixels: &crate::document::Pixels,
+    origin: Pt,
+    size: Pt,
+    doc: &Document,
+) -> bool {
+    if pixels.is_invisible() {
+        return false;
+    }
+    if let Some(c) = pixels.is_uniform() {
+        let paper = c.r > 250 && c.g > 250 && c.b > 250;
+        let (dw, dh) = if size.x.abs() > 0.5 && size.y.abs() > 0.5 {
+            (size.x.abs(), size.y.abs())
+        } else {
+            (pixels.w as f32, pixels.h as f32)
+        };
+        let covers = origin.x.abs() < 1.0
+            && origin.y.abs() < 1.0
+            && (dw - doc.width).abs() < 2.0
+            && (dh - doc.height).abs() < 2.0;
+        if paper && covers {
+            return false;
+        }
+    }
+    true
+}
+
 fn layer_bounds(layer: &Layer) -> Option<Bounds> {
     match &layer.kind {
         LayerKind::Vector { shapes } => {
@@ -106,7 +141,7 @@ fn write_shape(
 ) {
     let fill_attr = match &shape.style.fill {
         Fill::None => "fill=\"none\"".to_string(),
-        Fill::Solid(c) => format!("fill=\"{}\"", rgba_css(*c)),
+        Fill::Solid(c) => format!("fill=\"{}\"", svg_color(*c)),
         Fill::Linear { from, to, c0, c1 } => {
             *grad_id += 1;
             let id = format!("g{grad_id}");
@@ -142,7 +177,7 @@ fn write_shape(
                 .unwrap_or_default();
             format!(
                 " stroke=\"{}\" stroke-width=\"{:.2}\" stroke-linecap=\"{}\" stroke-linejoin=\"{}\"{dash}",
-                rgba_css(s.color),
+                svg_color(s.color),
                 s.width,
                 s.cap.name().to_ascii_lowercase(),
                 s.join.name().to_ascii_lowercase()
@@ -153,7 +188,7 @@ fn write_shape(
     if let Geom::Text(run) = &shape.geom {
         let family = crate::text::label_for(&run.font);
         let fill = match &shape.style.fill {
-            Fill::Solid(c) => rgba_css(*c),
+            Fill::Solid(c) => svg_color(*c),
             _ => "#111111".into(),
         };
         let escaped = run
@@ -204,8 +239,12 @@ fn write_shape(
     if d.is_empty() {
         return;
     }
+    let rule = match &shape.geom {
+        Geom::Poly { winding: false, .. } => " fill-rule=\"evenodd\"",
+        _ => "",
+    };
     body.push_str(&format!(
-        "  <path id=\"oma-{}\" d=\"{d}\" {fill_attr}{stroke_attr} opacity=\"{:.3}\"{extra}/>\n",
+        "  <path id=\"oma-{}\" d=\"{d}\" {fill_attr}{stroke_attr}{rule} opacity=\"{:.3}\"{extra}/>\n",
         shape.id,
         shape.opacity
     ));
@@ -265,11 +304,7 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
         } else {
             String::new()
         };
-        body.push_str(&format!(
-            "<g opacity=\"{:.3}\" style=\"mix-blend-mode:{}\"{fx_attr}>\n",
-            layer.opacity,
-            layer.blend.css()
-        ));
+        let mut layer_body = String::new();
         match &layer.kind {
             LayerKind::Vector { shapes } => {
                 for shape in shapes {
@@ -302,7 +337,7 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
                     }
                     extra.push_str(&xf_attr(shape));
                     write_shape(
-                        &mut body,
+                        &mut layer_body,
                         &mut defs,
                         &mut grad_id,
                         shape,
@@ -316,7 +351,8 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
                 size,
                 rotation,
             } => {
-                if let Some(pm) = pixels.to_pixmap()
+                if raster_worth_exporting(pixels, *origin, *size, doc)
+                    && let Some(pm) = pixels.to_pixmap()
                     && let Ok(png) = pm.encode_png()
                 {
                     let b64 = base64::Engine::encode(
@@ -337,13 +373,22 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
                             rotation.to_degrees()
                         );
                     }
-                    body.push_str(&format!(
+                    layer_body.push_str(&format!(
                         "  <image href=\"data:image/png;base64,{b64}\" x=\"{:.3}\" y=\"{:.3}\" width=\"{:.3}\" height=\"{:.3}\"{xf}/>\n",
                         origin.x, origin.y, dw, dh
                     ));
                 }
             }
         }
+        if layer_body.is_empty() {
+            continue;
+        }
+        body.push_str(&format!(
+            "<g opacity=\"{:.3}\" style=\"mix-blend-mode:{}\"{fx_attr}>\n",
+            layer.opacity,
+            layer.blend.css()
+        ));
+        body.push_str(&layer_body);
         body.push_str("</g>\n");
     }
 
@@ -457,5 +502,36 @@ mod tests {
         assert!(s.contains("<svg"));
         assert!(s.contains("viewBox"));
         assert!(s.contains("<path") || s.contains("<rect") || s.contains("<ellipse"));
+        assert!(
+            !s.contains("<image"),
+            "blank paper raster must not steal the SVG thumbnail"
+        );
+        assert!(s.contains("fill=\"none\""), "{s}");
+        assert!(s.contains("stroke=\"#"), "opaque stroke must be hex, got {s}");
+    }
+
+    #[test]
+    fn opaque_fill_is_hex_not_rgba() {
+        let mut doc = Document::new("t", 100.0, 100.0, 72.0);
+        apply(
+            &mut doc,
+            &Cmd::AddShape {
+                layer: 1,
+                shape: Shape::new(
+                    Geom::Rect {
+                        origin: Pt::new(10.0, 10.0),
+                        size: Pt::new(40.0, 20.0),
+                        radius: 0.0,
+                    },
+                    crate::document::Style {
+                        fill: Fill::Solid(crate::color::Rgba::rgb(0, 0, 0)),
+                        stroke: None,
+                    },
+                ),
+            },
+        );
+        let s = export(&doc).unwrap();
+        assert!(s.contains("fill=\"#000000\""), "{s}");
+        assert!(!s.contains("rgba(0,0,0"), "{s}");
     }
 }

@@ -181,6 +181,11 @@ fn paint_timeline(ui: &mut Ui, studio: &mut Studio, rect: Rect, resp: &eframe::e
     let mut clicked_key: Option<(u64, Prop, usize)> = None;
     let mut dragged_key: Option<(u64, Prop, usize, f32)> = None;
     let pointer = resp.interact_pointer_pos();
+    let press = resp.ctx.input(|i| i.pointer.primary_pressed());
+    let down = resp.ctx.input(|i| i.pointer.button_down(PointerButton::Primary));
+    if !down {
+        studio.key_drag = None;
+    }
 
     for (i, (id, name)) in rows.iter().enumerate() {
         let y = lane.min.y + i as f32 * ROW;
@@ -211,8 +216,9 @@ fn paint_timeline(ui: &mut Ui, studio: &mut Studio, rect: Rect, resp: &eframe::e
                 diamond(&painter, c, if on { 6.0 } else { 5.0 }, if on { select() } else { col });
                 if let Some(p) = pointer {
                     if (p - c).length() <= 8.0 {
-                        if resp.dragged_by(PointerButton::Primary) {
-                            dragged_key = Some((*id, tr.prop, ki, x_to_t(p.x)));
+                        if press {
+                            studio.key_drag = Some((*id, tr.prop, ki));
+                            clicked_key = Some((*id, tr.prop, ki));
                         } else if resp.clicked() {
                             clicked_key = Some((*id, tr.prop, ki));
                         }
@@ -239,9 +245,17 @@ fn paint_timeline(ui: &mut Ui, studio: &mut Studio, rect: Rect, resp: &eframe::e
     let head = Rect::from_center_size(pos2(px, ruler.center().y), vec2(8.0, 14.0));
     painter.rect_filled(head, 2.0, accent());
 
+    if let (Some((id, prop, i)), Some(p)) = (studio.key_drag, pointer) {
+        if resp.dragged_by(PointerButton::Primary) {
+            dragged_key = Some((id, prop, i, x_to_t(p.x)));
+        }
+    }
+
     if resp.clicked() || resp.dragged_by(PointerButton::Primary) {
         if let Some(p) = pointer {
-            if dragged_key.is_none() && (ruler.contains(p) || (p.x >= lane.min.x && p.y <= lane.max.y))
+            if dragged_key.is_none()
+                && studio.key_drag.is_none()
+                && (ruler.contains(p) || (p.x >= lane.min.x && p.y <= lane.max.y))
                 && clicked_key.is_none()
             {
                 studio.playhead = x_to_t(p.x);

@@ -633,7 +633,9 @@ pub fn path_svg_d(anchors: &[Anchor], closed: bool) -> String {
         if i == 0 && (a_pt - anchors[0].pt).length_sq() > 0.01 {
             d = format!("M {:.3} {:.3}", a_pt.x, a_pt.y);
         }
-        if a_out.length_sq() < 0.04 && b_in.length_sq() < 0.04 {
+        let seg = (b_pt - a_pt).length().max(1.0);
+        let eps = 1.0_f32.max(seg * 0.02);
+        if a_out.length() < eps && b_in.length() < eps {
             d.push_str(&format!(" L {:.3} {:.3}", b_pt.x, b_pt.y));
         } else {
             let c1 = a_pt + a_out;
@@ -1370,6 +1372,17 @@ mod tests {
         let d = path_svg_d(&anchors, false);
         assert!(d.contains('C') || d.contains(" C"), "{d}");
         assert!(!d.contains(" L ") || d.starts_with('M'));
+    }
+
+    #[test]
+    fn path_svg_junk_handles_are_lines() {
+        let mut a0 = Anchor::corner(Pt::new(0.0, 0.0));
+        a0.h_out = Pt::new(0.3, 0.0);
+        let mut a1 = Anchor::corner(Pt::new(80.0, 0.0));
+        a1.h_in = Pt::new(-0.4, 0.0);
+        let d = path_svg_d(&[a0, a1], false);
+        assert!(d.contains(" L "), "{d}");
+        assert!(!d.contains(" C "), "{d}");
     }
 
     #[test]

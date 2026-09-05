@@ -6,7 +6,7 @@ use crate::geom::{Geom, Pt};
 use crate::motion::Pose;
 use std::collections::HashMap;
 use tiny_skia::{
-    FillRule, GradientStop, LineCap, LineJoin, LinearGradient, Paint, PathBuilder, Pixmap,
+    FillRule, GradientStop, LinearGradient, Paint, PathBuilder, Pixmap,
     PixmapPaint, Point, RadialGradient, Shader, SpreadMode, Stroke as SkStroke, StrokeDash,
     Transform,
 };
@@ -166,21 +166,14 @@ pub fn render_view_posed(
 ) -> Option<Pixmap> {
     let mut pm = Pixmap::new(screen_w, screen_h)?;
     fill_solid(&mut pm, 0.0, 0.0, screen_w as f32, screen_h as f32, canvas_bg());
-
-    let origin = view.to_screen(Pt::ZERO);
-    let size = Pt::new(doc.width * view.scale, doc.height * view.scale);
-    draw_checker(&mut pm, origin, size);
-    stroke_rect(
-        &mut pm,
-        origin,
-        size,
-        1.0,
-        Rgba::rgb(0x55, 0x5A, 0x63),
-    );
+    draw_plates(&mut pm, doc, view);
 
     let t = view.transform();
     for (li, layer) in doc.layers.iter().enumerate() {
         if !layer.visible || layer.opacity <= 0.0 {
+            continue;
+        }
+        if is_paper_raster(layer) {
             continue;
         }
         let brush = draft
@@ -210,9 +203,13 @@ pub fn export_png(doc: &Document, scale: u32) -> Result<Vec<u8>, String> {
         Pt::ZERO,
         Pt::new(w as f32, h as f32),
     );
+    draw_export_plates(&mut pm, doc, s as f32);
     let t = Transform::from_scale(s as f32, s as f32);
     for layer in &doc.layers {
         if !layer.visible || layer.opacity <= 0.0 {
+            continue;
+        }
+        if is_paper_raster(layer) {
             continue;
         }
         draw_layer(&mut pm, layer, t, None, None, None, doc, None);
@@ -569,6 +566,81 @@ fn fill_paint<'a>(fill: &Fill, geom: &Geom) -> Paint<'a> {
     paint
 }
 
+fn is_paper_raster(layer: &Layer) -> bool {
+    let LayerKind::Raster { pixels, size, .. } = &layer.kind else {
+        return false;
+    };
+    let Some(c) = pixels.is_uniform() else {
+        return false;
+    };
+    let paper = c.r > 250 && c.g > 250 && c.b > 250 && c.a > 250;
+    if !paper {
+        return false;
+    }
+    size.x.abs() <= 0.5 && size.y.abs() <= 0.5
+}
+
+fn paper_color(doc: &Document) -> Rgba {
+    if doc.transparent {
+        CHECKER_A
+    } else {
+        Rgba::WHITE
+    }
+}
+
+fn draw_plates(pm: &mut Pixmap, doc: &Document, view: View) {
+    if doc.artboards.is_empty() {
+        let origin = view.to_screen(Pt::ZERO);
+        let size = Pt::new(doc.width * view.scale, doc.height * view.scale);
+        if doc.transparent {
+            draw_checker(pm, origin, size);
+        } else {
+            fill_solid(pm, origin.x, origin.y, size.x, size.y, Rgba::WHITE);
+        }
+        return;
+    }
+    let c = paper_color(doc);
+    for a in &doc.artboards {
+        let corners = a.corners().map(|p| view.to_screen(p));
+        fill_quad(pm, corners, c);
+    }
+}
+
+fn draw_export_plates(pm: &mut Pixmap, doc: &Document, scale: f32) {
+    if doc.artboards.is_empty() {
+        return;
+    }
+    let c = paper_color(doc);
+    for a in &doc.artboards {
+        let corners = a.corners().map(|p| p * scale);
+        fill_quad(pm, corners, c);
+    }
+}
+
+fn fill_quad(pm: &mut Pixmap, pts: [Pt; 4], c: Rgba) {
+    let mut pb = PathBuilder::new();
+    pb.move_to(pts[0].x, pts[0].y);
+    pb.line_to(pts[1].x, pts[1].y);
+    pb.line_to(pts[2].x, pts[2].y);
+    pb.line_to(pts[3].x, pts[3].y);
+    pb.close();
+    let Some(path) = pb.finish() else {
+        return;
+    };
+    let mut paint = Paint {
+        anti_alias: true,
+        ..Paint::default()
+    };
+    paint.set_color(c.to_skia());
+    pm.fill_path(
+        &path,
+        &paint,
+        FillRule::Winding,
+        Transform::identity(),
+        None,
+    );
+}
+
 fn fill_solid(pm: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, c: Rgba) {
     let Some(rect) = tiny_skia::Rect::from_xywh(x, y, w, h) else {
         return;
@@ -598,31 +670,6 @@ fn draw_checker(pm: &mut Pixmap, origin: Pt, size: Pt) {
             );
         }
     }
-}
-
-fn stroke_rect(pm: &mut Pixmap, origin: Pt, size: Pt, width: f32, c: Rgba) {
-    let Some(rect) = tiny_skia::Rect::from_xywh(origin.x, origin.y, size.x.max(1.0), size.y.max(1.0))
-    else {
-        return;
-    };
-    let path = PathBuilder::from_rect(rect);
-    let mut paint = Paint {
-        anti_alias: true,
-        ..Paint::default()
-    };
-    paint.set_color(c.to_skia());
-    pm.stroke_path(
-        &path,
-        &paint,
-        &SkStroke {
-            width,
-            line_cap: LineCap::Butt,
-            line_join: LineJoin::Miter,
-            ..SkStroke::default()
-        },
-        Transform::identity(),
-        None,
-    );
 }
 
 #[cfg(test)]
@@ -667,6 +714,32 @@ mod tests {
         )
         .unwrap();
         assert_ne!(rest.data(), posed.data(), "a keyed translate must redraw");
+    }
+
+    #[test]
+    fn artboard_plate_follows_origin() {
+        let mut doc = Document::new("t", 80.0, 80.0, 72.0);
+        doc.width = 200.0;
+        doc.artboards[0].origin = Pt::new(40.0, 0.0);
+        doc.artboards[0].size = Pt::new(40.0, 80.0);
+        let pm = render_view(&doc, View::default(), 80, 80, Draft::none()).unwrap();
+        let left = pm.pixel(10, 40).unwrap();
+        let right = pm.pixel(60, 40).unwrap();
+        let bg = canvas_bg();
+        assert!(
+            (left.red() as i32 - bg.r as i32).abs() < 8,
+            "left of the board must be pasteboard, got {} {} {}",
+            left.red(),
+            left.green(),
+            left.blue()
+        );
+        assert!(
+            right.red() > 240 && right.green() > 240 && right.blue() > 240,
+            "plate must sit on the artboard, got {} {} {}",
+            right.red(),
+            right.green(),
+            right.blue()
+        );
     }
 
     #[test]

@@ -305,13 +305,31 @@ fn viewer(ui: &mut Ui, studio: &mut Studio) {
         Color32::WHITE,
     );
 
-    if studio.tool == crate::tools::Tool::Crop && resp.dragged_by(PointerButton::Primary) {
-        if let (Some(a), Some(b)) = (resp.interact_pointer_pos(), resp.hover_pos()) {
-            let start = to_img(a, dest, size);
-            let cur = to_img(b, dest, size);
-            studio.photo.crop_drag = Some((start, cur));
-            let ra = dest.min + eframe::egui::vec2(start.x / size.x * dest.width(), start.y / size.y * dest.height());
-            let rb = dest.min + eframe::egui::vec2(cur.x / size.x * dest.width(), cur.y / size.y * dest.height());
+    if studio.tool == crate::tools::Tool::Crop {
+        if resp.ctx.input(|i| i.pointer.primary_pressed()) {
+            if let Some(a) = resp.interact_pointer_pos() {
+                let start = to_img(a, dest, size);
+                studio.photo.crop_drag = Some((start, start));
+            }
+        }
+        if resp.dragged_by(PointerButton::Primary) {
+            if let Some(b) = resp.interact_pointer_pos().or(resp.hover_pos()) {
+                let cur = to_img(b, dest, size);
+                if let Some((_, c)) = &mut studio.photo.crop_drag {
+                    *c = cur;
+                } else {
+                    studio.photo.crop_drag = Some((cur, cur));
+                }
+            }
+        }
+        if let Some((start, cur)) = studio.photo.crop_drag {
+            let ra = dest.min
+                + eframe::egui::vec2(
+                    start.x / size.x * dest.width(),
+                    start.y / size.y * dest.height(),
+                );
+            let rb = dest.min
+                + eframe::egui::vec2(cur.x / size.x * dest.width(), cur.y / size.y * dest.height());
             ui.painter().rect_stroke(
                 Rect::from_two_pos(ra, rb),
                 0.0,
@@ -319,10 +337,12 @@ fn viewer(ui: &mut Ui, studio: &mut Studio) {
                 eframe::egui::StrokeKind::Middle,
             );
         }
-    }
-    if studio.tool == crate::tools::Tool::Crop && resp.drag_stopped() {
-        if let Some((a, b)) = studio.photo.crop_drag.take() {
-            studio.commit_photo_crop(a, b);
+        if studio.photo.crop_drag.is_some()
+            && !resp.ctx.input(|i| i.pointer.button_down(PointerButton::Primary))
+        {
+            if let Some((a, b)) = studio.photo.crop_drag.take() {
+                studio.commit_photo_crop(a, b);
+            }
         }
     }
 

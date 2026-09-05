@@ -258,7 +258,7 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
     }
 
     if studio.pending_place.is_some() {
-        if resp.drag_started_by(PointerButton::Primary) {
+        if resp.ctx.input(|i| i.pointer.primary_pressed()) {
             studio.op = Some(Op::Place {
                 start: snap,
                 cur: snap,
@@ -354,9 +354,10 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
         return;
     }
 
-    // Text edit drag: selecting a range should not commit, but update the caret.
+    // Text edit drag: lock the caret on press. Waiting for drag_started
+    // means the first ~6px already picked a different character.
     if studio.type_edit.is_some() {
-        if resp.drag_started_by(PointerButton::Primary) {
+        if resp.ctx.input(|i| i.pointer.primary_pressed()) {
             let slack = 8.0 / studio.view.scale.max(0.01);
             if let Some(hit) = hit_shape(studio, pick, slack) {
                 if studio.editing_text(hit.0, hit.1) {
@@ -371,8 +372,8 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
                     return;
                 }
             }
-            studio.commit_type_edit();
-        } else if resp.dragged_by(PointerButton::Primary) {
+        }
+        if resp.dragged_by(PointerButton::Primary) {
             if let Some(edit) = studio.type_edit.as_ref() {
                 let (li, id) = (edit.layer, edit.id);
                 if let Some(shape) = studio.doc.find_shape(li, id) {
@@ -385,6 +386,9 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
                 }
             }
             return;
+        }
+        if resp.drag_started_by(PointerButton::Primary) {
+            studio.commit_type_edit();
         }
     }
 
@@ -438,9 +442,25 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
         return;
     }
 
+    // Same click-vs-drag delay as Pen/Node/Artboard. Lock the hit on press
+    // so scale/rotate/corner handles and thin strokes are grabbed where the
+    // pointer went down, not 6px later. Do not end a live op on drag_started —
+    // that would kill the press lock and re-hit at the moved point.
+    let press = resp.ctx.input(|i| i.pointer.primary_pressed());
+    if press
+        && studio.op.is_none()
+        && studio.type_edit.is_none()
+        && pointer_down_starts_op(studio.tool, alt)
+    {
+        start_drag(studio, pick, snap, shift, false);
+    }
     if resp.drag_started_by(PointerButton::Primary) {
-        if studio.op.is_some() {
-            end_drag(studio, snap, alt, ctrl, shift);
+        if alt && matches!(studio.op, Some(Op::Move { .. })) {
+            studio.duplicate_selection_by(Pt::ZERO);
+            let orig = snapshot(studio);
+            if let Some(Op::Move { orig: slot, .. }) = &mut studio.op {
+                *slot = orig;
+            }
         }
         if studio.op.is_none() {
             start_drag(studio, pick, snap, shift, alt);
@@ -448,7 +468,11 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
     }
 
     if resp.dragged_by(PointerButton::Primary) {
-        let world = if matches!(studio.tool, Tool::Node | Tool::Artboard) {
+        let world = if matches!(studio.tool, Tool::Node | Tool::Artboard)
+            || matches!(
+                studio.op,
+                Some(Op::Resize { .. } | Op::Rotate { .. } | Op::Corner { .. })
+            ) {
             pick
         } else {
             snap
@@ -474,6 +498,15 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
     }
 }
 
+fn pointer_down_starts_op(tool: Tool, alt: bool) -> bool {
+    match tool {
+        Tool::Pen | Tool::Node | Tool::Artboard => false,
+        Tool::Hand | Tool::Eyedropper | Tool::Fill | Tool::Wand | Tool::Text | Tool::Trace => false,
+        Tool::Clone if alt => false,
+        _ => true,
+    }
+}
+
 fn is_text_hit(studio: &Studio, hit: (usize, u64)) -> bool {
     studio
         .doc
@@ -496,23 +529,9 @@ fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
         )
         && !studio.selection.is_empty()
     {
-        if let Some((li, id, which)) = hit_corner(studio, pick) {
-            if let Some(s) = studio.doc.find_shape(li, id) {
-                let radius = match s.geom {
-                    Geom::Rect { radius, .. } => radius,
-                    _ => 0.0,
-                };
-                studio.op = Some(Op::Corner {
-                    layer: li,
-                    id,
-                    which,
-                    orig_corners: s.corners,
-                    orig_radius: radius,
-                    orig_geom: s.geom.clone(),
-                    start: pick,
-                });
-                return;
-            }
+        grab_corner(studio, pick);
+        if studio.op.is_some() {
+            return;
         }
         if let Some(sel) = hit_handle(studio, pick) {
             match sel {
@@ -649,10 +668,13 @@ fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
                 if alt {
                     studio.clone_artboard(id);
                 }
+                let ids = studio.artboard_sel.clone();
+                let contents = snapshot_on_artboards(studio, &ids);
                 studio.op = Some(Op::ArtboardMove {
                     orig: studio.doc.artboards.clone(),
-                    ids: studio.artboard_sel.clone(),
+                    ids,
                     start: snap,
+                    contents,
                 });
             } else {
                 studio.op = Some(Op::ArtboardDraw {
@@ -789,6 +811,25 @@ struct PixmapOr;
 impl PixmapOr {
     fn new(w: u32, h: u32) -> Option<tiny_skia::Pixmap> {
         tiny_skia::Pixmap::new(w, h)
+    }
+}
+
+fn snap_changed(studio: &Studio, snap: &ObjSnap) -> bool {
+    if snap.id == RASTER_ID {
+        studio
+            .doc
+            .layers
+            .get(snap.layer)
+            .and_then(|l| l.kind.raster_xform())
+            .is_some_and(|(o, sz, rot)| {
+                (o - snap.origin).length() > 0.2
+                    || (sz - snap.size).length() > 0.2
+                    || (rot - snap.rot).abs() > 1e-4
+            })
+    } else {
+        studio.doc.find_shape(snap.layer, snap.id).is_some_and(|s| {
+            snap.geom.as_ref().is_some_and(|g| *g != s.geom) || (s.rotation - snap.rot).abs() > 1e-4
+        })
     }
 }
 
@@ -958,6 +999,7 @@ fn node_press(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
     };
     let slack = 8.0 / studio.view.scale.max(0.01);
     let Some(hit) = hit_node(anchors, pick, slack, *closed) else {
+        grab_corner(studio, pick);
         return;
     };
     match hit {
@@ -994,8 +1036,46 @@ fn node_press(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
                 moving: BTreeSet::new(),
             });
         }
-        NodeHit::Segment(_) => {}
+        NodeHit::Segment(_) => grab_corner(studio, pick),
     }
+}
+
+fn grab_corner(studio: &mut Studio, pick: Pt) {
+    let Some((li, id, which)) = hit_corner(studio, pick) else {
+        return;
+    };
+    let Some(s) = studio.doc.find_shape(li, id) else {
+        return;
+    };
+    let radius = match s.geom {
+        Geom::Rect { radius, .. } => radius,
+        _ => 0.0,
+    };
+    studio.op = Some(Op::Corner {
+        layer: li,
+        id,
+        which,
+        orig_corners: s.corners,
+        orig_radius: radius,
+        orig_geom: s.geom.clone(),
+        start: pick,
+    });
+}
+
+fn snapshot_on_artboards(studio: &Studio, ids: &[u64]) -> Vec<ObjSnap> {
+    let mut out = Vec::new();
+    let mut seen = BTreeSet::new();
+    for id in ids {
+        let Some(a) = studio.doc.artboards.iter().find(|x| x.id == *id) else {
+            continue;
+        };
+        for snap in studio.snapshot_artboard_contents(a) {
+            if seen.insert((snap.layer, snap.id)) {
+                out.push(snap);
+            }
+        }
+    }
+    out
 }
 
 fn hit_artboard_handle(studio: &Studio, pick: Pt) -> Option<Op> {
@@ -1004,21 +1084,24 @@ fn hit_artboard_handle(studio: &Studio, pick: Pt) -> Option<Op> {
         let Some(a) = studio.doc.artboards.iter().find(|x| x.id == *id) else {
             continue;
         };
-        let b = a.bounds();
-        let rh = b.rotate_handle();
+        let c = a.center();
+        let rh = a.rotate_handle_pt();
         if (rh - pick).length() <= slack {
             return Some(Op::ArtboardRotate {
                 orig: a.clone(),
-                center: b.center(),
-                start_angle: (pick - b.center()).y.atan2((pick - b.center()).x),
+                center: c,
+                start_angle: (pick - c).y.atan2((pick - c).x),
+                contents: studio.snapshot_artboard_contents(a),
             });
         }
+        let handles = a.handle_pts();
         for i in 0..8 {
-            if (b.handle(i) - pick).length() <= slack {
+            if (handles[i] - pick).length() <= slack {
                 return Some(Op::ArtboardResize {
                     orig: a.clone(),
                     handle: i,
-                    start_box: b,
+                    start_box: a.local_bounds(),
+                    contents: studio.snapshot_artboard_contents(a),
                 });
             }
         }
@@ -1528,14 +1611,35 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                 }
             }
         }
-        Some(Op::ArtboardMove { orig, ids, start }) => {
+        Some(Op::ArtboardMove {
+            orig,
+            ids,
+            start,
+            contents,
+        }) => {
             let d = world - *start;
-            let orig = orig.clone();
+            let orig_boards = orig.clone();
             let ids = ids.clone();
-            studio.doc.artboards = orig;
+            let contents = contents.clone();
+            studio.doc.artboards = orig_boards;
             for a in &mut studio.doc.artboards {
                 if ids.contains(&a.id) {
                     a.origin += d;
+                }
+            }
+            for snap in &contents {
+                if snap.id == RASTER_ID {
+                    if let Some(l) = studio.doc.layers.get_mut(snap.layer) {
+                        l.kind
+                            .set_raster_xform(snap.origin + d, snap.size, snap.rot);
+                    }
+                } else if let (Some(geom), Some(s)) = (
+                    snap.geom.clone(),
+                    studio.doc.find_shape_mut(snap.layer, snap.id),
+                ) {
+                    s.geom = geom;
+                    s.geom.translate(d);
+                    s.rotation = snap.rot;
                 }
             }
         }
@@ -1543,10 +1647,18 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
             orig,
             handle,
             start_box,
+            contents,
         }) => {
             let orig = orig.clone();
             let handle = *handle;
             let start_box = *start_box;
+            let contents = contents.clone();
+            let c0 = start_box.center();
+            let local = if orig.rotation.abs() > 1e-5 {
+                world.rotate_about(c0, -orig.rotation)
+            } else {
+                world
+            };
             let (hx, hy) = match handle {
                 0 => (0.0, 0.0),
                 1 => (1.0, 0.0),
@@ -1560,14 +1672,14 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
             let mut min = start_box.min;
             let mut max = start_box.max;
             if hx == 0.0 {
-                min.x = world.x;
+                min.x = local.x;
             } else if hx == 1.0 {
-                max.x = world.x;
+                max.x = local.x;
             }
             if hy == 0.0 {
-                min.y = world.y;
+                min.y = local.y;
             } else if hy == 1.0 {
-                max.y = world.y;
+                max.y = local.y;
             }
             if min.x > max.x {
                 std::mem::swap(&mut min.x, &mut max.x);
@@ -1580,22 +1692,26 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                 a.size = Pt::new((max.x - min.x).max(8.0), (max.y - min.y).max(8.0));
                 a.rotation = orig.rotation;
             }
+            if let Some(neu) = studio.doc.artboards.iter().find(|a| a.id == orig.id).cloned() {
+                studio.apply_artboard_contents(&orig, &neu, &contents);
+            }
         }
         Some(Op::ArtboardRotate {
             orig,
             center,
             start_angle,
+            contents,
         }) => {
-            let mut ang = (world - *center).y.atan2((world - *center).x) - *start_angle;
-            if shift {
-                let step = std::f32::consts::PI / 12.0;
-                ang = (ang / step).round() * step;
-            }
+            let ang = (world - *center).y.atan2((world - *center).x) - *start_angle;
             let orig = orig.clone();
+            let contents = contents.clone();
             if let Some(a) = studio.doc.artboards.iter_mut().find(|a| a.id == orig.id) {
                 a.origin = orig.origin;
                 a.size = orig.size;
-                a.rotation = orig.rotation + ang;
+                a.rotation = crate::document::Artboard::snap_rotation(orig.rotation + ang);
+            }
+            if let Some(neu) = studio.doc.artboards.iter().find(|a| a.id == orig.id).cloned() {
+                studio.apply_artboard_contents(&orig, &neu, &contents);
             }
         }
         None => {}
@@ -1623,7 +1739,7 @@ fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) 
         Some(Op::Resize { orig, .. }) | Some(Op::Rotate { orig, .. }) => {
             if studio.is_motion() {
                 commit_pose_drag(studio);
-            } else {
+            } else if orig.iter().any(|s| snap_changed(studio, s)) {
                 commit_obj_snaps(studio, orig);
             }
         }
@@ -1669,18 +1785,24 @@ fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) 
             ..
         }) => {
             if let Some(s) = studio.doc.find_shape(layer, id) {
-                studio.history.push(crate::document::Cmd::SetCorners {
-                    layer,
-                    id,
-                    before: orig_corners,
-                    after: s.corners,
-                    radius_before: orig_radius,
-                    radius_after: match s.geom {
-                        Geom::Rect { radius, .. } => radius,
-                        _ => orig_radius,
-                    },
-                });
-                if s.geom != orig_geom {
+                let radius_after = match s.geom {
+                    Geom::Rect { radius, .. } => radius,
+                    _ => orig_radius,
+                };
+                let corners_changed = s.corners != orig_corners || (radius_after - orig_radius).abs() > 0.05;
+                let geom_changed = s.geom != orig_geom;
+                if corners_changed {
+                    studio.history.push(crate::document::Cmd::SetCorners {
+                        layer,
+                        id,
+                        before: orig_corners,
+                        after: s.corners,
+                        radius_before: orig_radius,
+                        radius_after,
+                    });
+                    studio.dirty = true;
+                }
+                if geom_changed {
                     studio.history.push(crate::document::Cmd::SetGeom {
                         layer,
                         id,
@@ -1689,8 +1811,8 @@ fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) 
                         rot_before: s.rotation,
                         rot_after: s.rotation,
                     });
+                    studio.dirty = true;
                 }
-                studio.dirty = true;
             }
         }
         Some(Op::ArtboardDraw { start, cur }) => {
@@ -1711,17 +1833,24 @@ fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) 
                 studio.artboard_sel = vec![id];
             }
         }
-        Some(Op::ArtboardMove { orig, .. }) => {
+        Some(Op::ArtboardMove { orig, contents, .. }) => {
             let after = studio.doc.artboards.clone();
             studio.doc.artboards = orig;
             studio.commit_artboards(after);
+            if !contents.is_empty() {
+                commit_obj_snaps(studio, contents);
+            }
         }
-        Some(Op::ArtboardResize { orig, .. }) | Some(Op::ArtboardRotate { orig, .. }) => {
+        Some(Op::ArtboardResize { orig, contents, .. })
+        | Some(Op::ArtboardRotate { orig, contents, .. }) => {
             let after = studio.doc.artboards.clone();
             if let Some(slot) = studio.doc.artboards.iter_mut().find(|a| a.id == orig.id) {
                 *slot = orig;
             }
             studio.commit_artboards(after);
+            if !contents.is_empty() {
+                commit_obj_snaps(studio, contents);
+            }
         }
         Some(Op::Brush {
             layer,
@@ -1795,7 +1924,9 @@ fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) 
             }
         }
         Some(Op::Gradient { start, cur }) => {
-            if let Some((li, id)) = studio.primary() {
+            if (cur - start).length() < 2.0 {
+                // click without a drag is not a gradient
+            } else if let Some((li, id)) = studio.primary() {
                 if let Some(s) = studio.doc.find_shape(li, id) {
                     let b = s.world_bbox();
                     let from = [
@@ -2034,39 +2165,39 @@ fn draw_artboard_frames(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) 
         return;
     }
     for a in &doc.artboards {
-        let r = Rect::from_min_max(
-            win(rect, studio.view, a.origin),
-            win(rect, studio.view, a.origin + a.size),
-        );
+        let corners = a.corners();
+        let scr: [Pos2; 4] = corners.map(|q| win(rect, studio.view, q));
         let on = studio.artboard_sel.contains(&a.id);
-        p.rect_stroke(
-            r,
-            0.0,
-            Stroke::new(
-                if on { 2.0 } else { 1.0 },
-                if on {
-                    accent()
-                } else {
-                    Color32::from_rgb(120, 130, 150)
-                },
-            ),
-            eframe::egui::StrokeKind::Middle,
+        let stroke = Stroke::new(
+            if on { 2.0 } else { 1.0 },
+            if on {
+                accent()
+            } else {
+                Color32::from_rgb(120, 130, 150)
+            },
         );
+        for i in 0..4 {
+            p.line_segment([scr[i], scr[(i + 1) % 4]], stroke);
+        }
         p.text(
-            r.left_top() + vec2(4.0, 2.0),
+            scr[0] + vec2(4.0, 2.0),
             eframe::egui::Align2::LEFT_TOP,
             &a.name,
             eframe::egui::FontId::monospace(10.0),
             fg_weak(),
         );
         if on && studio.tool == Tool::Artboard {
-            let b = a.bounds();
-            for i in 0..8 {
-                let h = win(rect, studio.view, b.handle(i));
-                p.rect_filled(Rect::from_center_size(h, vec2(9.0, 9.0)), 0.0, select());
+            for h in a.handle_pts() {
+                let sp = win(rect, studio.view, h);
+                p.rect_filled(Rect::from_center_size(sp, vec2(9.0, 9.0)), 0.0, select());
             }
-            let rh = win(rect, studio.view, b.rotate_handle());
-            p.circle_filled(rh, 5.0, accent());
+            let top = (corners[0] + corners[1]) * 0.5;
+            let rh = a.rotate_handle_pt();
+            p.line_segment(
+                [win(rect, studio.view, top), win(rect, studio.view, rh)],
+                Stroke::new(1.0, accent()),
+            );
+            p.circle_filled(win(rect, studio.view, rh), 5.0, accent());
         }
     }
 }
@@ -2791,5 +2922,102 @@ mod tests {
         let handle = Pt::new(64.0, 0.0);
         let hit = hit_node(&anchors, handle, 8.0, false);
         assert_eq!(hit, Some(NodeHit::HandleOut(1)));
+    }
+
+    #[test]
+    fn select_press_locks_scale_handle_after_pointer_leaves() {
+        let mut s = oval();
+        let handle = posed_bounds(&s).unwrap().handle(1);
+        start_drag(&mut s, handle, handle, false, false);
+        assert!(matches!(s.op, Some(Op::Resize { handle: 1, .. })));
+        continue_drag(&mut s, handle + Pt::new(24.0, 24.0), false, false);
+        assert!(
+            matches!(s.op, Some(Op::Resize { handle: 1, .. })),
+            "leaving the handle must not steal the grab"
+        );
+    }
+
+    #[test]
+    fn select_press_locks_rotate_handle() {
+        let mut s = oval();
+        let rh = posed_bounds(&s).unwrap().rotate_handle();
+        start_drag(&mut s, rh, rh, false, false);
+        assert!(matches!(s.op, Some(Op::Rotate { .. })));
+        continue_drag(&mut s, rh + Pt::new(20.0, 0.0), false, false);
+        assert!(matches!(s.op, Some(Op::Rotate { .. })));
+    }
+
+    #[test]
+    fn start_off_handle_does_not_grab_it() {
+        let mut s = oval();
+        let handle = posed_bounds(&s).unwrap().handle(1);
+        let miss = handle + Pt::new(20.0, 20.0);
+        start_drag(&mut s, miss, miss, false, false);
+        assert!(
+            !matches!(s.op, Some(Op::Resize { .. })),
+            "hit-test 20px off the handle misses — that is the drag_started bug"
+        );
+    }
+
+    #[test]
+    fn corner_widget_press_starts_corner_op() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        s.finish_create(CreateKind::Rect, Pt::new(40.0, 40.0), Pt::new(140.0, 140.0));
+        s.tool = Tool::Select;
+        let (origin, size) = match &s.doc.find_shape(s.selection[0].0, s.selection[0].1).unwrap().geom
+        {
+            Geom::Rect { origin, size, .. } => (*origin, *size),
+            _ => panic!("rect"),
+        };
+        let w = crate::geom::corner_widgets(origin, size)[0];
+        start_drag(&mut s, w, w, false, false);
+        assert!(matches!(s.op, Some(Op::Corner { .. })));
+    }
+
+    #[test]
+    fn thin_line_press_starts_move_not_marquee() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        s.finish_create(CreateKind::Line, Pt::new(10.0, 40.0), Pt::new(120.0, 40.0));
+        s.tool = Tool::Select;
+        // Mid-edge bbox handles sit on a horizontal line. Pick a gap between them.
+        start_drag(&mut s, Pt::new(30.0, 40.0), Pt::new(30.0, 40.0), false, false);
+        assert!(
+            matches!(s.op, Some(Op::Move { .. })),
+            "press on a thin stroke must lock Move, not marquee"
+        );
+    }
+
+    #[test]
+    fn rect_create_records_press_point() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        s.tool = Tool::Rect;
+        let press = Pt::new(12.0, 18.0);
+        start_drag(&mut s, press, press, false, false);
+        match &s.op {
+            Some(Op::Create {
+                start,
+                cur,
+                kind: CreateKind::Rect,
+            }) => {
+                assert_eq!(*start, press);
+                assert_eq!(*cur, press);
+            }
+            other => panic!("expected create at press, got op? {}", other.is_some()),
+        }
+    }
+
+    #[test]
+    fn click_resize_does_not_dirty() {
+        let mut s = oval();
+        s.dirty = false;
+        let n = s.history.len();
+        let handle = posed_bounds(&s).unwrap().handle(1);
+        start_drag(&mut s, handle, handle, false, false);
+        end_drag(&mut s, handle, false, false, false);
+        assert_eq!(s.history.len(), n, "clicking a handle without moving must not commit");
+        assert!(!s.dirty);
     }
 }

@@ -228,6 +228,15 @@ pub fn svg_fill(svg: &str) -> Option<crate::color::Rgba> {
 
 fn parse_svg_color(val: &str) -> Option<crate::color::Rgba> {
     let v = val.trim();
+    if v.eq_ignore_ascii_case("none") || v.eq_ignore_ascii_case("transparent") {
+        return None;
+    }
+    if v.eq_ignore_ascii_case("black") {
+        return Some(crate::color::Rgba::rgb(0, 0, 0));
+    }
+    if v.eq_ignore_ascii_case("white") {
+        return Some(crate::color::Rgba::rgb(255, 255, 255));
+    }
     if let Some(hex) = v.strip_prefix('#') {
         return match hex.len() {
             3 => {
@@ -243,7 +252,160 @@ fn parse_svg_color(val: &str) -> Option<crate::color::Rgba> {
             _ => None,
         };
     }
+    let lower = v.to_ascii_lowercase();
+    if let Some(rest) = lower.strip_prefix("rgba(").or_else(|| lower.strip_prefix("rgb(")) {
+        let rest = rest.trim_end_matches(')');
+        let parts: Vec<&str> = rest.split(',').map(|s| s.trim()).collect();
+        if parts.len() >= 3 {
+            let r: f32 = parts[0].parse().ok()?;
+            let g: f32 = parts[1].parse().ok()?;
+            let b: f32 = parts[2].parse().ok()?;
+            let a = if parts.len() >= 4 {
+                let t = parts[3];
+                if t.ends_with('%') {
+                    t.trim_end_matches('%').parse::<f32>().ok()? / 100.0
+                } else {
+                    t.parse::<f32>().ok()?
+                }
+            } else {
+                1.0
+            };
+            let to_u8 = |x: f32| x.clamp(0.0, 255.0).round() as u8;
+            let mut c = crate::color::Rgba::rgb(to_u8(r), to_u8(g), to_u8(b));
+            c.a = (a.clamp(0.0, 1.0) * 255.0).round() as u8;
+            return Some(c);
+        }
+    }
     None
+}
+
+/// Paint taken from a single SVG element.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SvgPaint {
+    Unspecified,
+    None,
+    Solid(crate::color::Rgba),
+}
+
+/// One drawable pulled out of an SVG, with its own fill/stroke.
+#[derive(Clone, Debug)]
+pub struct SvgElement {
+    pub geom: Geom,
+    pub fill: SvgPaint,
+    pub stroke: SvgPaint,
+    pub stroke_width: f32,
+    pub stroke_cap: Option<String>,
+    pub stroke_join: Option<String>,
+}
+
+fn parse_paint(v: Option<&str>) -> SvgPaint {
+    match v.map(str::trim) {
+        None | Some("") => SvgPaint::Unspecified,
+        Some(s) if s.eq_ignore_ascii_case("none") || s.eq_ignore_ascii_case("transparent") => {
+            SvgPaint::None
+        }
+        Some(s) => parse_svg_color(s)
+            .map(SvgPaint::Solid)
+            .unwrap_or(SvgPaint::Unspecified),
+    }
+}
+
+fn tag_attr<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
+    for q in ['"', '\''] {
+        let needle = format!("{name}={q}");
+        if let Some(i) = tag.find(&needle) {
+            let from = i + needle.len();
+            if let Some(end) = tag[from..].find(q) {
+                return Some(&tag[from..from + end]);
+            }
+        }
+    }
+    None
+}
+
+fn each_open_tag<'a>(svg: &'a str, name: &str) -> Vec<&'a str> {
+    let mut out = Vec::new();
+    let open = format!("<{name}");
+    let mut pos = 0;
+    while let Some(idx) = svg[pos..].find(&open) {
+        let start = pos + idx;
+        let rest = &svg[start..];
+        let end = rest.find('>').unwrap_or(rest.len());
+        out.push(&rest[..end]);
+        pos = start + end.max(1);
+    }
+    out
+}
+
+fn contours_to_geom(contours: Vec<Vec<Pt>>, closed: bool) -> Option<Geom> {
+    if contours.is_empty() {
+        return None;
+    }
+    if contours.len() == 1 {
+        let mut pts = contours.into_iter().next().unwrap();
+        if pts.len() < 2 {
+            return None;
+        }
+        if closed
+            && pts.len() > 2
+            && (pts[0] - *pts.last().unwrap()).length() < 0.5
+        {
+            pts.pop();
+        }
+        let anchors: Vec<crate::geom::Anchor> =
+            pts.into_iter().map(crate::geom::Anchor::corner).collect();
+        Some(Geom::Path { anchors, closed })
+    } else {
+        Some(Geom::Poly {
+            contours,
+            winding: true,
+        })
+    }
+}
+
+fn element_from_path_tag(tag: &str, vb_x: f32, vb_y: f32, scale: f32) -> Option<SvgElement> {
+    let d = tag_attr(tag, "d")?;
+    let closed = d.bytes().any(|b| b == b'Z' || b == b'z');
+    let contours = parse_path_d(d, vb_x, vb_y, scale);
+    let geom = contours_to_geom(contours, closed)?;
+    let stroke_width = tag_attr(tag, "stroke-width")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0.0)
+        * scale;
+    Some(SvgElement {
+        geom,
+        fill: parse_paint(tag_attr(tag, "fill")),
+        stroke: parse_paint(tag_attr(tag, "stroke")),
+        stroke_width,
+        stroke_cap: tag_attr(tag, "stroke-linecap").map(|s| s.to_string()),
+        stroke_join: tag_attr(tag, "stroke-linejoin").map(|s| s.to_string()),
+    })
+}
+
+/// Per-element SVG import. Keeps fill none + stroke instead of smashing
+/// every path into one filled poly.
+pub fn svg_to_elements(svg: &str) -> Result<Vec<SvgElement>, String> {
+    let (vb_x, vb_y, vb_w, vb_h) = parse_viewbox(svg).unwrap_or((0.0, 0.0, 256.0, 256.0));
+    let scale = 1.0;
+    let _ = (vb_w, vb_h);
+    let mut out = Vec::new();
+    for tag in each_open_tag(svg, "path") {
+        if let Some(el) = element_from_path_tag(tag, vb_x, vb_y, scale) {
+            out.push(el);
+        }
+    }
+    if out.is_empty() {
+        let g = svg_to_geom(svg, vb_w.max(vb_h).max(1.0))?;
+        out.push(SvgElement {
+            geom: g,
+            fill: SvgPaint::Unspecified,
+            stroke: SvgPaint::None,
+            stroke_width: 0.0,
+            stroke_cap: None,
+            stroke_join: None,
+        });
+    }
+    Ok(out)
 }
 
 /// Minimal SVG → Geom. Extracts viewBox and all `d="..."`, flattens beziers and
@@ -862,6 +1024,33 @@ mod tests {
             Geom::Poly { contours, .. } => assert_eq!(contours.len(), 1),
             _ => panic!("poly"),
         }
+    }
+
+    #[test]
+    fn parse_rgba_and_hex() {
+        let a = parse_svg_color("rgba(0,0,0,1.000)").unwrap();
+        assert_eq!((a.r, a.g, a.b, a.a), (0, 0, 0, 255));
+        let b = parse_svg_color("#4F8CFF").unwrap();
+        assert_eq!((b.r, b.g, b.b), (0x4F, 0x8C, 0xFF));
+        assert!(parse_svg_color("none").is_none());
+    }
+
+    #[test]
+    fn svg_elements_keep_stroke_and_fill_none() {
+        let svg = r##"<svg viewBox="0 0 100 100">
+            <path d="M10 10 L90 10 L90 90" fill="none" stroke="#000000" stroke-width="8"/>
+            <path d="M20 20 L40 20 L40 40 L20 40 Z" fill="#112233"/>
+        </svg>"##;
+        let els = svg_to_elements(svg).unwrap();
+        assert_eq!(els.len(), 2);
+        assert_eq!(els[0].fill, SvgPaint::None);
+        assert_eq!(els[0].stroke, SvgPaint::Solid(crate::color::Rgba::rgb(0, 0, 0)));
+        assert!((els[0].stroke_width - 8.0).abs() < 0.01);
+        assert_eq!(
+            els[1].fill,
+            SvgPaint::Solid(crate::color::Rgba::rgb(0x11, 0x22, 0x33))
+        );
+        assert_eq!(els[1].stroke, SvgPaint::Unspecified);
     }
 
     #[test]

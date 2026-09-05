@@ -771,14 +771,18 @@ fn artboard_transform(ui: &mut Ui, studio: &mut Studio) {
     });
     changed |= ui.add(Slider::new(&mut deg, -180.0..=180.0).text("Rotate°")).changed();
     if changed {
+        let orig = a.clone();
         a.origin = crate::geom::Pt::new(x, y);
         a.size = crate::geom::Pt::new(w, h);
-        a.rotation = deg.to_radians();
+        a.rotation = crate::document::Artboard::snap_rotation(deg.to_radians());
+        let snaps = studio.snapshot_artboard_contents(&orig);
         let mut after = studio.doc.artboards.clone();
         if let Some(slot) = after.iter_mut().find(|x| x.id == id) {
-            *slot = a;
+            *slot = a.clone();
         }
         studio.commit_artboards(after);
+        studio.apply_artboard_contents(&orig, &a, &snaps);
+        studio.commit_mapped_contents(snaps);
     }
     ui.horizontal(|ui| {
         if ui.button("Clone").clicked() {
@@ -832,7 +836,9 @@ fn raster_transform(ui: &mut Ui, studio: &mut Studio, li: usize) {
 
 fn transform_studio(ui: &mut Ui, studio: &mut Studio) {
     heading(ui, "Transform");
-    if studio.tool == crate::tools::Tool::Artboard || !studio.artboard_sel.is_empty() {
+    if studio.tool == crate::tools::Tool::Artboard
+        || (studio.selection.is_empty() && !studio.artboard_sel.is_empty())
+    {
         artboard_transform(ui, studio);
         return;
     }
