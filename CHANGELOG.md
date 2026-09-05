@@ -1,5 +1,49 @@
 # Changelog
 
+## 2026-09-05 · Pass 5 — Little keys. Big confidence.
+
+The studio has a quiet co-pilot now. It knows what is in your hand.
+
+### Your next move, in plain sight
+
+- A bottom **Shortcut HUD** shows the active tool's gestures above a strip of
+  letter-key hints. Pick Pen and the path controls follow. Hold Ctrl, Shift, Alt
+  or a combination and the command row changes with your hand.
+- Held gestures light up. Command keycaps stay compact: when Ctrl is held,
+  **S · Save** appears under the Ctrl heading. Let go and the tool keys return.
+- The HUD uses the same shortcut routing as the app. Text edits, focused fields,
+  menus and drawing gestures get appropriate hints. Reading the strip does not
+  steal focus or trigger a command.
+- The strip stays the same height through modifier changes, keeping the canvas
+  steady during a drag. Smaller windows show **+ more** with the overflow hints.
+  **Ctrl+/** and **View → Shortcut HUD** toggle it; **F1** remains the full key list.
+
+### Two small gaps closed
+
+Equal-spacing suggestions now reach tool points as well as moving objects and
+artboards. Pen placement can find repeated and balanced gaps while retaining
+edge/centre/guide priority and Shift constraints.
+
+Photo crop now honours Enter to apply and Esc to cancel during a drag. A held
+mouse button cannot silently restart the crop after cancellation.
+
+The earlier passes are included: editable guides and rulers, constrained moves,
+smart snapping, Free Transform and four reshape modes, stroke outlines, Select
+Same, Pathfinder, masks/healing, 13 motion presets and 52 editable templates.
+
+Pass 5 verification: **239 tests passed**, including the full shortcut suite and
+real modifier-only frames during Pen drawing. Checks cover angle constraints,
+broken handles, snapping override, text-field/modal ownership, focus loss,
+Ctrl+/ toggling, and command delivery with the HUD present.
+
+Layout checks cover all four personas at 960×640 and 1600×1000, with hints shown
+and hidden, and prove the canvas stays put as modifiers change. Tool-point gap
+snapping and the complete Photo crop Enter/Esc/release lifecycle also pass.
+Native previews cover bare, Ctrl, Shift, Alt and combined-modifier states, plus
+the compact Motion layout. The release build passed. Clippy completed with
+34 library advisories (47 including tests), without suppressions. Physical
+keyboard and OS dialog interaction remain part of human QA.
+
 ## 2026-09-05 · Pass 4 — A year of good starts
 
 The pudding has a sketchbook, a dance floor, and something fresh for every week.

@@ -159,7 +159,7 @@ impl Tool {
                 "Alt-click clean texture, then paint to blend it into the surrounding colour."
             }
             Tool::Smudge => "Drag to smear pixels along the stroke.",
-            Tool::Crop => "Drag a crop on the photo, Enter commits, Esc cancels.",
+            Tool::Crop => "Drag a crop · release or Enter applies · Esc cancels the current crop.",
             Tool::Marquee => "Drag a rectangular selection on the pixel layer.",
             Tool::EllipseMarquee => "Drag an elliptical selection.",
             Tool::Lasso => "Draw a freehand selection.",
@@ -556,6 +556,10 @@ pub fn shortcut_groups() -> &'static [(&'static str, &'static [ShortcutRow])] {
                 ShortcutRow {
                     action: "Keys",
                     keys: "F1",
+                },
+                ShortcutRow {
+                    action: "Show / hide shortcut HUD",
+                    keys: "Ctrl+/",
                 },
             ],
         ),

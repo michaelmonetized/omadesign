@@ -2,7 +2,7 @@ use super::*;
 use eframe::egui::{Event, Key, Modifiers};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Shortcut {
+pub(super) enum Shortcut {
     Save,
     SaveAs,
     Open,
@@ -32,10 +32,11 @@ enum Shortcut {
     ToggleGuides,
     ToggleSnapping,
     FreeTransform,
+    ToggleKeyHud,
 }
 
 impl Shortcut {
-    fn global(self) -> bool {
+    pub(super) fn global(self) -> bool {
         matches!(
             self,
             Self::Save
@@ -45,11 +46,12 @@ impl Shortcut {
                 | Self::New
                 | Self::Export
                 | Self::Help
+                | Self::ToggleKeyHud
         )
     }
 }
 
-fn key_shortcut(key: Key, mods: Modifiers) -> Option<Shortcut> {
+pub(super) fn key_shortcut(key: Key, mods: Modifiers) -> Option<Shortcut> {
     use Shortcut::*;
     if key == Key::F1 && mods.is_none() {
         return Some(Help);
@@ -66,6 +68,7 @@ fn key_shortcut(key: Key, mods: Modifiers) -> Option<Shortcut> {
     }
     Some(match (key, mods.shift) {
         (Key::Semicolon, false) => ToggleGuides,
+        (Key::Slash, false) => ToggleKeyHud,
         (Key::Semicolon | Key::Colon, true) => ToggleSnapping,
         (Key::S, false) => Save,
         (Key::S, true) => SaveAs,
@@ -95,9 +98,57 @@ fn key_shortcut(key: Key, mods: Modifiers) -> Option<Shortcut> {
     })
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ShortcutFocus {
+    Inactive,
+    Modal,
+    Popup,
+    Field,
+    Text,
+    Canvas,
+}
+
+pub(super) fn held_modifiers(ctx: &egui::Context) -> Modifiers {
+    ctx.input(|input| {
+        if !input.focused
+            || input
+                .events
+                .iter()
+                .any(|event| matches!(event, Event::WindowFocused(false)))
+        {
+            Modifiers::NONE
+        } else {
+            input.modifiers
+        }
+    })
+}
+
 impl Studio {
+    pub(super) fn shortcut_focus(&self, ctx: &egui::Context) -> ShortcutFocus {
+        if !ctx.input(|input| input.focused) {
+            ShortcutFocus::Inactive
+        } else if self.pending_nav.is_some()
+            || ctx.memory(|memory| memory.top_modal_layer().is_some())
+        {
+            ShortcutFocus::Modal
+        } else if egui::Popup::is_any_open(ctx) {
+            ShortcutFocus::Popup
+        } else if ctx.memory(|memory| {
+            memory.focused().is_some_and(|id| {
+                id != egui::Id::new("studio-canvas") && id != egui::Id::new("studio-photo-canvas")
+            })
+        }) {
+            ShortcutFocus::Field
+        } else if self.type_edit.is_some() {
+            ShortcutFocus::Text
+        } else {
+            ShortcutFocus::Canvas
+        }
+    }
+
     pub fn handle_shortcuts(&mut self, ctx: &egui::Context) {
-        let (events, final_modifiers) = ctx.input(|i| (i.events.clone(), i.modifiers));
+        let events = ctx.input(|i| i.events.clone());
+        let final_modifiers = held_modifiers(ctx);
         // Clipboard events have no modifier field. Replay modifier changes in order,
         // retaining the previous frame's state when a held chord spans frames.
         let mut modifiers = ctx.data_mut(|data| {
@@ -106,17 +157,14 @@ impl Studio {
             data.insert_temp(id, final_modifiers);
             previous
         });
-        if self.pending_nav.is_some()
-            || ctx.memory(|memory| memory.top_modal_layer().is_some())
-            || egui::Popup::is_any_open(ctx)
-        {
+        let focus = self.shortcut_focus(ctx);
+        if matches!(
+            focus,
+            ShortcutFocus::Inactive | ShortcutFocus::Modal | ShortcutFocus::Popup
+        ) {
             return;
         }
-        let field_focused = ctx.memory(|memory| {
-            memory.focused().is_some_and(|id| {
-                id != egui::Id::new("studio-canvas") && id != egui::Id::new("studio-photo-canvas")
-            })
-        });
+        let field_focused = focus == ShortcutFocus::Field;
         let mut consumed = Vec::new();
         for (index, event) in events.iter().enumerate() {
             let shortcut = match event {
@@ -193,6 +241,7 @@ impl Studio {
     fn run_shortcut(&mut self, ctx: &egui::Context, shortcut: Shortcut, payload: Option<&str>) {
         match shortcut {
             Shortcut::ToggleGuides => self.toggle_guides(),
+            Shortcut::ToggleKeyHud => self.show_key_hud = !self.show_key_hud,
             Shortcut::FreeTransform => self.free_transform(),
             Shortcut::ToggleSnapping => self.toggle_snapping(),
             Shortcut::Save => self.save(),
@@ -365,6 +414,17 @@ impl Studio {
     }
 
     fn canvas_key(&mut self, key: Key, shift: bool) -> bool {
+        if self.persona == Persona::Photo
+            && matches!(key, Key::Enter | Key::Escape)
+            && let Some((start, cur)) = self.photo.crop_drag.take()
+        {
+            if key == Key::Enter {
+                self.commit_photo_crop(start, cur);
+            } else {
+                self.photo.status = "Crop cancelled".into();
+            }
+            return true;
+        }
         if self.persona == Persona::Motion {
             match key {
                 Key::Space => {
@@ -604,6 +664,7 @@ mod tests {
             (Key::Equals, shift, ZoomIn),
             (Key::Minus, ctrl, ZoomOut),
             (Key::F1, Modifiers::NONE, Help),
+            (Key::Slash, ctrl, ToggleKeyHud),
             (Key::Semicolon, ctrl, ToggleGuides),
             (Key::Semicolon, shift, ToggleSnapping),
             (Key::Colon, shift, ToggleSnapping),

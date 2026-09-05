@@ -554,6 +554,8 @@ fn view_menu(ui: &mut Ui, studio: &mut Studio) {
         ui.checkbox(&mut studio.show_rulers, "Rulers").on_hover_text(
             "Drag down from the top ruler or right from the left ruler to add a guide. Drag the ruler corner to set zero; double-click it to reset."
         );
+        ui.checkbox(&mut studio.show_key_hud, "Shortcut HUD")
+            .on_hover_text("Live tool and modifier hints at the bottom of the window · Ctrl+/");
         ui.checkbox(&mut studio.doc.grid.visible, "Grid");
         if ui
             .add(

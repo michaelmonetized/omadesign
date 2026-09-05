@@ -5,6 +5,9 @@ mod deform;
 mod guides;
 mod icons;
 mod jobs;
+mod key_hud;
+#[cfg(test)]
+mod key_hud_tests;
 mod masking;
 mod motion_presets;
 mod photo;
@@ -31,6 +34,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     studio.tick_motion(&ctx);
 
     chrome::top_bar(ui, studio);
+    key_hud::show(ui, studio);
 
     if studio.show_welcome {
         welcome::show(ui, studio);

@@ -41,6 +41,10 @@ Tarball by hand:
 
 Press **F1** for the full key list.
 
+The bottom **Shortcut HUD** follows your tool and held modifiers: letter keys
+when idle, command keys with Ctrl/Shift/Alt, and contextual drawing gestures.
+**Ctrl+/** toggles it. Hover **+ more** for hints that do not fit the window.
+
 ## Design
 
 - Free transform (`Ctrl+T`): move, scale (8 handles), rotate (the handle above the box)

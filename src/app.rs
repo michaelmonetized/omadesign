@@ -2,6 +2,7 @@
 
 pub mod deform;
 mod guides;
+mod key_hints;
 mod masking;
 mod motion_presets;
 mod photo_session;
@@ -11,6 +12,7 @@ mod shortcuts;
 mod snapping;
 mod tabs;
 
+pub use key_hints::{KeyHint, KeyHints};
 pub use photo_session::PhotoSession;
 use recovery::RecoveryJob;
 use tabs::TabState;
@@ -269,6 +271,7 @@ pub struct Studio {
     pub export_scale: u32,
     pub show_welcome: bool,
     pub show_shortcuts: bool,
+    pub show_key_hud: bool,
     pub show_templates: bool,
     pub motion_preset_options: crate::motion_presets::Options,
     pub show_rulers: bool,
@@ -425,6 +428,7 @@ impl Studio {
             export_scale: 1,
             show_welcome: true,
             show_shortcuts: false,
+            show_key_hud: true,
             show_templates: false,
             motion_preset_options: crate::motion_presets::Options::default(),
             show_rulers: true,

@@ -4,6 +4,20 @@ A native Linux studio. Design, paint, photograph. One document, one layer stack.
 
 Keys match Affinity / Adobe. Press **F1** any time.
 
+## Learn as you draw
+
+The **Shortcut HUD** sits along the bottom of the window. Its upper row follows
+the current tool or edit; the lower row shows letter keys. Hold Ctrl, Shift, Alt,
+or a combination to see the matching commands and highlighted gestures. Release
+the modifier and the normal hints return. With Pen, for example, the strip keeps
+angle constraints, handle controls and finishing the path close at hand.
+
+It keeps the same height while modifiers change, so a drag stays anchored to the
+same canvas. Hover **+ more** to inspect overflow hints at smaller window sizes.
+Hints are informational and do not take keyboard focus from your work. Text
+editing and menus get their own context. **Ctrl+/** or **View → Shortcut HUD**
+shows or hides the strip; **F1** opens the complete shortcut list.
+
 ## Install
 
 ```sh
@@ -174,6 +188,7 @@ Copy Ctrl+C · Paste Ctrl+V · Cut Ctrl+X · Select all Ctrl+A
 Save Ctrl+S · Save as Ctrl+Shift+S · Open Ctrl+O · New Ctrl+N · Place Ctrl+Shift+P · Export Ctrl+E
 Combine Ctrl+G · Release Ctrl+Shift+G · Front Ctrl+Shift+] · Back Ctrl+Shift+[
 Free transform Ctrl+T · Guides Ctrl+; · Snapping Ctrl+Shift+; · Hold Ctrl to reverse snapping
+Shortcut HUD Ctrl+/ · All shortcuts F1
 Fit Ctrl+0 · 100% Ctrl+1 · Zoom in Ctrl++ · Zoom out Ctrl+- · Pan Space · Pinch / Ctrl+scroll zoom
 Motion: Space play · K key · Home start · End end
 ```
