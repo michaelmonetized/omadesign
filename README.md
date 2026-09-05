@@ -63,8 +63,7 @@ Timeline under the canvas. Rest pose stays in Design. Keys are X, Y, rotation, s
 
 - [User manual](docs/MANUAL.md)
 - [Contributing](docs/CONTRIBUTING.md)
-- [Roadmap](docs/ROADMAP.md)
-- [Go to market](docs/gtm/LAUNCH.md)
+- [Project status](docs/ROADMAP.md)
 
 ## Build from source
 

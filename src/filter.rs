@@ -218,6 +218,7 @@ fn blur(pm: &mut Pixmap, sigma: f32) {
 
 fn box_blur(pm: &mut Pixmap, radius: i32) {
     let r = radius.max(1);
+    let n = 2 * r + 1;
     let w = pm.width() as i32;
     let h = pm.height() as i32;
     let src = pm.data().to_vec();
@@ -226,7 +227,6 @@ fn box_blur(pm: &mut Pixmap, radius: i32) {
     for y in 0..h {
         for c in 0..4 {
             let mut acc = 0i32;
-            let n = (2 * r + 1) as i32;
             for k in -r..=r {
                 acc += sample(&src, w, h, k, y, c) as i32;
             }
@@ -242,7 +242,6 @@ fn box_blur(pm: &mut Pixmap, radius: i32) {
     for x in 0..w {
         for c in 0..4 {
             let mut acc = 0i32;
-            let n = (2 * r + 1) as i32;
             for k in -r..=r {
                 acc += sample(&tmp, w, h, x, k, c) as i32;
             }
@@ -364,7 +363,7 @@ fn blit_over(dst: &mut Pixmap, src: &Pixmap) {
         for c in 0..3 {
             let sc = si[c] as f32;
             let dc = di[c] as f32;
-            di[c] = ((sc + dc * (1.0 - sa)) ).round().clamp(0.0, 255.0) as u8;
+            di[c] = (sc + dc * (1.0 - sa)).round().clamp(0.0, 255.0) as u8;
         }
         di[3] = (out_a * 255.0).round() as u8;
     }
@@ -726,7 +725,11 @@ pub fn svg_filter(id: &str, stack: &FilterStack, region: [f32; 4]) -> Option<Str
                 octaves,
                 seed,
             } => {
-                let ty = if *fractal { "fractalNoise" } else { "turbulence" };
+                let ty = if *fractal {
+                    "fractalNoise"
+                } else {
+                    "turbulence"
+                };
                 body.push_str(&format!(
                     "<feTurbulence type=\"{ty}\" baseFrequency=\"{base:.4}\" numOctaves=\"{octaves}\" seed=\"{seed}\" result=\"{out}\"/>\n"
                 ));

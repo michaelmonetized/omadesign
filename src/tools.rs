@@ -123,19 +123,31 @@ impl Tool {
 
     pub fn hint(self) -> &'static str {
         match self {
-            Tool::Select => "Click to select · drag to move · handles scale · the top handle rotates · Shift-click adds",
-            Tool::Node => "Drag a point or handle · click a segment to add · Alt-click corner/smooth · Delete removes the point · Object → Break path",
-            Tool::Pen => "Click a corner · click-drag a smooth · Enter finishes open · click the first point to close · click an open end to continue or join",
+            Tool::Select => {
+                "Click to select · drag to move · handles scale · the top handle rotates · Shift-click adds"
+            }
+            Tool::Node => {
+                "Drag a point or handle · click a segment to add · Alt-click corner/smooth · Delete removes the point · Object → Break path"
+            }
+            Tool::Pen => {
+                "Click a corner · click-drag a smooth · Enter finishes open · click the first point to close · click an open end to continue or join"
+            }
             Tool::Pencil => "Drag a freehand curve. Release to commit.",
-            Tool::Rect => "Drag a rectangle. Shift keeps it square. Corner radius lives in Transform.",
+            Tool::Rect => {
+                "Drag a rectangle. Shift keeps it square. Corner radius lives in Transform."
+            }
             Tool::Ellipse => "Drag an ellipse. Shift keeps it a circle.",
             Tool::Polygon => "Drag a polygon. Sides live in Transform.",
             Tool::Star => "Drag a star. Points and inner radius live in Transform.",
             Tool::Line => "Drag a straight line. Shift snaps to 45°.",
-            Tool::Text => "Click to place type and type into it. Character studio: font, size, OpenType. Esc finishes.",
+            Tool::Text => {
+                "Click to place type and type into it. Character studio: font, size, OpenType. Esc finishes."
+            }
             Tool::Gradient => "Drag across a selected shape to set a linear fill.",
             Tool::Eyedropper => "Click anywhere on the canvas to sample fill colour.",
-            Tool::Trace => "Click to trace the active pixel layer into vectors. Colours and smoothness live in Trace.",
+            Tool::Trace => {
+                "Click to trace the active pixel layer into vectors. Colours and smoothness live in Trace."
+            }
             Tool::Brush => "Paint on the active pixel layer. [ ] size · Shift+[ ] hardness.",
             Tool::Eraser => "Erase on the active pixel layer.",
             Tool::Fill => "Click to flood-fill. Tolerance lives in Brush.",
@@ -147,8 +159,12 @@ impl Tool {
             Tool::Lasso => "Draw a freehand selection.",
             Tool::Wand => "Click to select similar colour.",
             Tool::Hand => "Drag to pan. Space does this from any tool.",
-            Tool::Zoom => "Drag a box · click in · Alt-click out · Ctrl-click artboard · Ctrl+Shift-click selection or all · pinch or scroll to zoom",
-            Tool::Artboard => "Click a board to select · drag a handle to resize · drag inside to move · drag empty to draw · Alt clones · wrap from Object",
+            Tool::Zoom => {
+                "Drag a box · click in · Alt-click out · Ctrl-click artboard · Ctrl+Shift-click selection or all · pinch or scroll to zoom"
+            }
+            Tool::Artboard => {
+                "Click a board to select · drag a handle to resize · drag inside to move · drag empty to draw · Alt clones · wrap from Object"
+            }
         }
     }
 
@@ -257,116 +273,303 @@ pub fn shortcut_groups() -> &'static [(&'static str, &'static [ShortcutRow])] {
         (
             "File",
             &[
-                ShortcutRow { action: "New", keys: "Ctrl+N" },
-                ShortcutRow { action: "Open", keys: "Ctrl+O" },
-                ShortcutRow { action: "Place", keys: "Ctrl+Shift+P" },
-                ShortcutRow { action: "Save", keys: "Ctrl+S" },
-                ShortcutRow { action: "Save as", keys: "Ctrl+Shift+S" },
-                ShortcutRow { action: "Export PNG", keys: "Ctrl+E" },
+                ShortcutRow {
+                    action: "New",
+                    keys: "Ctrl+N",
+                },
+                ShortcutRow {
+                    action: "Open",
+                    keys: "Ctrl+O",
+                },
+                ShortcutRow {
+                    action: "Place",
+                    keys: "Ctrl+Shift+P",
+                },
+                ShortcutRow {
+                    action: "Save",
+                    keys: "Ctrl+S",
+                },
+                ShortcutRow {
+                    action: "Save as",
+                    keys: "Ctrl+Shift+S",
+                },
+                ShortcutRow {
+                    action: "Export PNG",
+                    keys: "Ctrl+E",
+                },
             ],
         ),
         (
             "Edit",
             &[
-                ShortcutRow { action: "Undo", keys: "Ctrl+Z" },
-                ShortcutRow { action: "Redo", keys: "Ctrl+Shift+Z" },
-                ShortcutRow { action: "Cut", keys: "Ctrl+X" },
-                ShortcutRow { action: "Copy", keys: "Ctrl+C" },
-                ShortcutRow { action: "Paste", keys: "Ctrl+V" },
-                ShortcutRow { action: "Duplicate", keys: "Ctrl+D" },
-                ShortcutRow { action: "Delete", keys: "Delete" },
-                ShortcutRow { action: "Select all", keys: "Ctrl+A" },
-                ShortcutRow { action: "Copy style", keys: "Ctrl+Alt+C" },
-                ShortcutRow { action: "Paste style", keys: "Ctrl+Alt+V" },
+                ShortcutRow {
+                    action: "Undo",
+                    keys: "Ctrl+Z",
+                },
+                ShortcutRow {
+                    action: "Redo",
+                    keys: "Ctrl+Shift+Z / Ctrl+Y",
+                },
+                ShortcutRow {
+                    action: "Cut",
+                    keys: "Ctrl+X",
+                },
+                ShortcutRow {
+                    action: "Copy",
+                    keys: "Ctrl+C",
+                },
+                ShortcutRow {
+                    action: "Paste",
+                    keys: "Ctrl+V",
+                },
+                ShortcutRow {
+                    action: "Duplicate",
+                    keys: "Ctrl+D",
+                },
+                ShortcutRow {
+                    action: "Delete",
+                    keys: "Delete",
+                },
+                ShortcutRow {
+                    action: "Select all",
+                    keys: "Ctrl+A",
+                },
+                ShortcutRow {
+                    action: "Copy style",
+                    keys: "Ctrl+Alt+C",
+                },
+                ShortcutRow {
+                    action: "Paste style",
+                    keys: "Ctrl+Alt+V",
+                },
             ],
         ),
         (
             "Arrange",
             &[
-                ShortcutRow { action: "Bring to front", keys: "Ctrl+Shift+]" },
-                ShortcutRow { action: "Bring forward", keys: "Ctrl+]" },
-                ShortcutRow { action: "Send backward", keys: "Ctrl+[" },
-                ShortcutRow { action: "Send to back", keys: "Ctrl+Shift+[" },
-                ShortcutRow { action: "Combine", keys: "Ctrl+G" },
-                ShortcutRow { action: "Release", keys: "Ctrl+Shift+G" },
-                ShortcutRow { action: "Nudge", keys: "Arrows" },
-                ShortcutRow { action: "Nudge ×10", keys: "Shift+Arrows" },
-                ShortcutRow { action: "Break path", keys: "Object menu" },
+                ShortcutRow {
+                    action: "Bring to front",
+                    keys: "Ctrl+Shift+]",
+                },
+                ShortcutRow {
+                    action: "Bring forward",
+                    keys: "Ctrl+]",
+                },
+                ShortcutRow {
+                    action: "Send backward",
+                    keys: "Ctrl+[",
+                },
+                ShortcutRow {
+                    action: "Send to back",
+                    keys: "Ctrl+Shift+[",
+                },
+                ShortcutRow {
+                    action: "Combine",
+                    keys: "Ctrl+G",
+                },
+                ShortcutRow {
+                    action: "Release",
+                    keys: "Ctrl+Shift+G",
+                },
+                ShortcutRow {
+                    action: "Nudge",
+                    keys: "Arrows",
+                },
+                ShortcutRow {
+                    action: "Nudge ×10",
+                    keys: "Shift+Arrows",
+                },
+                ShortcutRow {
+                    action: "Break path",
+                    keys: "Object menu",
+                },
             ],
         ),
         (
             "Tools",
             &[
-                ShortcutRow { action: "Move", keys: "V" },
-                ShortcutRow { action: "Node", keys: "A" },
-                ShortcutRow { action: "Pen", keys: "P" },
-                ShortcutRow { action: "Pencil", keys: "N" },
-                ShortcutRow { action: "Rectangle", keys: "R" },
-                ShortcutRow { action: "Ellipse", keys: "O" },
-                ShortcutRow { action: "Polygon", keys: "Y" },
-                ShortcutRow { action: "Star", keys: "S" },
-                ShortcutRow { action: "Line", keys: "L" },
-                ShortcutRow { action: "Type", keys: "T" },
-                ShortcutRow { action: "Gradient", keys: "G" },
-                ShortcutRow { action: "Eyedropper", keys: "I" },
-                ShortcutRow { action: "Trace", keys: "U" },
-                ShortcutRow { action: "Brush", keys: "B" },
-                ShortcutRow { action: "Eraser", keys: "E" },
-                ShortcutRow { action: "Fill", keys: "K" },
-                ShortcutRow { action: "Clone", keys: "J" },
-                ShortcutRow { action: "Smudge", keys: "M" },
-                ShortcutRow { action: "Crop", keys: "C" },
-                ShortcutRow { action: "Wand", keys: "W" },
-                ShortcutRow { action: "Lasso", keys: "Q" },
-                ShortcutRow { action: "Hand", keys: "H" },
-                ShortcutRow { action: "Zoom", keys: "Z" },
-                ShortcutRow { action: "Artboard", keys: "Shift+O" },
+                ShortcutRow {
+                    action: "Move",
+                    keys: "V",
+                },
+                ShortcutRow {
+                    action: "Node",
+                    keys: "A",
+                },
+                ShortcutRow {
+                    action: "Pen",
+                    keys: "P",
+                },
+                ShortcutRow {
+                    action: "Pencil",
+                    keys: "N",
+                },
+                ShortcutRow {
+                    action: "Rectangle",
+                    keys: "R",
+                },
+                ShortcutRow {
+                    action: "Ellipse",
+                    keys: "O",
+                },
+                ShortcutRow {
+                    action: "Polygon",
+                    keys: "Y",
+                },
+                ShortcutRow {
+                    action: "Star",
+                    keys: "S",
+                },
+                ShortcutRow {
+                    action: "Line",
+                    keys: "L",
+                },
+                ShortcutRow {
+                    action: "Type",
+                    keys: "T",
+                },
+                ShortcutRow {
+                    action: "Gradient",
+                    keys: "G",
+                },
+                ShortcutRow {
+                    action: "Eyedropper",
+                    keys: "I",
+                },
+                ShortcutRow {
+                    action: "Trace",
+                    keys: "U",
+                },
+                ShortcutRow {
+                    action: "Brush",
+                    keys: "B",
+                },
+                ShortcutRow {
+                    action: "Eraser",
+                    keys: "E",
+                },
+                ShortcutRow {
+                    action: "Fill",
+                    keys: "K",
+                },
+                ShortcutRow {
+                    action: "Clone",
+                    keys: "J",
+                },
+                ShortcutRow {
+                    action: "Smudge",
+                    keys: "M",
+                },
+                ShortcutRow {
+                    action: "Crop",
+                    keys: "C",
+                },
+                ShortcutRow {
+                    action: "Wand",
+                    keys: "W",
+                },
+                ShortcutRow {
+                    action: "Lasso",
+                    keys: "Q",
+                },
+                ShortcutRow {
+                    action: "Hand",
+                    keys: "H",
+                },
+                ShortcutRow {
+                    action: "Zoom",
+                    keys: "Z",
+                },
+                ShortcutRow {
+                    action: "Artboard",
+                    keys: "Shift+O",
+                },
+                ShortcutRow {
+                    action: "Marquee (Pixel)",
+                    keys: "Shift+M",
+                },
+                ShortcutRow {
+                    action: "Ellipse marquee (Pixel)",
+                    keys: "Shift+O",
+                },
             ],
         ),
         (
             "View",
             &[
-                ShortcutRow { action: "Fit artboard", keys: "Ctrl+0" },
-                ShortcutRow { action: "100%", keys: "Ctrl+1" },
-                ShortcutRow { action: "Zoom in", keys: "Ctrl++" },
-                ShortcutRow { action: "Zoom out", keys: "Ctrl+-" },
-                ShortcutRow { action: "Pan", keys: "Space" },
-                ShortcutRow { action: "Zoom", keys: "Ctrl+scroll" },
-                ShortcutRow { action: "Keys", keys: "F1" },
+                ShortcutRow {
+                    action: "Fit artboard",
+                    keys: "Ctrl+0",
+                },
+                ShortcutRow {
+                    action: "100%",
+                    keys: "Ctrl+1",
+                },
+                ShortcutRow {
+                    action: "Zoom in",
+                    keys: "Ctrl++",
+                },
+                ShortcutRow {
+                    action: "Zoom out",
+                    keys: "Ctrl+-",
+                },
+                ShortcutRow {
+                    action: "Pan",
+                    keys: "Space",
+                },
+                ShortcutRow {
+                    action: "Zoom",
+                    keys: "Ctrl+scroll",
+                },
+                ShortcutRow {
+                    action: "Keys",
+                    keys: "F1",
+                },
             ],
         ),
         (
             "Motion",
             &[
-                ShortcutRow { action: "Play / pause", keys: "Space" },
-                ShortcutRow { action: "Key at playhead", keys: "K" },
-                ShortcutRow { action: "To start", keys: "Home" },
-                ShortcutRow { action: "To end", keys: "End" },
+                ShortcutRow {
+                    action: "Play / pause",
+                    keys: "Space",
+                },
+                ShortcutRow {
+                    action: "Key at playhead",
+                    keys: "K",
+                },
+                ShortcutRow {
+                    action: "To start",
+                    keys: "Home",
+                },
+                ShortcutRow {
+                    action: "To end",
+                    keys: "End",
+                },
             ],
         ),
         (
             "Colour / brush",
             &[
-                ShortcutRow { action: "Swap fill/stroke", keys: "X" },
-                ShortcutRow { action: "Default fill/stroke", keys: "D" },
-                ShortcutRow { action: "Brush size", keys: "[ ]" },
-                ShortcutRow { action: "Brush hardness", keys: "Shift+[ ]" },
+                ShortcutRow {
+                    action: "Swap fill/stroke",
+                    keys: "X",
+                },
+                ShortcutRow {
+                    action: "Default fill/stroke",
+                    keys: "D",
+                },
+                ShortcutRow {
+                    action: "Brush size",
+                    keys: "[ ]",
+                },
+                ShortcutRow {
+                    action: "Brush hardness",
+                    keys: "Shift+[ ]",
+                },
             ],
         ),
     ]
-}
-
-pub fn shortcuts_markdown() -> String {
-    let mut out = String::new();
-    for (group, rows) in shortcut_groups() {
-        out.push_str(group);
-        out.push('\n');
-        for row in *rows {
-            out.push_str(&format!("{}  {}\n", row.action, row.keys));
-        }
-        out.push('\n');
-    }
-    out
 }
 
 #[cfg(test)]

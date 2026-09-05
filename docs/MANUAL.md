@@ -73,7 +73,7 @@ Boolean (Object menu): union, subtract, intersect, XOR. Combine `Ctrl+G`, releas
 
 Layers expand to show objects. Eye and lock work per object. Click a name to select it on the canvas.
 
-Tabs sit left of the tools. Ctrl+N is a new tab. Ctrl+O opens another tab. Right-click a tab to close it. Unsaved work asks Save / Discard / Cancel.
+Document tabs sit above the canvas. Ctrl+N is a new tab. Ctrl+O opens another tab. Use the tab's close button or its right-click menu to close it. Unsaved work asks Save / Discard / Cancel.
 
 Idle for a second writes `~/.local/share/omadesign/<id>.oma.swp`. Save deletes it. The splash Recovered tab lists crash leftovers. Recents lists `.oma` files you actually opened.
 
@@ -87,7 +87,9 @@ Paint lives on a **pixel layer**. Add one from the Layers studio if the document
 
 ## Photo
 
-Open a folder, drop files, or load samples. Develop: exposure, contrast, highlights/shadows/whites/blacks, temp/tint, presence, tone curve, split tone, HSL, grain, vignette, rotate, crop. Histogram and before/after. **Place in Design** drops the developed image as a pixel layer.
+Open a folder, drop files, or load samples. The Develop panel groups adjustments into **Light**, **Colour**, and **Detail**. Tone curve, colour mixer, and colour grading expand when needed. **Before** compares the original; **Auto light** balances exposure and contrast. Export JPEG runs in the background. **Place in Design** drops the developed image as a pixel layer.
+
+Hold Space or choose Hand to drag the view; middle-drag and two-finger scroll also pan. Pinch, Ctrl+scroll, and Alt+scroll zoom. Ctrl+0 fits the photo; Ctrl+1 shows it at 100%.
 
 ## Motion
 

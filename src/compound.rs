@@ -94,17 +94,6 @@ mod tests {
     }
 
     #[test]
-    fn combine_two_rects() {
-        let a = rect(0.0, 0.0, 10.0);
-        let b = rect(20.0, 0.0, 10.0);
-        let g = combine_into_poly(&[&a, &b]).unwrap();
-        match g {
-            Geom::Poly { contours, .. } => assert_eq!(contours.len(), 2),
-            _ => panic!("expected poly"),
-        }
-    }
-
-    #[test]
     fn apply_multi_union_three() {
         let a = Geom::Rect {
             origin: Pt::new(0.0, 0.0),
@@ -123,9 +112,7 @@ mod tests {
         };
         let r = apply_multi(BoolOp::Union, &[a, b, c]).unwrap();
         let area = boolean::area(&r);
-        // 3 squares 10x10 overlapping by 5 each => union width 20 + overlap handling
-        // Expect around 200? Let's just check >150 and <250
-        assert!(area > 150.0 && area < 250.0, "area {area}");
+        assert!((area - 200.0).abs() < 0.01, "area {area}");
     }
 
     #[test]

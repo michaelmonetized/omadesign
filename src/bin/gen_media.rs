@@ -1,10 +1,9 @@
-use omadesign::app::{CreateKind, Studio};
+use omadesign::app::Studio;
 use omadesign::color::Rgba;
 use omadesign::compositor;
-use omadesign::document::{Fill, Layer, Shape, Style};
+use omadesign::document::{Fill, Shape, Style};
 use omadesign::geom::{Geom, Pt, TypeRun};
 use omadesign::shape_browser;
-use std::path::Path;
 
 fn save_jpeg(doc: &omadesign::document::Document, path: &str, quality: u8) {
     let png_bytes = compositor::export_png(doc, 1).expect("png");
@@ -12,8 +11,13 @@ fn save_jpeg(doc: &omadesign::document::Document, path: &str, quality: u8) {
     let rgb = img.to_rgb8();
     let mut buf = Vec::new();
     let mut enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, quality);
-    enc.encode(rgb.as_raw(), rgb.width(), rgb.height(), image::ExtendedColorType::Rgb8)
-        .expect("jpeg encode");
+    enc.encode(
+        rgb.as_raw(),
+        rgb.width(),
+        rgb.height(),
+        image::ExtendedColorType::Rgb8,
+    )
+    .expect("jpeg encode");
     std::fs::write(path, buf).expect("write");
     println!("wrote {} ({}x{})", path, rgb.width(), rgb.height());
 }
@@ -51,8 +55,14 @@ fn main() {
             },
         );
         // Commit them then combine to show compound
-        s.commit(omadesign::document::Cmd::AddShape { layer: 1, shape: rect1 });
-        s.commit(omadesign::document::Cmd::AddShape { layer: 1, shape: rect2 });
+        s.commit(omadesign::document::Cmd::AddShape {
+            layer: 1,
+            shape: rect1,
+        });
+        s.commit(omadesign::document::Cmd::AddShape {
+            layer: 1,
+            shape: rect2,
+        });
         // Save
         save_jpeg(&s.doc, &format!("{out_dir}/design.jpg"), 90);
     }
@@ -63,22 +73,40 @@ fn main() {
         s.show_welcome = false;
         s.doc = omadesign::document::Document::new("paint", 1600.0, 900.0, 72.0);
         s.active_layer = Some(0);
-        if let Some(px) = s.doc.layers[0].kind.pixels_mut() {
-            if let Some(mut pm) = px.to_pixmap() {
-                let brush = omadesign::paint::Brush {
-                    size: 64.0,
-                    hardness: 0.3,
-                    opacity: 0.9,
-                    flow: 0.9,
-                    spacing: 0.15,
-                    color: Rgba::from_hex(0xE5484D),
-                };
-                // Draw a few strokes
-                omadesign::paint::stroke_to(&mut pm, Pt::new(200.0, 300.0), Pt::new(1400.0, 320.0), &brush, false);
-                omadesign::paint::stroke_to(&mut pm, Pt::new(300.0, 500.0), Pt::new(1300.0, 520.0), &brush, false);
-                omadesign::paint::stroke_to(&mut pm, Pt::new(400.0, 700.0), Pt::new(1200.0, 720.0), &brush, false);
-                *px = omadesign::document::Pixels::from_pixmap(&pm);
-            }
+        if let Some(px) = s.doc.layers[0].kind.pixels_mut()
+            && let Some(mut pm) = px.to_pixmap()
+        {
+            let brush = omadesign::paint::Brush {
+                size: 64.0,
+                hardness: 0.3,
+                opacity: 0.9,
+                flow: 0.9,
+                spacing: 0.15,
+                color: Rgba::from_hex(0xE5484D),
+            };
+            // Draw a few strokes
+            omadesign::paint::stroke_to(
+                &mut pm,
+                Pt::new(200.0, 300.0),
+                Pt::new(1400.0, 320.0),
+                &brush,
+                false,
+            );
+            omadesign::paint::stroke_to(
+                &mut pm,
+                Pt::new(300.0, 500.0),
+                Pt::new(1300.0, 520.0),
+                &brush,
+                false,
+            );
+            omadesign::paint::stroke_to(
+                &mut pm,
+                Pt::new(400.0, 700.0),
+                Pt::new(1200.0, 720.0),
+                &brush,
+                false,
+            );
+            *px = omadesign::document::Pixels::from_pixmap(&pm);
         }
         // Add some vector shapes on top
         let star = Shape::new(
@@ -93,7 +121,10 @@ fn main() {
                 stroke: None,
             },
         );
-        s.commit(omadesign::document::Cmd::AddShape { layer: 1, shape: star });
+        s.commit(omadesign::document::Cmd::AddShape {
+            layer: 1,
+            shape: star,
+        });
         save_jpeg(&s.doc, &format!("{out_dir}/paint.jpg"), 90);
     }
 
@@ -118,7 +149,7 @@ fn main() {
         let mut s = Studio::new();
         s.show_welcome = false;
         s.doc = omadesign::document::Document::new("type", 1600.0, 800.0, 72.0);
-        let mut run = TypeRun {
+        let run = TypeRun {
             origin: Pt::new(120.0, 240.0),
             content: "Inter  ·  Google Fonts  ·  palettes".into(),
             px: 72.0,
@@ -134,10 +165,16 @@ fn main() {
         omadesign::text::fill_contours(&mut Geom::Text(run.clone()));
         let mut g = Geom::Text(run);
         omadesign::text::fill_contours(&mut g);
-        let shape = Shape::new(g, Style { fill: Fill::Solid(Rgba::from_hex(0x073B4C)), stroke: None });
+        let shape = Shape::new(
+            g,
+            Style {
+                fill: Fill::Solid(Rgba::from_hex(0x073B4C)),
+                stroke: None,
+            },
+        );
         s.commit(omadesign::document::Cmd::AddShape { layer: 1, shape });
 
-        let mut run2 = TypeRun {
+        let run2 = TypeRun {
             origin: Pt::new(120.0, 420.0),
             content: " Compound  →  Union  Subtract  Intersect ".into(),
             px: 42.0,
@@ -146,8 +183,17 @@ fn main() {
         };
         let mut g2 = Geom::Text(run2);
         omadesign::text::fill_contours(&mut g2);
-        let shape2 = Shape::new(g2, Style { fill: Fill::Solid(Rgba::from_hex(0xE5484D)), stroke: None });
-        s.commit(omadesign::document::Cmd::AddShape { layer: 1, shape: shape2 });
+        let shape2 = Shape::new(
+            g2,
+            Style {
+                fill: Fill::Solid(Rgba::from_hex(0xE5484D)),
+                stroke: None,
+            },
+        );
+        s.commit(omadesign::document::Cmd::AddShape {
+            layer: 1,
+            shape: shape2,
+        });
 
         // Add a palette swatch strip as shapes
         let swatches = [0xFFD166u32, 0x06D6A0, 0x118AB2, 0xEF476F, 0xFFC6FF];
@@ -158,9 +204,15 @@ fn main() {
                     size: Pt::new(100.0, 100.0),
                     radius: 12.0,
                 },
-                Style { fill: Fill::Solid(Rgba::from_hex(hex)), stroke: None },
+                Style {
+                    fill: Fill::Solid(Rgba::from_hex(hex)),
+                    stroke: None,
+                },
             );
-            s.commit(omadesign::document::Cmd::AddShape { layer: 1, shape: sq });
+            s.commit(omadesign::document::Cmd::AddShape {
+                layer: 1,
+                shape: sq,
+            });
         }
         save_jpeg(&s.doc, &format!("{out_dir}/type.jpg"), 90);
     }
@@ -173,7 +225,10 @@ fn main() {
         // Place a few icons as polys
         let icons = ["house", "heart", "star", "gear", "camera", "globe"];
         for (i, name) in icons.iter().enumerate() {
-            let icon = shape_browser::Icon { name, lib: "Phosphor" };
+            let icon = shape_browser::Icon {
+                name,
+                lib: "Phosphor",
+            };
             if let Ok(svg) = shape_browser::fetch_svg(&icon) {
                 if let Ok(mut geom) = shape_browser::svg_to_geom(&svg, 180.0) {
                     let col = (i as f32 * 60.0) as u32;
@@ -184,16 +239,33 @@ fn main() {
                     let bbox = geom.bbox();
                     let off = Pt::new(x, y) - bbox.min;
                     geom.translate(off);
-                    let shape = Shape::new(geom, Style { fill: Fill::Solid(Rgba::from_hex(0x073B4C + col * 100)), stroke: None });
+                    let shape = Shape::new(
+                        geom,
+                        Style {
+                            fill: Fill::Solid(Rgba::from_hex(0x073B4C + col * 100)),
+                            stroke: None,
+                        },
+                    );
                     s.commit(omadesign::document::Cmd::AddShape { layer: 1, shape });
                 }
             } else {
                 // Fallback star
                 let star = Shape::new(
-                    Geom::Star { center: Pt::new(200.0 + i as f32 * 250.0, 300.0), outer: Pt::splat(80.0), inner: 0.4, points: 5 },
-                    Style { fill: Fill::Solid(Rgba::from_hex(0x4F8CFF)), stroke: None },
+                    Geom::Star {
+                        center: Pt::new(200.0 + i as f32 * 250.0, 300.0),
+                        outer: Pt::splat(80.0),
+                        inner: 0.4,
+                        points: 5,
+                    },
+                    Style {
+                        fill: Fill::Solid(Rgba::from_hex(0x4F8CFF)),
+                        stroke: None,
+                    },
                 );
-                s.commit(omadesign::document::Cmd::AddShape { layer: 1, shape: star });
+                s.commit(omadesign::document::Cmd::AddShape {
+                    layer: 1,
+                    shape: star,
+                });
             }
         }
         save_jpeg(&s.doc, &format!("{out_dir}/shapes.jpg"), 90);
@@ -214,7 +286,11 @@ fn main() {
                     radius: 16.0,
                 },
                 Style {
-                    fill: Fill::Solid(Rgba::from_hex(match i { 0 => 0xFF6B6B, 1 => 0x4ECDC4, _ => 0x45B7D1 })),
+                    fill: Fill::Solid(Rgba::from_hex(match i {
+                        0 => 0xFF6B6B,
+                        1 => 0x4ECDC4,
+                        _ => 0x45B7D1,
+                    })),
                     stroke: None,
                 },
             );
@@ -227,8 +303,17 @@ fn main() {
             };
             let mut g = Geom::Text(label);
             omadesign::text::fill_contours(&mut g);
-            let tshape = Shape::new(g, Style { fill: Fill::Solid(Rgba::WHITE), stroke: None });
-            s.commit(omadesign::document::Cmd::AddShape { layer: 1, shape: tshape });
+            let tshape = Shape::new(
+                g,
+                Style {
+                    fill: Fill::Solid(Rgba::WHITE),
+                    stroke: None,
+                },
+            );
+            s.commit(omadesign::document::Cmd::AddShape {
+                layer: 1,
+                shape: tshape,
+            });
         }
         save_jpeg(&s.doc, &format!("{out_dir}/assets.jpg"), 90);
     }

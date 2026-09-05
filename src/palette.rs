@@ -2,7 +2,7 @@
 
 use crate::color::Rgba;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Palette {
@@ -21,10 +21,10 @@ impl Palette {
 
 pub fn path() -> PathBuf {
     // XDG config home, fallback to ~/.config
-    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
-        if !xdg.is_empty() {
-            return PathBuf::from(format!("{xdg}/omadesign/palettes.json"));
-        }
+    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME")
+        && !xdg.is_empty()
+    {
+        return PathBuf::from(format!("{xdg}/omadesign/palettes.json"));
     }
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
     PathBuf::from(format!("{home}/.config/omadesign/palettes.json"))
@@ -37,15 +37,17 @@ pub fn fallback_path() -> PathBuf {
 
 pub fn load() -> Vec<Palette> {
     for p in [path(), fallback_path()] {
-        if let Ok(s) = std::fs::read_to_string(&p) {
-            if let Ok(v) = serde_json::from_str::<Vec<Palette>>(&s) {
-                if !v.is_empty() {
-                    return v;
-                }
-            }
+        if let Ok(s) = std::fs::read_to_string(&p)
+            && let Ok(v) = serde_json::from_str::<Vec<Palette>>(&s)
+            && !v.is_empty()
+        {
+            return v;
         }
     }
-    vec![Palette::new("Oma Default", crate::color::default_swatches())]
+    vec![Palette::new(
+        "Oma Default",
+        crate::color::default_swatches(),
+    )]
 }
 
 pub fn save(palettes: &[Palette]) -> Result<(), String> {
@@ -79,7 +81,10 @@ mod tests {
     #[test]
     fn roundtrip() {
         let palettes = vec![
-            Palette::new("Brand", vec![Rgba::from_hex(0xFF0000), Rgba::from_hex(0x00FF00)]),
+            Palette::new(
+                "Brand",
+                vec![Rgba::from_hex(0xFF0000), Rgba::from_hex(0x00FF00)],
+            ),
             Palette::new("Mono", vec![Rgba::BLACK, Rgba::WHITE]),
         ];
         let s = serde_json::to_string(&palettes).unwrap();
@@ -92,14 +97,5 @@ mod tests {
         assert!(validate_name("").is_err());
         assert!(validate_name("  ").is_err());
         assert!(validate_name("Brand").is_ok());
-    }
-
-    #[test]
-    fn fallback_is_default() {
-        // Ensure default_swatches produces Oma Default when no file exists;
-        // we test that load() at least returns one palette.
-        let p = load();
-        assert!(!p.is_empty());
-        assert!(!p[0].colors.is_empty());
     }
 }

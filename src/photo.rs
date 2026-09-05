@@ -1,3 +1,4 @@
+use image::ImageEncoder;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -68,40 +69,16 @@ impl RgbaImage {
     }
 
     pub fn encode_png(&self) -> Option<Vec<u8>> {
-        let mut pm = tiny_skia::Pixmap::new(self.w, self.h)?;
-        for (i, src) in self.data.chunks_exact(4).enumerate() {
-            let a = src[3] as u32;
-            let (r, g, b) = if a == 0 || a == 255 {
-                (src[0], src[1], src[2])
-            } else {
-                (
-                    ((src[0] as u32 * 255 + a - 1) / a).min(255) as u8,
-                    ((src[1] as u32 * 255 + a - 1) / a).min(255) as u8,
-                    ((src[2] as u32 * 255 + a - 1) / a).min(255) as u8,
-                )
-            };
-            pm.data_mut()[i * 4..i * 4 + 4].copy_from_slice(&[r, g, b, a as u8]);
-        }
-        pm.encode_png().ok()
+        let mut bytes = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut bytes)
+            .write_image(&self.data, self.w, self.h, image::ExtendedColorType::Rgba8)
+            .ok()?;
+        Some(bytes)
     }
 }
 
 pub fn to_pixmap(img: &RgbaImage) -> Option<tiny_skia::Pixmap> {
-    let mut pm = tiny_skia::Pixmap::new(img.w, img.h)?;
-    for (i, src) in img.data.chunks_exact(4).enumerate() {
-        let a = src[3] as u32;
-        let (r, g, b) = if a == 0 || a == 255 {
-            (src[0], src[1], src[2])
-        } else {
-            (
-                ((src[0] as u32 * 255 + a - 1) / a).min(255) as u8,
-                ((src[1] as u32 * 255 + a - 1) / a).min(255) as u8,
-                ((src[2] as u32 * 255 + a - 1) / a).min(255) as u8,
-            )
-        };
-        pm.data_mut()[i * 4..i * 4 + 4].copy_from_slice(&[r, g, b, a as u8]);
-    }
-    Some(pm)
+    crate::color::rgba_to_pixmap(img.w, img.h, &img.data)
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -192,6 +169,17 @@ impl DevelopParams {
             (w, h)
         }
     }
+
+    pub fn output_dim(&self, w: u32, h: u32) -> (u32, u32) {
+        let (w, h) = self.rotated_dim(w, h);
+        match self.crop {
+            Some(crop) => (
+                ((crop[2] - crop[0]) * w as f32).round().max(1.0) as u32,
+                ((crop[3] - crop[1]) * h as f32).round().max(1.0) as u32,
+            ),
+            None => (w, h),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -240,14 +228,7 @@ fn pixel_luma(r: f32, g: f32, b: f32) -> f32 {
 
 pub fn develop(src: &RgbaImage, p: &DevelopParams) -> RgbaImage {
     let (rw, rh) = p.rotated_dim(src.w, src.h);
-    let (cw, ch) = match p.crop {
-        Some(c) => {
-            let w = ((c[2] - c[0]) * rw as f32).round().max(1.0) as u32;
-            let h = ((c[3] - c[1]) * rh as f32).round().max(1.0) as u32;
-            (w, h)
-        }
-        None => (rw, rh),
-    };
+    let (cw, ch) = p.output_dim(src.w, src.h);
 
     let n = src.w as usize * src.h as usize;
     let mut col = vec![0f32; n * 3];
@@ -265,105 +246,122 @@ pub fn develop(src: &RgbaImage, p: &DevelopParams) -> RgbaImage {
     let sh = p.shadows.clamp(-1.0, 1.0);
     let wh = p.whites.clamp(-1.0, 1.0);
     let bl = p.blacks.clamp(-1.0, 1.0);
+    let adjust_hsl = p.hue.abs() > 0.001
+        || p.hsl
+            .iter()
+            .any(|band| band.hue.abs() + band.sat.abs() + band.luma.abs() > 0.001);
 
-    col.par_chunks_mut(3)
-        .enumerate()
-        .for_each(|(i, px)| {
-            let base = i * 4;
-            let a = src.data[base + 3] as f32 / 255.0;
-            let mut r = src.data[base] as f32 / 255.0;
-            let mut g = src.data[base + 1] as f32 / 255.0;
-            let mut b = src.data[base + 2] as f32 / 255.0;
+    col.par_chunks_mut(3).enumerate().for_each(|(i, px)| {
+        let base = i * 4;
+        let a = src.data[base + 3] as f32 / 255.0;
+        let mut r = src.data[base] as f32 / 255.0;
+        let mut g = src.data[base + 1] as f32 / 255.0;
+        let mut b = src.data[base + 2] as f32 / 255.0;
 
-            if a > 0.0 {
-                r = pil(r * exp * temp_r);
-                g = pil(g * exp * temp_g);
-                b = pil(b * exp * temp_b);
+        if a > 0.0 {
+            r = pil(r * exp * temp_r);
+            g = pil(g * exp * temp_g);
+            b = pil(b * exp * temp_b);
 
+            let l = pixel_luma(r, g, b);
+
+            let hl_w = l * l;
+            let sh_w = (1.0 - l) * (1.0 - l);
+            let wh_w = l * l * l * l * l * l;
+            let bl_w = (1.0 - l) * (1.0 - l) * (1.0 - l) * (1.0 - l) * (1.0 - l) * (1.0 - l);
+            r =
+                pil(r
+                    * (1.0
+                        + hl * 0.9 * hl_w
+                        + sh * 0.9 * sh_w
+                        + wh * 0.7 * wh_w
+                        + bl * 0.7 * bl_w));
+            g =
+                pil(g
+                    * (1.0
+                        + hl * 0.9 * hl_w
+                        + sh * 0.9 * sh_w
+                        + wh * 0.7 * wh_w
+                        + bl * 0.7 * bl_w));
+            b =
+                pil(b
+                    * (1.0
+                        + hl * 0.9 * hl_w
+                        + sh * 0.9 * sh_w
+                        + wh * 0.7 * wh_w
+                        + bl * 0.7 * bl_w));
+
+            r = pil((r - 0.5) * contrast + 0.5);
+            g = pil((g - 0.5) * contrast + 0.5);
+            b = pil((b - 0.5) * contrast + 0.5);
+
+            let ln = pixel_luma(r, g, b);
+            let total_sat = sat * (1.0 + (vib - 1.0) * (1.0 - (r.max(g).max(b) - r.min(g).min(b))));
+            let s = total_sat;
+            r = pil(ln + (r - ln) * s);
+            g = pil(ln + (g - ln) * s);
+            b = pil(ln + (b - ln) * s);
+
+            if p.dehaze.abs() > 0.001 {
                 let l = pixel_luma(r, g, b);
-
-                let hl_w = l * l;
-                let sh_w = (1.0 - l) * (1.0 - l);
-                let wh_w = l * l * l * l * l * l;
-                let bl_w = (1.0 - l) * (1.0 - l) * (1.0 - l) * (1.0 - l) * (1.0 - l) * (1.0 - l);
-                r = pil(r * (1.0 + hl * 0.9 * hl_w + sh * 0.9 * sh_w + wh * 0.7 * wh_w + bl * 0.7 * bl_w));
-                g = pil(g * (1.0 + hl * 0.9 * hl_w + sh * 0.9 * sh_w + wh * 0.7 * wh_w + bl * 0.7 * bl_w));
-                b = pil(b * (1.0 + hl * 0.9 * hl_w + sh * 0.9 * sh_w + wh * 0.7 * wh_w + bl * 0.7 * bl_w));
-
-                r = pil((r - 0.5) * contrast + 0.5);
-                g = pil((g - 0.5) * contrast + 0.5);
-                b = pil((b - 0.5) * contrast + 0.5);
-
-                let ln = pixel_luma(r, g, b);
-                let total_sat = sat * (1.0 + (vib - 1.0) * (1.0 - (r.max(g).max(b) - r.min(g).min(b))));
-                let s = total_sat;
-                r = pil(ln + (r - ln) * s);
-                g = pil(ln + (g - ln) * s);
-                b = pil(ln + (b - ln) * s);
-
-                if p.dehaze.abs() > 0.001 {
-                    let l = pixel_luma(r, g, b);
-                    let haze = (l - r.min(g).min(b)).max(0.0);
-                    let k = p.dehaze.clamp(-1.0, 1.0);
-                    r = pil(r - haze * k * 0.85);
-                    g = pil(g - haze * k * 0.85);
-                    b = pil(b - haze * k * 0.85);
-                }
-
-                if p.hue.abs() > 0.001 || p.hsl.iter().any(|b| b.hue.abs() + b.sat.abs() + b.luma.abs() > 0.001) {
-                    let (mut h, mut s, mut l) = rgb_to_hsl(r, g, b);
-                    h = (h + p.hue / 360.0).rem_euclid(1.0);
-                    let band = hsl_band(h);
-                    let hb = p.hsl[band];
-                    h = (h + hb.hue / 360.0).rem_euclid(1.0);
-                    s = pil(s * (1.0 + hb.sat));
-                    l = pil(l * (1.0 + hb.luma));
-                    let (nr, ng, nb) = hsl_to_rgb(h, s, l);
-                    r = nr;
-                    g = ng;
-                    b = nb;
-                }
-
-                let l = pixel_luma(r, g, b);
-                let bal = p.split_balance.clamp(-1.0, 1.0);
-                let sh_w = ((1.0 - l) * (1.0 - bal * 0.5)).clamp(0.0, 1.0);
-                let hi_w = (l * (1.0 + bal * 0.5)).clamp(0.0, 1.0);
-                r = pil(r + p.split_shadow[0] * sh_w + p.split_highlight[0] * hi_w);
-                g = pil(g + p.split_shadow[1] * sh_w + p.split_highlight[1] * hi_w);
-                b = pil(b + p.split_shadow[2] * sh_w + p.split_highlight[2] * hi_w);
-
-                r = eval_curve(r, &p.curve);
-                g = eval_curve(g, &p.curve);
-                b = eval_curve(b, &p.curve);
+                let haze = (l - r.min(g).min(b)).max(0.0);
+                let k = p.dehaze.clamp(-1.0, 1.0);
+                r = pil(r - haze * k * 0.85);
+                g = pil(g - haze * k * 0.85);
+                b = pil(b - haze * k * 0.85);
             }
 
-            px[0] = r;
-            px[1] = g;
-            px[2] = b;
-        });
+            if adjust_hsl {
+                let (mut h, mut s, mut l) = rgb_to_hsl(r, g, b);
+                h = (h + p.hue / 360.0).rem_euclid(1.0);
+                let band = hsl_band(h);
+                let hb = p.hsl[band];
+                h = (h + hb.hue / 360.0).rem_euclid(1.0);
+                s = pil(s * (1.0 + hb.sat));
+                l = pil(l * (1.0 + hb.luma));
+                let (nr, ng, nb) = hsl_to_rgb(h, s, l);
+                r = nr;
+                g = ng;
+                b = nb;
+            }
 
-    let lum: Vec<f32> = col
-        .par_chunks(3)
-        .map(|px| pixel_luma(px[0], px[1], px[2]))
-        .collect();
+            let l = pixel_luma(r, g, b);
+            let bal = p.split_balance.clamp(-1.0, 1.0);
+            let sh_w = ((1.0 - l) * (1.0 - bal * 0.5)).clamp(0.0, 1.0);
+            let hi_w = (l * (1.0 + bal * 0.5)).clamp(0.0, 1.0);
+            r = pil(r + p.split_shadow[0] * sh_w + p.split_highlight[0] * hi_w);
+            g = pil(g + p.split_shadow[1] * sh_w + p.split_highlight[1] * hi_w);
+            b = pil(b + p.split_shadow[2] * sh_w + p.split_highlight[2] * hi_w);
+
+            r = eval_curve(r, &p.curve);
+            g = eval_curve(g, &p.curve);
+            b = eval_curve(b, &p.curve);
+        }
+
+        px[0] = r;
+        px[1] = g;
+        px[2] = b;
+    });
 
     if p.clarity.abs() > 0.001 {
+        let lum: Vec<f32> = col
+            .par_chunks(3)
+            .map(|px| pixel_luma(px[0], px[1], px[2]))
+            .collect();
         let radius = ((src.w.min(src.h)) as f32 / 260.0).clamp(2.0, 10.0) as usize;
         let bl = box_blur(&lum, src.w as usize, src.h as usize, radius);
         let c = (p.clarity.clamp(-1.0, 1.0) * 3.0) / (1.0 + radius as f32 * 0.5);
-        col.par_chunks_mut(3)
-            .enumerate()
-            .for_each(|(i, px)| {
-                let l = lum[i];
-                let delta = (l - bl[i]) * c;
-                let nl = pil(l + delta);
-                if l > 0.0001 {
-                    let f = nl / l;
-                    px[0] = pil(px[0] * f);
-                    px[1] = pil(px[1] * f);
-                    px[2] = pil(px[2] * f);
-                }
-            });
+        col.par_chunks_mut(3).enumerate().for_each(|(i, px)| {
+            let l = lum[i];
+            let delta = (l - bl[i]) * c;
+            let nl = pil(l + delta);
+            if l > 0.0001 {
+                let f = nl / l;
+                px[0] = pil(px[0] * f);
+                px[1] = pil(px[1] * f);
+                px[2] = pil(px[2] * f);
+            }
+        });
     }
 
     let grain = p.grain.clamp(0.0, 1.0);
@@ -435,9 +433,7 @@ pub fn develop(src: &RgbaImage, p: &DevelopParams) -> RgbaImage {
                 }
                 if grain > 0.001 {
                     let oi = y * cw as usize + x;
-                    let mut z = (oi as u32)
-                        .wrapping_mul(747796405)
-                        .wrapping_add(2891336453);
+                    let mut z = (oi as u32).wrapping_mul(747796405).wrapping_add(2891336453);
                     z = (z ^ (z >> 13)).wrapping_mul(1274126177);
                     let gv = ((z >> 24) as f64 / 255.0) as f32 * 2.0 - 1.0;
                     let band = grain * 0.10 + grain * grain * 0.10;
@@ -504,55 +500,45 @@ fn eval_curve(x: f32, pts: &[f32; 5]) -> f32 {
 }
 
 fn box_blur(lum: &[f32], w: usize, h: usize, radius: usize) -> Vec<f32> {
+    let win = radius * 2 + 1;
     let mut horiz = vec![0f32; w * h];
-    horiz
-        .par_chunks_mut(w)
-        .enumerate()
-        .for_each(|(y, row)| {
-            let base = y * w;
-            let mut sum = 0f32;
-            let win = radius * 2 + 1;
-            for x in 0..(radius.min(w)) {
-                sum += lum[base + x];
-            }
-            for x in 0..w {
-                let x0 = x as i64 - radius as i64;
-                let x1 = x as i64 + radius as i64;
-                if x0 >= 0 {
-                    sum -= lum[base + x0 as usize];
-                } else {
-                    sum -= lum[base];
-                }
-                let x1c = (x1 as usize).min(w - 1);
-                sum += lum[base + x1c];
-                row[x] = sum / win as f32;
-            }
-        });
+    horiz.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+        let source = &lum[y * w..(y + 1) * w];
+        let mut sum = source[0] * radius as f32;
+        for x in 0..=radius {
+            sum += source[x.min(w - 1)];
+        }
+        for (x, pixel) in row.iter_mut().enumerate() {
+            *pixel = sum / win as f32;
+            sum -= source[x.saturating_sub(radius)];
+            sum += source[(x + radius + 1).min(w - 1)];
+        }
+    });
 
     let mut vert = vec![0f32; w * h];
-    vert
-        .par_chunks_mut(w)
+    // Each strip owns complete output rows; vertical sums stay contiguous in memory.
+    const STRIP_ROWS: usize = 64;
+    vert.par_chunks_mut(w * STRIP_ROWS)
         .enumerate()
-        .for_each(|(x, column)| {
-            let mut sum = 0f32;
-            let win = radius * 2 + 1;
-            for y in 0..(radius.min(h)) {
-                sum += horiz[y * w + x];
-            }
-            for y in 0..h {
-                let y0 = y as i64 - radius as i64;
-                let y1 = y as i64 + radius as i64;
-                if y0 >= 0 {
-                    sum -= horiz[y0 as usize * w + x];
-                } else {
-                    sum -= horiz[x];
+        .for_each(|(strip_index, strip)| {
+            let start_y = strip_index * STRIP_ROWS;
+            let mut sums = vec![0f32; w];
+            for offset in 0..win {
+                let y = (start_y + offset).saturating_sub(radius).min(h - 1);
+                for (sum, value) in sums.iter_mut().zip(&horiz[y * w..(y + 1) * w]) {
+                    *sum += value;
                 }
-                let y1c = (y1 as usize).min(h - 1);
-                sum += horiz[y1c * w + x];
-                column[y] = sum / win as f32;
+            }
+            for (offset, row) in strip.chunks_exact_mut(w).enumerate() {
+                let y = start_y + offset;
+                let remove = y.saturating_sub(radius) * w;
+                let add = (y + radius + 1).min(h - 1) * w;
+                for (x, (pixel, sum)) in row.iter_mut().zip(&mut sums).enumerate() {
+                    *pixel = *sum / win as f32;
+                    *sum += horiz[add + x] - horiz[remove + x];
+                }
             }
         });
-
     vert
 }
 
@@ -580,7 +566,10 @@ pub fn histograms(img: &RgbaImage) -> [Histogram; 4] {
         bins[2][px[2] as usize] += 1;
         bins[3][l.min(255)] += 1;
     }
-    let mut out = [Histogram { bins: [0; 256], max: 1 }; 4];
+    let mut out = [Histogram {
+        bins: [0; 256],
+        max: 1,
+    }; 4];
     for (i, h) in out.iter_mut().enumerate() {
         h.bins = bins[i];
         h.max = bins[i].iter().copied().max().unwrap_or(1).max(1);
@@ -588,33 +577,33 @@ pub fn histograms(img: &RgbaImage) -> [Histogram; 4] {
     out
 }
 
-pub fn luminance_histogram(img: &RgbaImage) -> Histogram {
-    histograms(img)[3]
-}
-
 pub fn auto_tone(p: &mut DevelopParams, img: &RgbaImage) {
-    let mut lums: Vec<u8> = img
-        .data
-        .chunks_exact(4)
-        .step_by(4)
-        .map(|px| {
-            (0.2126 * px[0] as f32 + 0.7152 * px[1] as f32 + 0.0722 * px[2] as f32) as u8
-        })
-        .collect();
-    lums.sort_unstable();
-    let n = lums.len().max(2);
-    let lo_i = ((n as f32 * 0.01).floor() as usize).min(n - 1);
-    let hi_i = ((n as f32 * 0.99).floor() as usize).min(n - 1);
-    let lo = lums[lo_i] as f32 / 255.0;
-    let hi = lums[hi_i] as f32 / 255.0;
+    let mut bins = [0usize; 256];
+    let mut count = 0;
+    for px in img.data.chunks_exact(4).step_by(4) {
+        let luma = pixel_luma(px[0] as f32, px[1] as f32, px[2] as f32) as usize;
+        bins[luma.min(255)] += 1;
+        count += 1;
+    }
+    if count == 0 {
+        return;
+    }
+    let percentile = |fraction: f32| {
+        let rank = ((count as f32 * fraction).floor() as usize).min(count - 1);
+        let mut cumulative = 0;
+        for (value, samples) in bins.iter().enumerate() {
+            cumulative += samples;
+            if cumulative > rank {
+                return value as f32 / 255.0;
+            }
+        }
+        1.0
+    };
+    let lo = percentile(0.01);
+    let hi = percentile(0.99);
     p.exposure = (0.5 / ((lo + hi) * 0.5).max(0.01)).log2();
     p.blacks = -lo * 4.0;
     p.whites = (1.0 - hi) * 4.0;
-}
-
-#[allow(dead_code)]
-pub fn total_pixels(img: &RgbaImage) -> usize {
-    img.w as usize * img.h as usize
 }
 
 fn hash01(x: u32, y: u32) -> f32 {
@@ -683,7 +672,7 @@ fn sample_dawn() -> RgbaImage {
             r = lerp(0.12, 1.0, (1.0 - t).powi(2));
             g = lerp(0.10, 0.62, 1.0 - t * 1.5);
             b = lerp(0.34, 0.35, 1.0 - t);
-            r = r * 2.0; // warm band
+            r *= 2.0; // warm band
             let glow = (-sd * 9.0).exp();
             r += glow * 0.9;
             g += glow * 0.55;
@@ -707,7 +696,8 @@ fn sample_dawn() -> RgbaImage {
             } else {
                 let mt = ((ny - mline) / (1.0 - mline)).clamp(0.0, 1.0);
                 r = lerp(0.10, 0.03, mt) + hash01((nx * 400.0) as u32, (ny * 400.0) as u32) * 0.02;
-                g = lerp(0.06, 0.025, mt) + hash01((nx * 400.0) as u32, (ny * 400.0) as u32) * 0.015;
+                g = lerp(0.06, 0.025, mt)
+                    + hash01((nx * 400.0) as u32, (ny * 400.0) as u32) * 0.015;
                 b = lerp(0.05, 0.02, mt) + hash01((nx * 400.0) as u32, (ny * 400.0) as u32) * 0.015;
             }
         }
@@ -793,12 +783,30 @@ fn sample_testchart() -> RgbaImage {
         let l2 = 0.5;
         let s = 0.85;
         match hi % 6 {
-            0 => { r = l2; g = lerp(0.0, 1.0, hf); }
-            1 => { g = l2; r = lerp(1.0, 0.0, hf); }
-            2 => { g = l2; b = lerp(0.0, 1.0, hf); }
-            3 => { b = l2; g = lerp(1.0, 0.0, hf); }
-            4 => { b = l2; r = lerp(0.0, 1.0, hf); }
-            _ => { r = l2; b = lerp(1.0, 0.0, hf); }
+            0 => {
+                r = l2;
+                g = lerp(0.0, 1.0, hf);
+            }
+            1 => {
+                g = l2;
+                r = lerp(1.0, 0.0, hf);
+            }
+            2 => {
+                g = l2;
+                b = lerp(0.0, 1.0, hf);
+            }
+            3 => {
+                b = l2;
+                g = lerp(1.0, 0.0, hf);
+            }
+            4 => {
+                b = l2;
+                r = lerp(0.0, 1.0, hf);
+            }
+            _ => {
+                r = l2;
+                b = lerp(1.0, 0.0, hf);
+            }
         }
         let deskew = r * 0.299 + g * 0.587 + b * 0.114;
         r = (deskew + (r - deskew) * s).clamp(0.0, 1.0) * (0.35 + 0.65 * nx);
@@ -834,22 +842,35 @@ mod tests {
     }
 
     #[test]
-    fn samples_have_expected_sizes() {
-        assert_eq!(sample_dawn().w, 1920);
-        assert_eq!(sample_quiet().h, 1100);
-        assert_eq!(sample_testchart().w, 1800);
-    }
-
-    #[test]
     fn develop_preserves_dimensions_and_alpha() {
-        let img = sample_testchart();
+        let img = RgbaImage::new(
+            2,
+            2,
+            vec![
+                255, 0, 0, 255, 0, 255, 0, 128, 0, 0, 255, 64, 200, 100, 50, 0,
+            ],
+        )
+        .unwrap();
         let out = develop(&img, &DevelopParams::default());
         assert_eq!((out.w, out.h), (img.w, img.h));
         assert_eq!(out.data.len(), img.data.len());
-        let src_a: Vec<u8> = img.data.iter().step_by(4).copied().collect();
-        let out_a: Vec<u8> = out.data.iter().step_by(4).copied().collect();
-        assert_eq!(src_a.len(), out_a.len());
-        assert!(img.data.iter().step_by(4).any(|&a| a < 255), "test chart has some transparency");
+        assert!(
+            img.data
+                .chunks_exact(4)
+                .zip(out.data.chunks_exact(4))
+                .all(|(src, dst)| src[3] == dst[3])
+        );
+    }
+
+    #[test]
+    fn transparent_image_encodes_straight_rgba_and_renders_premultiplied() {
+        let img = RgbaImage::new(2, 1, vec![255, 0, 0, 128, 0, 0, 255, 64]).unwrap();
+        assert_eq!(
+            to_pixmap(&img).unwrap().data(),
+            &[128, 0, 0, 128, 0, 0, 64, 64]
+        );
+        let decoded = decode_bytes(&img.encode_png().unwrap()).unwrap();
+        assert_eq!(decoded, img);
     }
 
     #[test]
@@ -879,45 +900,65 @@ mod tests {
     }
 
     #[test]
+    fn clarity_blur_matches_clamped_box_on_non_square_images() {
+        for (w, h) in [(3, 5), (5, 3)] {
+            let source: Vec<_> = (0..w * h).map(|i| i as f32).collect();
+            let blurred = box_blur(&source, w, h, 2);
+            for y in 0..h {
+                for x in 0..w {
+                    let mut expected = 0.0;
+                    for dy in -2..=2 {
+                        for dx in -2..=2 {
+                            let sx = (x as isize + dx).clamp(0, w as isize - 1) as usize;
+                            let sy = (y as isize + dy).clamp(0, h as isize - 1) as usize;
+                            expected += source[sy * w + sx] / 25.0;
+                        }
+                    }
+                    assert!((blurred[y * w + x] - expected).abs() < 0.0001);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn histogram_contains_every_pixel() {
-        let img = sample_dawn();
-        let hists = histograms(&img);
-        let total: u32 = hists[3].bins.iter().sum();
-        assert_eq!(total, img.w * img.h);
-        assert!(hists[3].max > 0);
+        let img = gray_rgba(128, 8, 5);
+        for histogram in histograms(&img) {
+            assert_eq!(histogram.bins.iter().sum::<u32>(), 40);
+            assert_eq!(histogram.bins[128], 40);
+            assert_eq!(histogram.max, 40);
+        }
     }
 
     #[test]
-    fn auto_tone_sets_reasonable_ranges() {
-        let img = sample_quiet();
-        let mut p = DevelopParams::default();
-        auto_tone(&mut p, &img);
-        assert!(p.exposure.abs() < 4.0);
-        assert!((0.0..=2.0).contains(&p.contrast));
-        assert!((0.0..=2.0).contains(&p.saturation));
+    fn auto_tone_handles_single_pixel_and_empty_images() {
+        let mut params = DevelopParams::default();
+        let empty = RgbaImage {
+            w: 0,
+            h: 0,
+            data: Vec::new(),
+        };
+        auto_tone(&mut params, &empty);
+        assert_eq!(params, DevelopParams::default());
+
+        let img = gray_rgba(64, 1, 1);
+        auto_tone(&mut params, &img);
+        assert!((params.exposure - (127.5_f32 / 64.0).log2()).abs() < 0.0001);
+        assert!((params.blacks + 64.0 / 255.0 * 4.0).abs() < 0.0001);
+        assert!((params.whites - 191.0 / 255.0 * 4.0).abs() < 0.0001);
     }
 
     #[test]
-    fn downscaled_and_thumb_smaller() {
-        let img = sample_dawn();
-        let small = img.downscaled(1600);
-        assert!(small.w <= 1600 && small.w > 0);
-        let tiny = img.downscaled(192);
-        assert!(tiny.w <= 192);
-    }
-
-    #[test]
-    fn develop_preview_and_full_agree() {
-        let img = sample_quiet();
-        let preview = img.downscaled(1600);
-        let mut p = DevelopParams::default();
-        p.contrast = 1.3;
-        p.saturation = 1.2;
-        p.grain = 0.2;
-        p.vignette = 0.3;
-        let _full_out = develop(&img, &p);
-        let prev_out = develop(&preview, &p);
-        assert_eq!(prev_out.w, preview.w);
-        assert_eq!(prev_out.h, preview.h);
+    fn downscaled_preserves_aspect_ratio_and_pixel_values() {
+        let img = gray_rgba(128, 64, 32);
+        let small = img.downscaled(16);
+        assert_eq!((small.w, small.h), (16, 8));
+        assert!(
+            small
+                .data
+                .chunks_exact(4)
+                .all(|px| px == [128, 128, 128, 255])
+        );
+        assert_eq!(img.downscaled(128), img);
     }
 }

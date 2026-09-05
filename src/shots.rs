@@ -89,10 +89,12 @@ fn design(s: &mut Studio) {
     s.tool = Tool::Select;
     s.show_welcome = false;
     s.show_rulers = true;
-    if let Some(shapes) = s.doc.layers.get(1).and_then(|l| l.kind.shapes()) {
-        if let Some(star) = shapes.iter().find(|sh| matches!(sh.geom, Geom::Star { .. })) {
-            s.selection = vec![(1, star.id)];
-        }
+    if let Some(shapes) = s.doc.layers.get(1).and_then(|l| l.kind.shapes())
+        && let Some(star) = shapes
+            .iter()
+            .find(|sh| matches!(sh.geom, Geom::Star { .. }))
+    {
+        s.selection = vec![(1, star.id)];
     }
     s.need_fit = true;
     s.status = "Move V · handles scale · the top handle rotates".into();
@@ -163,7 +165,13 @@ fn pixel(s: &mut Studio) {
                 spacing: 0.12,
                 color: Rgba::from_hex(color),
             };
-            crate::paint::stroke_to(&mut pm, Pt::new(80.0, y), Pt::new(1360.0, y + 40.0), &b, false);
+            crate::paint::stroke_to(
+                &mut pm,
+                Pt::new(80.0, y),
+                Pt::new(1360.0, y + 40.0),
+                &b,
+                false,
+            );
         }
         *px = crate::document::Pixels::from_pixmap(&pm);
     }
@@ -188,7 +196,14 @@ fn colour(s: &mut Studio) {
     s.tool = Tool::Select;
     add_rect(s, 0.0, 0.0, 1440.0, 900.0, Rgba::from_hex(0x1E1E2E), 0.0);
     let swatches = [
-        0xF38BA8u32, 0xFAB387, 0xF9E2AF, 0xA6E3A1, 0x94E2D5, 0x89B4FA, 0xB4BEFE, 0xCBA6F7,
+        0xF38BA8u32,
+        0xFAB387,
+        0xF9E2AF,
+        0xA6E3A1,
+        0x94E2D5,
+        0x89B4FA,
+        0xB4BEFE,
+        0xCBA6F7,
     ];
     for (i, hex) in swatches.iter().enumerate() {
         let x = 80.0 + (i as f32 % 4.0) * 220.0;
@@ -271,7 +286,7 @@ fn shapes(s: &mut Studio) {
     s.show_shape_browser = false;
     s.shape_lib = "Phosphor".into();
     s.need_fit = true;
-    s.status = "Phosphor, LineIcons, Heroicons, Feather, Lucide.".into();
+    s.status = "Phosphor, LineIcons, Heroicons, Feather.".into();
 }
 
 fn keys(s: &mut Studio) {
@@ -351,7 +366,13 @@ fn poster(s: &mut Studio) {
             spacing: 0.2,
             color: orange,
         };
-        crate::paint::stroke_to(&mut pm, Pt::new(980.0, 80.0), Pt::new(1380.0, 820.0), &b, false);
+        crate::paint::stroke_to(
+            &mut pm,
+            Pt::new(980.0, 80.0),
+            Pt::new(1380.0, 820.0),
+            &b,
+            false,
+        );
         *px = crate::document::Pixels::from_pixmap(&pm);
     }
     if let Some(shapes) = s.doc.layers.get(1).and_then(|l| l.kind.shapes())
@@ -407,14 +428,7 @@ fn motion(s: &mut Studio) {
         layer: 1,
         shape: disc,
     });
-    add_text(
-        s,
-        Pt::new(480.0, 640.0),
-        "omadesign",
-        56.0,
-        cream,
-        -1.0,
-    );
+    add_text(s, Pt::new(480.0, 640.0), "omadesign", 56.0, cream, -1.0);
     let mut clip = crate::motion::Motion {
         duration: 2.0,
         fps: 30.0,
@@ -426,7 +440,13 @@ fn motion(s: &mut Studio) {
     clip.set_key(star_id, Prop::X, 1.0, 80.0, Ease::EaseInOut);
     clip.set_key(star_id, Prop::X, 2.0, 0.0, Ease::EaseInOut);
     clip.set_key(star_id, Prop::Rotation, 0.0, 0.0, Ease::EaseInOut);
-    clip.set_key(star_id, Prop::Rotation, 2.0, std::f32::consts::FRAC_PI_2, Ease::EaseInOut);
+    clip.set_key(
+        star_id,
+        Prop::Rotation,
+        2.0,
+        std::f32::consts::FRAC_PI_2,
+        Ease::EaseInOut,
+    );
     clip.set_key(star_id, Prop::Scale, 0.0, 1.0, Ease::EaseInOut);
     clip.set_key(star_id, Prop::Scale, 1.0, 1.18, Ease::EaseInOut);
     clip.set_key(star_id, Prop::Scale, 2.0, 1.0, Ease::EaseInOut);

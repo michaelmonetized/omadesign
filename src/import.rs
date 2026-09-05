@@ -68,14 +68,6 @@ pub fn open_any(path: &Path) -> Result<Imported, String> {
     }
 }
 
-pub fn support_matrix() -> &'static str {
-    "\
-Native: .oma, SVG, PNG, JPEG, WebP, GIF, BMP, TIFF
-Converted via system tools: PDF, AI (PDF-based), EPS, PSD
-Unsupported (export SVG/PDF first): Affinity .afdesign / .afphoto / .afpub, old Illustrator .ai
-"
-}
-
 fn ext(path: &Path) -> String {
     path.extension()
         .and_then(|s| s.to_str())
@@ -126,8 +118,10 @@ fn import_pdf_like(path: &Path, name: &str) -> Result<Imported, String> {
             svg,
         });
     }
-    if let Some(image) = rasterize_with(&["pdftoppm", "-png", "-f", "1", "-l", "1", "-singlefile"], path)
-    {
+    if let Some(image) = rasterize_with(
+        &["pdftoppm", "-png", "-f", "1", "-l", "1", "-singlefile"],
+        path,
+    ) {
         return Ok(Imported::Raster {
             name: name.to_string(),
             image,
@@ -150,7 +144,10 @@ fn import_eps(path: &Path, name: &str) -> Result<Imported, String> {
             &path.to_string_lossy(),
         ])
         .output();
-    if out.map(|o| o.status.success() && tmp.exists()).unwrap_or(false) {
+    if out
+        .map(|o| o.status.success() && tmp.exists())
+        .unwrap_or(false)
+    {
         let r = import_pdf_like(&tmp, name);
         let _ = std::fs::remove_file(&tmp);
         return r;

@@ -15,13 +15,35 @@ fn main() -> eframe::Result {
         }
         return Ok(());
     }
-    let shot = args.windows(2).find(|w| w[0] == "--shot").map(|w| w[1].clone());
+    let shot = args
+        .windows(2)
+        .find(|w| w[0] == "--shot")
+        .map(|w| w[1].clone());
     let out = args
         .windows(2)
         .find(|w| w[0] == "--out")
         .map(|w| PathBuf::from(&w[1]));
 
-    let options = eframe::NativeOptions {
+    let shot_size = args
+        .iter()
+        .position(|arg| arg == "--size")
+        .map(|index| {
+            let size = args.get(index + 1).and_then(|value| {
+                let (width, height) = value.split_once('x')?;
+                let width = width.parse::<u32>().ok()?;
+                let height = height.parse::<u32>().ok()?;
+                ((320..=8192).contains(&width) && (240..=8192).contains(&height))
+                    .then_some(egui::vec2(width as f32, height as f32))
+            });
+            if shot.is_none() || size.is_none() {
+                eprintln!("use --shot SCENE --size WIDTHxHEIGHT (320–8192 × 240–8192)");
+                std::process::exit(2);
+            }
+            size.unwrap()
+        })
+        .unwrap_or_else(|| egui::vec2(1600.0, 1000.0));
+
+    let mut options = eframe::NativeOptions {
         viewport: ViewportBuilder::default()
             .with_inner_size([1600.0, 1000.0])
             .with_min_inner_size([960.0, 640.0])
@@ -34,6 +56,13 @@ fn main() -> eframe::Result {
     };
 
     if let Some(name) = shot {
+        options.viewport = options
+            .viewport
+            .with_inner_size(shot_size)
+            .with_min_inner_size(shot_size)
+            .with_max_inner_size(shot_size)
+            .with_resizable(false)
+            .with_title(format!("omadesign — {name} preview"));
         let out = out.unwrap_or_else(|| PathBuf::from(format!("{name}.png")));
         return eframe::run_native(
             "omadesign",
@@ -51,6 +80,7 @@ fn main() -> eframe::Result {
                     out,
                     frame: 0,
                     requested: false,
+                    size: shot_size,
                 }))
             }),
         );
@@ -98,19 +128,29 @@ struct ShotRunner {
     out: PathBuf,
     frame: u32,
     requested: bool,
+    size: egui::Vec2,
 }
 
 impl eframe::App for ShotRunner {
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, input: &mut egui::RawInput) {
+        // A preview must not edit its scene when the user's desktop sends input.
+        input
+            .events
+            .retain(|event| matches!(event, egui::Event::Screenshot { .. }));
+        input.hovered_files.clear();
+        input.dropped_files.clear();
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         omadesign::ui::run(ui, &mut self.studio);
         let ctx = ui.ctx().clone();
         self.frame += 1;
         if self.frame == 2 {
-            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(1600.0, 1000.0)));
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(self.size));
         }
         let size = ctx.viewport_rect().size();
-        let landscape = size.x >= 1400.0 && size.y >= 800.0 && size.y <= 1200.0;
-        if !self.requested && self.frame >= 28 && (landscape || self.frame >= 80) {
+        let sized = (size - self.size).abs().max_elem() <= 1.0;
+        if !self.requested && self.frame >= 28 && sized {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
             self.requested = true;
         }
@@ -131,7 +171,10 @@ impl eframe::App for ShotRunner {
             std::process::exit(0);
         }
         if self.frame > 240 {
-            eprintln!("screenshot timed out after {} frames ({}x{})", self.frame, size.x, size.y);
+            eprintln!(
+                "screenshot timed out after {} frames ({}x{})",
+                self.frame, size.x, size.y
+            );
             std::process::exit(1);
         }
         ctx.request_repaint();
