@@ -166,6 +166,148 @@ Templates open as unsaved documents with editable paper, artwork and copy layers
 
 All 52 are available immediately. The [weekly drop plan](template-drops.md) proposes a release order and a remix prompt for each week; it does not schedule or publish marketing posts.
 
+## Palettes and brand libraries
+
+The right sidebar has three tabs: **Inspect** for the selected artwork, **Palettes**
+for reusable colours, and **Brand** for logos, images, fonts and other assets.
+
+Project libraries live beside your work: `.omacolors` holds the palettes and
+`.omatype` names the font roles, and `.omabrand/` holds the assets and font files.
+A saved document uses the nearest enclosing folder containing any of these.
+If none exists, it starts beside the document. For an
+unsaved document, use **Choose a project** to select a folder. The folder button
+also lets you switch libraries explicitly.
+
+### Build a palette
+
+1. Open **Palettes** and choose **Personal** for colours available across your work,
+   or **Project** for colours stored in the current project folder.
+2. Click **+ Palette**, enter a name and click **Rename**. Filter the collection by
+   palette name or hex colour.
+3. Add **+ Current colour**, collect fill and stroke colours **From selection**, or
+   type a hex value and click **+**. `#RRGGBBAA` includes transparency.
+4. Choose **Fill** or **Stroke**, then click a swatch to apply it. Right-clicking a
+   swatch applies the stroke directly. Each swatch's **···** menu can replace it
+   with the current colour, copy its hex value or remove it.
+5. Click the palette **Save** button to keep the collection. Palette edits have
+   their own save state, separate from saving the artwork.
+
+The collection's **··· → Load palettes…** adds palettes from a file; it keeps
+existing colours and gives conflicting names numbered suffixes. Save afterwards
+to keep the import. **Export selected palette…** shares one palette;
+**Export collection…** shares them all. Duplicate and remove controls are also
+available.
+
+Libraries refresh in the background about every three seconds. If the file changes
+while you have unsaved palette edits, those edits stay in the panel and Save is
+blocked. Export a copy to keep your version, or choose **Reload saved colours** to
+discard your palette edits and load the file on disk.
+
+Quitting with unsaved palettes offers **Save all**, **Discard** or **Cancel**.
+The app waits for library saves to finish and keeps you in the app if a save
+fails or a file conflicts. Any unsaved artwork gets its own save prompt afterwards.
+
+### Build a brand bank
+
+Open **Brand → Load bank…** and choose a project folder or its `.omabrand` folder.
+For a new collection, choose a project folder and click **Create bank**. Edit the
+brand name and click **Save** to name it.
+
+Use **··· → Add assets…** to copy artwork into the bank; the originals stay in
+place. Nested folders are supported. Filter by name, folder path or file type,
+or use **Image**, **SVG** and **omadesign** to narrow the tiles. Thumbnails load in
+the background, and files added or changed outside the app refresh about every
+three seconds. **··· → Refresh now** checks immediately.
+
+Drag a tile onto the canvas to place a copy at the drop point, or double-click it
+to place it at the selected artboard's centre. With no artboard selected, it uses
+the document centre. Placement is undoable with **Ctrl+Z**. In Photo, double-click
+an asset to place it in Design; drag placement is available on artboards.
+
+Banks accept PNG, JPEG, WebP, TIFF, BMP, GIF, SVG and `.oma` artwork. SVG uses the
+app's existing supported import subset; complex SVG features may not carry over.
+Use **··· → Save bank copy…** to copy the whole bank, including its name and nested
+folders, to another project folder.
+
+### Add brand typography
+
+Open **Brand → Typography** and choose **Add fonts…** to copy TTF or OTF files into
+the project. Name the kit and click **Save name**. Select a font row, give its role
+a useful name such as Heading, Body or Caption, and click **Save role**. Either save
+button keeps both pending name and role edits. Filter by role, family or filename.
+
+Click **Apply** beside a role to use it on selected text, or on the next text you
+create. The Character panel's font picker also lists **Project fonts**. Applying a
+font to artwork supports Undo; the kit's names and files have their own save controls.
+Fonts are available inside omadesign without installing them on your computer.
+
+The Typography **··· → Load kit…** action merges another `.omatype` kit and copies its font files; keep its
+`.omabrand/` folder beside the source file. **··· → Save copy…** writes the saved kit and
+its fonts into another project folder. Save pending name edits first. Removing a
+role keeps its font file for artwork that already uses it.
+
+External font changes refresh in the background. Existing text keeps its applied
+face; click **Apply** again to adopt a changed font. If the kit changes while you
+are editing a name, the panel preserves your draft and reports the conflict.
+Typography **··· → Reload typography** discards the draft and loads the saved kit.
+
+Native `.oma` text remains editable after moving the project, including typing
+new characters. Saving artwork into another folder also copies the font faces it
+uses into that folder's `.omabrand/fonts/`. SVG export draws project-font text as
+vector outlines so its appearance survives sharing; the `.oma` source keeps the
+editable text.
+
+### Share a project kit
+
+Copy `.omacolors`, `.omatype` and the complete `.omabrand/` folder with your project
+to another machine. **Save bank copy…** copies the assets, typography kit and fonts;
+export the palette collection separately as `.omacolors` in the destination folder.
+These names
+begin with a dot, so enable hidden files in your file manager when copying by hand.
+Try the portable [Fieldwork example](../examples/fieldwork).
+
+The `.omacolors` file is readable JSON. One file can hold several named palettes:
+
+```json
+{
+  "version": 1,
+  "palettes": [
+    { "name": "Fieldwork", "colors": ["#173F35", "#F5EBDC", "#D97C5B80"] },
+    { "name": "Ink", "colors": ["#202420", "#FFFFFF"] }
+  ]
+}
+```
+
+Handwritten files may also contain a single `{ "name": "Ink", "colors": [...] }`
+palette or a simple array such as `["#202420", "#FFFFFF"]`. Older saved palettes
+with RGBA objects still load and become the portable format when saved.
+
+The optional `.omabrand/brand.json` file sets the bank's display name:
+
+```json
+{ "version": 1, "name": "Fieldwork" }
+```
+
+Without that file, the project folder supplies the display name. Keep the artwork inside
+`.omabrand/`; no absolute paths are needed in the name file.
+
+The optional `.omatype` file names the project's font roles. Paths are relative
+to `.omabrand/`, and font files stay inside its `fonts/` folder:
+
+```json
+{
+  "version": 1,
+  "name": "Fieldwork typography",
+  "roles": [
+    { "name": "Heading", "font": "fonts/Display.ttf" },
+    { "name": "Body", "font": "fonts/Reading.otf" }
+  ]
+}
+```
+
+Replace those example filenames with your own fonts. Fonts added through the panel
+receive stable filenames automatically. Share fonts only under their licence terms.
+
 ## Files
 
 - Project: `.oma` (JSON, rasters PNG-packed, motion clip)
@@ -195,7 +337,7 @@ Motion: Space play · K key · Home start · End end
 
 ## Theme and font
 
-omadesign does not ship a brand palette. On launch it reads:
+The app chrome follows your desktop theme. On launch it reads:
 
 1. `~/.local/state/omarchy/current/theme/colors.toml`
 2. `~/.config/omarchy/themes/<current>/colors.toml`

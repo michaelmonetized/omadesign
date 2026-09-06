@@ -2,6 +2,7 @@ pub mod align;
 pub mod app;
 pub mod asset_browser;
 pub mod boolean;
+pub mod brand;
 pub mod color;
 pub mod compositor;
 pub mod compound;
@@ -26,6 +27,7 @@ pub mod templates;
 pub mod text;
 pub mod tools;
 pub mod trace;
+pub mod typography;
 pub mod ui;
 
 pub mod deform;

@@ -20,6 +20,67 @@ const FONT_CAP: usize = 2000;
 
 static FONTS: OnceLock<Vec<FontFace>> = OnceLock::new();
 static BYTES: OnceLock<Mutex<HashMap<PathBuf, Arc<Vec<u8>>>>> = OnceLock::new();
+static MEMORY_NAMES: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+
+pub fn project_font_loaded(id: &str) -> bool {
+    BYTES.get().is_some_and(|cache| {
+        cache
+            .lock()
+            .is_ok_and(|cache| cache.contains_key(Path::new(id)))
+    })
+}
+
+pub(crate) fn project_font_bytes(id: &str) -> Option<Arc<Vec<u8>>> {
+    if !id.starts_with("omatype:") {
+        return None;
+    }
+    BYTES.get()?.lock().ok()?.get(Path::new(id)).cloned()
+}
+
+/// Project fonts are addressed by their bytes, independent of a machine's paths.
+/// They do not join the global installed-font picker.
+pub fn register_memory_font(id: &str, name: &str, bytes: Arc<Vec<u8>>) -> Result<(), String> {
+    let expected = format!("omatype:{:032x}", crate::typography::fingerprint(&bytes));
+    if id != expected
+        || rustybuzz::Face::from_slice(&bytes, 0).is_none()
+        || ab_glyph::FontRef::try_from_slice(&bytes).is_err()
+    {
+        return Err("Invalid project font data".into());
+    }
+    let mut cache = BYTES
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .map_err(|_| "Font cache is unavailable")?;
+    let path = PathBuf::from(id);
+    if let Some(old) = cache.get(&path) {
+        if **old != *bytes {
+            return Err("Project font fingerprint collision".into());
+        }
+    } else {
+        cache.insert(path, bytes);
+    }
+    MEMORY_NAMES
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .map_err(|_| "Font labels are unavailable")?
+        .insert(id.into(), name.into());
+    Ok(())
+}
+
+pub fn font_name(bytes: &[u8]) -> Option<String> {
+    let face = rustybuzz::ttf_parser::Face::parse(bytes, 0).ok()?;
+    for id in [4, 1] {
+        if let Some(name) = face
+            .names()
+            .into_iter()
+            .filter(|name| name.name_id == id)
+            .find_map(|name| name.to_string().filter(|name| !name.trim().is_empty()))
+        {
+            return Some(name.trim().to_owned());
+        }
+    }
+    None
+}
 
 #[derive(Clone)]
 pub struct FontFace {
@@ -257,6 +318,12 @@ pub fn face_for(path: &str) -> Option<&'static FontFace> {
 }
 
 pub fn label_for(path: &str) -> String {
+    if path.starts_with("omatype:") {
+        return MEMORY_NAMES
+            .get()
+            .and_then(|names| names.lock().ok()?.get(path).cloned())
+            .unwrap_or_else(|| "Project font (load its typography kit)".into());
+    }
     face_for(path).map(|f| f.name.clone()).unwrap_or_else(|| {
         if path.is_empty() {
             fonts()
@@ -273,6 +340,12 @@ pub fn label_for(path: &str) -> String {
 }
 
 fn resolve_path(run: &TypeRun) -> Option<PathBuf> {
+    if run.font.starts_with("omatype:") {
+        let path = PathBuf::from(&run.font);
+        return BYTES
+            .get()
+            .and_then(|cache| cache.lock().ok()?.contains_key(&path).then_some(path));
+    }
     if !run.font.is_empty() {
         let p = PathBuf::from(&run.font);
         if p.exists() {

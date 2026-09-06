@@ -510,6 +510,12 @@ fn arrange_menu(ui: &mut Ui, studio: &mut Studio) {
 
 fn view_menu(ui: &mut Ui, studio: &mut Studio) {
     ui.menu_button("View", |ui| {
+        for (label, tab) in [("Inspector", crate::app::libraries::Sidebar::Inspector), ("Palette library", crate::app::libraries::Sidebar::Palettes), ("Brand assets", crate::app::libraries::Sidebar::Brand)] {
+            if ui.selectable_label(studio.libraries.sidebar == tab, label).clicked() {
+                studio.libraries.sidebar=tab; studio.show_welcome=false; ui.close();
+            }
+        }
+        ui.separator();
         if ui
             .add(Button::new("Zoom in").shortcut_text("Ctrl++"))
             .clicked()
