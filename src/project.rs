@@ -5,7 +5,7 @@ use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-const VERSION: u32 = 3;
+pub(crate) const VERSION: u32 = 4;
 
 #[derive(Serialize, Deserialize)]
 struct File {
@@ -25,6 +25,9 @@ pub fn encode(doc: &Document) -> Result<String, String> {
 
 pub fn decode(s: &str) -> Result<Document, String> {
     let file: File = serde_json::from_str(s).map_err(|e| e.to_string())?;
+    if !(1..=VERSION).contains(&file.version) {
+        return Err("Unsupported omadesign project version".into());
+    }
     let mut doc = file.doc;
     for layer in &mut doc.layers {
         if let Some(px) = layer.kind.pixels_mut() {
@@ -40,6 +43,7 @@ pub fn decode(s: &str) -> Result<Document, String> {
         }
     }
     doc.ensure_ids();
+    doc.validate_hierarchy()?;
     Ok(doc)
 }
 
@@ -137,14 +141,50 @@ pub fn dialog_save(name: &str) -> Option<PathBuf> {
 }
 
 const PLACE_EXTS: &[&str] = &[
-    "oma", "svg", "svgz", "png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "pdf", "ai",
-    "eps", "psd", "psb", "afdesign",
+    "oma",
+    "svg",
+    "svgz",
+    "png",
+    "jpg",
+    "jpeg",
+    "webp",
+    "gif",
+    "bmp",
+    "tif",
+    "tiff",
+    "pdf",
+    "ai",
+    "eps",
+    "ps",
+    "psd",
+    "psb",
+    "ora",
+    "af",
+    "afdesign",
+    "afphoto",
+    "afpub",
+    "aftemplate",
+    "afpackage",
 ];
 
 pub fn dialog_open() -> Option<PathBuf> {
     rfd::FileDialog::new()
         .add_filter("All supported", PLACE_EXTS)
         .add_filter("omadesign", &["oma"])
+        .add_filter(
+            "Layered documents",
+            &[
+                "psd",
+                "psb",
+                "ora",
+                "af",
+                "afdesign",
+                "afphoto",
+                "afpub",
+                "aftemplate",
+                "afpackage",
+            ],
+        )
         .add_filter(
             "Images",
             &[

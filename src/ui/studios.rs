@@ -181,6 +181,16 @@ fn inspector_title(ui: &mut Ui, studio: &Studio) {
                 |layer| format!("Pixels · {}", layer.name),
             );
         (icon, name, description)
+    } else if let Some(group) = studio
+        .active_layer
+        .and_then(|i| studio.doc.layers.get(i))
+        .filter(|l| l.is_group)
+    {
+        (
+            ph::FOLDER_OPEN,
+            group.name.as_str(),
+            "Group properties".into(),
+        )
     } else if let Some(name) = &selection_name {
         (ph::STACK, name.as_str(), "Shared properties".into())
     } else if let Some(shape) = selected {
@@ -1477,13 +1487,20 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
 }
 
 fn fx_studio(ui: &mut Ui, studio: &mut Studio) {
-    let shape_target = studio.primary().and_then(|(li, id)| {
-        if id == crate::document::RASTER_ID {
-            None
-        } else {
-            studio.doc.find_shape(li, id).map(|_| (li, id))
-        }
-    });
+    let group_active = studio
+        .active_layer
+        .and_then(|i| studio.doc.layers.get(i))
+        .is_some_and(|l| l.is_group);
+    let shape_target = studio
+        .primary()
+        .filter(|_| !group_active)
+        .and_then(|(li, id)| {
+            if id == crate::document::RASTER_ID {
+                None
+            } else {
+                studio.doc.find_shape(li, id).map(|_| (li, id))
+            }
+        });
     if let Some((li, id)) = shape_target {
         ui.label(RichText::new("Object").small().color(fg_weak()));
         let mut stack = studio
@@ -1503,6 +1520,9 @@ fn fx_studio(ui: &mut Ui, studio: &mut Studio) {
     };
     if li >= studio.doc.layers.len() {
         return;
+    }
+    if !studio.layer_unlocked(li) {
+        ui.disable();
     }
     let mut stack = studio.doc.layers[li].filters.clone();
     fx_stack_editor(ui, &mut stack, "layer");
@@ -1659,6 +1679,9 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
             && let Some(layer) = studio.doc.layers.get(li)
         {
             studio.layer_expanded.insert(layer.id);
+            for ancestor in studio.doc.layer_ancestors(li) {
+                studio.layer_expanded.insert(studio.doc.layers[ancestor].id);
+            }
         }
         ui.data_mut(|d| d.insert_temp(reveal_id, primary));
     }
@@ -1677,6 +1700,10 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                 }
                 if ui.button("New pixel layer").clicked() {
                     studio.add_layer(true);
+                    ui.close();
+                }
+                if ui.button("New group").clicked() {
+                    studio.add_layer_group();
                     ui.close();
                 }
                 ui.separator();
@@ -1707,16 +1734,44 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
     let mut shape_down: Option<(usize, usize)> = None;
     let n = studio.doc.layers.len();
     if let Some(i) = studio.active_layer.filter(|&i| i < n) {
-        ui.horizontal(|ui| {
-            let mut blend = studio.doc.layers[i].blend;
-            ComboBox::from_id_salt("active-layer-blend")
-                .selected_text(blend.name())
-                .width((ui.available_width() - 76.0).max(100.0))
-                .show_ui(ui, |ui| {
-                    for value in Blend::ALL {
-                        ui.selectable_value(&mut blend, value, value.name());
-                    }
+        if studio.doc.layers[i].is_group {
+            let before = studio.doc.layers[i].pass_through;
+            let mut after = before;
+            if ui
+                .add_enabled(
+                    studio.layer_unlocked(i),
+                    eframe::egui::Checkbox::new(&mut after, "Pass through"),
+                )
+                .on_hover_text("Allow layers in this group to blend with the layers below it")
+                .changed()
+            {
+                studio.commit(crate::document::Cmd::SetGroupPassThrough {
+                    index: i,
+                    before,
+                    after,
                 });
+            }
+        }
+        ui.horizontal(|ui| {
+            if !studio.layer_unlocked(i) {
+                ui.disable();
+            }
+            let mut blend = studio.doc.layers[i].blend;
+            let pass_through = studio.doc.layers[i].is_group && studio.doc.layers[i].pass_through;
+            ui.add_enabled_ui(!pass_through, |ui| {
+                ComboBox::from_id_salt("active-layer-blend")
+                    .selected_text(if pass_through {
+                        "Pass through"
+                    } else {
+                        blend.name()
+                    })
+                    .width((ui.available_width() - 76.0).max(100.0))
+                    .show_ui(ui, |ui| {
+                        for value in Blend::ALL {
+                            ui.selectable_value(&mut blend, value, value.name());
+                        }
+                    });
+            });
             let mut opacity = studio.doc.layers[i].opacity * 100.0;
             ui.add(
                 eframe::egui::DragValue::new(&mut opacity)
@@ -1748,6 +1803,14 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
         ui.add_space(8.0);
     }
     for i in (0..n).rev() {
+        let ancestors = studio.doc.layer_ancestors(i);
+        if ancestors
+            .iter()
+            .any(|&a| !studio.layer_expanded.contains(&studio.doc.layers[a].id))
+        {
+            continue;
+        }
+        let indent = ancestors.len() as f32 * 14.0;
         ui.push_id(studio.doc.layers[i].id, |ui| {
             let active = studio.active_layer == Some(i);
             Frame::new()
@@ -1760,12 +1823,16 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                 .inner_margin(Margin::symmetric(3, 2))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
+                        if !studio.layer_ancestors_unlocked(i) {
+                            ui.disable();
+                        }
                         ui.spacing_mut().item_spacing.x = 2.0;
+                        ui.add_space(indent);
                         let layer = &studio.doc.layers[i];
                         let expanded = studio.layer_expanded.contains(&layer.id);
-                        let has_children =
-                            layer.kind.shapes().is_some_and(|shapes| !shapes.is_empty())
-                                || layer.kind.is_placed_raster();
+                        let has_children = layer.is_group
+                            || layer.kind.shapes().is_some_and(|shapes| !shapes.is_empty())
+                            || layer.kind.is_placed_raster();
                         if has_children {
                             if icons::tiny_icon(
                                 ui,
@@ -1784,7 +1851,9 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                         }
                         object_icon(
                             ui,
-                            if layer.kind.shapes().is_some() {
+                            if layer.is_group {
+                                ph::FOLDER_OPEN
+                            } else if layer.kind.shapes().is_some() {
                                 ph::STACK
                             } else {
                                 ph::IMAGES
@@ -1806,23 +1875,43 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                 }
                             }
                         } else {
-                            let response = object_name(ui, &layer.name, name_width, layer.visible);
+                            let response = object_name(
+                                ui,
+                                &layer.name,
+                                name_width,
+                                studio.doc.layer_visible(i),
+                            );
                             if response.clicked() {
                                 activate = Some(i);
                             }
-                            if response.double_clicked() {
+                            if response.double_clicked() && studio.layer_unlocked(i) {
                                 start_rename = Some(i);
                             }
                             response
-                                .on_hover_text(format!("{} · {}", layer.name, layer.kind.tag()))
+                                .on_hover_text(format!(
+                                    "{} · {}",
+                                    layer.name,
+                                    if layer.is_group {
+                                        "Group"
+                                    } else {
+                                        layer.kind.tag()
+                                    }
+                                ))
                                 .context_menu(|ui| {
-                                    if ui.button("Rename").clicked() {
+                                    if ui
+                                        .add_enabled(
+                                            studio.layer_unlocked(i),
+                                            eframe::egui::Button::new("Rename"),
+                                        )
+                                        .clicked()
+                                    {
                                         start_rename = Some(i);
                                         ui.close();
                                     }
                                     if ui
                                         .add_enabled(
-                                            i + 1 < n,
+                                            studio.layer_unlocked(i)
+                                                && studio.layer_sibling(i, true).is_some(),
                                             eframe::egui::Button::new("Move up"),
                                         )
                                         .clicked()
@@ -1831,7 +1920,11 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                         ui.close();
                                     }
                                     if ui
-                                        .add_enabled(i > 0, eframe::egui::Button::new("Move down"))
+                                        .add_enabled(
+                                            studio.layer_unlocked(i)
+                                                && studio.layer_sibling(i, false).is_some(),
+                                            eframe::egui::Button::new("Move down"),
+                                        )
                                         .clicked()
                                     {
                                         down = Some(i);
@@ -1857,13 +1950,17 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                         }
                         if icons::tiny_icon(
                             ui,
-                            if layer.visible {
+                            if studio.doc.layer_visible(i) {
                                 ph::EYE
                             } else {
                                 ph::EYE_SLASH
                             },
-                            "Layer visibility",
-                            !layer.visible,
+                            if layer.visible && !studio.doc.layer_visible(i) {
+                                "Hidden by parent group"
+                            } else {
+                                "Layer visibility"
+                            },
+                            !studio.doc.layer_visible(i),
                         ) {
                             vis = Some(i);
                         }
@@ -1881,10 +1978,15 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                         }
                     });
                 });
-            if studio.layer_expanded.contains(&studio.doc.layers[i].id) {
+            if !studio.doc.layers[i].is_group
+                && studio.layer_expanded.contains(&studio.doc.layers[i].id)
+            {
                 if studio.doc.layers[i].kind.is_placed_raster() {
                     ui.horizontal(|ui| {
-                        ui.add_space(28.0);
+                        if !studio.doc.layer_editable(i) {
+                            ui.disable();
+                        }
+                        ui.add_space(indent + 28.0);
                         if ui
                             .selectable_label(
                                 studio.selection.contains(&(i, crate::document::RASTER_ID)),
@@ -1896,6 +1998,8 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                         }
                     });
                 }
+                let objects_unlocked = studio.layer_unlocked(i);
+                let objects_editable = studio.doc.layer_editable(i);
                 if let Some(shapes) = studio.doc.layers[i].kind.shapes() {
                     for (index, shape) in shapes.iter().enumerate().rev() {
                         ui.push_id(shape.id, |ui| {
@@ -1909,8 +2013,11 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                 .inner_margin(Margin::symmetric(3, 1))
                                 .show(ui, |ui| {
                                     ui.horizontal(|ui| {
+                                        if !objects_unlocked {
+                                            ui.disable();
+                                        }
                                         ui.spacing_mut().item_spacing.x = 2.0;
-                                        ui.add_space(24.0);
+                                        ui.add_space(indent + 24.0);
                                         object_icon(
                                             ui,
                                             geometry_icon(&shape.geom),
@@ -1954,10 +2061,14 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                                 studio.selection.contains(&(i, shape.id))
                                                     && shape.visible,
                                             );
-                                            if response.clicked() {
+                                            if response.clicked()
+                                                && objects_editable
+                                                && shape.visible
+                                                && !shape.locked
+                                            {
                                                 pick_shape = Some((i, shape.id));
                                             }
-                                            if response.double_clicked() {
+                                            if response.double_clicked() && !shape.locked {
                                                 start_shape_rename = Some((i, shape.id));
                                             }
                                             response.on_hover_text(&shape.name).context_menu(
@@ -2044,10 +2155,7 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
         }
     }
     if let Some(i) = activate {
-        if studio.active_layer != Some(i) {
-            studio.paint_mask = false;
-        }
-        studio.active_layer = Some(i);
+        studio.activate_layer_tree(i);
     }
     if let Some(i) = vis {
         let l = &studio.doc.layers[i];
@@ -2060,6 +2168,9 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
             blend: l.blend,
             before: (l.name.clone(), l.visible, l.locked, l.opacity, l.blend),
         });
+        studio
+            .selection
+            .retain(|(li, _)| studio.doc.layer_editable(*li));
     }
     if let Some(i) = lock {
         let l = &studio.doc.layers[i];
@@ -2072,18 +2183,15 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
             blend: l.blend,
             before: (l.name.clone(), l.visible, l.locked, l.opacity, l.blend),
         });
+        studio
+            .selection
+            .retain(|(li, _)| studio.doc.layer_editable(*li));
     }
-    if let Some(i) = up
-        && i + 1 < n
-    {
-        studio.commit(crate::document::Cmd::ReorderLayer { from: i, to: i + 1 });
-        studio.active_layer = Some(i + 1);
+    if let Some(i) = up {
+        studio.move_layer_tree(i, true);
     }
-    if let Some(i) = down
-        && i > 0
-    {
-        studio.commit(crate::document::Cmd::ReorderLayer { from: i, to: i - 1 });
-        studio.active_layer = Some(i - 1);
+    if let Some(i) = down {
+        studio.move_layer_tree(i, false);
     }
     if let Some(id) = toggle_expand
         && !studio.layer_expanded.remove(&id)

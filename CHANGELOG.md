@@ -1,5 +1,44 @@
 # Changelog
 
+## 2026-09-06 · Pass 13 — Bring your layers.
+
+Open Photoshop PSD/PSB, PDF-compatible Illustrator files, multi-page PDFs,
+OpenRaster, SVG/SVGZ, and supported Affinity documents as native layered work.
+Groups now expand in the Layers studio, inherit visibility and locks, and move
+or delete with their children in one Undo. Masks retain their placement; isolated
+and pass-through groups composite separately. File → Place keeps the imported
+hierarchy and scales it into the rectangle you draw.
+
+Large imports and layered exports run away from the frame loop. Imported source
+files open as unsaved working documents, so Save asks for an `.oma` destination.
+The file manager can offer Open With for native and Affinity documents without
+changing existing default apps. Conversion notes travel with the working file and explain substitutions and
+unsupported objects. Headless `--inspect` and `--convert` use the same codecs as
+the desktop. PSD/PSB, PDF and OpenRaster join SVG and image export.
+
+Real files copied from a Mac's iCloud exposed bugs that synthetic documents did
+not: a Photoshop color overlay, Affinity Photo float channel tiles, Illustrator
+embedded CFF fonts, clipped gradients and transparency masks. The PSD now keeps
+its original layer pixels and reproduces its saved composite exactly. The
+four-page Illustrator document keeps all its artboards; a second Illustrator file
+contains blank PDF-compatible pages and receives an explicit diagnostic. The
+Affinity bridge is separately installed, pinned and GPL-licensed; the native
+application remains MIT.
+
+Validation: **309 tests pass**, plus four optional PDF interoperability/sample
+checks, independent Photoshop and OpenRaster readers, native studio captures of
+Designer/Photo/Illustrator documents, formatting and desktop-entry validation.
+The PDF page fallback reproduces native pixels exactly with independent Cairo
+rendering. Clippy completes with existing repository warnings; strict warning-free
+Clippy is not claimed. The release build is installed for local testing.
+
+Known limits: this is partial interoperability, not complete Affinity or Adobe
+application parity. Native Affinity and Illustrator writers are unavailable;
+new `.af` and Publisher documents lack real-file verification. PSD text and smart
+objects use saved pixel layers; complex PDF/SVG text may become outlines.
+High-depth pixels become 8-bit and custom profiles are not fully applied. See
+[the format matrix](docs/format-support.md) for exact import/export limits.
+
 ## 2026-09-06 · Pass 12 — The download caught up.
 
 The website and the download now tell the same story. **v0.0.1-alpha** packages

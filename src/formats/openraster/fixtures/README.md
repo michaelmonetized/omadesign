@@ -1,0 +1,1 @@
+The MIT-licensed independent.ora fixture was generated with Python standard-library zipfile, struct and zlib, without the Omadesign writer. It contains a hidden offset red layer in an isolated group above a blue layer; stack.xml is deflated and mimetype is the first stored entry. The tiny merged preview represents the visible blue pixel.

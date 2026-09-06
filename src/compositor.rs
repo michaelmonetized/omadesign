@@ -1,5 +1,7 @@
 //! One geometry, two outputs: the live canvas and PNG export.
 
+mod groups;
+
 use crate::color::Rgba;
 use crate::document::{Document, Fill, Layer, LayerKind, Shape};
 use crate::geom::{Geom, Pt};
@@ -175,46 +177,18 @@ pub fn render_view_posed(
     draw_plates(&mut pm, doc, view);
 
     let t = view.transform();
-    for (li, layer) in doc.layers.iter().enumerate() {
-        if !layer.visible || layer.opacity <= 0.0 {
-            continue;
-        }
-        if is_paper_raster(layer) {
-            continue;
-        }
-        let brush = draft
-            .brush
-            .and_then(|(bl, buf, flow)| (bl == li).then_some((buf, flow)));
-        draw_layer(
-            &mut pm,
-            layer,
-            t,
-            brush,
-            draft.preview,
-            motion_t,
-            doc,
-            overrides,
-        );
-    }
+    groups::draw(&mut pm, doc, t, &draft, motion_t, overrides);
     Some(pm)
 }
 
-fn render_export(doc: &Document, scale: u32) -> Result<Pixmap, String> {
+pub(crate) fn render_export(doc: &Document, scale: u32) -> Result<Pixmap, String> {
     let s = scale.clamp(1, 8);
     let w = (doc.width * s as f32).round().max(1.0) as u32;
     let h = (doc.height * s as f32).round().max(1.0) as u32;
     let mut pm = Pixmap::new(w, h).ok_or("could not allocate export pixmap")?;
     draw_export_plates(&mut pm, doc, s as f32);
     let t = Transform::from_scale(s as f32, s as f32);
-    for layer in &doc.layers {
-        if !layer.visible || layer.opacity <= 0.0 {
-            continue;
-        }
-        if is_paper_raster(layer) {
-            continue;
-        }
-        draw_layer(&mut pm, layer, t, None, None, None, doc, None);
-    }
+    groups::draw(&mut pm, doc, t, &Draft::none(), None, None);
     Ok(pm)
 }
 
@@ -257,6 +231,9 @@ fn draw_layer(
     doc: &Document,
     overrides: Option<&HashMap<u64, Pose>>,
 ) {
+    if masked_outside_view(layer, t, pm.width(), pm.height()) {
+        return;
+    }
     let filtered = layer.filters.active();
     if layer.mask.is_some() || filtered {
         let Some(mut temp) = Pixmap::new(pm.width(), pm.height()) else {
@@ -326,6 +303,28 @@ fn draw_layer(
     }
 }
 
+/// A mask bounds all output unless a filter expands or replaces the masked pixels.
+fn masked_outside_view(layer: &Layer, view: Transform, width: u32, height: u32) -> bool {
+    if layer.filters.active() {
+        return false;
+    }
+    let Some(mask) = &layer.mask else {
+        return false;
+    };
+    let mut corners = [
+        tiny_skia::Point::from_xy(-1., -1.),
+        tiny_skia::Point::from_xy(mask.w as f32 + 1., -1.),
+        tiny_skia::Point::from_xy(mask.w as f32 + 1., mask.h as f32 + 1.),
+        tiny_skia::Point::from_xy(-1., mask.h as f32 + 1.),
+    ];
+    view.pre_concat(layer_pixel_transform(layer))
+        .map_points(&mut corners);
+    corners.iter().all(|p| p.x < 0.)
+        || corners.iter().all(|p| p.y < 0.)
+        || corners.iter().all(|p| p.x > width as f32)
+        || corners.iter().all(|p| p.y > height as f32)
+}
+
 /// Map a layer's native pixels (and its mask) into document coordinates.
 pub fn layer_pixel_transform(layer: &Layer) -> Transform {
     let LayerKind::Raster {
@@ -335,7 +334,17 @@ pub fn layer_pixel_transform(layer: &Layer) -> Transform {
         rotation,
     } = &layer.kind
     else {
-        return Transform::identity();
+        return if let Some(mask) = &layer.mask
+            && layer.mask_size.x > 0.0
+            && layer.mask_size.y > 0.0
+        {
+            Transform::from_translate(layer.mask_origin.x, layer.mask_origin.y).pre_scale(
+                layer.mask_size.x / mask.w.max(1) as f32,
+                layer.mask_size.y / mask.h.max(1) as f32,
+            )
+        } else {
+            Transform::identity()
+        };
     };
     let dimensions = if size.x.abs() > 0.5 && size.y.abs() > 0.5 {
         *size
@@ -620,7 +629,7 @@ fn fill_paint<'a>(fill: &Fill, geom: &Geom) -> Paint<'a> {
 }
 
 pub(crate) fn is_paper_raster(layer: &Layer) -> bool {
-    if layer.mask.is_some() {
+    if layer.mask.is_some() || layer.parent.is_some() || layer.name != "Background" {
         return false;
     }
     let LayerKind::Raster { pixels, size, .. } = &layer.kind else {

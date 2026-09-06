@@ -14,14 +14,40 @@ impl Studio {
     }
 
     pub fn place_brand_imported(&mut self, imported: Imported, at: Pt) -> Result<(), String> {
+        self.place_imported_at(imported, at, None)
+    }
+
+    pub(super) fn place_layered_document(
+        &mut self,
+        doc: Document,
+        destination: Bounds,
+    ) -> Result<(), String> {
+        let source = Bounds::from_min_size(Pt::ZERO, doc.size());
+        self.place_imported_at(
+            Imported::Document(doc),
+            destination.center(),
+            Some((source, destination)),
+        )?;
+        Ok(())
+    }
+
+    fn place_imported_at(
+        &mut self,
+        imported: Imported,
+        at: Pt,
+        placement: Option<(Bounds, Bounds)>,
+    ) -> Result<(), String> {
         if self.pending_nav.is_some() {
             return Err("Finish the open dialog before placing an asset".into());
         }
         if !at.x.is_finite() || !at.y.is_finite() {
             return Err("The placement point is invalid".into());
         }
-        let (name, mut layers, motion) = match imported {
-            Imported::Document(doc) => (doc.name, doc.layers, doc.motion),
+        let (name, mut layers, motion, notes) = match imported {
+            Imported::Document(doc) => {
+                doc.validate_hierarchy()?;
+                (doc.name, doc.layers, doc.motion, doc.import_notes)
+            }
             Imported::Raster { name, image } => {
                 checked_pixels(image.w, image.h, image.data.len())?;
                 let pixels = Pixels::from_rgba(image.w, image.h, image.data)
@@ -32,14 +58,14 @@ impl Studio {
                     Pt::ZERO,
                     Pt::new(image.w as f32, image.h as f32),
                 );
-                (name, vec![layer], Motion::default())
+                (name, vec![layer], Motion::default(), vec![])
             }
             Imported::Svg { name, svg } => {
                 if svg.len() > 16 * 1024 * 1024 {
                     return Err("Choose an SVG smaller than 16 MB".into());
                 }
                 let layer = svg_layer(&name, &svg)?;
-                (name, vec![layer], Motion::default())
+                (name, vec![layer], Motion::default(), vec![])
             }
         };
         if layers.len() > 1024 {
@@ -59,7 +85,9 @@ impl Studio {
             }
             total_shapes += layer.kind.shapes().map_or(0, <[Shape]>::len);
             if let Some(shapes) = layer.kind.shapes() {
-                vector_masks += usize::from(layer.mask.is_some());
+                vector_masks += usize::from(
+                    layer.mask.is_some() && (layer.mask_size.x <= 0.0 || layer.mask_size.y <= 0.0),
+                );
                 for shape in shapes {
                     largest_id = largest_id.max(shape.id);
                     if !shape.rotation.is_finite() || !finite_bounds(shape.geom.bbox()) {
@@ -83,9 +111,12 @@ impl Studio {
         }
         crate::document::bump_id(largest_id);
         // Empty paint buffers and empty vector layers carry no artwork.
-        layers.retain(|layer| match &layer.kind {
-            LayerKind::Vector { shapes } => !shapes.is_empty(),
-            LayerKind::Raster { pixels, .. } => !pixels.is_invisible(),
+        layers.retain(|layer| {
+            layer.is_group
+                || match &layer.kind {
+                    LayerKind::Vector { shapes } => !shapes.is_empty(),
+                    LayerKind::Raster { pixels, .. } => !pixels.is_invisible(),
+                }
         });
         let mut bounds: Option<Bounds> = None;
         for layer in &layers {
@@ -107,14 +138,21 @@ impl Studio {
                 bounds = Some(bounds.map_or(item, |bounds| bounds.union(item)));
             }
         }
-        let source = bounds.ok_or("The brand asset has no visible artwork")?;
+        let source = placement
+            .map(|(source, _)| source)
+            .or(bounds)
+            .ok_or("The brand asset has no visible artwork")?;
         let source = Bounds::from_min_size(
             source.center() - Pt::new(source.width().max(1.0), source.height().max(1.0)) * 0.5,
             Pt::new(source.width().max(1.0), source.height().max(1.0)),
         );
-        let scale = (self.doc.width * 0.92 / source.width())
-            .min(self.doc.height * 0.92 / source.height())
-            .min(1.0);
+        let scale = placement
+            .map(|(_, destination)| destination.width() / source.width())
+            .unwrap_or_else(|| {
+                (self.doc.width * 0.92 / source.width())
+                    .min(self.doc.height * 0.92 / source.height())
+                    .min(1.0)
+            });
         if !scale.is_finite() || scale <= 0.0 {
             return Err("The destination document has invalid dimensions".into());
         }
@@ -126,12 +164,17 @@ impl Studio {
         let mut ids = HashMap::new();
         let mut selected = Vec::new();
         let mut commands = Vec::new();
+        let layer_ids: HashMap<_, _> = layers.iter().map(|layer| (layer.id, next_id())).collect();
         for (position, mut layer) in layers.into_iter().enumerate() {
             let index = self.doc.layers.len() + position;
-            layer.id = next_id();
+            layer.id = layer_ids[&layer.id];
+            layer.parent = layer.parent.and_then(|id| layer_ids.get(&id).copied());
             match &mut layer.kind {
                 LayerKind::Vector { shapes } => {
-                    if let Some(mask) = layer.mask.take() {
+                    if layer.mask_size.x > 0.0 && layer.mask_size.y > 0.0 {
+                        layer.mask_origin = layer.mask_origin * scale + offset;
+                        layer.mask_size = layer.mask_size * scale;
+                    } else if let Some(mask) = layer.mask.take() {
                         layer.mask = Some(map_mask(
                             mask,
                             scale,
@@ -218,9 +261,22 @@ impl Studio {
                 after,
             });
         }
+        if !notes.is_empty() {
+            let before = self.doc.import_notes.clone();
+            let mut after = before.clone();
+            for note in notes {
+                if !after.contains(&note) {
+                    after.push(note);
+                }
+            }
+            if before != after {
+                commands.push(Cmd::SetImportNotes { before, after });
+            }
+        }
         // Complete the existing edit only after every import validation succeeded.
         self.commit_type_edit();
         self.commit(Cmd::Batch(commands));
+        selected.retain(|(index, _)| self.doc.layer_editable(*index));
         self.selection = selected;
         self.active_layer = self
             .selection
@@ -355,6 +411,66 @@ fn scale_filters(stack: &mut crate::filter::FilterStack, scale: f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn layered_place_scales_canvas_geometry_remaps_groups_and_undoes_every_change() {
+        let mut source = document("Layered artwork", 64.0, 32.0);
+        source.import_notes = vec!["Imported color conversion".into()];
+        let group = Layer::group("Artwork group");
+        let source_group_id = group.id;
+        let mut vector = Layer::vector("Masked vector");
+        vector.parent = Some(group.id);
+        vector.kind.shapes_mut().unwrap().push(rect(
+            Pt::new(10.0, 4.0),
+            Pt::new(20.0, 10.0),
+            Rgba::BLACK,
+        ));
+        let source_shape_id = vector.kind.shapes().unwrap()[0].id;
+        vector.mask = Pixels::from_rgba(2, 1, vec![255; 8]);
+        vector.mask_origin = Pt::new(10.0, 4.0);
+        vector.mask_size = Pt::new(20.0, 10.0);
+        let data = [230, 60, 30, 255].repeat(4);
+        let mut raster = Layer::placed_raster(
+            "Native pixels",
+            Pixels::from_rgba(2, 2, data.clone()).unwrap(),
+            Pt::new(6.0, 18.0),
+            Pt::ZERO,
+        );
+        raster.parent = Some(group.id);
+        source.layers = vec![vector, raster, group];
+        let mut studio = studio();
+        let before = serde_json::to_value(&studio.doc).unwrap();
+        let old_layers = studio.doc.layers.len();
+        let path = studio.path.clone();
+        studio.pending_place = Some(PendingPlace::Document(source));
+        studio.commit_place_rect(Pt::new(80.0, 60.0), Pt::new(208.0, 124.0));
+        assert_eq!(studio.path, path);
+        assert_eq!(studio.doc.layers.len(), old_layers + 3);
+        assert_eq!(studio.history.len(), 1);
+        let vector = &studio.doc.layers[old_layers];
+        let raster = &studio.doc.layers[old_layers + 1];
+        let group = &studio.doc.layers[old_layers + 2];
+        assert_ne!(group.id, source_group_id);
+        assert_eq!(vector.parent, Some(group.id));
+        assert_eq!(raster.parent, Some(group.id));
+        assert_ne!(vector.kind.shapes().unwrap()[0].id, source_shape_id);
+        assert_eq!(
+            vector.kind.shapes().unwrap()[0].geom.bbox().min,
+            Pt::new(100.0, 68.0)
+        );
+        assert_eq!(vector.mask_origin, Pt::new(100.0, 68.0));
+        assert_eq!(vector.mask_size, Pt::new(40.0, 20.0));
+        let (origin, size, _) = raster.kind.raster_xform().unwrap();
+        assert_eq!(origin, Pt::new(92.0, 96.0));
+        assert_eq!(size, Pt::new(4.0, 4.0));
+        assert_eq!(raster.kind.pixels().unwrap().data, data);
+        studio.doc.validate_hierarchy().unwrap();
+        let placed = serde_json::to_value(&studio.doc).unwrap();
+        studio.undo();
+        assert_eq!(serde_json::to_value(&studio.doc).unwrap(), before);
+        studio.redo();
+        assert_eq!(serde_json::to_value(&studio.doc).unwrap(), placed);
+    }
 
     fn document(name: &str, width: f32, height: f32) -> Document {
         let mut doc = Document::new(name, 1.0, 1.0, 72.0);

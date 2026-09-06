@@ -22,7 +22,7 @@ impl Studio {
             .layers
             .iter()
             .enumerate()
-            .filter(|(_, l)| l.visible && !l.locked)
+            .filter(|(li, _)| self.doc.layer_editable(*li))
             .flat_map(|(li, l)| {
                 if let Some(shapes) = l.kind.shapes() {
                     shapes

@@ -7,6 +7,6 @@ Exec=omadesign %F
 Icon=applications-graphics
 Terminal=false
 Categories=Graphics;2DGraphics;RasterGraphics;VectorGraphics;Photography;
-MimeType=image/png;image/jpeg;image/webp;image/tiff;image/svg+xml;
+MimeType=application/x-omadesign;application/affinity;image/png;image/jpeg;image/webp;image/tiff;image/svg+xml;image/vnd.adobe.photoshop;image/openraster;application/pdf;application/postscript;application/illustrator;
 Keywords=affinity;design;vector;paint;photo;illustration;
 StartupNotify=true

@@ -712,7 +712,7 @@ fn oma_document(bytes: &[u8]) -> Result<crate::document::Document, String> {
     }
     let Project { version, mut doc } = serde_json::from_slice(bytes)
         .map_err(|e| format!("Could not read project preview: {e}"))?;
-    if !(1..=3).contains(&version) {
+    if !(1..=crate::project::VERSION).contains(&version) {
         return Err("Unsupported omadesign project version.".into());
     }
     if doc.layers.len() > 256 || doc.artboards.len() > 128 {
