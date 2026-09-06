@@ -1,5 +1,56 @@
 # Changelog
 
+## 2026-09-05 · Pass 10 — Less pitch. More studio.
+
+The green paint has left the building. So has the pretend logo. The website now
+wears Catppuccin Mocha's base, mantle and crust, with a matching Latte option and
+the approved geometric deSiGN paths in the header, footer and favicon.
+
+### Take the studios for a spin
+
+Design, Pixel, Photo and Motion now sit in an interactive 3D artwork carousel.
+Click a side card, swipe, use the arrows, or navigate with the keyboard. Below
+it, **28 panel choices** expose working preview controls: change a fill, reshape
+an object, adjust the light, explore masks, or play an animation preset. Settings
+stay with their studio. Playback starts only when requested; reduced-motion and
+no-JavaScript alternatives are included.
+
+The artwork has a paper trail. Design and Motion use editable native vector
+projects. Original generated iris and coastal images supply the Pixel and Photo
+examples, with native import, Photo development and export. Sources, prompts and
+regeneration instructions live in `examples/site-showcase`. The web controls are
+clearly labeled as simplified previews.
+
+### Downloads at the front. Fluff at the exit.
+
+The hero contains **Omarchy**, **Omarchy MX Mac** and **Download src**, the
+requested “get started in under 1m” footnote, and the copyable installer command.
+The ARM64 button targets Linux on Apple Silicon; the FAQ explains the current
+published-alpha/source gap.
+
+Numbered kickers, repeated subtitles and the bottom sales pitch are gone. Copy
+uses US spelling. The old “slower” artwork is removed, and the template library
+has a fresh native capture. The corrected 97-second film remains available.
+
+The brand kit now demonstrates real interactions: Catppuccin palette swatches
+apply to fill or stroke, asset search and category filters compose, and font roles
+update an editable type sample. JSON examples remain available when wanted.
+
+### Motion with manners
+
+Sections and their contents enter, drift gently while in view and leave as you
+scroll. Hover, focus and preview controls add feedback. One passive scroll
+listener updates visible surfaces; layout measurements exclude animated positions
+so controls stay put when clicked. Reduced-motion preferences disable the travel.
+Obsolete screenshots, the old studio switcher and unused style rules are removed.
+
+Validation: **271 native tests pass**; release build, atomic reinstall, matching
+binary hashes, native capture and desktop-entry checks pass. TypeScript, formatting,
+server build and static prerender pass. Browser checks cover all 28 panels at both
+320 and 1440 pixels, touch and keyboard navigation, brand/HUD/search controls,
+clipboard fallback, theme persistence, documentation, video playback and motion
+preferences. The final GitHub Pages artifact is reviewed under `/omadesign/`.
+
 ## 2026-09-05 · Pass 9 — The front door finally fits the house.
 
 The studio had grown. Its website was still waving from three releases ago.

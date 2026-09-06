@@ -5,7 +5,7 @@ import {
   Scripts,
   createRootRoute,
 } from "@tanstack/react-router";
-import { ThemeProvider, useFlavour } from "../theme";
+import { ThemeProvider, useTheme } from "../theme";
 import { REPO, sitePath } from "../site";
 import appCss from "../styles.css?url";
 
@@ -16,21 +16,21 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "omadesign — your Linux. Your creative suite." },
+      { title: "omadesign — native Linux creative suite" },
       {
         name: "description",
         content:
           "An Omarchy-first creative suite for Linux. Native Rust. Design, paint, retouch and animate, with portable palettes, brand assets and fonts. Free and open source.",
       },
-      { name: "theme-color", content: "#111412" },
+      { name: "theme-color", content: "#1e1e2e" },
       {
         property: "og:title",
-        content: "omadesign — your Linux. Your creative suite.",
+        content: "omadesign — native Linux creative suite",
       },
       {
         property: "og:description",
         content:
-          "Omarchy first. Rust native. Four creative studios, portable brand files, and a desktop that feels like yours. FOSS, btw.",
+          "Omarchy first. Native Rust. Design, Pixel, Photo, and Motion, with portable colors, assets, and fonts. Free and open source for ARM64 and x86_64 Linux.",
       },
       { property: "og:type", content: "website" },
       {
@@ -42,7 +42,11 @@ export const Route = createRootRoute({
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", type: "image/svg+xml", href: sitePath("favicon.svg") },
+      {
+        rel: "icon",
+        type: "image/svg+xml",
+        href: sitePath("media/showcase/favicon.svg"),
+      },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       {
         rel: "preconnect",
@@ -63,12 +67,12 @@ export const Route = createRootRoute({
 });
 
 function Document() {
-  const { flavour, setFlavour } = useFlavour();
+  const { theme, setTheme } = useTheme();
   return (
     <html
-      lang="en"
+      lang="en-US"
       id="top"
-      className={flavour === "latte" ? "latte" : "mocha dark"}
+      className={theme === "latte" ? "latte" : "mocha dark"}
     >
       <head>
         <HeadContent />
@@ -84,9 +88,14 @@ function Document() {
               className="wordmark"
               aria-label="omadesign home"
             >
-              <span className="brand-dot" aria-hidden="true" />
-              oma<span>design</span>
-              <sup>α</sup>
+              <img
+                src={sitePath(
+                  `media/showcase/wordmark-on-${theme === "mocha" ? "dark" : "light"}.svg`,
+                )}
+                alt="omadesign"
+                width="138"
+                height="40"
+              />
             </a>
             <nav aria-label="Main navigation">
               <a className="nav-features" href={sitePath("#features")}>
@@ -101,10 +110,8 @@ function Document() {
               <button
                 className="theme-toggle"
                 type="button"
-                aria-label={`Use ${flavour === "mocha" ? "light" : "dark"} theme`}
-                onClick={() =>
-                  setFlavour(flavour === "mocha" ? "latte" : "mocha")
-                }
+                aria-label={`Use ${theme === "mocha" ? "light" : "dark"} theme`}
+                onClick={() => setTheme(theme === "mocha" ? "latte" : "mocha")}
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -127,9 +134,15 @@ function Document() {
         <footer className="site-footer">
           <div className="shell footer-top">
             <a className="wordmark" href={sitePath()}>
-              omadesign<sup>α</sup>
+              <img
+                src={sitePath(
+                  `media/showcase/wordmark-on-${theme === "mocha" ? "dark" : "light"}.svg`,
+                )}
+                alt="omadesign"
+                width="117"
+                height="34"
+              />
             </a>
-            <p>Made for the desktop you made your own.</p>
             <a href="#top">Back to top ↑</a>
           </div>
           <div className="shell footer-bottom">
@@ -140,9 +153,9 @@ function Document() {
               <a href={sitePath("docs/roadmap")}>Roadmap</a>
               <a href={sitePath("docs/contributing")}>Contribute</a>
               <a href={`${REPO}/issues`}>Report a bug</a>
-              <a href={`${REPO}/blob/master/LICENSE`}>Licence</a>
+              <a href={`${REPO}/blob/master/LICENSE`}>License</a>
             </div>
-            <span className="mono">Built in the open. FOSS, btw.</span>
+            <span className="mono">Rust · Linux · FOSS</span>
           </div>
         </footer>
         <Scripts />

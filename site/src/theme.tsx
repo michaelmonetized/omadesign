@@ -6,38 +6,40 @@ import {
   type ReactNode,
 } from "react";
 
-type Flavour = "mocha" | "latte";
+type ThemeName = "mocha" | "latte";
 const ThemeContext = createContext<{
-  flavour: Flavour;
-  setFlavour: (value: Flavour) => void;
+  theme: ThemeName;
+  setTheme: (value: ThemeName) => void;
 }>({
-  flavour: "mocha",
-  setFlavour: () => {},
+  theme: "mocha",
+  setTheme: () => {},
 });
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [flavour, setValue] = useState<Flavour>("mocha");
+  const [theme, setValue] = useState<ThemeName>("mocha");
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("omadesign-flavour");
+      const saved =
+        localStorage.getItem("omadesign-theme") ??
+        localStorage.getItem("omadesign-flavour");
       if (saved === "mocha" || saved === "latte") setValue(saved);
     } catch {
       /* Theme switching also works when browser storage is unavailable. */
     }
   }, []);
-  function setFlavour(value: Flavour) {
+  function setTheme(value: ThemeName) {
     setValue(value);
     try {
-      localStorage.setItem("omadesign-flavour", value);
+      localStorage.setItem("omadesign-theme", value);
     } catch {
       /* Keep the choice for this visit. */
     }
   }
   return (
-    <ThemeContext.Provider value={{ flavour, setFlavour }}>
+    <ThemeContext.Provider value={{ theme, setTheme }}>
       {children}
     </ThemeContext.Provider>
   );
 }
 
-export const useFlavour = () => useContext(ThemeContext);
+export const useTheme = () => useContext(ThemeContext);

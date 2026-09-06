@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+<defs>
+</defs>
+<g opacity="1.000" style="mix-blend-mode:normal">
+  <rect id="oma-8" x="0.000" y="0.000" width="1600.000" height="1000.000" fill="#F6EBDD" opacity="1.000"/>
+</g>
+<g opacity="1.000" style="mix-blend-mode:normal">
+  <rect id="oma-9" x="112.000" y="108.000" width="208.000" height="3.000" fill="#E87752" opacity="1.000"/>
+  <rect id="oma-10" x="904.560" y="218.560" width="168.480" height="168.480" fill="#E87752" opacity="1.000"/>
+  <ellipse id="oma-11" cx="1176.000" cy="302.800" rx="84.240" ry="84.240" fill="#C1C554" opacity="1.000"/>
+  <path id="oma-12" d="M 1278.960 387.040 L 1447.440 387.040 L 1447.440 218.560 Z" fill="#263B37" fill-rule="evenodd" opacity="1.000"/>
+  <ellipse id="oma-13" cx="988.800" cy="490.000" rx="84.240" ry="84.240" fill="#C1C554" opacity="1.000"/>
+  <path id="oma-14" d="M 1091.760 574.240 L 1260.240 574.240 L 1260.240 405.760 Z" fill="#263B37" fill-rule="evenodd" opacity="1.000"/>
+  <rect id="oma-15" x="1278.960" y="405.760" width="168.480" height="168.480" fill="#E87752" opacity="1.000"/>
+  <path id="oma-16" d="M 904.560 761.440 L 1073.040 761.440 L 1073.040 592.960 Z" fill="#263B37" fill-rule="evenodd" opacity="1.000"/>
+  <rect id="oma-17" x="1091.760" y="592.960" width="168.480" height="168.480" fill="#E87752" opacity="1.000"/>
+  <ellipse id="oma-18" cx="1363.200" cy="677.200" rx="84.240" ry="84.240" fill="#C1C554" opacity="1.000"/>
+</g>
+<g opacity="1.000" style="mix-blend-mode:normal">
+  <text id="oma-19" x="111.290" y="65.474" font-family="Liberation Sans" font-size="15.00" fill="#263B37" opacity="1.000">ONE STREET. MANY STORIES.</text>
+  <text id="oma-20" x="103.304" y="310.771" font-family="Liberation Sans Bold" font-size="130.00" fill="#263B37" opacity="1.000">BLOCK
+PARTY</text>
+  <text id="oma-21" x="109.867" y="658.840" font-family="Liberation Sans" font-size="26.00" fill="#263B37" opacity="1.000">Food, music and familiar faces.</text>
+  <text id="oma-22" x="111.432" y="949.058" font-family="Liberation Sans" font-size="12.50" fill="#263B37" opacity="1.000">SATURDAY / YOUR NEIGHBORHOOD</text>
+</g>
+</svg>

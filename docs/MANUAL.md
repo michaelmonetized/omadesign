@@ -34,7 +34,7 @@ That installs `~/.local/bin/omadesign` and a desktop entry. Binaries are glibc 2
 4. **Pixel** (`B`) paints on a raster layer.
 5. **Photo** opens a folder of pictures and grades them.
 
-Chrome follows your desktop: Omarchy theme colours and the font from `omarchy font current` / fontconfig. Icons are Phosphor Light.
+Chrome follows your desktop: Omarchy theme colors and the font from `omarchy font current` / fontconfig. Icons are Phosphor Light.
 
 ## Personas
 
@@ -76,11 +76,11 @@ Pen and Node gestures:
 - **Type** `T` — click to place, type on the canvas. First keystroke replaces the “Type” placeholder. Enter is a new line. Esc or click away finishes. Double-click existing type to edit. Character studio: font, size, tracking, leading, OpenType (kerning, ligatures, tabular figures, small caps).
 - **Gradient** `G` — drag across a selected shape.
 - **Eyedropper** `I` — sample fill.
-- **Trace** `U` — raster to vector on the active pixel layer. Threshold, colour count, and smoothness live in Trace. Object → Trace to vector does the same without switching tools.
+- **Trace** `U` — raster to vector on the active pixel layer. Threshold, color count, and smoothness live in Trace. Object → Trace to vector does the same without switching tools.
 - **Zoom** `Z` — drag a box to that area. Click zooms in, Alt-click zooms out a step. Ctrl-click fits the artboard. Ctrl+Shift-click fits the selection, or every object if nothing is selected. Pinch the trackpad to zoom the canvas. Ctrl++ / Ctrl+- / Ctrl+scroll / Alt-scroll also zoom the canvas, not the chrome. With Z selected, two-finger scroll zooms.
 - **Hand** `H` / Space — pan.
 
-Colour studio: HSV, hex, swatches, recent. `X` swaps fill/stroke. `D` restores defaults.
+Color studio: HSV, hex, swatches, recent. `X` swaps fill/stroke. `D` restores defaults.
 
 **Select** has All, None, Invert, Same Fill / Stroke / Effects, and With / Without Fill / Stroke / Effects. Matching compares the complete property, including gradient positions, stroke settings, or the effect stack. Hidden and locked objects stay out of the selection.
 
@@ -91,7 +91,7 @@ Colour studio: HSV, hex, swatches, recent. `X` swaps fill/stroke. `D` restores d
 Combine and Release preserve guide state, rotation, stacking and linear gradients
 in one undo step. Combine and Pathfinder require either artwork or guides, with
 no mixture. Radial fills follow each resulting object's bounds when contours are
-separated; a shared radial centre is not currently represented in the document.
+separated; a shared radial center is not currently represented in the document.
 
 ### Guides, rulers, and precision
 
@@ -99,9 +99,9 @@ Drag from the top ruler for a horizontal guide or the left ruler for a vertical 
 
 **Object → Guides → Convert selection to guides** turns vector artwork into editable, non-printing contours. Curves, compound paths, shapes and live text keep their original data and style. Move, Node and Reshape still edit them; snapping follows the actual curve. **Release guides** restores them as artwork, including any geometry edits. Both actions undo normally, and guides survive project saves while staying out of PNG/JPEG/SVG/Lottie exports. A placed image creates a separate guide around its bounds and retains its pixels. Hidden guides do not capture pointer input or snapping.
 
-Drag the rulers' top-left intersection to set the zero point. Double-click that corner to reset it. Right-click a ruler or use View to choose pixels, millimetres, centimetres, inches, or points. Physical units follow the document DPI; changing units changes the ruler display, not the artwork.
+Drag the rulers' top-left intersection to set the zero point. Double-click that corner to reset it. Right-click a ruler or use View to choose pixels, millimeters, centimeters, inches, or points. Physical units follow the document DPI; changing units changes the ruler display, not the artwork.
 
-Snapping uses object and artboard edges and centres, guides, the grid, and equal spacing between nearby objects. Alignment lines and gap measurements appear as you move. `Ctrl+Shift+;` toggles snapping; hold Ctrl during the same drag to temporarily reverse that choice, then release it to return. View has individual snapping options.
+Snapping uses object and artboard edges and centers, guides, the grid, and equal spacing between nearby objects. Alignment lines and gap measurements appear as you move. `Ctrl+Shift+;` toggles snapping; hold Ctrl during the same drag to temporarily reverse that choice, then release it to return. View has individual snapping options.
 
 Hold Shift to constrain pen points and handles, pencil/brush strokes, and object or artboard movement to horizontal, vertical, or 45°. Alt-drag clones an object; combine it with Shift for a constrained copy. During a brush stroke, pressing Shift anchors the constraint at the last free point.
 
@@ -111,7 +111,7 @@ In Design, select vector artwork and choose **Object → Reshape → Distort, Sk
 
 The first moved handle converts live text and parameter-based shapes to paths. Undo restores their original form. Reshape currently supports vector artwork; placed photographs retain the normal move, scale, and rotate tools.
 
-**FX** (right studio): SVG filter effects on the selected object, then the layer underneath — blur, drop/inner shadow, offset, dilate/erode, saturate, hue rotate, brightness, contrast, invert, color matrix, turbulence, displacement. Params are the SVG ones. They rasterise on the canvas and write `<filter>` / `fe*` on SVG export.
+**FX** (right studio): SVG filter effects on the selected object, then the layer underneath — blur, drop/inner shadow, offset, dilate/erode, saturate, hue rotate, brightness, contrast, invert, color matrix, turbulence, displacement. Params are the SVG ones. They rasterize on the canvas and write `<filter>` / `fe*` on SVG export.
 
 Layers expand to show objects. Eye and lock work per object. Click a name to select it on the canvas.
 
@@ -125,7 +125,7 @@ Paint lives on a **pixel layer**. Add one from the Layers studio if the document
 
 - Brush `B` — size `[` `]`, hardness `Shift+[` `]`.
 - Eraser `E`, Fill `K`, Clone `J` (Alt-click sets source), Smudge `M`.
-- Healing brush `Shift+J` — Alt-click clean texture on the active image, then paint over a blemish. It blends sampled texture with the destination's local colour and preserves transparency. The source stays fixed for the stroke; Undo restores the whole stroke.
+- Healing brush `Shift+J` — Alt-click clean texture on the active image, then paint over a blemish. It blends sampled texture with the destination's local color and preserves transparency. The source stays fixed for the stroke; Undo restores the whole stroke.
 - Marquee, elliptical marquee, lasso, wand. Tolerance is in Brush.
 
 ### Masks
@@ -136,7 +136,7 @@ Masks work on pixel and vector layers and remain editable in the project. Invert
 
 ## Photo
 
-Open a folder, drop files, or load samples. The Develop panel groups adjustments into **Light**, **Colour**, and **Detail**. Tone curve, colour mixer, and colour grading expand when needed. **Before** compares the original; **Auto light** balances exposure and contrast. Export JPEG runs in the background. **Place in Design** drops the developed image as a pixel layer.
+Open a folder, drop files, or load samples. The Develop panel groups adjustments into **Light**, **Color**, and **Detail**. Tone curve, color mixer, and color grading expand when needed. **Before** compares the original; **Auto light** balances exposure and contrast. Export JPEG runs in the background. **Place in Design** drops the developed image as a pixel layer.
 
 Hold Space or choose Hand to drag the view; middle-drag and two-finger scroll also pan. Pinch, Ctrl+scroll, and Alt+scroll zoom. Ctrl+0 fits the photo; Ctrl+1 shows it at 100%.
 
@@ -169,7 +169,7 @@ All 52 are available immediately. The [weekly drop plan](template-drops.md) prop
 ## Palettes and brand libraries
 
 The right sidebar has three tabs: **Inspect** for the selected artwork, **Palettes**
-for reusable colours, and **Brand** for logos, images, fonts and other assets.
+for reusable colors, and **Brand** for logos, images, fonts and other assets.
 
 Project libraries live beside your work: `.omacolors` holds the palettes and
 `.omatype` names the font roles, and `.omabrand/` holds the assets and font files.
@@ -180,27 +180,27 @@ also lets you switch libraries explicitly.
 
 ### Build a palette
 
-1. Open **Palettes** and choose **Personal** for colours available across your work,
-   or **Project** for colours stored in the current project folder.
+1. Open **Palettes** and choose **Personal** for colors available across your work,
+   or **Project** for colors stored in the current project folder.
 2. Click **+ Palette**, enter a name and click **Rename**. Filter the collection by
-   palette name or hex colour.
-3. Add **+ Current colour**, collect fill and stroke colours **From selection**, or
+   palette name or hex color.
+3. Add **+ Current color**, collect fill and stroke colors **From selection**, or
    type a hex value and click **+**. `#RRGGBBAA` includes transparency.
 4. Choose **Fill** or **Stroke**, then click a swatch to apply it. Right-clicking a
    swatch applies the stroke directly. Each swatch's **···** menu can replace it
-   with the current colour, copy its hex value or remove it.
+   with the current color, copy its hex value or remove it.
 5. Click the palette **Save** button to keep the collection. Palette edits have
    their own save state, separate from saving the artwork.
 
 The collection's **··· → Load palettes…** adds palettes from a file; it keeps
-existing colours and gives conflicting names numbered suffixes. Save afterwards
+existing colors and gives conflicting names numbered suffixes. Save afterwards
 to keep the import. **Export selected palette…** shares one palette;
 **Export collection…** shares them all. Duplicate and remove controls are also
 available.
 
 Libraries refresh in the background about every three seconds. If the file changes
 while you have unsaved palette edits, those edits stay in the panel and Save is
-blocked. Export a copy to keep your version, or choose **Reload saved colours** to
+blocked. Export a copy to keep your version, or choose **Reload saved colors** to
 discard your palette edits and load the file on disk.
 
 Quitting with unsaved palettes offers **Save all**, **Discard** or **Cancel**.
@@ -220,8 +220,8 @@ the background, and files added or changed outside the app refresh about every
 three seconds. **··· → Refresh now** checks immediately.
 
 Drag a tile onto the canvas to place a copy at the drop point, or double-click it
-to place it at the selected artboard's centre. With no artboard selected, it uses
-the document centre. Placement is undoable with **Ctrl+Z**. In Photo, double-click
+to place it at the selected artboard's center. With no artboard selected, it uses
+the document center. Placement is undoable with **Ctrl+Z**. In Photo, double-click
 an asset to place it in Design; drag placement is available on artboards.
 
 Banks accept PNG, JPEG, WebP, TIFF, BMP, GIF, SVG and `.oma` artwork. SVG uses the
@@ -306,12 +306,12 @@ to `.omabrand/`, and font files stay inside its `fonts/` folder:
 ```
 
 Replace those example filenames with your own fonts. Fonts added through the panel
-receive stable filenames automatically. Share fonts only under their licence terms.
+receive stable filenames automatically. Share fonts only under their license terms.
 
 ## Files
 
 - Project: `.oma` (JSON, rasters PNG-packed, motion clip)
-- **File → Place…** `Ctrl+Shift+P` — PNG/JPEG/WebP/TIFF/GIF/BMP, SVG, PDF, AI, EPS, PSD onto the current artboard. Click to drop at native size, drag to size it. Enter places at the centre. Esc cancels. Placed rasters are selectable objects: move, scale, rotate.
+- **File → Place…** `Ctrl+Shift+P` — PNG/JPEG/WebP/TIFF/GIF/BMP, SVG, PDF, AI, EPS, PSD onto the current artboard. Click to drop at native size, drag to size it. Enter places at the center. Esc cancels. Placed rasters are selectable objects: move, scale, rotate.
 - Drop a file on the canvas or the welcome screen: images and SVG place, `.oma` opens, Lottie imports. Affinity `.afdesign` is not readable — export SVG or PDF from Affinity first.
 - Open/Place format matrix: native `.oma` / SVG / PNG / JPEG / WebP / GIF / BMP / TIFF. Converted with poppler / Ghostscript / ImageMagick / Inkscape: PDF, AI (PDF-based), EPS, PSD. Unsupported with a clear error: Affinity packages.
 - Export: PNG (1×/2×/3×), JPEG, SVG (cubics stay cubics, rasters keep their box, type writes `<text>`), animated SVG, Lottie JSON

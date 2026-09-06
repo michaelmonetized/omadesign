@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { featureGroups } from "../features";
 import { sitePath } from "../site";
-import { Arrow, Eyebrow } from "./studio-ui";
+import { Arrow } from "./studio-ui";
 
 export function FeatureExplorer() {
   const [query, setQuery] = useState("");
@@ -24,19 +24,8 @@ export function FeatureExplorer() {
   );
   return (
     <section className="section shell features-section" id="features">
-      <div className="section-heading">
-        <div>
-          <Eyebrow>07 / THE WHOLE TOOLBOX</Eyebrow>
-          <h2>
-            Small details.
-            <br />
-            Serious possibilities.
-          </h2>
-        </div>
-        <p>
-          From a single anchor point to a complete brand system. Find the tools
-          for the work you want to do.
-        </p>
+      <div className="section-heading" data-motion>
+        <h2>Features</h2>
       </div>
       <div className="feature-controls">
         <label className="search-box">
@@ -46,7 +35,7 @@ export function FeatureExplorer() {
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Find a tool, a format, a possibility…"
+            placeholder="Search tools and formats"
           />
         </label>
         <label className="category-label">
@@ -55,7 +44,7 @@ export function FeatureExplorer() {
             value={category}
             onChange={(event) => setCategory(event.target.value)}
           >
-            <option value="all">Every part of the studio</option>
+            <option value="all">All categories</option>
             {featureGroups.map((group) => (
               <option key={group.id} value={group.id}>
                 {group.title}
@@ -70,19 +59,12 @@ export function FeatureExplorer() {
       <div className="feature-groups">
         {groups.map((group, index) => (
           <details
+            data-motion
             key={`${group.id}-${Boolean(needle)}-${category}`}
             open={needle.length > 0 || category !== "all" || index === 0}
           >
             <summary>
-              <span className="group-number">
-                {String(
-                  featureGroups.findIndex((g) => g.id === group.id) + 1,
-                ).padStart(2, "0")}
-              </span>
-              <span>
-                {group.title}
-                <small>{group.intro}</small>
-              </span>
+              <span className="feature-group-title">{group.title}</span>
               <span className="group-count">{group.features.length}</span>
               <span className="disclosure-plus" aria-hidden="true">
                 +
@@ -101,7 +83,7 @@ export function FeatureExplorer() {
       </div>
       {count === 0 ? (
         <div className="empty-search">
-          <h3>No matching tools.</h3>
+          <h3>No matching features</h3>
           <p>Try “mask”, “fonts”, “guides” or “animation”.</p>
           <button
             className="text-link"
@@ -111,14 +93,14 @@ export function FeatureExplorer() {
               setCategory("all");
             }}
           >
-            Show every feature <Arrow />
+            Clear filters <Arrow />
           </button>
         </div>
       ) : null}
       <p className="feature-note">
-        This tour follows the current source. For formats, gestures and
-        supported workflows,{" "}
-        <a href={sitePath("docs/manual")}>read the full manual →</a>
+        Features describe the current source. See the{" "}
+        <a href={sitePath("docs/manual")}>manual</a> for formats and supported
+        workflows.
       </p>
     </section>
   );

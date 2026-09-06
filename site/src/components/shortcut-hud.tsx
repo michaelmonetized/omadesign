@@ -1,5 +1,4 @@
 import { useState, type KeyboardEvent } from "react";
-import { Eyebrow } from "./studio-ui";
 
 type Modifier = "Letters" | "Ctrl" | "Shift" | "Alt";
 const hudCommands: Record<Modifier, [string, string][]> = {
@@ -48,22 +47,13 @@ export function ShortcutHud() {
   return (
     <section className="hud-section">
       <div className="shell section">
-        <div className="section-heading">
-          <div>
-            <Eyebrow>04 / LITTLE KEYS. BIG CONFIDENCE.</Eyebrow>
-            <h2>
-              Find your flow.
-              <br />
-              The shortcuts will follow.
-            </h2>
-          </div>
-          <p>
-            A quiet strip at the bottom of the app shows what’s possible. Pick a
-            tool. Hold a modifier. The hints change with you.
-          </p>
+        <div className="section-heading" data-motion>
+          <h2>Shortcuts for the current tool</h2>
+          <p>Pick a tool and hold Ctrl, Shift or Alt to see its shortcuts.</p>
         </div>
         <div
           className="hud-demo"
+          data-motion
           tabIndex={0}
           onKeyDown={keys}
           onKeyUp={keys}
@@ -76,7 +66,7 @@ export function ShortcutHud() {
           aria-label="Interactive shortcut preview. Focus here and hold Control, Shift or Alt, or use the buttons."
         >
           <div className="hud-demo-top">
-            <span className="small-label">TRY THE SHORTCUT HUD</span>
+            <span>Tool</span>
             <div className="segment-control" aria-label="Preview tool">
               {["Pen", "Move", "Brush"].map((value) => (
                 <button
@@ -107,13 +97,6 @@ export function ShortcutHud() {
               <rect x="119" y="132" width="12" height="12" />
               <rect x="662" y="36" width="12" height="12" />
             </svg>
-            <span>
-              {tool === "Pen"
-                ? "Every point. A little more precise."
-                : tool === "Move"
-                  ? "Everything, right where it belongs."
-                  : "A steady hand. A little help."}
-            </span>
           </div>
           <div className="hud-tool-row">
             <span>{tool}</span>
@@ -167,7 +150,7 @@ export function ShortcutHud() {
           </div>
         </div>
         <div className="hud-caption">
-          <span>Hold a modifier while the preview has focus, or tap one →</span>
+          <span>Focus the preview and hold a key, or choose a modifier.</span>
           <div className="modifier-buttons">
             {(["Letters", "Ctrl", "Shift", "Alt"] as Modifier[]).map((key) => (
               <button
@@ -180,9 +163,6 @@ export function ShortcutHud() {
               </button>
             ))}
           </div>
-          <span className="muted">
-            A taste of the live, contextual HUD in the app.
-          </span>
         </div>
       </div>
     </section>

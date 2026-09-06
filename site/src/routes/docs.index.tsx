@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { CURL } from "../site";
 
 export const Route = createFileRoute("/docs/")({
   head: () => ({ meta: [{ title: "Getting started · omadesign" }] }),
@@ -9,21 +10,16 @@ function DocsOverview() {
   return (
     <>
       <header>
-        <p className="eyebrow">The studio guide</p>
-        <h1>
-          A place to start.
-          <br />
-          Room to find your way.
-        </h1>
+        <h1>Getting started</h1>
         <p>
           omadesign brings vector design, painting, photo adjustments and motion
-          into one native Linux studio. Start small, learn the tools as you go,
-          and keep your artwork in an editable <code>.oma</code> document.
+          into one native Linux studio. Save editable artwork in an{" "}
+          <code>.oma</code> document.
         </p>
       </header>
 
       <section aria-labelledby="choose-a-persona">
-        <h2 id="choose-a-persona">Four ways to make.</h2>
+        <h2 id="choose-a-persona">Studios</h2>
         <dl className="docs-personas">
           <div>
             <dt>Design</dt>
@@ -42,7 +38,7 @@ function DocsOverview() {
           <div>
             <dt>Photo</dt>
             <dd>
-              Adjust light and colour, compare edits and crop. Place the result
+              Adjust light and color, compare edits and crop. Place the result
               back into Design.
             </dd>
           </div>
@@ -62,7 +58,7 @@ function DocsOverview() {
       </section>
 
       <section aria-labelledby="get-the-app">
-        <h2 id="get-the-app">Get the app.</h2>
+        <h2 id="get-the-app">Install</h2>
         <p>
           The installer chooses the published Linux package for your machine and
           adds a desktop entry. You can also download a package from{" "}
@@ -72,11 +68,7 @@ function DocsOverview() {
           .
         </p>
         <pre aria-label="Install omadesign">
-          <code>
-            {
-              "curl -fsSL https://raw.githubusercontent.com/michaelmonetized/omadesign/master/scripts/install-remote.sh | sh"
-            }
-          </code>
+          <code>{CURL}</code>
         </pre>
         <aside className="docs-note" aria-label="Version information">
           <p>
@@ -91,20 +83,22 @@ function DocsOverview() {
       </section>
 
       <section aria-labelledby="make-something">
-        <h2 id="make-something">Make something yours.</h2>
+        <h2 id="make-something">Templates and resources</h2>
         <p>
-          Open the template library for an editable starting point, or explore
-          the{" "}
+          Open the{" "}
+          <Link to="/docs/manual" hash="templates">
+            template library
+          </Link>{" "}
+          for an editable starting point, or explore the{" "}
           <a href="https://github.com/michaelmonetized/omadesign/tree/master/examples/fieldwork">
             Fieldwork example kit
           </a>{" "}
           to try portable palettes and reusable brand artwork.
         </p>
         <p>
-          Curious about what is still taking shape? Read the{" "}
-          <Link to="/docs/roadmap">project status</Link>. Found something worth
-          fixing? The <Link to="/docs/contributing">contributing guide</Link> is
-          a good next step.
+          Read the <Link to="/docs/roadmap">project status</Link> for current
+          limits, or the <Link to="/docs/contributing">contributing guide</Link>{" "}
+          to help with development.
         </p>
       </section>
     </>
