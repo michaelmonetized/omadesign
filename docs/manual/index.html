@@ -1,0 +1,246 @@
+<!DOCTYPE html><html lang="en" id="top" class="mocha dark"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="/omadesign/assets/styles-BncfRdJI.css" data-precedence="default"/><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" data-precedence="default"/><title>User manual · omadesign</title><meta name="description" content="An Omarchy-first creative suite for Linux. Native Rust. Design, paint, retouch and animate, with portable palettes, brand assets and fonts. Free and open source."/><meta name="theme-color" content="#111412"/><meta property="og:title" content="omadesign — your Linux. Your creative suite."/><meta property="og:description" content="Omarchy first. Rust native. Four creative studios, portable brand files, and a desktop that feels like yours. FOSS, btw."/><meta property="og:type" content="website"/><meta property="og:image" content="https://michaelmonetized.github.io/omadesign/media/studio/omadesign-logo.webp"/><meta name="twitter:card" content="summary_large_image"/><link rel="modulepreload" href="/omadesign/assets/index-CzowaW4x.js"/><link rel="modulepreload" href="/omadesign/assets/docs-Dd6PiS50.js"/><link rel="modulepreload" href="/omadesign/assets/docs.manual-BhYjkKra.js"/><link rel="modulepreload" href="/omadesign/assets/md-CYAhWzfs.js"/><link rel="icon" type="image/svg+xml" href="/omadesign/favicon.svg"/><link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="shell header-inner"><a href="/omadesign/" class="wordmark" aria-label="omadesign home"><span class="brand-dot" aria-hidden="true"></span>oma<span>design</span><sup>α</sup></a><nav aria-label="Main navigation"><a class="nav-features" href="/omadesign/#features">Features</a><a href="/omadesign/docs">Docs</a><a href="https://github.com/michaelmonetized/omadesign">GitHub <span aria-hidden="true">↗</span></a></nav><div class="header-actions"><button class="theme-toggle" type="button" aria-label="Use light theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor"></path></svg></button><a class="button button-small" href="/omadesign/#install">Get omadesign <span aria-hidden="true">↗</span></a></div></div></header><!--$--><main id="main" class="docs-layout"><aside class="docs-nav"><nav aria-label="Documentation"><p class="docs-nav-title">A little guidance.</p><ul><li><a href="/omadesign/docs">Overview</a></li><li><a class="active" href="/omadesign/docs/manual" data-status="active" aria-current="page">User manual</a></li><li><a href="/omadesign/docs/contributing">Contributing</a></li><li><a href="/omadesign/docs/roadmap">Project status</a></li></ul></nav><nav aria-label="Project resources"><p class="docs-nav-title">Keep exploring</p><ul><li><a href="https://github.com/michaelmonetized/omadesign/tree/master/examples/fieldwork">Fieldwork brand kit ↗</a></li><li><a href="https://github.com/michaelmonetized/omadesign/blob/master/docs/template-drops.md">Template collection notes ↗</a></li><li><a href="https://github.com/michaelmonetized/omadesign/issues">Issues &amp; ideas ↗</a></li></ul></nav></aside><article class="docs-content prose" aria-label="Documentation article"><h1 id="omadesign-user-manual">omadesign user manual</h1>
+<p>A native Linux studio. Design, paint, retouch and animate. One document, one layer stack.</p>
+<p>Familiar shortcuts, with a contextual guide. Press <strong>F1</strong> any time.</p>
+<h2 id="learn-as-you-draw">Learn as you draw</h2>
+<p>The <strong>Shortcut HUD</strong> sits along the bottom of the window. Its upper row follows
+the current tool or edit; the lower row shows letter keys. Hold Ctrl, Shift, Alt,
+or a combination to see the matching commands and highlighted gestures. Release
+the modifier and the normal hints return. With Pen, for example, the strip keeps
+angle constraints, handle controls and finishing the path close at hand.</p>
+<p>It keeps the same height while modifiers change, so a drag stays anchored to the
+same canvas. Hover <strong>+ more</strong> to inspect overflow hints at smaller window sizes.
+Hints are informational and do not take keyboard focus from your work. Text
+editing and menus get their own context. <strong>Ctrl+/</strong> or <strong>View → Shortcut HUD</strong>
+shows or hides the strip; <strong>F1</strong> opens the complete shortcut list.</p>
+<h2 id="install">Install</h2>
+<pre><code class="language-sh">curl -fsSL https://raw.githubusercontent.com/michaelmonetized/omadesign/master/scripts/install-remote.sh | sh
+</code></pre>
+<p>That installs <code>~/.local/bin/omadesign</code> and a desktop entry. Binaries are glibc 2.35, so they run on Asahi Omarchy, Ubuntu 22.04+, and current Arch.</p>
+<h2 id="first-five-minutes">First five minutes</h2>
+<ol>
+<li>Launch <strong>omadesign</strong>.</li>
+<li>Pick a document size, try <strong>Templates · 52</strong>, or open the demo.</li>
+<li><strong>Design</strong> is the default persona. <code>R</code> a rectangle, <code>P</code> the pen, <code>T</code> type.</li>
+<li><strong>Pixel</strong> (<code>B</code>) paints on a raster layer.</li>
+<li><strong>Photo</strong> opens a folder of pictures and grades them.</li>
+</ol>
+<p>Chrome follows your desktop: Omarchy theme colours and the font from <code>omarchy font current</code> / fontconfig. Icons are Phosphor Light.</p>
+<h2 id="personas">Personas</h2>
+<table><thead><tr><th>Persona</th><th>You are…</th><th>First tools</th></tr></thead><tbody><tr><td><strong>Design</strong></td><td>a mark, a poster, a layout</td><td>Move <code>V</code>, Pen <code>P</code>, Rectangle <code>R</code>, Type <code>T</code></td></tr><tr><td><strong>Pixel</strong></td><td>painting or retouching</td><td>Brush <code>B</code>, Eraser <code>E</code>, Clone <code>J</code>, Wand <code>W</code></td></tr><tr><td><strong>Photo</strong></td><td>grading a photograph</td><td>Crop <code>C</code>, develop sliders, Place in Design</td></tr><tr><td><strong>Motion</strong></td><td>animating the artboard</td><td>Space play, <code>K</code> key, File → Lottie</td></tr></tbody></table>
+<h2 id="design">Design</h2>
+<ul>
+<li><strong>Move</strong> <code>V</code> — click to select, drag to move, eight handles scale, the handle above the box rotates. Shift-click adds to the selection. Alt-drag clones. Corner dots round a rectangle.</li>
+<li><strong>Free transform</strong> <code>Ctrl+T</code> — puts the current selection into Move with its scale and rotation handles ready. Also under Object. It keeps live text and shape parameters editable.</li>
+<li><strong>Node</strong> <code>A</code> — drag points and Bézier handles. Shift-click adds nodes. Drag a box around nodes to select them. Drag a segment to move the line. Click a curve to insert. Alt-click converts corner/smooth. Alt-drag a handle breaks symmetry. Delete removes selected points. Object → Break path. Shapes convert to a path the first time you edit them.</li>
+<li><strong>Pen</strong> <code>P</code> — click a corner, click-drag a smooth point (a twitch under 3px stays a corner). Shift constrains 45°. Alt-drag breaks handle symmetry. The cubic is drawn as you go. Enter or double-click finishes an <strong>open</strong> path. Esc removes the last point, then cancels. Click the first point to close. Click an open endpoint to continue it, or to join it to the path you&#x27;re drawing.</li>
+<li><strong>Artboard</strong> <code>Shift+O</code> — draw a new board, drag to move, handles scale, the top handle rotates. Alt-drag clones. Object → Wrap selection in artboard. Click the name in Transform to rename.</li>
+</ul>
+<p>Pen and Node gestures:</p>
+<table><thead><tr><th>Gesture</th><th>Pen</th><th>Node</th></tr></thead><tbody><tr><td>Click</td><td>Corner</td><td>Select (Shift adds)</td></tr><tr><td>Click-drag</td><td>Smooth</td><td>Move selected points</td></tr><tr><td>Alt-drag</td><td>Break handle</td><td>Break handle</td></tr><tr><td>Shift</td><td>45°</td><td>45° on handles</td></tr><tr><td>Esc</td><td>Drop last point, then cancel</td><td>—</td></tr><tr><td>Enter / double-click</td><td>Finish open</td><td>—</td></tr><tr><td>Click first point</td><td>Close</td><td>—</td></tr><tr><td>Click open end</td><td>Continue / join</td><td>—</td></tr><tr><td>Box</td><td>—</td><td>Select those nodes</td></tr><tr><td>Drag a segment</td><td>—</td><td>Move the line</td></tr><tr><td>Click a curve</td><td>—</td><td>Insert</td></tr><tr><td>Alt-click a point</td><td>—</td><td>Corner ↔ smooth</td></tr><tr><td>Delete</td><td>—</td><td>Remove selected points</td></tr></tbody></table>
+<ul>
+<li><strong>Pencil</strong> <code>N</code> — freehand curve.</li>
+<li><strong>Rectangle</strong> <code>R</code> / <strong>Ellipse</strong> <code>O</code> / <strong>Polygon</strong> <code>Y</code> / <strong>Star</strong> <code>S</code> / <strong>Line</strong> <code>L</code> — drag. Shift constrains. Corner radius, sides, and inner radius live in Transform.</li>
+<li><strong>Type</strong> <code>T</code> — click to place, type on the canvas. First keystroke replaces the “Type” placeholder. Enter is a new line. Esc or click away finishes. Double-click existing type to edit. Character studio: font, size, tracking, leading, OpenType (kerning, ligatures, tabular figures, small caps).</li>
+<li><strong>Gradient</strong> <code>G</code> — drag across a selected shape.</li>
+<li><strong>Eyedropper</strong> <code>I</code> — sample fill.</li>
+<li><strong>Trace</strong> <code>U</code> — raster to vector on the active pixel layer. Threshold, colour count, and smoothness live in Trace. Object → Trace to vector does the same without switching tools.</li>
+<li><strong>Zoom</strong> <code>Z</code> — drag a box to that area. Click zooms in, Alt-click zooms out a step. Ctrl-click fits the artboard. Ctrl+Shift-click fits the selection, or every object if nothing is selected. Pinch the trackpad to zoom the canvas. Ctrl++ / Ctrl+- / Ctrl+scroll / Alt-scroll also zoom the canvas, not the chrome. With Z selected, two-finger scroll zooms.</li>
+<li><strong>Hand</strong> <code>H</code> / Space — pan.</li>
+</ul>
+<p>Colour studio: HSV, hex, swatches, recent. <code>X</code> swaps fill/stroke. <code>D</code> restores defaults.</p>
+<p><strong>Select</strong> has All, None, Invert, Same Fill / Stroke / Effects, and With / Without Fill / Stroke / Effects. Matching compares the complete property, including gradient positions, stroke settings, or the effect stack. Hidden and locked objects stay out of the selection.</p>
+<p><strong>Object → Pathfinder</strong> offers Union, Subtract, Intersect, XOR, and Divide. Select two or more vector objects on the same layer. Operations follow the layer stacking order; Divide makes separate pieces, with holes preserved. Each operation is one undo step. Combine <code>Ctrl+G</code> and Release <code>Ctrl+Shift+G</code> remain available.</p>
+<p><strong>Object → Expand stroke to outline</strong> turns the visible stroke into filled geometry, including caps, joins, and dashes. Existing fills stay in place beneath the new outline. Compound outlines retain their holes; use Reshape to move their contours together.</p>
+<p>Combine and Release preserve guide state, rotation, stacking and linear gradients
+in one undo step. Combine and Pathfinder require either artwork or guides, with
+no mixture. Radial fills follow each resulting object&#x27;s bounds when contours are
+separated; a shared radial centre is not currently represented in the document.</p>
+<h3 id="guides-rulers-and-precision">Guides, rulers, and precision</h3>
+<p>Drag from the top ruler for a horizontal guide or the left ruler for a vertical one. Drag an existing guide to move it. Select a guide and press Delete, drag it outside the canvas, or use its context menu to remove it. View also offers Clear ruler guides. <code>Ctrl+;</code> shows or hides ruler and object guides.</p>
+<p><strong>Object → Guides → Convert selection to guides</strong> turns vector artwork into editable, non-printing contours. Curves, compound paths, shapes and live text keep their original data and style. Move, Node and Reshape still edit them; snapping follows the actual curve. <strong>Release guides</strong> restores them as artwork, including any geometry edits. Both actions undo normally, and guides survive project saves while staying out of PNG/JPEG/SVG/Lottie exports. A placed image creates a separate guide around its bounds and retains its pixels. Hidden guides do not capture pointer input or snapping.</p>
+<p>Drag the rulers&#x27; top-left intersection to set the zero point. Double-click that corner to reset it. Right-click a ruler or use View to choose pixels, millimetres, centimetres, inches, or points. Physical units follow the document DPI; changing units changes the ruler display, not the artwork.</p>
+<p>Snapping uses object and artboard edges and centres, guides, the grid, and equal spacing between nearby objects. Alignment lines and gap measurements appear as you move. <code>Ctrl+Shift+;</code> toggles snapping; hold Ctrl during the same drag to temporarily reverse that choice, then release it to return. View has individual snapping options.</p>
+<p>Hold Shift to constrain pen points and handles, pencil/brush strokes, and object or artboard movement to horizontal, vertical, or 45°. Alt-drag clones an object; combine it with Shift for a constrained copy. During a brush stroke, pressing Shift anchors the constraint at the last free point.</p>
+<h3 id="reshape">Reshape</h3>
+<p>In Design, select vector artwork and choose <strong>Object → Reshape → Distort, Skew, Perspective, or Warp mesh</strong>. Drag the cage handles; the inspector switches modes and finishes the edit. The mesh has nine handles. Shift constrains movement, and Ctrl temporarily reverses snapping. Enter finishes; Esc cancels the current drag, or leaves the mode if no drag is active. Each completed drag is one undo step.</p>
+<p>The first moved handle converts live text and parameter-based shapes to paths. Undo restores their original form. Reshape currently supports vector artwork; placed photographs retain the normal move, scale, and rotate tools.</p>
+<p><strong>FX</strong> (right studio): SVG filter effects on the selected object, then the layer underneath — blur, drop/inner shadow, offset, dilate/erode, saturate, hue rotate, brightness, contrast, invert, color matrix, turbulence, displacement. Params are the SVG ones. They rasterise on the canvas and write <code>&lt;filter&gt;</code> / <code>fe*</code> on SVG export.</p>
+<p>Layers expand to show objects. Eye and lock work per object. Click a name to select it on the canvas.</p>
+<p>Document tabs sit above the canvas. Ctrl+N is a new tab. Ctrl+O opens another tab. Use the tab&#x27;s close button or its right-click menu to close it. Unsaved work asks Save / Discard / Cancel.</p>
+<p>Idle for a second writes <code>~/.local/share/omadesign/&lt;id&gt;.oma.swp</code>. Save deletes it. The splash Recovered tab lists crash leftovers. Recents lists <code>.oma</code> files you actually opened.</p>
+<h2 id="pixel">Pixel</h2>
+<p>Paint lives on a <strong>pixel layer</strong>. Add one from the Layers studio if the document is vector-only.</p>
+<ul>
+<li>Brush <code>B</code> — size <code>[</code> <code>]</code>, hardness <code>Shift+[</code> <code>]</code>.</li>
+<li>Eraser <code>E</code>, Fill <code>K</code>, Clone <code>J</code> (Alt-click sets source), Smudge <code>M</code>.</li>
+<li>Healing brush <code>Shift+J</code> — Alt-click clean texture on the active image, then paint over a blemish. It blends sampled texture with the destination&#x27;s local colour and preserves transparency. The source stays fixed for the stroke; Undo restores the whole stroke.</li>
+<li>Marquee, elliptical marquee, lasso, wand. Tolerance is in Brush.</li>
+</ul>
+<h3 id="masks">Masks</h3>
+<p>Use the layer context menu&#x27;s <strong>Mask</strong> submenu, or <strong>Add layer mask</strong> in Pixel, to reveal all, hide all, or start from the current pixel selection. Switch between Pixels/Artwork and Mask in the inspector. Black hides; white reveals. The Eraser hides on a mask, and Fill works on the current paint target.</p>
+<p>Masks work on pixel and vector layers and remain editable in the project. Invert flips the mask; Remove reveals the untouched layer. Apply to Pixels bakes the result into a raster layer, with one undo restoring both pixels and mask. Placed image masks follow the image&#x27;s position, scale, and rotation. Choose Pixels before using the healing or clone brush.</p>
+<h2 id="photo">Photo</h2>
+<p>Open a folder, drop files, or load samples. The Develop panel groups adjustments into <strong>Light</strong>, <strong>Colour</strong>, and <strong>Detail</strong>. Tone curve, colour mixer, and colour grading expand when needed. <strong>Before</strong> compares the original; <strong>Auto light</strong> balances exposure and contrast. Export JPEG runs in the background. <strong>Place in Design</strong> drops the developed image as a pixel layer.</p>
+<p>Hold Space or choose Hand to drag the view; middle-drag and two-finger scroll also pan. Pinch, Ctrl+scroll, and Alt+scroll zoom. Ctrl+0 fits the photo; Ctrl+1 shows it at 100%.</p>
+<h2 id="motion">Motion</h2>
+<p>The artboard you drew is the rest pose. Motion does not rewrite it. Tracks include X, Y, rotation, scale, opacity, stroke reveal and fill reveal.</p>
+<ul>
+<li>Open the <strong>Motion</strong> persona. The timeline sits under the canvas.</li>
+<li>Select vector artwork and choose <strong>Draw stroke, Pop in, Slam, Shake, Fill up, Slide up/down/left/right, Fly, Zoom, Buzz, or Fade in</strong> in the inspector. Draw stroke needs a visible stroke; Fill up needs a closed shape with a fill. Incompatible, locked, hidden and guide objects are skipped.</li>
+<li>Duration sits above the presets. <strong>Timing &amp; energy</strong> opens delay, stagger, intensity and start-at-playhead options. Presets become ordinary keys; each application has its own Undo. They replace only the affected channels inside their time interval and extend the clip if needed. Space previews the result.</li>
+<li>Select a shape. Drag it — that writes keys at the playhead. First key at t &gt; 0 also plants rest at 0, so it animates from where you drew it.</li>
+<li><code>K</code> keys X/Y/rotate/scale for the selection. Diamonds on the row are keys. Drag a diamond to retime. Click it, Delete removes it. Cycle ease on a selected key.</li>
+<li>Space plays. Home / End jump. Loop is the repeat icon.</li>
+<li><strong>File → Export animated SVG…</strong> writes animated transforms plus stroke/fill reveals, retaining masks and effects. <strong>Export Lottie…</strong> writes Bodymovin 5.x shape animation with trim paths and fill masks. Pixel layers, layer masks and effects cannot be preserved by this Lottie exporter and produce a clear error; choose animated SVG for those compositions. <strong>Import Lottie…</strong> brings a shape-layer Lottie onto the timeline.</li>
+</ul>
+<p>PNG/JPEG/static SVG stay the rest pose. The clip lives in the <code>.oma</code>.</p>
+<p>Animated SVG outlines text in the exported file so glyph geometry and reveals
+match the canvas. The source text stays editable in <code>.oma</code>. Lottie import is a
+basic shape subset; use <code>.oma</code> to retain the complete editable animation.</p>
+<h2 id="templates">Templates</h2>
+<p>Open <strong>Templates · 52</strong> on the welcome screen or <strong>File → Template library</strong> while drawing. Search by name or idea, filter the nine categories, choose any built-in document size or enter custom width, height and DPI. Previews adapt to the chosen proportions. Click a card and <strong>Use this template</strong>, or double-click the card.</p>
+<p>Templates open as unsaved documents with editable paper, artwork and copy layers. Existing work stays in its tab. They use locally available fonts and need no network connection. The 52 designs include distinct artwork and layouts for portrait, square and landscape pages; very tiny sizes omit unreadable secondary copy.</p>
+<p>All 52 are available immediately. The <a href="https://github.com/michaelmonetized/omadesign/blob/master/docs/template-drops.md">weekly drop plan</a> proposes a release order and a remix prompt for each week; it does not schedule or publish marketing posts.</p>
+<h2 id="palettes-and-brand-libraries">Palettes and brand libraries</h2>
+<p>The right sidebar has three tabs: <strong>Inspect</strong> for the selected artwork, <strong>Palettes</strong>
+for reusable colours, and <strong>Brand</strong> for logos, images, fonts and other assets.</p>
+<p>Project libraries live beside your work: <code>.omacolors</code> holds the palettes and
+<code>.omatype</code> names the font roles, and <code>.omabrand/</code> holds the assets and font files.
+A saved document uses the nearest enclosing folder containing any of these.
+If none exists, it starts beside the document. For an
+unsaved document, use <strong>Choose a project</strong> to select a folder. The folder button
+also lets you switch libraries explicitly.</p>
+<h3 id="build-a-palette">Build a palette</h3>
+<ol>
+<li>Open <strong>Palettes</strong> and choose <strong>Personal</strong> for colours available across your work,
+or <strong>Project</strong> for colours stored in the current project folder.</li>
+<li>Click <strong>+ Palette</strong>, enter a name and click <strong>Rename</strong>. Filter the collection by
+palette name or hex colour.</li>
+<li>Add <strong>+ Current colour</strong>, collect fill and stroke colours <strong>From selection</strong>, or
+type a hex value and click <strong>+</strong>. <code>#RRGGBBAA</code> includes transparency.</li>
+<li>Choose <strong>Fill</strong> or <strong>Stroke</strong>, then click a swatch to apply it. Right-clicking a
+swatch applies the stroke directly. Each swatch&#x27;s <strong>···</strong> menu can replace it
+with the current colour, copy its hex value or remove it.</li>
+<li>Click the palette <strong>Save</strong> button to keep the collection. Palette edits have
+their own save state, separate from saving the artwork.</li>
+</ol>
+<p>The collection&#x27;s <strong>··· → Load palettes…</strong> adds palettes from a file; it keeps
+existing colours and gives conflicting names numbered suffixes. Save afterwards
+to keep the import. <strong>Export selected palette…</strong> shares one palette;
+<strong>Export collection…</strong> shares them all. Duplicate and remove controls are also
+available.</p>
+<p>Libraries refresh in the background about every three seconds. If the file changes
+while you have unsaved palette edits, those edits stay in the panel and Save is
+blocked. Export a copy to keep your version, or choose <strong>Reload saved colours</strong> to
+discard your palette edits and load the file on disk.</p>
+<p>Quitting with unsaved palettes offers <strong>Save all</strong>, <strong>Discard</strong> or <strong>Cancel</strong>.
+The app waits for library saves to finish and keeps you in the app if a save
+fails or a file conflicts. Any unsaved artwork gets its own save prompt afterwards.</p>
+<h3 id="build-a-brand-bank">Build a brand bank</h3>
+<p>Open <strong>Brand → Load bank…</strong> and choose a project folder or its <code>.omabrand</code> folder.
+For a new collection, choose a project folder and click <strong>Create bank</strong>. Edit the
+brand name and click <strong>Save</strong> to name it.</p>
+<p>Use <strong>··· → Add assets…</strong> to copy artwork into the bank; the originals stay in
+place. Nested folders are supported. Filter by name, folder path or file type,
+or use <strong>Image</strong>, <strong>SVG</strong> and <strong>omadesign</strong> to narrow the tiles. Thumbnails load in
+the background, and files added or changed outside the app refresh about every
+three seconds. <strong>··· → Refresh now</strong> checks immediately.</p>
+<p>Drag a tile onto the canvas to place a copy at the drop point, or double-click it
+to place it at the selected artboard&#x27;s centre. With no artboard selected, it uses
+the document centre. Placement is undoable with <strong>Ctrl+Z</strong>. In Photo, double-click
+an asset to place it in Design; drag placement is available on artboards.</p>
+<p>Banks accept PNG, JPEG, WebP, TIFF, BMP, GIF, SVG and <code>.oma</code> artwork. SVG uses the
+app&#x27;s existing supported import subset; complex SVG features may not carry over.
+Use <strong>··· → Save bank copy…</strong> to copy the whole bank, including its name and nested
+folders, to another project folder.</p>
+<h3 id="add-brand-typography">Add brand typography</h3>
+<p>Open <strong>Brand → Typography</strong> and choose <strong>Add fonts…</strong> to copy TTF or OTF files into
+the project. Name the kit and click <strong>Save name</strong>. Select a font row, give its role
+a useful name such as Heading, Body or Caption, and click <strong>Save role</strong>. Either save
+button keeps both pending name and role edits. Filter by role, family or filename.</p>
+<p>Click <strong>Apply</strong> beside a role to use it on selected text, or on the next text you
+create. The Character panel&#x27;s font picker also lists <strong>Project fonts</strong>. Applying a
+font to artwork supports Undo; the kit&#x27;s names and files have their own save controls.
+Fonts are available inside omadesign without installing them on your computer.</p>
+<p>The Typography <strong>··· → Load kit…</strong> action merges another <code>.omatype</code> kit and copies its font files; keep its
+<code>.omabrand/</code> folder beside the source file. <strong>··· → Save copy…</strong> writes the saved kit and
+its fonts into another project folder. Save pending name edits first. Removing a
+role keeps its font file for artwork that already uses it.</p>
+<p>External font changes refresh in the background. Existing text keeps its applied
+face; click <strong>Apply</strong> again to adopt a changed font. If the kit changes while you
+are editing a name, the panel preserves your draft and reports the conflict.
+Typography <strong>··· → Reload typography</strong> discards the draft and loads the saved kit.</p>
+<p>Native <code>.oma</code> text remains editable after moving the project, including typing
+new characters. Saving artwork into another folder also copies the font faces it
+uses into that folder&#x27;s <code>.omabrand/fonts/</code>. SVG export draws project-font text as
+vector outlines so its appearance survives sharing; the <code>.oma</code> source keeps the
+editable text.</p>
+<h3 id="share-a-project-kit">Share a project kit</h3>
+<p>Copy <code>.omacolors</code>, <code>.omatype</code> and the complete <code>.omabrand/</code> folder with your project
+to another machine. <strong>Save bank copy…</strong> copies the assets, typography kit and fonts;
+export the palette collection separately as <code>.omacolors</code> in the destination folder.
+These names
+begin with a dot, so enable hidden files in your file manager when copying by hand.
+Try the portable <a href="https://github.com/michaelmonetized/omadesign/tree/master/examples/fieldwork">Fieldwork example</a>.</p>
+<p>The <code>.omacolors</code> file is readable JSON. One file can hold several named palettes:</p>
+<pre><code class="language-json">{
+  &quot;version&quot;: 1,
+  &quot;palettes&quot;: [
+    { &quot;name&quot;: &quot;Fieldwork&quot;, &quot;colors&quot;: [&quot;#173F35&quot;, &quot;#F5EBDC&quot;, &quot;#D97C5B80&quot;] },
+    { &quot;name&quot;: &quot;Ink&quot;, &quot;colors&quot;: [&quot;#202420&quot;, &quot;#FFFFFF&quot;] }
+  ]
+}
+</code></pre>
+<p>Handwritten files may also contain a single <code>{ &quot;name&quot;: &quot;Ink&quot;, &quot;colors&quot;: [...] }</code>
+palette or a simple array such as <code>[&quot;#202420&quot;, &quot;#FFFFFF&quot;]</code>. Older saved palettes
+with RGBA objects still load and become the portable format when saved.</p>
+<p>The optional <code>.omabrand/brand.json</code> file sets the bank&#x27;s display name:</p>
+<pre><code class="language-json">{ &quot;version&quot;: 1, &quot;name&quot;: &quot;Fieldwork&quot; }
+</code></pre>
+<p>Without that file, the project folder supplies the display name. Keep the artwork inside
+<code>.omabrand/</code>; no absolute paths are needed in the name file.</p>
+<p>The optional <code>.omatype</code> file names the project&#x27;s font roles. Paths are relative
+to <code>.omabrand/</code>, and font files stay inside its <code>fonts/</code> folder:</p>
+<pre><code class="language-json">{
+  &quot;version&quot;: 1,
+  &quot;name&quot;: &quot;Fieldwork typography&quot;,
+  &quot;roles&quot;: [
+    { &quot;name&quot;: &quot;Heading&quot;, &quot;font&quot;: &quot;fonts/Display.ttf&quot; },
+    { &quot;name&quot;: &quot;Body&quot;, &quot;font&quot;: &quot;fonts/Reading.otf&quot; }
+  ]
+}
+</code></pre>
+<p>Replace those example filenames with your own fonts. Fonts added through the panel
+receive stable filenames automatically. Share fonts only under their licence terms.</p>
+<h2 id="files">Files</h2>
+<ul>
+<li>Project: <code>.oma</code> (JSON, rasters PNG-packed, motion clip)</li>
+<li><strong>File → Place…</strong> <code>Ctrl+Shift+P</code> — PNG/JPEG/WebP/TIFF/GIF/BMP, SVG, PDF, AI, EPS, PSD onto the current artboard. Click to drop at native size, drag to size it. Enter places at the centre. Esc cancels. Placed rasters are selectable objects: move, scale, rotate.</li>
+<li>Drop a file on the canvas or the welcome screen: images and SVG place, <code>.oma</code> opens, Lottie imports. Affinity <code>.afdesign</code> is not readable — export SVG or PDF from Affinity first.</li>
+<li>Open/Place format matrix: native <code>.oma</code> / SVG / PNG / JPEG / WebP / GIF / BMP / TIFF. Converted with poppler / Ghostscript / ImageMagick / Inkscape: PDF, AI (PDF-based), EPS, PSD. Unsupported with a clear error: Affinity packages.</li>
+<li>Export: PNG (1×/2×/3×), JPEG, SVG (cubics stay cubics, rasters keep their box, type writes <code>&lt;text&gt;</code>), animated SVG, Lottie JSON</li>
+<li>Copy / cut / paste objects. Status bar says so. Copy style <code>Ctrl+Alt+C</code>, paste style <code>Ctrl+Alt+V</code>. Alt-drag clones.</li>
+<li>Native file dialogs. Right-click the canvas for Place, Trace, and the same edits.</li>
+</ul>
+<h2 id="keys">Keys</h2>
+<pre><code>Move V · Node A · Pen P · Pencil N
+Rectangle R · Ellipse O · Polygon Y · Star S · Line L
+Type T · Gradient G · Eyedropper I · Trace U · Brush B · Eraser E
+Fill K · Clone J · Heal Shift+J · Smudge M · Crop C · Wand W · Hand H · Zoom Z
+Undo Ctrl+Z · Redo Ctrl+Shift+Z · Duplicate Ctrl+D
+Copy Ctrl+C · Paste Ctrl+V · Cut Ctrl+X · Select all Ctrl+A
+Save Ctrl+S · Save as Ctrl+Shift+S · Open Ctrl+O · New Ctrl+N · Place Ctrl+Shift+P · Export Ctrl+E
+Combine Ctrl+G · Release Ctrl+Shift+G · Front Ctrl+Shift+] · Back Ctrl+Shift+[
+Free transform Ctrl+T · Guides Ctrl+; · Snapping Ctrl+Shift+; · Hold Ctrl to reverse snapping
+Shortcut HUD Ctrl+/ · All shortcuts F1
+Fit Ctrl+0 · 100% Ctrl+1 · Zoom in Ctrl++ · Zoom out Ctrl+- · Pan Space · Pinch / Ctrl+scroll zoom
+Motion: Space play · K key · Home start · End end
+</code></pre>
+<h2 id="theme-and-font">Theme and font</h2>
+<p>The app chrome follows your desktop theme. On launch it reads:</p>
+<ol>
+<li><code>~/.local/state/omarchy/current/theme/colors.toml</code></li>
+<li><code>~/.config/omarchy/themes/&lt;current&gt;/colors.toml</code></li>
+<li>stock Omarchy Catppuccin if nothing else is there</li>
+</ol>
+<p>UI type is <code>omarchy font current</code>, then fontconfig <code>sans-serif</code>. Override with <code>OMADESIGN_FONT=/path/to/font.ttf</code>.</p></article></main><script>(function(a,f){let l;try{l=JSON.parse(sessionStorage.getItem(a)||"{}")}catch{return}const n=l?.[f||history.state?.__TSR_key];let c=!1;for(const t in n){const e=n[t],o=e?.scrollX,s=e?.scrollY;if(Number.isFinite(o)&&Number.isFinite(s)){if(t==="window")scrollTo(o,s),c=!0;else if(t)try{const r=document.querySelector(t);r&&(r.scrollLeft=o,r.scrollTop=s)}catch{}}}if(c)return;const i=location.hash.slice(1);if(i){const t=history.state?.__hashScrollIntoViewOptions??!0;if(t){const e=document.getElementById(i);e&&e.scrollIntoView(t)}return}scrollTo(0,0)})("tsr-scroll-restoration-v1_3");document.currentScript.remove()</script><!--/$--><footer class="site-footer"><div class="shell footer-top"><a class="wordmark" href="/omadesign/">omadesign<sup>α</sup></a><p>Made for the desktop you made your own.</p><a href="#top">Back to top ↑</a></div><div class="shell footer-bottom"><span>© <!-- -->2026<!-- --> omadesign contributors · MIT licensed</span><div><a href="/omadesign/docs/roadmap">Roadmap</a><a href="/omadesign/docs/contributing">Contribute</a><a href="https://github.com/michaelmonetized/omadesign/issues">Report a bug</a><a href="https://github.com/michaelmonetized/omadesign/blob/master/LICENSE">Licence</a></div><span class="mono">Built in the open. FOSS, btw.</span></div></footer><script class="$tsr" id="$tsr-stream-barrier">(self.$R=self.$R||{})["tsr"]=[];self.$_TSR={h(){this.hydrated=!0,this.c()},e(){this.streamEnded=!0,this.c()},c(){this.hydrated&&this.streamEnded&&(delete self.$_TSR,delete self.$R.tsr)},p(e){this.initialized?e():this.buffer.push(e)},buffer:[]};$_TSR.router=($R=>$R[0]={manifest:$R[1]={routes:$R[2]={__root__:$R[3]={preloads:$R[4]=["/omadesign/assets/index-CzowaW4x.js"],scripts:$R[5]=[$R[6]={attrs:$R[7]={type:"module",async:!0,src:"/omadesign/assets/index-CzowaW4x.js"}}]},"/docs":$R[8]={preloads:$R[9]=["/omadesign/assets/docs-Dd6PiS50.js"]},"/docs/manual":$R[10]={preloads:$R[11]=["/omadesign/assets/docs.manual-BhYjkKra.js","/omadesign/assets/md-CYAhWzfs.js"]}}},matches:$R[12]=[$R[13]={i:"__root__ ",u:1788659696121,s:"success",ssr:!0},$R[14]={i:" docs docs",u:1788659696121,s:"success",ssr:!0},$R[15]={i:" docs manual docs manual",u:1788659696121,s:"success",ssr:!0}]})($R["tsr"]);$_TSR.e();document.currentScript.remove()</script><script type="module" async="" src="/omadesign/assets/index-CzowaW4x.js"></script></body></html>

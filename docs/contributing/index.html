@@ -1,0 +1,73 @@
+<!DOCTYPE html><html lang="en" id="top" class="mocha dark"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="/omadesign/assets/styles-BncfRdJI.css" data-precedence="default"/><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" data-precedence="default"/><title>Contributing · omadesign</title><meta name="description" content="An Omarchy-first creative suite for Linux. Native Rust. Design, paint, retouch and animate, with portable palettes, brand assets and fonts. Free and open source."/><meta name="theme-color" content="#111412"/><meta property="og:title" content="omadesign — your Linux. Your creative suite."/><meta property="og:description" content="Omarchy first. Rust native. Four creative studios, portable brand files, and a desktop that feels like yours. FOSS, btw."/><meta property="og:type" content="website"/><meta property="og:image" content="https://michaelmonetized.github.io/omadesign/media/studio/omadesign-logo.webp"/><meta name="twitter:card" content="summary_large_image"/><link rel="modulepreload" href="/omadesign/assets/index-CzowaW4x.js"/><link rel="modulepreload" href="/omadesign/assets/docs-Dd6PiS50.js"/><link rel="modulepreload" href="/omadesign/assets/docs.contributing-D5roBgeW.js"/><link rel="modulepreload" href="/omadesign/assets/md-CYAhWzfs.js"/><link rel="icon" type="image/svg+xml" href="/omadesign/favicon.svg"/><link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="shell header-inner"><a href="/omadesign/" class="wordmark" aria-label="omadesign home"><span class="brand-dot" aria-hidden="true"></span>oma<span>design</span><sup>α</sup></a><nav aria-label="Main navigation"><a class="nav-features" href="/omadesign/#features">Features</a><a href="/omadesign/docs">Docs</a><a href="https://github.com/michaelmonetized/omadesign">GitHub <span aria-hidden="true">↗</span></a></nav><div class="header-actions"><button class="theme-toggle" type="button" aria-label="Use light theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor"></path></svg></button><a class="button button-small" href="/omadesign/#install">Get omadesign <span aria-hidden="true">↗</span></a></div></div></header><!--$--><main id="main" class="docs-layout"><aside class="docs-nav"><nav aria-label="Documentation"><p class="docs-nav-title">A little guidance.</p><ul><li><a href="/omadesign/docs">Overview</a></li><li><a href="/omadesign/docs/manual">User manual</a></li><li><a class="active" href="/omadesign/docs/contributing" data-status="active" aria-current="page">Contributing</a></li><li><a href="/omadesign/docs/roadmap">Project status</a></li></ul></nav><nav aria-label="Project resources"><p class="docs-nav-title">Keep exploring</p><ul><li><a href="https://github.com/michaelmonetized/omadesign/tree/master/examples/fieldwork">Fieldwork brand kit ↗</a></li><li><a href="https://github.com/michaelmonetized/omadesign/blob/master/docs/template-drops.md">Template collection notes ↗</a></li><li><a href="https://github.com/michaelmonetized/omadesign/issues">Issues &amp; ideas ↗</a></li></ul></nav></aside><article class="docs-content prose" aria-label="Documentation article"><h1 id="contributing-to-omadesign">Contributing to omadesign</h1>
+<p>This is a small native Linux studio. Keep it that way.</p>
+<h2 id="how-to-work-on-it">How to work on it</h2>
+<pre><code class="language-sh">git clone https://github.com/michaelmonetized/omadesign.git
+cd omadesign
+cargo test
+cargo run --release --bin omadesign
+</code></pre>
+<p>Rust 2024. <code>cargo</code> is the toolchain. No GTK app, no Electron, no GitHub Actions.</p>
+<h3 id="layout">Layout</h3>
+<pre><code>src/
+  geom.rs         points, bounds, Bézier, hit testing     (no UI)
+  document.rs     layers, shapes, command history
+  compositor.rs   tiny-skia renderer + PNG/JPEG export
+  paint.rs        brush, erase, smudge, clone, fill, wand
+  photo.rs        develop pipeline + histograms
+  trace.rs        raster to vector (threshold and colour)
+  boolean.rs      union / subtract / intersect / xor
+  text.rs         rustybuzz OpenType + glyph outlines
+  tools.rs        personas, tools, shortcut table
+  app.rs          studio state and document commands
+  app/
+    tabs.rs       document ownership and tab switching
+    recovery.rs   background recovery snapshots
+    shortcuts.rs  keyboard commands
+    photo_session.rs  photo selection, previews and textures
+  ui/             chrome, canvas, studios, photo, welcome
+    jobs.rs       background asset, icon and font requests
+assets/phosphor/  Phosphor Light (MIT)
+docs/             manual, project status, contributing
+site/             landing page (TanStack Start)
+scripts/          local release + curl installer
+</code></pre>
+<p>Mutations go through <code>Cmd</code> + <code>History</code>. Tests cover geometry, boolean, paint, develop, project round-trip, SVG, export, type, zoom, place, and trace.</p>
+<p>Keep file and network work outside the frame loop. Tab switches transfer document state instead of cloning it. Rendering caches are derived from document data and invalidated when that data changes; they do not belong in saved projects.</p>
+<h3 id="rules-of-the-house">Rules of the house</h3>
+<ul>
+<li><strong>No stubs.</strong> A tool that drops a baked path called “Type” is not type.</li>
+<li><strong>No hardcoded UI colours.</strong> Chrome reads the Omarchy / <code>~/.config</code> theme. Fallback is Catppuccin Mocha, used only when no theme is on disk.</li>
+<li><strong>Icons are Phosphor Light.</strong> Add a glyph in <code>src/ui/icons.rs</code>, do not invent a stick figure.</li>
+<li><strong>UI font is the desktop font.</strong> Do not bundle Inter “because marketing.”</li>
+<li><strong>Deep modules.</strong> <code>geom</code> and <code>text</code> have no egui types. Tests share the same seams.</li>
+<li><strong>Local builds.</strong> <code>./scripts/release.sh</code> zig-links glibc 2.35 for aarch64 and x86_64. Never add a GitHub Actions workflow that bills Microsoft for runners.</li>
+</ul>
+<h3 id="pull-requests">Pull requests</h3>
+<ol>
+<li><code>cargo test</code> is green.</li>
+<li>If you touched UI, say how you verified it (run the app; there is no browser here).</li>
+<li>If you added a command, it has an undo.</li>
+<li>Do not bump the version unless you are cutting a release.</li>
+</ol>
+<h3 id="every-qa-pass">Every QA pass</h3>
+<p>Finish each pass with a dated entry in <code>CHANGELOG.md</code>: give it a memorable title,
+explain what feels different, and name the bugs that went away. Keep it readable
+by someone testing the app, with verification and known limits stated honestly.</p>
+<p>Push the tested changes to a branch and open or update its GitHub pull request.
+Then build and reinstall the same revision for human testing:</p>
+<pre><code class="language-sh">cargo build --release --bin omadesign
+./scripts/install.sh
+</code></pre>
+<p>The installer also works inside a release tarball. It replaces the binary
+atomically, so an open session can finish safely. Relaunch omadesign before
+testing the new build; an already running window still uses the previous one.</p>
+<h3 id="releasing">Releasing</h3>
+<p>On the build machine:</p>
+<pre><code class="language-sh"># bump version in Cargo.toml
+./scripts/release.sh
+git tag vX.Y.Z
+gh release create vX.Y.Z dist/omadesign-X.Y.Z-*.tar.gz*
+</code></pre>
+<p>Refuse to ship if <code>objdump -T</code> shows GLIBC newer than 2.35.</p>
+<h3 id="licence">Licence</h3>
+<p>MIT. Phosphor Light is MIT (see <code>assets/phosphor/LICENSE-MIT</code>).</p></article></main><script>(function(a,f){let l;try{l=JSON.parse(sessionStorage.getItem(a)||"{}")}catch{return}const n=l?.[f||history.state?.__TSR_key];let c=!1;for(const t in n){const e=n[t],o=e?.scrollX,s=e?.scrollY;if(Number.isFinite(o)&&Number.isFinite(s)){if(t==="window")scrollTo(o,s),c=!0;else if(t)try{const r=document.querySelector(t);r&&(r.scrollLeft=o,r.scrollTop=s)}catch{}}}if(c)return;const i=location.hash.slice(1);if(i){const t=history.state?.__hashScrollIntoViewOptions??!0;if(t){const e=document.getElementById(i);e&&e.scrollIntoView(t)}return}scrollTo(0,0)})("tsr-scroll-restoration-v1_3");document.currentScript.remove()</script><!--/$--><footer class="site-footer"><div class="shell footer-top"><a class="wordmark" href="/omadesign/">omadesign<sup>α</sup></a><p>Made for the desktop you made your own.</p><a href="#top">Back to top ↑</a></div><div class="shell footer-bottom"><span>© <!-- -->2026<!-- --> omadesign contributors · MIT licensed</span><div><a href="/omadesign/docs/roadmap">Roadmap</a><a href="/omadesign/docs/contributing">Contribute</a><a href="https://github.com/michaelmonetized/omadesign/issues">Report a bug</a><a href="https://github.com/michaelmonetized/omadesign/blob/master/LICENSE">Licence</a></div><span class="mono">Built in the open. FOSS, btw.</span></div></footer><script class="$tsr" id="$tsr-stream-barrier">(self.$R=self.$R||{})["tsr"]=[];self.$_TSR={h(){this.hydrated=!0,this.c()},e(){this.streamEnded=!0,this.c()},c(){this.hydrated&&this.streamEnded&&(delete self.$_TSR,delete self.$R.tsr)},p(e){this.initialized?e():this.buffer.push(e)},buffer:[]};$_TSR.router=($R=>$R[0]={manifest:$R[1]={routes:$R[2]={__root__:$R[3]={preloads:$R[4]=["/omadesign/assets/index-CzowaW4x.js"],scripts:$R[5]=[$R[6]={attrs:$R[7]={type:"module",async:!0,src:"/omadesign/assets/index-CzowaW4x.js"}}]},"/docs":$R[8]={preloads:$R[9]=["/omadesign/assets/docs-Dd6PiS50.js"]},"/docs/contributing":$R[10]={preloads:$R[11]=["/omadesign/assets/docs.contributing-D5roBgeW.js","/omadesign/assets/md-CYAhWzfs.js"]}}},matches:$R[12]=[$R[13]={i:"__root__ ",u:1788659696068,s:"success",ssr:!0},$R[14]={i:" docs docs",u:1788659696068,s:"success",ssr:!0},$R[15]={i:" docs contributing docs contributing",u:1788659696068,s:"success",ssr:!0}]})($R["tsr"]);$_TSR.e();document.currentScript.remove()</script><script type="module" async="" src="/omadesign/assets/index-CzowaW4x.js"></script></body></html>
