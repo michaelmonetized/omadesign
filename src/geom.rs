@@ -665,7 +665,7 @@ pub struct TypeRun {
     /// Line height in px. `0` means auto (`px * 1.2`).
     #[serde(default)]
     pub leading: f32,
-    /// Absolute font path. Empty picks the first system sans.
+    /// Installed font path or portable `omatype:` content ID. Empty picks system sans.
     #[serde(default)]
     pub font: String,
     #[serde(default = "default_true")]

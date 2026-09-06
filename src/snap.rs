@@ -225,7 +225,7 @@ impl Scene {
                     }
                 }
             }
-            if settings.spacing && settings.objects && max > min {
+            if settings.spacing && settings.objects {
                 // Only nearby rows/columns participate; sorting adjacent objects avoids O(n²) pairs.
                 let mut neighbors: Vec<_> = self
                     .objects
@@ -529,6 +529,100 @@ mod tests {
             24.0
         );
     }
+    #[test]
+    fn tool_points_repeat_and_balance_gaps_only_in_nearby_rows() {
+        let mut doc = Document::new("Point spacing", 800.0, 600.0, 96.0);
+        object(&mut doc, 20.0, true);
+        object(&mut doc, 70.0, true);
+        let scene = Scene::new(&doc, &[], &[]);
+        for (input, expected) in [(118.0, 120.0), (53.0, 55.0), (-8.0, -10.0)] {
+            let (point, feedback) = scene.point(settings(), Pt::new(input, 30.0), 1.0, None);
+            assert_eq!(point, Pt::new(expected, 30.0));
+            assert_eq!(feedback.gaps.len(), 2);
+            let lengths: Vec<_> = feedback
+                .gaps
+                .iter()
+                .map(|(a, b)| (*b - *a).length())
+                .collect();
+            assert!((lengths[0] - lengths[1]).abs() < 0.001);
+        }
+        assert_eq!(
+            scene
+                .point(settings(), Pt::new(118.0, 100.0), 1.0, None)
+                .0
+                .x,
+            118.0
+        );
+        assert_eq!(
+            scene.point(settings(), Pt::new(116.0, 30.0), 2.0, None).0.x,
+            116.0
+        );
+        assert_eq!(
+            scene
+                .point(
+                    SnapSettings {
+                        spacing: false,
+                        ..settings()
+                    },
+                    Pt::new(118.0, 30.0),
+                    1.0,
+                    None
+                )
+                .0
+                .x,
+            118.0
+        );
+    }
+
+    #[test]
+    fn point_spacing_preserves_angle_constraints_disabled_snapping_and_guide_priority() {
+        let mut doc = Document::new("Point spacing constraints", 800.0, 600.0, 96.0);
+        object(&mut doc, 20.0, true);
+        object(&mut doc, 70.0, true);
+        let anchor = Pt::new(90.0, 0.0);
+        let input = Pt::new(118.0, 29.0);
+        let scene = Scene::new(&doc, &[], &[]);
+        let (point, _) = scene.point(settings(), input, 1.0, Some(anchor));
+        assert!((point - Pt::new(120.0, 30.0)).length() < 0.001);
+        let (free, feedback) = scene.point(
+            SnapSettings {
+                enabled: false,
+                ..settings()
+            },
+            input,
+            1.0,
+            Some(anchor),
+        );
+        assert!(((free.x - anchor.x) - (free.y - anchor.y)).abs() < 0.001);
+        assert!((free - point).length() > 1.0);
+        assert!(feedback.gaps.is_empty());
+        doc.guides.push(crate::document::Guide {
+            vertical: true,
+            pos: 120.0,
+        });
+        let scene = Scene::new(&doc, &[], &[]);
+        let (point, feedback) = scene.point(
+            SnapSettings {
+                guides: true,
+                ..settings()
+            },
+            Pt::new(118.0, 30.0),
+            1.0,
+            None,
+        );
+        assert_eq!(point.x, 120.0);
+        assert!(
+            feedback.gaps.is_empty(),
+            "equally close guides keep their priority"
+        );
+        assert!(
+            feedback
+                .lines
+                .iter()
+                .any(|(a, b)| a.x == 120.0 && b.x == 120.0)
+        );
+    }
+
     #[test]
     fn posed_targets_follow_rotation_scale_and_live_overrides() {
         let mut doc = Document::new("posed snap", 800.0, 600.0, 96.0);

@@ -510,6 +510,12 @@ fn arrange_menu(ui: &mut Ui, studio: &mut Studio) {
 
 fn view_menu(ui: &mut Ui, studio: &mut Studio) {
     ui.menu_button("View", |ui| {
+        for (label, tab) in [("Inspector", crate::app::libraries::Sidebar::Inspector), ("Palette library", crate::app::libraries::Sidebar::Palettes), ("Brand assets", crate::app::libraries::Sidebar::Brand)] {
+            if ui.selectable_label(studio.libraries.sidebar == tab, label).clicked() {
+                studio.libraries.sidebar=tab; studio.show_welcome=false; ui.close();
+            }
+        }
+        ui.separator();
         if ui
             .add(Button::new("Zoom in").shortcut_text("Ctrl++"))
             .clicked()
@@ -554,6 +560,8 @@ fn view_menu(ui: &mut Ui, studio: &mut Studio) {
         ui.checkbox(&mut studio.show_rulers, "Rulers").on_hover_text(
             "Drag down from the top ruler or right from the left ruler to add a guide. Drag the ruler corner to set zero; double-click it to reset."
         );
+        ui.checkbox(&mut studio.show_key_hud, "Shortcut HUD")
+            .on_hover_text("Live tool and modifier hints at the bottom of the window · Ctrl+/");
         ui.checkbox(&mut studio.doc.grid.visible, "Grid");
         if ui
             .add(

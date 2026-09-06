@@ -1,4 +1,5 @@
 //! Feature scenes for product shots. Real chrome, real documents.
+pub mod logo_wordmark;
 
 use crate::app::Studio;
 use crate::color::Rgba;
@@ -13,6 +14,18 @@ pub struct Scene {
 }
 
 pub const SCENES: &[Scene] = &[
+    Scene {
+        id: "brand-library",
+        caption: "Good taste travels. A portable home for your brand.",
+    },
+    Scene {
+        id: "palette-library",
+        caption: "A few good colours. Ready for every project.",
+    },
+    Scene {
+        id: "hud-pen",
+        caption: "Your next move, right under your fingertips.",
+    },
     Scene {
         id: "templates",
         caption: "52 good starts. An editable design for every size.",
@@ -89,6 +102,9 @@ pub const SCENES: &[Scene] = &[
 
 pub fn apply(studio: &mut Studio, id: &str) -> Result<(), String> {
     match id {
+        "brand-library" => project_library(studio, false)?,
+        "palette-library" => project_library(studio, true)?,
+        "hud-pen" => key_hud(studio),
         "templates" => {
             studio.show_welcome = true;
             studio.welcome_page = crate::app::WelcomePage::Templates;
@@ -116,6 +132,102 @@ pub fn apply(studio: &mut Studio, id: &str) -> Result<(), String> {
         other => return Err(format!("unknown scene: {other}")),
     }
     Ok(())
+}
+
+fn project_library(s: &mut Studio, palettes: bool) -> Result<(), String> {
+    use crate::app::libraries::Sidebar;
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/fieldwork");
+    s.show_welcome = false;
+    s.doc = crate::document::Document::new("Fieldwork / A slower kind of good", 1120., 840., 72.);
+    s.persona = Persona::Design;
+    s.tool = Tool::Select;
+    let paper = Rgba::from_hex(0xF5F0E6);
+    let ink = Rgba::from_hex(0x283F3B);
+    let coral = Rgba::from_hex(0xCF765C);
+    add_rect(s, 0., 0., 1120., 840., paper, 0.);
+    add_rect(s, 55., 80., 1010., 2., ink, 0.);
+    add_text(s, Pt::new(57., 58.), "FIELDWORK", 24., ink, 3.);
+    add_text(s, Pt::new(849., 58.), "DESIGN / 001", 14., ink, 1.);
+    add_text(s, Pt::new(58., 222.), "A slower", 88., ink, -3.);
+    add_text(s, Pt::new(58., 320.), "kind of good.", 88., ink, -3.);
+    add_text(
+        s,
+        Pt::new(62., 386.),
+        "Made with care. Made to carry with you.",
+        23.,
+        ink,
+        0.,
+    );
+    s.place_brand_asset(
+        &root.join(".omabrand/illustrations/rolling-hills.svg"),
+        Pt::new(807., 580.),
+    )?;
+    add_rect(s, 62., 462., 183., 48., coral, 24.);
+    add_text(s, Pt::new(84., 493.), "MAKE YOUR MARK", 13., paper, 0.6);
+    add_rect(s, 55., 748., 1010., 2., ink, 0.);
+    add_text(s, Pt::new(59., 792.), "GOOD TASTE TRAVELS.", 14., ink, 1.);
+    add_text(s, Pt::new(824., 792.), "COLOURS / ARTWORK", 13., ink, 0.);
+    s.selection.clear();
+    s.path = Some(root.join("field-notes.oma"));
+    s.libraries.sidebar = if palettes {
+        Sidebar::Palettes
+    } else {
+        Sidebar::Brand
+    };
+    s.libraries.project_scope = true;
+    s.need_fit = true;
+    s.status = "Fieldwork · portable colours and artwork, right beside your project".into();
+    Ok(())
+}
+
+fn key_hud(s: &mut Studio) {
+    s.show_welcome = false;
+    s.doc = crate::document::Document::new("Your next move", 1280.0, 840.0, 72.0);
+    s.persona = Persona::Design;
+    s.tool = Tool::Pen;
+    add_rect(s, 0.0, 0.0, 1280.0, 840.0, Rgba::from_hex(0xF5F1E9), 0.0);
+    add_text(
+        s,
+        Pt::new(92.0, 124.0),
+        "YOUR NEXT MOVE.",
+        42.0,
+        Rgba::from_hex(0x293D42),
+        -0.5,
+    );
+    add_text(
+        s,
+        Pt::new(96.0, 174.0),
+        "Good tools teach as you go.",
+        20.0,
+        Rgba::from_hex(0x727B79),
+        0.0,
+    );
+    add_text(
+        s,
+        Pt::new(96.0, 748.0),
+        "HOLD A MODIFIER. FIND A NEW POSSIBILITY.",
+        14.0,
+        Rgba::from_hex(0x727B79),
+        0.0,
+    );
+    s.style = Style {
+        fill: Fill::None,
+        stroke: Some(crate::document::Stroke {
+            color: Rgba::from_hex(0xD97C5B),
+            width: 8.0,
+            ..Default::default()
+        }),
+    };
+    for point in [
+        Pt::new(195.0, 560.0),
+        Pt::new(435.0, 320.0),
+        Pt::new(690.0, 560.0),
+    ] {
+        s.pen_click(point);
+    }
+    s.selection.clear();
+    s.need_fit = true;
+    s.status = "A path in progress · hold Shift, Ctrl or Alt to explore the hints".into();
 }
 
 fn welcome(s: &mut Studio) {
