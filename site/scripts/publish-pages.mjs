@@ -233,6 +233,9 @@ async function publish() {
         ],
         repository,
       );
+      // The first push happened before Pages watched this branch. Request that
+      // initial build explicitly; subsequent pushes trigger builds themselves.
+      command("gh", ["api", `repos/${repo}/pages/builds`, "--method", "POST"]);
     }
     console.log(
       `Published generated branch gh-pages. GitHub Pages is building ${pages.html_url}`,
