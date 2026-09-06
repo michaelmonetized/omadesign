@@ -35,7 +35,12 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         .size_range(256.0..=420.0)
         .frame(Frame::new().fill(bg_panel()).inner_margin(Margin::same(14)))
         .show(ui, |ui| {
-            develop_panel(ui, studio);
+            super::library::tabs(ui, studio);
+            if studio.libraries.sidebar == crate::app::libraries::Sidebar::Inspector {
+                develop_panel(ui, studio);
+            } else {
+                super::library::show(ui, studio);
+            }
         });
     viewer(ui, studio);
 }
@@ -491,10 +496,10 @@ fn viewer(ui: &mut Ui, studio: &mut Studio) {
             && let Some(b) = resp.interact_pointer_pos().or(resp.hover_pos())
         {
             let cur = to_img(b, dest, size);
+            // Enter/Escape may end a crop while the button is still held.
+            // Only a new pointer press may start the next crop.
             if let Some((_, c)) = &mut studio.photo.crop_drag {
                 *c = cur;
-            } else {
-                studio.photo.crop_drag = Some((cur, cur));
             }
         }
         if let Some((start, cur)) = studio.photo.crop_drag {
@@ -613,9 +618,109 @@ mod tests {
                 events,
                 ..Default::default()
             },
-            |ui| viewer(ui, studio),
+            |ui| {
+                studio.handle_shortcuts(ui.ctx());
+                viewer(ui, studio);
+            },
         );
         output.textures_delta.clear();
+    }
+
+    #[test]
+    fn photo_crop_enter_and_escape_finish_the_gesture_until_the_next_press() {
+        for key in [Key::Enter, Key::Escape] {
+            let (ctx, mut studio) = fixture();
+            studio.persona = crate::tools::Persona::Photo;
+            studio.tool = crate::tools::Tool::Crop;
+            studio.photo.images.push(photo::PhotoImage::from_full(
+                "Crop fixture".into(),
+                photo::RgbaImage {
+                    w: 80,
+                    h: 60,
+                    data: [128, 128, 128, 255].repeat(80 * 60),
+                },
+            ));
+            studio.photo.selected = Some(0);
+            let original = Some([0.1, 0.1, 0.9, 0.9]);
+            studio.photo.selected_mut().unwrap().develop.crop = original;
+            let press = |pos, pressed| Event::PointerButton {
+                pos,
+                button: PointerButton::Primary,
+                pressed,
+                modifiers: Modifiers::NONE,
+            };
+            let start = pos2(100.0, 75.0);
+            frame(&ctx, &mut studio, vec![Event::PointerMoved(start)]);
+            frame(&ctx, &mut studio, vec![press(start, true)]);
+            frame(
+                &ctx,
+                &mut studio,
+                vec![Event::PointerMoved(pos2(220.0, 185.0))],
+            );
+            let (a, b) = studio.photo.crop_drag.expect("drag creates a crop");
+            let version = studio.photo.sel_version;
+            frame(
+                &ctx,
+                &mut studio,
+                vec![Event::Key {
+                    key,
+                    physical_key: Some(key),
+                    pressed: true,
+                    repeat: false,
+                    modifiers: Modifiers::NONE,
+                }],
+            );
+            assert!(studio.photo.crop_drag.is_none());
+            let committed = studio.photo.selected().unwrap().develop.crop;
+            if key == Key::Enter {
+                assert_eq!(
+                    committed,
+                    Some([
+                        a.x.min(b.x) / 80.0,
+                        a.y.min(b.y) / 60.0,
+                        a.x.max(b.x) / 80.0,
+                        a.y.max(b.y) / 60.0
+                    ])
+                );
+                assert_eq!(studio.photo.sel_version, version + 1);
+            } else {
+                assert_eq!(committed, original);
+                assert_eq!(studio.photo.sel_version, version);
+            }
+            let version = studio.photo.sel_version;
+            frame(
+                &ctx,
+                &mut studio,
+                vec![Event::PointerMoved(pos2(260.0, 200.0))],
+            );
+            frame(&ctx, &mut studio, vec![press(pos2(260.0, 200.0), false)]);
+            assert!(
+                studio.photo.crop_drag.is_none(),
+                "continued dragging must not recreate the crop"
+            );
+            assert_eq!(studio.photo.selected().unwrap().develop.crop, committed);
+            assert_eq!(
+                studio.photo.sel_version, version,
+                "release must not commit twice"
+            );
+            frame(&ctx, &mut studio, vec![press(start, true)]);
+            frame(
+                &ctx,
+                &mut studio,
+                vec![Event::PointerMoved(pos2(240.0, 210.0))],
+            );
+            assert!(
+                studio.photo.crop_drag.is_some(),
+                "a new press starts a fresh crop"
+            );
+            frame(&ctx, &mut studio, vec![press(pos2(240.0, 210.0), false)]);
+            assert!(studio.photo.crop_drag.is_none());
+            assert_eq!(
+                studio.photo.sel_version,
+                version + 1,
+                "release still commits a fresh crop"
+            );
+        }
     }
 
     #[test]

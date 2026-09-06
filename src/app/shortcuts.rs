@@ -2,7 +2,7 @@ use super::*;
 use eframe::egui::{Event, Key, Modifiers};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Shortcut {
+pub(super) enum Shortcut {
     Save,
     SaveAs,
     Open,
@@ -29,10 +29,14 @@ enum Shortcut {
     ZoomIn,
     ZoomOut,
     Help,
+    ToggleGuides,
+    ToggleSnapping,
+    FreeTransform,
+    ToggleKeyHud,
 }
 
 impl Shortcut {
-    fn global(self) -> bool {
+    pub(super) fn global(self) -> bool {
         matches!(
             self,
             Self::Save
@@ -42,11 +46,12 @@ impl Shortcut {
                 | Self::New
                 | Self::Export
                 | Self::Help
+                | Self::ToggleKeyHud
         )
     }
 }
 
-fn key_shortcut(key: Key, mods: Modifiers) -> Option<Shortcut> {
+pub(super) fn key_shortcut(key: Key, mods: Modifiers) -> Option<Shortcut> {
     use Shortcut::*;
     if key == Key::F1 && mods.is_none() {
         return Some(Help);
@@ -62,6 +67,9 @@ fn key_shortcut(key: Key, mods: Modifiers) -> Option<Shortcut> {
         };
     }
     Some(match (key, mods.shift) {
+        (Key::Semicolon, false) => ToggleGuides,
+        (Key::Slash, false) => ToggleKeyHud,
+        (Key::Semicolon | Key::Colon, true) => ToggleSnapping,
         (Key::S, false) => Save,
         (Key::S, true) => SaveAs,
         (Key::O, false) => Open,
@@ -74,6 +82,7 @@ fn key_shortcut(key: Key, mods: Modifiers) -> Option<Shortcut> {
         (Key::X, false) => Cut,
         (Key::V, false) => Paste,
         (Key::D, false) => Duplicate,
+        (Key::T, false) => FreeTransform,
         (Key::A, false) => SelectAll,
         (Key::G, false) => Combine,
         (Key::G, true) => Release,
@@ -89,9 +98,57 @@ fn key_shortcut(key: Key, mods: Modifiers) -> Option<Shortcut> {
     })
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ShortcutFocus {
+    Inactive,
+    Modal,
+    Popup,
+    Field,
+    Text,
+    Canvas,
+}
+
+pub(super) fn held_modifiers(ctx: &egui::Context) -> Modifiers {
+    ctx.input(|input| {
+        if !input.focused
+            || input
+                .events
+                .iter()
+                .any(|event| matches!(event, Event::WindowFocused(false)))
+        {
+            Modifiers::NONE
+        } else {
+            input.modifiers
+        }
+    })
+}
+
 impl Studio {
+    pub(super) fn shortcut_focus(&self, ctx: &egui::Context) -> ShortcutFocus {
+        if !ctx.input(|input| input.focused) {
+            ShortcutFocus::Inactive
+        } else if self.pending_nav.is_some()
+            || ctx.memory(|memory| memory.top_modal_layer().is_some())
+        {
+            ShortcutFocus::Modal
+        } else if egui::Popup::is_any_open(ctx) {
+            ShortcutFocus::Popup
+        } else if ctx.memory(|memory| {
+            memory.focused().is_some_and(|id| {
+                id != egui::Id::new("studio-canvas") && id != egui::Id::new("studio-photo-canvas")
+            })
+        }) {
+            ShortcutFocus::Field
+        } else if self.type_edit.is_some() {
+            ShortcutFocus::Text
+        } else {
+            ShortcutFocus::Canvas
+        }
+    }
+
     pub fn handle_shortcuts(&mut self, ctx: &egui::Context) {
-        let (events, final_modifiers) = ctx.input(|i| (i.events.clone(), i.modifiers));
+        let events = ctx.input(|i| i.events.clone());
+        let final_modifiers = held_modifiers(ctx);
         // Clipboard events have no modifier field. Replay modifier changes in order,
         // retaining the previous frame's state when a held chord spans frames.
         let mut modifiers = ctx.data_mut(|data| {
@@ -100,17 +157,14 @@ impl Studio {
             data.insert_temp(id, final_modifiers);
             previous
         });
-        if self.pending_nav.is_some()
-            || ctx.memory(|memory| memory.top_modal_layer().is_some())
-            || egui::Popup::is_any_open(ctx)
-        {
+        let focus = self.shortcut_focus(ctx);
+        if matches!(
+            focus,
+            ShortcutFocus::Inactive | ShortcutFocus::Modal | ShortcutFocus::Popup
+        ) {
             return;
         }
-        let field_focused = ctx.memory(|memory| {
-            memory.focused().is_some_and(|id| {
-                id != egui::Id::new("studio-canvas") && id != egui::Id::new("studio-photo-canvas")
-            })
-        });
+        let field_focused = focus == ShortcutFocus::Field;
         let mut consumed = Vec::new();
         for (index, event) in events.iter().enumerate() {
             let shortcut = match event {
@@ -186,6 +240,10 @@ impl Studio {
 
     fn run_shortcut(&mut self, ctx: &egui::Context, shortcut: Shortcut, payload: Option<&str>) {
         match shortcut {
+            Shortcut::ToggleGuides => self.toggle_guides(),
+            Shortcut::ToggleKeyHud => self.show_key_hud = !self.show_key_hud,
+            Shortcut::FreeTransform => self.free_transform(),
+            Shortcut::ToggleSnapping => self.toggle_snapping(),
             Shortcut::Save => self.save(),
             Shortcut::SaveAs => self.save_as(),
             Shortcut::Open => {
@@ -225,29 +283,7 @@ impl Studio {
                 self.paste_style();
             }
             Shortcut::Duplicate => self.duplicate_selection(),
-            Shortcut::SelectAll => {
-                self.selection = self
-                    .doc
-                    .layers
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, layer)| layer.visible && !layer.locked)
-                    .flat_map(|(li, layer)| {
-                        let mut ids: Vec<_> = layer
-                            .kind
-                            .shapes()
-                            .into_iter()
-                            .flatten()
-                            .filter(|shape| shape.visible && !shape.locked)
-                            .map(|shape| (li, shape.id))
-                            .collect();
-                        if layer.kind.is_placed_raster() {
-                            ids.push((li, RASTER_ID));
-                        }
-                        ids
-                    })
-                    .collect();
-            }
+            Shortcut::SelectAll => self.select_all(),
             Shortcut::Combine => self.combine_selected(),
             Shortcut::Release => self.release_compound(),
             Shortcut::Forward => self.bring_forward(),
@@ -289,6 +325,7 @@ impl Studio {
 
     fn type_shortcut(&mut self, ctx: &egui::Context, shortcut: Shortcut, payload: Option<&str>) {
         match shortcut {
+            Shortcut::FreeTransform => self.free_transform(),
             Shortcut::Copy | Shortcut::Cut => {
                 let (lo, hi) = self.type_sel_range();
                 if lo == hi {
@@ -377,6 +414,17 @@ impl Studio {
     }
 
     fn canvas_key(&mut self, key: Key, shift: bool) -> bool {
+        if self.persona == Persona::Photo
+            && matches!(key, Key::Enter | Key::Escape)
+            && let Some((start, cur)) = self.photo.crop_drag.take()
+        {
+            if key == Key::Enter {
+                self.commit_photo_crop(start, cur);
+            } else {
+                self.photo.status = "Crop cancelled".into();
+            }
+            return true;
+        }
         if self.persona == Persona::Motion {
             match key {
                 Key::Space => {
@@ -401,10 +449,15 @@ impl Studio {
                 _ => {}
             }
         }
+        if self.deformation.is_some() && matches!(key, Key::Escape | Key::Enter) {
+            self.end_deform(key == Key::Escape);
+            return true;
+        }
         let step = if shift { 10.0 } else { 1.0 };
         match key {
             Key::Delete | Key::Backspace => self.delete_selection(),
             Key::Escape => {
+                self.end_pixel_stroke(true);
                 if self.pending_place.is_some() {
                     self.cancel_place();
                     self.op = None;
@@ -466,6 +519,7 @@ impl Studio {
             _ => {
                 let tool = match (key, shift, self.persona) {
                     (Key::M, true, Persona::Pixel) => Tool::Marquee,
+                    (Key::J, true, Persona::Pixel) => Tool::Heal,
                     (Key::O, true, Persona::Pixel) => Tool::EllipseMarquee,
                     (Key::O, true, Persona::Design) => Tool::Artboard,
                     (Key::V, false, _) => Tool::Select,
@@ -593,6 +647,7 @@ mod tests {
             (Key::C, alt, CopyStyle),
             (Key::V, alt, PasteStyle),
             (Key::D, ctrl, Duplicate),
+            (Key::T, ctrl, FreeTransform),
             (Key::A, ctrl, SelectAll),
             (Key::G, ctrl, Combine),
             (Key::G, shift, Release),
@@ -609,6 +664,10 @@ mod tests {
             (Key::Equals, shift, ZoomIn),
             (Key::Minus, ctrl, ZoomOut),
             (Key::F1, Modifiers::NONE, Help),
+            (Key::Slash, ctrl, ToggleKeyHud),
+            (Key::Semicolon, ctrl, ToggleGuides),
+            (Key::Semicolon, shift, ToggleSnapping),
+            (Key::Colon, shift, ToggleSnapping),
         ];
         for (key, modifiers, expected) in cases {
             assert_eq!(
@@ -647,6 +706,76 @@ mod tests {
                 "unassigned Alt chord must not fire {key:?}"
             );
         }
+    }
+
+    #[test]
+    fn precision_chords_toggle_state_and_healing_keeps_its_shift_variant() {
+        let ctx = context();
+        let mut studio = Studio::new();
+        studio.show_welcome = false;
+        let guides = studio.doc.ruler.guides_visible;
+        let snap = studio.snap.enabled;
+        frame(
+            &ctx,
+            &mut studio,
+            vec![
+                key(Key::Semicolon, Modifiers::CTRL),
+                Event::ModifiersChanged(Modifiers::NONE),
+            ],
+        );
+        assert_eq!(studio.doc.ruler.guides_visible, !guides);
+        frame(
+            &ctx,
+            &mut studio,
+            vec![
+                key(Key::Colon, Modifiers::CTRL | Modifiers::SHIFT),
+                Event::ModifiersChanged(Modifiers::NONE),
+            ],
+        );
+        assert_eq!(studio.snap.enabled, !snap);
+        frame(
+            &ctx,
+            &mut studio,
+            vec![key(Key::Semicolon, Modifiers::CTRL | Modifiers::SHIFT)],
+        );
+        assert_eq!(studio.snap.enabled, snap);
+        studio.persona = Persona::Pixel;
+        frame(&ctx, &mut studio, vec![key(Key::J, Modifiers::SHIFT)]);
+        assert_eq!(studio.tool, Tool::Heal);
+        frame(&ctx, &mut studio, vec![key(Key::J, Modifiers::NONE)]);
+        assert_eq!(studio.tool, Tool::Clone);
+    }
+
+    #[test]
+    fn free_transform_chord_preserves_the_selected_artwork_and_commits_live_type() {
+        let ctx = context();
+        let mut studio = Studio::new();
+        let id = add_rectangle(&mut studio, 10.0);
+        studio.tool = Tool::Node;
+        let before = studio.doc.find_shape(1, id).unwrap().clone();
+        let history = studio.history.len();
+        frame(
+            &ctx,
+            &mut studio,
+            vec![
+                key(Key::T, Modifiers::CTRL),
+                Event::ModifiersChanged(Modifiers::NONE),
+            ],
+        );
+        assert_eq!(studio.tool, Tool::Select);
+        assert_eq!(studio.selection, vec![(1, id)]);
+        assert_eq!(studio.doc.find_shape(1, id), Some(&before));
+        assert_eq!(studio.history.len(), history);
+        studio.place_text(Pt::new(60.0, 80.0));
+        studio.type_insert("Make it yours");
+        let text = studio.primary().unwrap();
+        frame(&ctx, &mut studio, vec![key(Key::T, Modifiers::CTRL)]);
+        assert!(studio.type_edit.is_none());
+        assert_eq!(studio.tool, Tool::Select);
+        let Geom::Text(run) = &studio.doc.find_shape(text.0, text.1).unwrap().geom else {
+            panic!("live text stays text")
+        };
+        assert_eq!(run.content, "Make it yours");
     }
 
     #[test]

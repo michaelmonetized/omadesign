@@ -274,23 +274,26 @@ fn draw_layer(
             doc,
             overrides,
         );
-        if let Some(mask) = &layer.mask
-            && let Some(mask_pm) = mask.to_pixmap()
-        {
-            let mut placed = Pixmap::new(pm.width(), pm.height()).unwrap();
-            placed.draw_pixmap(
-                0,
-                0,
-                mask_pm.as_ref(),
-                &PixmapPaint {
-                    quality: tiny_skia::FilterQuality::Bilinear,
-                    ..Default::default()
-                },
-                t,
-                None,
-            );
-            let m = tiny_skia::Mask::from_pixmap(placed.as_ref(), tiny_skia::MaskType::Alpha);
-            temp.apply_mask(&m);
+        if let Some(mask) = &layer.mask {
+            let _ = mask.with_pm(|mask_pm| {
+                let Some(mut placed) = Pixmap::new(pm.width(), pm.height()) else {
+                    return;
+                };
+                placed.draw_pixmap(
+                    0,
+                    0,
+                    mask_pm.as_ref(),
+                    &PixmapPaint {
+                        quality: tiny_skia::FilterQuality::Bilinear,
+                        ..Default::default()
+                    },
+                    t.pre_concat(layer_pixel_transform(layer)),
+                    None,
+                );
+                let m =
+                    tiny_skia::Mask::from_pixmap(placed.as_ref(), tiny_skia::MaskType::Luminance);
+                temp.apply_mask(&m);
+            });
         }
         if filtered {
             crate::filter::apply(&mut temp, &layer.filters);
@@ -323,6 +326,36 @@ fn draw_layer(
     }
 }
 
+/// Map a layer's native pixels (and its mask) into document coordinates.
+pub fn layer_pixel_transform(layer: &Layer) -> Transform {
+    let LayerKind::Raster {
+        pixels,
+        origin,
+        size,
+        rotation,
+    } = &layer.kind
+    else {
+        return Transform::identity();
+    };
+    let dimensions = if size.x.abs() > 0.5 && size.y.abs() > 0.5 {
+        *size
+    } else {
+        Pt::new(pixels.w as f32, pixels.h as f32)
+    };
+    let mut transform = Transform::from_translate(origin.x, origin.y).pre_scale(
+        dimensions.x / pixels.w.max(1) as f32,
+        dimensions.y / pixels.h.max(1) as f32,
+    );
+    if rotation.abs() > 1e-5 {
+        let centre = *origin + dimensions * 0.5;
+        transform = Transform::from_translate(centre.x, centre.y)
+            .pre_concat(Transform::from_rotate(rotation.to_degrees()))
+            .pre_concat(Transform::from_translate(-centre.x, -centre.y))
+            .pre_concat(transform);
+    }
+    transform
+}
+
 fn draw_content(
     pm: &mut Pixmap,
     layer: &Layer,
@@ -338,7 +371,7 @@ fn draw_content(
     match &layer.kind {
         LayerKind::Vector { shapes } => {
             for s in shapes {
-                if !s.visible {
+                if !s.visible || s.guide {
                     continue;
                 }
                 let pose = pose_of(s.id, motion_t, doc, overrides);
@@ -346,48 +379,15 @@ fn draw_content(
             }
             if let Some(p) = preview
                 && p.visible
+                && !p.guide
             {
                 let pose = pose_of(p.id, motion_t, doc, overrides);
                 draw_shape(pm, p, t, opacity * 0.85, blend, pose);
             }
         }
-        LayerKind::Raster {
-            pixels,
-            origin,
-            size,
-            rotation,
-        } => {
-            let (ox, oy, dw, dh) = {
-                let native_w = pixels.w as f32;
-                let native_h = pixels.h as f32;
-                let (dw, dh) = if size.x.abs() > 0.5 && size.y.abs() > 0.5 {
-                    (size.x, size.y)
-                } else {
-                    (native_w, native_h)
-                };
-                (origin.x, origin.y, dw, dh)
-            };
+        LayerKind::Raster { pixels, .. } => {
             let _ = pixels.with_pm(|src| {
-                let sx = if src.width() == 0 {
-                    1.0
-                } else {
-                    dw / src.width() as f32
-                };
-                let sy = if src.height() == 0 {
-                    1.0
-                } else {
-                    dh / src.height() as f32
-                };
-                let mut xf = Transform::from_translate(ox, oy).pre_scale(sx, sy);
-                if rotation.abs() > 1e-5 {
-                    let cx = ox + dw * 0.5;
-                    let cy = oy + dh * 0.5;
-                    xf = Transform::from_translate(cx, cy)
-                        .pre_concat(Transform::from_rotate(rotation.to_degrees()))
-                        .pre_concat(Transform::from_translate(-cx, -cy))
-                        .pre_concat(xf);
-                }
-                xf = t.pre_concat(xf);
+                let xf = t.pre_concat(layer_pixel_transform(layer));
                 pm.draw_pixmap(
                     0,
                     0,
@@ -444,7 +444,7 @@ fn draw_shape(
 ) {
     if shape.filters.active() {
         let pad = crate::filter::svg_pad(&shape.filters).ceil().max(8.0);
-        let b = shape.world_bbox().inflate(pad);
+        let b = pose.map_bounds(shape.world_bbox()).inflate(pad);
         let tw = b.width().ceil().max(1.0) as u32;
         let th = b.height().ceil().max(1.0) as u32;
         if let Some(mut temp) = Pixmap::new(tw, th) {
@@ -495,19 +495,54 @@ fn draw_shape_inner(
     } else {
         t.pre_concat(pose.to_skia(shape.world_bbox().center()))
     };
-    if !shape.style.fill.is_none() && shape.geom.is_closed() {
+    let fill_reveal = pose.fill_reveal.unwrap_or(1.0).clamp(0.0, 1.0);
+    if !shape.style.fill.is_none() && shape.geom.is_closed() && fill_reveal > 0.0 {
         let mut paint = fill_paint(&shape.style.fill, &shape.geom);
         paint.blend_mode = blend;
+        if shape.rotation.abs() > 1e-5 {
+            let center = shape.geom.bbox().center();
+            paint.shader.transform(Transform::from_rotate_at(
+                shape.rotation.to_degrees(),
+                center.x,
+                center.y,
+            ));
+        }
         paint.shader.apply_opacity(op);
         let rule = match &shape.geom {
             crate::geom::Geom::Poly { winding: true, .. } => FillRule::Winding,
             _ => FillRule::EvenOdd,
         };
-        pm.fill_path(&path, &paint, rule, xf, None);
+        if fill_reveal < 1.0 {
+            let bounds = shape.world_bbox();
+            if let Some(rect) = tiny_skia::Rect::from_xywh(
+                bounds.min.x,
+                bounds.max.y - bounds.height() * fill_reveal,
+                bounds.width().max(1e-5),
+                (bounds.height() * fill_reveal).max(1e-5),
+            ) && let Some(mut clip) = tiny_skia::Mask::new(pm.width(), pm.height())
+            {
+                clip.fill_path(&PathBuilder::from_rect(rect), FillRule::Winding, true, xf);
+                pm.fill_path(&path, &paint, rule, xf, Some(&clip));
+            }
+        } else {
+            pm.fill_path(&path, &paint, rule, xf, None);
+        }
     }
+    let stroke_reveal = pose.stroke_reveal.unwrap_or(1.0).clamp(0.0, 1.0);
     if let Some(stroke) = &shape.style.stroke
         && stroke.width > 0.0
+        && stroke_reveal > 0.0
     {
+        let trimmed;
+        let stroke_path = if stroke_reveal < 1.0 {
+            trimmed = crate::motion::trimmed_stroke_path(shape, stroke_reveal);
+            let Some(path) = trimmed.as_ref() else {
+                return;
+            };
+            path
+        } else {
+            &path
+        };
         let mut paint = Paint {
             anti_alias: true,
             blend_mode: blend,
@@ -525,7 +560,7 @@ fn draw_shape_inner(
         if let Some((on, off)) = stroke.dash {
             sk.dash = StrokeDash::new(vec![on, off], 0.0);
         }
-        pm.stroke_path(&path, &paint, &sk, xf, None);
+        pm.stroke_path(stroke_path, &paint, &sk, xf, None);
     }
 }
 
@@ -584,7 +619,10 @@ fn fill_paint<'a>(fill: &Fill, geom: &Geom) -> Paint<'a> {
     paint
 }
 
-fn is_paper_raster(layer: &Layer) -> bool {
+pub(crate) fn is_paper_raster(layer: &Layer) -> bool {
+    if layer.mask.is_some() {
+        return false;
+    }
     let LayerKind::Raster { pixels, size, .. } = &layer.kind else {
         return false;
     };
@@ -704,6 +742,85 @@ fn draw_checker(pm: &mut Pixmap, origin: Pt, size: Pt) {
 mod tests {
     use super::*;
     use crate::document::{Cmd, Document, Shape, Style, apply};
+
+    #[test]
+    fn reveal_channels_clip_fill_and_trim_stroke_independently_under_motion() {
+        let shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(10.0, 10.0),
+                size: Pt::new(40.0, 40.0),
+                radius: 0.0,
+            },
+            Style {
+                fill: Fill::Solid(Rgba::rgb(255, 0, 0)),
+                stroke: Some(crate::document::Stroke {
+                    color: Rgba::rgb(0, 0, 255),
+                    width: 4.0,
+                    ..Default::default()
+                }),
+            },
+        );
+        let render = |fill, stroke| {
+            let mut pixels = Pixmap::new(80, 80).unwrap();
+            draw_shape(
+                &mut pixels,
+                &shape,
+                Transform::identity(),
+                1.0,
+                tiny_skia::BlendMode::SourceOver,
+                Pose {
+                    dx: 10.0,
+                    dy: 5.0,
+                    fill_reveal: Some(fill),
+                    stroke_reveal: Some(stroke),
+                    ..Pose::identity()
+                },
+            );
+            pixels
+        };
+        let zero = render(0.0, 0.0);
+        assert!(zero.data().iter().all(|byte| *byte == 0));
+        let half_fill = render(0.5, 0.0);
+        assert_eq!(half_fill.pixel(40, 25).unwrap().alpha(), 0);
+        assert_eq!(half_fill.pixel(40, 45).unwrap().red(), 255);
+        let quarter_stroke = render(0.0, 0.25);
+        assert_eq!(quarter_stroke.pixel(40, 15).unwrap().blue(), 255);
+        assert_eq!(quarter_stroke.pixel(40, 55).unwrap().alpha(), 0);
+        let full = render(1.0, 1.0);
+        assert_eq!(full.pixel(40, 25).unwrap().red(), 255);
+        assert_eq!(full.pixel(40, 55).unwrap().blue(), 255);
+    }
+
+    #[test]
+    fn filtered_motion_does_not_clip_travel_to_rest_bounds() {
+        let mut shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(5.0, 5.0),
+                size: Pt::new(20.0, 20.0),
+                radius: 0.0,
+            },
+            Style {
+                fill: Fill::Solid(Rgba::rgb(255, 0, 0)),
+                stroke: None,
+            },
+        );
+        shape.filters.enabled = true;
+        shape.filters.items = vec![crate::filter::Fx::Blur { std: 1.0 }];
+        let mut pixels = Pixmap::new(100, 60).unwrap();
+        draw_shape(
+            &mut pixels,
+            &shape,
+            Transform::identity(),
+            1.0,
+            tiny_skia::BlendMode::SourceOver,
+            Pose {
+                dx: 60.0,
+                ..Pose::identity()
+            },
+        );
+        assert!(pixels.pixel(75, 15).unwrap().alpha() > 200);
+        assert_eq!(pixels.pixel(15, 15).unwrap().alpha(), 0);
+    }
 
     #[test]
     fn checker_clips_large_artboards_without_changing_pattern() {

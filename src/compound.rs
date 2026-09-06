@@ -37,26 +37,7 @@ pub fn apply_multi(op: BoolOp, geoms: &[Geom]) -> Option<Geom> {
     if geoms.len() < 2 {
         return None;
     }
-    let mut acc = geoms[0].clone();
-    for g in &geoms[1..] {
-        match boolean::apply(op, &acc, g) {
-            Some(next) => acc = next,
-            None => {
-                // If any step produces nothing (e.g. disjoint intersect), the
-                // overall result is empty.
-                if op == BoolOp::Intersect {
-                    return None;
-                }
-                // For other ops, continue with accumulator unchanged?
-                // But boolean::apply returning None means empty, so we keep acc
-                // for union when disjoint? Actually union of disjoint should succeed.
-                // If union fails, it means one of the inputs had no contours.
-                // We'll keep acc.
-                continue;
-            }
-        }
-    }
-    Some(acc)
+    boolean::apply_many(op, geoms)
 }
 
 /// Explode a Poly with >1 contour into separate Poly shapes (one contour each).

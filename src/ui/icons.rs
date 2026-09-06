@@ -23,6 +23,7 @@ pub mod ph {
     pub const PAINT_BRUSH: &str = "\u{E6F0}";
     pub const ERASER: &str = "\u{E21E}";
     pub const PAINT_BUCKET: &str = "\u{E392}";
+    pub const BANDAIDS: &str = "\u{E0B2}";
     pub const COPY: &str = "\u{E1CA}";
     pub const DROP: &str = "\u{E210}";
     pub const CROP: &str = "\u{E1D4}";
@@ -151,6 +152,7 @@ fn tool_glyph(tool: Tool) -> &'static str {
         Tool::Eraser => ph::ERASER,
         Tool::Fill => ph::PAINT_BUCKET,
         Tool::Clone => ph::COPY,
+        Tool::Heal => ph::BANDAIDS,
         Tool::Smudge => ph::DROP,
         Tool::Crop => ph::CROP,
         Tool::Marquee => ph::SELECTION,

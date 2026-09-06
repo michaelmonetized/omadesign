@@ -72,6 +72,10 @@ impl TabState {
 
 impl Studio {
     fn exchange_tab(&mut self, i: usize) {
+        self.end_pixel_stroke(true);
+        self.end_deform(true);
+        self.reset_snap_gesture();
+        self.paint_mask = false;
         let t = &mut self.tabs[i];
         swap(&mut self.doc, &mut t.doc);
         swap(&mut self.path, &mut t.path);
@@ -257,8 +261,10 @@ impl Studio {
     }
 
     pub fn delete_swap_file(&mut self, path: &std::path::Path) {
-        let _ = std::fs::remove_file(path);
-        self.status = "discarded recovery".into();
+        self.status = match crate::project::delete_swap_at(path) {
+            Ok(()) => "discarded recovery".into(),
+            Err(error) => format!("Could not discard recovery: {error}"),
+        };
     }
 
     pub fn execute_nav(&mut self, ctx: &egui::Context, save: bool) {

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="260" height="320" viewBox="0 0 260 320">
+  <title>Fieldwork / a quiet arrangement</title>
+  <path d="M 0 0 H 260 V 320 H 0 Z" fill="#F4EDDF"/>
+  <path d="M 0 268 H 260 V 320 H 0 Z" fill="#EDC6AF"/>
+  <path d="M 66 271 C 66 259 107 254 143 258 C 176 261 194 269 183 276 C 171 284 109 286 80 280 C 71 278 66 275 66 271 Z" fill="#C3A391"/>
+  <path d="M 125 169 C 117 129 119 86 133 44" fill="none" stroke="#253A35" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 124 141 C 99 129 79 98 81 74 C 112 80 131 107 124 141 Z" fill="#96A58B"/>
+  <path d="M 123 118 C 126 80 150 57 180 58 C 179 88 154 113 123 118 Z" fill="#48685F"/>
+  <path d="M 129 77 C 112 69 101 49 106 31 C 125 36 135 54 129 77 Z" fill="#96A58B"/>
+  <path d="M 91 163 H 163 L 175 226 C 181 257 162 275 128 275 C 94 275 76 256 82 226 Z" fill="#E47D65"/>
+  <path d="M 91 163 C 102 155 150 155 163 163 C 151 171 103 171 91 163 Z" fill="#253A35"/>
+  <path d="M 110 188 C 103 215 101 240 111 251" fill="none" stroke="#EDC6AF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 228 234 C 228 243.941 219.941 252 210 252 C 200.059 252 192 243.941 192 234 C 192 224.059 200.059 216 210 216 C 219.941 216 228 224.059 228 234 Z" fill="#D5AE55"/>
+</svg>
