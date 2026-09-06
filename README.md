@@ -1,5 +1,7 @@
 # omadesign
 
+[Explore the studio](https://michaelmonetized.github.io/omadesign/) · [User manual](https://michaelmonetized.github.io/omadesign/docs/manual/) · [Build from source](docs/CONTRIBUTING.md)
+
 A native Linux studio for **design, paint, photograph, and motion**. One
 document, one layer stack. Built so a designer coming from macOS can sit down
 and start working.

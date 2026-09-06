@@ -1,69 +1,93 @@
-export function Markdown({ source }: { source: string }) {
-  const html = toHtml(source);
-  return <div dangerouslySetInnerHTML={{ __html: html }} />;
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+const REPOSITORY = "https://github.com/michaelmonetized/omadesign";
+const DOC_ROUTES: Record<string, string> = {
+  "/docs": "docs/",
+  "/docs/manual": "docs/manual/",
+  "/docs/manual.md": "docs/manual/",
+  "/docs/contributing": "docs/contributing/",
+  "/docs/contributing.md": "docs/contributing/",
+  "/docs/roadmap": "docs/roadmap/",
+  "/docs/roadmap.md": "docs/roadmap/",
+};
+
+/** Keep source-relative Markdown links useful in a GitHub Pages subdirectory. */
+export function documentationUrl(
+  url: string,
+  sourcePath: string,
+  base = import.meta.env.BASE_URL,
+): string | undefined {
+  const safe = defaultUrlTransform(url);
+  if (!safe) return undefined;
+  if (safe.startsWith("#") || /^(?:[a-z][\w+.-]*:|\/\/)/i.test(safe))
+    return safe;
+
+  const resolved = new URL(safe, `https://docs.invalid/${sourcePath}`);
+  const prefix = `${base.replace(/\/$/, "")}/`;
+  const pathname = resolved.pathname.startsWith(prefix)
+    ? `/${resolved.pathname.slice(prefix.length)}`
+    : resolved.pathname;
+  const route = DOC_ROUTES[pathname.replace(/\/$/, "").toLowerCase()];
+  const suffix = resolved.search + resolved.hash;
+  if (route) return prefix + route + suffix;
+  if (pathname === "/") return prefix + suffix;
+
+  // Examples and planning documents live in the repository, not on site routes.
+  const kind = /\.[^/]+$/.test(pathname) ? "blob" : "tree";
+  return `${REPOSITORY}/${kind}/master${pathname}${suffix}`;
 }
 
-function escape(s: string) {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
+type MarkdownNode = {
+  type: string;
+  tagName?: string;
+  value?: string;
+  properties?: Record<string, unknown>;
+  children?: MarkdownNode[];
+};
 
-function toHtml(md: string) {
-  const lines = md.split("\n");
-  const out: string[] = [];
-  let inCode = false;
-  let inTable = false;
-  for (const line of lines) {
-    if (line.startsWith("```")) {
-      if (inCode) {
-        out.push("</code></pre>");
-        inCode = false;
-      } else {
-        out.push("<pre><code>");
-        inCode = true;
+function headingAnchors() {
+  return (tree: MarkdownNode) => {
+    const used = new Set<string>();
+    const text = (node: MarkdownNode): string =>
+      node.value ?? node.children?.map(text).join("") ?? "";
+    const visit = (node: MarkdownNode) => {
+      if (/^h[1-6]$/.test(node.tagName ?? "")) {
+        const slug =
+          text(node)
+            .toLowerCase()
+            .trim()
+            .replace(/[^\p{L}\p{N}\s_-]/gu, "")
+            .replace(/\s/g, "-") || "section";
+        let id = slug;
+        for (let index = 1; used.has(id); index++) id = `${slug}-${index}`;
+        used.add(id);
+        node.properties = { ...node.properties, id };
       }
-      continue;
-    }
-    if (inCode) {
-      out.push(escape(line));
-      continue;
-    }
-    if (line.startsWith("|") && line.includes("|")) {
-      if (!inTable) {
-        out.push("<table>");
-        inTable = true;
-      }
-      if (/^\|[\s:-|]+\|$/.test(line.replace(/\s/g, " "))) continue;
-      const cells = line.split("|").slice(1, -1);
-      const tag = out[out.length - 1] === "<table>" ? "th" : "td";
-      out.push(
-        "<tr>" +
-          cells.map((c) => `<${tag}>${inline(c.trim())}</${tag}>`).join("") +
-          "</tr>",
-      );
-      continue;
-    }
-    if (inTable) {
-      out.push("</table>");
-      inTable = false;
-    }
-    if (line.startsWith("# ")) out.push(`<h1>${inline(line.slice(2))}</h1>`);
-    else if (line.startsWith("## ")) out.push(`<h2>${inline(line.slice(3))}</h2>`);
-    else if (line.startsWith("### ")) out.push(`<h3>${inline(line.slice(4))}</h3>`);
-    else if (line.startsWith("- ")) out.push(`<li>${inline(line.slice(2))}</li>`);
-    else if (line.trim() === "") out.push("");
-    else out.push(`<p>${inline(line)}</p>`);
-  }
-  if (inCode) out.push("</code></pre>");
-  if (inTable) out.push("</table>");
-  return out.join("\n");
+      node.children?.forEach(visit);
+    };
+    visit(tree);
+  };
 }
 
-function inline(s: string) {
-  return escape(s)
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+const remarkPlugins = [remarkGfm];
+const rehypePlugins = [headingAnchors];
+
+export function Markdown({
+  source,
+  sourcePath,
+}: {
+  source: string;
+  sourcePath: string;
+}) {
+  return (
+    <ReactMarkdown
+      skipHtml
+      remarkPlugins={remarkPlugins}
+      rehypePlugins={rehypePlugins}
+      urlTransform={(url) => documentationUrl(url, sourcePath)}
+    >
+      {source}
+    </ReactMarkdown>
+  );
 }

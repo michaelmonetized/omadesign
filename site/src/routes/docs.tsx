@@ -1,40 +1,57 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
 
-export const Route = createFileRoute("/docs")({
-  component: Docs,
-});
+export const Route = createFileRoute("/docs")({ component: Docs });
 
 function Docs() {
   return (
-    <div className="mx-auto grid max-w-6xl gap-10 px-6 py-12 md:grid-cols-[200px_1fr]">
-      <aside className="text-sm text-ctp-subtext1">
-        <p className="mb-3 font-medium text-ctp-text">Docs</p>
-        <ul className="space-y-2">
-          <li>
-            <Link to="/docs" className="hover:text-ctp-lavender">
-              Overview
-            </Link>
-          </li>
-          <li>
-            <Link to="/docs/manual" className="hover:text-ctp-lavender">
-              User manual
-            </Link>
-          </li>
-          <li>
-            <Link to="/docs/contributing" className="hover:text-ctp-lavender">
-              Contributing
-            </Link>
-          </li>
-          <li>
-            <Link to="/docs/roadmap" className="hover:text-ctp-lavender">
-              Roadmap
-            </Link>
-          </li>
-        </ul>
+    <main id="main" className="docs-layout">
+      <aside className="docs-nav">
+        <nav aria-label="Documentation">
+          <p className="docs-nav-title">A little guidance.</p>
+          <ul>
+            <li>
+              <Link to="/docs" activeOptions={{ exact: true }}>
+                Overview
+              </Link>
+            </li>
+            <li>
+              <Link to="/docs/manual">User manual</Link>
+            </li>
+            <li>
+              <Link to="/docs/contributing">Contributing</Link>
+            </li>
+            <li>
+              <Link to="/docs/roadmap">Project status</Link>
+            </li>
+          </ul>
+        </nav>
+        <nav aria-label="Project resources">
+          <p className="docs-nav-title">Keep exploring</p>
+          <ul>
+            <li>
+              <a href="https://github.com/michaelmonetized/omadesign/tree/master/examples/fieldwork">
+                Fieldwork brand kit ↗
+              </a>
+            </li>
+            <li>
+              <a href="https://github.com/michaelmonetized/omadesign/blob/master/docs/template-drops.md">
+                Template collection notes ↗
+              </a>
+            </li>
+            <li>
+              <a href="https://github.com/michaelmonetized/omadesign/issues">
+                Issues & ideas ↗
+              </a>
+            </li>
+          </ul>
+        </nav>
       </aside>
-      <article className="prose prose-invert max-w-none prose-headings:text-ctp-text prose-p:text-ctp-subtext0 prose-a:text-ctp-lavender prose-code:text-ctp-green prose-pre:bg-ctp-mantle">
+      <article
+        className="docs-content prose"
+        aria-label="Documentation article"
+      >
         <Outlet />
       </article>
-    </div>
+    </main>
   );
 }

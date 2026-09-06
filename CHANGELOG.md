@@ -1,5 +1,59 @@
 # Changelog
 
+## 2026-09-05 · Pass 9 — The front door finally fits the house.
+
+The studio had grown. Its website was still waving from three releases ago.
+Now the first thing visitors meet is the reason this app exists: a creative
+home on Linux, built for Omarchy, with Rust underneath and ordinary files at
+its heart. PRs **32–38 are merged into master**, including the corrected logo
+and finished film.
+
+### Your Linux. Your creative suite.
+
+A new charcoal-and-green homepage leads with Omarchy theme and font integration,
+native responsiveness, ARM64 and x86_64 Linux packages, and the MIT licence.
+Current native screenshots introduce Design, Pixel, Photo and Motion; switching
+studios changes the artwork and the tool story together. Light mode brings a
+softer paper-and-ink treatment, and remembers the choice when browser storage
+is available.
+
+The portable brand kit gets a place of its own. Explore `.omacolors`,
+`.omabrand/` and `.omatype`, with readable examples and the actual native panels.
+Try the keyboard HUD with tool buttons or a held modifier. Browse **51 features
+in nine groups**, search for a particular tool, and open the details that matter.
+The 52 editable templates and the corrected 97-second film round out the tour.
+The film loads on demand, with native playback controls, scene captions and a
+download link.
+
+### A guide that reads like a guide
+
+The manual now has real paragraphs, lists, tables and linkable headings. The
+four-studio introduction, project-kit links and documentation navigation work
+under the site's GitHub Pages path. The source-build command explicitly chooses
+the main application binary. Unsafe Markdown links and raw HTML stay disabled.
+
+### One website, one source
+
+The stale hand-maintained root homepage and superseded media have retired.
+TanStack Start prerenders the homepage and documentation from the same source;
+a local publisher checks routes, assets and the reviewed revision before
+updating a generated `gh-pages` branch. No GitHub Actions workflow or new hosting
+account is required. Focused components keep the interactive sections separate,
+and lossless WebP screenshots keep the image payload small.
+
+The copy names the actual strengths and the alpha's current boundaries. It does
+not claim to be Linux's first professional creative application or invent a
+competitor speed ranking. Published September 2 packages predate the new feature
+stack; the site clearly points to current-source builds for everything shown.
+
+Validation: **271 native tests pass**, formatting and the release build pass,
+and the installed executable matches that build byte for byte. An isolated
+native Brand capture and desktop-entry validation pass. Browser QA covers all
+studio and dotfile previews, real HUD modifier events, feature search/categories,
+FAQ disclosures, clipboard success/fallback, theme persistence/blocked storage,
+97-second video playback, and layouts from 320 to 1440 pixels. Documentation,
+static direct links and the final published artifact are checked before shipping.
+
 ## 2026-09-05 · Pass 8 — S, as in design.
 
 The extra downstroke on the S closed its upper opening and made it read as a g.

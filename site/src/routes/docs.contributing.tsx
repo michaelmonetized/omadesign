@@ -3,5 +3,6 @@ import src from "../../../docs/CONTRIBUTING.md?raw";
 import { Markdown } from "../md";
 
 export const Route = createFileRoute("/docs/contributing")({
-  component: () => <Markdown source={src} />,
+  head: () => ({ meta: [{ title: "Contributing · omadesign" }] }),
+  component: () => <Markdown source={src} sourcePath="docs/CONTRIBUTING.md" />,
 });

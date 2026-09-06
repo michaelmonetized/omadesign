@@ -1,95 +1,148 @@
 /// <reference types="vite/client" />
-import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import {
+  HeadContent,
+  Outlet,
+  Scripts,
+  createRootRoute,
+} from "@tanstack/react-router";
 import { ThemeProvider, useFlavour } from "../theme";
+import { REPO, sitePath } from "../site";
 import appCss from "../styles.css?url";
 
-const CURL =
-  "curl -fsSL https://raw.githubusercontent.com/michaelmonetized/omadesign/master/scripts/install-remote.sh | sh";
+export { CURL } from "../site";
 
 export const Route = createRootRoute({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "omadesign — your Linux, for making things" },
+      { title: "omadesign — your Linux. Your creative suite." },
       {
         name: "description",
         content:
-          "Native Linux studio for design, paint, and photograph. No Electron. Type you can type into. Theme from ~/.config.",
+          "An Omarchy-first creative suite for Linux. Native Rust. Design, paint, retouch and animate, with portable palettes, brand assets and fonts. Free and open source.",
       },
-      { name: "theme-color", content: "#1e1e2e" },
-      { property: "og:title", content: "omadesign" },
+      { name: "theme-color", content: "#111412" },
+      {
+        property: "og:title",
+        content: "omadesign — your Linux. Your creative suite.",
+      },
       {
         property: "og:description",
-        content: "A native Linux studio. Design, paint, photograph.",
+        content:
+          "Omarchy first. Rust native. Four creative studios, portable brand files, and a desktop that feels like yours. FOSS, btw.",
       },
-      { property: "og:image", content: "/media/design.jpg" },
+      { property: "og:type", content: "website" },
+      {
+        property: "og:image",
+        content:
+          "https://michaelmonetized.github.io/omadesign/media/studio/omadesign-logo.webp",
+      },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
+      { rel: "icon", type: "image/svg+xml", href: sitePath("favicon.svg") },
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      {
+        rel: "preconnect",
+        href: "https://fonts.gstatic.com",
+        crossOrigin: "anonymous",
+      },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&family=IBM+Plex+Mono:wght@400;500&display=swap",
       },
     ],
   }),
-  component: Root,
+  component: () => (
+    <ThemeProvider>
+      <Document />
+    </ThemeProvider>
+  ),
 });
 
-function Root() {
-  return (
-    <ThemeProvider>
-      <RootDocument>
-        <Outlet />
-      </RootDocument>
-    </ThemeProvider>
-  );
-}
-
-function RootDocument({ children }: { children: ReactNode }) {
+function Document() {
   const { flavour, setFlavour } = useFlavour();
   return (
-    <html lang="en" className={flavour === "latte" ? "latte" : "mocha dark"}>
+    <html
+      lang="en"
+      id="top"
+      className={flavour === "latte" ? "latte" : "mocha dark"}
+    >
       <head>
         <HeadContent />
       </head>
-      <body className="bg-ctp-base text-ctp-text antialiased">
-        <header className="sticky top-0 z-30 border-b border-ctp-surface0/80 bg-ctp-base/80 backdrop-blur-md">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-            <a href="/" className="font-semibold tracking-tight text-ctp-text">
-              omadesign
+      <body>
+        <a className="skip-link" href="#main">
+          Skip to content
+        </a>
+        <header className="site-header">
+          <div className="shell header-inner">
+            <a
+              href={sitePath()}
+              className="wordmark"
+              aria-label="omadesign home"
+            >
+              <span className="brand-dot" aria-hidden="true" />
+              oma<span>design</span>
+              <sup>α</sup>
             </a>
-            <nav className="flex items-center gap-5 text-sm text-ctp-subtext0">
-              <a href="/docs" className="hover:text-ctp-text">
-                Docs
+            <nav aria-label="Main navigation">
+              <a className="nav-features" href={sitePath("#features")}>
+                Features
               </a>
-              <a href="/docs/roadmap" className="hover:text-ctp-text">
-                Roadmap
+              <a href={sitePath("docs")}>Docs</a>
+              <a href={REPO}>
+                GitHub <span aria-hidden="true">↗</span>
               </a>
-              <a
-                href="https://github.com/michaelmonetized/omadesign"
-                className="hover:text-ctp-text"
-              >
-                GitHub
-              </a>
-              <button
-                type="button"
-                onClick={() => setFlavour(flavour === "mocha" ? "latte" : "mocha")}
-                className="rounded-full border border-ctp-overlay0 px-3 py-1 text-xs text-ctp-subtext1 hover:border-ctp-lavender"
-              >
-                {flavour === "mocha" ? "Light" : "Dark"}
-              </button>
             </nav>
+            <div className="header-actions">
+              <button
+                className="theme-toggle"
+                type="button"
+                aria-label={`Use ${flavour === "mocha" ? "light" : "dark"} theme`}
+                onClick={() =>
+                  setFlavour(flavour === "mocha" ? "latte" : "mocha")
+                }
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="8" />
+                  <path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" />
+                </svg>
+              </button>
+              <a className="button button-small" href={sitePath("#install")}>
+                Get omadesign <span aria-hidden="true">↗</span>
+              </a>
+            </div>
           </div>
         </header>
-        {children}
-        <footer className="border-t border-ctp-surface0">
-          <div className="mx-auto flex max-w-6xl flex-col gap-3 px-6 py-10 text-sm text-ctp-overlay1 md:flex-row md:items-center md:justify-between">
-            <p>MIT · native Linux · no GitHub Actions bill</p>
-            <code className="rounded-md bg-ctp-mantle px-3 py-1 font-mono text-xs text-ctp-subtext0">
-              {CURL}
-            </code>
+        <Outlet />
+        <footer className="site-footer">
+          <div className="shell footer-top">
+            <a className="wordmark" href={sitePath()}>
+              omadesign<sup>α</sup>
+            </a>
+            <p>Made for the desktop you made your own.</p>
+            <a href="#top">Back to top ↑</a>
+          </div>
+          <div className="shell footer-bottom">
+            <span>
+              © {new Date().getFullYear()} omadesign contributors · MIT licensed
+            </span>
+            <div>
+              <a href={sitePath("docs/roadmap")}>Roadmap</a>
+              <a href={sitePath("docs/contributing")}>Contribute</a>
+              <a href={`${REPO}/issues`}>Report a bug</a>
+              <a href={`${REPO}/blob/master/LICENSE`}>Licence</a>
+            </div>
+            <span className="mono">Built in the open. FOSS, btw.</span>
           </div>
         </footer>
         <Scripts />
@@ -97,5 +150,3 @@ function RootDocument({ children }: { children: ReactNode }) {
     </html>
   );
 }
-
-export { CURL };

@@ -8,7 +8,7 @@ This is a small native Linux studio. Keep it that way.
 git clone https://github.com/michaelmonetized/omadesign.git
 cd omadesign
 cargo test
-cargo run --release
+cargo run --release --bin omadesign
 ```
 
 Rust 2024. `cargo` is the toolchain. No GTK app, no Electron, no GitHub Actions.

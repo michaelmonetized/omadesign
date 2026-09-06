@@ -1,8 +1,8 @@
 # omadesign user manual
 
-A native Linux studio. Design, paint, photograph. One document, one layer stack.
+A native Linux studio. Design, paint, retouch and animate. One document, one layer stack.
 
-Keys match Affinity / Adobe. Press **F1** any time.
+Familiar shortcuts, with a contextual guide. Press **F1** any time.
 
 ## Learn as you draw
 
@@ -53,7 +53,7 @@ Chrome follows your desktop: Omarchy theme colours and the font from `omarchy fo
 - **Pen** `P` — click a corner, click-drag a smooth point (a twitch under 3px stays a corner). Shift constrains 45°. Alt-drag breaks handle symmetry. The cubic is drawn as you go. Enter or double-click finishes an **open** path. Esc removes the last point, then cancels. Click the first point to close. Click an open endpoint to continue it, or to join it to the path you're drawing.
 - **Artboard** `Shift+O` — draw a new board, drag to move, handles scale, the top handle rotates. Alt-drag clones. Object → Wrap selection in artboard. Click the name in Transform to rename.
 
-Pen / Node parity with Affinity, Illustrator, and Inkscape:
+Pen and Node gestures:
 
 | Gesture | Pen | Node |
 |---|---|---|
