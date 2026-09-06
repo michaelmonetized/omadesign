@@ -6,9 +6,8 @@ use crate::geom::{Geom, Pt};
 use crate::motion::Pose;
 use std::collections::HashMap;
 use tiny_skia::{
-    FillRule, GradientStop, LinearGradient, Paint, PathBuilder, Pixmap,
-    PixmapPaint, Point, RadialGradient, Shader, SpreadMode, Stroke as SkStroke, StrokeDash,
-    Transform,
+    FillRule, GradientStop, LinearGradient, Paint, PathBuilder, Pixmap, PixmapPaint, Point,
+    RadialGradient, SpreadMode, Stroke as SkStroke, StrokeDash, Transform,
 };
 
 /// Canvas camera. `offset` is in **canvas-widget pixels** (0,0 = top-left of
@@ -68,8 +67,8 @@ impl View {
         if viewport.width() < 1.0 || viewport.height() < 1.0 {
             return;
         }
-        self.scale = ((viewport.width() / doc.x).min(viewport.height() / doc.y) * 0.90)
-            .clamp(0.02, 64.0);
+        self.scale =
+            ((viewport.width() / doc.x).min(viewport.height() / doc.y) * 0.90).clamp(0.02, 64.0);
         let scaled = doc * self.scale;
         self.offset = viewport.center() - scaled * 0.5;
     }
@@ -165,7 +164,14 @@ pub fn render_view_posed(
     overrides: Option<&HashMap<u64, Pose>>,
 ) -> Option<Pixmap> {
     let mut pm = Pixmap::new(screen_w, screen_h)?;
-    fill_solid(&mut pm, 0.0, 0.0, screen_w as f32, screen_h as f32, canvas_bg());
+    fill_solid(
+        &mut pm,
+        0.0,
+        0.0,
+        screen_w as f32,
+        screen_h as f32,
+        canvas_bg(),
+    );
     draw_plates(&mut pm, doc, view);
 
     let t = view.transform();
@@ -193,16 +199,11 @@ pub fn render_view_posed(
     Some(pm)
 }
 
-pub fn export_png(doc: &Document, scale: u32) -> Result<Vec<u8>, String> {
+fn render_export(doc: &Document, scale: u32) -> Result<Pixmap, String> {
     let s = scale.clamp(1, 8);
     let w = (doc.width * s as f32).round().max(1.0) as u32;
     let h = (doc.height * s as f32).round().max(1.0) as u32;
     let mut pm = Pixmap::new(w, h).ok_or("could not allocate export pixmap")?;
-    draw_checker(
-        &mut pm,
-        Pt::ZERO,
-        Pt::new(w as f32, h as f32),
-    );
     draw_export_plates(&mut pm, doc, s as f32);
     let t = Transform::from_scale(s as f32, s as f32);
     for layer in &doc.layers {
@@ -214,19 +215,32 @@ pub fn export_png(doc: &Document, scale: u32) -> Result<Vec<u8>, String> {
         }
         draw_layer(&mut pm, layer, t, None, None, None, doc, None);
     }
-    pm.encode_png().map_err(|e| e.to_string())
+    Ok(pm)
+}
+
+pub fn export_png(doc: &Document, scale: u32) -> Result<Vec<u8>, String> {
+    render_export(doc, scale)?
+        .encode_png()
+        .map_err(|e| e.to_string())
 }
 
 pub fn export_jpeg(doc: &Document, scale: u32, quality: u8) -> Result<Vec<u8>, String> {
-    let png = export_png(doc, scale)?;
-    let img = image::load_from_memory(&png).map_err(|e| e.to_string())?;
-    let rgb = img.to_rgb8();
+    let pm = render_export(doc, scale)?;
+    let mut rgb = Vec::with_capacity(pm.width() as usize * pm.height() as usize * 3);
+    for pixel in pm.pixels() {
+        let white = 255 - pixel.alpha();
+        rgb.extend_from_slice(&[
+            pixel.red().saturating_add(white),
+            pixel.green().saturating_add(white),
+            pixel.blue().saturating_add(white),
+        ]);
+    }
     let mut buf = Vec::new();
     let mut enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, quality.max(1));
     enc.encode(
-        rgb.as_raw(),
-        rgb.width(),
-        rgb.height(),
+        &rgb,
+        pm.width(),
+        pm.height(),
         image::ExtendedColorType::Rgb8,
     )
     .map_err(|e| e.to_string())?;
@@ -261,8 +275,10 @@ fn draw_layer(
             overrides,
         );
         if let Some(mask) = &layer.mask {
-            if let Some(mask_pm) = mask.to_pixmap() {
-                let mut placed = Pixmap::new(pm.width(), pm.height()).unwrap();
+            let _ = mask.with_pm(|mask_pm| {
+                let Some(mut placed) = Pixmap::new(pm.width(), pm.height()) else {
+                    return;
+                };
                 placed.draw_pixmap(
                     0,
                     0,
@@ -271,12 +287,13 @@ fn draw_layer(
                         quality: tiny_skia::FilterQuality::Bilinear,
                         ..Default::default()
                     },
-                    t,
+                    t.pre_concat(layer_pixel_transform(layer)),
                     None,
                 );
-                let m = tiny_skia::Mask::from_pixmap(placed.as_ref(), tiny_skia::MaskType::Alpha);
+                let m =
+                    tiny_skia::Mask::from_pixmap(placed.as_ref(), tiny_skia::MaskType::Luminance);
                 temp.apply_mask(&m);
-            }
+            });
         }
         if filtered {
             crate::filter::apply(&mut temp, &layer.filters);
@@ -309,6 +326,36 @@ fn draw_layer(
     }
 }
 
+/// Map a layer's native pixels (and its mask) into document coordinates.
+pub fn layer_pixel_transform(layer: &Layer) -> Transform {
+    let LayerKind::Raster {
+        pixels,
+        origin,
+        size,
+        rotation,
+    } = &layer.kind
+    else {
+        return Transform::identity();
+    };
+    let dimensions = if size.x.abs() > 0.5 && size.y.abs() > 0.5 {
+        *size
+    } else {
+        Pt::new(pixels.w as f32, pixels.h as f32)
+    };
+    let mut transform = Transform::from_translate(origin.x, origin.y).pre_scale(
+        dimensions.x / pixels.w.max(1) as f32,
+        dimensions.y / pixels.h.max(1) as f32,
+    );
+    if rotation.abs() > 1e-5 {
+        let centre = *origin + dimensions * 0.5;
+        transform = Transform::from_translate(centre.x, centre.y)
+            .pre_concat(Transform::from_rotate(rotation.to_degrees()))
+            .pre_concat(Transform::from_translate(-centre.x, -centre.y))
+            .pre_concat(transform);
+    }
+    transform
+}
+
 fn draw_content(
     pm: &mut Pixmap,
     layer: &Layer,
@@ -324,44 +371,23 @@ fn draw_content(
     match &layer.kind {
         LayerKind::Vector { shapes } => {
             for s in shapes {
-                if !s.visible {
+                if !s.visible || s.guide {
                     continue;
                 }
                 let pose = pose_of(s.id, motion_t, doc, overrides);
                 draw_shape(pm, s, t, opacity, blend, pose);
             }
-            if let Some(p) = preview {
-                if p.visible {
-                    let pose = pose_of(p.id, motion_t, doc, overrides);
-                    draw_shape(pm, p, t, opacity * 0.85, blend, pose);
-                }
+            if let Some(p) = preview
+                && p.visible
+                && !p.guide
+            {
+                let pose = pose_of(p.id, motion_t, doc, overrides);
+                draw_shape(pm, p, t, opacity * 0.85, blend, pose);
             }
         }
-        LayerKind::Raster { pixels, origin, size, rotation } => {
-            let (ox, oy, dw, dh) = {
-                let native_w = pixels.w as f32;
-                let native_h = pixels.h as f32;
-                let (dw, dh) = if size.x.abs() > 0.5 && size.y.abs() > 0.5 {
-                    (size.x, size.y)
-                } else {
-                    (native_w, native_h)
-                };
-                (origin.x, origin.y, dw, dh)
-            };
+        LayerKind::Raster { pixels, .. } => {
             let _ = pixels.with_pm(|src| {
-                let sx = if src.width() == 0 { 1.0 } else { dw / src.width() as f32 };
-                let sy = if src.height() == 0 { 1.0 } else { dh / src.height() as f32 };
-                let mut xf = Transform::from_translate(ox, oy)
-                    .pre_scale(sx, sy);
-                if rotation.abs() > 1e-5 {
-                    let cx = ox + dw * 0.5;
-                    let cy = oy + dh * 0.5;
-                    xf = Transform::from_translate(cx, cy)
-                        .pre_concat(Transform::from_rotate(rotation.to_degrees()))
-                        .pre_concat(Transform::from_translate(-cx, -cy))
-                        .pre_concat(xf);
-                }
-                xf = t.pre_concat(xf);
+                let xf = t.pre_concat(layer_pixel_transform(layer));
                 pm.draw_pixmap(
                     0,
                     0,
@@ -370,7 +396,6 @@ fn draw_content(
                         opacity: opacity.clamp(0.0, 1.0),
                         blend_mode: blend,
                         quality: tiny_skia::FilterQuality::Bilinear,
-                        ..Default::default()
                     },
                     xf,
                     None,
@@ -419,12 +444,19 @@ fn draw_shape(
 ) {
     if shape.filters.active() {
         let pad = crate::filter::svg_pad(&shape.filters).ceil().max(8.0);
-        let b = shape.world_bbox().inflate(pad);
+        let b = pose.map_bounds(shape.world_bbox()).inflate(pad);
         let tw = b.width().ceil().max(1.0) as u32;
         let th = b.height().ceil().max(1.0) as u32;
         if let Some(mut temp) = Pixmap::new(tw, th) {
             let local = Transform::from_translate(-b.min.x, -b.min.y);
-            draw_shape_inner(&mut temp, shape, local, 1.0, tiny_skia::BlendMode::SourceOver, pose);
+            draw_shape_inner(
+                &mut temp,
+                shape,
+                local,
+                1.0,
+                tiny_skia::BlendMode::SourceOver,
+                pose,
+            );
             crate::filter::apply(&mut temp, &shape.filters);
             let xf = t.pre_concat(Transform::from_translate(b.min.x, b.min.y));
             pm.draw_pixmap(
@@ -435,7 +467,6 @@ fn draw_shape(
                     opacity: opacity.clamp(0.0, 1.0),
                     blend_mode: blend,
                     quality: tiny_skia::FilterQuality::Bilinear,
-                    ..Default::default()
                 },
                 xf,
                 None,
@@ -464,23 +495,54 @@ fn draw_shape_inner(
     } else {
         t.pre_concat(pose.to_skia(shape.world_bbox().center()))
     };
-    if !shape.style.fill.is_none() && shape.geom.is_closed() {
+    let fill_reveal = pose.fill_reveal.unwrap_or(1.0).clamp(0.0, 1.0);
+    if !shape.style.fill.is_none() && shape.geom.is_closed() && fill_reveal > 0.0 {
         let mut paint = fill_paint(&shape.style.fill, &shape.geom);
         paint.blend_mode = blend;
-        let mut c = paint_color(&mut paint);
-        if let Some(col) = c.as_mut() {
-            col.set_alpha(col.alpha() * op);
-            paint.set_color(*col);
+        if shape.rotation.abs() > 1e-5 {
+            let center = shape.geom.bbox().center();
+            paint.shader.transform(Transform::from_rotate_at(
+                shape.rotation.to_degrees(),
+                center.x,
+                center.y,
+            ));
         }
+        paint.shader.apply_opacity(op);
         let rule = match &shape.geom {
             crate::geom::Geom::Poly { winding: true, .. } => FillRule::Winding,
             _ => FillRule::EvenOdd,
         };
-        pm.fill_path(&path, &paint, rule, xf, None);
+        if fill_reveal < 1.0 {
+            let bounds = shape.world_bbox();
+            if let Some(rect) = tiny_skia::Rect::from_xywh(
+                bounds.min.x,
+                bounds.max.y - bounds.height() * fill_reveal,
+                bounds.width().max(1e-5),
+                (bounds.height() * fill_reveal).max(1e-5),
+            ) && let Some(mut clip) = tiny_skia::Mask::new(pm.width(), pm.height())
+            {
+                clip.fill_path(&PathBuilder::from_rect(rect), FillRule::Winding, true, xf);
+                pm.fill_path(&path, &paint, rule, xf, Some(&clip));
+            }
+        } else {
+            pm.fill_path(&path, &paint, rule, xf, None);
+        }
     }
+    let stroke_reveal = pose.stroke_reveal.unwrap_or(1.0).clamp(0.0, 1.0);
     if let Some(stroke) = &shape.style.stroke
         && stroke.width > 0.0
+        && stroke_reveal > 0.0
     {
+        let trimmed;
+        let stroke_path = if stroke_reveal < 1.0 {
+            trimmed = crate::motion::trimmed_stroke_path(shape, stroke_reveal);
+            let Some(path) = trimmed.as_ref() else {
+                return;
+            };
+            path
+        } else {
+            &path
+        };
         let mut paint = Paint {
             anti_alias: true,
             blend_mode: blend,
@@ -498,17 +560,8 @@ fn draw_shape_inner(
         if let Some((on, off)) = stroke.dash {
             sk.dash = StrokeDash::new(vec![on, off], 0.0);
         }
-        pm.stroke_path(&path, &paint, &sk, xf, None);
+        pm.stroke_path(stroke_path, &paint, &sk, xf, None);
     }
-}
-
-fn paint_color(p: &mut Paint) -> Option<tiny_skia::Color> {
-    if matches!(p.shader, Shader::SolidColor(_)) {
-        if let Shader::SolidColor(c) = p.shader {
-            return Some(c);
-        }
-    }
-    None
 }
 
 fn fill_paint<'a>(fill: &Fill, geom: &Geom) -> Paint<'a> {
@@ -566,10 +619,16 @@ fn fill_paint<'a>(fill: &Fill, geom: &Geom) -> Paint<'a> {
     paint
 }
 
-fn is_paper_raster(layer: &Layer) -> bool {
+pub(crate) fn is_paper_raster(layer: &Layer) -> bool {
+    if layer.mask.is_some() {
+        return false;
+    }
     let LayerKind::Raster { pixels, size, .. } = &layer.kind else {
         return false;
     };
+    if size.x.abs() > 0.5 || size.y.abs() > 0.5 {
+        return false;
+    }
     let Some(c) = pixels.is_uniform() else {
         return false;
     };
@@ -577,7 +636,7 @@ fn is_paper_raster(layer: &Layer) -> bool {
     if !paper {
         return false;
     }
-    size.x.abs() <= 0.5 && size.y.abs() <= 0.5
+    true
 }
 
 fn paper_color(doc: &Document) -> Rgba {
@@ -607,13 +666,16 @@ fn draw_plates(pm: &mut Pixmap, doc: &Document, view: View) {
 }
 
 fn draw_export_plates(pm: &mut Pixmap, doc: &Document, scale: f32) {
-    if doc.artboards.is_empty() {
+    if doc.transparent {
         return;
     }
-    let c = paper_color(doc);
+    if doc.artboards.is_empty() {
+        pm.fill(tiny_skia::Color::WHITE);
+        return;
+    }
     for a in &doc.artboards {
         let corners = a.corners().map(|p| p * scale);
-        fill_quad(pm, corners, c);
+        fill_quad(pm, corners, Rgba::WHITE);
     }
 }
 
@@ -653,10 +715,14 @@ fn fill_solid(pm: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, c: Rgba) {
 fn draw_checker(pm: &mut Pixmap, origin: Pt, size: Pt) {
     fill_solid(pm, origin.x, origin.y, size.x, size.y, CHECKER_A);
     let cell = 16.0f32;
-    let cols = (size.x / cell).ceil() as i32;
-    let rows = (size.y / cell).ceil() as i32;
-    for gy in 0..rows {
-        for gx in 0..cols {
+    // Zoom can make the artboard millions of pixels wide. Only visit cells
+    // intersecting the output, keeping work bounded by the viewport.
+    let x0 = ((-origin.x / cell).floor() as i32).max(0);
+    let y0 = ((-origin.y / cell).floor() as i32).max(0);
+    let x1 = ((pm.width() as f32 - origin.x).min(size.x) / cell).ceil() as i32;
+    let y1 = ((pm.height() as f32 - origin.y).min(size.y) / cell).ceil() as i32;
+    for gy in y0..y1 {
+        for gx in x0..x1 {
             if (gx + gy) % 2 == 0 {
                 continue;
             }
@@ -676,6 +742,129 @@ fn draw_checker(pm: &mut Pixmap, origin: Pt, size: Pt) {
 mod tests {
     use super::*;
     use crate::document::{Cmd, Document, Shape, Style, apply};
+
+    #[test]
+    fn reveal_channels_clip_fill_and_trim_stroke_independently_under_motion() {
+        let shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(10.0, 10.0),
+                size: Pt::new(40.0, 40.0),
+                radius: 0.0,
+            },
+            Style {
+                fill: Fill::Solid(Rgba::rgb(255, 0, 0)),
+                stroke: Some(crate::document::Stroke {
+                    color: Rgba::rgb(0, 0, 255),
+                    width: 4.0,
+                    ..Default::default()
+                }),
+            },
+        );
+        let render = |fill, stroke| {
+            let mut pixels = Pixmap::new(80, 80).unwrap();
+            draw_shape(
+                &mut pixels,
+                &shape,
+                Transform::identity(),
+                1.0,
+                tiny_skia::BlendMode::SourceOver,
+                Pose {
+                    dx: 10.0,
+                    dy: 5.0,
+                    fill_reveal: Some(fill),
+                    stroke_reveal: Some(stroke),
+                    ..Pose::identity()
+                },
+            );
+            pixels
+        };
+        let zero = render(0.0, 0.0);
+        assert!(zero.data().iter().all(|byte| *byte == 0));
+        let half_fill = render(0.5, 0.0);
+        assert_eq!(half_fill.pixel(40, 25).unwrap().alpha(), 0);
+        assert_eq!(half_fill.pixel(40, 45).unwrap().red(), 255);
+        let quarter_stroke = render(0.0, 0.25);
+        assert_eq!(quarter_stroke.pixel(40, 15).unwrap().blue(), 255);
+        assert_eq!(quarter_stroke.pixel(40, 55).unwrap().alpha(), 0);
+        let full = render(1.0, 1.0);
+        assert_eq!(full.pixel(40, 25).unwrap().red(), 255);
+        assert_eq!(full.pixel(40, 55).unwrap().blue(), 255);
+    }
+
+    #[test]
+    fn filtered_motion_does_not_clip_travel_to_rest_bounds() {
+        let mut shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(5.0, 5.0),
+                size: Pt::new(20.0, 20.0),
+                radius: 0.0,
+            },
+            Style {
+                fill: Fill::Solid(Rgba::rgb(255, 0, 0)),
+                stroke: None,
+            },
+        );
+        shape.filters.enabled = true;
+        shape.filters.items = vec![crate::filter::Fx::Blur { std: 1.0 }];
+        let mut pixels = Pixmap::new(100, 60).unwrap();
+        draw_shape(
+            &mut pixels,
+            &shape,
+            Transform::identity(),
+            1.0,
+            tiny_skia::BlendMode::SourceOver,
+            Pose {
+                dx: 60.0,
+                ..Pose::identity()
+            },
+        );
+        assert!(pixels.pixel(75, 15).unwrap().alpha() > 200);
+        assert_eq!(pixels.pixel(15, 15).unwrap().alpha(), 0);
+    }
+
+    #[test]
+    fn checker_clips_large_artboards_without_changing_pattern() {
+        let mut near = Pixmap::new(64, 64).unwrap();
+        let mut far = near.clone();
+        draw_checker(&mut near, Pt::new(-29.0, -25.0), Pt::new(128.0, 128.0));
+        draw_checker(
+            &mut far,
+            Pt::new(-999_997.0, -999_993.0),
+            Pt::new(2_000_000.0, 2_000_000.0),
+        );
+        assert_eq!(near.data(), far.data());
+    }
+
+    #[test]
+    fn gradient_fill_respects_shape_and_layer_opacity() {
+        let mut shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::ZERO,
+                size: Pt::new(20.0, 20.0),
+                radius: 0.0,
+            },
+            Style {
+                fill: Fill::Linear {
+                    from: [0.0, 0.0],
+                    to: [1.0, 0.0],
+                    c0: Rgba::rgb(255, 0, 0),
+                    c1: Rgba::rgb(0, 0, 255),
+                },
+                stroke: None,
+            },
+        );
+        shape.opacity = 0.5;
+        let mut pm = Pixmap::new(20, 20).unwrap();
+        draw_shape(
+            &mut pm,
+            &shape,
+            Transform::identity(),
+            0.5,
+            tiny_skia::BlendMode::SourceOver,
+            Pose::identity(),
+        );
+        assert!((pm.pixel(10, 10).unwrap().alpha() as i32 - 64).abs() <= 1);
+    }
     use crate::geom::Geom;
 
     #[test]
@@ -693,13 +882,7 @@ mod tests {
             Style::default(),
         );
         let id = shape.id;
-        apply(
-            &mut doc,
-            &Cmd::AddShape {
-                layer: 1,
-                shape,
-            },
-        );
+        apply(&mut doc, &Cmd::AddShape { layer: 1, shape });
         doc.motion.set_key(id, Prop::X, 0.0, 0.0, Ease::Linear);
         doc.motion.set_key(id, Prop::X, 1.0, 30.0, Ease::Linear);
         let rest = render_view(&doc, View::default(), 80, 80, Draft::none()).unwrap();
@@ -743,7 +926,7 @@ mod tests {
     }
 
     #[test]
-    fn export_png_is_valid() {
+    fn export_images_preserve_dimensions_and_transparency() {
         let mut doc = Document::new("t", 64.0, 48.0, 72.0);
         apply(
             &mut doc,
@@ -764,6 +947,23 @@ mod tests {
         let img = image::load_from_memory(&bytes).unwrap();
         assert_eq!(img.width(), 64);
         assert_eq!(img.height(), 48);
+        let jpeg = image::load_from_memory(&export_jpeg(&doc, 2, 90).unwrap()).unwrap();
+        assert_eq!((jpeg.width(), jpeg.height()), (128, 96));
+        doc.transparent = true;
+        doc.layers[1].kind.shapes_mut().unwrap()[0].opacity = 0.5;
+        let png = image::load_from_memory(&export_png(&doc, 1).unwrap())
+            .unwrap()
+            .to_rgba8();
+        assert_eq!(
+            png.get_pixel(0, 0).0[3],
+            0,
+            "the editor checkerboard is not artwork"
+        );
+        assert!((png.get_pixel(16, 16).0[3] as i32 - 128).abs() <= 1);
+        let jpeg = image::load_from_memory(&export_jpeg(&doc, 1, 100).unwrap())
+            .unwrap()
+            .to_rgb8();
+        assert!(jpeg.get_pixel(0, 0).0.iter().all(|&channel| channel > 245));
     }
 
     #[test]

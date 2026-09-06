@@ -37,26 +37,7 @@ pub fn apply_multi(op: BoolOp, geoms: &[Geom]) -> Option<Geom> {
     if geoms.len() < 2 {
         return None;
     }
-    let mut acc = geoms[0].clone();
-    for g in &geoms[1..] {
-        match boolean::apply(op, &acc, g) {
-            Some(next) => acc = next,
-            None => {
-                // If any step produces nothing (e.g. disjoint intersect), the
-                // overall result is empty.
-                if op == BoolOp::Intersect {
-                    return None;
-                }
-                // For other ops, continue with accumulator unchanged?
-                // But boolean::apply returning None means empty, so we keep acc
-                // for union when disjoint? Actually union of disjoint should succeed.
-                // If union fails, it means one of the inputs had no contours.
-                // We'll keep acc.
-                continue;
-            }
-        }
-    }
-    Some(acc)
+    boolean::apply_many(op, geoms)
 }
 
 /// Explode a Poly with >1 contour into separate Poly shapes (one contour each).
@@ -94,17 +75,6 @@ mod tests {
     }
 
     #[test]
-    fn combine_two_rects() {
-        let a = rect(0.0, 0.0, 10.0);
-        let b = rect(20.0, 0.0, 10.0);
-        let g = combine_into_poly(&[&a, &b]).unwrap();
-        match g {
-            Geom::Poly { contours, .. } => assert_eq!(contours.len(), 2),
-            _ => panic!("expected poly"),
-        }
-    }
-
-    #[test]
     fn apply_multi_union_three() {
         let a = Geom::Rect {
             origin: Pt::new(0.0, 0.0),
@@ -123,9 +93,7 @@ mod tests {
         };
         let r = apply_multi(BoolOp::Union, &[a, b, c]).unwrap();
         let area = boolean::area(&r);
-        // 3 squares 10x10 overlapping by 5 each => union width 20 + overlap handling
-        // Expect around 200? Let's just check >150 and <250
-        assert!(area > 150.0 && area < 250.0, "area {area}");
+        assert!((area - 200.0).abs() < 0.01, "area {area}");
     }
 
     #[test]

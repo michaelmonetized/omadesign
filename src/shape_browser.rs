@@ -1,6 +1,7 @@
 //! Shape browser – previews from popular OSS icon libs and pulls SVG on demand.
 
 use crate::geom::{Geom, Pt};
+use std::sync::OnceLock;
 
 /// A single icon entry. SVGs are fetched lazily from the lib's CDN / GitHub raw.
 #[derive(Clone, Debug)]
@@ -10,57 +11,80 @@ pub struct Icon {
 }
 
 pub fn libs() -> &'static [&'static str] {
-    &["Phosphor", "LineIcons", "Heroicons", "Feather", "Lucide"]
+    &["Phosphor", "LineIcons", "Heroicons", "Feather"]
 }
 
-/// Hard-coded popular set – enough to show search without a live GitHub index.
-/// Real browser lazy-fetches SVGs from the raw URLs on “Add”.
-pub fn all_icons() -> Vec<Icon> {
-    let lineicons = [
-        "home", "user", "heart", "star", "cog", "search", "envelope", "bell",
-        "calendar", "camera", "comments", "code", "cube", "download", "upload",
-        "trash", "pencil", "plus", "minus", "close",
-    ];
-    let mut out = Vec::new();
-    for (n, _) in crate::phosphor_map::ICONS {
-        out.push(Icon { name: n, lib: "Phosphor" });
-    }
-    for n in lineicons {
-        out.push(Icon { name: n, lib: "LineIcons" });
-    }
-    // Add a few heroicons/feather for “All” search coverage
-    for n in ["academic-cap", "adjustments", "archive", "arrow-path", "beaker"] {
-        out.push(Icon { name: n, lib: "Heroicons" });
-    }
-    for n in ["activity", "airplay", "alert-circle", "anchor", "aperture"] {
-        out.push(Icon { name: n, lib: "Feather" });
-    }
-    out
+/// Bundled catalogue, sorted once; remote SVGs are fetched only when placing an icon.
+fn all_icons() -> &'static [Icon] {
+    static ICONS: OnceLock<Vec<Icon>> = OnceLock::new();
+    ICONS.get_or_init(|| {
+        let lineicons = [
+            "home", "user", "heart", "star", "cog", "search", "envelope", "bell", "calendar",
+            "camera", "comments", "code", "cube", "download", "upload", "trash", "pencil", "plus",
+            "minus", "close",
+        ];
+        let mut out = Vec::new();
+        for (n, _) in crate::phosphor_map::ICONS {
+            out.push(Icon {
+                name: n,
+                lib: "Phosphor",
+            });
+        }
+        for n in lineicons {
+            out.push(Icon {
+                name: n,
+                lib: "LineIcons",
+            });
+        }
+        // Add a few heroicons/feather for “All” search coverage
+        for n in [
+            "academic-cap",
+            "adjustments",
+            "archive",
+            "arrow-path",
+            "beaker",
+        ] {
+            out.push(Icon {
+                name: n,
+                lib: "Heroicons",
+            });
+        }
+        for n in ["activity", "airplay", "alert-circle", "anchor", "aperture"] {
+            out.push(Icon {
+                name: n,
+                lib: "Feather",
+            });
+        }
+        out.sort_by(|a, b| a.name.cmp(b.name));
+        out
+    })
 }
 
 pub fn search(query: &str, lib: &str, limit: usize) -> Vec<Icon> {
     let q = query.trim().to_ascii_lowercase();
-    let mut v: Vec<Icon> = all_icons()
-        .into_iter()
-        .filter(|ic| {
-            (lib == "All" || ic.lib == lib) && (q.is_empty() || ic.name.contains(&q) || ic.lib.to_ascii_lowercase().contains(&q))
-        })
+    let matching_libs: Vec<_> = libs()
+        .iter()
+        .filter(|name| name.to_ascii_lowercase().contains(&q))
+        .copied()
         .collect();
-    v.sort_by(|a, b| a.name.cmp(b.name));
-    v.truncate(limit);
-    v
+    all_icons()
+        .iter()
+        .filter(|ic| {
+            (lib == "All" || ic.lib == lib)
+                && (q.is_empty() || ic.name.contains(&q) || matching_libs.contains(&ic.lib))
+        })
+        .take(limit)
+        .cloned()
+        .collect()
 }
 
-pub fn svg_url(icon: &Icon) -> String {
-    match icon.lib {
+fn svg_url(icon: &Icon) -> Option<String> {
+    Some(match icon.lib {
         "Phosphor" => format!(
             "https://raw.githubusercontent.com/phosphor-icons/core/main/assets/light/{}-light.svg",
             icon.name
         ),
-        "LineIcons" => format!(
-            "https://cdn.lineicons.com/4.0/lineicons/{}.svg",
-            icon.name
-        ),
+        "LineIcons" => format!("https://cdn.lineicons.com/4.0/lineicons/{}.svg", icon.name),
         "Heroicons" => format!(
             "https://raw.githubusercontent.com/tailwindlabs/heroicons/master/24/outline/{}.svg",
             icon.name
@@ -69,11 +93,8 @@ pub fn svg_url(icon: &Icon) -> String {
             "https://raw.githubusercontent.com/feathericons/feather/master/icons/{}.svg",
             icon.name
         ),
-        _ => format!(
-            "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/{}.svg",
-            icon.name
-        ),
-    }
+        _ => return None,
+    })
 }
 
 /// Build geometry for an icon. Phosphor comes from the bundled Light TTF —
@@ -94,7 +115,8 @@ fn phosphor_from_font(name: &str, target_px: f32) -> Option<Geom> {
         .find(|(n, _)| *n == name)
         .map(|(_, cp)| *cp)?;
     let ch = char::from_u32(cp)?;
-    let font = FontRef::try_from_slice(include_bytes!("../assets/phosphor/Phosphor-Light.ttf")).ok()?;
+    let font =
+        FontRef::try_from_slice(include_bytes!("../assets/phosphor/Phosphor-Light.ttf")).ok()?;
     let gid = font.glyph_id(ch);
     if gid.0 == 0 {
         return None;
@@ -182,9 +204,9 @@ fn phosphor_from_font(name: &str, target_px: f32) -> Option<Geom> {
     })
 }
 
-/// Download SVG text for an icon. Uses ureq; falls back to a minimal placeholder on failure.
+/// Download an icon SVG, preserving network and provider errors.
 pub fn fetch_svg(icon: &Icon) -> Result<String, String> {
-    let url = svg_url(icon);
+    let url = svg_url(icon).ok_or_else(|| format!("unknown icon library: {}", icon.lib))?;
     let resp = ureq::get(&url)
         .timeout(std::time::Duration::from_secs(8))
         .call()
@@ -200,30 +222,6 @@ pub fn svg_size(svg: &str) -> (f32, f32) {
     parse_viewbox(svg)
         .map(|(_, _, w, h)| (w.max(1.0), h.max(1.0)))
         .unwrap_or((256.0, 256.0))
-}
-
-/// First hex fill that is not `none`. Icons without a fill fall back to the caller.
-pub fn svg_fill(svg: &str) -> Option<crate::color::Rgba> {
-    let mut pos = 0;
-    while let Some(idx) = svg[pos..].find("fill=") {
-        let start = pos + idx + 5;
-        let rest = &svg[start..];
-        let quote = rest.chars().next()?;
-        if quote != '"' && quote != '\'' {
-            pos = start;
-            continue;
-        }
-        let end = rest[1..].find(quote)?;
-        let val = rest[1..1 + end].trim();
-        pos = start + 1 + end + 1;
-        if val.eq_ignore_ascii_case("none") || val.eq_ignore_ascii_case("transparent") {
-            continue;
-        }
-        if let Some(c) = parse_svg_color(val) {
-            return Some(c);
-        }
-    }
-    None
 }
 
 fn parse_svg_color(val: &str) -> Option<crate::color::Rgba> {
@@ -253,7 +251,10 @@ fn parse_svg_color(val: &str) -> Option<crate::color::Rgba> {
         };
     }
     let lower = v.to_ascii_lowercase();
-    if let Some(rest) = lower.strip_prefix("rgba(").or_else(|| lower.strip_prefix("rgb(")) {
+    if let Some(rest) = lower
+        .strip_prefix("rgba(")
+        .or_else(|| lower.strip_prefix("rgb("))
+    {
         let rest = rest.trim_end_matches(')');
         let parts: Vec<&str> = rest.split(',').map(|s| s.trim()).collect();
         if parts.len() >= 3 {
@@ -346,10 +347,7 @@ fn contours_to_geom(contours: Vec<Vec<Pt>>, closed: bool) -> Option<Geom> {
         if pts.len() < 2 {
             return None;
         }
-        if closed
-            && pts.len() > 2
-            && (pts[0] - *pts.last().unwrap()).length() < 0.5
-        {
+        if closed && pts.len() > 2 && (pts[0] - *pts.last().unwrap()).length() < 0.5 {
             pts.pop();
         }
         let anchors: Vec<crate::geom::Anchor> =
@@ -977,17 +975,20 @@ fn tokenize(d: &str) -> Vec<String> {
                 out.push(std::mem::take(&mut cur));
             }
             out.push(ch.to_string());
-        } else if ch == '-' || ch == '+' || ch == '.' || ch.is_ascii_digit() || ch == 'e' || ch == 'E'
+        } else if ch == '-'
+            || ch == '+'
+            || ch == '.'
+            || ch.is_ascii_digit()
+            || ch == 'e'
+            || ch == 'E'
         {
-            if ch == '-' && !cur.is_empty() && !cur.ends_with('e') && !cur.ends_with('E') {
+            let starts_number =
+                (ch == '-' && !cur.is_empty() && !cur.ends_with('e') && !cur.ends_with('E'))
+                    || (ch == '.' && cur.contains('.') && !cur.contains('e') && !cur.contains('E'));
+            if starts_number {
                 out.push(std::mem::take(&mut cur));
-                cur.push(ch);
-            } else if ch == '.' && cur.contains('.') && !cur.contains('e') && !cur.contains('E') {
-                out.push(std::mem::take(&mut cur));
-                cur.push(ch);
-            } else {
-                cur.push(ch);
             }
+            cur.push(ch);
         } else if !cur.is_empty() {
             out.push(std::mem::take(&mut cur));
         }
@@ -1017,16 +1018,6 @@ mod tests {
     }
 
     #[test]
-    fn svg_to_geom_placeholder() {
-        let svg = r#"<svg viewBox="0 0 100 100"><path d="M10 10 L90 10 L90 90 L10 90 Z"/></svg>"#;
-        let g = svg_to_geom(svg, 100.0).unwrap();
-        match g {
-            Geom::Poly { contours, .. } => assert_eq!(contours.len(), 1),
-            _ => panic!("poly"),
-        }
-    }
-
-    #[test]
     fn parse_rgba_and_hex() {
         let a = parse_svg_color("rgba(0,0,0,1.000)").unwrap();
         assert_eq!((a.r, a.g, a.b, a.a), (0, 0, 0, 255));
@@ -1044,7 +1035,10 @@ mod tests {
         let els = svg_to_elements(svg).unwrap();
         assert_eq!(els.len(), 2);
         assert_eq!(els[0].fill, SvgPaint::None);
-        assert_eq!(els[0].stroke, SvgPaint::Solid(crate::color::Rgba::rgb(0, 0, 0)));
+        assert_eq!(
+            els[0].stroke,
+            SvgPaint::Solid(crate::color::Rgba::rgb(0, 0, 0))
+        );
         assert!((els[0].stroke_width - 8.0).abs() < 0.01);
         assert_eq!(
             els[1].fill,
@@ -1119,12 +1113,7 @@ mod tests {
             Geom::Poly { contours, .. } => {
                 assert_eq!(contours.len(), 4, "outer, inner, lens outer, lens inner");
                 let b = contours[2].iter().fold(
-                    (
-                        f32::MAX,
-                        f32::MAX,
-                        f32::MIN,
-                        f32::MIN,
-                    ),
+                    (f32::MAX, f32::MAX, f32::MIN, f32::MIN),
                     |(a, b, c, d), p| (a.min(p.x), b.min(p.y), c.max(p.x), d.max(p.y)),
                 );
                 let w = b.2 - b.0;

@@ -26,15 +26,23 @@ src/
   boolean.rs      union / subtract / intersect / xor
   text.rs         rustybuzz OpenType + glyph outlines
   tools.rs        personas, tools, shortcut table
-  app.rs          studio state, commands, keys
+  app.rs          studio state and document commands
+  app/
+    tabs.rs       document ownership and tab switching
+    recovery.rs   background recovery snapshots
+    shortcuts.rs  keyboard commands
+    photo_session.rs  photo selection, previews and textures
   ui/             chrome, canvas, studios, photo, welcome
+    jobs.rs       background asset, icon and font requests
 assets/phosphor/  Phosphor Light (MIT)
-docs/             manual, roadmap, GTM
+docs/             manual, project status, contributing
 site/             landing page (TanStack Start)
 scripts/          local release + curl installer
 ```
 
 Mutations go through `Cmd` + `History`. Tests cover geometry, boolean, paint, develop, project round-trip, SVG, export, type, zoom, place, and trace.
+
+Keep file and network work outside the frame loop. Tab switches transfer document state instead of cloning it. Rendering caches are derived from document data and invalidated when that data changes; they do not belong in saved projects.
 
 ### Rules of the house
 
@@ -51,6 +59,24 @@ Mutations go through `Cmd` + `History`. Tests cover geometry, boolean, paint, de
 2. If you touched UI, say how you verified it (run the app; there is no browser here).
 3. If you added a command, it has an undo.
 4. Do not bump the version unless you are cutting a release.
+
+### Every QA pass
+
+Finish each pass with a dated entry in `CHANGELOG.md`: give it a memorable title,
+explain what feels different, and name the bugs that went away. Keep it readable
+by someone testing the app, with verification and known limits stated honestly.
+
+Push the tested changes to a branch and open or update its GitHub pull request.
+Then build and reinstall the same revision for human testing:
+
+```sh
+cargo build --release --bin omadesign
+./scripts/install.sh
+```
+
+The installer also works inside a release tarball. It replaces the binary
+atomically, so an open session can finish safely. Relaunch omadesign before
+testing the new build; an already running window still uses the previous one.
 
 ### Releasing
 

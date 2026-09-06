@@ -2,7 +2,7 @@
 
 use crate::color::Rgba;
 use crate::document::Pixels;
-use crate::geom::{poly_area, Geom, Pt};
+use crate::geom::{Geom, Pt, poly_area};
 use std::collections::HashMap;
 
 /// Trace knobs. Defaults match a logo on white or a transparent PNG.
@@ -256,13 +256,7 @@ fn average_rgb(pts: &[[u8; 3]]) -> [u8; 3] {
     [(s[0] / n) as u8, (s[1] / n) as u8, (s[2] / n) as u8]
 }
 
-fn contours_to_traced(
-    mask: &[u8],
-    w: u32,
-    h: u32,
-    opts: TraceOpts,
-    color: Rgba,
-) -> Vec<Traced> {
+fn contours_to_traced(mask: &[u8], w: u32, h: u32, opts: TraceOpts, color: Rgba) -> Vec<Traced> {
     let raw = trace_mask(mask, w, h);
     let eps = opts.smoothness.max(0.2);
     let min_a = opts.min_area.max(1.0);
@@ -392,11 +386,7 @@ fn rdp_closed(pts: &[Pt], eps: f32) -> Vec<Pt> {
     if out.len() >= 2 && (out[0] - *out.last().unwrap()).length() < 1e-3 {
         out.pop();
     }
-    if out.len() < 3 {
-        pts.to_vec()
-    } else {
-        out
-    }
+    if out.len() < 3 { pts.to_vec() } else { out }
 }
 
 fn rdp(pts: &[Pt], eps: f32) -> Vec<Pt> {
@@ -531,7 +521,12 @@ mod tests {
                 ..TraceOpts::default()
             },
         );
-        assert_eq!(out.len(), 2, "expected two colour shapes, got {}", out.len());
+        assert_eq!(
+            out.len(),
+            2,
+            "expected two colour shapes, got {}",
+            out.len()
+        );
         let reds = out.iter().filter(|t| t.color.r > t.color.b).count();
         let blues = out.iter().filter(|t| t.color.b > t.color.r).count();
         assert_eq!(reds, 1);

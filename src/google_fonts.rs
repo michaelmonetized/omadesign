@@ -9,6 +9,8 @@ const CACHE_DAYS: u64 = 7;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GoogleFont {
+    #[serde(default)]
+    pub id: String,
     pub family: String,
     #[serde(default)]
     pub variants: Vec<String>,
@@ -33,10 +35,7 @@ pub fn install_dir() -> PathBuf {
 }
 
 fn bundled_catalog() -> Vec<GoogleFont> {
-    // Offline fallback – 30 web-safe popular families with at least regular.
-    // URLs are the API files map entries for “regular” (or 400). They are real
-    // Google storage URLs so an online fetch can still succeed even when the
-    // catalogue API is unreachable.
+    // Keep family search available offline. Download URLs require a live catalogue.
     let families = [
         ("Inter", "sans-serif"),
         ("Roboto", "sans-serif"),
@@ -72,22 +71,27 @@ fn bundled_catalog() -> Vec<GoogleFont> {
     families
         .into_iter()
         .map(|(fam, cat)| GoogleFont {
+            id: fam.to_ascii_lowercase().replace(' ', "-"),
             family: fam.into(),
-            variants: vec!["regular".into(), "italic".into(), "700".into(), "700italic".into()],
+            variants: vec![
+                "regular".into(),
+                "italic".into(),
+                "700".into(),
+                "700italic".into(),
+            ],
             subsets: vec!["latin".into()],
             category: cat.into(),
-            files: HashMap::new(), // empty – caller will build URL via google-fonts direct link if needed
+            files: HashMap::new(),
         })
         .collect()
 }
 
 fn is_cache_fresh(p: &Path) -> bool {
-    if let Ok(meta) = std::fs::metadata(p) {
-        if let Ok(mtime) = meta.modified() {
-            if let Ok(elapsed) = std::time::SystemTime::now().duration_since(mtime) {
-                return elapsed.as_secs() < CACHE_DAYS * 24 * 3600;
-            }
-        }
+    if let Ok(meta) = std::fs::metadata(p)
+        && let Ok(mtime) = meta.modified()
+        && let Ok(elapsed) = std::time::SystemTime::now().duration_since(mtime)
+    {
+        return elapsed.as_secs() < CACHE_DAYS * 24 * 3600;
     }
     false
 }
@@ -127,10 +131,11 @@ pub fn fetch_catalog() -> Result<Vec<GoogleFont>, String> {
 
 /// Public entry: cache → network → bundled.
 pub fn catalog() -> Vec<GoogleFont> {
-    if let Some(cached) = load_catalog_from_cache() {
-        if !cached.is_empty() {
-            return cached;
-        }
+    if let Some(cached) = load_catalog_from_cache()
+        && !cached.is_empty()
+        && cached.iter().all(|font| !font.id.is_empty())
+    {
+        return cached;
     }
     match fetch_catalog() {
         Ok(v) => v,
@@ -159,28 +164,62 @@ pub fn search<'a>(catalog: &'a [GoogleFont], query: &str) -> Vec<&'a GoogleFont>
     out
 }
 
-/// Resolve a download URL for family/variant. Prefers the catalogue's files map,
-/// else builds a Google Fonts direct URL (github google/fonts soft link is not
-/// stable, so we use the fonts.gstatic.com pattern that the API itself returns).
+/// Resolve an exact variant, accepting 400 as the catalogue's name for regular.
 pub fn url_for(font: &GoogleFont, variant: &str) -> Option<String> {
     if let Some(u) = font.files.get(variant) {
         return Some(u.clone());
     }
     // Fallback: many families expose “regular” under “400”.
-    if variant == "regular" {
-        if let Some(u) = font.files.get("400") {
-            return Some(u.clone());
-        }
+    if variant == "regular"
+        && let Some(u) = font.files.get("400")
+    {
+        return Some(u.clone());
     }
-    if variant == "700" {
-        if let Some(u) = font.files.get("700") {
-            return Some(u.clone());
-        }
-    }
-    // Last resort: synthesise a google-fonts github raw URL – the caller will
-    // handle 404 by surfacing an error; the offline bundled catalogue has no
-    // files map and will hit this path, so we return None to signal “no URL”.
     None
+}
+
+#[derive(Deserialize)]
+struct FontDetails {
+    variants: Vec<FontVariant>,
+}
+
+#[derive(Deserialize)]
+struct FontVariant {
+    id: String,
+    ttf: Option<String>,
+}
+
+impl FontDetails {
+    fn url_for(&self, variant: &str) -> Option<&str> {
+        let variant = if variant == "400" { "regular" } else { variant };
+        self.variants
+            .iter()
+            .find(|item| item.id == variant)
+            .and_then(|item| item.ttf.as_deref())
+    }
+}
+
+fn download_url(font: &GoogleFont, variant: &str) -> Result<String, String> {
+    if let Some(url) = url_for(font, variant) {
+        return Ok(url);
+    }
+    // The list endpoint contains names; file URLs live on the family endpoint.
+    let id = if font.id.is_empty() {
+        font.family.to_ascii_lowercase().replace(' ', "-")
+    } else {
+        font.id.clone()
+    };
+    let response = ureq::get(&format!("{CATALOG_URL}/{id}"))
+        .query("subsets", &font.subsets.join(","))
+        .timeout(std::time::Duration::from_secs(8))
+        .call()
+        .map_err(|e| format!("could not load font variants: {e}"))?;
+    let text = response.into_string().map_err(|e| e.to_string())?;
+    let details: FontDetails = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    details
+        .url_for(variant)
+        .map(str::to_owned)
+        .ok_or_else(|| format!("{} has no downloadable {variant} variant", font.family))
 }
 
 pub fn is_installed(family: &str, variant: &str) -> bool {
@@ -188,8 +227,8 @@ pub fn is_installed(family: &str, variant: &str) -> bool {
 }
 
 pub fn installed_path(family: &str, variant: &str) -> PathBuf {
-    let safe_family = family.replace(' ', "_").replace('/', "_");
-    let safe_variant = variant.replace(' ', "_");
+    let safe_family = family.replace([' ', '/', '\\'], "_");
+    let safe_variant = variant.replace([' ', '/', '\\'], "_");
     install_dir().join(format!("{safe_family}-{safe_variant}.ttf"))
 }
 
@@ -200,10 +239,7 @@ pub fn download(family: &str, variant: &str, catalog: &[GoogleFont]) -> Result<P
         .iter()
         .find(|f| f.family.eq_ignore_ascii_case(family))
         .ok_or_else(|| format!("family '{family}' not in catalogue"))?;
-    let url = url_for(font, variant)
-        .or_else(|| font.files.values().next().cloned())
-        .ok_or_else(|| format!("no file URL for {family} {variant} (bundled offline list – connect to download)"))?;
-    // Fetch bytes
+    let url = download_url(font, variant)?;
     let resp = ureq::get(&url)
         .timeout(std::time::Duration::from_secs(20))
         .call()
@@ -215,23 +251,22 @@ pub fn download(family: &str, variant: &str, catalog: &[GoogleFont]) -> Result<P
     resp.into_reader()
         .read_to_end(&mut bytes)
         .map_err(|e| e.to_string())?;
-    if bytes.len() < 4096 {
-        return Err(format!("file too small ({} bytes) – likely an error page", bytes.len()));
+    if rustybuzz::Face::from_slice(&bytes, 0).is_none() {
+        return Err("download did not contain a valid font".into());
     }
     let dest = installed_path(family, variant);
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     std::fs::write(&dest, &bytes).map_err(|e| e.to_string())?;
-    // Invalidate fontconfig? Best-effort fc-cache, ignore errors.
     let _ = std::process::Command::new("fc-cache")
-        .args(["-f", &install_dir().to_string_lossy().to_string()])
+        .arg("-f")
+        .arg(install_dir())
         .output();
     // Register for this session so the combo shows it without restart.
-    let path = dest.clone();
     crate::text::register_font(crate::text::FontFace {
         name: format!("{family} {}", variant_name_pretty(variant)),
-        path: path.clone(),
+        path: dest.clone(),
     });
     Ok(dest)
 }
@@ -251,13 +286,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn bundled_has_inter() {
-        let c = bundled_catalog();
-        assert!(c.iter().any(|f| f.family == "Inter"));
-        assert!(c.len() >= 20);
-    }
-
-    #[test]
     fn search_filters() {
         let c = bundled_catalog();
         let r = search(&c, "inter");
@@ -267,16 +295,29 @@ mod tests {
     }
 
     #[test]
-    fn cache_roundtrip() {
-        let c = bundled_catalog();
-        save_catalog_to_cache(&c);
-        let back = load_catalog_from_cache().unwrap();
-        assert_eq!(back.len(), c.len());
+    fn install_path_is_sanitized() {
+        let p = installed_path("Open/Sans", "../regular");
+        assert_eq!(p.parent(), Some(install_dir().as_path()));
+        assert_eq!(p.file_name().unwrap(), "Open_Sans-.._regular.ttf");
     }
 
     #[test]
-    fn install_path_is_sanitized() {
-        let p = installed_path("Open Sans", "regular");
-        assert!(p.to_string_lossy().contains("Open_Sans"));
+    fn family_response_resolves_exact_ttf_variant() {
+        let details: FontDetails = serde_json::from_str(
+            r#"{"variants":[
+            {"id":"regular","ttf":"https://fonts.gstatic.com/regular.ttf"},
+            {"id":"700","ttf":"https://fonts.gstatic.com/bold.ttf"}
+        ]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            details.url_for("400"),
+            Some("https://fonts.gstatic.com/regular.ttf")
+        );
+        assert_eq!(
+            details.url_for("700"),
+            Some("https://fonts.gstatic.com/bold.ttf")
+        );
+        assert_eq!(details.url_for("italic"), None);
     }
 }

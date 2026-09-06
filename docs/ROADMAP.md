@@ -1,34 +1,7 @@
-# Roadmap
+# Project status
 
-omadesign 1.0 is a working Design / Pixel / Photo studio. This is what comes next, in order of how much it hurts not to have it.
+omadesign is an alpha native Linux design studio. The current tools cover vector design, raster painting, photo adjustments, and motion in a shared document.
 
-## Now (1.x)
+The [manual](MANUAL.md) describes the available workflows. Known issues and planned work live in [GitHub Issues](https://github.com/michaelmonetized/omadesign/issues).
 
-- [x] Live type: caret, Character studio, OpenType
-- [x] Zoom marquee
-- [x] Pen that actually adds points
-- [x] Handles that sit on the shape
-- [x] Phosphor Light icons
-- [x] Desktop theme + font
-- Publisher-class text: wrapping frames, baseline grid, hyphenation
-- Symbols / components with overrides
-- Mesh warp and envelope distort
-- Better boolean (holes that survive a second subtract)
-- RAW develop (libraw) in Photo
-- Recorded brush dynamics (tilt if the tablet talks)
-- [x] Motion timeline, animated SVG, Lottie in/out
-
-## Next
-
-- [x] Multi-page / artboards
-- Shared colour books and spot colours
-- SVG import that does not flatten type
-- Scripting (a small Rust-facing command bus, not a plugin bazaar)
-- Collaborative `.oma` later, never a login wall
-
-## Not on the table
-
-- An Electron rewrite
-- GitHub Actions runners
-- A “system” theme option on the marketing site
-- Feature flags that hide empty panels
+Current limitations include RAW photo development, advanced publishing and text layout, reusable symbols, and collaborative editing. Affinity documents require export to SVG or PDF before import; some other formats require system conversion tools.

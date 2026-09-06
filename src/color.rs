@@ -2,6 +2,19 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Convert stored straight RGBA bytes to tiny-skia's premultiplied pixels.
+pub(crate) fn rgba_to_pixmap(w: u32, h: u32, data: &[u8]) -> Option<tiny_skia::Pixmap> {
+    let len = (w as usize).checked_mul(h as usize)?.checked_mul(4)?;
+    if data.len() != len {
+        return None;
+    }
+    let mut pm = tiny_skia::Pixmap::new(w, h)?;
+    for (dst, src) in pm.pixels_mut().iter_mut().zip(data.chunks_exact(4)) {
+        *dst = tiny_skia::ColorU8::from_rgba(src[0], src[1], src[2], src[3]).premultiply();
+    }
+    Some(pm)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Rgba {
     pub r: u8,
@@ -64,12 +77,7 @@ impl Rgba {
     }
 
     pub fn from_egui(c: eframe::egui::Color32) -> Self {
-        Self {
-            r: c.r(),
-            g: c.g(),
-            b: c.b(),
-            a: c.a(),
-        }
+        Self::from_array(c.to_srgba_unmultiplied())
     }
 
     pub fn to_skia(self) -> tiny_skia::Color {
@@ -281,12 +289,12 @@ impl Blend {
 
 pub fn default_swatches() -> Vec<Rgba> {
     const HEX: &[u32] = &[
-        0x000000, 0x1B1B1B, 0x3D3D3D, 0x6B6B6B, 0x9E9E9E, 0xC8C8C8, 0xEDEDED, 0xFFFFFF,
-        0x7A1F1F, 0xC62828, 0xE53935, 0xEF9A9A, 0x7A3A12, 0xEF6C00, 0xFB8C00, 0xFFCC80,
-        0x7A6A10, 0xF9A825, 0xFDD835, 0xFFF59D, 0x1B5E20, 0x2E7D32, 0x43A047, 0xA5D6A7,
-        0x004D40, 0x00897B, 0x26A69A, 0x80CBC4, 0x0D47A1, 0x1565C0, 0x1E88E5, 0x90CAF9,
-        0x4A148C, 0x6A1B9A, 0x8E24AA, 0xCE93D8, 0x880E4F, 0xC2185B, 0xEC407A, 0xF48FB1,
-        0xF47C2E, 0xE5484D, 0x4F8CFF, 0x2EC4B6, 0xFFD166, 0x06D6A0, 0x118AB2, 0x073B4C,
+        0x000000, 0x1B1B1B, 0x3D3D3D, 0x6B6B6B, 0x9E9E9E, 0xC8C8C8, 0xEDEDED, 0xFFFFFF, 0x7A1F1F,
+        0xC62828, 0xE53935, 0xEF9A9A, 0x7A3A12, 0xEF6C00, 0xFB8C00, 0xFFCC80, 0x7A6A10, 0xF9A825,
+        0xFDD835, 0xFFF59D, 0x1B5E20, 0x2E7D32, 0x43A047, 0xA5D6A7, 0x004D40, 0x00897B, 0x26A69A,
+        0x80CBC4, 0x0D47A1, 0x1565C0, 0x1E88E5, 0x90CAF9, 0x4A148C, 0x6A1B9A, 0x8E24AA, 0xCE93D8,
+        0x880E4F, 0xC2185B, 0xEC407A, 0xF48FB1, 0xF47C2E, 0xE5484D, 0x4F8CFF, 0x2EC4B6, 0xFFD166,
+        0x06D6A0, 0x118AB2, 0x073B4C,
     ];
     HEX.iter().copied().map(Rgba::from_hex).collect()
 }
@@ -301,6 +309,8 @@ mod tests {
         assert_eq!(c.hex(), "#F47C2E");
         assert_eq!(Rgba::parse_hex("#f47c2e"), Some(c));
         assert_eq!(Rgba::parse_hex("F47"), Some(Rgba::rgb(0xFF, 0x44, 0x77)));
+        let translucent = Rgba::new(255, 0, 0, 128);
+        assert_eq!(Rgba::from_egui(translucent.to_egui()), translucent);
     }
 
     #[test]

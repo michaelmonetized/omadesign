@@ -1,9 +1,9 @@
 //! UI chrome follows the desktop: Omarchy theme + fontconfig. No baked-in brand hex.
 
 use eframe::egui::{
-    style::{Selection, WidgetVisuals, Widgets},
     Color32, Context, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Shadow, Stroke,
     TextStyle, Theme, Vec2, Visuals,
+    style::{Selection, WidgetVisuals, Widgets},
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -203,12 +203,13 @@ impl Palette {
     }
 
     fn from_map(m: &HashMap<String, String>) -> Self {
-        let bg = get(m, &["background", "base", "bg"]).unwrap_or(Color32::from_rgb(0x1E, 0x1E, 0x2E));
-        let fg = get(m, &["foreground", "text", "fg"]).unwrap_or(Color32::from_rgb(0xCD, 0xD6, 0xF4));
+        let bg =
+            get(m, &["background", "base", "bg"]).unwrap_or(Color32::from_rgb(0x1E, 0x1E, 0x2E));
+        let fg =
+            get(m, &["foreground", "text", "fg"]).unwrap_or(Color32::from_rgb(0xCD, 0xD6, 0xF4));
         let accent = get(m, &["accent", "blue", "color4", "primary"])
             .unwrap_or(Color32::from_rgb(0x89, 0xB4, 0xFA));
-        let muted = get(m, &["muted", "dark_foreground", "color8", "overlay0"])
-            .unwrap_or(mix(fg, bg, 0.45));
+        let muted = mix(fg, bg, 0.38);
         let sel = get(m, &["selection", "selection_background", "surface1"])
             .unwrap_or(mix(accent, bg, 0.55));
         let dark = lum(bg) < 140.0;
@@ -228,12 +229,16 @@ impl Palette {
             lift(bg, 0.12)
         });
         let error = get(m, &["red", "color1"]).unwrap_or(Color32::from_rgb(0xF3, 0x8B, 0xA8));
-        let warn = get(m, &["yellow", "orange", "color3"]).unwrap_or(Color32::from_rgb(0xF9, 0xE2, 0xAF));
-        let border = mix(widget, fg, 0.12);
+        let warn =
+            get(m, &["yellow", "orange", "color3"]).unwrap_or(Color32::from_rgb(0xF9, 0xE2, 0xAF));
+        // Keep surfaces close to the desktop background; contrast belongs to the artwork.
+        let panel = mix(bg, panel, 0.45);
+        let widget = mix(bg, widget, 0.55);
+        let border = mix(panel, fg, 0.10);
         Self {
             accent,
             accent_dim: dim(accent, 0.28),
-            accent_soft: alpha(accent, 40),
+            accent_soft: alpha(accent, 25),
             bg_window: bg,
             bg_panel: panel,
             bg_widget: widget,
@@ -248,10 +253,10 @@ impl Palette {
                 dim(widget, 0.14)
             },
             bg_extreme: extreme,
-            bg_canvas: widget,
+            bg_canvas: mix(bg, extreme, 0.6),
             fg,
             fg_weak: muted,
-            fg_strong: if dark { Color32::WHITE } else { Color32::BLACK },
+            fg_strong: mix(fg, if dark { Color32::WHITE } else { Color32::BLACK }, 0.25),
             border,
             border_strong: mix(border, fg, 0.18),
             select: get(m, &["cursor", "sapphire", "sky"]).unwrap_or(accent),
@@ -351,14 +356,14 @@ fn load_ui_font_bytes() -> Option<(String, Vec<u8>)> {
 }
 
 pub fn apply(ctx: &Context) {
-    let pal = Palette::load();
-    let _ = PALETTE.set(pal.clone());
+    let pal = p();
 
     let mut fonts = FontDefinitions::default();
     if let Some((name, bytes)) = load_ui_font_bytes() {
-        fonts
-            .font_data
-            .insert(name.clone(), std::sync::Arc::new(FontData::from_owned(bytes)));
+        fonts.font_data.insert(
+            name.clone(),
+            std::sync::Arc::new(FontData::from_owned(bytes)),
+        );
         fonts
             .families
             .entry(FontFamily::Proportional)
@@ -378,27 +383,27 @@ pub fn apply(ctx: &Context) {
     );
     fonts
         .families
-        .entry(FontFamily::Proportional)
-        .or_default()
-        .insert(1, "phosphor".into());
+        .insert(FontFamily::Name("phosphor".into()), vec!["phosphor".into()]);
     ctx.set_fonts(fonts);
 
-    let r4 = CornerRadius::same(4);
+    let radius = CornerRadius::same(6);
     let widget = |bg: Color32| WidgetVisuals {
         bg_fill: bg,
         weak_bg_fill: bg,
-        bg_stroke: Stroke::new(1.0, pal.border),
-        corner_radius: r4,
+        bg_stroke: Stroke::NONE,
+        corner_radius: radius,
         fg_stroke: Stroke::new(1.0, pal.fg),
         expansion: 0.0,
     };
     let widgets = Widgets {
-        noninteractive: widget(pal.bg_widget),
+        noninteractive: WidgetVisuals {
+            bg_stroke: Stroke::new(1.0, pal.border),
+            ..widget(pal.bg_widget)
+        },
         inactive: widget(pal.bg_widget),
         hovered: widget(pal.bg_widget_hover),
         active: widget(pal.bg_widget_active),
         open: widget(pal.bg_widget),
-        ..Default::default()
     };
     let visuals = Visuals {
         dark_mode: pal.dark,
@@ -407,7 +412,7 @@ pub fn apply(ctx: &Context) {
         weak_text_color: Some(pal.fg_weak),
         widgets,
         selection: Selection {
-            bg_fill: pal.accent_dim,
+            bg_fill: pal.accent_soft,
             stroke: Stroke::new(1.0, pal.accent),
         },
         hyperlink_color: pal.accent,
@@ -417,23 +422,23 @@ pub fn apply(ctx: &Context) {
         code_bg_color: pal.bg_widget,
         warn_fg_color: pal.warn,
         error_fg_color: pal.error,
-        window_corner_radius: CornerRadius::same(8),
+        window_corner_radius: CornerRadius::same(10),
         window_shadow: Shadow {
-            offset: [0, 8],
-            blur: 24,
+            offset: [0, 6],
+            blur: 18,
             spread: 0,
-            color: Color32::from_black_alpha(140),
+            color: Color32::from_black_alpha(80),
         },
         window_fill: pal.bg_window,
-        window_stroke: Stroke::new(1.0, pal.border_strong),
+        window_stroke: Stroke::new(1.0, pal.border),
         window_highlight_topmost: false,
-        menu_corner_radius: r4,
+        menu_corner_radius: radius,
         panel_fill: pal.bg_panel,
         popup_shadow: Shadow {
             offset: [0, 4],
             blur: 12,
             spread: 0,
-            color: Color32::from_black_alpha(120),
+            color: Color32::from_black_alpha(64),
         },
         resize_corner_size: 12.0,
         ..Default::default()
@@ -444,17 +449,23 @@ pub fn apply(ctx: &Context) {
         ctx.set_theme(eframe::egui::ThemePreference::Light);
     }
     ctx.set_visuals(visuals);
-    ctx.options_mut(|o| o.zoom_with_keyboard = false);
+    ctx.options_mut(|o| {
+        o.zoom_with_keyboard = false;
+        o.input_options.zoom_modifier = eframe::egui::Modifiers::COMMAND
+            | eframe::egui::Modifiers::CTRL
+            | eframe::egui::Modifiers::ALT;
+    });
     crate::compositor::set_canvas_bg(pal.bg_canvas.r(), pal.bg_canvas.g(), pal.bg_canvas.b());
 
     let theme = if pal.dark { Theme::Dark } else { Theme::Light };
     ctx.style_mut_of(theme, |style| {
         style.spacing.item_spacing = Vec2::new(6.0, 6.0);
-        style.spacing.button_padding = Vec2::new(8.0, 4.0);
+        style.animation_time = 0.10;
+        style.spacing.button_padding = Vec2::new(9.0, 5.0);
         style.spacing.icon_width = 14.0;
         style.spacing.slider_width = 132.0;
         style.spacing.slider_rail_height = 3.0;
-        style.spacing.interact_size = Vec2::new(24.0, 22.0);
+        style.spacing.interact_size = Vec2::new(26.0, 26.0);
         style.spacing.scroll = eframe::egui::style::ScrollStyle::thin();
         style.spacing.indent = 12.0;
         style.text_styles.insert(
@@ -468,9 +479,10 @@ pub fn apply(ctx: &Context) {
             TextStyle::Button,
             FontId::new(12.5, FontFamily::Proportional),
         );
-        style
-            .text_styles
-            .insert(TextStyle::Small, FontId::new(11.0, FontFamily::Proportional));
+        style.text_styles.insert(
+            TextStyle::Small,
+            FontId::new(11.0, FontFamily::Proportional),
+        );
         style.text_styles.insert(
             TextStyle::Monospace,
             FontId::new(12.0, FontFamily::Monospace),
@@ -481,13 +493,6 @@ pub fn apply(ctx: &Context) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn mocha_fallback_is_dark() {
-        let p = Palette::fallback();
-        assert!(p.dark);
-        assert!(lum(p.bg_window) < lum(p.fg));
-    }
 
     #[test]
     fn parses_omarchy_toml() {

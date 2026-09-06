@@ -62,11 +62,7 @@ fn hex_css(c: Rgba) -> String {
 }
 
 fn svg_color(c: Rgba) -> String {
-    if c.a >= 250 {
-        hex_css(c)
-    } else {
-        rgba_css(c)
-    }
+    if c.a >= 250 { hex_css(c) } else { rgba_css(c) }
 }
 
 fn raster_worth_exporting(
@@ -96,12 +92,62 @@ fn raster_worth_exporting(
     true
 }
 
+fn pixel_image(
+    pixels: &crate::document::Pixels,
+    transform: tiny_skia::Transform,
+) -> Result<String, String> {
+    let png = pixels
+        .to_pixmap()
+        .ok_or("Invalid image pixels in SVG export")?
+        .encode_png()
+        .map_err(|error| format!("Could not encode SVG image: {error}"))?;
+    let b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, png);
+    Ok(format!(
+        "  <image href=\"data:image/png;base64,{b64}\" width=\"{}\" height=\"{}\" preserveAspectRatio=\"none\" transform=\"matrix({:.6} {:.6} {:.6} {:.6} {:.6} {:.6})\"/>\n",
+        pixels.w,
+        pixels.h,
+        transform.sx,
+        transform.ky,
+        transform.kx,
+        transform.sy,
+        transform.tx,
+        transform.ty,
+    ))
+}
+
+fn write_layer_mask(defs: &mut String, layer: &Layer) -> Result<Option<String>, String> {
+    let Some(mask) = &layer.mask else {
+        return Ok(None);
+    };
+    let transform = crate::compositor::layer_pixel_transform(layer);
+    let mut corners = [
+        tiny_skia::Point::from_xy(0.0, 0.0),
+        tiny_skia::Point::from_xy(mask.w as f32, 0.0),
+        tiny_skia::Point::from_xy(mask.w as f32, mask.h as f32),
+        tiny_skia::Point::from_xy(0.0, mask.h as f32),
+    ];
+    transform.map_points(&mut corners);
+    let mut bounds = Bounds::from_pt(Pt::new(corners[0].x, corners[0].y));
+    for point in &corners[1..] {
+        bounds.union_pt(Pt::new(point.x, point.y));
+    }
+    let bounds = bounds.inflate(1.0);
+    let id = format!("oma-mask-{}", layer.id);
+    defs.push_str(&format!(
+        "<mask id=\"{id}\" maskUnits=\"userSpaceOnUse\" maskContentUnits=\"userSpaceOnUse\" mask-type=\"luminance\" color-interpolation=\"sRGB\" x=\"{:.3}\" y=\"{:.3}\" width=\"{:.3}\" height=\"{:.3}\">\n",
+        bounds.min.x,bounds.min.y,bounds.width(),bounds.height(),
+    ));
+    defs.push_str(&pixel_image(mask, transform)?);
+    defs.push_str("</mask>\n");
+    Ok(Some(id))
+}
+
 fn layer_bounds(layer: &Layer) -> Option<Bounds> {
     match &layer.kind {
         LayerKind::Vector { shapes } => {
             let mut b: Option<Bounds> = None;
             for s in shapes {
-                if !s.visible {
+                if !s.visible || s.guide {
                     continue;
                 }
                 let sb = s.world_bbox();
@@ -124,11 +170,7 @@ fn stop_color(c: Rgba) -> String {
     if c.a >= 250 {
         hex_css(c)
     } else {
-        format!(
-            "{}\" stop-opacity=\"{:.3}",
-            hex_css(c),
-            c.a as f32 / 255.0
-        )
+        format!("{}\" stop-opacity=\"{:.3}", hex_css(c), c.a as f32 / 255.0)
     }
 }
 
@@ -138,6 +180,7 @@ fn write_shape(
     grad_id: &mut usize,
     shape: &Shape,
     extra: &str,
+    text_as_paths: bool,
 ) {
     let fill_attr = match &shape.style.fill {
         Fill::None => "fill=\"none\"".to_string(),
@@ -185,7 +228,12 @@ fn write_shape(
         }
         _ => String::new(),
     };
-    if let Geom::Text(run) = &shape.geom {
+    // Animation and portable project faces use glyph outlines: an SVG recipient
+    // may not have the brand font. Text stays editable in the original document.
+    if let Geom::Text(run) = &shape.geom
+        && !text_as_paths
+        && !run.font.starts_with("omatype:")
+    {
         let family = crate::text::label_for(&run.font);
         let fill = match &shape.style.fill {
             Fill::Solid(c) => svg_color(*c),
@@ -240,8 +288,8 @@ fn write_shape(
         return;
     }
     let rule = match &shape.geom {
-        Geom::Poly { winding: false, .. } => " fill-rule=\"evenodd\"",
-        _ => "",
+        Geom::Poly { winding: true, .. } => "",
+        _ => " fill-rule=\"evenodd\"",
     };
     body.push_str(&format!(
         "  <path id=\"oma-{}\" d=\"{d}\" {fill_attr}{stroke_attr}{rule} opacity=\"{:.3}\"{extra}/>\n",
@@ -265,6 +313,199 @@ pub fn export_animated(doc: &Document) -> Result<String, String> {
     export_inner(doc, true)
 }
 
+fn animate_attribute(
+    attribute: &str,
+    motion: &crate::motion::Motion,
+    times: &[f32],
+    values: impl Fn(f32) -> f32,
+) -> String {
+    let duration = motion.duration.max(0.05);
+    let keys = times
+        .iter()
+        .map(|t| format!("{:.7}", (t / duration).clamp(0.0, 1.0)))
+        .collect::<Vec<_>>()
+        .join(";");
+    let values = times
+        .iter()
+        .map(|t| format!("{:.6}", values(*t)))
+        .collect::<Vec<_>>()
+        .join(";");
+    let repeat = if motion.looped { "indefinite" } else { "1" };
+    format!(
+        "<animate attributeName=\"{attribute}\" dur=\"{duration:.4}s\" repeatCount=\"{repeat}\" fill=\"freeze\" calcMode=\"linear\" keyTimes=\"{keys}\" values=\"{values}\"/>\n"
+    )
+}
+
+fn write_animated_shape(
+    body: &mut String,
+    defs: &mut String,
+    grad_id: &mut usize,
+    shape: &Shape,
+    motion: &crate::motion::Motion,
+) {
+    use crate::motion::Prop;
+    let times = motion.sample_times(shape.id);
+    let bounds = shape.world_bbox();
+    let center = bounds.center();
+    body.push_str(&format!(
+        "<g class=\"oma-a\" style=\"animation-name: oma-{}; transform-origin: {:.4}px {:.4}px\">\n",
+        shape.id, center.x, center.y
+    ));
+    let mut component = shape.clone();
+    component.opacity = 1.0;
+    if !shape.style.fill.is_none() && shape.geom.is_closed() {
+        component.style.stroke = None;
+        body.push_str(&format!(
+            "<g class=\"oma-a\" style=\"animation-name: oma-{}-opacity\">\n",
+            shape.id
+        ));
+        let reveal = motion.value(shape.id, Prop::FillReveal, 0.0).is_some();
+        if reveal {
+            let id = format!("oma-fill-reveal-{}", shape.id);
+            let initial = motion
+                .pose(shape.id, 0.0)
+                .fill_reveal
+                .unwrap_or(1.0)
+                .clamp(0.0, 1.0);
+            defs.push_str(&format!("<clipPath id=\"{id}\" clipPathUnits=\"userSpaceOnUse\"><rect x=\"{:.4}\" y=\"{:.4}\" width=\"{:.4}\" height=\"{:.4}\">\n",bounds.min.x,bounds.max.y-bounds.height()*initial,bounds.width(),bounds.height()*initial));
+            defs.push_str(&animate_attribute("y", motion, &times, |time| {
+                bounds.max.y
+                    - bounds.height()
+                        * motion
+                            .pose(shape.id, time)
+                            .fill_reveal
+                            .unwrap_or(1.0)
+                            .clamp(0.0, 1.0)
+            }));
+            defs.push_str(&animate_attribute("height", motion, &times, |time| {
+                bounds.height()
+                    * motion
+                        .pose(shape.id, time)
+                        .fill_reveal
+                        .unwrap_or(1.0)
+                        .clamp(0.0, 1.0)
+            }));
+            defs.push_str("</rect></clipPath>\n");
+            body.push_str(&format!("<g clip-path=\"url(#{id})\">\n"));
+        }
+        let mut part = String::new();
+        write_shape(
+            &mut part,
+            defs,
+            grad_id,
+            &component,
+            &xf_attr(&component),
+            true,
+        );
+        body.push_str(&part.replacen(
+            &format!("id=\"oma-{}\"", shape.id),
+            &format!("id=\"oma-{}-fill\"", shape.id),
+            1,
+        ));
+        if reveal {
+            body.push_str("</g>\n");
+        }
+        body.push_str("</g>\n");
+    }
+    if let Some(stroke) = shape
+        .style
+        .stroke
+        .as_ref()
+        .filter(|stroke| stroke.width > 0.0)
+    {
+        body.push_str(&format!(
+            "<g class=\"oma-a\" style=\"animation-name: oma-{}-opacity\">\n",
+            shape.id
+        ));
+        component.style.fill = Fill::None;
+        component.style.stroke = Some(stroke.clone());
+        let reveal = motion.value(shape.id, Prop::StrokeReveal, 0.0).is_some();
+        if reveal {
+            let id = format!("oma-stroke-reveal-{}", shape.id);
+            let mask_bounds = bounds.inflate(stroke.width * 2.0 + 2.0);
+            defs.push_str(&format!("<mask id=\"{id}\" maskUnits=\"userSpaceOnUse\" maskContentUnits=\"userSpaceOnUse\" mask-type=\"alpha\" x=\"{:.4}\" y=\"{:.4}\" width=\"{:.4}\" height=\"{:.4}\">\n",mask_bounds.min.x,mask_bounds.min.y,mask_bounds.width(),mask_bounds.height()));
+            let closed = shape.geom.is_closed();
+            let contours = shape.world_contours(128);
+            let lengths: Vec<f32> = contours
+                .iter()
+                .map(|points| {
+                    points
+                        .windows(2)
+                        .map(|pair| (pair[1] - pair[0]).length())
+                        .sum::<f32>()
+                        + if closed && points.len() > 1 {
+                            (points[0] - points[points.len() - 1]).length()
+                        } else {
+                            0.0
+                        }
+                })
+                .collect();
+            let total: f32 = lengths.iter().sum();
+            let mut passed = 0.0;
+            // Add a near-zero sample so a round start cap is absent at zero,
+            // but appears as soon as this contour begins drawing.
+            for (points, length) in contours.iter().zip(lengths) {
+                if length <= 1e-5 {
+                    continue;
+                }
+                let offset = |time| {
+                    length
+                        - (total
+                            * motion
+                                .pose(shape.id, time)
+                                .stroke_reveal
+                                .unwrap_or(1.0)
+                                .clamp(0.0, 1.0)
+                            - passed)
+                            .clamp(0.0, length)
+                };
+                defs.push_str(&format!("<path d=\"{}\" fill=\"none\" stroke=\"white\" stroke-width=\"{:.4}\" stroke-linecap=\"{}\" stroke-linejoin=\"{}\" stroke-dasharray=\"{length:.5} {length:.5}\" stroke-dashoffset=\"{:.5}\">\n",poly_d(points,closed),stroke.width+0.5,stroke.cap.name().to_ascii_lowercase(),stroke.join.name().to_ascii_lowercase(),offset(0.0)));
+                defs.push_str(&animate_attribute(
+                    "stroke-dashoffset",
+                    motion,
+                    &times,
+                    offset,
+                ));
+                let mut cap_times = times.clone();
+                for pair in times.windows(2) {
+                    cap_times.push(pair[0] + (pair[1] - pair[0]) * 0.0001);
+                }
+                cap_times.sort_by(f32::total_cmp);
+                defs.push_str(&animate_attribute("opacity", motion, &cap_times, |time| {
+                    if total * motion.pose(shape.id, time).stroke_reveal.unwrap_or(1.0) > passed {
+                        1.0
+                    } else {
+                        0.0
+                    }
+                }));
+                defs.push_str("</path>\n");
+                passed += length;
+            }
+            defs.push_str("</mask>\n");
+            body.push_str(&format!("<g mask=\"url(#{id})\">\n"));
+        }
+        let mut part = String::new();
+        write_shape(
+            &mut part,
+            defs,
+            grad_id,
+            &component,
+            &xf_attr(&component),
+            true,
+        );
+        body.push_str(&part.replacen(
+            &format!("id=\"oma-{}\"", shape.id),
+            &format!("id=\"oma-{}-stroke\"", shape.id),
+            1,
+        ));
+        if reveal {
+            body.push_str("</g>\n");
+        }
+        body.push_str("</g>\n");
+    }
+    body.push_str("</g>\n");
+}
+
 fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
     let mut body = String::new();
     let mut defs = String::new();
@@ -274,7 +515,7 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
     let looping = if motion.looped { "infinite" } else { "1" };
     if animate && !motion.is_empty() {
         css.push_str(&format!(
-            ".oma-a {{ animation-duration: {:.3}s; animation-iteration-count: {looping}; animation-fill-mode: both; transform-box: fill-box; transform-origin: center; }}\n",
+            ".oma-a {{ animation-duration: {:.3}s; animation-iteration-count: {looping}; animation-fill-mode: both; animation-timing-function: linear; transform-box: view-box; }}\n",
             motion.duration.max(0.05)
         ));
     }
@@ -308,19 +549,19 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
         match &layer.kind {
             LayerKind::Vector { shapes } => {
                 for shape in shapes {
-                    if !shape.visible {
+                    if !shape.visible || shape.guide {
                         continue;
                     }
+                    let keyframes = animate
+                        .then(|| {
+                            motion.css_keyframes(
+                                shape.id,
+                                &format!("oma-{}", shape.id),
+                                shape.opacity,
+                            )
+                        })
+                        .flatten();
                     let mut extra = String::new();
-                    if animate
-                        && let Some(kf) = motion.css_keyframes(shape.id, &format!("oma-{}", shape.id))
-                    {
-                        css.push_str(&kf);
-                        extra = format!(
-                            " class=\"oma-a\" style=\"animation-name: oma-{}\"",
-                            shape.id
-                        );
-                    }
                     if shape.filters.active() {
                         let fid = format!("oma-fx-s{}", shape.id);
                         let b = shape.world_bbox();
@@ -335,48 +576,43 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
                             extra.push_str(&format!(" filter=\"url(#{fid})\""));
                         }
                     }
-                    extra.push_str(&xf_attr(shape));
-                    write_shape(
-                        &mut layer_body,
-                        &mut defs,
-                        &mut grad_id,
-                        shape,
-                        &extra,
-                    );
+                    if let Some(keyframes) = keyframes {
+                        css.push_str(&keyframes);
+                        layer_body.push_str(&format!("<g{extra}>\n"));
+                        write_animated_shape(
+                            &mut layer_body,
+                            &mut defs,
+                            &mut grad_id,
+                            shape,
+                            motion,
+                        );
+                        layer_body.push_str("</g>\n");
+                    } else {
+                        extra.push_str(&xf_attr(shape));
+                        write_shape(
+                            &mut layer_body,
+                            &mut defs,
+                            &mut grad_id,
+                            shape,
+                            &extra,
+                            false,
+                        );
+                    }
                 }
             }
             LayerKind::Raster {
                 pixels,
                 origin,
                 size,
-                rotation,
+                ..
             } => {
-                if raster_worth_exporting(pixels, *origin, *size, doc)
-                    && let Some(pm) = pixels.to_pixmap()
-                    && let Ok(png) = pm.encode_png()
+                if !pixels.is_invisible()
+                    && (layer.mask.is_some() || raster_worth_exporting(pixels, *origin, *size, doc))
                 {
-                    let b64 = base64::Engine::encode(
-                        &base64::engine::general_purpose::STANDARD,
-                        png,
-                    );
-                    let (dw, dh) = if size.x.abs() > 0.5 && size.y.abs() > 0.5 {
-                        (size.x, size.y)
-                    } else {
-                        (pixels.w as f32, pixels.h as f32)
-                    };
-                    let mut xf = String::new();
-                    if rotation.abs() > 1e-5 {
-                        let cx = origin.x + dw * 0.5;
-                        let cy = origin.y + dh * 0.5;
-                        xf = format!(
-                            " transform=\"rotate({:.4} {cx:.3} {cy:.3})\"",
-                            rotation.to_degrees()
-                        );
-                    }
-                    layer_body.push_str(&format!(
-                        "  <image href=\"data:image/png;base64,{b64}\" x=\"{:.3}\" y=\"{:.3}\" width=\"{:.3}\" height=\"{:.3}\"{xf}/>\n",
-                        origin.x, origin.y, dw, dh
-                    ));
+                    layer_body.push_str(&pixel_image(
+                        pixels,
+                        crate::compositor::layer_pixel_transform(layer),
+                    )?);
                 }
             }
         }
@@ -388,7 +624,13 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
             layer.opacity,
             layer.blend.css()
         ));
-        body.push_str(&layer_body);
+        // Canvas masks the layer before applying its effects. Keep the mask on
+        // an inner group so SVG's filter-before-mask order cannot reverse that.
+        if let Some(mask_id) = write_layer_mask(&mut defs, layer)? {
+            body.push_str(&format!("<g mask=\"url(#{mask_id})\">\n{layer_body}</g>\n"));
+        } else {
+            body.push_str(&layer_body);
+        }
         body.push_str("</g>\n");
     }
 
@@ -408,6 +650,37 @@ mod tests {
     use super::*;
     use crate::document::{Cmd, Shape, Style, apply};
     use crate::geom::{Geom, Pt};
+
+    #[test]
+    fn project_type_exports_its_glyphs_without_requiring_the_brand_font() {
+        let mut run = crate::geom::TypeRun {
+            content: "Brand Ω".into(),
+            origin: Pt::new(20., 80.),
+            px: 48.,
+            ..Default::default()
+        };
+        run.contours = crate::text::shape(&run);
+        assert!(!run.contours.is_empty());
+        // A saved glyph outline remains exportable even without its font kit.
+        run.font = "omatype:missing-on-this-machine".into();
+        let mut shape = Shape::new(Geom::Text(run), Style::default());
+        shape.rotation = 0.2;
+        let expected = path_data(&shape);
+        let mut doc = Document::new("Portable type", 4., 3., 72.);
+        doc.layers = vec![Layer::vector("Type")];
+        doc.layers[0].kind.shapes_mut().unwrap().push(shape.clone());
+
+        let svg = export(&doc).unwrap();
+        assert!(svg.contains(&format!("d=\"{expected}\"")), "{svg}");
+        assert!(svg.contains("transform=\"rotate("));
+        assert!(!svg.contains("<text") && !svg.contains("font-family"));
+        assert_eq!(doc.layers[0].kind.shapes().unwrap()[0].geom, shape.geom);
+
+        if let Geom::Text(run) = &mut doc.layers[0].kind.shapes_mut().unwrap()[0].geom {
+            run.font.clear();
+        }
+        assert!(export(&doc).unwrap().contains("<text"));
+    }
 
     #[test]
     fn svg_contains_path() {
@@ -479,7 +752,10 @@ mod tests {
                     crate::geom::Geom::Path {
                         anchors: vec![
                             Anchor::corner(crate::geom::Pt::new(10.0, 10.0)),
-                            Anchor::smooth(crate::geom::Pt::new(80.0, 40.0), crate::geom::Pt::new(20.0, 10.0)),
+                            Anchor::smooth(
+                                crate::geom::Pt::new(80.0, 40.0),
+                                crate::geom::Pt::new(20.0, 10.0),
+                            ),
                         ],
                         closed: false,
                     },
@@ -507,7 +783,10 @@ mod tests {
             "blank paper raster must not steal the SVG thumbnail"
         );
         assert!(s.contains("fill=\"none\""), "{s}");
-        assert!(s.contains("stroke=\"#"), "opaque stroke must be hex, got {s}");
+        assert!(
+            s.contains("stroke=\"#"),
+            "opaque stroke must be hex, got {s}"
+        );
     }
 
     #[test]
@@ -533,5 +812,93 @@ mod tests {
         let s = export(&doc).unwrap();
         assert!(s.contains("fill=\"#000000\""), "{s}");
         assert!(!s.contains("rgba(0,0,0"), "{s}");
+    }
+}
+
+#[cfg(test)]
+mod mask_tests {
+    use super::*;
+    use crate::document::Pixels;
+    use base64::Engine as _;
+
+    #[test]
+    fn svg_masks_preserve_luminance_alpha_placement_and_filter_order() {
+        let mut doc = Document::new("Mask export", 160.0, 120.0, 72.0);
+        doc.transparent = true;
+        let mut layer = Layer::raster("Masked image", 4, 2);
+        if let LayerKind::Raster {
+            pixels,
+            origin,
+            size,
+            rotation,
+        } = &mut layer.kind
+        {
+            pixels.data = [255, 0, 0, 255].repeat(8);
+            *origin = Pt::new(40.0, 30.0);
+            *size = Pt::new(80.0, 40.0);
+            *rotation = std::f32::consts::FRAC_PI_2;
+        }
+        let mask_data = [
+            0, 0, 0, 255, 255, 255, 255, 64, 128, 128, 128, 128, 255, 255, 255, 255,
+        ]
+        .repeat(2);
+        layer.mask = Some(Pixels::from_rgba(4, 2, mask_data.clone()).unwrap());
+        layer
+            .filters
+            .items
+            .push(crate::filter::Fx::Blur { std: 2.0 });
+        let id = layer.id;
+        doc.layers = vec![layer];
+        let svg = export(&doc).unwrap();
+        let mask = svg
+            .split("<mask ")
+            .nth(1)
+            .unwrap()
+            .split("</mask>")
+            .next()
+            .unwrap();
+        assert!(mask.contains("mask-type=\"luminance\""));
+        assert!(mask.contains("color-interpolation=\"sRGB\""));
+        let matrix: Vec<f32> = mask
+            .split("matrix(")
+            .nth(1)
+            .unwrap()
+            .split(')')
+            .next()
+            .unwrap()
+            .split_whitespace()
+            .map(|value| value.parse().unwrap())
+            .collect();
+        assert_eq!(matrix.len(), 6);
+        for (actual, expected) in matrix.iter().zip([0.0, 20.0, -20.0, 0.0, 100.0, 10.0]) {
+            assert!(
+                (actual - expected).abs() < 0.001,
+                "mask placement: {matrix:?}"
+            );
+        }
+        let b64 = mask
+            .split("data:image/png;base64,")
+            .nth(1)
+            .unwrap()
+            .split('"')
+            .next()
+            .unwrap();
+        let png = base64::engine::general_purpose::STANDARD
+            .decode(b64)
+            .unwrap();
+        assert_eq!(
+            image::load_from_memory(&png).unwrap().to_rgba8().into_raw(),
+            mask_data
+        );
+        let filter = svg.find(&format!(" filter=\"url(#oma-fx-{id})\"")).unwrap();
+        let masking = svg
+            .find(&format!("<g mask=\"url(#oma-mask-{id})\""))
+            .unwrap();
+        assert!(
+            filter < masking,
+            "mask must be nested inside the outer filter group"
+        );
+        let decoded = crate::project::decode(&crate::project::encode(&doc).unwrap()).unwrap();
+        assert_eq!(decoded.layers[0].mask.as_ref().unwrap().data, mask_data);
     }
 }
