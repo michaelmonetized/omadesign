@@ -89,7 +89,12 @@ canvas or double-click to centre it on the selected artboard. Searchable folders
 background previews and automatic refresh keep the collection current. Placement
 supports Undo.
 
-Project kits travel as a `.omacolors` file and a `.omabrand/` folder. Start with the
+**Brand → Typography** keeps TTF and OTF fonts with the project. Add fonts, name
+roles such as Heading and Body, then Apply to selected text or choose a role in
+Character's **Project fonts** list. Font files are copied locally; no system font
+installation is needed. Text stays editable when the project moves.
+
+Project kits travel as `.omacolors`, `.omatype` and the `.omabrand/` folder. Start with the
 [Fieldwork example](examples/fieldwork), or follow the
 [palette and brand library guide](docs/MANUAL.md#palettes-and-brand-libraries).
 

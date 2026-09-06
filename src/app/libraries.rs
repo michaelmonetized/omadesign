@@ -67,6 +67,14 @@ pub struct Libraries {
     pub personal: PaletteDraft,
     pub projects: HashMap<PathBuf, PaletteDraft>,
     pub catalog: Option<Arc<crate::brand::Catalog>>,
+    pub typography: Option<Arc<crate::typography::LoadedKit>>,
+    pub typography_name: String,
+    pub typography_query: String,
+    pub typography_role: String,
+    pub typography_selected: usize,
+    pub typography_message: String,
+    pub typography_refresh: bool,
+    pub typography_edit_stamp: Option<u128>,
     pub brand_query: String,
     pub brand_kind: String,
     pub brand_name: String,
@@ -91,6 +99,14 @@ impl Default for Libraries {
             personal,
             projects: HashMap::new(),
             catalog: None,
+            typography: None,
+            typography_name: String::new(),
+            typography_query: String::new(),
+            typography_role: String::new(),
+            typography_selected: 0,
+            typography_message: String::new(),
+            typography_refresh: false,
+            typography_edit_stamp: None,
             brand_query: String::new(),
             brand_kind: "All".into(),
             brand_name: String::new(),
@@ -160,7 +176,10 @@ pub fn project_folder(source: &Source) -> Option<PathBuf> {
     }
     let start = source.path.as_ref()?.parent()?;
     for dir in start.ancestors() {
-        if dir.join(".omacolors").is_file() || dir.join(".omabrand").is_dir() {
+        if dir.join(".omacolors").is_file()
+            || dir.join(".omabrand").is_dir()
+            || dir.join(".omatype").is_file()
+        {
             return Some(dir.to_path_buf());
         }
     }

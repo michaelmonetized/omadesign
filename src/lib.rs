@@ -27,6 +27,7 @@ pub mod templates;
 pub mod text;
 pub mod tools;
 pub mod trace;
+pub mod typography;
 pub mod ui;
 
 pub mod deform;

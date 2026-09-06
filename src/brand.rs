@@ -329,10 +329,16 @@ fn copy_new(source: &Path, destination: &Path) -> Result<(), String> {
 /// operation's new files; existing assets are never removed or changed.
 pub fn add_files(folder: &Path, sources: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
     let root = canonical_root(folder)?;
+    let project = if root.file_name().is_some_and(|name| name == FOLDER) {
+        root.parent().ok_or("Library has no project folder")?
+    } else {
+        &root
+    };
     if sources.len() > MAX_ASSETS {
         return Err("Choose at most 2048 assets at a time.".into());
     }
     let mut copied = Vec::new();
+    let mut font_copies = Vec::new();
     let result = (|| {
         for source in sources {
             if kind(source).is_none() {
@@ -352,6 +358,9 @@ pub fn add_files(folder: &Path, sources: &[PathBuf]) -> Result<Vec<PathBuf>, Str
             }
             copy_new(source, &destination)?;
             copied.push(destination);
+            if kind(source) == Some(AssetKind::Document) {
+                font_copies.extend(crate::typography::copy_document_fonts(source, project)?);
+            }
         }
         Ok(copied
             .iter()
@@ -359,14 +368,14 @@ pub fn add_files(folder: &Path, sources: &[PathBuf]) -> Result<Vec<PathBuf>, Str
             .collect())
     })();
     if result.is_err() {
-        for path in copied {
+        for path in copied.into_iter().chain(font_copies) {
             let _ = fs::remove_file(path);
         }
     }
     result
 }
 
-/// Copy the entire portable bank, including its manifest and regular sidecars,
+/// Copy the entire portable bank, including its typography kit and font archives,
 /// into `destination_folder/.omabrand`. Existing banks are never replaced.
 pub fn export_copy_bank(folder: &Path, destination_folder: &Path) -> Result<PathBuf, String> {
     let root = canonical_root(folder)?;
@@ -377,6 +386,26 @@ pub fn export_copy_bank(folder: &Path, destination_folder: &Path) -> Result<Path
         return Err("Choose an export folder outside this library.".into());
     }
     let destination = parent.join(FOLDER);
+    let typography = root
+        .file_name()
+        .filter(|name| *name == FOLDER)
+        .and_then(|_| root.parent())
+        .map(|project| project.join(crate::typography::FILE))
+        .filter(|path| fs::symlink_metadata(path).is_ok());
+    let destination_type = parent.join(crate::typography::FILE);
+    if let Some(source) = &typography {
+        let meta =
+            fs::symlink_metadata(source).map_err(|e| io_error("Could not inspect", source, e))?;
+        if !meta.is_file() || meta.file_type().is_symlink() {
+            return Err("Typography kit must be a regular file, not a linked file.".into());
+        }
+        if fs::symlink_metadata(&destination_type).is_ok() {
+            return Err(
+                "The destination already has a typography kit; choose another folder.".into(),
+            );
+        }
+        crate::typography::load_file(source)?;
+    }
     let mut warnings = Vec::new();
     let files = walk(&root, &mut warnings)?;
     if !warnings.is_empty() {
@@ -389,7 +418,12 @@ pub fn export_copy_bank(folder: &Path, destination_folder: &Path) -> Result<Path
         return Err("This library exceeds the 2 GB copy limit.".into());
     }
     fs::create_dir(&destination).map_err(|e| io_error("Could not create", &destination, e))?;
+    let mut copied_type = false;
     let result = (|| {
+        if let Some(source) = &typography {
+            copy_new(source, &destination_type)?;
+            copied_type = true;
+        }
         for (source, _) in files {
             let target = destination.join(source.strip_prefix(&root).map_err(|e| e.to_string())?);
             fs::create_dir_all(target.parent().unwrap()).map_err(|e| e.to_string())?;
@@ -399,6 +433,9 @@ pub fn export_copy_bank(folder: &Path, destination_folder: &Path) -> Result<Path
     })();
     if result.is_err() {
         let _ = fs::remove_dir_all(&destination);
+        if copied_type {
+            let _ = fs::remove_file(destination_type);
+        }
     }
     result
 }
@@ -513,7 +550,10 @@ pub fn load_asset(path: &Path) -> Result<crate::import::Imported, String> {
             svg_document(&svg)?;
             crate::import::Imported::Svg { name, svg }
         }
-        AssetKind::Document => crate::import::Imported::Document(oma_document(&bytes)?),
+        AssetKind::Document => {
+            crate::typography::load_for_document(path)?;
+            crate::import::Imported::Document(oma_document(&bytes)?)
+        }
     })
 }
 
@@ -539,7 +579,10 @@ pub fn load_thumbnail(folder: &Path, asset: &Asset, max_edge: u32) -> Result<Rgb
     }
     let doc = match asset.kind {
         AssetKind::Svg => svg_document(std::str::from_utf8(&bytes).map_err(|e| e.to_string())?)?,
-        AssetKind::Document => oma_document(&bytes)?,
+        AssetKind::Document => {
+            crate::typography::load_for_document(&path)?;
+            oma_document(&bytes)?
+        }
         AssetKind::Raster => unreachable!(),
     };
     render_document(&doc, edge)
@@ -675,6 +718,7 @@ fn oma_document(bytes: &[u8]) -> Result<crate::document::Document, String> {
     if doc.layers.len() > 256 || doc.artboards.len() > 128 {
         return Err("Project has too many layers or artboards for a preview.".into());
     }
+    crate::typography::validate_document_fonts(&doc)?;
     let mut pixels = 0;
     let mut geometry = 0;
     let mut effects = 0;
@@ -844,6 +888,147 @@ mod tests {
         assert!(export_copy_bank(&bank.root, &bank.root).is_err());
         assert!(save_name(&bank.root, "\n").is_err());
         assert_eq!(scan(&bank.root).unwrap().name, "Renamed studio");
+    }
+
+    #[test]
+    fn native_assets_carry_font_dependencies_and_bank_exports_keep_the_role_manifest() {
+        use crate::document::{Artboard, Document, Layer, Shape, Style};
+        use crate::geom::{Geom, Pt, TypeRun};
+        let temp = Temp::new();
+        let source = temp.0.join("Source");
+        fs::create_dir(&source).unwrap();
+        let installed =
+            crate::text::default_path().expect("a desktop font for the native text fixture");
+        let mut bytes = fs::read(&installed).unwrap();
+        // A valid face with unique trailing bytes avoids satisfying the import
+        // through another parallel test's in-memory font registration.
+        bytes.extend_from_slice(format!("brand-test-{}", crate::document::next_id()).as_bytes());
+        let font = source.join("Portable.ttf");
+        fs::write(&font, &bytes).unwrap();
+        let kit = crate::typography::add_fonts(&source, &[font], None).unwrap();
+        crate::typography::register(&kit).unwrap();
+        let loaded = &kit.fonts[0];
+        let mut doc = Document::new("Portable text", 1.0, 1.0, 72.0);
+        doc.width = 320.0;
+        doc.height = 100.0;
+        doc.artboards = vec![Artboard::new(0, Pt::ZERO, Pt::new(320.0, 100.0))];
+        doc.layers = vec![Layer::vector("Lettering")];
+        doc.layers[0].kind.shapes_mut().unwrap().push(Shape::new(
+            Geom::Text(TypeRun {
+                origin: Pt::new(20.0, 60.0),
+                content: "Portable glyphs".into(),
+                px: 28.0,
+                font: loaded.id.clone(),
+                ..Default::default()
+            }),
+            Style::default(),
+        ));
+        let artwork = source.join("Lettering.oma");
+        crate::project::save_to(&doc, &artwork).unwrap();
+        let project = temp.0.join("Destination");
+        let bank = create(&project, "Portable brand").unwrap();
+        let kept = bank.root.join("keep.png");
+        png(&kept, 8, 8);
+        let unsupported = source.join("notes.txt");
+        fs::write(&unsupported, "Not a brand asset").unwrap();
+        let copied_font = bank.root.join(&loaded.file);
+        assert!(add_files(&bank.root, &[artwork.clone(), unsupported]).is_err());
+        assert!(!bank.root.join("Lettering.oma").exists());
+        assert!(
+            !copied_font.exists(),
+            "failed batch retained its new font dependency"
+        );
+        assert!(kept.is_file());
+
+        assert_eq!(
+            add_files(&bank.root, &[artwork]).unwrap(),
+            [PathBuf::from("Lettering.oma")]
+        );
+        assert_eq!(fs::read(&copied_font).unwrap(), bytes);
+        assert!(
+            !project.join(crate::typography::FILE).exists(),
+            "asset import must not invent or replace roles"
+        );
+        fs::remove_dir_all(&source).unwrap();
+        let crate::import::Imported::Document(imported) =
+            load_asset(&bank.root.join("Lettering.oma")).unwrap()
+        else {
+            panic!("editable native artwork")
+        };
+        let Geom::Text(run) = &imported.layers[0].kind.shapes().unwrap()[0].geom else {
+            panic!("live text")
+        };
+        assert_eq!(run.font, loaded.id);
+        assert_eq!(run.content, "Portable glyphs");
+        assert!(
+            run.contours.len() > 1,
+            "text was replaced by a missing-font placeholder"
+        );
+
+        crate::typography::save(&project, &kit.kit, None).unwrap();
+        let manifest = fs::read(project.join(crate::typography::FILE)).unwrap();
+        let exported_project = temp.0.join("Export");
+        fs::create_dir(&exported_project).unwrap();
+        let exported = export_copy_bank(&bank.root, &exported_project).unwrap();
+        assert_eq!(
+            fs::read(exported_project.join(crate::typography::FILE)).unwrap(),
+            manifest
+        );
+        assert_eq!(fs::read(exported.join(&loaded.file)).unwrap(), bytes);
+        let exported_kit = crate::typography::load(&exported_project).unwrap().unwrap();
+        assert_eq!(exported_kit.kit, kit.kit);
+        assert_eq!(exported_kit.fonts[0].id, loaded.id);
+
+        let conflict = temp.0.join("Existing kit");
+        fs::create_dir(&conflict).unwrap();
+        fs::write(conflict.join(crate::typography::FILE), "keep existing kit").unwrap();
+        assert!(export_copy_bank(&bank.root, &conflict).is_err());
+        assert_eq!(
+            fs::read_to_string(conflict.join(crate::typography::FILE)).unwrap(),
+            "keep existing kit"
+        );
+        assert!(!conflict.join(FOLDER).exists());
+
+        // Exercise a failure after the role manifest has already been copied.
+        File::create(bank.root.join("too-large.bin"))
+            .unwrap()
+            .set_len(MAX_FILE_BYTES + 1)
+            .unwrap();
+        let failed = temp.0.join("Failed export");
+        fs::create_dir(&failed).unwrap();
+        fs::write(failed.join("keep.txt"), "untouched").unwrap();
+        assert!(export_copy_bank(&bank.root, &failed).is_err());
+        assert!(!failed.join(FOLDER).exists());
+        assert!(!failed.join(crate::typography::FILE).exists());
+        assert_eq!(
+            fs::read_to_string(failed.join("keep.txt")).unwrap(),
+            "untouched"
+        );
+
+        let mut missing = doc.clone();
+        let Geom::Text(run) = &mut missing.layers[0].kind.shapes_mut().unwrap()[0].geom else {
+            unreachable!()
+        };
+        run.font = format!("omatype:{:032x}", crate::document::next_id());
+        let missing_path = bank.root.join("Missing-font.oma");
+        fs::write(&missing_path, crate::project::encode(&missing).unwrap()).unwrap();
+        assert!(
+            load_asset(&missing_path)
+                .err()
+                .unwrap()
+                .contains("missing project font")
+        );
+        let catalog = scan(&bank.root).unwrap();
+        let asset = catalog
+            .assets
+            .iter()
+            .find(|asset| asset.relative_path == Path::new("Missing-font.oma"))
+            .unwrap();
+        assert!(
+            load_thumbnail(&bank.root, asset, 128)
+                .unwrap_err()
+                .contains("missing project font")
+        );
     }
 
     #[test]

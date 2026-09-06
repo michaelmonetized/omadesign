@@ -13,6 +13,7 @@ pub(crate) mod selection;
 mod shortcuts;
 mod snapping;
 mod tabs;
+mod typography;
 
 pub use key_hints::{KeyHint, KeyHints};
 pub use photo_session::PhotoSession;
@@ -695,6 +696,9 @@ impl Studio {
     }
 
     pub fn remember_font(&mut self, path: &str) {
+        if path.starts_with("omatype:") {
+            return;
+        }
         crate::project::push_font_recent(path);
         self.font_recents = crate::project::load_font_recents();
     }

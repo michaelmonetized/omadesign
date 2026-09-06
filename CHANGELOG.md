@@ -1,5 +1,77 @@
 # Changelog
 
+## 2026-09-05 · Pass 8 — S, as in design.
+
+The extra downstroke on the S closed its upper opening and made it read as a g.
+Removing it restores the square S, with matching stroke weight and spacing.
+The editable logo, SVG, PNG and native construction replay use the correction.
+
+The film now opens with that same complete logo and closes with its animation.
+The separate introductory wordmark has retired. Timing stays at 97 seconds,
+including the 30-second construction scene and five-second ending.
+
+All **271 tests pass**, including the shortcut suite and native logo construction.
+Formatting and Clippy pass with the existing 34 library advisories (46 including
+tests). Visual review confirms the lettering reads deSiGN. The release build is
+reinstalled. The [corrected film](https://github.com/user-attachments/assets/52fb79d2-373d-48cc-966b-3cb65b766937)
+decodes all 2,910 frames; opening and ending frames both match the corrected logo.
+
+## 2026-09-05 · Pass 7 — A mark of our own.
+
+The maze found its letters. The Pen found its manners. Your fonts have a place
+to travel with the project, too.
+
+### A straight answer from Shift
+
+Pen previews now use the same constrained position as the point you place.
+Holding Shift visibly locks the next segment to 0°, 45° or 90°. Quick modifier
+releases keep the click's own state, and handle drags include the final release
+position. Shift, Alt and Ctrl changes also work when the pointer is still.
+
+### The type belongs with the brand
+
+**`.omatype`** describes a named set of font roles. Their files live in
+**`.omabrand/fonts/`**. The Brand panel can load, name, save, filter and share the
+collection, and Character offers the project's fonts alongside ordinary local
+faces. Applying a role changes live, editable type with Undo.
+
+Portable font identities let a copied project find the same face on another
+machine. Loading a project resolves its kit before shaping text; background
+refresh picks up new files without rewriting already-applied font choices.
+Save As, native brand assets and recovery snapshots carry the faces their text
+uses. Failed writes preserve existing artwork. SVG exports use glyph outlines
+for project fonts, while the original document keeps its editable text.
+
+The Brand panel scrolls at compact heights, keeping every role action reachable.
+Secondary typography actions share a small menu beside Add fonts.
+
+### The maze becomes a wordmark
+
+The new logo construction scene rebuilds the supplied `logo-4.oma` idea on a
+1920×1080 black artboard. Six editable Pen paths share a consistent stroke,
+square corners, aligned baselines and balanced spacing. The Omarchy maze keeps
+its green glow; the wordmark gets a shadow and individual animation presets.
+
+The 30-second native editor replay replaces the old star-clone scene. The
+finished mark returns as a full-frame animated ending. The remaining demo
+chapters stay in the film, with a newly extended original soundtrack.
+
+The [finished film](https://github.com/user-attachments/assets/fc19dbe5-5313-4872-b8dc-d433f500b7f1)
+is 97 seconds at 1080p / 30 fps. The new scene runs from 0:13 to 0:43, with the
+logo ending at 1:32. Editable [artwork](media/logo-4-refined.oma),
+[SVG](media/logo-4-refined.svg) and [PNG](media/logo-4-refined.png) are included.
+
+Pass 7 verification: **271 tests passed**, including the shortcut suite, real
+Pen modifier events, fresh-process font moves and recovery, failed-write rollback,
+missing dependencies, archive capacity, SVG glyph export and compact sidebar
+scrolling. The sidebar remains 288 px wide at both QA sizes. Native recordings
+cover construction, styling and animation; the final film decodes all 2,910 frames.
+
+Formatting and Clippy passed without new advisories or suppressions. The existing
+34 library advisories (46 including tests) remain. The release build is installed,
+and the installed executable matches the build byte for byte. Physical keyboard
+and native file-dialog interaction remain part of human QA.
+
 ## 2026-09-05 · Pass 6 — Good taste travels.
 
 Your brand can live beside your work now. Copy the folder. Take the colours.

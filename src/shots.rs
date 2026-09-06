@@ -1,4 +1,5 @@
 //! Feature scenes for product shots. Real chrome, real documents.
+pub mod logo_wordmark;
 
 use crate::app::Studio;
 use crate::color::Rgba;

@@ -169,11 +169,12 @@ All 52 are available immediately. The [weekly drop plan](template-drops.md) prop
 ## Palettes and brand libraries
 
 The right sidebar has three tabs: **Inspect** for the selected artwork, **Palettes**
-for reusable colours, and **Brand** for logos, images and other assets.
+for reusable colours, and **Brand** for logos, images, fonts and other assets.
 
 Project libraries live beside your work: `.omacolors` holds the palettes and
-`.omabrand/` holds the assets. A saved document uses the nearest enclosing folder
-containing either one. If none exists, it starts beside the document. For an
+`.omatype` names the font roles, and `.omabrand/` holds the assets and font files.
+A saved document uses the nearest enclosing folder containing any of these.
+If none exists, it starts beside the document. For an
 unsaved document, use **Choose a project** to select a folder. The folder button
 also lets you switch libraries explicitly.
 
@@ -228,11 +229,40 @@ app's existing supported import subset; complex SVG features may not carry over.
 Use **··· → Save bank copy…** to copy the whole bank, including its name and nested
 folders, to another project folder.
 
+### Add brand typography
+
+Open **Brand → Typography** and choose **Add fonts…** to copy TTF or OTF files into
+the project. Name the kit and click **Save name**. Select a font row, give its role
+a useful name such as Heading, Body or Caption, and click **Save role**. Either save
+button keeps both pending name and role edits. Filter by role, family or filename.
+
+Click **Apply** beside a role to use it on selected text, or on the next text you
+create. The Character panel's font picker also lists **Project fonts**. Applying a
+font to artwork supports Undo; the kit's names and files have their own save controls.
+Fonts are available inside omadesign without installing them on your computer.
+
+The Typography **··· → Load kit…** action merges another `.omatype` kit and copies its font files; keep its
+`.omabrand/` folder beside the source file. **··· → Save copy…** writes the saved kit and
+its fonts into another project folder. Save pending name edits first. Removing a
+role keeps its font file for artwork that already uses it.
+
+External font changes refresh in the background. Existing text keeps its applied
+face; click **Apply** again to adopt a changed font. If the kit changes while you
+are editing a name, the panel preserves your draft and reports the conflict.
+Typography **··· → Reload typography** discards the draft and loads the saved kit.
+
+Native `.oma` text remains editable after moving the project, including typing
+new characters. Saving artwork into another folder also copies the font faces it
+uses into that folder's `.omabrand/fonts/`. SVG export draws project-font text as
+vector outlines so its appearance survives sharing; the `.oma` source keeps the
+editable text.
+
 ### Share a project kit
 
-Copy both `.omacolors` and the complete `.omabrand/` folder with your project to
-another machine. **Save bank copy…** copies the assets; export the palette
-collection separately as `.omacolors` in the destination folder. These names
+Copy `.omacolors`, `.omatype` and the complete `.omabrand/` folder with your project
+to another machine. **Save bank copy…** copies the assets, typography kit and fonts;
+export the palette collection separately as `.omacolors` in the destination folder.
+These names
 begin with a dot, so enable hidden files in your file manager when copying by hand.
 Try the portable [Fieldwork example](../examples/fieldwork).
 
@@ -260,6 +290,23 @@ The optional `.omabrand/brand.json` file sets the bank's display name:
 
 Without that file, the project folder supplies the display name. Keep the artwork inside
 `.omabrand/`; no absolute paths are needed in the name file.
+
+The optional `.omatype` file names the project's font roles. Paths are relative
+to `.omabrand/`, and font files stay inside its `fonts/` folder:
+
+```json
+{
+  "version": 1,
+  "name": "Fieldwork typography",
+  "roles": [
+    { "name": "Heading", "font": "fonts/Display.ttf" },
+    { "name": "Body", "font": "fonts/Reading.otf" }
+  ]
+}
+```
+
+Replace those example filenames with your own fonts. Fonts added through the panel
+receive stable filenames automatically. Share fonts only under their licence terms.
 
 ## Files
 

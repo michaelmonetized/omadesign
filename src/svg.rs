@@ -228,10 +228,11 @@ fn write_shape(
         }
         _ => String::new(),
     };
-    // Animation uses actual glyph outlines without changing the original bounds
-    // used by gradients. The document text stays editable.
+    // Animation and portable project faces use glyph outlines: an SVG recipient
+    // may not have the brand font. Text stays editable in the original document.
     if let Geom::Text(run) = &shape.geom
         && !text_as_paths
+        && !run.font.starts_with("omatype:")
     {
         let family = crate::text::label_for(&run.font);
         let fill = match &shape.style.fill {
@@ -649,6 +650,37 @@ mod tests {
     use super::*;
     use crate::document::{Cmd, Shape, Style, apply};
     use crate::geom::{Geom, Pt};
+
+    #[test]
+    fn project_type_exports_its_glyphs_without_requiring_the_brand_font() {
+        let mut run = crate::geom::TypeRun {
+            content: "Brand Ω".into(),
+            origin: Pt::new(20., 80.),
+            px: 48.,
+            ..Default::default()
+        };
+        run.contours = crate::text::shape(&run);
+        assert!(!run.contours.is_empty());
+        // A saved glyph outline remains exportable even without its font kit.
+        run.font = "omatype:missing-on-this-machine".into();
+        let mut shape = Shape::new(Geom::Text(run), Style::default());
+        shape.rotation = 0.2;
+        let expected = path_data(&shape);
+        let mut doc = Document::new("Portable type", 4., 3., 72.);
+        doc.layers = vec![Layer::vector("Type")];
+        doc.layers[0].kind.shapes_mut().unwrap().push(shape.clone());
+
+        let svg = export(&doc).unwrap();
+        assert!(svg.contains(&format!("d=\"{expected}\"")), "{svg}");
+        assert!(svg.contains("transform=\"rotate("));
+        assert!(!svg.contains("<text") && !svg.contains("font-family"));
+        assert_eq!(doc.layers[0].kind.shapes().unwrap()[0].geom, shape.geom);
+
+        if let Geom::Text(run) = &mut doc.layers[0].kind.shapes_mut().unwrap()[0].geom {
+            run.font.clear();
+        }
+        assert!(export(&doc).unwrap().contains("<text"));
+    }
 
     #[test]
     fn svg_contains_path() {
