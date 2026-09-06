@@ -1,4 +1,4 @@
-import{j as e}from"./index-CW7G2Z1E.js";import{M as o}from"./md-5bR1Z9ns.js";const n=`# Project status
+import{j as e}from"./index-BwTnirHB.js";import{M as o}from"./md-Cx-daoxy.js";const n=`# Project status
 
 omadesign is an alpha native Linux design studio. The current tools cover vector design, raster painting, photo adjustments, and motion in a shared document.
 

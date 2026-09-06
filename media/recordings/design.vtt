@@ -1,0 +1,22 @@
+WEBVTT
+
+00:00:00.000 --> 00:00:06.000
+Layout: Rotate the selected shape and round its corners with the Layout controls.
+
+00:00:06.000 --> 00:00:12.000
+Appearance: Add a stroke, inspect stroke options, and change the fill to a gradient.
+
+00:00:12.000 --> 00:00:18.000
+Typography: Adjust the headline spacing and explore OpenType features.
+
+00:00:18.000 --> 00:00:24.000
+Reshape: Enter Warp mesh and drag a real cage handle to reshape the artwork.
+
+00:00:24.000 --> 00:00:30.000
+Effects: Add a drop shadow in the native Effects panel.
+
+00:00:30.000 --> 00:00:36.000
+Trace: Inspect tracing options and the Ignore white setting.
+
+00:00:36.000 --> 00:00:42.000
+Layers: Compare Multiply and Normal blend modes on the artwork layer.

@@ -1,0 +1,196 @@
+{
+  "version": 1,
+  "provenance": "Native omadesign WGPU viewport recordings. Seeded example documents; actual egui pointer and keyboard input during replay. The only overlay is a pointer indicator. No audio.",
+  "recordings": [
+    {
+      "id": "design",
+      "duration": 42,
+      "width": 1600,
+      "height": 900,
+      "fps": 30,
+      "src": "media/recordings/design.mp4",
+      "poster": "media/recordings/design.webp",
+      "captions": "media/recordings/design.vtt",
+      "bytes": 807222,
+      "sha256": "0403bdc0eac14e02e82a33a0a3101fa0f504adb8e2c176096d9fef9666c2e430",
+      "chapters": [
+        {
+          "start": 0,
+          "label": "Layout",
+          "description": "Rotate the selected shape and round its corners with the Layout controls."
+        },
+        {
+          "start": 6,
+          "label": "Appearance",
+          "description": "Add a stroke, inspect stroke options, and change the fill to a gradient."
+        },
+        {
+          "start": 12,
+          "label": "Typography",
+          "description": "Adjust the headline spacing and explore OpenType features."
+        },
+        {
+          "start": 18,
+          "label": "Reshape",
+          "description": "Enter Warp mesh and drag a real cage handle to reshape the artwork."
+        },
+        {
+          "start": 24,
+          "label": "Effects",
+          "description": "Add a drop shadow in the native Effects panel."
+        },
+        {
+          "start": 30,
+          "label": "Trace",
+          "description": "Inspect tracing options and the Ignore white setting."
+        },
+        {
+          "start": 36,
+          "label": "Layers",
+          "description": "Compare Multiply and Normal blend modes on the artwork layer."
+        }
+      ]
+    },
+    {
+      "id": "pixel",
+      "duration": 30,
+      "width": 1600,
+      "height": 900,
+      "fps": 30,
+      "src": "media/recordings/pixel.mp4",
+      "poster": "media/recordings/pixel.webp",
+      "captions": "media/recordings/pixel.vtt",
+      "bytes": 1224093,
+      "sha256": "dffb2a22b784d1344f256256edfa9e62935cefe9e2461b5358e5e9e2e5042754",
+      "chapters": [
+        {
+          "start": 0,
+          "label": "Brush",
+          "description": "Adjust the brush size and paint a highlight on a separate layer."
+        },
+        {
+          "start": 6,
+          "label": "Retouch",
+          "description": "Choose the Healing brush, Alt-click a source, and blend a short stroke into the painting."
+        },
+        {
+          "start": 12,
+          "label": "Mask",
+          "description": "Add a layer mask and brush away part of the new highlight."
+        },
+        {
+          "start": 18,
+          "label": "Color",
+          "description": "Inspect the color picker and choose a project palette color for the brush."
+        },
+        {
+          "start": 24,
+          "label": "Layers",
+          "description": "Compare layer blending and use Undo on the actual document."
+        }
+      ]
+    },
+    {
+      "id": "photo",
+      "duration": 24,
+      "width": 1600,
+      "height": 900,
+      "fps": 30,
+      "src": "media/recordings/photo.mp4",
+      "poster": "media/recordings/photo.webp",
+      "captions": "media/recordings/photo.vtt",
+      "bytes": 1423486,
+      "sha256": "02c867b8d9106255aa074ed07413572c8a618d2a5508b28e4313c41f96b352e4",
+      "chapters": [
+        {
+          "start": 0,
+          "label": "Light",
+          "description": "Adjust exposure and shadows, then compare the original with Before."
+        },
+        {
+          "start": 6,
+          "label": "Color",
+          "description": "Warm the scene slightly and adjust vibrance in the Color panel."
+        },
+        {
+          "start": 12,
+          "label": "Detail",
+          "description": "Add a gentle clarity and vignette adjustment."
+        },
+        {
+          "start": 18,
+          "label": "Library",
+          "description": "Switch between library images, return to the coast, and compare Before."
+        }
+      ]
+    },
+    {
+      "id": "motion",
+      "duration": 30,
+      "width": 1600,
+      "height": 900,
+      "fps": 30,
+      "src": "media/recordings/motion.mp4",
+      "poster": "media/recordings/motion.webp",
+      "captions": "media/recordings/motion.vtt",
+      "bytes": 753163,
+      "sha256": "5de4e6a63e80788c0e79a36e3969f75dd0a1cc2e1e30c52bea610c56edaa0eba",
+      "chapters": [
+        {
+          "start": 0,
+          "label": "Presets",
+          "description": "Apply Draw stroke to the selected rings and play the actual animation."
+        },
+        {
+          "start": 6,
+          "label": "Keyframes",
+          "description": "Open Keyframe controls and work with keys in the native timeline."
+        },
+        {
+          "start": 12,
+          "label": "Appearance",
+          "description": "Inspect stroke appearance on the animated artwork."
+        },
+        {
+          "start": 18,
+          "label": "Reshape in Design",
+          "description": "Switch the same document to Design, adjust a Perspective handle, then return to Motion."
+        },
+        {
+          "start": 24,
+          "label": "Layers",
+          "description": "Compare blend modes and play the edited animation."
+        }
+      ]
+    },
+    {
+      "id": "brand-kit",
+      "duration": 30,
+      "width": 1600,
+      "height": 900,
+      "fps": 30,
+      "src": "media/recordings/brand-kit.mp4",
+      "poster": "media/recordings/brand-kit.webp",
+      "captions": "media/recordings/brand-kit.vtt",
+      "bytes": 460265,
+      "sha256": "436811923b4cdde732908a701965ccb654fdc1373df1c655b0c5babe60436d9b",
+      "chapters": [
+        {
+          "start": 0,
+          "label": "Palettes",
+          "description": "Choose colors from two project palettes and apply them to the selected shape."
+        },
+        {
+          "start": 10,
+          "label": "Brand assets",
+          "description": "Filter the project asset bank, drag an SVG onto the artboard, and undo its placement."
+        },
+        {
+          "start": 20,
+          "label": "Typography",
+          "description": "Apply project Heading and Body font roles to the selected headline."
+        }
+      ]
+    }
+  ]
+}
