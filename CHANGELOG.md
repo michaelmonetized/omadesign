@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-09-05 · Pass 8 — S, as in design.
+
+The extra downstroke on the S closed its upper opening and made it read as a g.
+Removing it restores the square S, with matching stroke weight and spacing.
+The editable logo, SVG, PNG and native construction replay use the correction.
+
+The film now opens with that same complete logo and closes with its animation.
+The separate introductory wordmark has retired. Timing stays at 97 seconds,
+including the 30-second construction scene and five-second ending.
+
+All **271 tests pass**, including the shortcut suite and native logo construction.
+Formatting and Clippy pass with the existing 34 library advisories (46 including
+tests). Visual review confirms the lettering reads deSiGN. The release build is
+reinstalled. The [corrected film](https://github.com/user-attachments/assets/52fb79d2-373d-48cc-966b-3cb65b766937)
+decodes all 2,910 frames; opening and ending frames both match the corrected logo.
+
 ## 2026-09-05 · Pass 7 — A mark of our own.
 
 The maze found its letters. The Pen found its manners. Your fonts have a place

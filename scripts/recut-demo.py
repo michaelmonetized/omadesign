@@ -101,8 +101,6 @@ def find_font(weight: str) -> Path:
                     "/usr/share/fonts/liberation/LiberationSans-Regular.ttf"],
         "medium": ["/usr/share/fonts/noto/NotoSans-Medium.ttf",
                    "/usr/share/fonts/liberation/LiberationSans-Bold.ttf"],
-        "light": ["/usr/share/fonts/noto/NotoSans-Light.ttf",
-                  "/usr/share/fonts/liberation/LiberationSans-Regular.ttf"],
     }
     for name in choices[weight]:
         if Path(name).is_file():
@@ -130,30 +128,25 @@ def final_pixels() -> str:
     return f"scale={WIDTH}:{HEIGHT}:out_color_matrix=bt709:out_range=tv,format=yuv420p,setsar=1"
 
 
-def title_card(ffmpeg: str, work: Path, fonts: dict[str, Path], kind: str,
-               crf: int, preset: str) -> Path:
+def logo_bookend(ffmpeg: str, inputs: Path, work: Path, kind: str,
+                 crf: int, preset: str) -> Path:
     output = work / f"{kind}.mp4"
     if kind == "outro":
-        run([ffmpeg, "-hide_banner", "-loglevel", "warning", "-nostdin", "-y",
-             "-i", str(work.parent / "logo-ending.mp4"),
-             "-vf", "fade=t=in:st=0:d=0.18,fade=t=out:st=4.4:d=0.6," + final_pixels(),
-             *encode_options(crf, preset, OUTRO_SECONDS), str(output)])
-        return output
-    if kind == "intro":
-        lines = [
-            ("wordmark", "omadesign", "light", 98, PRIMARY, 385),
-            ("rhythm", "A night. A new rhythm.", "regular", 29, PRIMARY, 548),
-            ("context", "The latest studio updates", "regular", 19, SECONDARY, 611),
-        ]
-        accent_y, fade_out, fade_duration = 342, 1.75, 0.25
-    filters = ["format=rgba", f"drawbox=x=936:y={accent_y}:w=48:h=3:color={CORAL}:t=fill"]
-    for slug, content, weight, size, color, y in lines:
-        filters.append(text_filter(work, f"{kind}-{slug}", content, fonts[weight], size,
-                                   color, "(w-text_w)/2", y))
-    filters += ["fade=t=in:st=0:d=0.3", f"fade=t=out:st={fade_out}:d={fade_duration}", final_pixels()]
+        source = ["-i", str(inputs / "logo-ending.mp4")]
+        seconds = OUTRO_SECONDS
+        fades = "fade=t=in:st=0:d=0.18,fade=t=out:st=4.4:d=0.6,"
+    elif kind == "intro":
+        source = ["-loop", "1", "-framerate", str(FPS),
+                  "-i", str(inputs / "logo-final.png")]
+        seconds = INTRO_SECONDS
+        fades = "fade=t=in:st=0:d=0.3,fade=t=out:st=1.75:d=0.25,"
+    else:
+        raise ValueError(f"Unknown logo bookend: {kind}")
+    # Use the native logo at full frame for both ends of the film. The opening
+    # holds the complete mark; the ending replays its editable letter animation.
     run([ffmpeg, "-hide_banner", "-loglevel", "warning", "-nostdin", "-y",
-         "-f", "lavfi", "-i", f"color=c={BACKGROUND}:s={WIDTH}x{HEIGHT}:r={FPS}:d=2",
-         "-vf", ",".join(filters), *encode_options(crf, preset, 2), str(output)])
+         *source, "-vf", fades + final_pixels(),
+         *encode_options(crf, preset, seconds), str(output)])
     return output
 
 
@@ -193,7 +186,8 @@ def render_chapter(ffmpeg: str, inputs: Path, work: Path, fonts: dict[str, Path]
 
 
 def timeline() -> list[dict]:
-    entries = [{"start": 0, "end": 2, "title": "omadesign", "kind": "intro"}]
+    entries = [{"start": 0, "end": INTRO_SECONDS, "file": "logo-final.png",
+                "title": "omadesign — the finished mark", "kind": "intro"}]
     elapsed = INTRO_SECONDS
     for chapter in CHAPTERS:
         entries.append({"start": elapsed, "end": elapsed + chapter.seconds,
@@ -201,6 +195,7 @@ def timeline() -> list[dict]:
                         "subtitle": chapter.subtitle, "kind": "app"})
         elapsed += chapter.seconds
     entries.append({"start": elapsed, "end": elapsed + OUTRO_SECONDS,
+                    "file": "logo-ending.mp4",
                     "title": "omadesign — the finished mark", "kind": "outro"})
     return entries
 
@@ -215,7 +210,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-dir", type=Path, default=Path.home() / "Videos/omadesign/logo-4-recut-sources")
     parser.add_argument("--music", type=Path, default=Path.home() / "Videos/omadesign/logo-4-recut-sources/music.wav")
-    parser.add_argument("--output", type=Path, default=Path.home() / "Videos/omadesign/omadesign-logo-4-recut-2026-09-05.mp4")
+    parser.add_argument("--output", type=Path, default=Path.home() / "Videos/omadesign/omadesign-logo-4-corrected-2026-09-05.mp4")
     parser.add_argument("--poster-time", type=float, default=95.5,
                         help="Poster frame in seconds; default is the finished logo")
     parser.add_argument("--crf", type=int, default=17)
@@ -235,7 +230,7 @@ def main() -> None:
     ffmpeg, ffprobe = shutil.which("ffmpeg"), shutil.which("ffprobe")
     if not ffmpeg or not ffprobe:
         raise RuntimeError("Install ffmpeg and ffprobe before rendering")
-    fonts = {weight: find_font(weight) for weight in ("regular", "medium", "light")}
+    fonts = {weight: find_font(weight) for weight in ("regular", "medium")}
     # Validate the reviewed input contract before spending time on any encoding.
     for chapter in CHAPTERS:
         path = args.input_dir / (chapter.filename + ".mp4")
@@ -254,6 +249,10 @@ def main() -> None:
     if audio is None or duration(audio_info, audio) + 0.1 < TOTAL_SECONDS:
         raise ValueError("The background music must cover all 97 seconds")
 
+    opening_info = probe(args.input_dir / "logo-final.png", ffprobe)
+    opening_image = next((s for s in opening_info["streams"] if s["codec_type"] == "video"), None)
+    if opening_image is None or (opening_image.get("width"), opening_image.get("height")) != (WIDTH, HEIGHT):
+        raise ValueError("The opening logo must be the complete 1920×1080 native PNG render")
     ending_info = probe(args.input_dir / "logo-ending.mp4", ffprobe)
     ending_video = next(s for s in ending_info["streams"] if s["codec_type"] == "video")
     if (ending_video["width"], ending_video["height"]) != (WIDTH, HEIGHT) or duration(ending_info, ending_video) < OUTRO_SECONDS:
@@ -262,16 +261,16 @@ def main() -> None:
     work.mkdir(parents=True, exist_ok=True)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     (work / "timeline.json").write_text(json.dumps(timeline(), indent=2, ensure_ascii=False), encoding="utf-8")
-    print("Rendering the opening wordmark…", flush=True)
-    segments = [title_card(ffmpeg, work, fonts, "intro", args.crf, args.preset)]
+    print("Rendering the opening logo…", flush=True)
+    segments = [logo_bookend(ffmpeg, args.input_dir, work, "intro", args.crf, args.preset)]
     elapsed = 0
     for index, chapter in enumerate(CHAPTERS):
         print(f"Rendering {index + 1:02d}/{len(CHAPTERS)} — {chapter.title}", flush=True)
         segments.append(render_chapter(ffmpeg, args.input_dir, work, fonts,
                                        index, chapter, elapsed, args.crf, args.preset))
         elapsed += chapter.seconds
-    print("Rendering the closing card…", flush=True)
-    segments.append(title_card(ffmpeg, work, fonts, "outro", args.crf, args.preset))
+    print("Rendering the animated logo ending…", flush=True)
+    segments.append(logo_bookend(ffmpeg, args.input_dir, work, "outro", args.crf, args.preset))
 
     concat = work / "segments.ffconcat"
     # These generated filenames are simple; quote arbitrary parent directories.
