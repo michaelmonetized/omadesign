@@ -525,7 +525,7 @@ pub const CATALOG: &[Template] = &[
         "woven-together",
         "Woven Together",
         "Community",
-        "Interlaced colour for a collaborative making project.",
+        "Interlaced color for a collaborative making project.",
         "MANY HANDS. ONE SHARED STORY.",
         "WOVEN\nTOGETHER",
         "Everyone brings something to the pattern.",
@@ -848,7 +848,7 @@ pub const CATALOG: &[Template] = &[
         "inner-world",
         "Inner World",
         "Wellness",
-        "Nested colour blocks for a reflective personal practice.",
+        "Nested color blocks for a reflective personal practice.",
         "MAKE A LITTLE SPACE INSIDE",
         "INNER\nWORLD",
         "A few quiet minutes can change the day.",
@@ -1168,7 +1168,7 @@ impl Drawing {
     }
     fn rect(&mut self, x: f32, y: f32, w: f32, h: f32, color: Rgba) {
         self.shape(
-            "Colour block",
+            "Color block",
             Geom::Rect {
                 origin: self.area.point(x, y),
                 size: Pt::new(w * self.area.w, h * self.area.h),

@@ -58,7 +58,7 @@ fn write_requests(requests: Vec<SaveRequest>) -> Vec<Saved> {
             }
             if request.conflict || file_stamp(&request.path)? != request.stamp {
                 return Err(format!(
-                    "{} changed on disk. Cancel quitting, then reload it or export your colours as a copy.",
+                    "{} changed on disk. Cancel quitting, then reload it or export your colors as a copy.",
                     request.path.display(),
                 ));
             }

@@ -1,5 +1,186 @@
 # Changelog
 
+## 2026-09-06 · Pass 12 — The download caught up.
+
+The website and the download now tell the same story. **v0.0.1-alpha** packages
+the current studio for **ARM64 and x86_64 Linux**, including the 52 templates,
+guides and snapping, deformation tools, animation presets, shortcut HUD, and
+portable palette, brand-asset, and typography libraries showcased on the site.
+
+The hero's two binaries and source archive point to this tagged release. The
+FAQ now confirms that these features are included, and Getting started links
+the same release notes. The app's alpha status and current limits stay clear.
+
+Installation checks the published SHA-256 before opening the archive. A missing,
+malformed, or mismatched checksum stops installation. Local packaging builds only
+the application, checks both binaries' required glibc versions against the 2.35
+baseline, and includes the Phosphor icon license. `omadesign --version` (or `-V`)
+now reports the installed version without opening a window.
+
+Validation: **272 tests pass**, plus formatting, shell checks, TypeScript, and the
+website build. Both final archives pass checksum, version, and ELF checks. The
+ARM64 package renders native Pen/HUD and Brand windows and exports PNG; the x86_64
+package renders native Pen/HUD and Motion windows on a second Linux machine.
+Both binaries start against Ubuntu 22.04's glibc 2.35; x86_64 also exports PNG on
+that baseline runtime. Installer failure checks confirm that invalid downloads
+stop before extraction.
+
+## 2026-09-06 · Pass 11 — Now it moves.
+
+The front door needed more than a polite fade. Headlines now arrive through bold
+Catppuccin color wipes, lines follow in sequence, and the template title opens
+through an expanding ellipse. Sections rise into view and leave with the scroll.
+The artwork gallery has room to breathe: four floating planes orbit through real
+3D space, with depth, camera movement, drag momentum, and a pause button.
+
+### The studio is the demo
+
+The simulated panel controls are gone. Design, Pixel, Photo, and Motion now have
+separate native screen recordings with named chapters. Click a chapter to jump
+straight to the actual tool or panel. The shared brand recording covers palettes,
+assets, and typography, including their project dotfiles. These are captured WGPU
+frames from the Rust app, with real pointer and keyboard events driving the edits.
+The capture utility, chapter manifest, captions, and regeneration notes are included.
+
+The gallery and recording tabs stay in sync. Videos load when requested, pause
+after leaving the viewport, and stop when changing studios. Native controls,
+downloads, captions, keyboard navigation, and a no-JavaScript fallback keep the
+tour usable. Reduced motion switches the orbit to a static artwork grid and
+removes the traveling reveals. Keyboard focus reveals controls immediately; a
+pointer press holds an arriving panel in place until the click has finished.
+
+### The maze is back
+
+The header and footer restore the complete approved logo: blurred OMA maze,
+open-S deSiGN lettering, and original proportions. Both Catppuccin themes keep it
+legible. The hero now reads **Professional Grade Graphic Design Tool Suite**,
+followed by **Developed for Omarchy BTW.** and **Illustrate / Paint / Refine /
+Animate**. The larger **get started in under 1m** line leads into the installer
+command, with all three download buttons directly below it.
+
+### A recording found a real wobble
+
+Opening keyframes, effects, or Trace could force the native inspector wider and
+shift its controls. Labels and editable values now sit above tracks that fit the
+available width. The sidebar stays at the width you chose, including its narrowest
+setting. A focused native layout regression opens the real panels and exercises
+changing values and every effect across narrow, default, and wide layouts.
+Visible color labels in the recorded native panels also use US spelling.
+
+Validation: **272 native tests pass**, including the inspector geometry check.
+The release build is reinstalled; installed and built hashes match, native capture
+works, and the desktop entry validates. TypeScript, formatting, and the server
+build pass. Browser checks cover visible text reveals and exits, mouse momentum,
+real touch input, keyboard controls, reduced motion, no JavaScript, and layouts
+from 320 to 1735 pixels. All five recordings decode and play; early and rapid
+chapter seeks, source changes, offscreen pause, captions, and clicks during an
+entrance animation pass. The **156 seconds of native footage total 4.67 MB**.
+
+## 2026-09-05 · Pass 10 — Less pitch. More studio.
+
+The green paint has left the building. So has the pretend logo. The website now
+wears Catppuccin Mocha's base, mantle and crust, with a matching Latte option and
+the approved geometric deSiGN paths in the header, footer and favicon.
+
+### Take the studios for a spin
+
+Design, Pixel, Photo and Motion now sit in an interactive 3D artwork carousel.
+Click a side card, swipe, use the arrows, or navigate with the keyboard. Below
+it, **28 panel choices** expose working preview controls: change a fill, reshape
+an object, adjust the light, explore masks, or play an animation preset. Settings
+stay with their studio. Playback starts only when requested; reduced-motion and
+no-JavaScript alternatives are included.
+
+The artwork has a paper trail. Design and Motion use editable native vector
+projects. Original generated iris and coastal images supply the Pixel and Photo
+examples, with native import, Photo development and export. Sources, prompts and
+regeneration instructions live in `examples/site-showcase`. The web controls are
+clearly labeled as simplified previews.
+
+### Downloads at the front. Fluff at the exit.
+
+The hero contains **Omarchy**, **Omarchy MX Mac** and **Download src**, the
+requested “get started in under 1m” footnote, and the copyable installer command.
+The ARM64 button targets Linux on Apple Silicon; the FAQ explains the current
+published-alpha/source gap.
+
+Numbered kickers, repeated subtitles and the bottom sales pitch are gone. Copy
+uses US spelling. The old “slower” artwork is removed, and the template library
+has a fresh native capture. The corrected 97-second film remains available.
+
+The brand kit now demonstrates real interactions: Catppuccin palette swatches
+apply to fill or stroke, asset search and category filters compose, and font roles
+update an editable type sample. JSON examples remain available when wanted.
+
+### Motion with manners
+
+Sections and their contents enter, drift gently while in view and leave as you
+scroll. Hover, focus and preview controls add feedback. One passive scroll
+listener updates visible surfaces; layout measurements exclude animated positions
+so controls stay put when clicked. Reduced-motion preferences disable the travel.
+Obsolete screenshots, the old studio switcher and unused style rules are removed.
+
+Validation: **271 native tests pass**; release build, atomic reinstall, matching
+binary hashes, native capture and desktop-entry checks pass. TypeScript, formatting,
+server build and static prerender pass. Browser checks cover all 28 panels at both
+320 and 1440 pixels, touch and keyboard navigation, brand/HUD/search controls,
+clipboard fallback, theme persistence, documentation, video playback and motion
+preferences. The final GitHub Pages artifact is reviewed under `/omadesign/`.
+
+## 2026-09-05 · Pass 9 — The front door finally fits the house.
+
+The studio had grown. Its website was still waving from three releases ago.
+Now the first thing visitors meet is the reason this app exists: a creative
+home on Linux, built for Omarchy, with Rust underneath and ordinary files at
+its heart. PRs **32–38 are merged into master**, including the corrected logo
+and finished film.
+
+### Your Linux. Your creative suite.
+
+A new charcoal-and-green homepage leads with Omarchy theme and font integration,
+native responsiveness, ARM64 and x86_64 Linux packages, and the MIT licence.
+Current native screenshots introduce Design, Pixel, Photo and Motion; switching
+studios changes the artwork and the tool story together. Light mode brings a
+softer paper-and-ink treatment, and remembers the choice when browser storage
+is available.
+
+The portable brand kit gets a place of its own. Explore `.omacolors`,
+`.omabrand/` and `.omatype`, with readable examples and the actual native panels.
+Try the keyboard HUD with tool buttons or a held modifier. Browse **51 features
+in nine groups**, search for a particular tool, and open the details that matter.
+The 52 editable templates and the corrected 97-second film round out the tour.
+The film loads on demand, with native playback controls, scene captions and a
+download link.
+
+### A guide that reads like a guide
+
+The manual now has real paragraphs, lists, tables and linkable headings. The
+four-studio introduction, project-kit links and documentation navigation work
+under the site's GitHub Pages path. The source-build command explicitly chooses
+the main application binary. Unsafe Markdown links and raw HTML stay disabled.
+
+### One website, one source
+
+The stale hand-maintained root homepage and superseded media have retired.
+TanStack Start prerenders the homepage and documentation from the same source;
+a local publisher checks routes, assets and the reviewed revision before
+updating a generated `gh-pages` branch. No GitHub Actions workflow or new hosting
+account is required. Focused components keep the interactive sections separate,
+and lossless WebP screenshots keep the image payload small.
+
+The copy names the actual strengths and the alpha's current boundaries. It does
+not claim to be Linux's first professional creative application or invent a
+competitor speed ranking. Published September 2 packages predate the new feature
+stack; the site clearly points to current-source builds for everything shown.
+
+Validation: **271 native tests pass**, formatting and the release build pass,
+and the installed executable matches that build byte for byte. An isolated
+native Brand capture and desktop-entry validation pass. Browser QA covers all
+studio and dotfile previews, real HUD modifier events, feature search/categories,
+FAQ disclosures, clipboard success/fallback, theme persistence/blocked storage,
+97-second video playback, and layouts from 320 to 1440 pixels. Documentation,
+static direct links and the final published artifact are checked before shipping.
+
 ## 2026-09-05 · Pass 8 — S, as in design.
 
 The extra downstroke on the S closed its upper opening and made it read as a g.

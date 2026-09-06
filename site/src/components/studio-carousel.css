@@ -1,0 +1,269 @@
+.studio-carousel {
+  width: 100%;
+  padding: 0 0 70px;
+  color: var(--ink);
+}
+.orb-stage {
+  --orb-width: min(60vw, 900px);
+  position: relative;
+  width: 100%;
+  height: 82svh;
+  min-height: 560px;
+  max-height: 880px;
+  overflow: clip;
+  perspective: clamp(1000px, 130vw, 1800px);
+  perspective-origin: 50% 58%;
+  touch-action: pan-y;
+  cursor: grab;
+  isolation: isolate;
+  background: radial-gradient(
+    ellipse at 50% 70%,
+    color-mix(in srgb, var(--panel-deep) 60%, transparent),
+    transparent 68%
+  );
+}
+.orb-stage[data-dragging="true"] {
+  cursor: grabbing;
+}
+.orb-stage:focus-visible {
+  outline-offset: -8px;
+}
+.orb-world {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform-origin: 50% 58%;
+  will-change: transform;
+}
+.orb-artwork {
+  display: block;
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  width: var(--orb-width);
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 2px;
+  cursor: inherit;
+  user-select: none;
+  touch-action: pan-y;
+  backface-visibility: visible;
+  transform-style: preserve-3d;
+  will-change: transform;
+  box-shadow: 0 24px 80px -20px #0006;
+}
+.orb-artwork img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: 2px;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+/* The server-rendered first view already has depth; hydration starts from it. */
+.orb-artwork[data-work="0"] {
+  transform: translate(-50%, -50%) rotateX(-5deg) rotateZ(-4deg);
+}
+.orb-artwork[data-work="1"] {
+  transform: translate(-50%, -50%) translate3d(74vw, -26svh, -76vw)
+    rotateY(-34deg) rotateZ(16deg);
+  opacity: 0.83;
+}
+.orb-artwork[data-work="2"] {
+  transform: translate(-50%, -50%) translate3d(0, -77svh, -152vw) rotateX(5deg)
+    rotateZ(-3deg);
+  opacity: 0.66;
+}
+.orb-artwork[data-work="3"] {
+  transform: translate(-50%, -50%) translate3d(-74vw, -51svh, -76vw)
+    rotateY(34deg) rotateZ(-7deg);
+  opacity: 0.83;
+}
+.orb-artwork-name {
+  display: none;
+}
+.orb-drag-hint {
+  position: absolute;
+  bottom: 15px;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  pointer-events: none;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.01em;
+}
+.orb-controls {
+  display: grid;
+  justify-items: center;
+  gap: 20px;
+  padding: 25px 24px 0;
+}
+.orb-caption {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+}
+.orb-caption h2 {
+  min-width: 200px;
+  text-align: center;
+  font-size: clamp(40px, 4.4vw, 64px);
+}
+.orb-arrow {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  font: 22px var(--font-sans);
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+}
+.orb-arrow:hover {
+  border-color: var(--accent);
+  background: var(--panel);
+}
+.orb-nav {
+  display: flex;
+  gap: 8px;
+}
+.orb-nav button {
+  padding: 10px 17px;
+  color: var(--muted);
+  border-bottom: 1px solid transparent;
+  font-size: 13px;
+  transition:
+    border-color 0.2s,
+    color 0.2s;
+}
+.orb-nav button:hover,
+.orb-nav button[aria-pressed="true"] {
+  color: var(--ink);
+}
+.orb-nav button[aria-pressed="true"] {
+  border-bottom-color: var(--accent);
+}
+.orb-motion-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.orb-motion-toggle:hover {
+  color: var(--ink);
+}
+.orb-motion-toggle span {
+  display: inline-grid;
+  place-items: center;
+  width: 12px;
+}
+@media (max-width: 650px) {
+  .studio-carousel {
+    padding-bottom: 42px;
+  }
+  .orb-stage {
+    --orb-width: 82vw;
+    height: 66svh;
+    min-height: 450px;
+    max-height: 600px;
+    perspective: 1000px;
+  }
+  .orb-artwork[data-work="1"] {
+    transform: translate(-50%, -50%) translate3d(88vw, -12svh, -80vw)
+      rotateY(-34deg) rotateZ(16deg);
+  }
+  .orb-artwork[data-work="2"] {
+    transform: translate(-50%, -50%) translate3d(0, -45svh, -160vw)
+      rotateX(5deg) rotateZ(-3deg);
+  }
+  .orb-artwork[data-work="3"] {
+    transform: translate(-50%, -50%) translate3d(-88vw, -32svh, -80vw)
+      rotateY(34deg) rotateZ(-7deg);
+  }
+  .orb-controls {
+    gap: 14px;
+    padding-top: 16px;
+  }
+  .orb-caption {
+    gap: 20px;
+  }
+  .orb-caption h2 {
+    min-width: 150px;
+    font-size: 42px;
+  }
+  .orb-arrow {
+    width: 40px;
+    height: 40px;
+  }
+  .orb-nav {
+    gap: 0;
+  }
+  .orb-nav button {
+    padding-inline: 14px;
+    font-size: 12px;
+  }
+  .orb-drag-hint {
+    font-size: 10px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .studio-carousel * {
+    animation: none !important;
+    transition: none !important;
+  }
+  .orb-stage {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    padding: 28px max(20px, 6vw);
+    overflow: visible;
+    perspective: none;
+    cursor: default;
+    background: none;
+  }
+  .orb-world {
+    position: static;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 30px;
+    transform: none !important;
+    will-change: auto;
+  }
+  .orb-artwork {
+    position: static;
+    width: 100%;
+    transform: none !important;
+    opacity: 1 !important;
+    cursor: pointer;
+    box-shadow: none;
+    will-change: auto;
+  }
+  .orb-artwork[aria-pressed="true"] {
+    outline: 2px solid var(--accent);
+    outline-offset: 7px;
+  }
+  .orb-artwork-name {
+    display: block;
+    padding-top: 12px;
+    font-size: 15px;
+    text-align: left;
+  }
+  .orb-drag-hint,
+  .orb-motion-toggle {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) and (max-width: 600px) {
+  .orb-world {
+    grid-template-columns: 1fr;
+    gap: 25px;
+  }
+}

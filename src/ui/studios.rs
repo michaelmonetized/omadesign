@@ -910,6 +910,53 @@ fn motion_studio(ui: &mut Ui, studio: &mut Studio) {
     eframe::egui::CollapsingHeader::new("Keyframe controls").show(ui, |ui| motion_keys(ui, studio));
 }
 
+fn inspector_slider<N: eframe::egui::emath::Numeric>(
+    ui: &mut Ui,
+    label: &str,
+    value: &mut N,
+    range: std::ops::RangeInclusive<N>,
+    suffix: &str,
+) -> bool {
+    let speed = (range.end().to_f64() - range.start().to_f64()) / 500.0;
+    let (mut changed, label_id) = ui
+        .horizontal(|ui| {
+            ui.with_layout(Layout::right_to_left(eframe::egui::Align::Center), |ui| {
+                ui.spacing_mut().button_padding.x = 4.0;
+                let number = ui.add_sized(
+                    [80.0, 24.0],
+                    eframe::egui::DragValue::new(value)
+                        .range(range.clone())
+                        .speed(speed)
+                        .max_decimals(3)
+                        .suffix(suffix),
+                );
+                let label_id = ui
+                    .with_layout(Layout::left_to_right(eframe::egui::Align::Center), |ui| {
+                        ui.add(
+                            eframe::egui::Label::new(RichText::new(label).small().color(fg_weak()))
+                                .truncate(),
+                        )
+                        .id
+                    })
+                    .inner;
+                (number.labelled_by(label_id).changed(), label_id)
+            })
+            .inner
+        })
+        .inner;
+    changed |= ui
+        .scope(|ui| {
+            // Keep the track inside the panel; the label and editable value
+            // live above it so their widths never push the panel outward.
+            ui.spacing_mut().slider_width = ui.available_width();
+            ui.add(Slider::new(value, range).show_value(false))
+                .labelled_by(label_id)
+                .changed()
+        })
+        .inner;
+    changed
+}
+
 fn motion_keys(ui: &mut Ui, studio: &mut Studio) {
     ui.label(
         RichText::new("Rest pose is Design. Keys are offsets.")
@@ -976,14 +1023,9 @@ fn motion_keys(ui: &mut Ui, studio: &mut Studio) {
             .map(|s| s.opacity)
             .unwrap_or(1.0)
     });
-    ui.horizontal(|ui| {
-        if ui
-            .add(Slider::new(&mut op, 0.0..=1.0).text("Opacity"))
-            .changed()
-        {
-            studio.key_prop(id, crate::motion::Prop::Opacity, op);
-        }
-    });
+    if inspector_slider(ui, "Opacity", &mut op, 0.0..=1.0, "") {
+        studio.key_prop(id, crate::motion::Prop::Opacity, op);
+    }
     for (property, label, value) in [
         (
             crate::motion::Prop::StrokeReveal,
@@ -994,14 +1036,7 @@ fn motion_keys(ui: &mut Ui, studio: &mut Studio) {
     ] {
         if let Some(value) = value {
             let mut percent = value * 100.0;
-            if ui
-                .add(
-                    Slider::new(&mut percent, 0.0..=100.0)
-                        .text(label)
-                        .suffix("%"),
-                )
-                .changed()
-            {
+            if inspector_slider(ui, label, &mut percent, 0.0..=100.0, "%") {
                 studio.key_prop(id, property, percent / 100.0);
             }
         }
@@ -1359,7 +1394,7 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
             });
             match fx {
                 crate::filter::Fx::Blur { std } => {
-                    ui.add(Slider::new(std, 0.0..=80.0).text("Blur"));
+                    inspector_slider(ui, "Blur", std, 0.0..=80.0, "");
                 }
                 crate::filter::Fx::Shadow {
                     dx,
@@ -1373,9 +1408,9 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
                     blur,
                     color,
                 } => {
-                    ui.add(Slider::new(dx, -80.0..=80.0).text("Offset X"));
-                    ui.add(Slider::new(dy, -80.0..=80.0).text("Offset Y"));
-                    ui.add(Slider::new(blur, 0.0..=80.0).text("Blur"));
+                    inspector_slider(ui, "Offset X", dx, -80.0..=80.0, "");
+                    inspector_slider(ui, "Offset Y", dy, -80.0..=80.0, "");
+                    inspector_slider(ui, "Blur", blur, 0.0..=80.0, "");
                     ui.horizontal(|ui| {
                         let mut rgb = [color.r, color.g, color.b];
                         if ui.color_edit_button_srgb(&mut rgb).changed() {
@@ -1386,30 +1421,30 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
                     });
                 }
                 crate::filter::Fx::Offset { dx, dy } => {
-                    ui.add(Slider::new(dx, -200.0..=200.0).text("Offset X"));
-                    ui.add(Slider::new(dy, -200.0..=200.0).text("Offset Y"));
+                    inspector_slider(ui, "Offset X", dx, -200.0..=200.0, "");
+                    inspector_slider(ui, "Offset Y", dy, -200.0..=200.0, "");
                 }
                 crate::filter::Fx::Morphology { erode, radius } => {
                     ui.checkbox(erode, "Erode");
-                    ui.add(Slider::new(radius, 0.0..=40.0).text("Radius"));
+                    inspector_slider(ui, "Radius", radius, 0.0..=40.0, "");
                 }
                 crate::filter::Fx::Saturate { amount } => {
-                    ui.add(Slider::new(amount, 0.0..=3.0).text("Amount"));
+                    inspector_slider(ui, "Amount", amount, 0.0..=3.0, "");
                 }
                 crate::filter::Fx::HueRotate { degrees } => {
-                    ui.add(Slider::new(degrees, -180.0..=180.0).text("Angle"));
+                    inspector_slider(ui, "Angle", degrees, -180.0..=180.0, "");
                 }
                 crate::filter::Fx::Brightness { amount } => {
-                    ui.add(Slider::new(amount, 0.0..=3.0).text("Amount"));
+                    inspector_slider(ui, "Amount", amount, 0.0..=3.0, "");
                 }
                 crate::filter::Fx::Contrast { amount } => {
-                    ui.add(Slider::new(amount, 0.0..=3.0).text("Amount"));
+                    inspector_slider(ui, "Amount", amount, 0.0..=3.0, "");
                 }
                 crate::filter::Fx::Invert { amount } => {
-                    ui.add(Slider::new(amount, 0.0..=1.0).text("amount"));
+                    inspector_slider(ui, "amount", amount, 0.0..=1.0, "");
                 }
                 crate::filter::Fx::ColorMatrix { values } => {
-                    ui.add(Slider::new(&mut values[0], -2.0..=2.0).text("m00"));
+                    inspector_slider(ui, "m00", &mut values[0], -2.0..=2.0, "");
                 }
                 crate::filter::Fx::Turbulence {
                     fractal,
@@ -1418,14 +1453,14 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
                     seed,
                 } => {
                     ui.checkbox(fractal, "fractalNoise");
-                    ui.add(Slider::new(base, 0.001..=0.5).text("baseFrequency"));
-                    ui.add(Slider::new(octaves, 1..=8).text("numOctaves"));
-                    ui.add(Slider::new(seed, 0..=9999).text("seed"));
+                    inspector_slider(ui, "baseFrequency", base, 0.001..=0.5, "");
+                    inspector_slider(ui, "numOctaves", octaves, 1..=8, "");
+                    inspector_slider(ui, "seed", seed, 0..=9999, "");
                 }
                 crate::filter::Fx::Displacement { scale, x_ch, y_ch } => {
-                    ui.add(Slider::new(scale, 0.0..=120.0).text("scale"));
-                    ui.add(Slider::new(x_ch, 0..=3).text("xChannel"));
-                    ui.add(Slider::new(y_ch, 0..=3).text("yChannel"));
+                    inspector_slider(ui, "scale", scale, 0.0..=120.0, "");
+                    inspector_slider(ui, "xChannel", x_ch, 0..=3, "");
+                    inspector_slider(ui, "yChannel", y_ch, 0..=3, "");
                 }
             }
         });
@@ -1483,12 +1518,30 @@ fn trace_studio(ui: &mut Ui, studio: &mut Studio) {
             .small()
             .color(fg_weak()),
     );
-    ui.add(Slider::new(&mut studio.trace_opts.colors, 1..=12).text("Colours"));
+    inspector_slider(ui, "Colors", &mut studio.trace_opts.colors, 1..=12, "");
     if studio.trace_opts.colors <= 1 {
-        ui.add(Slider::new(&mut studio.trace_opts.threshold, 0.05..=0.95).text("Threshold"));
+        inspector_slider(
+            ui,
+            "Threshold",
+            &mut studio.trace_opts.threshold,
+            0.05..=0.95,
+            "",
+        );
     }
-    ui.add(Slider::new(&mut studio.trace_opts.smoothness, 0.2..=8.0).text("Smoothness"));
-    ui.add(Slider::new(&mut studio.trace_opts.min_area, 1.0..=64.0).text("Min area"));
+    inspector_slider(
+        ui,
+        "Smoothness",
+        &mut studio.trace_opts.smoothness,
+        0.2..=8.0,
+        "",
+    );
+    inspector_slider(
+        ui,
+        "Min area",
+        &mut studio.trace_opts.min_area,
+        1.0..=64.0,
+        "",
+    );
     ui.checkbox(&mut studio.trace_opts.ignore_white, "Ignore white");
     ui.add_space(4.0);
     if ui.button("Trace to vector").clicked() {
@@ -2138,6 +2191,153 @@ fn inspector_keeps_its_width_across_frames_and_personas() {
             );
             output.textures_delta.clear();
             assert!(width <= 304.0, "{scene} inspector grew to {width}px");
+        }
+    }
+}
+
+#[test]
+fn expanded_keyframes_and_effects_respect_the_resized_panel() {
+    use eframe::egui::{self, Event, Id, Modifiers, PointerButton, Pos2, Rect};
+
+    fn frame(
+        ctx: &egui::Context,
+        studio: &mut Studio,
+        time: &mut f64,
+        events: Vec<Event>,
+    ) -> (f32, Vec<(String, Rect)>) {
+        *time += 0.05;
+        let mut width = 0.0;
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1600.0, 1400.0))),
+                time: Some(*time),
+                events,
+                ..Default::default()
+            },
+            |ui| {
+                right_panel(ui, studio);
+                width = 1600.0 - ui.available_width();
+            },
+        );
+        fn texts(shape: &egui::Shape, out: &mut Vec<(String, Rect)>) {
+            match shape {
+                egui::Shape::Text(text) => out.push((
+                    text.galley.text().to_owned(),
+                    text.galley.rect.translate(text.pos.to_vec2()),
+                )),
+                egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| texts(s, out)),
+                _ => {}
+            }
+        }
+        let mut labels = Vec::new();
+        for shape in &output.shapes {
+            texts(&shape.shape, &mut labels);
+        }
+        output.textures_delta.clear();
+        (width, labels)
+    }
+
+    fn open_section(ctx: &egui::Context, studio: &mut Studio, time: &mut f64, title: &str) {
+        let (_, labels) = frame(ctx, studio, time, vec![]);
+        let pos = labels
+            .iter()
+            .find(|(text, _)| text == title)
+            .unwrap()
+            .1
+            .center();
+        frame(ctx, studio, time, vec![Event::PointerMoved(pos)]);
+        for pressed in [true, false] {
+            frame(
+                ctx,
+                studio,
+                time,
+                vec![Event::PointerButton {
+                    pos,
+                    button: PointerButton::Primary,
+                    pressed,
+                    modifiers: Modifiers::NONE,
+                }],
+            );
+        }
+        frame(ctx, studio, time, vec![]);
+        frame(ctx, studio, time, vec![]);
+    }
+
+    for target_width in [256.0, 288.0, 420.0] {
+        let ctx = egui::Context::default();
+        crate::ui::theme::apply(&ctx);
+        ctx.data_mut(|data| {
+            data.insert_persisted(
+                Id::new("studios"),
+                egui::containers::panel::PanelState {
+                    outer_rect: Rect::from_min_size(
+                        egui::pos2(1600.0 - target_width, 0.0),
+                        vec2(target_width, 1400.0),
+                    ),
+                },
+            );
+        });
+        let mut studio = Studio::new();
+        studio.doc = crate::document::Document::new("Panel sizing", 1.0, 1.0, 72.0);
+        let shape = crate::document::Shape::new(
+            Geom::Rect {
+                origin: crate::geom::Pt::ZERO,
+                size: crate::geom::Pt::splat(100.0),
+                radius: 0.0,
+            },
+            crate::document::Style::default(),
+        );
+        let id = shape.id;
+        let mut layer = crate::document::Layer::vector("Artwork");
+        layer.kind.shapes_mut().unwrap().push(shape);
+        studio.doc.layers = vec![layer];
+        studio.selection = vec![(0, id)];
+        studio.active_layer = Some(0);
+        studio.persona = Persona::Motion;
+        let mut time = 0.0;
+        frame(&ctx, &mut studio, &mut time, vec![]);
+        open_section(&ctx, &mut studio, &mut time, "Keyframe controls");
+        for reveal in [0.0, 0.000123, 0.5000123, 0.99021, 1.0] {
+            studio.pose_drag.insert(
+                id,
+                crate::motion::Pose {
+                    opacity: Some(reveal),
+                    stroke_reveal: Some(reveal),
+                    fill_reveal: Some(reveal),
+                    ..crate::motion::Pose::identity()
+                },
+            );
+            let (width, labels) = frame(&ctx, &mut studio, &mut time, vec![]);
+            assert!(
+                (width - target_width).abs() <= 1.0,
+                "Keyframes grew {target_width}px panel to {width}px at {reveal}"
+            );
+            for name in ["Opacity", "Draw stroke", "Fill up"] {
+                let (_, rect) = labels.iter().find(|(text, _)| text == name).unwrap();
+                assert!(rect.left() >= 1600.0 - width && rect.right() <= 1600.0);
+            }
+        }
+        studio.pose_drag.clear();
+        studio.persona = Persona::Design;
+        open_section(&ctx, &mut studio, &mut time, "Effects");
+        for (name, make) in crate::filter::Fx::catalog() {
+            studio.doc.find_shape_mut(0, id).unwrap().filters.items = vec![make()];
+            for _ in 0..3 {
+                let (width, _) = frame(&ctx, &mut studio, &mut time, vec![]);
+                assert!(
+                    (width - target_width).abs() <= 1.0,
+                    "{name} grew {target_width}px panel to {width}px"
+                );
+            }
+        }
+        studio.tool = Tool::Trace;
+        studio.trace_opts.colors = 1;
+        for _ in 0..3 {
+            let (width, _) = frame(&ctx, &mut studio, &mut time, vec![]);
+            assert!(
+                (width - target_width).abs() <= 1.0,
+                "Trace grew {target_width}px panel to {width}px"
+            );
         }
     }
 }

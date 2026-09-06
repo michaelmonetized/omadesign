@@ -6,8 +6,14 @@ set -eu
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
 VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+case "$VERSION" in
+  ''|*[!A-Za-z0-9.+-]*) echo "invalid package version: $VERSION" >&2; exit 1 ;;
+esac
 DIST="dist"
 mkdir -p "$DIST"
+for tool in cargo readelf tar sha256sum; do
+  command -v "$tool" >/dev/null || { echo "missing release tool: $tool" >&2; exit 1; }
+done
 
 chmod +x scripts/zig-cc scripts/zig-cc-aarch64 scripts/zig-cc-x86_64
 
@@ -16,12 +22,12 @@ export CARGO_PROFILE_RELEASE_LTO=false
 
 echo "building aarch64-unknown-linux-gnu (glibc 2.35)..."
 CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="$ROOT/scripts/zig-cc-aarch64" \
-  cargo build --release --target aarch64-unknown-linux-gnu
+  cargo build --locked --release --bin omadesign --target aarch64-unknown-linux-gnu
 
 echo "building x86_64-unknown-linux-gnu (glibc 2.35)..."
 CC_x86_64_unknown_linux_gnu="$ROOT/scripts/zig-cc-x86_64" \
 CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER="$ROOT/scripts/zig-cc-x86_64" \
-  cargo build --release --target x86_64-unknown-linux-gnu
+  cargo build --locked --release --bin omadesign --target x86_64-unknown-linux-gnu
 
 package() {
   target_dir="$1"
@@ -31,15 +37,29 @@ package() {
     echo "missing $bin" >&2
     exit 1
   fi
-  max_glibc="$(objdump -T "$bin" | rg -o 'GLIBC_[0-9.]+' | sort -V | tail -1 || true)"
-  echo "$triple glibc ceiling: ${max_glibc:-unknown}"
-  case "$max_glibc" in
-    GLIBC_2.4*|GLIBC_2.3[89]|GLIBC_2.36|GLIBC_2.37)
-      echo "refusing to ship $triple: still needs $max_glibc (want <= 2.35)" >&2
-      objdump -T "$bin" | rg "$max_glibc" >&2 || true
-      exit 1
-      ;;
-  esac
+  # readelf understands both ELF architectures on either build host. Inspect
+  # required version names, and fail closed if inspection produces no evidence.
+  if ! versions="$(readelf --version-info "$bin")"; then
+    echo "could not inspect $bin" >&2
+    exit 1
+  fi
+  glibc_versions="$(printf '%s\n' "$versions" | sed -n 's/.*Name: \(GLIBC_[^ ]*\).*/\1/p')"
+  if [ -z "$glibc_versions" ]; then
+    echo "refusing to ship $triple: no required glibc versions found" >&2
+    exit 1
+  fi
+  if ! printf '%s\n' "$glibc_versions" | awk -F '[_.]' '
+    NF < 3 || $1 != "GLIBC" { exit 1 }
+    { for (i = 2; i <= NF; i++) if ($i !~ /^[0-9]+$/) exit 1 }
+    $2 > 2 || ($2 == 2 && $3 > 35) { exit 1 }
+    $2 == 2 && $3 == 35 { for (i = 4; i <= NF; i++) if ($i > 0) exit 1 }
+  '; then
+    echo "refusing to ship $triple: requires glibc newer than 2.35 or an unsupported ABI" >&2
+    printf '%s\n' "$glibc_versions" >&2
+    exit 1
+  fi
+  max_glibc="$(printf '%s\n' "$glibc_versions" | sort -V | tail -1)"
+  echo "$triple glibc ceiling: $max_glibc"
   name="omadesign-${VERSION}-${triple}"
   stage="${DIST}/${name}"
   rm -rf "$stage"
@@ -53,6 +73,7 @@ package() {
   install -Dm644 omadesign.desktop "$stage/omadesign.desktop"
   install -Dm644 README.md "$stage/README.md"
   install -Dm644 LICENSE "$stage/LICENSE"
+  install -Dm644 assets/phosphor/LICENSE-MIT "$stage/LICENSE-Phosphor"
   install -Dm755 scripts/install.sh "$stage/install.sh"
   tar -C "$DIST" -czf "${DIST}/${name}.tar.gz" "$name"
   (cd "$DIST" && sha256sum "${name}.tar.gz" > "${name}.tar.gz.sha256")

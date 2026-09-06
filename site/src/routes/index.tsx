@@ -1,200 +1,181 @@
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { CURL } from "./__root";
+import { faqs } from "../features";
+import { media, sitePath } from "../site";
+import { BrandKit } from "../components/brand-kit";
+import { StudioCarousel, type StudioName } from "../components/studio-carousel";
+import { StudioRecordings } from "../components/native-recordings";
+import { RevealText } from "../components/reveal-text";
+import { ShortcutHud } from "../components/shortcut-hud";
+import { FeatureExplorer } from "../components/feature-explorer";
+import { Install } from "../components/install";
+import { Arrow, Shot } from "../components/studio-ui";
+import { useScrollMotion } from "../components/scroll-motion";
 
-export const Route = createFileRoute("/")({
-  component: Home,
-});
-
-const shots = [
-  { src: "/media/design.jpg", cap: "Design — resize from any tool, compound, boolean" },
-  { src: "/media/paint.jpg", cap: "Pixel — brush, clone, wand on a raster layer" },
-  { src: "/media/photo.jpg", cap: "Photo — develop, crop, Place in Design" },
-  { src: "/media/type.jpg", cap: "Type — caret + Google Fonts on-demand + max font default + palettes" },
-  { src: "/media/shapes.jpg", cap: "Shapes — Phosphor / LineIcons / Heroicons / Feather live SVG browser" },
-  { src: "/media/motion.jpg", cap: "Motion — timeline, keys, Lottie in and out" },
-  { src: "/media/assets.jpg", cap: "Assets — Pixabay / Pexels / Vecteezy / Picsum free browser" },
-];
+export const Route = createFileRoute("/")({ component: Home });
 
 function Home() {
+  const motion = useScrollMotion();
+  const [studio, setStudio] = useState<StudioName>("Design");
   return (
-    <main>
-      <section className="mx-auto max-w-6xl px-6 pb-8 pt-16 md:pt-24">
-        <p className="mb-4 text-sm uppercase tracking-[0.2em] text-ctp-overlay1">
-          Updated with v0.0.1-alpha.rc — Motion, Lottie, a welcome that fits
-        </p>
-        <h1 className="max-w-4xl text-5xl font-bold leading-[1.05] tracking-tight text-ctp-text md:text-7xl">
-          Your Linux, for making things.
-        </h1>
-        <p className="mt-6 max-w-2xl text-lg text-ctp-subtext0 md:text-xl">
-          A native studio. Design, paint, photograph, motion. One document, one
-          layer stack. Theme from ~/.config. Type you can type into. Timeline
-          and Lottie, no After Effects tab open.
-        </p>
-        <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-ctp-subtext1">
-          <li>Free, MIT</li>
-          <li>aarch64 Asahi + x86_64</li>
-          <li>glibc 2.35</li>
-          <li>No Electron</li>
-        </ul>
-        <div className="mt-10 flex flex-col gap-3 md:flex-row md:items-center">
-          <code className="flex-1 overflow-x-auto rounded-xl border border-ctp-surface1 bg-ctp-mantle px-4 py-3 font-mono text-sm text-ctp-green">
-            {CURL}
-          </code>
-          <a
-            href="https://github.com/michaelmonetized/omadesign/releases"
-            className="rounded-xl bg-ctp-lavender px-5 py-3 text-center text-sm font-medium text-ctp-base"
-          >
-            Releases
-          </a>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-6xl px-6 pb-20">
-        <div className="overflow-hidden rounded-3xl border border-ctp-surface0 bg-ctp-mantle shadow-2xl shadow-ctp-crust/40">
-          <video
-            className="aspect-video w-full bg-ctp-crust object-cover"
-            autoPlay
-            muted
-            loop
-            playsInline
-            poster="/media/design.jpg"
-          >
-            <source src="/media/hero.mp4" type="video/mp4" />
-          </video>
-        </div>
-        <p className="mt-3 text-center text-xs text-ctp-overlay1">
-          New in alpha-rc — Google Fonts on tap, palettes, compound, shape & asset browsers, and the big welcome with tabs. Remotion 4.0.518 hero (39 s, 1920×1080, 2.2 MB, 1170f) with real UI screenshots.
-        </p>
-      </section>
-
-      <section className="mx-auto max-w-6xl px-6 pb-16">
-        <div className="rounded-3xl border border-ctp-surface0 bg-ctp-mantle p-8">
-          <h2 className="text-2xl font-bold tracking-tight">What&apos;s new in v0.0.0.0alpha-rc</h2>
-          <p className="mt-2 text-sm text-ctp-subtext0">7 commits, 6 stacked PRs → fast-forward to master, built locally with zig cc (glibc 2.35).</p>
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-            {[
-              ["Fonts, full", "fontconfig + ttf_parser, 2000 cap. Google Fonts browser (30 bundled, ureq → ~/.local/share/fonts/omadesign/google)."],
-              ["Max font", "Scans ~/Projects next/font/google, most frequent wins (Inter). Shown as default."],
-              ["Palettes", "Custom palettes at ~/.config/omadesign/palettes.json — New/Rename/Delete, +Fill/+Stroke, Import/Export."],
-              ["Compound", "Combine (even-odd) / Release + multi-boolean Union/Subtract/Intersect/Xor."],
-              ["Browsers", "◇ Shapes (Phosphor/LineIcons/Heroicons/Feather) + ⬙ Assets (Pixabay/Pexels/Picsum fallback)."],
-              ["Welcome 2.0", "Big 720 px square, tabs All/Web/Print/Social/Photo/Identity, 210×112 cards, transparent/bleed/safe/artboards ×1–16."],
-              ["Canvas", "Artboard frames, bleed red + crop marks, safe green inset. Checker when transparent."],
-            ].map(([t, d]) => (
-              <div key={t} className="rounded-2xl border border-ctp-surface0 bg-ctp-base p-4">
-                <h3 className="text-sm font-semibold text-ctp-text">{t}</h3>
-                <p className="mt-1 text-sm leading-snug text-ctp-subtext0">{d}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="border-y border-ctp-surface0 bg-ctp-mantle/40 py-16">
-        <div className="mx-auto max-w-6xl px-6">
-          <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
-            Three rooms, one house.
-          </h2>
-          <p className="mt-3 max-w-2xl text-ctp-subtext0">
-            Switch persona from the top bar. Keys stay where they already live
-            in your fingers.
+    <main id="main" ref={motion}>
+      <section className="hero shell">
+        <div className="hero-heading">
+          <RevealText
+            as="h1"
+            hero
+            lines={["Professional Grade", "Graphic Design Tool Suite"]}
+          />
+          <p className="hero-intro">
+            <span>Developed for Omarchy BTW.</span>
+            <span className="hero-modes">
+              <span>Illustrate</span>
+              <span>Paint</span>
+              <span>Refine</span>
+              <span>Animate</span>
+            </span>
           </p>
-          <div className="mt-10 grid gap-6 md:grid-cols-3">
-            {[
-              ["Design", "V · P · R · T", "Marks, posters, boolean, live type."],
-              ["Pixel", "B · E · J · W", "Brush, clone, wand. On a raster layer."],
-              ["Photo", "C · develop", "Grade, crop, Place in Design."],
-            ].map(([name, keys, blurb]) => (
-              <div
-                key={name}
-                className="rounded-2xl border border-ctp-surface0 bg-ctp-base p-6"
-              >
-                <h3 className="text-xl font-medium text-ctp-lavender">{name}</h3>
-                <p className="mt-1 font-mono text-xs text-ctp-overlay1">{keys}</p>
-                <p className="mt-4 text-ctp-subtext0">{blurb}</p>
-              </div>
-            ))}
-          </div>
+        </div>
+        <Install />
+      </section>
+      <section className="hero-stage">
+        <StudioCarousel selected={studio} onSelect={setStudio} />
+      </section>
+      <StudioRecordings studio={studio} onSelect={setStudio} />
+      <div className="btw-strip">
+        <div className="shell">
+          <span>
+            Rust, <em>btw.</em>
+          </span>
+          <span>
+            Arch, <em>btw.</em>
+          </span>
+          <span>ARM64 + x86_64</span>
+          <span>FOSS. MIT.</span>
+        </div>
+      </div>
+      <section className="section shell native-section" id="native">
+        <div className="section-heading">
+          <RevealText text="Omarchy first." />
+        </div>
+        <div className="principles">
+          <article>
+            <div className="theme-swatch" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+              <i />
+              <i />
+            </div>
+            <RevealText as="h3" text="Your desktop theme" />
+            <p>
+              Reads your Omarchy colors and desktop font at launch. Uses
+              Catppuccin when an Omarchy theme isn’t available.
+            </p>
+          </article>
+          <article>
+            <div className="native-symbol" aria-hidden="true">
+              ↗
+            </div>
+            <RevealText as="h3" text="Native Rust" />
+            <p>
+              Cached rendering. Background previews, file scans, and exports.
+              Built for ARM64 and x86_64 Linux.
+            </p>
+          </article>
+          <article>
+            <div className="file-symbol" aria-hidden="true">
+              ~/
+            </div>
+            <RevealText as="h3" text="Local files" />
+            <p>
+              Editable documents and portable brand kits on your disk. No app
+              account. Free and open source.
+            </p>
+          </article>
         </div>
       </section>
-
-      <section className="mx-auto max-w-6xl px-6 py-20">
-        <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
-          Just some of the highlights
-        </h2>
-        <p className="mt-2 text-sm text-ctp-subtext0">Screenshots regenerated headless via <code className="rounded bg-ctp-surface0 px-1 py-0.5 font-mono text-xs">cargo run --bin gen_media</code> + <code className="rounded bg-ctp-surface0 px-1 py-0.5 font-mono text-xs">compositor::export_png</code> → JPEG.</p>
-        <div className="mt-10 grid gap-6 md:grid-cols-3">
-          {shots.map((s) => (
-            <figure key={s.src}>
-              <img
-                src={s.src}
-                alt={s.cap}
-                className="aspect-[16/9] w-full rounded-2xl border border-ctp-surface0 object-cover"
-              />
-              <figcaption className="mt-3 text-sm leading-snug text-ctp-subtext1">{s.cap}</figcaption>
-            </figure>
-          ))}
-        </div>
-      </section>
-
-      <section className="border-y border-ctp-surface0 py-16">
-        <div className="mx-auto max-w-6xl px-6">
-          <h2 className="text-3xl font-bold tracking-tight">
-            Built like desktop software.
-          </h2>
-          <div className="mt-8 grid gap-6 md:grid-cols-2">
-            {[
-              [
-                "Your chrome, not ours",
-                "Colours from the Omarchy theme on disk. Font from fontconfig. No baked orange.",
-              ],
-              [
-                "Asahi is first class",
-                "aarch64 tarball, zig-linked to glibc 2.35. Same release as x86_64.",
-              ],
-              [
-                "Type is a string",
-                "Caret, Enter for a line, Character studio, OpenType kern/liga/tnum/smcp.",
-              ],
-              [
-                "No runners",
-                "Binaries are built on this machine and uploaded. Microsoft does not get a penny.",
-              ],
-            ].map(([t, d]) => (
-              <div key={t}>
-                <h3 className="font-medium text-ctp-text">{t}</h3>
-                <p className="mt-2 text-ctp-subtext0">{d}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-6xl px-6 py-20">
-        <h2 className="text-3xl font-bold tracking-tight">Take this with you</h2>
-        <p className="mt-3 text-ctp-subtext0">
-          Manual, contributing, roadmap. The site is Catppuccin mocha until you
-          ask for light.
-        </p>
-        <div className="mt-8 flex flex-wrap gap-4">
-          <a className="rounded-xl border border-ctp-surface1 px-4 py-2 text-sm" href="/docs/manual">
-            User manual
-          </a>
+      <BrandKit />
+      <ShortcutHud />
+      <section className="section shell templates-section" id="templates">
+        <div className="templates-copy">
+          <RevealText iris lines={["52 editable", "templates."]} />
+          <p>
+            Posters, identity, social, and editorial. Nine categories. Preset or
+            custom sizes. All included, all offline.
+          </p>
           <a
-            className="rounded-xl border border-ctp-surface1 px-4 py-2 text-sm"
-            href="/docs/contributing"
+            className="text-link"
+            href={`${sitePath("docs/manual")}#templates`}
           >
-            Contributing
-          </a>
-          <a className="rounded-xl border border-ctp-surface1 px-4 py-2 text-sm" href="/docs/roadmap">
-            Roadmap
+            Template library <Arrow />
           </a>
         </div>
-        <img
-          src="/media/mark.png"
-          alt="omadesign mark"
-          className="mt-12 max-h-64 rounded-2xl border border-ctp-surface0"
-        />
+        <figure className="template-visual">
+          <Shot
+            name="templates.webp"
+            alt="The native template library with editable designs, category filters, and size controls."
+          />
+        </figure>
+      </section>
+      <section className="section shell film-section" id="film">
+        <div className="section-heading">
+          <RevealText text="The studio in 97 seconds." />
+          <a className="text-link" href={media("film.mp4")} download>
+            Download video ↓
+          </a>
+        </div>
+        <video
+          controls
+          playsInline
+          preload="none"
+          poster={media("omadesign-logo.webp")}
+          width="1920"
+          height="1080"
+          aria-label="omadesign feature demo, 97 seconds"
+        >
+          <source src={media("film.mp4")} type="video/mp4" />
+          <track
+            kind="captions"
+            src={media("film.vtt")}
+            srcLang="en"
+            label="English scene descriptions"
+          />
+          <p>
+            <a href={media("film.mp4")}>Download the demo video</a>.
+          </p>
+        </video>
+      </section>
+      <FeatureExplorer />
+      <section className="section shell faq-section" id="questions">
+        <RevealText text="Details." />
+        <div className="faq-list">
+          {faqs.map(({ question, answer }) => (
+            <details key={question}>
+              <summary>
+                {question}
+                <span aria-hidden="true">+</span>
+              </summary>
+              <p>{answer}</p>
+            </details>
+          ))}
+          <details>
+            <summary>
+              What sets it apart from Affinity?<span aria-hidden="true">+</span>
+            </summary>
+            <p>
+              Native Linux support, Omarchy theme integration, portable brand
+              dotfiles, and vector design, painting, photo editing, and
+              animation in one app. omadesign is an independent alpha.
+            </p>
+            <p>
+              <a href="https://www.affinity.studio/get-affinity">
+                Affinity platform information ↗
+              </a>{" "}
+              · <a href={sitePath("docs/manual")}>omadesign manual →</a>
+            </p>
+          </details>
+        </div>
       </section>
     </main>
   );

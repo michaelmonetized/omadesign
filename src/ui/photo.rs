@@ -232,7 +232,7 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
     });
     let Some(img) = studio.photo.selected() else {
         ui.add_space(24.0);
-        ui.label(RichText::new("A little light. A little colour.").strong());
+        ui.label(RichText::new("A little light. A little color.").strong());
         ui.label(RichText::new("Open a photo to make it yours.").color(fg_weak()));
         return;
     };
@@ -259,7 +259,7 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
     let tab_id = ui.id().with("develop-tab");
     let mut tab = ui.data_mut(|data| data.get_temp::<usize>(tab_id).unwrap_or(0));
     ui.columns(3, |columns| {
-        for (i, label) in ["Light", "Colour", "Detail"].iter().enumerate() {
+        for (i, label) in ["Light", "Color", "Detail"].iter().enumerate() {
             if columns[i]
                 .add_sized(
                     [columns[i].available_width(), 28.0],
@@ -306,7 +306,7 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
                 changed |= slider(ui, "Saturation", &mut p.saturation, 0.0, 2.0);
                 changed |= slider(ui, "Hue", &mut p.hue, -180.0, 180.0);
                 ui.add_space(6.0);
-                ui.collapsing("Colour mixer", |ui| {
+                ui.collapsing("Color mixer", |ui| {
                     let id = ui.id().with("hsl-channel");
                     let mut channel = ui.data_mut(|data| data.get_temp::<usize>(id).unwrap_or(0));
                     eframe::egui::ComboBox::from_id_salt("hsl-channel")
@@ -323,7 +323,7 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
                     changed |= slider(ui, "Saturation", &mut p.hsl[channel].sat, -1.0, 1.0);
                     changed |= slider(ui, "Luminance", &mut p.hsl[channel].luma, -1.0, 1.0);
                 });
-                ui.collapsing("Colour grading", |ui| {
+                ui.collapsing("Color grading", |ui| {
                     ui.label(RichText::new("Shadows").small().color(fg_weak()));
                     for (i, label) in ["Red", "Green", "Blue"].iter().enumerate() {
                         changed |= slider(ui, label, &mut p.split_shadow[i], -0.4, 0.4);

@@ -93,7 +93,7 @@ pub fn decode(json: &str) -> Result<Vec<Palette>, String> {
         }
         Value::Array(_) => parse_palettes(&value)?,
         _ => {
-            return Err("Expected a palette, a palette library, or an array of hex colours".into());
+            return Err("Expected a palette, a palette library, or an array of hex colors".into());
         }
     };
     validate(&palettes)?;
@@ -135,7 +135,7 @@ fn parse_colors(value: &Value, name: &str) -> Result<Vec<Rgba>, String> {
         .ok_or_else(|| format!("Palette {name:?}: colors must be an array"))?;
     if colors.len() > MAX_COLORS_PER_PALETTE {
         return Err(format!(
-            "Palette {name:?} exceeds {MAX_COLORS_PER_PALETTE} colours"
+            "Palette {name:?} exceeds {MAX_COLORS_PER_PALETTE} colors"
         ));
     }
     colors
@@ -155,7 +155,7 @@ fn parse_colors(value: &Value, name: &str) -> Result<Vec<Rgba>, String> {
             };
             color.ok_or_else(|| {
                 format!(
-                    "Palette {name:?}, colour {}: use #RRGGBB or #RRGGBBAA",
+                    "Palette {name:?}, color {}: use #RRGGBB or #RRGGBBAA",
                     index + 1
                 )
             })
@@ -188,7 +188,7 @@ fn validate(palettes: &[Palette]) -> Result<(), String> {
         validate_name(&palette.name)?;
         if palette.colors.len() > MAX_COLORS_PER_PALETTE {
             return Err(format!(
-                "Palette {:?} exceeds {MAX_COLORS_PER_PALETTE} colours",
+                "Palette {:?} exceeds {MAX_COLORS_PER_PALETTE} colors",
                 palette.name
             ));
         }
@@ -196,7 +196,7 @@ fn validate(palettes: &[Palette]) -> Result<(), String> {
     }
     if total > MAX_TOTAL_COLORS {
         return Err(format!(
-            "A library can contain at most {MAX_TOTAL_COLORS} colours"
+            "A library can contain at most {MAX_TOTAL_COLORS} colors"
         ));
     }
     Ok(())
@@ -257,7 +257,7 @@ pub fn merge(existing: &mut Vec<Palette>, mut incoming: Vec<Palette>) -> Result<
         .sum();
     if total > MAX_TOTAL_COLORS {
         return Err(format!(
-            "A library can contain at most {MAX_TOTAL_COLORS} colours"
+            "A library can contain at most {MAX_TOTAL_COLORS} colors"
         ));
     }
     unique_names(&mut incoming, existing);

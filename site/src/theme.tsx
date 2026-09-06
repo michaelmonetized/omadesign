@@ -1,33 +1,45 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
-export type Flavour = "mocha" | "latte";
-
-const ThemeCtx = createContext<{ flavour: Flavour; setFlavour: (f: Flavour) => void }>({
-  flavour: "mocha",
-  setFlavour: () => {},
+type ThemeName = "mocha" | "latte";
+const ThemeContext = createContext<{
+  theme: ThemeName;
+  setTheme: (value: ThemeName) => void;
+}>({
+  theme: "mocha",
+  setTheme: () => {},
 });
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [flavour, setFlavourState] = useState<Flavour>("mocha");
-
+  const [theme, setValue] = useState<ThemeName>("mocha");
   useEffect(() => {
-    const saved = window.localStorage.getItem("omadesign-flavour");
-    if (saved === "latte" || saved === "mocha") setFlavourState(saved);
+    try {
+      const saved =
+        localStorage.getItem("omadesign-theme") ??
+        localStorage.getItem("omadesign-flavour");
+      if (saved === "mocha" || saved === "latte") setValue(saved);
+    } catch {
+      /* Theme switching also works when browser storage is unavailable. */
+    }
   }, []);
-
-  useEffect(() => {
-    const root = document.documentElement;
-    root.classList.remove("mocha", "latte", "dark");
-    root.classList.add(flavour);
-    if (flavour === "mocha") root.classList.add("dark");
-    window.localStorage.setItem("omadesign-flavour", flavour);
-  }, [flavour]);
-
-  const setFlavour = (f: Flavour) => setFlavourState(f);
-
-  return <ThemeCtx.Provider value={{ flavour, setFlavour }}>{children}</ThemeCtx.Provider>;
+  function setTheme(value: ThemeName) {
+    setValue(value);
+    try {
+      localStorage.setItem("omadesign-theme", value);
+    } catch {
+      /* Keep the choice for this visit. */
+    }
+  }
+  return (
+    <ThemeContext.Provider value={{ theme, setTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
 }
 
-export function useFlavour() {
-  return useContext(ThemeCtx);
-}
+export const useTheme = () => useContext(ThemeContext);

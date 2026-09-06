@@ -218,7 +218,7 @@ pub fn retouch_hint(ui: &mut Ui, studio: &mut Studio) {
     });
     if studio.tool == Tool::Heal {
         ui.label(
-            RichText::new("Clean texture, blended into local colour.")
+            RichText::new("Clean texture, blended into local color.")
                 .small()
                 .color(fg_weak()),
         );

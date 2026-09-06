@@ -147,23 +147,23 @@ impl Tool {
                 "Click to place type and type into it. Character studio: font, size, OpenType. Esc finishes."
             }
             Tool::Gradient => "Drag across a selected shape to set a linear fill.",
-            Tool::Eyedropper => "Click anywhere on the canvas to sample fill colour.",
+            Tool::Eyedropper => "Click anywhere on the canvas to sample fill color.",
             Tool::Trace => {
-                "Click to trace the active pixel layer into vectors. Colours and smoothness live in Trace."
+                "Click to trace the active pixel layer into vectors. Colors and smoothness live in Trace."
             }
             Tool::Brush => "Paint on the active pixel layer. [ ] size · Shift+[ ] hardness.",
             Tool::Eraser => "Erase on the active pixel layer.",
             Tool::Fill => "Click to flood-fill. Tolerance lives in Brush.",
             Tool::Clone => "Alt-click sets the source, then paint to clone.",
             Tool::Heal => {
-                "Alt-click clean texture, then paint to blend it into the surrounding colour."
+                "Alt-click clean texture, then paint to blend it into the surrounding color."
             }
             Tool::Smudge => "Drag to smear pixels along the stroke.",
             Tool::Crop => "Drag a crop · release or Enter applies · Esc cancels the current crop.",
             Tool::Marquee => "Drag a rectangular selection on the pixel layer.",
             Tool::EllipseMarquee => "Drag an elliptical selection.",
             Tool::Lasso => "Draw a freehand selection.",
-            Tool::Wand => "Click to select similar colour.",
+            Tool::Wand => "Click to select similar color.",
             Tool::Hand => "Drag to pan. Space does this from any tool.",
             Tool::Zoom => {
                 "Drag a box · click in · Alt-click out · Ctrl-click artboard · Ctrl+Shift-click selection or all · pinch or scroll to zoom"
@@ -585,7 +585,7 @@ pub fn shortcut_groups() -> &'static [(&'static str, &'static [ShortcutRow])] {
             ],
         ),
         (
-            "Colour / brush",
+            "Color / brush",
             &[
                 ShortcutRow {
                     action: "Swap fill/stroke",

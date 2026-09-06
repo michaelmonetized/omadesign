@@ -12,3 +12,6 @@ site/src/routeTree.gen.ts
 atelier-demo-export.png
 atelier-export.svg
 omadesign-demo-export.png
+
+site/.pages
+site/.pages-build

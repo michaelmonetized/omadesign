@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+<defs>
+</defs>
+<g opacity="1.000" style="mix-blend-mode:normal">
+  <rect id="oma-30" x="0.000" y="0.000" width="1600.000" height="1000.000" fill="#161923" opacity="1.000"/>
+</g>
+<g opacity="1.000" style="mix-blend-mode:normal">
+  <rect id="oma-31" x="112.000" y="108.000" width="208.000" height="3.000" fill="#EBAF62" opacity="1.000"/>
+  <ellipse id="oma-32" cx="1176.000" cy="490.000" rx="274.560" ry="274.560" fill="rgba(0,0,0,0.000)" stroke="#EBAF62" stroke-width="9.98" stroke-linecap="round" stroke-linejoin="round" opacity="1.000"/>
+  <ellipse id="oma-33" cx="1176.000" cy="490.000" rx="238.992" ry="238.992" fill="rgba(0,0,0,0.000)" stroke="#AA8DD8" stroke-width="9.98" stroke-linecap="round" stroke-linejoin="round" opacity="1.000"/>
+  <ellipse id="oma-34" cx="1176.000" cy="490.000" rx="203.424" ry="203.424" fill="rgba(0,0,0,0.000)" stroke="#EBAF62" stroke-width="9.98" stroke-linecap="round" stroke-linejoin="round" opacity="1.000"/>
+  <ellipse id="oma-35" cx="1176.000" cy="490.000" rx="167.856" ry="167.856" fill="rgba(0,0,0,0.000)" stroke="#AA8DD8" stroke-width="9.98" stroke-linecap="round" stroke-linejoin="round" opacity="1.000"/>
+  <ellipse id="oma-36" cx="1176.000" cy="490.000" rx="132.288" ry="132.288" fill="rgba(0,0,0,0.000)" stroke="#EBAF62" stroke-width="9.98" stroke-linecap="round" stroke-linejoin="round" opacity="1.000"/>
+  <ellipse id="oma-37" cx="1176.000" cy="490.000" rx="96.720" ry="96.720" fill="rgba(0,0,0,0.000)" stroke="#AA8DD8" stroke-width="9.98" stroke-linecap="round" stroke-linejoin="round" opacity="1.000"/>
+  <ellipse id="oma-38" cx="1176.000" cy="490.000" rx="61.152" ry="61.152" fill="rgba(0,0,0,0.000)" stroke="#EBAF62" stroke-width="9.98" stroke-linecap="round" stroke-linejoin="round" opacity="1.000"/>
+  <ellipse id="oma-39" cx="1319.520" cy="309.040" rx="49.920" ry="49.920" fill="#161923" opacity="1.000"/>
+  <ellipse id="oma-40" cx="1319.520" cy="309.040" rx="32.448" ry="32.448" fill="#EBAF62" opacity="1.000"/>
+</g>
+<g opacity="1.000" style="mix-blend-mode:normal">
+  <text id="oma-41" x="110.770" y="65.869" font-family="Liberation Sans" font-size="15.00" fill="#F6F0E2" opacity="1.000">LISTENING ROOM / VOL. 01</text>
+  <text id="oma-42" x="108.763" y="309.438" font-family="Liberation Sans Bold" font-size="130.00" fill="#F6F0E2" opacity="1.000">AFTER
+HOURS</text>
+  <text id="oma-43" x="110.692" y="658.840" font-family="Liberation Sans" font-size="26.00" fill="#F6F0E2" opacity="1.000">Good records. Low lights. Open ears.</text>
+  <text id="oma-44" x="110.975" y="949.058" font-family="Liberation Sans" font-size="12.50" fill="#F6F0E2" opacity="1.000">FRIDAY / 20:00 / ALL WELCOME</text>
+</g>
+</svg>
