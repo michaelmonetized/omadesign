@@ -41,15 +41,20 @@ Tarball by hand:
 
 Press **F1** for the full key list.
 
+The bottom **Shortcut HUD** follows your tool and held modifiers: letter keys
+when idle, command keys with Ctrl/Shift/Alt, and contextual drawing gestures.
+**Ctrl+/** toggles it. Hover **+ more** for hints that do not fit the window.
+
 ## Design
 
-- Move, scale (8 handles), rotate (the handle above the box)
+- Free transform (`Ctrl+T`): move, scale (8 handles), rotate (the handle above the box)
 - Node tool: drag points and Bézier handles
 - Pen: click a corner, click-drag a smooth point, Enter finishes, click the first point to close. A twitch under 3px stays a corner.
 - Type: click, type on the canvas, Character studio (font, size, tracking, leading, OpenType)
 - Zoom: drag a box to that area; click zooms in, Alt-click out
 - Fill / stroke, Pathfinder and Divide, stroke outlines, Select Same, align, layers, copy/paste
 - Drag-out guides, ruler origins and units, smart alignment and equal-spacing snaps
+- Convert artwork to editable object guides; release it back with its original style
 - Vector distort, skew, perspective, and a nine-handle warp mesh
 - File → Place, drop files on the canvas, Trace (`U`) turns a pixel layer into paths
 
@@ -59,7 +64,39 @@ Brush, eraser, clone, healing, fill, marquees, wand, and editable layer masks. P
 
 ## Motion
 
-Timeline under the canvas. Rest pose stays in Design. Keys are X, Y, rotation, scale, opacity. Export animated SVG or Lottie JSON. Import a shape-layer Lottie.
+13 editable presets: draw stroke, pop in, slam, shake, fill up, four slide directions,
+fly, zoom, buzz, and fade in. Set duration, delay, stagger and intensity, then adjust
+the ordinary keys in the timeline. Export animated SVG or Lottie JSON; Lottie
+reports unsupported pixels, masks and effects instead of dropping them.
+
+## Templates
+
+**Templates · 52** on the welcome screen, or **File → Template library**. Original
+editable vector designs fit all 20 document presets and custom dimensions. Search,
+filter, preview, and make one yours. All 52 ship locally; the
+[weekly drop plan](docs/template-drops.md) gives each one a suggested adoption idea.
+
+## Palettes and brand libraries
+
+The right sidebar's **Inspect / Palettes / Brand** tabs keep reusable colours and
+artwork close to the canvas. Create named **Personal** or **Project** palettes,
+collect colours from your selection, search names or hex values, and apply a
+swatch to Fill or Stroke. Save, import, or export one palette or a whole collection;
+imports preserve existing palettes and transparency.
+
+Load or create a **Brand** bank, add logos and imagery, then drag a tile onto the
+canvas or double-click to centre it on the selected artboard. Searchable folders,
+background previews and automatic refresh keep the collection current. Placement
+supports Undo.
+
+**Brand → Typography** keeps TTF and OTF fonts with the project. Add fonts, name
+roles such as Heading and Body, then Apply to selected text or choose a role in
+Character's **Project fonts** list. Font files are copied locally; no system font
+installation is needed. Text stays editable when the project moves.
+
+Project kits travel as `.omacolors`, `.omatype` and the `.omabrand/` folder. Start with the
+[Fieldwork example](examples/fieldwork), or follow the
+[palette and brand library guide](docs/MANUAL.md#palettes-and-brand-libraries).
 
 ## Docs
 

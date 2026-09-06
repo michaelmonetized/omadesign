@@ -261,8 +261,10 @@ impl Studio {
     }
 
     pub fn delete_swap_file(&mut self, path: &std::path::Path) {
-        let _ = std::fs::remove_file(path);
-        self.status = "discarded recovery".into();
+        self.status = match crate::project::delete_swap_at(path) {
+            Ok(()) => "discarded recovery".into(),
+            Err(error) => format!("Could not discard recovery: {error}"),
+        };
     }
 
     pub fn execute_nav(&mut self, ctx: &egui::Context, save: bool) {

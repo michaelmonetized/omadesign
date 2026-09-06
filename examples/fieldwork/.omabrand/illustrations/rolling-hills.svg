@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="260" viewBox="0 0 360 260">
+  <title>Fieldwork / the long way home</title>
+  <path d="M 0 0 H 360 V 260 H 0 Z" fill="#F4EDDF"/>
+  <path d="M 311 65 C 311 81.0163 298.016 94 282 94 C 265.984 94 253 81.0163 253 65 C 253 48.9837 265.984 36 282 36 C 298.016 36 311 48.9837 311 65 Z" fill="#D5AE55"/>
+  <path d="M 0 149 C 60 105 111 94 169 133 C 233 176 291 153 360 112 V 260 H 0 Z" fill="#BDCAAB"/>
+  <path d="M 0 194 C 84 125 140 137 214 187 C 267 222 323 201 360 178 V 260 H 0 Z" fill="#96A58B"/>
+  <path d="M 0 231 C 77 205 156 213 211 234 C 267 255 310 243 360 219 V 260 H 0 Z" fill="#253A35"/>
+  <path d="M 109 260 C 93 234 124 214 161 205 C 203 195 231 184 218 170 C 205 157 174 152 160 139" fill="none" stroke="#F4EDDF" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 32 75 H 93" fill="none" stroke="#C6B59E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 32 87 H 70" fill="none" stroke="#C6B59E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

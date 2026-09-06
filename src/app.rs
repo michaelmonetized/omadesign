@@ -1,15 +1,21 @@
 //! Studio: document + tool state. Mutations go through commands.
 
+mod brand_assets;
 pub mod deform;
 mod guides;
+mod key_hints;
+pub mod libraries;
 mod masking;
+mod motion_presets;
 mod photo_session;
 mod recovery;
 pub(crate) mod selection;
 mod shortcuts;
 mod snapping;
 mod tabs;
+mod typography;
 
+pub use key_hints::{KeyHint, KeyHints};
 pub use photo_session::PhotoSession;
 use recovery::RecoveryJob;
 use tabs::TabState;
@@ -86,6 +92,7 @@ pub struct ObjSnap {
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum WelcomePage {
     New,
+    Templates,
     Recents,
     Recovered,
 }
@@ -267,6 +274,9 @@ pub struct Studio {
     pub export_scale: u32,
     pub show_welcome: bool,
     pub show_shortcuts: bool,
+    pub show_key_hud: bool,
+    pub show_templates: bool,
+    pub motion_preset_options: crate::motion_presets::Options,
     pub show_rulers: bool,
     pub show_grid: bool,
     pub text_px: f32,
@@ -291,9 +301,7 @@ pub struct Studio {
     pub google_catalog: Vec<crate::google_fonts::GoogleFont>,
     pub google_variant: String,
     pub google_catalog_loaded: bool,
-    pub palettes: Vec<crate::palette::Palette>,
-    pub palette_idx: usize,
-    pub palette_name_buf: String,
+    pub libraries: libraries::Libraries,
     // Welcome / new document options
     pub new_doc_group: String,
     pub new_doc_transparent: bool,
@@ -421,6 +429,9 @@ impl Studio {
             export_scale: 1,
             show_welcome: true,
             show_shortcuts: false,
+            show_key_hud: true,
+            show_templates: false,
+            motion_preset_options: crate::motion_presets::Options::default(),
             show_rulers: true,
             show_grid: false,
             text_px: 72.0,
@@ -447,9 +458,7 @@ impl Studio {
             google_catalog: Vec::new(),
             google_variant: "regular".into(),
             google_catalog_loaded: false,
-            palettes: crate::palette::load(),
-            palette_idx: 0,
-            palette_name_buf: String::new(),
+            libraries: libraries::Libraries::default(),
             new_doc_group: "All".into(),
             new_doc_transparent: false,
             new_doc_bleed: false,
@@ -506,9 +515,6 @@ impl Studio {
         };
         s.ensure_tabs();
         s.doc.grid.visible = false;
-        if !s.palettes.is_empty() {
-            s.palette_name_buf = s.palettes[0].name.clone();
-        }
         // Hint the max-font default in the status line so it is discoverable
         // before any type is placed. The Character studio also shows it.
         if let Some(fam) = crate::text::preferred_default_family_name() {
@@ -690,6 +696,9 @@ impl Studio {
     }
 
     pub fn remember_font(&mut self, path: &str) {
+        if path.starts_with("omatype:") {
+            return;
+        }
         crate::project::push_font_recent(path);
         self.font_recents = crate::project::load_font_recents();
     }
@@ -1039,6 +1048,12 @@ impl Studio {
             after.set_key(id, Prop::Scale, t, pose.scale, ease);
             if let Some(op) = pose.opacity {
                 after.set_key(id, Prop::Opacity, t, op, ease);
+            }
+            if let Some(reveal) = pose.stroke_reveal {
+                after.set_key(id, Prop::StrokeReveal, t, reveal, ease);
+            }
+            if let Some(reveal) = pose.fill_reveal {
+                after.set_key(id, Prop::FillReveal, t, reveal, ease);
             }
         }
         self.commit_motion(after);
@@ -1725,6 +1740,37 @@ impl Studio {
         }
     }
 
+    pub fn free_transform(&mut self) {
+        if self.selection.is_empty() {
+            self.status = "Select objects to transform".into();
+            return;
+        }
+        self.commit_type_edit();
+        self.set_tool(Tool::Select);
+        self.artboard_sel.clear();
+        self.status =
+            "Free transform · drag to move · handles scale · top grip rotates · Shift constrains"
+                .into();
+    }
+
+    pub fn use_template(&mut self, id: &str, width: f32, height: f32, dpi: f32) {
+        match crate::templates::build(id, width, height, dpi) {
+            Ok(document) => {
+                self.ensure_tabs();
+                self.open_document(document, None);
+                self.persona = Persona::Design;
+                self.set_tool(Tool::Select);
+                self.dirty = true;
+                self.show_templates = false;
+                self.show_welcome = false;
+                self.need_fit = true;
+                self.status = "Your template is ready · every shape and word is editable".into();
+                self.mark();
+            }
+            Err(error) => self.status = error,
+        }
+    }
+
     pub fn finish_create(&mut self, kind: CreateKind, start: Pt, cur: Pt) {
         let Some(li) = self.vector_target() else {
             return;
@@ -1895,7 +1941,11 @@ impl Studio {
                 continue;
             };
             for s in shapes {
-                if skip == Some(s.id) {
+                if skip == Some(s.id)
+                    || !s.visible
+                    || s.locked
+                    || (s.guide && !self.doc.ruler.guides_visible)
+                {
                     continue;
                 }
                 let Geom::Path {
@@ -2172,6 +2222,10 @@ impl Studio {
             .iter()
             .filter_map(|(li, id)| self.doc.find_shape(*li, *id).cloned())
             .collect();
+        if shapes.iter().any(|shape| shape.guide) && shapes.iter().any(|shape| !shape.guide) {
+            self.status = "Combine needs only artwork or only guides".into();
+            return;
+        }
         let refs: Vec<&Shape> = shapes.iter().collect();
         let Some(geom) = crate::compound::combine_into_poly(&refs) else {
             self.status = "combine produced nothing".into();
@@ -2179,19 +2233,67 @@ impl Studio {
         };
         let mut combined = shapes[0].clone();
         combined.id = crate::document::next_id();
+        combined.style.fill = Self::compound_fill(&shapes[0], &geom, 0.0);
         combined.geom = geom;
+        combined.rotation = 0.0;
+        combined.corners = [0.0; 4];
         combined.name = "Compound".into();
-        self.commit(Cmd::RemoveShapes {
+        let id = combined.id;
+        let source = self.doc.layers[layer].kind.shapes().unwrap();
+        let ids: HashSet<_> = shapes.iter().map(|shape| shape.id).collect();
+        let insert = source
+            .iter()
+            .position(|shape| ids.contains(&shape.id))
+            .unwrap();
+        let mut order: Vec<_> = source.iter().map(|shape| shape.id).collect();
+        let mut commands = vec![Cmd::SetMotion {
+            before: self.doc.motion.clone(),
+            after: self.doc.motion.clone(),
+        }];
+        for shape in &shapes {
+            let from = order.iter().position(|id| *id == shape.id).unwrap();
+            let to = order.len() - 1;
+            commands.push(Cmd::ReorderShape { layer, from, to });
+            order.remove(from);
+            order.push(shape.id);
+        }
+        commands.push(Cmd::RemoveShapes {
             layer,
             shapes: shapes.clone(),
         });
-        let id = combined.id;
-        self.commit(Cmd::AddShape {
+        commands.push(Cmd::AddShape {
             layer,
             shape: combined,
         });
+        commands.push(Cmd::ReorderShape {
+            layer,
+            from: order.len() - shapes.len(),
+            to: insert,
+        });
+        self.commit(Cmd::Batch(commands));
         self.selection = vec![(layer, id)];
         self.status = "combined into compound (even-odd)".into();
+    }
+
+    // Compound operations change bounds and rotation pivots. Linear endpoints
+    // are stored relative to those bounds, so carry their world positions across.
+    fn compound_fill(source: &Shape, geometry: &Geom, rotation: f32) -> Fill {
+        let mut fill = source.style.fill.clone();
+        if let Fill::Linear { from, to, .. } = &mut fill {
+            let before = source.geom.bbox();
+            let after = geometry.bbox();
+            for endpoint in [from, to] {
+                let point = (before.min
+                    + Pt::new(endpoint[0] * before.width(), endpoint[1] * before.height()))
+                .rotate_about(before.center(), source.rotation)
+                .rotate_about(after.center(), -rotation);
+                *endpoint = [
+                    (point.x - after.min.x) / after.width().max(1e-6),
+                    (point.y - after.min.y) / after.height().max(1e-6),
+                ];
+            }
+        }
+        fill
     }
 
     pub fn release_compound(&mut self) {
@@ -2210,22 +2312,50 @@ impl Studio {
             self.status = "not a compound (needs Poly with >1 contour)".into();
             return;
         };
-        // Remove compound, add parts as separate shapes
-        self.commit(Cmd::RemoveShapes {
-            layer: li,
-            shapes: vec![shape],
-        });
-        let mut new_ids = Vec::new();
-        for g in parts {
-            let mut s = Shape::new(g, self.style.clone());
-            s.name = "Part".into();
-            let nid = s.id;
-            new_ids.push((li, nid));
-            self.commit(Cmd::AddShape {
+        let source_shapes = self.doc.layers[li].kind.shapes().unwrap();
+        let source_index = source_shapes.iter().position(|part| part.id == id).unwrap();
+        let source_len = source_shapes.len();
+        let center = shape.geom.bbox().center();
+        // Move the source to the end first so reversing this batch also restores
+        // its exact stacking position after RestoreShapes appends it.
+        let mut commands = vec![
+            Cmd::SetMotion {
+                before: self.doc.motion.clone(),
+                after: self.doc.motion.clone(),
+            },
+            Cmd::ReorderShape {
                 layer: li,
-                shape: s,
+                from: source_index,
+                to: source_len - 1,
+            },
+            Cmd::RemoveShapes {
+                layer: li,
+                shapes: vec![shape.clone()],
+            },
+        ];
+        let mut new_ids = Vec::new();
+        for (index, mut geometry) in parts.into_iter().enumerate() {
+            // Each part rotates around its own centre. Move that centre to its
+            // original rotated location before retaining the source rotation.
+            let part_center = geometry.bbox().center();
+            geometry.translate(part_center.rotate_about(center, shape.rotation) - part_center);
+            let mut part = shape.clone();
+            part.id = crate::document::next_id();
+            part.name = format!("{} · part {}", shape.name, index + 1);
+            part.style.fill = Self::compound_fill(&shape, &geometry, part.rotation);
+            part.geom = geometry;
+            new_ids.push((li, part.id));
+            commands.push(Cmd::AddShape {
+                layer: li,
+                shape: part,
+            });
+            commands.push(Cmd::ReorderShape {
+                layer: li,
+                from: source_len - 1 + index,
+                to: source_index + index,
             });
         }
+        self.commit(Cmd::Batch(commands));
         self.selection = new_ids;
         self.status = "compound released".into();
     }
@@ -3245,10 +3375,12 @@ impl eframe::App for Studio {
         let ctx = ui.ctx().clone();
         if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
             self.commit_type_edit();
-            if self.has_unsaved_changes() {
-                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-                self.pending_nav = Some(PendingNav::Quit);
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            if !self.libraries.close_requested {
+                self.libraries.close_error.clear();
             }
+            self.libraries.close_requested = true;
+            self.pending_nav = None;
         }
         crate::ui::run(ui, self);
     }
@@ -3766,5 +3898,70 @@ mod tests {
         assert!(traced >= 1);
         s.undo();
         s.undo();
+    }
+}
+
+#[cfg(test)]
+mod template_lifecycle_tests {
+    use super::*;
+
+    #[test]
+    fn template_creation_preserves_unsaved_artwork_live_type_and_undo_in_its_tab() {
+        let mut studio = Studio::new();
+        studio.show_welcome = false;
+        studio.doc.name = "Work in progress".into();
+        let original_path = PathBuf::from("/tmp/omadesign-template-lifecycle.oma");
+        studio.path = Some(original_path.clone());
+        studio.finish_create(CreateKind::Rect, Pt::new(20.0, 30.0), Pt::new(80.0, 90.0));
+        let artwork = studio.primary().unwrap();
+        let original = studio.doc.find_shape(artwork.0, artwork.1).unwrap().clone();
+        studio.place_text(Pt::new(60.0, 120.0));
+        studio.type_insert("Keep this unfinished idea");
+        let text = studio.primary().unwrap();
+        assert!(studio.type_edit.is_some());
+        let old_history = studio.history.len();
+        studio.show_templates = true;
+
+        studio.use_template("missing-template", 640.0, 480.0, 144.0);
+        assert_eq!(studio.tab_count(), 1);
+        assert_eq!(studio.doc.name, "Work in progress");
+        assert_eq!(studio.history.len(), old_history);
+        assert!(studio.type_edit.is_some() && studio.show_templates && studio.dirty);
+
+        studio.use_template(crate::templates::CATALOG[0].id, 640.0, 480.0, 144.0);
+        assert_eq!(studio.tab_count(), 2);
+        assert_eq!(studio.tab_title(0), ("Work in progress", true));
+        assert_eq!(
+            (studio.doc.width, studio.doc.height, studio.doc.dpi),
+            (640.0, 480.0, 144.0)
+        );
+        assert!(studio.path.is_none() && studio.dirty && studio.need_fit);
+        assert!(!studio.show_welcome && !studio.show_templates);
+        assert_eq!(studio.persona, Persona::Design);
+        assert_eq!(studio.tool, Tool::Select);
+        assert!(studio.type_edit.is_none());
+
+        studio.switch_tab(0);
+        assert_eq!(studio.path, Some(original_path));
+        assert_eq!(studio.doc.find_shape(artwork.0, artwork.1), Some(&original));
+        let Geom::Text(run) = &studio.doc.find_shape(text.0, text.1).unwrap().geom else {
+            panic!("live copy must remain editable text")
+        };
+        assert_eq!(run.content, "Keep this unfinished idea");
+        assert!(studio.dirty && studio.type_edit.is_none());
+        assert!(
+            studio.history.len() > old_history,
+            "tab handoff commits the text edit"
+        );
+        studio.undo();
+        assert_eq!(studio.doc.find_shape(artwork.0, artwork.1), Some(&original));
+        assert_eq!(
+            studio.history.len(),
+            old_history,
+            "the original tab keeps its own undo history"
+        );
+        studio.switch_tab(1);
+        assert_eq!((studio.doc.width, studio.doc.height), (640.0, 480.0));
+        assert!(studio.dirty, "the new template still needs its first save");
     }
 }

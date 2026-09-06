@@ -42,6 +42,35 @@ fn main() -> eframe::Result {
             size.unwrap()
         })
         .unwrap_or_else(|| egui::vec2(1600.0, 1000.0));
+    let shot_modifiers = if let Some(index) = args.iter().position(|arg| arg == "--shot-modifiers")
+    {
+        let mut modifiers = egui::Modifiers::NONE;
+        let valid = args.get(index + 1).is_some_and(|value| {
+            value.split('+').all(|part| match part {
+                "ctrl" => {
+                    modifiers.ctrl = true;
+                    modifiers.command = true;
+                    true
+                }
+                "shift" => {
+                    modifiers.shift = true;
+                    true
+                }
+                "alt" => {
+                    modifiers.alt = true;
+                    true
+                }
+                _ => false,
+            })
+        });
+        if shot.is_none() || !valid {
+            eprintln!("use --shot SCENE --shot-modifiers ctrl, shift, alt, or a + combination");
+            std::process::exit(2);
+        }
+        modifiers
+    } else {
+        egui::Modifiers::NONE
+    };
 
     let mut options = eframe::NativeOptions {
         viewport: ViewportBuilder::default()
@@ -81,6 +110,7 @@ fn main() -> eframe::Result {
                     frame: 0,
                     requested: false,
                     size: shot_size,
+                    modifiers: shot_modifiers,
                 }))
             }),
         );
@@ -129,6 +159,7 @@ struct ShotRunner {
     frame: u32,
     requested: bool,
     size: egui::Vec2,
+    modifiers: egui::Modifiers,
 }
 
 impl eframe::App for ShotRunner {
@@ -139,6 +170,10 @@ impl eframe::App for ShotRunner {
             .retain(|event| matches!(event, egui::Event::Screenshot { .. }));
         input.hovered_files.clear();
         input.dropped_files.clear();
+        input
+            .events
+            .push(egui::Event::ModifiersChanged(self.modifiers));
+        input.focused = true;
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -150,7 +185,11 @@ impl eframe::App for ShotRunner {
         }
         let size = ctx.viewport_rect().size();
         let sized = (size - self.size).abs().max_elem() <= 1.0;
-        if !self.requested && self.frame >= 28 && sized {
+        if !self.requested
+            && self.frame >= 28
+            && sized
+            && omadesign::ui::scene_ready(&ctx, &self.studio)
+        {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
             self.requested = true;
         }

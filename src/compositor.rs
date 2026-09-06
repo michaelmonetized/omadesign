@@ -371,7 +371,7 @@ fn draw_content(
     match &layer.kind {
         LayerKind::Vector { shapes } => {
             for s in shapes {
-                if !s.visible {
+                if !s.visible || s.guide {
                     continue;
                 }
                 let pose = pose_of(s.id, motion_t, doc, overrides);
@@ -379,6 +379,7 @@ fn draw_content(
             }
             if let Some(p) = preview
                 && p.visible
+                && !p.guide
             {
                 let pose = pose_of(p.id, motion_t, doc, overrides);
                 draw_shape(pm, p, t, opacity * 0.85, blend, pose);
@@ -443,7 +444,7 @@ fn draw_shape(
 ) {
     if shape.filters.active() {
         let pad = crate::filter::svg_pad(&shape.filters).ceil().max(8.0);
-        let b = shape.world_bbox().inflate(pad);
+        let b = pose.map_bounds(shape.world_bbox()).inflate(pad);
         let tw = b.width().ceil().max(1.0) as u32;
         let th = b.height().ceil().max(1.0) as u32;
         if let Some(mut temp) = Pixmap::new(tw, th) {
@@ -494,19 +495,54 @@ fn draw_shape_inner(
     } else {
         t.pre_concat(pose.to_skia(shape.world_bbox().center()))
     };
-    if !shape.style.fill.is_none() && shape.geom.is_closed() {
+    let fill_reveal = pose.fill_reveal.unwrap_or(1.0).clamp(0.0, 1.0);
+    if !shape.style.fill.is_none() && shape.geom.is_closed() && fill_reveal > 0.0 {
         let mut paint = fill_paint(&shape.style.fill, &shape.geom);
         paint.blend_mode = blend;
+        if shape.rotation.abs() > 1e-5 {
+            let center = shape.geom.bbox().center();
+            paint.shader.transform(Transform::from_rotate_at(
+                shape.rotation.to_degrees(),
+                center.x,
+                center.y,
+            ));
+        }
         paint.shader.apply_opacity(op);
         let rule = match &shape.geom {
             crate::geom::Geom::Poly { winding: true, .. } => FillRule::Winding,
             _ => FillRule::EvenOdd,
         };
-        pm.fill_path(&path, &paint, rule, xf, None);
+        if fill_reveal < 1.0 {
+            let bounds = shape.world_bbox();
+            if let Some(rect) = tiny_skia::Rect::from_xywh(
+                bounds.min.x,
+                bounds.max.y - bounds.height() * fill_reveal,
+                bounds.width().max(1e-5),
+                (bounds.height() * fill_reveal).max(1e-5),
+            ) && let Some(mut clip) = tiny_skia::Mask::new(pm.width(), pm.height())
+            {
+                clip.fill_path(&PathBuilder::from_rect(rect), FillRule::Winding, true, xf);
+                pm.fill_path(&path, &paint, rule, xf, Some(&clip));
+            }
+        } else {
+            pm.fill_path(&path, &paint, rule, xf, None);
+        }
     }
+    let stroke_reveal = pose.stroke_reveal.unwrap_or(1.0).clamp(0.0, 1.0);
     if let Some(stroke) = &shape.style.stroke
         && stroke.width > 0.0
+        && stroke_reveal > 0.0
     {
+        let trimmed;
+        let stroke_path = if stroke_reveal < 1.0 {
+            trimmed = crate::motion::trimmed_stroke_path(shape, stroke_reveal);
+            let Some(path) = trimmed.as_ref() else {
+                return;
+            };
+            path
+        } else {
+            &path
+        };
         let mut paint = Paint {
             anti_alias: true,
             blend_mode: blend,
@@ -524,7 +560,7 @@ fn draw_shape_inner(
         if let Some((on, off)) = stroke.dash {
             sk.dash = StrokeDash::new(vec![on, off], 0.0);
         }
-        pm.stroke_path(&path, &paint, &sk, xf, None);
+        pm.stroke_path(stroke_path, &paint, &sk, xf, None);
     }
 }
 
@@ -583,7 +619,7 @@ fn fill_paint<'a>(fill: &Fill, geom: &Geom) -> Paint<'a> {
     paint
 }
 
-fn is_paper_raster(layer: &Layer) -> bool {
+pub(crate) fn is_paper_raster(layer: &Layer) -> bool {
     if layer.mask.is_some() {
         return false;
     }
@@ -706,6 +742,85 @@ fn draw_checker(pm: &mut Pixmap, origin: Pt, size: Pt) {
 mod tests {
     use super::*;
     use crate::document::{Cmd, Document, Shape, Style, apply};
+
+    #[test]
+    fn reveal_channels_clip_fill_and_trim_stroke_independently_under_motion() {
+        let shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(10.0, 10.0),
+                size: Pt::new(40.0, 40.0),
+                radius: 0.0,
+            },
+            Style {
+                fill: Fill::Solid(Rgba::rgb(255, 0, 0)),
+                stroke: Some(crate::document::Stroke {
+                    color: Rgba::rgb(0, 0, 255),
+                    width: 4.0,
+                    ..Default::default()
+                }),
+            },
+        );
+        let render = |fill, stroke| {
+            let mut pixels = Pixmap::new(80, 80).unwrap();
+            draw_shape(
+                &mut pixels,
+                &shape,
+                Transform::identity(),
+                1.0,
+                tiny_skia::BlendMode::SourceOver,
+                Pose {
+                    dx: 10.0,
+                    dy: 5.0,
+                    fill_reveal: Some(fill),
+                    stroke_reveal: Some(stroke),
+                    ..Pose::identity()
+                },
+            );
+            pixels
+        };
+        let zero = render(0.0, 0.0);
+        assert!(zero.data().iter().all(|byte| *byte == 0));
+        let half_fill = render(0.5, 0.0);
+        assert_eq!(half_fill.pixel(40, 25).unwrap().alpha(), 0);
+        assert_eq!(half_fill.pixel(40, 45).unwrap().red(), 255);
+        let quarter_stroke = render(0.0, 0.25);
+        assert_eq!(quarter_stroke.pixel(40, 15).unwrap().blue(), 255);
+        assert_eq!(quarter_stroke.pixel(40, 55).unwrap().alpha(), 0);
+        let full = render(1.0, 1.0);
+        assert_eq!(full.pixel(40, 25).unwrap().red(), 255);
+        assert_eq!(full.pixel(40, 55).unwrap().blue(), 255);
+    }
+
+    #[test]
+    fn filtered_motion_does_not_clip_travel_to_rest_bounds() {
+        let mut shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(5.0, 5.0),
+                size: Pt::new(20.0, 20.0),
+                radius: 0.0,
+            },
+            Style {
+                fill: Fill::Solid(Rgba::rgb(255, 0, 0)),
+                stroke: None,
+            },
+        );
+        shape.filters.enabled = true;
+        shape.filters.items = vec![crate::filter::Fx::Blur { std: 1.0 }];
+        let mut pixels = Pixmap::new(100, 60).unwrap();
+        draw_shape(
+            &mut pixels,
+            &shape,
+            Transform::identity(),
+            1.0,
+            tiny_skia::BlendMode::SourceOver,
+            Pose {
+                dx: 60.0,
+                ..Pose::identity()
+            },
+        );
+        assert!(pixels.pixel(75, 15).unwrap().alpha() > 200);
+        assert_eq!(pixels.pixel(15, 15).unwrap().alpha(), 0);
+    }
 
     #[test]
     fn checker_clips_large_artboards_without_changing_pattern() {

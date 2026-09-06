@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="260" viewBox="0 0 320 260">
+  <title>Fieldwork / lines of the land</title>
+  <path d="M 0 0 H 320 V 260 H 0 Z" fill="#253A35"/>
+  <path d="M 20 37 C 68 8 86 15 118 36 C 163 65 188 13 223 20 C 257 27 270 50 300 33" fill="none" stroke="#96A58B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 20 60 C 68 31 86 38 118 59 C 163 88 188 36 223 43 C 257 50 270 73 300 56" fill="none" stroke="#F4EDDF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 20 83 C 68 54 86 61 118 82 C 163 111 188 59 223 66 C 257 73 270 96 300 79" fill="none" stroke="#D5AE55" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 20 106 C 68 77 86 84 118 105 C 163 134 188 82 223 89 C 257 96 270 119 300 102" fill="none" stroke="#96A58B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 20 129 C 68 100 86 107 118 128 C 163 157 188 105 223 112 C 257 119 270 142 300 125" fill="none" stroke="#F4EDDF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 20 152 C 68 123 86 130 118 151 C 163 180 188 128 223 135 C 257 142 270 165 300 148" fill="none" stroke="#D5AE55" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 20 175 C 68 146 86 153 118 174 C 163 203 188 151 223 158 C 257 165 270 188 300 171" fill="none" stroke="#96A58B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 20 198 C 68 169 86 176 118 197 C 163 226 188 174 223 181 C 257 188 270 211 300 194" fill="none" stroke="#F4EDDF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 20 221 C 68 192 86 199 118 220 C 163 249 188 197 223 204 C 257 211 270 234 300 217" fill="none" stroke="#D5AE55" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

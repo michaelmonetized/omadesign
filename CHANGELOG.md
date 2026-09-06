@@ -1,5 +1,250 @@
 # Changelog
 
+## 2026-09-05 · Pass 8 — S, as in design.
+
+The extra downstroke on the S closed its upper opening and made it read as a g.
+Removing it restores the square S, with matching stroke weight and spacing.
+The editable logo, SVG, PNG and native construction replay use the correction.
+
+The film now opens with that same complete logo and closes with its animation.
+The separate introductory wordmark has retired. Timing stays at 97 seconds,
+including the 30-second construction scene and five-second ending.
+
+All **271 tests pass**, including the shortcut suite and native logo construction.
+Formatting and Clippy pass with the existing 34 library advisories (46 including
+tests). Visual review confirms the lettering reads deSiGN. The release build is
+reinstalled. The [corrected film](https://github.com/user-attachments/assets/52fb79d2-373d-48cc-966b-3cb65b766937)
+decodes all 2,910 frames; opening and ending frames both match the corrected logo.
+
+## 2026-09-05 · Pass 7 — A mark of our own.
+
+The maze found its letters. The Pen found its manners. Your fonts have a place
+to travel with the project, too.
+
+### A straight answer from Shift
+
+Pen previews now use the same constrained position as the point you place.
+Holding Shift visibly locks the next segment to 0°, 45° or 90°. Quick modifier
+releases keep the click's own state, and handle drags include the final release
+position. Shift, Alt and Ctrl changes also work when the pointer is still.
+
+### The type belongs with the brand
+
+**`.omatype`** describes a named set of font roles. Their files live in
+**`.omabrand/fonts/`**. The Brand panel can load, name, save, filter and share the
+collection, and Character offers the project's fonts alongside ordinary local
+faces. Applying a role changes live, editable type with Undo.
+
+Portable font identities let a copied project find the same face on another
+machine. Loading a project resolves its kit before shaping text; background
+refresh picks up new files without rewriting already-applied font choices.
+Save As, native brand assets and recovery snapshots carry the faces their text
+uses. Failed writes preserve existing artwork. SVG exports use glyph outlines
+for project fonts, while the original document keeps its editable text.
+
+The Brand panel scrolls at compact heights, keeping every role action reachable.
+Secondary typography actions share a small menu beside Add fonts.
+
+### The maze becomes a wordmark
+
+The new logo construction scene rebuilds the supplied `logo-4.oma` idea on a
+1920×1080 black artboard. Six editable Pen paths share a consistent stroke,
+square corners, aligned baselines and balanced spacing. The Omarchy maze keeps
+its green glow; the wordmark gets a shadow and individual animation presets.
+
+The 30-second native editor replay replaces the old star-clone scene. The
+finished mark returns as a full-frame animated ending. The remaining demo
+chapters stay in the film, with a newly extended original soundtrack.
+
+The [finished film](https://github.com/user-attachments/assets/fc19dbe5-5313-4872-b8dc-d433f500b7f1)
+is 97 seconds at 1080p / 30 fps. The new scene runs from 0:13 to 0:43, with the
+logo ending at 1:32. Editable [artwork](media/logo-4-refined.oma),
+[SVG](media/logo-4-refined.svg) and [PNG](media/logo-4-refined.png) are included.
+
+Pass 7 verification: **271 tests passed**, including the shortcut suite, real
+Pen modifier events, fresh-process font moves and recovery, failed-write rollback,
+missing dependencies, archive capacity, SVG glyph export and compact sidebar
+scrolling. The sidebar remains 288 px wide at both QA sizes. Native recordings
+cover construction, styling and animation; the final film decodes all 2,910 frames.
+
+Formatting and Clippy passed without new advisories or suppressions. The existing
+34 library advisories (46 including tests) remain. The release build is installed,
+and the installed executable matches the build byte for byte. Physical keyboard
+and native file-dialog interaction remain part of human QA.
+
+## 2026-09-05 · Pass 6 — Good taste travels.
+
+Your brand can live beside your work now. Copy the folder. Take the colours.
+Bring the little leaf logo. It all travels as ordinary files.
+
+### A proper home for your colours
+
+The right sidebar now has **Inspect / Palettes / Brand** tabs. Palettes has named
+Personal and Project collections, a name-or-hex filter, transparent hex colours,
+Fill and Stroke targets, and colour collection from selected artwork. Rename,
+duplicate, remove, import, and export are all there; the old tucked-away palette
+editor has retired.
+
+Project colours live in **`.omacolors`**, a readable JSON file containing named
+palettes and hex values. Share one palette or the whole collection. Imports keep
+existing colours and resolve name collisions. Older personal palettes still load.
+
+Edits stay in their own draft until Save. Background refresh notices changes on
+disk without overwriting your work, and quitting checks for unsaved collections
+before continuing to the artwork save prompt.
+
+### The brand cupboard, without the cupboard doors
+
+**`.omabrand/`** is a filterable bank of logos, images and reusable `.oma` artwork.
+Nested folders become searchable categories. A small optional `brand.json` gives
+the bank its name. Create or load a bank, add files, rename it, and save a portable
+copy from the sidebar. Originals stay where they were; duplicate filenames get
+new names.
+
+Drag a tile onto an artboard, or double-click to place it at the centre. Each
+placement gets one Undo. Native artwork keeps its editable shapes, text, masks
+and motion tracks, with fresh object IDs. Photo offers double-click placement
+into Design. Escape cancels a pending load; switching documents cannot drop a
+late arrival into the wrong tab.
+
+Discovery, scans and image decoding run in the background. The grid lays out
+visible rows, loads only visible previews and bounds its texture cache. Libraries
+follow the active document's nearest project folder and notice files added on disk.
+
+### A kit to get your hands on
+
+[Fieldwork](examples/fieldwork) ships with three curated palettes and six original,
+editable SVG marks, illustrations and patterns. Copy its hidden sidecars into a
+project, or point the sidebar at the example folder. Two native screenshot scenes
+show the kit in context.
+
+SVG assets use the existing native import subset; advanced SVG features may not
+carry over. Palette collection saves are separate from document saves.
+
+Pass 6 verification: **259 tests passed**, including real sidebar typing, colour
+application, filtering and disk saves; native tile drag/drop and Undo; delayed
+worker cancellation; external-edit conflicts; document switching; and safe quit
+ordering. Repeated layout checks keep both populated panels near 288 pixels wide
+at compact and large sizes, including unusually long names.
+
+Formatting and Clippy completed without suppressions. Clippy reports the existing
+34 library advisories (46 including tests). All six sample assets passed native
+import and preview rendering. Release-build and installed-app screenshots cover
+both panels at 960×640 and 1600×1000. Physical keyboard and OS file-dialog use
+remain part of human QA.
+
+## 2026-09-05 · Pass 5 — Little keys. Big confidence.
+
+The studio has a quiet co-pilot now. It knows what is in your hand.
+
+### Your next move, in plain sight
+
+- A bottom **Shortcut HUD** shows the active tool's gestures above a strip of
+  letter-key hints. Pick Pen and the path controls follow. Hold Ctrl, Shift, Alt
+  or a combination and the command row changes with your hand.
+- Held gestures light up. Command keycaps stay compact: when Ctrl is held,
+  **S · Save** appears under the Ctrl heading. Let go and the tool keys return.
+- The HUD uses the same shortcut routing as the app. Text edits, focused fields,
+  menus and drawing gestures get appropriate hints. Reading the strip does not
+  steal focus or trigger a command.
+- The strip stays the same height through modifier changes, keeping the canvas
+  steady during a drag. Smaller windows show **+ more** with the overflow hints.
+  **Ctrl+/** and **View → Shortcut HUD** toggle it; **F1** remains the full key list.
+
+### Two small gaps closed
+
+Equal-spacing suggestions now reach tool points as well as moving objects and
+artboards. Pen placement can find repeated and balanced gaps while retaining
+edge/centre/guide priority and Shift constraints.
+
+Photo crop now honours Enter to apply and Esc to cancel during a drag. A held
+mouse button cannot silently restart the crop after cancellation.
+
+The earlier passes are included: editable guides and rulers, constrained moves,
+smart snapping, Free Transform and four reshape modes, stroke outlines, Select
+Same, Pathfinder, masks/healing, 13 motion presets and 52 editable templates.
+
+Pass 5 verification: **239 tests passed**, including the full shortcut suite and
+real modifier-only frames during Pen drawing. Checks cover angle constraints,
+broken handles, snapping override, text-field/modal ownership, focus loss,
+Ctrl+/ toggling, and command delivery with the HUD present.
+
+Layout checks cover all four personas at 960×640 and 1600×1000, with hints shown
+and hidden, and prove the canvas stays put as modifiers change. Tool-point gap
+snapping and the complete Photo crop Enter/Esc/release lifecycle also pass.
+Native previews cover bare, Ctrl, Shift, Alt and combined-modifier states, plus
+the compact Motion layout. The release build passed. Clippy completed with
+34 library advisories (47 including tests), without suppressions. Physical
+keyboard and OS dialog interaction remain part of human QA.
+
+## 2026-09-05 · Pass 4 — A year of good starts
+
+The pudding has a sketchbook, a dance floor, and something fresh for every week.
+
+### The lines can change jobs
+
+- **Object → Guides** turns vector artwork into editable, non-printing guides.
+  Béziers stay Béziers, text stays text, and compound paths keep their holes.
+  Move a guide, edit its nodes, then release it back into artwork with its style
+  intact. Undo and project saves preserve the whole arrangement.
+- Snapping follows the actual guide curve, including a Shift-constrained drag.
+  Hidden guides stay out of the way; exported artwork leaves guides behind.
+  Photographs get a separate bounds guide while their pixels remain untouched.
+- Combining and separating compound paths preserve guide state, rotation,
+  linear gradients and stacking, with one Undo per operation. Mixed guide and
+  artwork inputs are rejected clearly. Radial fills stay radial and follow each
+  resulting object's bounds; the current format cannot retain a shared radial
+  centre across separated contours.
+- **Free transform · Ctrl+T** gives the existing move, scale and rotate handles
+  a clear entry in Object and F1. Distort, Skew, Perspective and the nine-handle
+  Warp mesh remain one menu away in **Object → Reshape**.
+  Reshaping rotated artwork now maps its linear gradient from the correct pose.
+
+### Give it a little life
+
+**Draw stroke, Pop in, Slam, Shake, Fill up, Slide up/down/left/right, Fly, Zoom,
+Buzz, and Fade in.** Thirteen starting points, all made from ordinary timeline
+keys. Duration stays close; delay, stagger and intensity unfold under Timing &
+energy. Each application has its own Undo and preserves unrelated animation.
+
+Draw stroke traces the path instead of fading it. Fill up reveals the interior
+from the bottom. The native canvas, animated SVG and Lottie use those reveal
+channels. Animated SVG retains masks and effects; Lottie reports unsupported
+pixels, masks or effects instead of quietly throwing them away. Moving filtered
+artwork also stops being clipped to the box it started in.
+
+The Motion inspector now opens with the presets. Appearance and manual key
+controls unfold when needed, leaving more room to choose the next move.
+
+### Fifty-two invitations to make something
+
+**Templates · 52** on the welcome screen and **File → Template library** open a
+searchable bank of original designs: events, food, culture, community, editorial,
+branding, education, wellness and products. These are editable shapes and live
+words, with 13 artwork families and 52 distinct compositions.
+
+Choose any of the 20 document sizes or your own dimensions. Portrait, square and
+landscape layouts reflow. Preview rendering happens in the background, cached
+thumbnails stay small, and the gallery only lays out visible rows. Creating a
+template keeps existing work in its own tab and starts a fresh unsaved document.
+
+All 52 ship locally. The [weekly drop plan](docs/template-drops.md) pairs every
+design with a practical remix prompt for a year of adoption campaigns. It is an
+editorial plan; posts and public releases are not scheduled automatically.
+
+Pass 4 verification: **230 tests passed**, including the full shortcut suite,
+native guide dragging, compound geometry/gradient/undo regressions, editable
+preset timing and reveal pixels, export fidelity, unsaved-document preservation,
+and compact gallery clipping. The template audit built **1,352 documents**:
+52 designs across every preset and six custom/minimum/extreme sizes.
+
+The release build passed. Welcome and floating template galleries, object guides
+and the Motion inspector were reviewed at 1600×1000 and 960×640. Portrait and
+landscape contact sheets cover all 52 templates. Browser renders of animated SVG
+and lottie-web matched the native reveal geometry at four animation stages.
+Clippy completed with 34 library advisories (46 including tests); none were hidden.
+Physical keyboard and OS dialog interaction remain part of human QA.
+
 ## 2026-09-05 · Pass 3 — Rulers, rubber, and a little repair
 
 The pudding has learned to park between the lines. It can also bend them.

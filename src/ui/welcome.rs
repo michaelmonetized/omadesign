@@ -49,48 +49,56 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         .auto_shrink([false, false])
         .show(ui, |ui| {
             let width = (ui.available_width() - 48.0).clamp(240.0, 920.0);
-            ui.add_space((full.height() * 0.065).clamp(20.0, 64.0));
+            ui.add_space(if studio.welcome_page == WelcomePage::Templates {
+                18.0
+            } else {
+                (full.height() * 0.065).clamp(20.0, 64.0)
+            });
             ui.with_layout(Layout::top_down(Align::Center), |ui| {
                 ui.allocate_ui_with_layout(vec2(width, 0.0), Layout::top_down(Align::Min), |ui| {
                     ui.set_max_width(width);
-                    ui.horizontal(|ui| {
-                        ui.vertical(|ui| {
-                            ui.label(
-                                RichText::new("Make something.")
-                                    .size(30.0)
-                                    .strong()
-                                    .color(fg()),
-                            );
-                            ui.add_space(4.0);
-                            ui.label(
-                                RichText::new("A fresh canvas, or right where you left off.")
-                                    .size(13.0)
-                                    .color(fg_weak()),
-                            );
-                        });
-                        if width >= 640.0 {
-                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                if ui
-                                    .add_sized(
-                                        vec2(130.0, 34.0),
-                                        Button::new("Open document").fill(accent_soft()),
-                                    )
-                                    .on_hover_text("Ctrl+O")
-                                    .clicked()
-                                {
-                                    studio.open();
-                                }
+                    if studio.welcome_page != WelcomePage::Templates {
+                        ui.horizontal(|ui| {
+                            ui.vertical(|ui| {
+                                ui.label(
+                                    RichText::new("Make something.")
+                                        .size(30.0)
+                                        .strong()
+                                        .color(fg()),
+                                );
+                                ui.add_space(4.0);
+                                ui.label(
+                                    RichText::new("A fresh canvas, or right where you left off.")
+                                        .size(13.0)
+                                        .color(fg_weak()),
+                                );
                             });
+                            if width >= 640.0 {
+                                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                    if ui
+                                        .add_sized(
+                                            vec2(130.0, 34.0),
+                                            Button::new("Open document").fill(accent_soft()),
+                                        )
+                                        .on_hover_text("Ctrl+O")
+                                        .clicked()
+                                    {
+                                        studio.open();
+                                    }
+                                });
+                            }
+                        });
+                        if width < 640.0
+                            && ui.button("Open document").on_hover_text("Ctrl+O").clicked()
+                        {
+                            studio.open();
                         }
-                    });
-                    if width < 640.0 && ui.button("Open document").on_hover_text("Ctrl+O").clicked()
-                    {
-                        studio.open();
+                        ui.add_space(24.0);
                     }
-                    ui.add_space(24.0);
                     ui.horizontal(|ui| {
                         for (page, label) in [
                             (WelcomePage::New, "New document"),
+                            (WelcomePage::Templates, "Templates · 52"),
                             (WelcomePage::Recents, "Recent"),
                             (WelcomePage::Recovered, "Recovered"),
                         ] {
@@ -110,21 +118,24 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
                     ui.add_space(16.0);
                     match studio.welcome_page {
                         WelcomePage::New => new_page(ui, studio),
+                        WelcomePage::Templates => super::templates::library(ui, studio),
                         WelcomePage::Recents => files_page(ui, studio, false),
                         WelcomePage::Recovered => files_page(ui, studio, true),
                     }
-                    ui.add_space(22.0);
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(RichText::new("Explore").small().color(fg_weak()));
-                        if ui.add(Button::new("Demo document").frame(false)).clicked() {
-                            studio.seed_demo();
-                        }
-                        if ui.add(Button::new("Photo samples").frame(false)).clicked() {
-                            studio.show_welcome = false;
-                            studio.persona = crate::tools::Persona::Photo;
-                            studio.photo.import_samples();
-                        }
-                    });
+                    if studio.welcome_page != WelcomePage::Templates {
+                        ui.add_space(22.0);
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(RichText::new("Explore").small().color(fg_weak()));
+                            if ui.add(Button::new("Demo document").frame(false)).clicked() {
+                                studio.seed_demo();
+                            }
+                            if ui.add(Button::new("Photo samples").frame(false)).clicked() {
+                                studio.show_welcome = false;
+                                studio.persona = crate::tools::Persona::Photo;
+                                studio.photo.import_samples();
+                            }
+                        });
+                    }
                     ui.add_space(24.0);
                 });
             });

@@ -5,11 +5,17 @@ mod deform;
 mod guides;
 mod icons;
 mod jobs;
+mod key_hud;
+#[cfg(test)]
+mod key_hud_tests;
+mod library;
 mod masking;
+mod motion_presets;
 mod photo;
 mod retouch;
 mod selection;
 mod studios;
+mod templates;
 pub mod theme;
 mod timeline;
 mod welcome;
@@ -24,11 +30,14 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     if (ctx.zoom_factor() - 1.0).abs() > 1e-3 {
         ctx.set_zoom_factor(1.0);
     }
+    // Give cancellable library loads Escape before canvas shortcuts consume it.
+    library::tick(&ctx, studio);
     guides::handle_shortcuts(&ctx, studio);
     studio.handle_shortcuts(&ctx);
     studio.tick_motion(&ctx);
 
     chrome::top_bar(ui, studio);
+    key_hud::show(ui, studio);
 
     if studio.show_welcome {
         welcome::show(ui, studio);
@@ -53,12 +62,21 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
 
     browsers::show_shape_browser(ui, studio);
     browsers::show_asset_browser(ui, studio);
+    templates::window(ui, studio);
 
     if studio.show_shortcuts {
         egui_shortcuts(ui, studio);
     }
     unsaved_dialog(ui, studio);
     studio.tick_swap(&ctx);
+}
+
+/// Screenshot scenes wait for their actual template previews, not a fixed sleep.
+pub fn scene_ready(ctx: &eframe::egui::Context, studio: &Studio) -> bool {
+    library::ready(ctx, studio)
+        && (!(studio.show_templates
+            || (studio.show_welcome && studio.welcome_page == crate::app::WelcomePage::Templates))
+            || templates::previews_ready(ctx))
 }
 
 fn unsaved_dialog(ui: &mut Ui, studio: &mut Studio) {

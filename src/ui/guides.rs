@@ -372,7 +372,7 @@ pub fn ruler_menu(ui: &mut Ui, studio: &mut Studio) {
     if ui
         .add_enabled(
             !studio.doc.guides.is_empty(),
-            egui::Button::new("Clear guides"),
+            egui::Button::new("Clear ruler guides"),
         )
         .clicked()
     {
@@ -386,6 +386,55 @@ pub fn draw(painter: &Painter, rect: Rect, studio: &Studio) {
     let content = content_rect(rect, studio.show_rulers);
     let guides = painter.with_clip_rect(content);
     if studio.doc.ruler.guides_visible {
+        for (layer_index, layer) in studio
+            .doc
+            .layers
+            .iter()
+            .enumerate()
+            .filter(|(_, layer)| layer.visible)
+        {
+            let Some(shapes) = layer.kind.shapes() else {
+                continue;
+            };
+            for shape in shapes.iter().filter(|shape| shape.visible && shape.guide) {
+                let selected = studio.selection.contains(&(layer_index, shape.id));
+                let stroke = Stroke::new(
+                    if selected { 1.6 } else { 1.0 },
+                    accent().gamma_multiply(if selected { 1.0 } else { 0.65 }),
+                );
+                let pose = studio.is_motion().then(|| studio.live_pose(shape.id));
+                let bounds = shape.world_bbox();
+                let center = bounds.center();
+                let displayed = pose.map_or(bounds, |pose| pose.map_bounds(bounds));
+                if !Rect::from_min_max(
+                    screen(rect, studio, displayed.min),
+                    screen(rect, studio, displayed.max),
+                )
+                .expand(2.0)
+                .intersects(content)
+                {
+                    continue;
+                }
+                for contour in shape.world_contours(96) {
+                    let mut points: Vec<Pos2> = contour
+                        .into_iter()
+                        .map(|point| {
+                            screen(
+                                rect,
+                                studio,
+                                pose.map_or(point, |pose| pose.map(center, point)),
+                            )
+                        })
+                        .collect();
+                    if shape.geom.is_closed() && points.len() > 2 {
+                        points.push(points[0]);
+                    }
+                    if points.len() > 1 {
+                        guides.add(egui::Shape::line(points, stroke));
+                    }
+                }
+            }
+        }
         for (index, guide) in studio.doc.guides.iter().enumerate() {
             if matches!(state.drag, Some(Drag::Guide { index: Some(i), .. }) if i == index) {
                 continue;
