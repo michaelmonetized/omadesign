@@ -2446,7 +2446,7 @@ dependencies = [
 
 [[package]]
 name = "omadesign"
-version = "0.0.1-alpha.rc"
+version = "0.0.1-alpha"
 dependencies = [
  "ab_glyph",
  "base64",

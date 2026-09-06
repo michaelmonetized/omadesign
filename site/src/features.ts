@@ -1,3 +1,5 @@
+import { RELEASE_TAG } from "./release";
+
 export type FeatureGroup = {
   id: string;
   title: string;
@@ -337,8 +339,7 @@ export const faqs: { question: string; answer: string }[] = [
   },
   {
     question: "Does the published download include everything shown here?",
-    answer:
-      "Not yet. The latest published packages are v0.0.1-alpha.rc from September 2, 2026. This site also shows newer work from the current source, including the expanded brand tools and templates. Build the current source for those features, or check the release notes before downloading. The app remains an alpha.",
+    answer: `Yes. ${RELEASE_TAG} includes the tools, templates, palettes, brand assets, and typography shown here. The app remains an alpha; the release notes describe its current limitations and fixes.`,
   },
   {
     question: "Can I open Affinity files?",

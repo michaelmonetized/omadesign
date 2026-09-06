@@ -1,6 +1,6 @@
 [package]
 name = "omadesign"
-version = "0.0.1-alpha.rc"
+version = "0.0.1-alpha"
 edition = "2024"
 description = "Native Linux studio for design, painting, photography, and motion"
 license = "MIT"

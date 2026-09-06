@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-09-06 · Pass 12 — The download caught up.
+
+The website and the download now tell the same story. **v0.0.1-alpha** packages
+the current studio for **ARM64 and x86_64 Linux**, including the 52 templates,
+guides and snapping, deformation tools, animation presets, shortcut HUD, and
+portable palette, brand-asset, and typography libraries showcased on the site.
+
+The hero's two binaries and source archive point to this tagged release. The
+FAQ now confirms that these features are included, and Getting started links
+the same release notes. The app's alpha status and current limits stay clear.
+
+Installation checks the published SHA-256 before opening the archive. A missing,
+malformed, or mismatched checksum stops installation. Local packaging builds only
+the application, checks both binaries' required glibc versions against the 2.35
+baseline, and includes the Phosphor icon license. `omadesign --version` (or `-V`)
+now reports the installed version without opening a window.
+
+Validation: **272 tests pass**, plus formatting, shell checks, TypeScript, and the
+website build. Both final archives pass checksum, version, and ELF checks. The
+ARM64 package renders native Pen/HUD and Brand windows and exports PNG; the x86_64
+package renders native Pen/HUD and Motion windows on a second Linux machine.
+Both binaries start against Ubuntu 22.04's glibc 2.35; x86_64 also exports PNG on
+that baseline runtime. Installer failure checks confirm that invalid downloads
+stop before extraction.
+
 ## 2026-09-06 · Pass 11 — Now it moves.
 
 The front door needed more than a polite fade. Headlines now arrive through bold

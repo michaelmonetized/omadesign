@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { CURL } from "../site";
+import { RELEASE_TAG, RELEASE_URL } from "../release";
 
 export const Route = createFileRoute("/docs/")({
   head: () => ({ meta: [{ title: "Getting started · omadesign" }] }),
@@ -62,22 +63,19 @@ function DocsOverview() {
         <p>
           The installer chooses the published Linux package for your machine and
           adds a desktop entry. You can also download a package from{" "}
-          <a href="https://github.com/michaelmonetized/omadesign/releases">
-            GitHub Releases
-          </a>
-          .
+          <a href={RELEASE_URL}>{RELEASE_TAG} on GitHub Releases</a>.
         </p>
         <pre aria-label="Install omadesign">
           <code>{CURL}</code>
         </pre>
         <aside className="docs-note" aria-label="Version information">
           <p>
-            This guide describes the current source. The published installer
-            packages are older and may not yet include every tool shown here.
-            See the{" "}
-            <Link to="/docs/contributing">source build instructions</Link> for
-            the latest work, and check the release notes for your installed
-            version.
+            {RELEASE_TAG} includes the tools, templates and brand features
+            described in this guide. The app remains an alpha. Read the{" "}
+            <a href={RELEASE_URL}>release notes</a> for current limitations and
+            fixes, or follow the{" "}
+            <Link to="/docs/contributing">source build instructions</Link> to
+            build it yourself.
           </p>
         </aside>
       </section>

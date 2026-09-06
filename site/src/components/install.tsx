@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { CURL, REPO } from "../site";
+import { RELEASE_TAG, RELEASE_VERSION } from "../release";
 
-const release = `${REPO}/releases/download/v0.0.1-alpha.rc/omadesign-0.0.1-alpha.rc`;
+const release = `${REPO}/releases/download/${RELEASE_TAG}/omadesign-${RELEASE_VERSION}`;
 
 export function Install() {
   const [status, setStatus] = useState<"idle" | "copied" | "selected">("idle");
@@ -48,7 +49,7 @@ export function Install() {
         </a>
         <a
           className="button button-outline"
-          href={`${REPO}/archive/refs/heads/master.zip`}
+          href={`${REPO}/archive/refs/tags/${RELEASE_TAG}.zip`}
         >
           Download src <span aria-hidden="true">↗</span>
         </a>

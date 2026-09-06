@@ -1,6 +1,6 @@
 # omadesign
 
-[Explore the studio](https://michaelmonetized.github.io/omadesign/) · [User manual](https://michaelmonetized.github.io/omadesign/docs/manual/) · [Build from source](docs/CONTRIBUTING.md)
+[Download v0.0.1-alpha](https://github.com/michaelmonetized/omadesign/releases/tag/v0.0.1-alpha) · [Explore the studio](https://michaelmonetized.github.io/omadesign/) · [User manual](https://michaelmonetized.github.io/omadesign/docs/manual/) · [Build from source](docs/CONTRIBUTING.md)
 
 A native Linux studio for **design, paint, photograph, and motion**. One
 document, one layer stack. Built so a designer coming from macOS can sit down
@@ -8,7 +8,7 @@ and start working.
 
 Pure Rust. No GTK app, no Electron. `cargo` is the toolchain.
 
-UI chrome follows **your** desktop: Omarchy theme colours and the fontconfig /
+UI chrome follows **your** desktop: Omarchy theme colors and the fontconfig /
 `omarchy font current` face. Icons are **Phosphor Light**. There is no baked-in
 orange.
 
@@ -23,7 +23,8 @@ curl -fsSL https://raw.githubusercontent.com/michaelmonetized/omadesign/master/s
 ```
 
 That is the whole line. It picks aarch64 or x86_64, downloads the latest
-release, and puts `omadesign` on `~/.local/bin`.
+release, checks its SHA-256, and puts `omadesign` on `~/.local/bin`.
+Run `omadesign --version` to confirm the installed version.
 
 Tarball by hand:
 
@@ -80,14 +81,14 @@ filter, preview, and make one yours. All 52 ship locally; the
 
 ## Palettes and brand libraries
 
-The right sidebar's **Inspect / Palettes / Brand** tabs keep reusable colours and
+The right sidebar's **Inspect / Palettes / Brand** tabs keep reusable colors and
 artwork close to the canvas. Create named **Personal** or **Project** palettes,
-collect colours from your selection, search names or hex values, and apply a
+collect colors from your selection, search names or hex values, and apply a
 swatch to Fill or Stroke. Save, import, or export one palette or a whole collection;
 imports preserve existing palettes and transparency.
 
 Load or create a **Brand** bank, add logos and imagery, then drag a tile onto the
-canvas or double-click to centre it on the selected artboard. Searchable folders,
+canvas or double-click to center it on the selected artboard. Searchable folders,
 background previews and automatic refresh keep the collection current. Placement
 supports Undo.
 
@@ -109,7 +110,7 @@ Project kits travel as `.omacolors`, `.omatype` and the `.omabrand/` folder. Sta
 ## Build from source
 
 ```sh
-cargo run --release
+cargo run --release --bin omadesign
 cargo test
 ./scripts/release.sh
 ```
