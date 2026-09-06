@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { faqs } from "../features";
 import { media, sitePath } from "../site";
 import { BrandKit } from "../components/brand-kit";
-import { StudioCarousel } from "../components/studio-carousel";
+import { StudioCarousel, type StudioName } from "../components/studio-carousel";
+import { StudioRecordings } from "../components/native-recordings";
+import { RevealText } from "../components/reveal-text";
 import { ShortcutHud } from "../components/shortcut-hud";
 import { FeatureExplorer } from "../components/feature-explorer";
 import { Install } from "../components/install";
@@ -13,24 +16,32 @@ export const Route = createFileRoute("/")({ component: Home });
 
 function Home() {
   const motion = useScrollMotion();
+  const [studio, setStudio] = useState<StudioName>("Design");
   return (
     <main id="main" ref={motion}>
       <section className="hero shell">
-        <div className="hero-heading" data-motion>
-          <h1>
-            Native Linux.
-            <br />
-            <span>Full creative control.</span>
-          </h1>
-          <p>
-            Design, paint, edit photos, and animate.
-            <br />
-            Built in Rust. Built for Omarchy.
+        <div className="hero-heading">
+          <RevealText
+            as="h1"
+            hero
+            lines={["Professional Grade", "Graphic Design Tool Suite"]}
+          />
+          <p className="hero-intro">
+            <span>Developed for Omarchy BTW.</span>
+            <span className="hero-modes">
+              <span>Illustrate</span>
+              <span>Paint</span>
+              <span>Refine</span>
+              <span>Animate</span>
+            </span>
           </p>
         </div>
         <Install />
-        <StudioCarousel />
       </section>
+      <section className="hero-stage">
+        <StudioCarousel selected={studio} onSelect={setStudio} />
+      </section>
+      <StudioRecordings studio={studio} onSelect={setStudio} />
       <div className="btw-strip">
         <div className="shell">
           <span>
@@ -45,7 +56,7 @@ function Home() {
       </div>
       <section className="section shell native-section" id="native">
         <div className="section-heading">
-          <h2>Omarchy first.</h2>
+          <RevealText text="Omarchy first." />
         </div>
         <div className="principles">
           <article>
@@ -56,7 +67,7 @@ function Home() {
               <i />
               <i />
             </div>
-            <h3>Your desktop theme</h3>
+            <RevealText as="h3" text="Your desktop theme" />
             <p>
               Reads your Omarchy colors and desktop font at launch. Uses
               Catppuccin when an Omarchy theme isn’t available.
@@ -66,7 +77,7 @@ function Home() {
             <div className="native-symbol" aria-hidden="true">
               ↗
             </div>
-            <h3>Native Rust</h3>
+            <RevealText as="h3" text="Native Rust" />
             <p>
               Cached rendering. Background previews, file scans, and exports.
               Built for ARM64 and x86_64 Linux.
@@ -76,7 +87,7 @@ function Home() {
             <div className="file-symbol" aria-hidden="true">
               ~/
             </div>
-            <h3>Local files</h3>
+            <RevealText as="h3" text="Local files" />
             <p>
               Editable documents and portable brand kits on your disk. No app
               account. Free and open source.
@@ -88,9 +99,7 @@ function Home() {
       <ShortcutHud />
       <section className="section shell templates-section" id="templates">
         <div className="templates-copy">
-          <h2>
-            <span className="accent">52</span> editable templates.
-          </h2>
+          <RevealText iris lines={["52 editable", "templates."]} />
           <p>
             Posters, identity, social, and editorial. Nine categories. Preset or
             custom sizes. All included, all offline.
@@ -111,7 +120,7 @@ function Home() {
       </section>
       <section className="section shell film-section" id="film">
         <div className="section-heading">
-          <h2>The studio in 97 seconds.</h2>
+          <RevealText text="The studio in 97 seconds." />
           <a className="text-link" href={media("film.mp4")} download>
             Download video ↓
           </a>
@@ -139,7 +148,7 @@ function Home() {
       </section>
       <FeatureExplorer />
       <section className="section shell faq-section" id="questions">
-        <h2>Details.</h2>
+        <RevealText text="Details." />
         <div className="faq-list">
           {faqs.map(({ question, answer }) => (
             <details key={question}>

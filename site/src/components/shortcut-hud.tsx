@@ -1,3 +1,4 @@
+import { RevealText } from "./reveal-text";
 import { useState, type KeyboardEvent } from "react";
 
 type Modifier = "Letters" | "Ctrl" | "Shift" | "Alt";
@@ -48,7 +49,7 @@ export function ShortcutHud() {
     <section className="hud-section">
       <div className="shell section">
         <div className="section-heading" data-motion>
-          <h2>Shortcuts for the current tool</h2>
+          <RevealText text="Shortcuts for the current tool" />
           <p>Pick a tool and hold Ctrl, Shift or Alt to see its shortcuts.</p>
         </div>
         <div

@@ -90,11 +90,11 @@ function Document() {
             >
               <img
                 src={sitePath(
-                  `media/showcase/wordmark-on-${theme === "mocha" ? "dark" : "light"}.svg`,
+                  `media/showcase/wordmark-on-${theme === "mocha" ? "dark" : "light"}.svg?v=full-logo`,
                 )}
                 alt="omadesign"
-                width="138"
-                height="40"
+                width="160"
+                height="90"
               />
             </a>
             <nav aria-label="Main navigation">
@@ -136,11 +136,11 @@ function Document() {
             <a className="wordmark" href={sitePath()}>
               <img
                 src={sitePath(
-                  `media/showcase/wordmark-on-${theme === "mocha" ? "dark" : "light"}.svg`,
+                  `media/showcase/wordmark-on-${theme === "mocha" ? "dark" : "light"}.svg?v=full-logo`,
                 )}
                 alt="omadesign"
-                width="117"
-                height="34"
+                width="160"
+                height="90"
               />
             </a>
             <a href="#top">Back to top ↑</a>

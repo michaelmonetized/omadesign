@@ -4,7 +4,7 @@ use super::*;
 pub(super) fn palettes(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
     let compact = ui.ctx().viewport_rect().height() < 650.0;
     if !compact {
-        ui.label(RichText::new("Your colours.").size(21.).strong());
+        ui.label(RichText::new("Your colors.").size(21.).strong());
         note(ui, "A little collection. A consistent identity.");
         ui.add_space(10.);
     }
@@ -33,7 +33,7 @@ pub(super) fn palettes(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
     ui.add_space(8.);
     ui.add(
         egui::TextEdit::singleline(&mut d.query)
-            .hint_text("Filter names or hex colours…")
+            .hint_text("Filter names or hex colors…")
             .desired_width(f32::INFINITY),
     );
     ui.horizontal_wrapped(|ui| {
@@ -86,7 +86,7 @@ pub(super) fn palettes(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
             {
                 ui.close();
                 if let Some(file) = rfd::FileDialog::new()
-                    .add_filter("Colour palettes", &["omacolors", "json"])
+                    .add_filter("Color palettes", &["omacolors", "json"])
                     .pick_file()
                 {
                     let root = root.clone();
@@ -105,7 +105,7 @@ pub(super) fn palettes(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
                 ui.close();
                 if let Some(file) = rfd::FileDialog::new()
                     .set_file_name(".omacolors")
-                    .add_filter("Colour palettes", &["omacolors", "json"])
+                    .add_filter("Color palettes", &["omacolors", "json"])
                     .save_file()
                 {
                     let saved = d.palettes.clone();
@@ -137,7 +137,7 @@ pub(super) fn palettes(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
                 }
             }
             if ui
-                .button("Reload saved colours")
+                .button("Reload saved colors")
                 .on_hover_text("Discard unsaved palette edits and reload the file")
                 .clicked()
             {
@@ -169,7 +169,7 @@ pub(super) fn palettes(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
     if d.conflict {
         note(
             ui,
-            "This file changed on disk. Your edits are safe here. Reload saved colours or export a copy.",
+            "This file changed on disk. Your edits are safe here. Reload saved colors or export a copy.",
         );
     }
     note(ui, &d.message);
@@ -194,26 +194,35 @@ pub(super) fn palettes(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
         .id_salt("palette-library-scroll")
         .auto_shrink([false, false])
         .show(ui, |ui| {
-            egui::ScrollArea::vertical().id_salt("palette-library-names")
-                .max_height(if compact { 68. } else { 96. }).auto_shrink([false, true]).show(ui, |ui| {
-            for &index in &matches {
-                let palette = &d.palettes[index];
-                let response = ui.add(egui::Button::selectable(
-                    d.selected == index,
-                    format!("{}   ·   {}", palette.name, palette.colors.len()),
-                ).truncate());
-                if response.clicked() {
-                    d.selected = index;
-                    d.selected_name();
-                }
-            }
-            });
-            if matches.is_empty() {
-                note(ui, if d.palettes.is_empty() {
-                    "Start a palette, then add a colour from your artwork or type its hex value."
-                } else {
-                    "No matching palettes. Try a name or a hex colour."
+            egui::ScrollArea::vertical()
+                .id_salt("palette-library-names")
+                .max_height(if compact { 68. } else { 96. })
+                .auto_shrink([false, true])
+                .show(ui, |ui| {
+                    for &index in &matches {
+                        let palette = &d.palettes[index];
+                        let response = ui.add(
+                            egui::Button::selectable(
+                                d.selected == index,
+                                format!("{}   ·   {}", palette.name, palette.colors.len()),
+                            )
+                            .truncate(),
+                        );
+                        if response.clicked() {
+                            d.selected = index;
+                            d.selected_name();
+                        }
+                    }
                 });
+            if matches.is_empty() {
+                note(
+                    ui,
+                    if d.palettes.is_empty() {
+                        "Start a palette, then add a color from your artwork or type its hex value."
+                    } else {
+                        "No matching palettes. Try a name or a hex color."
+                    },
+                );
             }
             if let Some(palette) = d.palettes.get(d.selected).cloned() {
                 palette_editor(ui, studio, d, &palette);
@@ -285,7 +294,7 @@ fn palette_editor(ui: &mut Ui, studio: &mut Studio, draft: &mut PaletteDraft, pa
                             );
                         }
                         let response =
-                            response.on_hover_text("Apply colour · right-click applies stroke");
+                            response.on_hover_text("Apply color · right-click applies stroke");
                         if response.clicked() {
                             apply_colour(studio, color, studio.fill_active);
                         }
@@ -298,7 +307,7 @@ fn palette_editor(ui: &mut Ui, studio: &mut Studio, draft: &mut PaletteDraft, pa
                                 |ui| {
                                     ui.spacing_mut().button_padding = vec2(3., 2.);
                                     ui.menu_button("⋯", |ui| {
-                                        if ui.button("Use current colour").clicked() {
+                                        if ui.button("Use current color").clicked() {
                                             replace = Some(index);
                                             ui.close();
                                         }
@@ -336,12 +345,12 @@ fn palette_editor(ui: &mut Ui, studio: &mut Studio, draft: &mut PaletteDraft, pa
     }
     ui.add_space(8.);
     ui.horizontal_wrapped(|ui| {
-        if ui.button("+ Current colour").clicked() {
+        if ui.button("+ Current color").clicked() {
             add_colour(draft, current_colour(studio));
         }
         if ui
             .button("From selection")
-            .on_hover_text("Collect unique fill and stroke colours from selected objects")
+            .on_hover_text("Collect unique fill and stroke colors from selected objects")
             .clicked()
         {
             for color in selection_colours(studio) {
@@ -356,7 +365,7 @@ fn palette_editor(ui: &mut Ui, studio: &mut Studio, draft: &mut PaletteDraft, pa
                     Rgba::parse_hex(&draft.hex).is_some(),
                     egui::Button::new("+"),
                 )
-                .on_hover_text("Add hex colour")
+                .on_hover_text("Add hex color")
                 .clicked();
             ui.add(
                 egui::TextEdit::singleline(&mut draft.hex)
@@ -374,7 +383,7 @@ fn palette_editor(ui: &mut Ui, studio: &mut Studio, draft: &mut PaletteDraft, pa
     ui.collapsing("Manage palette", |ui| {
         if ui
             .button("Remove this palette")
-            .on_hover_text("Reload saved colours restores it until you save")
+            .on_hover_text("Reload saved colors restores it until you save")
             .clicked()
         {
             draft.palettes.remove(draft.selected);
@@ -392,13 +401,13 @@ fn add_colour(draft: &mut PaletteDraft, color: Rgba) {
         return;
     }
     if palette.colors.len() >= crate::palette::MAX_COLORS_PER_PALETTE {
-        draft.message = "This palette already contains the maximum 4096 colours.".into();
+        draft.message = "This palette already contains the maximum 4096 colors.".into();
         return;
     }
     if draft.palettes.iter().map(|p| p.colors.len()).sum::<usize>()
         >= crate::palette::MAX_TOTAL_COLORS
     {
-        draft.message = "This collection already contains the maximum 65536 colours.".into();
+        draft.message = "This collection already contains the maximum 65536 colors.".into();
         return;
     }
     draft.palettes[draft.selected].colors.push(color);

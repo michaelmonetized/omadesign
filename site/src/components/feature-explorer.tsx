@@ -1,3 +1,4 @@
+import { RevealText } from "./reveal-text";
 import { useState } from "react";
 import { featureGroups } from "../features";
 import { sitePath } from "../site";
@@ -25,7 +26,7 @@ export function FeatureExplorer() {
   return (
     <section className="section shell features-section" id="features">
       <div className="section-heading" data-motion>
-        <h2>Features</h2>
+        <RevealText text="Features" />
       </div>
       <div className="feature-controls">
         <label className="search-box">

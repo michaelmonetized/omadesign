@@ -119,7 +119,6 @@ h3 {
   padding-block: 90px;
 }
 .mono,
-.small-label,
 kbd {
   font-family: var(--font-mono);
 }
@@ -206,12 +205,6 @@ p {
 .button-outline:hover {
   border-color: var(--accent);
 }
-.button-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 20px;
-}
 .text-link {
   display: inline-flex;
   gap: 12px;
@@ -228,15 +221,6 @@ p {
 }
 .text-link:hover > span:last-child {
   transform: translateX(3px);
-}
-.status-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  background: var(--accent);
-  border-radius: 50%;
-  vertical-align: middle;
-  margin-right: 9px;
 }
 .skip-link {
   position: fixed;
@@ -260,7 +244,7 @@ p {
   backdrop-filter: blur(20px);
 }
 .header-inner {
-  height: 78px;
+  height: 106px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -272,7 +256,7 @@ p {
   align-items: center;
 }
 .wordmark img {
-  max-height: 43px;
+  max-height: 90px;
   width: auto;
 }
 .header-inner nav {
@@ -304,23 +288,34 @@ p {
   height: 19px;
 }
 .hero {
-  padding-block: 72px 50px;
+  padding-block: 64px 12px;
 }
 .hero-heading {
-  display: grid;
-  grid-template-columns: 1.7fr 1fr;
-  align-items: end;
-  gap: 60px;
-  margin-bottom: 32px;
+  margin-bottom: 36px;
 }
-.hero h1 span {
-  color: var(--accent);
+.hero-heading h1 {
+  font-size: clamp(42px, 6.5vw, 88px);
+  letter-spacing: -0.055em;
 }
-.hero-heading > p {
-  max-width: 390px;
+.hero-intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px 40px;
   color: var(--muted);
-  font-size: 18px;
-  padding-bottom: 9px;
+  font-size: clamp(17px, 1.55vw, 22px);
+  margin-top: 24px;
+}
+.hero-modes {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0 20px;
+  color: var(--ink);
+}
+.hero-modes > span + span::before {
+  content: "/";
+  color: var(--accent);
+  margin-right: 20px;
 }
 .hero-install {
   max-width: 950px;
@@ -330,11 +325,12 @@ p {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  margin-top: 16px;
 }
 .install-speed {
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 12px;
+  font-size: clamp(18px, 1.6vw, 22px);
+  color: var(--ink);
+  margin-bottom: 12px;
 }
 .install-command {
   display: flex;
@@ -344,7 +340,6 @@ p {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px 14px;
-  margin-top: 20px;
   text-align: left;
 }
 .install-command > span {
@@ -946,29 +941,9 @@ details[open] > summary .disclosure-plus {
   background: var(--panel);
   margin-block: 24px;
 }
-.brand-section {
-  background: var(--panel);
-  border-top: 1px solid var(--line);
-}
-.motion-ready [data-scroll-motion] {
-  opacity: var(--motion-opacity, 1);
-  translate: 0 var(--motion-y, 0);
-  scale: var(--motion-scale, 1);
-  transform-origin: center center;
-}
-.motion-ready [data-motion-active="true"] {
-  will-change: translate, opacity;
-}
-.motion-ready [data-scroll-motion]:focus-within {
-  opacity: 1;
-}
 @media (max-width: 1100px) {
   .shell {
     width: calc(100% - 64px);
-  }
-  .hero-heading {
-    gap: 35px;
-    grid-template-columns: 1.5fr 1fr;
   }
   h1 {
     font-size: clamp(50px, 6.2vw, 72px);
@@ -991,17 +966,8 @@ details[open] > summary .disclosure-plus {
   .hero {
     padding-top: 48px;
   }
-  .hero-heading {
-    grid-template-columns: 1fr;
-    gap: 22px;
-  }
   h1 {
     font-size: clamp(48px, 9.4vw, 72px);
-  }
-  .hero-heading > p {
-    max-width: 540px;
-    font-size: 16px;
-    padding: 0;
   }
   .section-heading {
     align-items: start;
@@ -1065,11 +1031,11 @@ details[open] > summary .disclosure-plus {
     width: calc(100% - 36px);
   }
   .header-inner {
-    height: 70px;
+    height: 88px;
   }
   .wordmark img {
-    max-width: 116px;
-    max-height: 35px;
+    max-width: 128px;
+    max-height: 72px;
   }
   .header-inner nav {
     font-size: 11px;
@@ -1120,8 +1086,15 @@ details[open] > summary .disclosure-plus {
     font-size: 10px;
     padding: 7px 9px;
   }
-  .install-speed {
-    font-size: 10px;
+  .hero-heading h1 {
+    font-size: clamp(36px, 8.7vw, 47px);
+  }
+  .hero-modes {
+    gap: 0 8px;
+    font-size: 16px;
+  }
+  .hero-modes > span + span::before {
+    margin-right: 8px;
   }
   .btw-strip .shell {
     flex-wrap: wrap;
@@ -1268,9 +1241,25 @@ details[open] > summary .disclosure-plus {
     animation: none !important;
     transition: none !important;
   }
-  .motion-ready [data-scroll-motion] {
-    opacity: 1;
-    translate: none;
-    scale: none;
+}
+
+.hero-stage {
+  overflow: clip;
+}
+.hero-heading .reveal-line {
+  white-space: nowrap;
+}
+.native-section > .section-heading h2 {
+  font-size: clamp(48px, 6.4vw, 88px);
+}
+.native-section .principles {
+  margin-top: 52px;
+}
+.section-heading .reveal-text {
+  margin: 0;
+}
+@media (max-width: 800px) {
+  .hero-heading .reveal-line {
+    white-space: normal;
   }
 }

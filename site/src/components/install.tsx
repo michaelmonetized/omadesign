@@ -23,6 +23,14 @@ export function Install() {
   }
   return (
     <div className="hero-install" id="install" data-motion>
+      <p className="install-speed">get started in under 1m</p>
+      <div className="install-command">
+        <span aria-hidden="true">$</span>
+        <code ref={command}>{CURL}</code>
+        <button type="button" onClick={copy}>
+          {status === "copied" ? "Copied ✓" : "Copy"}
+        </button>
+      </div>
       <div className="download-buttons">
         <a
           className="button"
@@ -44,14 +52,6 @@ export function Install() {
         >
           Download src <span aria-hidden="true">↗</span>
         </a>
-      </div>
-      <p className="install-speed">get started in under 1m</p>
-      <div className="install-command">
-        <span aria-hidden="true">$</span>
-        <code ref={command}>{CURL}</code>
-        <button type="button" onClick={copy}>
-          {status === "copied" ? "Copied ✓" : "Copy"}
-        </button>
       </div>
       <p className="copy-status" role="status">
         {status === "selected"

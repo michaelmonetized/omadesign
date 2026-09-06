@@ -20,7 +20,7 @@ pub const SCENES: &[Scene] = &[
     },
     Scene {
         id: "palette-library",
-        caption: "A few good colours. Ready for every project.",
+        caption: "A few good colors. Ready for every project.",
     },
     Scene {
         id: "hud-pen",
@@ -68,7 +68,7 @@ pub const SCENES: &[Scene] = &[
     },
     Scene {
         id: "healing",
-        caption: "Healing — clean texture, blended into local colour.",
+        caption: "Healing — clean texture, blended into local color.",
     },
     Scene {
         id: "photo",
@@ -76,7 +76,7 @@ pub const SCENES: &[Scene] = &[
     },
     Scene {
         id: "colour",
-        caption: "Colour — real picker, palettes, fill and stroke.",
+        caption: "Color — real picker, palettes, fill and stroke.",
     },
     Scene {
         id: "boolean",
@@ -166,7 +166,7 @@ fn project_library(s: &mut Studio, palettes: bool) -> Result<(), String> {
     add_text(s, Pt::new(84., 493.), "MAKE YOUR MARK", 13., paper, 0.6);
     add_rect(s, 55., 748., 1010., 2., ink, 0.);
     add_text(s, Pt::new(59., 792.), "GOOD TASTE TRAVELS.", 14., ink, 1.);
-    add_text(s, Pt::new(824., 792.), "COLOURS / ARTWORK", 13., ink, 0.);
+    add_text(s, Pt::new(824., 792.), "COLORS / ARTWORK", 13., ink, 0.);
     s.selection.clear();
     s.path = Some(root.join("field-notes.oma"));
     s.libraries.sidebar = if palettes {
@@ -176,7 +176,7 @@ fn project_library(s: &mut Studio, palettes: bool) -> Result<(), String> {
     };
     s.libraries.project_scope = true;
     s.need_fit = true;
-    s.status = "Fieldwork · portable colours and artwork, right beside your project".into();
+    s.status = "Fieldwork · portable colors and artwork, right beside your project".into();
     Ok(())
 }
 
@@ -496,7 +496,7 @@ fn healing(s: &mut Studio) {
     add_text(
         s,
         Pt::new(92.0, 156.0),
-        "Borrow the texture. Keep the colour.",
+        "Borrow the texture. Keep the color.",
         20.0,
         Rgba::from_hex(0x747775),
         0.0,
@@ -574,12 +574,12 @@ fn healing(s: &mut Studio) {
     s.paint_mask = false;
     s.selection.clear();
     s.need_fit = true;
-    s.status = "Healing keeps source texture and matches the surrounding colour".into();
+    s.status = "Healing keeps source texture and matches the surrounding color".into();
 }
 
 fn colour(s: &mut Studio) {
     s.show_welcome = false;
-    s.doc = crate::document::Document::new("Colour", 1440.0, 900.0, 72.0);
+    s.doc = crate::document::Document::new("Color", 1440.0, 900.0, 72.0);
     s.persona = Persona::Design;
     s.tool = Tool::Select;
     add_rect(s, 0.0, 0.0, 1440.0, 900.0, Rgba::from_hex(0x1E1E2E), 0.0);

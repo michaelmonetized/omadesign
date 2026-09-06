@@ -50,11 +50,12 @@ website WebPs and the three logo SVGs are in `site/public/media/showcase`.
 
 ## Approved wordmark
 
-The website's `wordmark-on-dark.svg` and `wordmark-on-light.svg` copy the exact six
-letter paths and the dot rectangle from `media/logo-4-refined.svg`, including the
-approved open S. They only remove the background, maze and effects, set a tight
-view box and choose a foreground color. `favicon.svg` uses the same approved d
-path, centered in a square view box; its foreground responds to the color scheme.
+The website's `wordmark-on-dark.svg` and `wordmark-on-light.svg` preserve the full
+composition from `media/logo-4-refined.svg`: the blurred green OMA maze, the exact
+six letter paths and dot rectangle, the approved open S, and the original shadows
+and view box. Only the solid background is removed; the light variant uses an ink
+foreground so the wordmark remains readable. `favicon.svg` uses the same approved
+d path, centered in a square view box; its foreground responds to the color scheme.
 The original user logo files are unchanged.
 
 ## Template library capture
@@ -63,3 +64,9 @@ The landing page also uses an unedited native library capture at 1600 × 880,
 encoded to lossless WebP. This viewport shows the first six template cards.
 Recreate it with `omadesign --shot templates --size 1600x880 --out /tmp/templates.png`,
 then encode that PNG to `site/public/media/studio/templates.webp`.
+
+## Native panel recordings
+
+The five continuous studio clips use real native UI input and viewport capture.
+See [recordings.md](recordings.md) for provenance, chapter timings, dependencies
+and the isolated recording and publishing commands.

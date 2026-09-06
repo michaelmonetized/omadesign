@@ -1,94 +1,87 @@
 import { useEffect, useRef } from "react";
 
-const targets = [
-  ":scope > section",
-  ":scope > .btw-strip",
+const surfaces = [
+  "[data-reveal]",
   "[data-motion]",
-  ".section-heading",
+  ".hero-install",
   ".principles > article",
-  ".templates-copy",
   ".template-visual",
+  ".templates-copy > p",
   ".film-section video",
   ".feature-controls",
   ".feature-groups > details",
   ".feature-grid > article",
   ".faq-list > details",
+  ".file-cards > article",
 ].join(",");
 
-/** One scroll listener, one frame, and only visible surfaces participate. */
+/** Timed reveals follow the viewport; scroll only drives the scene exit. */
 export function useScrollMotion() {
   const root = useRef<HTMLElement>(null);
   useEffect(() => {
     const page = root.current;
     if (!page) return;
     const preference = matchMedia("(prefers-reduced-motion: reduce)");
-    const active = new Set<HTMLElement>();
     const known = new Set<HTMLElement>();
+    const scenes = new Set<HTMLElement>();
+    const active = new Set<HTMLElement>();
+    const pressed = new Set<HTMLElement>();
     let frame = 0;
     let scanFrame = 0;
+    let releaseFrame = 0;
     const clamp = (value: number) => Math.max(0, Math.min(1, value));
-
     function render() {
       frame = 0;
       if (preference.matches) return;
-      const height = window.innerHeight;
-      // Read first, then write: panel interaction does not cause layout thrashing.
+      const height = innerHeight;
       const states = [...active].map((element) => {
-        // Layout offsets exclude our own and ancestor animations. Reading the
-        // transformed rectangle would feed the previous frame into the next.
         let documentTop = 0;
         for (
           let parent: HTMLElement | null = element;
           parent;
           parent = parent.offsetParent as HTMLElement | null
-        ) {
+        )
           documentTop += parent.offsetTop;
-        }
-        const top = documentTop - window.scrollY;
-        const size = element.offsetHeight;
-        const bottom = top + size;
-        const entrance = clamp((height - top) / Math.min(180, size * 0.6 + 40));
-        const exit = clamp(bottom / Math.min(140, size * 0.5 + 30));
-        const progress = clamp((height - top) / (height + size));
-        const focused = element.matches(":focus-within");
-        const visibility = focused ? 1 : Math.min(entrance, exit);
-        const drift = (progress - 0.5) * -8;
+        const top = documentTop - scrollY;
+        const bottom = top + element.offsetHeight;
+        const exit = clamp((height * 0.25 - bottom) / (height * 0.25));
         return {
           element,
-          visibility,
-          scale: 0.987 + Math.min(entrance, exit) * 0.013,
-          y: (1 - entrance) * 30 - (1 - exit) * 20 + drift,
-          progress,
-          state: top >= height ? "before" : bottom <= 0 ? "after" : "inside",
+          exit,
+          progress: clamp((height - top) / (height + element.offsetHeight)),
         };
       });
-      for (const { element, visibility, scale, y, progress, state } of states) {
-        element.style.setProperty(
-          "--motion-opacity",
-          String(0.08 + visibility * 0.92),
-        );
-        element.style.setProperty("--motion-y", `${y.toFixed(2)}px`);
-        element.style.setProperty("--motion-scale", String(scale));
-        element.style.setProperty("--motion-progress", progress.toFixed(3));
-        element.dataset.motionState = state;
+      for (const { element, exit, progress } of states) {
+        element.style.setProperty("--scene-exit", exit.toFixed(3));
+        element.style.setProperty("--scene-progress", progress.toFixed(3));
       }
-      page?.classList.add("motion-ready");
     }
     function schedule() {
       if (!frame && !preference.matches) frame = requestAnimationFrame(render);
     }
-    const observer = new IntersectionObserver(
+    const entrances = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const element = entry.target as HTMLElement;
+          if (entry.isIntersecting) element.dataset.revealState = "entered";
+          else if (entry.boundingClientRect.bottom <= 0)
+            element.dataset.revealState = "past";
+          else if (entry.boundingClientRect.top >= innerHeight)
+            element.dataset.revealState = "waiting";
+        }
+      },
+      { rootMargin: "0px 0px -16% 0px" },
+    );
+    const viewport = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           const element = entry.target as HTMLElement;
           if (entry.isIntersecting) {
             active.add(element);
-            element.dataset.motionActive = "true";
+            element.dataset.sceneActive = "true";
           } else {
             active.delete(element);
-            delete element.dataset.motionActive;
-            element.dataset.motionState =
-              entry.boundingClientRect.top > 0 ? "before" : "after";
+            delete element.dataset.sceneActive;
           }
         }
         schedule();
@@ -97,23 +90,51 @@ export function useScrollMotion() {
     );
     function scan() {
       scanFrame = 0;
-      for (const element of page!.querySelectorAll<HTMLElement>(targets)) {
-        if (!known.has(element)) {
-          known.add(element);
-          element.dataset.scrollMotion = "";
-          observer.observe(element);
+      for (const element of page!.querySelectorAll<HTMLElement>(surfaces)) {
+        if (
+          known.has(element) ||
+          element.closest(".studio-carousel") ||
+          element.matches(".section-heading,.hero-heading")
+        )
+          continue;
+        known.add(element);
+        if (!element.dataset.reveal) element.dataset.reveal = "surface";
+        element.dataset.revealState = "waiting";
+        if (
+          element.parentElement?.matches(
+            ".principles,.file-cards,.feature-grid",
+          )
+        ) {
+          const index = [...element.parentElement.children].indexOf(element);
+          element.style.setProperty(
+            "--reveal-delay",
+            `${Math.min(index, 3) * 90}ms`,
+          );
         }
+        entrances.observe(element);
       }
-      for (const element of known) {
+      for (const element of page!.querySelectorAll<HTMLElement>(
+        ":scope > section, :scope > .btw-strip",
+      )) {
+        if (scenes.has(element)) continue;
+        scenes.add(element);
+        element.dataset.motionScene = "";
+        viewport.observe(element);
+      }
+      for (const element of known)
         if (!page!.contains(element)) {
-          observer.unobserve(element);
+          entrances.unobserve(element);
           known.delete(element);
-          active.delete(element);
         }
-      }
+      for (const element of scenes)
+        if (!page!.contains(element)) {
+          viewport.unobserve(element);
+          active.delete(element);
+          scenes.delete(element);
+        }
       schedule();
     }
-    function scheduleScan() {
+    function rescan() {
       if (!scanFrame) scanFrame = requestAnimationFrame(scan);
     }
     function changePreference() {
@@ -123,32 +144,81 @@ export function useScrollMotion() {
         frame = 0;
       } else schedule();
     }
-    const mutations = new MutationObserver(scheduleScan);
+    function focus(event: FocusEvent) {
+      const element = event.target as HTMLElement;
+      if (!element.matches(":focus-visible")) return;
+      for (const surface of known)
+        if (surface.contains(element) && !pressed.has(surface))
+          surface.dataset.revealState = "settled";
+    }
+    function press(event: PointerEvent) {
+      for (const surface of known) {
+        if (
+          surface.dataset.reveal === "surface" &&
+          surface.dataset.revealState === "entered" &&
+          surface.contains(event.target as Node)
+        ) {
+          surface.style.animationPlayState = "paused";
+          pressed.add(surface);
+        }
+      }
+    }
+    function release() {
+      if (!pressed.size || releaseFrame) return;
+      // Keep the pressed control in place through mouseup and click dispatch.
+      releaseFrame = requestAnimationFrame(() => {
+        releaseFrame = 0;
+        for (const surface of pressed) {
+          surface.dataset.revealState = "settled";
+          surface.style.removeProperty("animation-play-state");
+        }
+        pressed.clear();
+      });
+    }
+    function settled(event: AnimationEvent) {
+      if (event.animationName !== "surface-arrive") return;
+      const element = event.target as HTMLElement;
+      if (known.has(element)) element.dataset.revealState = "settled";
+    }
+    const mutations = new MutationObserver(rescan);
     mutations.observe(page, { childList: true, subtree: true });
     const resize = new ResizeObserver(schedule);
     resize.observe(page);
     scan();
+    changePreference();
     window.addEventListener("scroll", schedule, { passive: true });
     window.addEventListener("resize", schedule, { passive: true });
-    page.addEventListener("focusin", schedule);
-    page.addEventListener("focusout", schedule);
+    page.addEventListener("focusin", focus);
+    page.addEventListener("pointerdown", press, true);
+    window.addEventListener("pointerup", release);
+    window.addEventListener("pointercancel", release);
+    window.addEventListener("blur", release);
+    page.addEventListener("animationend", settled);
     preference.addEventListener("change", changePreference);
     return () => {
       cancelAnimationFrame(frame);
       cancelAnimationFrame(scanFrame);
-      observer.disconnect();
+      cancelAnimationFrame(releaseFrame);
+      entrances.disconnect();
+      viewport.disconnect();
       mutations.disconnect();
       resize.disconnect();
       window.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
-      page.removeEventListener("focusin", schedule);
-      page.removeEventListener("focusout", schedule);
+      page.removeEventListener("focusin", focus);
+      page.removeEventListener("pointerdown", press, true);
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("pointercancel", release);
+      window.removeEventListener("blur", release);
+      page.removeEventListener("animationend", settled);
       preference.removeEventListener("change", changePreference);
       page.classList.remove("motion-ready");
-      for (const element of known) {
-        delete element.dataset.scrollMotion;
-        delete element.dataset.motionActive;
-        delete element.dataset.motionState;
+      for (const surface of pressed)
+        surface.style.removeProperty("animation-play-state");
+      for (const element of known) delete element.dataset.revealState;
+      for (const element of scenes) {
+        delete element.dataset.motionScene;
+        delete element.dataset.sceneActive;
       }
     };
   }, []);

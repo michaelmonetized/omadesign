@@ -406,7 +406,7 @@ impl Studio {
                         snapping = true;
                     }
                     Tool::Eyedropper => {
-                        add("Click", "Sample fill colour", false);
+                        add("Click", "Sample fill color", false);
                     }
                     Tool::Fill => {
                         add("Click", "Flood fill", false);
@@ -418,7 +418,7 @@ impl Studio {
                         add("Drag", "Select pixels", false);
                     }
                     Tool::Wand => {
-                        add("Click", "Select similar colour", false);
+                        add("Click", "Select similar color", false);
                     }
                     Tool::Hand => {
                         add("Drag", "Pan canvas", false);

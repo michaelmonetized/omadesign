@@ -515,7 +515,7 @@ fn palette_sidebar_creates_edits_applies_and_saves_transparent_colours() {
         vec![(0, selected)],
         "typing in the palette changed canvas selection"
     );
-    click_label(&ctx, &mut studio, "Filter names or hex colours…");
+    click_label(&ctx, &mut studio, "Filter names or hex colors…");
     let labels = replace_field(&ctx, &mut studio, "does-not-match");
     assert!(
         labels

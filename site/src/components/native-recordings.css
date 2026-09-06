@@ -1,0 +1,161 @@
+.recordings-section {
+  padding-top: 72px;
+}
+.recording-studio-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 30px;
+}
+.recording-studio-tabs button {
+  position: relative;
+  color: var(--muted);
+  padding: 18px 30px;
+  font-size: 18px;
+  transition: color 0.2s;
+}
+.recording-studio-tabs button::after {
+  content: "";
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: -1px;
+  height: 3px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.35s cubic-bezier(0.2, 0.75, 0.2, 1);
+}
+.recording-studio-tabs button[aria-selected="true"] {
+  color: var(--ink);
+}
+.recording-studio-tabs button[aria-selected="true"]::after {
+  transform: scaleX(1);
+}
+.recording-studio-tabs button:hover {
+  color: var(--accent);
+}
+.recording-chapters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+.recording-chapters button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 13px;
+  transition:
+    background 0.2s,
+    color 0.2s,
+    border-color 0.2s;
+}
+.recording-chapters button > span:last-child {
+  font: 10px var(--font-mono);
+  color: var(--muted);
+}
+.recording-chapters button[aria-current="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--button-ink);
+}
+.recording-chapters button[aria-current="true"] > span:last-child {
+  color: inherit;
+  opacity: 0.7;
+}
+.recording-chapters button:hover {
+  border-color: var(--accent);
+}
+.recording-frame {
+  background: var(--panel-deep);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 28px 100px -65px #0009;
+}
+.recording-frame video {
+  width: 100%;
+  aspect-ratio: 16/9;
+  object-fit: contain;
+}
+.recording-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  color: var(--muted);
+  font: 11px var(--font-mono);
+  margin-top: 18px;
+}
+.recording-meta a:hover {
+  color: var(--accent);
+}
+.recording-notice {
+  min-height: 18px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.recording-notice a,
+.recording-fallback a {
+  text-decoration: underline;
+}
+.recording-fallback {
+  font-size: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.brand-recordings {
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+.brand-recordings .section-heading p {
+  max-width: 390px;
+}
+.brand-recordings .recording-chapters button {
+  font-family: var(--font-mono);
+  font-size: 15px;
+}
+.brand-recordings .text-link {
+  margin-top: 10px;
+}
+@media (max-width: 600px) {
+  .recording-studio-tabs {
+    gap: 0;
+    margin-bottom: 22px;
+  }
+  .recording-studio-tabs button {
+    padding: 15px 19px;
+    font-size: 15px;
+  }
+  .recording-studio-tabs button::after {
+    left: 12px;
+    right: 12px;
+  }
+  .recording-chapters {
+    gap: 6px;
+  }
+  .recording-chapters button {
+    padding: 9px 11px;
+    gap: 10px;
+    font-size: 12px;
+  }
+  .recording-meta {
+    font-size: 10px;
+  }
+  .recording-frame {
+    border-radius: 7px;
+  }
+  .brand-recordings .recording-chapters button {
+    font-size: 12px;
+  }
+}
+@media (max-width: 360px) {
+  .recording-studio-tabs button {
+    padding-inline: 14px;
+  }
+}

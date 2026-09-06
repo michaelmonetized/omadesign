@@ -49,7 +49,7 @@ fn populated_libraries_keep_their_width_and_canvas_space() {
                         "Fieldwork / a thoughtfully named collection of reusable artwork".into();
                     let draft = studio.libraries.draft();
                     draft.palettes[0].name =
-                        "Fieldwork / thoughtful colours for an unusually long project name".into();
+                        "Fieldwork / thoughtful colors for an unusually long project name".into();
                     draft.selected_name();
                 }
                 let mut canvas_width = 0.0;

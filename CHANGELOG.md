@@ -1,5 +1,56 @@
 # Changelog
 
+## 2026-09-06 · Pass 11 — Now it moves.
+
+The front door needed more than a polite fade. Headlines now arrive through bold
+Catppuccin color wipes, lines follow in sequence, and the template title opens
+through an expanding ellipse. Sections rise into view and leave with the scroll.
+The artwork gallery has room to breathe: four floating planes orbit through real
+3D space, with depth, camera movement, drag momentum, and a pause button.
+
+### The studio is the demo
+
+The simulated panel controls are gone. Design, Pixel, Photo, and Motion now have
+separate native screen recordings with named chapters. Click a chapter to jump
+straight to the actual tool or panel. The shared brand recording covers palettes,
+assets, and typography, including their project dotfiles. These are captured WGPU
+frames from the Rust app, with real pointer and keyboard events driving the edits.
+The capture utility, chapter manifest, captions, and regeneration notes are included.
+
+The gallery and recording tabs stay in sync. Videos load when requested, pause
+after leaving the viewport, and stop when changing studios. Native controls,
+downloads, captions, keyboard navigation, and a no-JavaScript fallback keep the
+tour usable. Reduced motion switches the orbit to a static artwork grid and
+removes the traveling reveals. Keyboard focus reveals controls immediately; a
+pointer press holds an arriving panel in place until the click has finished.
+
+### The maze is back
+
+The header and footer restore the complete approved logo: blurred OMA maze,
+open-S deSiGN lettering, and original proportions. Both Catppuccin themes keep it
+legible. The hero now reads **Professional Grade Graphic Design Tool Suite**,
+followed by **Developed for Omarchy BTW.** and **Illustrate / Paint / Refine /
+Animate**. The larger **get started in under 1m** line leads into the installer
+command, with all three download buttons directly below it.
+
+### A recording found a real wobble
+
+Opening keyframes, effects, or Trace could force the native inspector wider and
+shift its controls. Labels and editable values now sit above tracks that fit the
+available width. The sidebar stays at the width you chose, including its narrowest
+setting. A focused native layout regression opens the real panels and exercises
+changing values and every effect across narrow, default, and wide layouts.
+Visible color labels in the recorded native panels also use US spelling.
+
+Validation: **272 native tests pass**, including the inspector geometry check.
+The release build is reinstalled; installed and built hashes match, native capture
+works, and the desktop entry validates. TypeScript, formatting, and the server
+build pass. Browser checks cover visible text reveals and exits, mouse momentum,
+real touch input, keyboard controls, reduced motion, no JavaScript, and layouts
+from 320 to 1735 pixels. All five recordings decode and play; early and rapid
+chapter seeks, source changes, offscreen pause, captions, and clicks during an
+entrance animation pass. The **156 seconds of native footage total 4.67 MB**.
+
 ## 2026-09-05 · Pass 10 — Less pitch. More studio.
 
 The green paint has left the building. So has the pretend logo. The website now
