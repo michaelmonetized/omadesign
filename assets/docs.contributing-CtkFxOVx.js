@@ -1,6 +1,6 @@
-import{j as e}from"./index-CzowaW4x.js";import{M as n}from"./md-CYAhWzfs.js";const s=`# Contributing to omadesign
+import{j as e}from"./index-CW7G2Z1E.js";import{M as n}from"./md-5bR1Z9ns.js";const s=`# Contributing to omadesign
 
-This is a small native Linux studio. Keep it that way.
+Build and contribute to the native Linux app.
 
 ## How to work on it
 
@@ -22,7 +22,7 @@ src/
   compositor.rs   tiny-skia renderer + PNG/JPEG export
   paint.rs        brush, erase, smudge, clone, fill, wand
   photo.rs        develop pipeline + histograms
-  trace.rs        raster to vector (threshold and colour)
+  trace.rs        raster to vector (threshold and color)
   boolean.rs      union / subtract / intersect / xor
   text.rs         rustybuzz OpenType + glyph outlines
   tools.rs        personas, tools, shortcut table
@@ -44,14 +44,14 @@ Mutations go through \`Cmd\` + \`History\`. Tests cover geometry, boolean, paint
 
 Keep file and network work outside the frame loop. Tab switches transfer document state instead of cloning it. Rendering caches are derived from document data and invalidated when that data changes; they do not belong in saved projects.
 
-### Rules of the house
+### Project conventions
 
-- **No stubs.** A tool that drops a baked path called “Type” is not type.
-- **No hardcoded UI colours.** Chrome reads the Omarchy / \`~/.config\` theme. Fallback is Catppuccin Mocha, used only when no theme is on disk.
-- **Icons are Phosphor Light.** Add a glyph in \`src/ui/icons.rs\`, do not invent a stick figure.
-- **UI font is the desktop font.** Do not bundle Inter “because marketing.”
+- **Complete tools.** Implement the advertised behavior; live text must remain editable.
+- **No hardcoded UI colors.** Chrome reads the Omarchy / \`~/.config\` theme. Fallback is Catppuccin Mocha, used only when no theme is on disk.
+- **Icons are Phosphor Light.** Use the glyphs in \`src/ui/icons.rs\`.
+- **UI font is the desktop font.** Resolve it through Omarchy and fontconfig.
 - **Deep modules.** \`geom\` and \`text\` have no egui types. Tests share the same seams.
-- **Local builds.** \`./scripts/release.sh\` zig-links glibc 2.35 for aarch64 and x86_64. Never add a GitHub Actions workflow that bills Microsoft for runners.
+- **Local builds.** \`./scripts/release.sh\` zig-links glibc 2.35 for aarch64 and x86_64. Build release packages locally; do not add GitHub Actions workflows that use billed runners.
 
 ### Pull requests
 
@@ -91,7 +91,7 @@ gh release create vX.Y.Z dist/omadesign-X.Y.Z-*.tar.gz*
 
 Refuse to ship if \`objdump -T\` shows GLIBC newer than 2.35.
 
-### Licence
+### License
 
 MIT. Phosphor Light is MIT (see \`assets/phosphor/LICENSE-MIT\`).
 `,a=()=>e.jsx(n,{source:s,sourcePath:"docs/CONTRIBUTING.md"});export{a as component};
