@@ -745,29 +745,150 @@ impl Studio {
         self.commit(Cmd::SetArtboards { before, after });
     }
 
+    fn flip_target(&self, layer: usize, id: u64) -> Option<&Shape> {
+        self.doc.find_shape(layer, id).filter(|shape| {
+            self.doc.layer_editable(layer)
+                && shape.visible
+                && !shape.locked
+                && !matches!(shape.geom, Geom::Text(_))
+                && (!shape.guide || self.doc.ruler.guides_visible)
+        })
+    }
+
+    pub fn can_flip_selection(&self) -> bool {
+        self.selection
+            .iter()
+            .any(|&(layer, id)| self.flip_target(layer, id).is_some())
+    }
+
     pub fn flip_selection(&mut self, horizontal: bool) {
-        let mut items = Vec::new();
-        for (li, id) in self.selection.clone() {
-            if id == RASTER_ID {
-                continue;
+        if !self.can_flip_selection() {
+            self.status = if self.selection.iter().any(|&(layer, id)| {
+                self.doc
+                    .find_shape(layer, id)
+                    .is_some_and(|shape| matches!(shape.geom, Geom::Text(_)))
+            }) {
+                "Convert text to paths before flipping"
+            } else {
+                "Select an unlocked vector object to flip"
             }
-            if let Some(s) = self.doc.find_shape(li, id) {
-                let before = s.geom.clone();
-                let mut after = before.clone();
-                after.flip(horizontal);
-                items.push((li, id, before, after, s.rotation, s.rotation));
-            }
-        }
-        if items.is_empty() {
-            self.status = "select an object to flip".into();
+            .into();
             return;
         }
-        self.commit(Cmd::SetGeoms { items });
-        self.status = if horizontal {
-            "flipped horizontal".into()
-        } else {
-            "flipped vertical".into()
-        };
+        self.commit_type_edit();
+        self.end_deform(false);
+        self.reset_snap_gesture();
+        let mut commands = Vec::new();
+        let mut seen = HashSet::new();
+        for &(layer, id) in &self.selection {
+            if !seen.insert((layer, id)) {
+                continue;
+            }
+            let Some(shape) = self.flip_target(layer, id) else {
+                continue;
+            };
+            let dashed = shape
+                .style
+                .stroke
+                .as_ref()
+                .is_some_and(|stroke| stroke.dash.is_some());
+            // A symmetric primitive keeps its canonical contour start/direction.
+            // Preserve the compositor's actual contour when dashes need mirroring.
+            let mut after = match &shape.geom {
+                Geom::Rect { origin, size, .. } if dashed => Geom::Poly {
+                    contours: vec![crate::geom::rounded_rect_corners(
+                        *origin,
+                        *size,
+                        shape.effective_corners(),
+                    )],
+                    winding: false,
+                },
+                Geom::Ellipse { .. } if dashed => Geom::Poly {
+                    contours: shape.geom.contours(96),
+                    winding: false,
+                },
+                // These primitives have no reflection parameter.
+                Geom::Polygon { .. } | Geom::Star { .. } => shape.geom.to_path(),
+                other => other.clone(),
+            };
+            let center = shape.geom.bbox().center();
+            let visible_center = shape.world_bbox().center();
+            let translation = if horizontal {
+                Pt::new(2.0 * (visible_center.x - center.x), 0.0)
+            } else {
+                Pt::new(0.0, 2.0 * (visible_center.y - center.y))
+            };
+            after.flip_about(center, horizontal);
+            // Asymmetric paths can have a different visible centre after rotation.
+            // Keep their canvas bounds stationary while changing the local pivot.
+            after.translate(translation);
+            // F * R(angle) = R(-angle) * F: mirror the visible canvas axis,
+            // including objects that already carry a separate rotation.
+            commands.push(Cmd::SetGeom {
+                layer,
+                id,
+                before: shape.geom.clone(),
+                after: after.clone(),
+                rot_before: shape.rotation,
+                rot_after: -shape.rotation,
+            });
+            let mut style = shape.style.clone();
+            if let Fill::Linear { from, to, .. } = &mut style.fill {
+                let source_bounds = shape.geom.bbox();
+                let target_bounds = after.bbox();
+                for endpoint in [from, to] {
+                    let mut point = source_bounds.min
+                        + Pt::new(
+                            endpoint[0] * source_bounds.width(),
+                            endpoint[1] * source_bounds.height(),
+                        );
+                    if horizontal {
+                        point.x = 2.0 * center.x - point.x;
+                    } else {
+                        point.y = 2.0 * center.y - point.y;
+                    }
+                    point += translation;
+                    *endpoint = [
+                        (point.x - target_bounds.min.x) / target_bounds.width().max(1e-6),
+                        (point.y - target_bounds.min.y) / target_bounds.height().max(1e-6),
+                    ];
+                }
+            }
+            if style != shape.style {
+                commands.push(Cmd::SetStyle {
+                    layer,
+                    id,
+                    before: shape.style.clone(),
+                    after: style,
+                });
+            }
+            if let Geom::Rect { radius, .. } = shape.geom {
+                let [tl, tr, br, bl] = shape.corners;
+                let corners = if horizontal {
+                    [tr, tl, bl, br]
+                } else {
+                    [bl, br, tr, tl]
+                };
+                if corners != shape.corners {
+                    commands.push(Cmd::SetCorners {
+                        layer,
+                        id,
+                        before: shape.corners,
+                        after: corners,
+                        radius_before: radius,
+                        radius_after: radius,
+                    });
+                }
+            }
+        }
+        if commands.is_empty() {
+            return;
+        }
+        self.commit(Cmd::Batch(commands));
+        self.status = format!(
+            "Flipped {}",
+            if horizontal { "horizontal" } else { "vertical" }
+        );
     }
 
     pub fn wrap_selection_artboard(&mut self) {
@@ -2074,17 +2195,14 @@ impl Studio {
         }
         let mut after = s.geom.to_path();
         let rot = s.rotation;
-        if rot.abs() > 1e-5 {
-            let c = after.bbox().center();
-            after.rotate_about(c, rot);
-        }
+        after.preserve_rotation_pivot(s.geom.bbox().center(), rot);
         self.commit(Cmd::SetGeom {
             layer: li,
             id,
             before: s.geom.clone(),
             after,
             rot_before: rot,
-            rot_after: 0.0,
+            rot_after: rot,
         });
     }
 
@@ -2123,11 +2241,13 @@ impl Studio {
         if !anchors.is_empty() {
             self.node_sel.insert(anchors.len() - 1);
         }
+        let mut after = Geom::Path { anchors, closed };
+        after.preserve_rotation_pivot(s.geom.bbox().center(), s.rotation);
         self.commit(Cmd::SetGeom {
             layer: li,
             id,
             before: s.geom.clone(),
-            after: Geom::Path { anchors, closed },
+            after,
             rot_before: s.rotation,
             rot_after: s.rotation,
         });
@@ -2152,17 +2272,19 @@ impl Studio {
             self.status = "can't break at an endpoint".into();
             return;
         };
-        self.commit(Cmd::SetGeom {
+        let mut after = Geom::Path {
+            anchors: left,
+            closed: false,
+        };
+        after.preserve_rotation_pivot(s.geom.bbox().center(), s.rotation);
+        let mut commands = vec![Cmd::SetGeom {
             layer: li,
             id,
             before: s.geom.clone(),
-            after: Geom::Path {
-                anchors: left,
-                closed: false,
-            },
+            after,
             rot_before: s.rotation,
             rot_after: s.rotation,
-        });
+        }];
         if let Some(anchors) = right {
             let mut sh = s.clone();
             sh.id = crate::document::next_id();
@@ -2170,11 +2292,14 @@ impl Studio {
                 anchors,
                 closed: false,
             };
-            self.commit(Cmd::AddShape {
+            sh.geom
+                .preserve_rotation_pivot(s.geom.bbox().center(), s.rotation);
+            commands.push(Cmd::AddShape {
                 layer: li,
                 shape: sh,
             });
         }
+        self.commit(Cmd::Batch(commands));
         self.node_sel.clear();
         self.node_sel.insert(0);
         self.status = "path broken".into();
@@ -3932,5 +4057,338 @@ mod template_lifecycle_tests {
         studio.switch_tab(1);
         assert_eq!((studio.doc.width, studio.doc.height), (640.0, 480.0));
         assert!(studio.dirty, "the new template still needs its first save");
+    }
+}
+
+#[cfg(test)]
+mod flip_tests {
+    use super::*;
+
+    fn studio(shape: Shape) -> Studio {
+        let mut studio = Studio::new();
+        studio.doc = Document::new("Flip", 176.0, 192.0, 96.0);
+        studio.selection = vec![(1, shape.id)];
+        studio.doc.layers[1].kind.shapes_mut().unwrap().push(shape);
+        studio
+    }
+
+    fn mirror(point: Pt, center: Pt, horizontal: bool) -> Pt {
+        if horizontal {
+            Pt::new(2.0 * center.x - point.x, point.y)
+        } else {
+            Pt::new(point.x, 2.0 * center.y - point.y)
+        }
+    }
+
+    #[test]
+    fn flip_rotated_paths_and_primitives_matches_canvas_axes_and_one_undo() {
+        let geometries = [
+            Geom::Path {
+                anchors: vec![
+                    Anchor {
+                        pt: Pt::new(40.0, 55.0),
+                        h_in: Pt::ZERO,
+                        h_out: Pt::new(25.0, -15.0),
+                        radius: 0.0,
+                    },
+                    Anchor {
+                        pt: Pt::new(95.0, 115.0),
+                        h_in: Pt::new(-5.0, -20.0),
+                        h_out: Pt::ZERO,
+                        radius: 0.0,
+                    },
+                    Anchor::corner(Pt::new(50.0, 100.0)),
+                ],
+                closed: false,
+            },
+            Geom::Polygon {
+                center: Pt::new(88.0, 96.0),
+                radii: Pt::new(45.0, 30.0),
+                sides: 3,
+            },
+            Geom::Star {
+                center: Pt::new(88.0, 96.0),
+                outer: Pt::new(42.0, 32.0),
+                inner: 0.4,
+                points: 5,
+            },
+        ];
+        for geometry in geometries {
+            for degrees in [37.0_f32, 90.0, 180.0] {
+                for horizontal in [true, false] {
+                    let mut original = Shape::new(geometry.clone(), Style::default());
+                    original.rotation = degrees.to_radians();
+                    original.guide = true;
+                    let id = original.id;
+                    let center = original.world_bbox().center();
+                    let expected: Vec<_> = original
+                        .world_contours(96)
+                        .into_iter()
+                        .flatten()
+                        .map(|point| mirror(point, center, horizontal))
+                        .collect();
+                    let mut studio = studio(original.clone());
+                    assert!(studio.can_flip_selection());
+                    studio.flip_selection(horizontal);
+                    assert_eq!(studio.history.len(), 1);
+                    let after = studio.doc.find_shape(1, id).unwrap().clone();
+                    assert!(after.guide);
+                    assert!((after.world_bbox().center() - center).length() < 0.002);
+                    let actual: Vec<_> = after.world_contours(96).into_iter().flatten().collect();
+                    assert!(!actual.is_empty());
+                    // Closed paths may repeat the first vertex; compare the contour
+                    // in both directions so a missing or displaced point cannot pass.
+                    for (a, b) in [(&expected, &actual), (&actual, &expected)] {
+                        for point in a {
+                            assert!(
+                                b.iter().any(|other| (*point - *other).length() < 0.002),
+                                "{degrees} degrees, horizontal={horizontal}: {point:?}"
+                            );
+                        }
+                    }
+                    studio.undo();
+                    assert_eq!(studio.doc.find_shape(1, id), Some(&original));
+                    studio.redo();
+                    assert_eq!(studio.doc.find_shape(1, id), Some(&after));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn flip_render_mirrors_gradient_and_unequal_corners_after_rotation() {
+        for horizontal in [true, false] {
+            let mut shape = Shape::new(
+                Geom::Rect {
+                    origin: Pt::new(48.0, 64.0),
+                    size: Pt::new(80.0, 64.0),
+                    radius: 0.0,
+                },
+                Style {
+                    fill: Fill::Linear {
+                        from: [-0.2, 0.15],
+                        to: [1.1, 0.8],
+                        c0: Rgba::rgb(200, 50, 80),
+                        c1: Rgba::rgb(30, 140, 220),
+                    },
+                    stroke: None,
+                },
+            );
+            shape.rotation = std::f32::consts::FRAC_PI_2;
+            shape.corners = [0.0, 5.0, 16.0, 25.0];
+            let center = shape.geom.bbox().center();
+            let expected: Vec<_> = shape
+                .world_contours(96)
+                .into_iter()
+                .flatten()
+                .map(|point| mirror(point, center, horizontal))
+                .collect();
+            let mut studio = studio(shape);
+            studio.doc.transparent = true;
+            studio.doc.layers[0].visible = false;
+            let before = image::load_from_memory(&compositor::export_png(&studio.doc, 1).unwrap())
+                .unwrap()
+                .to_rgba8();
+            studio.flip_selection(horizontal);
+            let after = image::load_from_memory(&compositor::export_png(&studio.doc, 1).unwrap())
+                .unwrap()
+                .to_rgba8();
+            let actual: Vec<_> = studio
+                .doc
+                .find_shape(1, studio.selection[0].1)
+                .unwrap()
+                .world_contours(96)
+                .into_iter()
+                .flatten()
+                .collect();
+            for point in &expected {
+                assert!(
+                    actual
+                        .iter()
+                        .any(|other| (*point - *other).length() < 0.002)
+                );
+            }
+            let mut max_interior = 0;
+            let mut opaque_pixels = 0;
+            let mut coverage_error = 0u64;
+            for (x, y, pixel) in before.enumerate_pixels() {
+                let (mx, my) = if horizontal {
+                    (before.width() - 1 - x, y)
+                } else {
+                    (x, before.height() - 1 - y)
+                };
+                let reflected = after.get_pixel(mx, my);
+                coverage_error += pixel.0[3].abs_diff(reflected.0[3]) as u64;
+                if pixel.0[3] == 255 && reflected.0[3] == 255 {
+                    opaque_pixels += 1;
+                    for (a, b) in pixel.0.iter().zip(reflected.0) {
+                        max_interior = max_interior.max(a.abs_diff(b));
+                    }
+                }
+            }
+            assert!(
+                opaque_pixels > 3500,
+                "the gradient must be visibly rendered"
+            );
+            assert!(
+                max_interior <= 1,
+                "mirroring must retain interior gradient colors"
+            );
+            // Reversing contour direction changes subpixel edge coverage slightly.
+            // Require less than one pixel of accumulated error over the whole image.
+            assert!(
+                coverage_error < 255,
+                "mirrored edge coverage differs by {coverage_error}/255 pixels"
+            );
+
+            let reopened =
+                crate::project::decode(&crate::project::encode(&studio.doc).unwrap()).unwrap();
+            assert_eq!(
+                reopened.layers[1].kind.shapes(),
+                studio.doc.layers[1].kind.shapes()
+            );
+        }
+    }
+
+    #[test]
+    fn flip_dashed_primitives_mirrors_visible_gaps_and_restores_primitive() {
+        for ellipse in [false, true] {
+            for horizontal in [true, false] {
+                let geometry = if ellipse {
+                    Geom::Ellipse {
+                        center: Pt::new(88.0, 96.0),
+                        radii: Pt::new(40.0, 32.0),
+                    }
+                } else {
+                    Geom::Rect {
+                        origin: Pt::new(48.0, 64.0),
+                        size: Pt::new(80.0, 64.0),
+                        radius: 0.0,
+                    }
+                };
+                let mut original = Shape::new(
+                    geometry,
+                    Style {
+                        fill: Fill::None,
+                        stroke: Some(Stroke {
+                            width: 5.0,
+                            dash: Some((11.0, 7.0)),
+                            cap: Cap::Butt,
+                            ..Stroke::default()
+                        }),
+                    },
+                );
+                original.rotation = std::f32::consts::FRAC_PI_2;
+                if !ellipse {
+                    original.corners = [0.0, 5.0, 16.0, 25.0];
+                }
+                let id = original.id;
+                let mut studio = studio(original.clone());
+                studio.doc.transparent = true;
+                studio.doc.layers[0].visible = false;
+                let before =
+                    image::load_from_memory(&compositor::export_png(&studio.doc, 1).unwrap())
+                        .unwrap()
+                        .to_rgba8();
+                studio.flip_selection(horizontal);
+                let reflected = studio.doc.find_shape(1, id).unwrap().clone();
+                let after =
+                    image::load_from_memory(&compositor::export_png(&studio.doc, 1).unwrap())
+                        .unwrap()
+                        .to_rgba8();
+                let mut coverage_error = 0u64;
+                let mut visible_pixels = 0;
+                let mut max_alpha = 0;
+                for (x, y, pixel) in before.enumerate_pixels() {
+                    if pixel.0[3] > 0 {
+                        visible_pixels += 1;
+                    }
+                    let (mx, my) = if horizontal {
+                        (before.width() - 1 - x, y)
+                    } else {
+                        (x, before.height() - 1 - y)
+                    };
+                    let difference = pixel.0[3].abs_diff(after.get_pixel(mx, my).0[3]);
+                    coverage_error += difference as u64;
+                    max_alpha = max_alpha.max(difference);
+                }
+                assert!(
+                    visible_pixels > 500,
+                    "fixture must render its dashed outline"
+                );
+                // Reflected edges can differ by one antialias coverage step;
+                // real dash-phase errors move opaque strokes into empty gaps.
+                assert!(max_alpha <= 16, "a dash or gap moved beyond edge smoothing");
+                assert!(
+                    coverage_error < 255 * 2,
+                    "ellipse={ellipse}, horizontal={horizontal}: dash coverage differs by {coverage_error}/255 pixels"
+                );
+                assert_eq!(studio.history.len(), 1);
+                let reopened =
+                    crate::project::decode(&crate::project::encode(&studio.doc).unwrap()).unwrap();
+                assert_eq!(
+                    compositor::export_png(&reopened, 1).unwrap(),
+                    compositor::export_png(&studio.doc, 1).unwrap()
+                );
+                studio.undo();
+                assert_eq!(studio.doc.find_shape(1, id), Some(&original));
+                studio.redo();
+                assert_eq!(studio.doc.find_shape(1, id), Some(&reflected));
+            }
+        }
+    }
+
+    #[test]
+    fn flip_skips_live_text_locked_hidden_and_ancestor_locked_objects() {
+        let text = Shape::new(
+            Geom::Text(TypeRun {
+                content: "Still editable".into(),
+                ..TypeRun::default()
+            }),
+            Style::default(),
+        );
+        let mut studio = studio(text.clone());
+        assert!(!studio.can_flip_selection());
+        studio.flip_selection(true);
+        assert_eq!(studio.doc.find_shape(1, text.id), Some(&text));
+        assert_eq!(studio.history.len(), 0);
+        assert!(studio.status.contains("Convert text to paths"));
+
+        let shape = Shape::new(
+            Geom::Line {
+                a: Pt::new(20.0, 30.0),
+                b: Pt::new(65.0, 90.0),
+            },
+            Style::default(),
+        );
+        let id = shape.id;
+        studio.doc.layers[1]
+            .kind
+            .shapes_mut()
+            .unwrap()
+            .push(shape.clone());
+        studio.selection.push((1, id));
+        let mut group = Layer::group("Locked parent");
+        group.locked = true;
+        studio.doc.layers[1].parent = Some(group.id);
+        studio.doc.layers.push(group);
+        assert!(!studio.can_flip_selection());
+        studio.flip_selection(true);
+        assert_eq!(studio.history.len(), 0);
+        studio.doc.layers[2].locked = false;
+        studio.doc.find_shape_mut(1, id).unwrap().visible = false;
+        assert!(!studio.can_flip_selection());
+        studio.doc.find_shape_mut(1, id).unwrap().visible = true;
+        studio.doc.find_shape_mut(1, id).unwrap().locked = true;
+        assert!(!studio.can_flip_selection());
+        studio.doc.find_shape_mut(1, id).unwrap().locked = false;
+        assert!(studio.can_flip_selection());
+        studio.flip_selection(true);
+        assert_eq!(studio.history.len(), 1);
+        assert_eq!(studio.doc.find_shape(1, text.id), Some(&text));
+        assert_ne!(studio.doc.find_shape(1, id), Some(&shape));
+        studio.undo();
+        assert_eq!(studio.doc.find_shape(1, id), Some(&shape));
+        assert_eq!(studio.doc.find_shape(1, text.id), Some(&text));
     }
 }

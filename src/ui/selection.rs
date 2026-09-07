@@ -4,6 +4,27 @@ use crate::app::{
 };
 use eframe::egui::{self, Ui};
 
+/// Shared flip actions for the Object menu and object context menus.
+pub(super) fn flip_buttons(ui: &mut Ui, enabled: bool) -> Option<bool> {
+    for (horizontal, label, hint) in [
+        (true, "Flip horizontal", "Mirror left to right (X)"),
+        (false, "Flip vertical", "Mirror top to bottom (Y)"),
+    ] {
+        if ui
+            .add_enabled(enabled, egui::Button::new(label))
+            .on_hover_text(hint)
+            .on_disabled_hover_text(
+                "Select an unlocked vector object. For text, use Object → Convert to path first.",
+            )
+            .clicked()
+        {
+            ui.close();
+            return Some(horizontal);
+        }
+    }
+    None
+}
+
 pub fn menu(ui: &mut Ui, studio: &mut Studio) {
     if studio.persona == crate::tools::Persona::Photo {
         ui.add_enabled_ui(!studio.photo.is_batching(), |ui| {

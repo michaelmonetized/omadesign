@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-09-07 · Pass 19 — The handles got the memo.
+
+Version **0.0.4-alpha** fixes the split between a rotated path and its editable
+nodes. Rotation gestures turn geometry once, and points, Bézier handles, hit
+targets and dragging follow the rendered path. Editing a point keeps the other
+points in place even when the path's bounds change. Undo/Redo restores the
+geometry and rotation together; selecting a rotated path adds no history entry.
+
+Flip is within reach. **Flip horizontal** and **Flip vertical** appear directly
+in canvas and object-row context menus, as well as Object and the inspector.
+Right-clicking another object targets that object; clicking a selected member
+keeps the whole selection. Flips mirror the visible canvas axes after rotation,
+including linear gradients, dashed strokes and individual rectangle corners.
+Dashed circles and rectangles become paths so their dash placement mirrors too;
+Undo restores the original shape. Locked and hidden objects are left alone.
+Text stays editable until you explicitly choose **Object → Convert to path**;
+that conversion preserves all letter contours and holes and can be undone.
+
+Validation: **362 tests pass**; five existing optional fixtures remain opt-in.
+Native WGPU replay verifies 90°/180° rotation, visible nodes and Bézier handles,
+point insertion, both context-menu flips, right-click target selection and
+Undo/Redo. Reopening a rotated path preserves its geometry. Render checks cover
+gradients, unequal corners, dash placement and overlapping text. Formatting,
+diff checks and TypeScript pass; Clippy adds no warnings.
+
 ## 2026-09-07 · Pass 18 — One good edit. The whole camera roll.
 
 Version **0.0.3-alpha** gives Photo a batch workflow. Copy a developed look with
