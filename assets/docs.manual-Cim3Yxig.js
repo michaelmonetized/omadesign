@@ -1,4 +1,4 @@
-import{j as e}from"./index-cY-ggi-a.js";import{M as t}from"./md-6n7kYv6L.js";import"./release-BcHc7KB2.js";const n=`# omadesign user manual
+import{j as e}from"./index-BgEyxwvk.js";import{M as t}from"./md-DYBlZmOF.js";import"./release-DuqKHh6r.js";const n=`# omadesign user manual
 
 A native Linux studio. Design, paint, retouch and animate. One document, one layer stack.
 

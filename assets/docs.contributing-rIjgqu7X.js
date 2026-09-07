@@ -1,4 +1,4 @@
-import{j as e}from"./index-cY-ggi-a.js";import{M as n}from"./md-6n7kYv6L.js";import"./release-BcHc7KB2.js";const s=`# Contributing to omadesign
+import{j as e}from"./index-BgEyxwvk.js";import{M as n}from"./md-DYBlZmOF.js";import"./release-DuqKHh6r.js";const s=`# Contributing to omadesign
 
 Build and contribute to the native Linux app.
 
@@ -11,7 +11,9 @@ cargo test
 cargo run --release --bin omadesign
 \`\`\`
 
-Rust 2024. \`cargo\` is the toolchain. No GTK app, no Electron, no GitHub Actions.
+Rust 2024. Install Git, stable Rust, a C/C++ compiler and pkg-config. The C++
+compiler builds the bundled RAW decoder; no installed LibRaw is needed.
+\`cargo\` is the toolchain. No GTK app, no Electron, no GitHub Actions.
 
 ### Layout
 
@@ -94,4 +96,4 @@ Refuse to ship if \`objdump -T\` shows GLIBC newer than 2.35.
 ### License
 
 MIT. Phosphor Light is MIT (see \`assets/phosphor/LICENSE-MIT\`).
-`,r=()=>e.jsx(n,{source:s,sourcePath:"docs/CONTRIBUTING.md"});export{r as component};
+`,i=()=>e.jsx(n,{source:s,sourcePath:"docs/CONTRIBUTING.md"});export{i as component};
