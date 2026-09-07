@@ -101,6 +101,25 @@ Project kits travel as `.omacolors`, `.omatype` and the `.omabrand/` folder. Sta
 [Fieldwork example](examples/fieldwork), or follow the
 [palette and brand library guide](docs/MANUAL.md#palettes-and-brand-libraries).
 
+## Layered files
+
+Open and edit supported PSD/PSB layers, all PDF pages, PDF-compatible Illustrator
+artwork, OpenRaster, and SVG/SVGZ. Nested groups keep their order, visibility,
+opacity, blend settings and editable masks. Export layered PSD, PSB, PDF and
+OpenRaster from File. Imported documents save as `.oma`; source files are preserved.
+
+Affinity `.af`, `.afdesign`, `.afphoto`, `.afpub`, `.aftemplate` and `.afpackage`
+use the optional [Affinity bridge](docs/affinity-import.md). Proprietary features
+have limits: review **View → Document conversion notes** and the
+[format support matrix](docs/format-support.md). Native Affinity and Illustrator
+export are not available.
+
+```sh
+omadesign --inspect artwork.psd
+omadesign --convert artwork.afdesign --output artwork.oma
+omadesign --convert artwork.oma --output artwork.pdf
+```
+
 ## Docs
 
 - [User manual](docs/MANUAL.md)

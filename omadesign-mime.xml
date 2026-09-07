@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-omadesign">
+    <comment>Omadesign project</comment>
+    <sub-class-of type="application/json"/>
+    <generic-icon name="image-x-generic"/>
+    <glob pattern="*.oma"/>
+  </mime-type>
+  <!-- Canva's Affinity document MIME type. Register documents, not add-ons. -->
+  <mime-type type="application/affinity">
+    <comment>Affinity document</comment>
+    <generic-icon name="image-x-generic"/>
+    <glob pattern="*.af"/>
+    <glob pattern="*.affinity"/>
+    <glob pattern="*.afdesign"/>
+    <glob pattern="*.afphoto"/>
+    <glob pattern="*.afpub"/>
+    <glob pattern="*.aftemplate"/>
+    <glob pattern="*.afpackage"/>
+  </mime-type>
+  <mime-type type="image/vnd.adobe.photoshop">
+    <glob pattern="*.psb"/>
+  </mime-type>
+</mime-info>

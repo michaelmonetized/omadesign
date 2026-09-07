@@ -8,6 +8,7 @@ pub mod compositor;
 pub mod compound;
 pub mod document;
 pub mod filter;
+pub mod formats;
 pub mod geom;
 pub mod google_fonts;
 pub mod import;

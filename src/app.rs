@@ -2,8 +2,10 @@
 
 mod brand_assets;
 pub mod deform;
+mod file_io;
 mod guides;
 mod key_hints;
+mod layer_groups;
 pub mod libraries;
 mod masking;
 mod motion_presets;
@@ -54,12 +56,14 @@ pub enum CreateKind {
 pub enum PendingPlace {
     Raster { name: String, image: RgbaImage },
     Svg { name: String, svg: String },
+    Document(Document),
 }
 
 impl PendingPlace {
     pub fn name(&self) -> &str {
         match self {
             PendingPlace::Raster { name, .. } | PendingPlace::Svg { name, .. } => name,
+            PendingPlace::Document(doc) => &doc.name,
         }
     }
 
@@ -67,6 +71,7 @@ impl PendingPlace {
         match self {
             PendingPlace::Raster { image, .. } => (image.w as f32, image.h as f32),
             PendingPlace::Svg { svg, .. } => crate::shape_browser::svg_size(svg),
+            PendingPlace::Document(doc) => (doc.width, doc.height),
         }
     }
 }
@@ -357,6 +362,9 @@ pub struct Studio {
     pub artboard_rename: Option<(u64, String)>,
     pub shape_rename: Option<(usize, u64, String)>,
     pub clipboard_rasters: Vec<Layer>,
+    file_jobs: Vec<file_io::ImportJob>,
+    pub show_import_notes: bool,
+    pub transfer_notes: Vec<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -512,6 +520,9 @@ impl Studio {
             artboard_rename: None,
             shape_rename: None,
             clipboard_rasters: vec![],
+            file_jobs: vec![],
+            show_import_notes: false,
+            transfer_notes: vec![],
         };
         s.ensure_tabs();
         s.doc.grid.visible = false;
@@ -840,6 +851,7 @@ impl Studio {
         }
         for mut layer in rasters {
             layer.id = crate::document::next_id();
+            layer.parent = None;
             layer.name = format!("{} copy", layer.name);
             if let Some((o, sz, rot)) = layer.kind.raster_xform() {
                 layer.kind.set_raster_xform(o + delta, sz, rot);
@@ -1155,7 +1167,7 @@ impl Studio {
                 self.doc.layers.get(i).map(|l| &l.kind),
                 Some(LayerKind::Vector { .. })
             )
-            && !self.doc.layers[i].locked
+            && self.doc.layer_editable(i)
         {
             return Some(i);
         }
@@ -1164,7 +1176,9 @@ impl Studio {
             .iter()
             .enumerate()
             .rev()
-            .find(|(_, l)| matches!(l.kind, LayerKind::Vector { .. }) && !l.locked)
+            .find(|(i, l)| {
+                matches!(l.kind, LayerKind::Vector { .. }) && self.doc.layer_editable(*i)
+            })
             .map(|(i, _)| i)
     }
 
@@ -1176,7 +1190,7 @@ impl Studio {
                 .doc
                 .layers
                 .get(index)
-                .filter(|layer| editable(layer))
+                .filter(|layer| editable(layer) && self.doc.layer_editable(index))
                 .map(|_| index);
         }
         self.doc
@@ -1184,13 +1198,13 @@ impl Studio {
             .iter()
             .enumerate()
             .rev()
-            .find(|(_, layer)| editable(layer))
+            .find(|(index, layer)| editable(layer) && self.doc.layer_editable(*index))
             .map(|(index, _)| index)
     }
 
     pub fn add_layer(&mut self, raster: bool) {
         let n = self.doc.layers.len() + 1;
-        let layer = if raster {
+        let mut layer = if raster {
             Layer::raster(
                 format!("Pixel {n}"),
                 self.doc.width as u32,
@@ -1199,18 +1213,15 @@ impl Studio {
         } else {
             Layer::vector(format!("Layer {n}"))
         };
-        let index = self.doc.layers.len();
+        let (index, parent) = self.new_layer_parent();
+        layer.parent = parent;
         self.commit(Cmd::AddLayer { index, layer });
         self.active_layer = Some(index);
     }
 
     pub fn delete_layer(&mut self) {
-        if let Some(i) = self.active_layer
-            && self.doc.layers.len() > 1
-            && i < self.doc.layers.len()
-        {
-            let layer = self.doc.layers[i].clone();
-            self.commit(Cmd::RemoveLayer { index: i, layer });
+        if let Some(i) = self.active_layer {
+            self.delete_layer_tree(i);
         }
     }
 
@@ -1268,6 +1279,7 @@ impl Studio {
             if id == RASTER_ID {
                 if let Some(mut layer) = self.doc.layers.get(li).cloned() {
                     layer.id = crate::document::next_id();
+                    layer.parent = None;
                     layer.name = format!("{} copy", layer.name);
                     if let Some((origin, size, rotation)) = layer.kind.raster_xform() {
                         layer.kind.set_raster_xform(origin + delta, size, rotation);
@@ -2471,6 +2483,7 @@ impl Studio {
         }
         for mut layer in self.clipboard_rasters.clone() {
             layer.id = crate::document::next_id();
+            layer.parent = None;
             if let Some((o, sz, rot)) = layer.kind.raster_xform() {
                 layer.kind.set_raster_xform(o + nudge, sz, rot);
             }
@@ -2707,46 +2720,25 @@ impl Studio {
     }
 
     pub fn open_path(&mut self, path: PathBuf) {
-        match crate::import::open_any(&path) {
-            Ok(crate::import::Imported::Document(doc)) => {
-                self.open_document(doc, Some(path));
-            }
-            Ok(crate::import::Imported::Svg { name, svg }) => {
-                if !self.current_is_blank() {
-                    self.new_tab();
-                }
-                self.persona = Persona::Design;
-                self.show_welcome = false;
-                self.pending_place = Some(PendingPlace::Svg { name, svg });
-                self.commit_place_at(Pt::new(self.doc.width * 0.5, self.doc.height * 0.5));
-            }
-            Ok(crate::import::Imported::Raster { name, image }) => {
-                if self.persona == Persona::Photo {
-                    self.photo.import_file(&path);
-                    self.show_welcome = false;
-                    return;
-                }
-                if !self.current_is_blank() {
-                    self.new_tab();
-                }
-                self.persona = Persona::Design;
-                self.show_welcome = false;
-                self.pending_place = Some(PendingPlace::Raster { name, image });
-                self.commit_place_at(Pt::new(self.doc.width * 0.5, self.doc.height * 0.5));
-            }
-            Err(e) => self.status = e,
-        }
+        self.queue_import(path, file_io::ImportMode::Open);
     }
 
     fn open_document(&mut self, mut doc: crate::document::Document, path: Option<PathBuf>) {
         doc.ensure_ids();
-        let tab = TabState::new(doc, path.clone());
+        let imported = path
+            .as_ref()
+            .is_some_and(|p| crate::import::classify(p) != "oma");
+        self.show_import_notes = !doc.import_notes.is_empty();
+        let mut tab = TabState::new(doc, if imported { None } else { path.clone() });
+        tab.dirty = imported;
         if self.current_is_blank() {
             crate::project::delete_swap(&self.swap_id);
             self.replace_active_tab(tab);
         } else {
             self.push_tab(tab);
         }
+        self.persona = Persona::Design;
+        self.tool = Tool::Select;
         if let Some(p) = path {
             self.remember_path(&p);
             self.status = format!("opened {}", p.display());
@@ -3003,30 +2995,7 @@ impl Studio {
     }
 
     pub fn load_place_path(&mut self, path: &std::path::Path) {
-        match crate::import::open_any(path) {
-            Ok(crate::import::Imported::Document(doc)) => {
-                self.open_document(doc, Some(path.to_path_buf()));
-            }
-            Ok(crate::import::Imported::Raster { name, image }) => {
-                self.show_welcome = false;
-                if self.persona == Persona::Photo {
-                    self.persona = Persona::Design;
-                    self.tool = Tool::Select;
-                }
-                self.status = format!("click or drag to place {name}");
-                self.pending_place = Some(PendingPlace::Raster { name, image });
-            }
-            Ok(crate::import::Imported::Svg { name, svg }) => {
-                self.show_welcome = false;
-                if self.persona == Persona::Photo {
-                    self.persona = Persona::Design;
-                    self.tool = Tool::Select;
-                }
-                self.status = format!("click or drag to place {name}");
-                self.pending_place = Some(PendingPlace::Svg { name, svg });
-            }
-            Err(e) => self.status = e,
-        }
+        self.queue_import(path.to_path_buf(), file_io::ImportMode::Place);
     }
 
     pub fn ingest_dropped(&mut self, path: &std::path::Path, at: Option<Pt>) {
@@ -3053,34 +3022,7 @@ impl Studio {
             self.photo.import_file(path);
             return;
         }
-        match crate::import::open_any(path) {
-            Ok(crate::import::Imported::Document(doc)) => {
-                self.open_document(doc, Some(path.to_path_buf()))
-            }
-            Ok(crate::import::Imported::Raster { name, image }) => {
-                self.show_welcome = false;
-                if self.persona == Persona::Photo {
-                    self.persona = Persona::Design;
-                    self.tool = Tool::Select;
-                }
-                self.pending_place = Some(PendingPlace::Raster { name, image });
-                self.commit_place_at(
-                    at.unwrap_or(Pt::new(self.doc.width * 0.5, self.doc.height * 0.5)),
-                );
-            }
-            Ok(crate::import::Imported::Svg { name, svg }) => {
-                self.show_welcome = false;
-                if self.persona == Persona::Photo {
-                    self.persona = Persona::Design;
-                    self.tool = Tool::Select;
-                }
-                self.pending_place = Some(PendingPlace::Svg { name, svg });
-                self.commit_place_at(
-                    at.unwrap_or(Pt::new(self.doc.width * 0.5, self.doc.height * 0.5)),
-                );
-            }
-            Err(e) => self.status = e,
-        }
+        self.queue_import(path.to_path_buf(), file_io::ImportMode::Drop(at));
     }
 
     pub fn cancel_place(&mut self) {
@@ -3142,6 +3084,11 @@ impl Studio {
         match pending {
             PendingPlace::Raster { name, image } => self.place_raster(name, image, dest),
             PendingPlace::Svg { name, svg } => self.place_svg(name, &svg, dest),
+            PendingPlace::Document(doc) => {
+                if let Err(error) = self.place_layered_document(doc, dest) {
+                    self.status = error;
+                }
+            }
         }
     }
 
@@ -3382,7 +3329,9 @@ impl eframe::App for Studio {
             self.libraries.close_requested = true;
             self.pending_nav = None;
         }
+        self.poll_file_jobs(&ctx);
         crate::ui::run(ui, self);
+        self.import_notes_window(&ctx);
     }
 }
 
@@ -3855,6 +3804,13 @@ mod tests {
         let mut s = Studio::new();
         s.show_welcome = false;
         s.ingest_dropped(std::path::Path::new("/tmp/does-not-exist-xyz.oma"), None);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        let ctx = egui::Context::default();
+        while !s.file_jobs.is_empty() && std::time::Instant::now() < deadline {
+            s.poll_file_jobs(&ctx);
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(s.pending_place.is_none());
         assert!(
             s.status.contains("open failed")
                 || s.status.contains("opened")

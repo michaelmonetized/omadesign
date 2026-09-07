@@ -6,6 +6,13 @@ use std::path::PathBuf;
 
 fn main() -> eframe::Result {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(result) = omadesign::formats::cli::run(&args) {
+        if let Err(error) = result {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
     if args.iter().any(|arg| arg == "--version" || arg == "-V") {
         println!("omadesign {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
@@ -19,10 +26,15 @@ fn main() -> eframe::Result {
         }
         return Ok(());
     }
+    let shot_file = args
+        .windows(2)
+        .find(|w| w[0] == "--shot-file")
+        .map(|w| PathBuf::from(&w[1]));
     let shot = args
         .windows(2)
         .find(|w| w[0] == "--shot")
-        .map(|w| w[1].clone());
+        .map(|w| w[1].clone())
+        .or_else(|| shot_file.as_ref().map(|_| "imported".to_string()));
     let out = args
         .windows(2)
         .find(|w| w[0] == "--out")
@@ -104,7 +116,26 @@ fn main() -> eframe::Result {
                 theme::apply(&cc.egui_ctx);
                 cc.egui_ctx.set_pixels_per_point(1.0);
                 let mut studio = Studio::new();
-                if let Err(e) = shots::apply(&mut studio, &name) {
+                if let Some(path) = &shot_file {
+                    studio.doc = match omadesign::formats::cli::document(path) {
+                        Ok(doc) => doc,
+                        Err(error) => {
+                            eprintln!("{error}");
+                            std::process::exit(2);
+                        }
+                    };
+                    studio.show_welcome = false;
+                    studio.active_layer = studio.doc.layers.len().checked_sub(1);
+                    studio.layer_expanded.extend(
+                        studio
+                            .doc
+                            .layers
+                            .iter()
+                            .filter(|l| l.is_group)
+                            .map(|l| l.id),
+                    );
+                    studio.need_fit = true;
+                } else if let Err(e) = shots::apply(&mut studio, &name) {
                     eprintln!("{e}");
                     std::process::exit(2);
                 }

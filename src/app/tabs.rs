@@ -6,7 +6,7 @@ use std::mem::swap;
 pub(super) struct TabState {
     doc: Document,
     path: Option<PathBuf>,
-    dirty: bool,
+    pub(super) dirty: bool,
     view: View,
     selection: Vec<(usize, u64)>,
     active_layer: Option<usize>,

@@ -205,6 +205,17 @@ fn file_menu(ui: &mut Ui, studio: &mut Studio) {
             studio.export_svg();
             ui.close();
         }
+        for (label, extension) in [
+            ("Export Photoshop PSD…", "psd"),
+            ("Export large Photoshop PSB…", "psb"),
+            ("Export layered PDF…", "pdf"),
+            ("Export OpenRaster…", "ora"),
+        ] {
+            if ui.button(label).clicked() {
+                studio.export_layered(extension);
+                ui.close();
+            }
+        }
         if ui.button("Export animated SVG…").clicked() {
             studio.export_animated_svg();
             ui.close();
@@ -510,6 +521,11 @@ fn arrange_menu(ui: &mut Ui, studio: &mut Studio) {
 
 fn view_menu(ui: &mut Ui, studio: &mut Studio) {
     ui.menu_button("View", |ui| {
+        if ui.button("Document conversion notes…").clicked() {
+            studio.transfer_notes = studio.doc.import_notes.clone();
+            studio.show_import_notes = true;
+            ui.close();
+        }
         for (label, tab) in [("Inspector", crate::app::libraries::Sidebar::Inspector), ("Palette library", crate::app::libraries::Sidebar::Palettes), ("Brand assets", crate::app::libraries::Sidebar::Brand)] {
             if ui.selectable_label(studio.libraries.sidebar == tab, label).clicked() {
                 studio.libraries.sidebar=tab; studio.show_welcome=false; ui.close();

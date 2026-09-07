@@ -90,6 +90,12 @@ impl PhotoSession {
         }
     }
 
+    pub fn import_image(&mut self, name: String, full: RgbaImage) {
+        self.images.push(PhotoImage::from_full(name, full));
+        self.select_image(self.images.len() - 1);
+        self.status = "imported".into();
+    }
+
     pub fn import_bytes(&mut self, name: String, bytes: &[u8]) {
         match photo::decode_bytes(bytes) {
             Some(full) => {

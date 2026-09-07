@@ -65,33 +65,6 @@ fn svg_color(c: Rgba) -> String {
     if c.a >= 250 { hex_css(c) } else { rgba_css(c) }
 }
 
-fn raster_worth_exporting(
-    pixels: &crate::document::Pixels,
-    origin: Pt,
-    size: Pt,
-    doc: &Document,
-) -> bool {
-    if pixels.is_invisible() {
-        return false;
-    }
-    if let Some(c) = pixels.is_uniform() {
-        let paper = c.r > 250 && c.g > 250 && c.b > 250;
-        let (dw, dh) = if size.x.abs() > 0.5 && size.y.abs() > 0.5 {
-            (size.x.abs(), size.y.abs())
-        } else {
-            (pixels.w as f32, pixels.h as f32)
-        };
-        let covers = origin.x.abs() < 1.0
-            && origin.y.abs() < 1.0
-            && (dw - doc.width).abs() < 2.0
-            && (dh - doc.height).abs() < 2.0;
-        if paper && covers {
-            return false;
-        }
-    }
-    true
-}
-
 fn pixel_image(
     pixels: &crate::document::Pixels,
     transform: tiny_skia::Transform,
@@ -182,6 +155,16 @@ fn write_shape(
     extra: &str,
     text_as_paths: bool,
 ) {
+    let extra = format!(
+        " inkscape:label=\"{}\"{}{}",
+        xml_escape(&shape.name),
+        if shape.visible {
+            ""
+        } else {
+            " visibility=\"hidden\""
+        },
+        extra
+    );
     let fill_attr = match &shape.style.fill {
         Fill::None => "fill=\"none\"".to_string(),
         Fill::Solid(c) => format!("fill=\"{}\"", svg_color(*c)),
@@ -507,7 +490,9 @@ fn write_animated_shape(
 }
 
 fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
+    doc.validate_hierarchy()?;
     let mut body = String::new();
+    let mut layer_outputs = std::collections::HashMap::<u64, String>::new();
     let mut defs = String::new();
     let mut grad_id = 0usize;
     let mut css = String::new();
@@ -520,10 +505,25 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
         ));
     }
 
+    // Serialize descendants before parents, independent of their flat storage order.
+    let by_id: std::collections::HashMap<_, _> = doc.layers.iter().map(|l| (l.id, l)).collect();
+    let mut children = std::collections::HashMap::<u64, Vec<&Layer>>::new();
     for layer in &doc.layers {
-        if !layer.visible || layer.opacity <= 0.0 {
-            continue;
+        if let Some(parent) = layer.parent {
+            children.entry(parent).or_default().push(layer);
         }
+    }
+    let mut order: Vec<_> = doc.layers.iter().collect();
+    order.sort_by_cached_key(|layer| {
+        let mut depth = 0;
+        let mut parent = layer.parent;
+        while let Some(id) = parent {
+            depth += 1;
+            parent = by_id[&id].parent;
+        }
+        std::cmp::Reverse(depth)
+    });
+    for layer in order {
         let fx_id = format!("oma-fx-{}", layer.id);
         let fx_attr = if layer.filters.active() {
             let b = layer_bounds(layer).unwrap_or(crate::geom::Bounds {
@@ -546,10 +546,17 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
             String::new()
         };
         let mut layer_body = String::new();
+        if layer.is_group {
+            for child in children.get(&layer.id).into_iter().flatten() {
+                if let Some(output) = layer_outputs.get(&child.id) {
+                    layer_body.push_str(output);
+                }
+            }
+        }
         match &layer.kind {
             LayerKind::Vector { shapes } => {
                 for shape in shapes {
-                    if !shape.visible || shape.guide {
+                    if shape.guide {
                         continue;
                     }
                     let keyframes = animate
@@ -600,15 +607,8 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
                     }
                 }
             }
-            LayerKind::Raster {
-                pixels,
-                origin,
-                size,
-                ..
-            } => {
-                if !pixels.is_invisible()
-                    && (layer.mask.is_some() || raster_worth_exporting(pixels, *origin, *size, doc))
-                {
+            LayerKind::Raster { pixels, .. } => {
+                if !pixels.is_invisible() && !crate::compositor::is_paper_raster(layer) {
                     layer_body.push_str(&pixel_image(
                         pixels,
                         crate::compositor::layer_pixel_transform(layer),
@@ -616,22 +616,32 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
                 }
             }
         }
-        if layer_body.is_empty() {
+        if layer_body.is_empty() && !layer.is_group {
             continue;
         }
-        body.push_str(&format!(
-            "<g opacity=\"{:.3}\" style=\"mix-blend-mode:{}\"{fx_attr}>\n",
+        let mut output = String::new();
+        output.push_str(&format!(
+            "<g id=\"oma-layer-{}\" inkscape:label=\"{}\"{} opacity=\"{:.3}\" style=\"mix-blend-mode:{};isolation:{}\"{fx_attr}>\n",
+            layer.id, xml_escape(&layer.name), if layer.visible { "" } else { " visibility=\"hidden\"" },
             layer.opacity,
-            layer.blend.css()
+            layer.blend.css(),
+            if layer.is_group && !layer.pass_through { "isolate" } else { "auto" }
         ));
         // Canvas masks the layer before applying its effects. Keep the mask on
         // an inner group so SVG's filter-before-mask order cannot reverse that.
         if let Some(mask_id) = write_layer_mask(&mut defs, layer)? {
-            body.push_str(&format!("<g mask=\"url(#{mask_id})\">\n{layer_body}</g>\n"));
+            output.push_str(&format!("<g mask=\"url(#{mask_id})\">\n{layer_body}</g>\n"));
         } else {
-            body.push_str(&layer_body);
+            output.push_str(&layer_body);
         }
-        body.push_str("</g>\n");
+        output.push_str("</g>\n");
+        layer_outputs.insert(layer.id, output);
+    }
+
+    for layer in doc.layers.iter().filter(|layer| layer.parent.is_none()) {
+        if let Some(output) = layer_outputs.get(&layer.id) {
+            body.push_str(output);
+        }
     }
 
     let style = if css.is_empty() {
@@ -640,7 +650,7 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
         format!("<style>\n{css}</style>\n")
     };
     Ok(format!(
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\">\n{style}<defs>\n{defs}</defs>\n{body}</svg>\n",
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\">\n{style}<defs>\n{defs}</defs>\n{body}</svg>\n",
         doc.width, doc.height, doc.width, doc.height
     ))
 }

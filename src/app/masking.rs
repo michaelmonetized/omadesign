@@ -64,7 +64,10 @@ impl Studio {
             .layers
             .get(index)
             .filter(|layer| {
-                self.paint_mask && !layer.locked && layer.visible && layer.mask.is_some()
+                self.paint_mask
+                    && self.layer_unlocked(index)
+                    && self.doc.layer_visible(index)
+                    && layer.mask.is_some()
             })
             .map(|_| index)
     }
@@ -153,7 +156,12 @@ impl Studio {
     }
 
     pub fn invert_layer_mask(&mut self, index: usize) {
-        let Some(layer) = self.doc.layers.get(index).filter(|layer| !layer.locked) else {
+        let Some(layer) = self
+            .doc
+            .layers
+            .get(index)
+            .filter(|_| self.layer_unlocked(index))
+        else {
             return;
         };
         let Some(mut mask) = layer.mask.clone() else {
@@ -184,7 +192,12 @@ impl Studio {
     }
 
     pub fn apply_layer_mask(&mut self, index: usize) {
-        let Some(layer) = self.doc.layers.get(index).filter(|layer| !layer.locked) else {
+        let Some(layer) = self
+            .doc
+            .layers
+            .get(index)
+            .filter(|_| self.layer_unlocked(index))
+        else {
             return;
         };
         let Some(mask) = layer.mask.as_ref() else {
@@ -228,7 +241,17 @@ impl Studio {
     }
 
     fn mask_dimensions(&self, index: usize) -> Option<(u32, u32)> {
-        let layer = self.doc.layers.get(index).filter(|layer| !layer.locked)?;
+        let layer = self
+            .doc
+            .layers
+            .get(index)
+            .filter(|_| self.layer_unlocked(index))?;
+        if layer.mask_size.x > 0.0 && layer.mask_size.y > 0.0 {
+            return Some(layer.mask.as_ref().map(|mask| (mask.w, mask.h)).unwrap_or((
+                layer.mask_size.x.ceil().max(1.0) as u32,
+                layer.mask_size.y.ceil().max(1.0) as u32,
+            )));
+        }
         Some(layer.kind.pixels().map_or(
             (
                 self.doc.width.ceil().max(1.0) as u32,
@@ -239,7 +262,12 @@ impl Studio {
     }
 
     fn replace_layer_mask(&mut self, index: usize, after: Option<Pixels>) {
-        let Some(layer) = self.doc.layers.get(index).filter(|layer| !layer.locked) else {
+        let Some(layer) = self
+            .doc
+            .layers
+            .get(index)
+            .filter(|_| self.layer_unlocked(index))
+        else {
             return;
         };
         self.commit(Cmd::SetLayerMask {

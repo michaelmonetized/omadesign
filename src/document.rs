@@ -590,12 +590,31 @@ pub struct Layer {
     pub opacity: f32,
     pub blend: Blend,
     pub mask: Option<Pixels>,
+    /// Optional placed mask geometry for vector layers and groups.
+    #[serde(default)]
+    pub mask_origin: Pt,
+    #[serde(default)]
+    pub mask_size: Pt,
     pub kind: LayerKind,
+    /// Parent group id. Layers stay in painter order; group markers follow children.
+    #[serde(default)]
+    pub parent: Option<u64>,
+    #[serde(default)]
+    pub is_group: bool,
+    #[serde(default)]
+    pub pass_through: bool,
     #[serde(default)]
     pub filters: crate::filter::FilterStack,
 }
 
 impl Layer {
+    pub fn group(name: impl Into<String>) -> Self {
+        let mut layer = Self::vector(name);
+        layer.is_group = true;
+        layer.pass_through = true;
+        layer
+    }
+
     pub fn vector(name: impl Into<String>) -> Self {
         Self {
             id: next_id(),
@@ -604,7 +623,12 @@ impl Layer {
             locked: false,
             opacity: 1.0,
             blend: Blend::Normal,
+            parent: None,
+            is_group: false,
+            pass_through: false,
             mask: None,
+            mask_origin: Pt::ZERO,
+            mask_size: Pt::ZERO,
             kind: LayerKind::Vector { shapes: vec![] },
             filters: crate::filter::FilterStack::default(),
         }
@@ -618,7 +642,12 @@ impl Layer {
             locked: false,
             opacity: 1.0,
             blend: Blend::Normal,
+            parent: None,
+            is_group: false,
+            pass_through: false,
             mask: None,
+            mask_origin: Pt::ZERO,
+            mask_size: Pt::ZERO,
             kind: LayerKind::Raster {
                 pixels: Pixels::new(w, h),
                 origin: Pt::ZERO,
@@ -637,7 +666,12 @@ impl Layer {
             locked: false,
             opacity: 1.0,
             blend: Blend::Normal,
+            parent: None,
+            is_group: false,
+            pass_through: false,
             mask: None,
+            mask_origin: Pt::ZERO,
+            mask_size: Pt::ZERO,
             kind: LayerKind::Raster {
                 pixels,
                 origin,
@@ -936,6 +970,9 @@ pub struct Document {
     pub height: f32,
     pub dpi: f32,
     pub layers: Vec<Layer>,
+    /// Conversion changes stay with the saved project for later inspection.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub import_notes: Vec<String>,
     pub guides: Vec<Guide>,
     #[serde(default)]
     pub ruler: RulerSettings,
@@ -955,6 +992,70 @@ pub struct Document {
 }
 
 impl Document {
+    /// Ancestors are bounded even for malformed native documents.
+    pub fn layer_ancestors(&self, index: usize) -> Vec<usize> {
+        let mut result = Vec::new();
+        let mut parent = self.layers.get(index).and_then(|l| l.parent);
+        while let Some(id) = parent {
+            let Some(i) = self.layers.iter().position(|l| l.id == id && l.is_group) else {
+                break;
+            };
+            if i == index || result.contains(&i) || result.len() >= 64 {
+                break;
+            }
+            result.push(i);
+            parent = self.layers[i].parent;
+        }
+        result
+    }
+
+    pub fn layer_editable(&self, index: usize) -> bool {
+        self.layers
+            .get(index)
+            .is_some_and(|l| l.visible && !l.locked && !l.is_group)
+            && self
+                .layer_ancestors(index)
+                .iter()
+                .all(|&i| self.layers[i].visible && !self.layers[i].locked)
+    }
+
+    pub fn layer_visible(&self, index: usize) -> bool {
+        self.layers.get(index).is_some_and(|l| l.visible)
+            && self
+                .layer_ancestors(index)
+                .iter()
+                .all(|&i| self.layers[i].visible)
+    }
+
+    pub fn validate_hierarchy(&self) -> Result<(), String> {
+        let ids: std::collections::HashMap<_, _> = self
+            .layers
+            .iter()
+            .enumerate()
+            .map(|(i, l)| (l.id, i))
+            .collect();
+        if ids.len() != self.layers.len() {
+            return Err("Duplicate layer identifiers".into());
+        }
+        for layer in &self.layers {
+            let mut seen = std::collections::HashSet::new();
+            seen.insert(layer.id);
+            let mut parent = layer.parent;
+            while let Some(id) = parent {
+                if !seen.insert(id) || seen.len() > 64 {
+                    return Err("Invalid or overly deep layer group hierarchy".into());
+                }
+                let target = ids
+                    .get(&id)
+                    .and_then(|&i| self.layers.get(i))
+                    .filter(|l| l.is_group)
+                    .ok_or("Missing layer group")?;
+                parent = target.parent;
+            }
+        }
+        Ok(())
+    }
+
     pub fn new(name: impl Into<String>, width: f32, height: f32, dpi: f32) -> Self {
         Self::new_with_options(name, width, height, dpi, false, 1, false, false)
     }
@@ -986,6 +1087,7 @@ impl Document {
             height: page_h,
             dpi,
             layers: vec![Layer::raster("Background", w, h), Layer::vector("Layer 1")],
+            import_notes: vec![],
             guides: vec![],
             ruler: RulerSettings::default(),
             grid: Grid::default(),
@@ -1117,7 +1219,7 @@ impl Document {
 
     pub fn hit_test(&self, p: Pt, stroke_slack: f32) -> Option<(usize, u64)> {
         for (li, layer) in self.layers.iter().enumerate().rev() {
-            if !layer.visible || layer.locked {
+            if !self.layer_editable(li) {
                 continue;
             }
             if let Some(shapes) = layer.kind.shapes() {
@@ -1143,7 +1245,7 @@ impl Document {
     pub fn hits_in_rect(&self, r: Bounds) -> Vec<(usize, u64)> {
         let mut out = vec![];
         for (li, layer) in self.layers.iter().enumerate() {
-            if !layer.visible || layer.locked {
+            if !self.layer_editable(li) {
                 continue;
             }
             if let Some(shapes) = layer.kind.shapes() {
@@ -1187,6 +1289,15 @@ impl Document {
 
 #[derive(Clone, Debug)]
 pub enum Cmd {
+    SetImportNotes {
+        before: Vec<String>,
+        after: Vec<String>,
+    },
+    SetGroupPassThrough {
+        index: usize,
+        before: bool,
+        after: bool,
+    },
     SetShapeGuide {
         layer: usize,
         id: u64,
@@ -1530,6 +1641,19 @@ fn coalesce(prev: &mut Cmd, next: &Cmd) -> bool {
 
 fn invert_cmd(cmd: Cmd) -> Cmd {
     match cmd {
+        Cmd::SetImportNotes { before, after } => Cmd::SetImportNotes {
+            before: after,
+            after: before,
+        },
+        Cmd::SetGroupPassThrough {
+            index,
+            before,
+            after,
+        } => Cmd::SetGroupPassThrough {
+            index,
+            before: after,
+            after: before,
+        },
         Cmd::SetShapeGuide {
             layer,
             id,
@@ -1722,6 +1846,12 @@ fn invert_cmd(cmd: Cmd) -> Cmd {
 
 pub fn apply(doc: &mut Document, cmd: &Cmd) {
     match cmd {
+        Cmd::SetImportNotes { after, .. } => doc.import_notes = after.clone(),
+        Cmd::SetGroupPassThrough { index, after, .. } => {
+            if let Some(layer) = doc.layers.get_mut(*index) {
+                layer.pass_through = *after;
+            }
+        }
         Cmd::SetShapeGuide {
             layer, id, after, ..
         } => {
