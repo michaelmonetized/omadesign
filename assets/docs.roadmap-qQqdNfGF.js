@@ -1,10 +1,10 @@
-import{j as e}from"./index-D5NqmCia.js";import{M as t}from"./md-54_nl6k5.js";import"./release-BgmMATed.js";const a=`# Project status
+import{j as e}from"./index-kOqe4ds4.js";import{M as t}from"./md-CIHssN3d.js";import"./release-BJYwViUn.js";const a=`# Project status
 
 omadesign is an alpha native Linux design studio. The current tools cover vector design, raster painting, photo adjustments, and motion in a shared document.
 
 The [manual](MANUAL.md) describes the available workflows. Known issues and planned work live in [GitHub Issues](https://github.com/michaelmonetized/omadesign/issues).
 
-The [v0.0.3-alpha release](https://github.com/michaelmonetized/omadesign/releases/tag/v0.0.3-alpha) includes layered interchange, RAW photo development, batch adjustments and shareable presets in both ARM64 and x86_64 Linux downloads.
+The [v0.0.4-alpha release](https://github.com/michaelmonetized/omadesign/releases/tag/v0.0.4-alpha) includes layered interchange, RAW photo development, batch adjustments, shareable presets, accurate rotated node editing and right-click flips in both ARM64 and x86_64 Linux downloads.
 
 Import supported layers from PSD/PSB, PDF, PDF-compatible AI, SVG and OpenRaster, with an optional [Affinity bridge](affinity-import.md). Photo decodes supported camera RAW files at full resolution, saves adjustments in \`.omaphoto\` files and exports developed 16-bit PNG/TIFF or JPEG. See [file formats](format-support.md) for the import/export matrix and specific limits.
 
