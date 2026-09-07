@@ -1,4 +1,4 @@
-import{j as e}from"./index-DfCc-bIS.js";import{M as t}from"./md-D9SyRy_S.js";const n=`# omadesign user manual
+import{j as e}from"./index-cY-ggi-a.js";import{M as t}from"./md-6n7kYv6L.js";import"./release-BcHc7KB2.js";const n=`# omadesign user manual
 
 A native Linux studio. Design, paint, retouch and animate. One document, one layer stack.
 
@@ -136,7 +136,11 @@ Masks work on pixel and vector layers and remain editable in the project. Invert
 
 ## Photo
 
-Open a folder, drop files, or load samples. The Develop panel groups adjustments into **Light**, **Color**, and **Detail**. Tone curve, color mixer, and color grading expand when needed. **Before** compares the original; **Auto light** balances exposure and contrast. Export JPEG runs in the background. **Place in Design** drops the developed image as a pixel layer.
+Open a photo, browse a folder, drop files, or load samples. Camera RAW files such as DNG, CR2/CR3, NEF, ARW, RAF, ORF and RW2 use the built-in decoder. The Photo library shows camera metadata when available, and imports run in the background. The Develop panel groups adjustments into **Light**, **Color**, and **Detail**. Tone curve, color mixer, and color grading expand when needed. **Before** compares the default development; **Auto light** balances exposure and contrast. RAW exposure and white-balance changes use the 16-bit linear source.
+
+Use **Save settings** to keep development adjustments beside the original photo as a small \`.omaphoto\` file. Reopening the source restores those settings. Keep both files together; the original photograph is never rewritten. A changed source file or invalid settings file produces a note. Photo edits have their own Undo/Redo history. Quitting offers Save all, Discard or Cancel for unsaved photo settings before the palette and artwork save steps, and waits for writes to finish. Saving a Design \`.oma\` does not store the RAW source or its settings.
+
+Export JPEG, PNG or TIFF in the background at the full developed resolution, including crop and rotation. RAW PNG/TIFF exports keep 16-bit channels. **Place in Design** adds an 8-bit developed pixel layer with Undo; retain the RAW and settings for later development. The initial display preview has a maximum edge of 1600 pixels. Zoom in for full-resolution detail, prepared in the background and displayed as visible tiles while the preview keeps the view responsive. See [RAW format limits](format-support.md#camera-raw) for supported camera families and color-rendering differences.
 
 Hold Space or choose Hand to drag the view; middle-drag and two-finger scroll also pan. Pinch, Ctrl+scroll, and Alt+scroll zoom. Ctrl+0 fits the photo; Ctrl+1 shows it at 100%.
 
@@ -311,10 +315,13 @@ receive stable filenames automatically. Share fonts only under their license ter
 ## Files
 
 - Project: \`.oma\` (JSON, rasters PNG-packed, motion clip)
-- **File → Place…** \`Ctrl+Shift+P\` — PNG/JPEG/WebP/TIFF/GIF/BMP, SVG, PDF, AI, EPS, PSD onto the current artboard. Click to drop at native size, drag to size it. Enter places at the center. Esc cancels. Placed rasters are selectable objects: move, scale, rotate.
-- Drop a file on the canvas or the welcome screen: images and SVG place, \`.oma\` opens, Lottie imports. Affinity \`.afdesign\` is not readable — export SVG or PDF from Affinity first.
-- Open/Place format matrix: native \`.oma\` / SVG / PNG / JPEG / WebP / GIF / BMP / TIFF. Converted with poppler / Ghostscript / ImageMagick / Inkscape: PDF, AI (PDF-based), EPS, PSD. Unsupported with a clear error: Affinity packages.
-- Export: PNG (1×/2×/3×), JPEG, SVG (cubics stay cubics, rasters keep their box, type writes \`<text>\`), animated SVG, Lottie JSON
+- **File → Open** reads layered PSD/PSB, every page of PDF and PDF-compatible AI, OpenRaster, SVG/SVGZ, and supported Affinity documents through the optional bridge. Imported documents open in their own tab at their original dimensions. **Save** uses \`.oma\` and preserves the source file.
+- Camera RAW files open in Photo for development. **Save settings** creates \`.omaphoto\` alongside the source; Photo export creates a separate JPEG, PNG or TIFF. The original RAW is not changed.
+- **File → Place…** \`Ctrl+Shift+P\` loads artwork in the background, then lets you click or drag to place it. Nested layers and masks travel together, and Undo removes the placement in one step. Enter places at the center; Esc cancels.
+- Drop layered documents on the canvas or welcome screen to open them; ordinary images place, \`.oma\` opens, and Lottie imports.
+- Groups in the layer tree expand, rename, hide, lock and reorder as units. **Pass through** controls whether child blend modes interact with the backdrop. Disable it for isolated group blending.
+- **View → Document conversion notes** lists unsupported or converted features. Notes also stay in \`.oma\` projects. Affinity native features, Photoshop live text/smart objects/effects, and Illustrator private editing data are not universally supported. See the [format support matrix](format-support.md) and [Affinity setup](affinity-import.md).
+- Export: PNG (1×/2×/3×), JPEG, SVG, animated SVG, Lottie JSON, layered PSD/PSB, PDF and OpenRaster. Layers unsupported by an export format may become individual pixel layers; conversion notes describe those changes. Native \`.af*\` and \`.ai\` writers are not available.
 - Copy / cut / paste objects. Status bar says so. Copy style \`Ctrl+Alt+C\`, paste style \`Ctrl+Alt+V\`. Alt-drag clones.
 - Native file dialogs. Right-click the canvas for Place, Trace, and the same edits.
 
@@ -344,4 +351,4 @@ The app chrome follows your desktop theme. On launch it reads:
 3. stock Omarchy Catppuccin if nothing else is there
 
 UI type is \`omarchy font current\`, then fontconfig \`sans-serif\`. Override with \`OMADESIGN_FONT=/path/to/font.ttf\`.
-`,s=()=>e.jsx(t,{source:n,sourcePath:"docs/MANUAL.md"});export{s as component};
+`,r=()=>e.jsx(t,{source:n,sourcePath:"docs/MANUAL.md"});export{r as component};

@@ -1,4 +1,4 @@
-import{j as e}from"./index-DfCc-bIS.js";import{M as n}from"./md-D9SyRy_S.js";const s=`# Contributing to omadesign
+import{j as e}from"./index-cY-ggi-a.js";import{M as n}from"./md-6n7kYv6L.js";import"./release-BcHc7KB2.js";const s=`# Contributing to omadesign
 
 Build and contribute to the native Linux app.
 
@@ -94,4 +94,4 @@ Refuse to ship if \`objdump -T\` shows GLIBC newer than 2.35.
 ### License
 
 MIT. Phosphor Light is MIT (see \`assets/phosphor/LICENSE-MIT\`).
-`,a=()=>e.jsx(n,{source:s,sourcePath:"docs/CONTRIBUTING.md"});export{a as component};
+`,r=()=>e.jsx(n,{source:s,sourcePath:"docs/CONTRIBUTING.md"});export{r as component};
