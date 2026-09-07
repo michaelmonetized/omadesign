@@ -107,7 +107,7 @@ function DocsOverview() {
             template library
           </Link>{" "}
           for an editable starting point, or explore the{" "}
-          <a href="https://github.com/michaelmonetized/omadesign/tree/master/examples/fieldwork">
+          <a href={`${RELEASE_SOURCE_URL}/examples/fieldwork`}>
             Fieldwork example kit
           </a>{" "}
           to try portable palettes and reusable brand artwork.

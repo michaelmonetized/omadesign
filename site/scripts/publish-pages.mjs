@@ -64,6 +64,12 @@ async function validate(directory) {
     if (!names.has(name))
       throw new Error(`Missing prerendered output: ${name}`);
   }
+  if (
+    (await readFile(join(directory, "install"), "utf8")) !==
+    (await readFile(join(repository, "scripts/install-remote.sh"), "utf8"))
+  ) {
+    throw new Error("Sync site/public/install with scripts/install-remote.sh before publishing.");
+  }
   for (const path of paths) {
     if ((await stat(path)).size >= 100 * 1024 * 1024) {
       throw new Error(

@@ -11,7 +11,10 @@ linear pixels, saves `.omaphoto` adjustments and exports 16-bit PNG/TIFF or JPEG
 The website, source download and installer now describe the same release.
 Development-only notices become release availability notes, and source links use
 the release tag. Source-build prerequisites now include the C/C++ toolchain used
-by the bundled decoder. Compatibility limits remain in the format guide.
+by the bundled decoder. The website's standalone installer now verifies release
+checksums, and publication rejects an outdated installer copy. Documentation
+links in the downloaded archive resolve to the release source. Compatibility
+limits remain in the format guide.
 
 Validation: **329 tests pass**, plus all three optional librsvg/Poppler PDF
 checks. Formatting passes and Clippy reports no new warnings. Portable packaging

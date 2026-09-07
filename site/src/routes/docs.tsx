@@ -1,5 +1,5 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
-import { RELEASE_TAG } from "../release";
+import { RELEASE_TAG, RELEASE_SOURCE_URL } from "../release";
 
 export const Route = createFileRoute("/docs")({ component: Docs });
 
@@ -36,12 +36,12 @@ function Docs() {
           <p className="docs-nav-title">Keep exploring</p>
           <ul>
             <li>
-              <a href="https://github.com/michaelmonetized/omadesign/tree/master/examples/fieldwork">
+              <a href={`${RELEASE_SOURCE_URL}/examples/fieldwork`}>
                 Fieldwork brand kit ↗
               </a>
             </li>
             <li>
-              <a href="https://github.com/michaelmonetized/omadesign/blob/master/docs/template-drops.md">
+              <a href={`${RELEASE_SOURCE_URL}/docs/template-drops.md`}>
                 Template collection notes ↗
               </a>
             </li>
