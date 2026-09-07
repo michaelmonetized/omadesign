@@ -11,7 +11,8 @@ mod key_hud_tests;
 mod library;
 mod masking;
 mod motion_presets;
-mod photo;
+pub(crate) mod photo;
+mod photo_detail;
 mod retouch;
 mod selection;
 mod studios;
@@ -74,6 +75,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
 /// Screenshot scenes wait for their actual template previews, not a fixed sleep.
 pub fn scene_ready(ctx: &eframe::egui::Context, studio: &Studio) -> bool {
     library::ready(ctx, studio)
+        && (studio.persona != Persona::Photo || photo_detail::ready(ctx))
         && (!(studio.show_templates
             || (studio.show_welcome && studio.welcome_page == crate::app::WelcomePage::Templates))
             || templates::previews_ready(ctx))

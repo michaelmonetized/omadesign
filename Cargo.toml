@@ -45,6 +45,13 @@ usvg = "0.47"
 resvg = "0.47"
 lopdf = { version = "0.44", default-features = false }
 zip = { version = "8.6", default-features = false, features = ["deflate-flate2"] }
+libz-sys = { version = "1.1", features = ["static"] }
+mozjpeg-sys = { version = "2.2.3", default-features = false, features = ["unwinding"] }
+
+[build-dependencies]
+cc = { version = "1", features = ["parallel"] }
+flate2 = "1"
+tar = "0.4"
 
 # winit 0.30 only emits PinchGesture on macOS/iOS. This tree adds Wayland
 # zwp_pointer_gestures_v1 so a trackpad pinch zooms the canvas.

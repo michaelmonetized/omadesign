@@ -1,4 +1,4 @@
-//! Palette drafts finish saving before the existing artwork quit flow begins.
+//! Photo settings and palette drafts finish saving before the artwork quit flow.
 use super::*;
 
 const SAVE_ALL: &str = "library-save-on-quit";
@@ -98,6 +98,62 @@ fn discard_drafts(state: &mut Libraries) {
     state.next_sync = Instant::now();
 }
 
+/// Photo writes finish before palettes and artwork ask their own save questions.
+/// Returning true keeps the quit flow here, including after a failed write.
+fn show_photo_quit(ctx: &egui::Context, studio: &mut Studio) -> bool {
+    let busy = studio.photo.is_saving() || crate::ui::photo::is_exporting(ctx);
+    let names = studio.photo.unsaved_names();
+    if !busy && names.is_empty() && studio.photo.save_error().is_empty() {
+        return false;
+    }
+    let mut cancel = false;
+    let mut discard = false;
+    let mut save = false;
+    let dialog = egui::Modal::new(egui::Id::new("unsaved-photo-settings")).show(ctx, |ui| {
+        ui.set_width((ctx.viewport_rect().width() - 64.0).clamp(240.0, 420.0));
+        ui.heading("Save your photo settings?");
+        ui.add_space(6.0);
+        ui.label("Development settings are saved beside each original photograph.");
+        egui::ScrollArea::vertical()
+            .max_height(140.0)
+            .show(ui, |ui| {
+                for name in &names {
+                    ui.label(name);
+                }
+                if !studio.photo.save_error().is_empty() {
+                    ui.label(studio.photo.save_error());
+                }
+            });
+        if busy {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label("Finishing photo writes…");
+            });
+        }
+        ui.add_space(12.0);
+        ui.horizontal(|ui| {
+            cancel = ui.button("Cancel").clicked();
+            discard = ui
+                .add_enabled(!busy, egui::Button::new("Discard"))
+                .clicked();
+            save = ui
+                .add_enabled(!busy && !names.is_empty(), egui::Button::new("Save all"))
+                .clicked();
+        });
+    });
+    if cancel || dialog.should_close() {
+        studio.libraries.close_requested = false;
+        studio.libraries.close_error.clear();
+        studio.photo.clear_save_error();
+    } else if discard {
+        studio.photo.discard_settings();
+        return false;
+    } else if save {
+        studio.photo.save_all_settings();
+    }
+    true
+}
+
 pub(super) fn show(ctx: &egui::Context, studio: &mut Studio) {
     if let Some(result) = jobs::poll::<Vec<Saved>>(ctx, SAVE_ALL) {
         jobs::cancel::<Snapshot>(ctx, SYNC);
@@ -127,6 +183,9 @@ pub(super) fn show(ctx: &egui::Context, studio: &mut Studio) {
         }
     }
     if !studio.libraries.close_requested {
+        return;
+    }
+    if show_photo_quit(ctx, studio) {
         return;
     }
     let busy = jobs::is_running::<Vec<Saved>>(ctx, SAVE_ALL)
@@ -205,6 +264,109 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn photo_quit_waits_for_writes_preserves_failures_and_checks_artwork_after_discard() {
+        let temp = Temp(std::env::temp_dir().join(format!(
+            "omadesign-photo-close-{}-{}",
+            std::process::id(),
+            crate::document::next_id()
+        )));
+        std::fs::create_dir(&temp.0).unwrap();
+        let png = crate::photo::RgbaImage::new(3, 2, [48, 72, 96, 255].repeat(6))
+            .unwrap()
+            .encode_png()
+            .unwrap();
+        let a = temp.0.join("a.png");
+        let b = temp.0.join("b.png");
+        let ctx = egui::Context::default();
+        let mut studio = Studio::new();
+        studio.dirty = true;
+        for path in [&a, &b] {
+            std::fs::write(path, &png).unwrap();
+            studio
+                .photo
+                .import_photo(crate::photo::PhotoImage::load(path).unwrap());
+            let before = studio.photo.selected().unwrap().develop.clone();
+            studio.photo.selected_mut().unwrap().develop.exposure = 0.5;
+            studio.photo.record_edit(before, false);
+        }
+        // A replaced source must not receive the old image's development.
+        std::fs::write(&b, b"a replaced photograph").unwrap();
+        studio.libraries.close_requested = true;
+        studio.photo.save_all_settings();
+        let frame = |studio: &mut Studio, events| {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        vec2(960.0, 640.0),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| show(ui.ctx(), studio),
+            );
+            output.textures_delta.clear();
+        };
+        frame(&mut studio, vec![]);
+        assert!(
+            !studio.allow_close && studio.pending_nav.is_none(),
+            "a pending Photo save must block artwork quit"
+        );
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while studio.photo.is_saving() {
+            assert!(Instant::now() < deadline, "Photo save did not finish");
+            studio.photo.poll(&ctx);
+            frame(&mut studio, vec![]);
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert_eq!(
+            crate::photo::PhotoImage::load(&a).unwrap().develop.exposure,
+            0.5
+        );
+        assert!(!crate::photo::edits::sidecar_path(&b).exists());
+        assert_eq!(studio.photo.unsaved_names(), ["b.png"]);
+        assert!(
+            studio
+                .photo
+                .save_error()
+                .contains("changed after it was opened")
+        );
+        assert!(
+            studio.libraries.close_requested && !studio.allow_close && studio.pending_nav.is_none()
+        );
+
+        frame(
+            &mut studio,
+            vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: Some(egui::Key::Escape),
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+        assert!(
+            !studio.libraries.close_requested,
+            "Escape cancels quitting after a failed photo write"
+        );
+        assert!(studio.photo.has_unsaved_settings());
+        assert!(studio.pending_nav.is_none());
+
+        // Discard restores the last saved development, even if the following
+        // artwork save dialog is cancelled and the Photo session remains open.
+        studio.photo.discard_settings();
+        studio.libraries.close_requested = true;
+        frame(&mut studio, vec![]);
+        assert_eq!(studio.photo.images[1].develop.exposure, 0.0);
+        assert!(!studio.photo.has_unsaved_settings());
+        assert!(!studio.allow_close);
+        assert!(matches!(
+            studio.pending_nav,
+            Some(crate::app::PendingNav::Quit)
+        ));
     }
 
     #[test]

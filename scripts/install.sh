@@ -19,10 +19,12 @@ if [ -f "$SCRIPT_DIR/../Cargo.toml" ]; then
   SOURCE_BIN="$ROOT_DIR/target/release/omadesign"
   DESKTOP_FILE="$ROOT_DIR/omadesign.desktop"
   MIME_FILE="$ROOT_DIR/omadesign-mime.xml"
+  LICENSE_DIR="$ROOT_DIR/vendor"
 else
   SOURCE_BIN="$SCRIPT_DIR/omadesign"
   DESKTOP_FILE="$SCRIPT_DIR/omadesign.desktop"
   MIME_FILE="$SCRIPT_DIR/omadesign-mime.xml"
+  LICENSE_DIR="$SCRIPT_DIR/licenses"
 fi
 if [ ! -x "$SOURCE_BIN" ]; then
   echo "omadesign: build first with cargo build --release --bin omadesign" >&2
@@ -30,6 +32,12 @@ if [ ! -x "$SOURCE_BIN" ]; then
 fi
 if [ ! -f "$DESKTOP_FILE" ] || [ ! -f "$MIME_FILE" ]; then
   echo "omadesign: installation is missing desktop or MIME metadata" >&2
+  exit 1
+fi
+if [ ! -f "$LICENSE_DIR/libraw/LibRaw-0.22.2.tar.gz" ] || \
+   [ ! -f "$LICENSE_DIR/libraw/LICENSE.CDDL" ] || \
+   [ ! -d "$LICENSE_DIR/native-notices" ]; then
+  echo "omadesign: installation is missing the bundled RAW source and licenses" >&2
   exit 1
 fi
 if [ -n "$INSTALL_PREFIX" ]; then
@@ -44,6 +52,9 @@ fi
 APP="$DATA/applications"
 MIME="$DATA/mime"
 mkdir -p "$BIN" "$APP" "$MIME/packages"
+mkdir -p "$DATA/omadesign/licenses/libraw" "$DATA/omadesign/licenses/native-notices"
+cp "$LICENSE_DIR/libraw/"* "$DATA/omadesign/licenses/libraw/"
+cp "$LICENSE_DIR/native-notices/"* "$DATA/omadesign/licenses/native-notices/"
 # Rename into place so an existing session can keep running until QA relaunches.
 STAGED_BIN="$(mktemp "$BIN/.omadesign.XXXXXX")"
 STAGED_APP="$(mktemp "$APP/.omadesign.XXXXXX")"

@@ -6,6 +6,7 @@ use std::process::Command;
 
 #[derive(Clone)]
 pub enum Imported {
+    Photo(Box<crate::photo::PhotoImage>),
     Document(crate::document::Document),
     Raster { name: String, image: RgbaImage },
     Svg { name: String, svg: String },
@@ -13,6 +14,9 @@ pub enum Imported {
 
 pub fn classify(path: &Path) -> &'static str {
     let ext = ext(path);
+    if crate::formats::raw::is_extension(&ext) {
+        return "raw";
+    }
     match ext.as_str() {
         "oma" => "oma",
         "svg" | "svgz" => "svg",
@@ -33,6 +37,9 @@ pub fn classify(path: &Path) -> &'static str {
 pub fn open_any(path: &Path) -> Result<Imported, String> {
     let name = file_name(path);
     let kind = classify(path);
+    if kind == "raw" {
+        return crate::photo::PhotoImage::load(path).map(|photo| Imported::Photo(Box::new(photo)));
+    }
     let document = |mut doc: crate::document::Document, notes: Vec<String>| {
         doc.import_notes.extend(notes);
         doc.validate_hierarchy()?;

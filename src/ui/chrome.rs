@@ -156,14 +156,24 @@ fn file_menu(ui: &mut Ui, studio: &mut Studio) {
         });
         ui.separator();
         if ui
-            .add(Button::new("Save").shortcut_text("Ctrl+S"))
+            .add(
+                Button::new(if studio.persona == Persona::Photo {
+                    "Save photo settings"
+                } else {
+                    "Save"
+                })
+                .shortcut_text("Ctrl+S"),
+            )
             .clicked()
         {
             studio.save();
             ui.close();
         }
         if ui
-            .add(Button::new("Save as…").shortcut_text("Ctrl+Shift+S"))
+            .add_enabled(
+                studio.persona != Persona::Photo,
+                Button::new("Save as…").shortcut_text("Ctrl+Shift+S"),
+            )
             .clicked()
         {
             studio.save_as();
@@ -179,6 +189,21 @@ fn file_menu(ui: &mut Ui, studio: &mut Studio) {
         }
         ui.separator();
         ui.label(RichText::new("Export").small().color(fg_weak()));
+        if studio.persona == Persona::Photo {
+            ui.add_enabled_ui(!super::photo::is_exporting(ui.ctx()), |ui| {
+                for (label, extension) in [
+                    ("Export PNG…  Ctrl+E", "png"),
+                    ("Export TIFF…", "tif"),
+                    ("Export JPEG…", "jpg"),
+                ] {
+                    if ui.button(label).clicked() {
+                        super::photo::export_developed(ui.ctx(), studio, extension);
+                        ui.close();
+                    }
+                }
+            });
+            return;
+        }
         ui.horizontal(|ui| {
             ui.label(RichText::new("Scale").small().color(fg_weak()));
             for s in [1u32, 2, 3] {
@@ -236,7 +261,11 @@ fn edit_menu(ui: &mut Ui, studio: &mut Studio) {
     ui.menu_button("Edit", |ui| {
         if ui
             .add_enabled(
-                studio.history.can_undo(),
+                if studio.persona == Persona::Photo {
+                    studio.photo.can_undo()
+                } else {
+                    studio.history.can_undo()
+                },
                 Button::new("Undo").shortcut_text("Ctrl+Z"),
             )
             .clicked()
@@ -246,7 +275,11 @@ fn edit_menu(ui: &mut Ui, studio: &mut Studio) {
         }
         if ui
             .add_enabled(
-                studio.history.can_redo(),
+                if studio.persona == Persona::Photo {
+                    studio.photo.can_redo()
+                } else {
+                    studio.history.can_redo()
+                },
                 Button::new("Redo").shortcut_text("Ctrl+Shift+Z"),
             )
             .clicked()
@@ -877,6 +910,28 @@ pub fn status_bar(ui: &mut Ui, studio: &mut Studio) {
                 return;
             }
             let width = ui.available_width();
+            if studio.persona == Persona::Photo {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if let Some(image) = studio.photo.selected() {
+                        let (w, h) = image.dimensions();
+                        let (w, h) = image.develop.output_dim(w, h);
+                        ui.label(
+                            RichText::new(format!("{w} × {h} px"))
+                                .small()
+                                .color(fg_weak()),
+                        );
+                    }
+                    ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                        ui.add(
+                            eframe::egui::Label::new(
+                                RichText::new(&studio.photo.status).small().color(fg_weak()),
+                            )
+                            .truncate(),
+                        );
+                    });
+                });
+                return;
+            }
             // Reserve metadata before the hint, so a long tool description truncates.
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 ui.label(

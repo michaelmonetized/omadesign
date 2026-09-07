@@ -15,17 +15,22 @@ for tool in cargo readelf tar sha256sum; do
   command -v "$tool" >/dev/null || { echo "missing release tool: $tool" >&2; exit 1; }
 done
 
-chmod +x scripts/zig-cc scripts/zig-cc-aarch64 scripts/zig-cc-x86_64
+chmod +x scripts/zig-cc scripts/zig-cc-aarch64 scripts/zig-cc-x86_64 \
+  scripts/zig-cxx-aarch64 scripts/zig-cxx-x86_64
 
 # LLVM LTO + zig cc's lld plugin is a fight we don't need.
 export CARGO_PROFILE_RELEASE_LTO=false
+export OMA_RAW_CXX_STDLIB=c++
 
 echo "building aarch64-unknown-linux-gnu (glibc 2.35)..."
+CC_aarch64_unknown_linux_gnu="$ROOT/scripts/zig-cc-aarch64" \
+CXX_aarch64_unknown_linux_gnu="$ROOT/scripts/zig-cxx-aarch64" \
 CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="$ROOT/scripts/zig-cc-aarch64" \
   cargo build --locked --release --bin omadesign --target aarch64-unknown-linux-gnu
 
 echo "building x86_64-unknown-linux-gnu (glibc 2.35)..."
 CC_x86_64_unknown_linux_gnu="$ROOT/scripts/zig-cc-x86_64" \
+CXX_x86_64_unknown_linux_gnu="$ROOT/scripts/zig-cxx-x86_64" \
 CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER="$ROOT/scripts/zig-cc-x86_64" \
   cargo build --locked --release --bin omadesign --target x86_64-unknown-linux-gnu
 
@@ -41,6 +46,14 @@ package() {
   # required version names, and fail closed if inspection produces no evidence.
   if ! versions="$(readelf --version-info "$bin")"; then
     echo "could not inspect $bin" >&2
+    exit 1
+  fi
+  if ! native_libraries="$(readelf --dynamic "$bin")"; then
+    echo "could not inspect native dependencies of $bin" >&2
+    exit 1
+  fi
+  if printf '%s\n' "$native_libraries" | grep -Eq 'Shared library: \[lib(raw|jpeg|mozjpeg|z\.|stdc\+\+|c\+\+)'; then
+    echo "refusing to ship $triple: RAW support has an external library dependency" >&2
     exit 1
   fi
   glibc_versions="$(printf '%s\n' "$versions" | sed -n 's/.*Name: \(GLIBC_[^ ]*\).*/\1/p')"
@@ -75,6 +88,9 @@ package() {
   install -Dm644 README.md "$stage/README.md"
   install -Dm644 LICENSE "$stage/LICENSE"
   install -Dm644 assets/phosphor/LICENSE-MIT "$stage/LICENSE-Phosphor"
+  mkdir -p "$stage/licenses/libraw" "$stage/licenses/native-notices"
+  cp vendor/libraw/* "$stage/licenses/libraw/"
+  cp vendor/native-notices/* "$stage/licenses/native-notices/"
   install -Dm755 scripts/install.sh "$stage/install.sh"
   tar -C "$DIST" -czf "${DIST}/${name}.tar.gz" "$name"
   (cd "$DIST" && sha256sum "${name}.tar.gz" > "${name}.tar.gz.sha256")

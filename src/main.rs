@@ -117,24 +117,36 @@ fn main() -> eframe::Result {
                 cc.egui_ctx.set_pixels_per_point(1.0);
                 let mut studio = Studio::new();
                 if let Some(path) = &shot_file {
-                    studio.doc = match omadesign::formats::cli::document(path) {
-                        Ok(doc) => doc,
-                        Err(error) => {
-                            eprintln!("{error}");
-                            std::process::exit(2);
+                    if omadesign::import::classify(path) == "raw" {
+                        match omadesign::photo::PhotoImage::load(path) {
+                            Ok(photo) => studio.photo.import_photo(photo),
+                            Err(error) => {
+                                eprintln!("{error}");
+                                std::process::exit(2);
+                            }
                         }
-                    };
+                        studio.persona = omadesign::tools::Persona::Photo;
+                        studio.tool = omadesign::tools::Tool::Hand;
+                    } else {
+                        studio.doc = match omadesign::formats::cli::document(path) {
+                            Ok(doc) => doc,
+                            Err(error) => {
+                                eprintln!("{error}");
+                                std::process::exit(2);
+                            }
+                        };
+                        studio.active_layer = studio.doc.layers.len().checked_sub(1);
+                        studio.layer_expanded.extend(
+                            studio
+                                .doc
+                                .layers
+                                .iter()
+                                .filter(|l| l.is_group)
+                                .map(|l| l.id),
+                        );
+                        studio.need_fit = true;
+                    }
                     studio.show_welcome = false;
-                    studio.active_layer = studio.doc.layers.len().checked_sub(1);
-                    studio.layer_expanded.extend(
-                        studio
-                            .doc
-                            .layers
-                            .iter()
-                            .filter(|l| l.is_group)
-                            .map(|l| l.id),
-                    );
-                    studio.need_fit = true;
                 } else if let Err(e) = shots::apply(&mut studio, &name) {
                     eprintln!("{e}");
                     std::process::exit(2);
@@ -146,6 +158,7 @@ fn main() -> eframe::Result {
                     requested: false,
                     size: shot_size,
                     modifiers: shot_modifiers,
+                    detail_zoom_pending: name == "raw-detail" && shot_file.is_some(),
                 }))
             }),
         );
@@ -195,6 +208,7 @@ struct ShotRunner {
     requested: bool,
     size: egui::Vec2,
     modifiers: egui::Modifiers,
+    detail_zoom_pending: bool,
 }
 
 impl eframe::App for ShotRunner {
@@ -215,6 +229,15 @@ impl eframe::App for ShotRunner {
         omadesign::ui::run(ui, &mut self.studio);
         let ctx = ui.ctx().clone();
         self.frame += 1;
+        if self.detail_zoom_pending
+            && self.frame >= 3
+            && self.studio.persona == omadesign::tools::Persona::Photo
+            && self.studio.photo.fit_scale > 0.0
+        {
+            self.studio.photo.view_scale = 1.0 / self.studio.photo.fit_scale;
+            self.studio.photo.view_offset = egui::Vec2::ZERO;
+            self.detail_zoom_pending = false;
+        }
         if self.frame == 2 {
             ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(self.size));
         }

@@ -167,10 +167,28 @@ const PLACE_EXTS: &[&str] = &[
     "afpackage",
 ];
 
+fn raw_extensions() -> Vec<String> {
+    // Portal glob filters are case-sensitive; cameras normally write uppercase
+    // suffixes while edited/downloaded files often use lowercase ones.
+    crate::formats::raw::EXTENSIONS
+        .iter()
+        .flat_map(|extension| [(*extension).to_owned(), extension.to_ascii_uppercase()])
+        .collect()
+}
+
+fn supported_extensions() -> Vec<String> {
+    PLACE_EXTS
+        .iter()
+        .map(|extension| (*extension).to_owned())
+        .chain(raw_extensions())
+        .collect()
+}
+
 pub fn dialog_open() -> Option<PathBuf> {
     rfd::FileDialog::new()
-        .add_filter("All supported", PLACE_EXTS)
+        .add_filter("All supported", &supported_extensions())
         .add_filter("omadesign", &["oma"])
+        .add_filter("Camera RAW", &raw_extensions())
         .add_filter(
             "Layered documents",
             &[
@@ -197,7 +215,8 @@ pub fn dialog_open() -> Option<PathBuf> {
 
 pub fn dialog_place() -> Option<PathBuf> {
     rfd::FileDialog::new()
-        .add_filter("Place", PLACE_EXTS)
+        .add_filter("Place", &supported_extensions())
+        .add_filter("Camera RAW", &raw_extensions())
         .add_filter(
             "Images",
             &[
