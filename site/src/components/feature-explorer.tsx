@@ -54,7 +54,7 @@ export function FeatureExplorer() {
           </select>
         </label>
         <span className="feature-count" role="status">
-          {count} features
+          {count} {count === 1 ? "feature" : "features"}
         </span>
       </div>
       <div className="feature-groups">

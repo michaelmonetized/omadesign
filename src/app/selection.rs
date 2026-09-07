@@ -17,6 +17,46 @@ pub enum With {
 }
 
 impl Studio {
+    /// Explicit outlining may discard live text; entering the Node tool must not.
+    pub fn convert_object_to_path(&mut self, layer: usize, id: u64) {
+        if !self.doc.layer_editable(layer)
+            || !self.doc.find_shape(layer, id).is_some_and(|shape| {
+                shape.visible && !shape.locked && (!shape.guide || self.doc.ruler.guides_visible)
+            })
+        {
+            self.status = "Select an unlocked vector object to convert".into();
+            return;
+        }
+        self.commit_type_edit();
+        self.end_deform(false);
+        let Some(shape) = self.doc.find_shape(layer, id) else {
+            return;
+        };
+        if let Geom::Text(run) = &shape.geom {
+            if run.contours.is_empty() {
+                self.status = "This text has no outlines to convert".into();
+                return;
+            }
+            // Keep every glyph and counter, plus the existing bounds/rotation pivot.
+            self.commit(Cmd::SetGeom {
+                layer,
+                id,
+                before: shape.geom.clone(),
+                after: Geom::Poly {
+                    contours: run.contours.clone(),
+                    winding: false,
+                },
+                rot_before: shape.rotation,
+                rot_after: shape.rotation,
+            });
+            self.status = "Text converted to paths · Undo restores editable text".into();
+        } else {
+            self.ensure_path(layer, id);
+        }
+        self.node_sel.clear();
+        self.reset_snap_gesture();
+    }
+
     fn selectable_objects(&self) -> Vec<(usize, u64)> {
         self.doc
             .layers
@@ -457,5 +497,83 @@ mod tests {
         assert_eq!(*s.doc.layers[0].kind.shapes().unwrap(), original);
         s.redo();
         assert!(s.doc.layers[0].kind.shapes().unwrap().len() > original.len());
+    }
+}
+
+#[cfg(test)]
+mod text_outline_tests {
+    use super::*;
+
+    #[test]
+    fn explicit_text_outlining_preserves_all_glyphs_holes_and_restores_live_type() {
+        for (content, px, tracking) in [("BO8", 58.0, 0.0), ("OO", 80.0, -30.0)] {
+            let mut geometry = Geom::Text(TypeRun {
+                origin: Pt::new(45.0, 120.0),
+                content: content.into(),
+                px,
+                tracking,
+                ..TypeRun::default()
+            });
+            crate::text::fill_contours(&mut geometry);
+            let Geom::Text(run) = &geometry else {
+                unreachable!()
+            };
+            assert!(
+                run.contours.len() >= if content == "BO8" { 6 } else { 4 },
+                "fixture must have multiple glyphs and counters"
+            );
+            let mut original = Shape::new(
+                geometry,
+                Style {
+                    fill: Fill::Linear {
+                        from: [-0.1, 0.0],
+                        to: [1.0, 0.8],
+                        c0: Rgba::rgb(220, 40, 80),
+                        c1: Rgba::rgb(30, 110, 230),
+                    },
+                    stroke: None,
+                },
+            );
+            original.rotation = 31.0_f32.to_radians();
+            let id = original.id;
+            let mut studio = Studio::new();
+            studio.doc = Document::new("Outlined type", 240.0, 200.0, 96.0);
+            studio.doc.layers[1]
+                .kind
+                .shapes_mut()
+                .unwrap()
+                .push(original.clone());
+            studio.selection = vec![(1, id)];
+            studio.begin_type_edit((1, id), Pt::new(50.0, 110.0));
+            let before = compositor::export_png(&studio.doc, 1).unwrap();
+            studio.convert_object_to_path(1, id);
+            assert!(studio.type_edit.is_none());
+            assert_eq!(studio.history.len(), 1);
+            assert!(studio.can_flip_selection());
+            let outlined = studio.doc.find_shape(1, id).unwrap().clone();
+            let Geom::Poly { contours, winding } = &outlined.geom else {
+                panic!("all-contour outline")
+            };
+            let Geom::Text(run) = &original.geom else {
+                unreachable!()
+            };
+            assert!(
+                !*winding,
+                "preserve live text's even-odd overlapping-glyph appearance"
+            );
+            assert_eq!(contours, &run.contours);
+            assert_eq!(outlined.style, original.style);
+            assert_eq!(outlined.rotation, original.rotation);
+            assert_eq!(outlined.geom.bbox(), original.geom.bbox());
+            assert_eq!(compositor::export_png(&studio.doc, 1).unwrap(), before);
+            let reopened =
+                crate::project::decode(&crate::project::encode(&studio.doc).unwrap()).unwrap();
+            assert_eq!(reopened.find_shape(1, id), Some(&outlined));
+            assert_eq!(compositor::export_png(&reopened, 1).unwrap(), before);
+            studio.undo();
+            assert_eq!(studio.doc.find_shape(1, id), Some(&original));
+            studio.redo();
+            assert_eq!(studio.doc.find_shape(1, id), Some(&outlined));
+        }
     }
 }

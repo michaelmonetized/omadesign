@@ -851,6 +851,15 @@ impl Geom {
         b.unwrap_or(Bounds::from_pt(Pt::ZERO))
     }
 
+    /// Keep edits in the original rotation frame when their bounds change.
+    /// Shape rotation is applied around the geometry's current bounding center.
+    pub fn preserve_rotation_pivot(&mut self, original_center: Pt, rotation: f32) {
+        if rotation.abs() > 1e-5 {
+            let delta = original_center - self.bbox().center();
+            self.translate(delta - delta.rotate(rotation));
+        }
+    }
+
     pub fn translate(&mut self, d: Pt) {
         match self {
             Geom::Rect { origin, .. } => *origin += d,

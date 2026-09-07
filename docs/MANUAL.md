@@ -53,6 +53,10 @@ Select a layer row to reorder it with **Ctrl+[ / Ctrl+]**; add **Shift** to send
 
 - **Free transform** `Ctrl+T` — puts the current selection into Move with its scale and rotation handles ready. Also under Object. It keeps live text and shape parameters editable.
 - **Node** `A` — drag points and Bézier handles. Shift-click adds nodes. Drag a box around nodes to select them. Drag a segment to move the line. Click a curve to insert. Alt-click converts corner/smooth. Alt-drag a handle breaks symmetry. Delete removes selected points. Object → Break path. Shapes convert to a path the first time you edit them.
+- **Flip** — right-click artwork or its object row and choose **Flip horizontal** (left/right) or **Flip vertical** (top/bottom). The same controls live under Object and in the inspector. Flips follow the visible canvas axes even after rotation, and Undo restores them. Dashed rectangles and ellipses become paths so their dash placement mirrors too; Undo restores their shape parameters. For live text, explicitly choose **Object → Convert to path** first; this preserves letter outlines and holes but replaces editable text. Undo restores the text.
+
+Rotated paths keep their visible points and Bézier handles aligned with the artwork. Point, handle and segment edits work at those displayed locations; existing saved rotations remain intact. Selecting a path does not create an undo step.
+
 - **Pen** `P` — click a corner, click-drag a smooth point (a twitch under 3px stays a corner). Shift constrains 45°. Alt-drag breaks handle symmetry. The cubic is drawn as you go. Enter or double-click finishes an **open** path. Esc removes the last point, then cancels. Click the first point to close. Click an open endpoint to continue it, or to join it to the path you're drawing.
 - **Artboard** `Shift+O` — draw a new board, drag to move, handles scale, the top handle rotates. Alt-drag clones. Object → Wrap selection in artboard. Click the name in Transform to rename.
 

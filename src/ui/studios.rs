@@ -1275,11 +1275,19 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
     }
     ui.horizontal(|ui| {
         ui.label(RichText::new("Flip").small().color(fg_weak()));
-        if ui.small_button("Horizontal").clicked() {
-            studio.flip_selection(true);
-        }
-        if ui.small_button("Vertical").clicked() {
-            studio.flip_selection(false);
+        for (horizontal, label) in [(true, "Horizontal"), (false, "Vertical")] {
+            if ui
+                .add_enabled(
+                    studio.can_flip_selection(),
+                    eframe::egui::Button::new(label).small(),
+                )
+                .on_disabled_hover_text(
+                    "Select an unlocked vector object. Convert text to paths before flipping.",
+                )
+                .clicked()
+            {
+                studio.flip_selection(horizontal);
+            }
         }
     });
     if let Some(mut count) = polygon
@@ -1749,6 +1757,7 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
     let mut start_shape_rename: Option<(usize, u64)> = None;
     let mut shape_up: Option<(usize, usize)> = None;
     let mut shape_down: Option<(usize, usize)> = None;
+    let mut flip_shape: Option<(usize, u64, bool)> = None;
     let n = studio.doc.layers.len();
     if let Some(i) = studio.active_layer.filter(|&i| i < n) {
         if studio.doc.layers[i].is_group {
@@ -2100,6 +2109,28 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                                         start_shape_rename = Some((i, shape.id));
                                                         ui.close();
                                                     }
+                                                    ui.separator();
+                                                    if let Some(horizontal) =
+                                                        super::selection::flip_buttons(
+                                                            ui,
+                                                            objects_editable
+                                                                && shape.visible
+                                                                && !shape.locked
+                                                                && !matches!(
+                                                                    shape.geom,
+                                                                    Geom::Text(_)
+                                                                )
+                                                                && (!shape.guide
+                                                                    || studio
+                                                                        .doc
+                                                                        .ruler
+                                                                        .guides_visible),
+                                                        )
+                                                    {
+                                                        flip_shape =
+                                                            Some((i, shape.id, horizontal));
+                                                    }
+                                                    ui.separator();
                                                     if ui
                                                         .add_enabled(
                                                             index + 1 < shapes.len(),
@@ -2237,6 +2268,21 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
         studio.selection = vec![(li, id)];
         studio.active_layer = Some(li);
         studio.artboard_sel.clear();
+    }
+    if let Some((li, id, horizontal)) = flip_shape {
+        if !studio.selection.contains(&(li, id)) {
+            studio.commit_type_edit();
+            studio.end_deform(true);
+            studio.selected_layer = None;
+            studio.selection = vec![(li, id)];
+            studio.node_sel.clear();
+            studio.artboard_sel.clear();
+            if studio.active_layer != Some(li) {
+                studio.paint_mask = false;
+            }
+            studio.active_layer = Some(li);
+        }
+        studio.flip_selection(horizontal);
     }
     if let Some((li, id)) = vis_shape
         && let Some(s) = studio.doc.find_shape(li, id)

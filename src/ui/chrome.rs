@@ -443,18 +443,17 @@ fn object_menu(ui: &mut Ui, studio: &mut Studio) {
             ui.close();
         }
         ui.separator();
-        if ui.button("Flip horizontal").clicked() {
-            flip(studio, true);
-            ui.close();
-        }
-        if ui.button("Flip vertical").clicked() {
-            flip(studio, false);
-            ui.close();
+        if let Some(horizontal) = super::selection::flip_buttons(ui, studio.can_flip_selection()) {
+            studio.flip_selection(horizontal);
         }
         ui.separator();
-        if ui.button("Convert to path").clicked() {
+        if ui
+            .button("Convert to path")
+            .on_hover_text("Convert shapes or text to editable vector outlines")
+            .clicked()
+        {
             if let Some((li, id)) = studio.primary() {
-                studio.ensure_path(li, id);
+                studio.convert_object_to_path(li, id);
             }
             ui.close();
         }
@@ -508,10 +507,6 @@ fn object_menu(ui: &mut Ui, studio: &mut Studio) {
             ui.close();
         }
     });
-}
-
-fn flip(studio: &mut Studio, horizontal: bool) {
-    studio.flip_selection(horizontal);
 }
 
 fn arrange_menu(ui: &mut Ui, studio: &mut Studio) {

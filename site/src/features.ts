@@ -21,7 +21,7 @@ export const featureGroups: FeatureGroup[] = [
       {
         name: "Node editing",
         description:
-          "Move points, segments and Bézier handles. Add or remove nodes, switch corners to curves and break handle symmetry.",
+          "Move points, segments and Bézier handles directly on rotated paths. Add or remove nodes, switch corners to curves and break handle symmetry.",
       },
       {
         name: "Geometric shapes",
@@ -36,7 +36,7 @@ export const featureGroups: FeatureGroup[] = [
       {
         name: "Free transform",
         description:
-          "Move, scale and rotate with canvas handles while keeping live text and shape parameters editable. Alt-drag makes a copy.",
+          "Move, scale and rotate with canvas handles. Right-click to flip vectors horizontally or vertically. Alt-drag makes a copy; text stays live until you explicitly outline it.",
       },
       {
         name: "Pathfinder and compound paths",

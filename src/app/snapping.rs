@@ -177,14 +177,22 @@ impl Studio {
                 (*start + delta, feedback)
             }
             Some(Op::Node {
-                orig: Geom::Path { anchors, .. },
+                orig,
+                layer,
+                id,
                 which: NodeHit::Point(index),
                 ..
             }) if shift => scene.point(
                 self.effective_snap(),
                 point,
                 self.view.scale,
-                anchors.get(*index).map(|a| a.pt),
+                match orig {
+                    Geom::Path { anchors, .. } => anchors.get(*index).map(|anchor| {
+                        let rotation = self.doc.find_shape(*layer, *id).map_or(0.0, |s| s.rotation);
+                        anchor.pt.rotate_about(orig.bbox().center(), rotation)
+                    }),
+                    _ => None,
+                },
             ),
             _ => scene.point(self.effective_snap(), point, self.view.scale, None),
         };

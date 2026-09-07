@@ -218,6 +218,34 @@ impl Shape {
         }
     }
 
+    pub fn world_point(&self, point: Pt) -> Pt {
+        point.rotate_about(self.geom.bbox().center(), self.rotation)
+    }
+
+    pub fn local_point(&self, point: Pt) -> Pt {
+        point.rotate_about(self.geom.bbox().center(), -self.rotation)
+    }
+
+    /// Editable anchors in the same coordinate space as the rendered outline.
+    pub fn world_anchors(&self) -> Option<Vec<crate::geom::Anchor>> {
+        let Geom::Path { anchors, .. } = &self.geom else {
+            return None;
+        };
+        let center = self.geom.bbox().center();
+        Some(
+            anchors
+                .iter()
+                .map(|anchor| {
+                    let mut anchor = *anchor;
+                    anchor.pt = anchor.pt.rotate_about(center, self.rotation);
+                    anchor.h_in = anchor.h_in.rotate(self.rotation);
+                    anchor.h_out = anchor.h_out.rotate(self.rotation);
+                    anchor
+                })
+                .collect(),
+        )
+    }
+
     pub fn world_contours(&self, segs: usize) -> Vec<Vec<Pt>> {
         let mut cs = if let Geom::Rect { origin, size, .. } = self.geom {
             vec![crate::geom::rounded_rect_corners(

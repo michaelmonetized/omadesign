@@ -55,7 +55,7 @@ export function Install() {
         </a>
       </div>
       <p className="install-version">
-        {RELEASE_TAG} adds batch photo adjustments and reusable presets.
+        {RELEASE_TAG} fixes rotated node editing and adds right-click flip controls.
         {" "}<a href={RELEASE_URL}>Read the release notes</a>.
       </p>
       <p className="copy-status" role="status">
