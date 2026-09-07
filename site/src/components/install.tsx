@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { CURL, REPO } from "../site";
+import { CURL, REPO, sitePath } from "../site";
 import { RELEASE_TAG, RELEASE_VERSION } from "../release";
 
 const release = `${REPO}/releases/download/${RELEASE_TAG}/omadesign-${RELEASE_VERSION}`;
@@ -54,6 +54,10 @@ export function Install() {
           Download src <span aria-hidden="true">↗</span>
         </a>
       </div>
+      <p className="install-version">
+        Downloads: {RELEASE_TAG}. For layered files and RAW, {" "}
+        <a href={`${sitePath("docs/")}#development-preview`}>try the development preview</a>.
+      </p>
       <p className="copy-status" role="status">
         {status === "selected"
           ? "Command selected. Use your browser’s Copy command."

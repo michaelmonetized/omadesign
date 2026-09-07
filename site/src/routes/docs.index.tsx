@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CURL } from "../site";
-import { RELEASE_TAG, RELEASE_URL } from "../release";
+import { CURL, REPO } from "../site";
+import { PREVIEW_BUILD, PREVIEW_URL, RELEASE_TAG, RELEASE_URL } from "../release";
 
 export const Route = createFileRoute("/docs/")({
   head: () => ({ meta: [{ title: "Getting started · omadesign" }] }),
@@ -70,14 +70,34 @@ function DocsOverview() {
         </pre>
         <aside className="docs-note" aria-label="Version information">
           <p>
-            {RELEASE_TAG} includes the tools, templates and brand features
-            described in this guide. The app remains an alpha. Read the{" "}
-            <a href={RELEASE_URL}>release notes</a> for current limitations and
-            fixes, or follow the{" "}
-            <Link to="/docs/contributing">source build instructions</Link> to
-            build it yourself.
+            {RELEASE_TAG} predates the layered-file and RAW development work.
+            Use the preview below to try those features. Read the{" "}
+            <a href={RELEASE_URL}>release notes</a> for the published alpha’s
+            features and limitations.
           </p>
         </aside>
+      </section>
+
+      <section aria-labelledby="development-preview">
+        <h2 id="development-preview">Try the development preview</h2>
+        <p>
+          This source build includes <a href={`${REPO}/pull/40`}>layered interchange</a>{" "}
+          and <a href={`${REPO}/pull/41`}>RAW photo development</a>. It is pinned to
+          the <a href={PREVIEW_URL}>revision documented here</a>. On Linux, install
+          Git, stable Rust, a C/C++ compiler and pkg-config, then run:
+        </p>
+        <pre aria-label="Build the development preview"><code>{PREVIEW_BUILD}</code></pre>
+        <p>
+          Open a camera file in Photo, develop it, and use <strong>Save settings</strong>{" "}
+          to keep adjustments beside the original. Export PNG or TIFF for 16-bit
+          developed pixels, or JPEG for sharing.
+        </p>
+        <p>
+          Check the <Link to="/docs/formats">format support guide</Link> before
+          importing layered work. Affinity documents also need the optional{" "}
+          <Link to="/docs/affinity">Affinity bridge setup</Link>. Keep your source
+          documents: unsupported features can be converted or omitted, with notes.
+        </p>
       </section>
 
       <section aria-labelledby="make-something">
