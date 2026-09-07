@@ -141,15 +141,23 @@ pub fn save_to(
                 .into(),
         );
     }
-    let bytes = serde_json::to_vec_pretty(&Settings {
+    let bytes = encode(identity, develop)?;
+    crate::formats::write_atomic(path, &bytes)
+        .map_err(|error| format!("Could not save photo settings: {error}"))?;
+    Ok(path.to_owned())
+}
+
+pub(crate) fn encode(
+    identity: &SourceIdentity,
+    develop: &DevelopParams,
+) -> Result<Vec<u8>, String> {
+    validate(develop)?;
+    serde_json::to_vec_pretty(&Settings {
         version: VERSION,
         source: identity.clone(),
         develop: develop.clone(),
     })
-    .map_err(|error| format!("Could not encode photo settings: {error}"))?;
-    crate::formats::write_atomic(path, &bytes)
-        .map_err(|error| format!("Could not save photo settings: {error}"))?;
-    Ok(path.to_owned())
+    .map_err(|error| format!("Could not encode photo settings: {error}"))
 }
 
 /// Sidecars are editable JSON; reject invalid geometry and nonfinite or extreme

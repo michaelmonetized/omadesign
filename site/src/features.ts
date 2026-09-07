@@ -158,10 +158,28 @@ export const featureGroups: FeatureGroup[] = [
   },
   {
     id: "photo",
-    title: "Photo adjustments",
+    title: "Photo development",
     intro:
-      "Adjust photographs in a dedicated studio, then bring the result into your design.",
+      "Develop one photo or apply a consistent look across a whole shoot.",
     features: [
+      {
+        name: "Copy, paste and batch adjustments",
+        since: "0.0.3-alpha",
+        description:
+          "Copy one photo’s look, select a range or the whole library, and apply it in one step. Choose which adjustments travel; crop and rotation stay separate by default. Undo restores the batch.",
+      },
+      {
+        name: "Whole-folder development",
+        since: "0.0.3-alpha",
+        description:
+          "Apply adjustments to a folder in the background without opening every RAW file. Track progress, cancel remaining work, and keep original images untouched.",
+      },
+      {
+        name: "Reusable, shareable photo presets",
+        since: "0.0.3-alpha",
+        description:
+          "Name and save a look, filter your preset library, and share it as an .omapreset JSON file. Apply it to another photo or a selected batch.",
+      },
       {
         name: "Photo browsing and comparison",
         description:
@@ -370,7 +388,7 @@ export const faqs: { question: string; answer: string }[] = [
   },
   {
     question: "Does the published download include everything shown here?",
-    answer: `Yes. ${RELEASE_TAG} includes layered interchange, camera RAW development, saved photo adjustments and 16-bit photo export alongside the existing studios, templates and brand tools. Affinity import requires a separate optional bridge setup. The app remains an alpha; the format guide explains compatibility limits.`,
+    answer: `Yes. ${RELEASE_TAG} includes layered interchange, camera RAW development, batch photo adjustments, shareable presets and 16-bit photo export alongside the existing studios, templates and brand tools. Affinity import requires a separate optional bridge setup. The app remains an alpha; the format guide explains compatibility limits.`,
   },
   {
     question: "Can I open Affinity files?",

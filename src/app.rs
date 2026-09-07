@@ -2713,7 +2713,7 @@ impl Studio {
 
     pub fn save_as(&mut self) {
         if self.persona == Persona::Photo {
-            self.photo.save_settings();
+            self.photo.save_selected_settings();
             return;
         }
         self.end_deform(false);
@@ -2809,7 +2809,7 @@ impl Studio {
 
     pub fn save(&mut self) {
         if self.persona == Persona::Photo {
-            self.photo.save_settings();
+            self.photo.save_selected_settings();
             return;
         }
         self.save_artwork();

@@ -19,19 +19,21 @@ if [ -f "$SCRIPT_DIR/../Cargo.toml" ]; then
   SOURCE_BIN="$ROOT_DIR/target/release/omadesign"
   DESKTOP_FILE="$ROOT_DIR/omadesign.desktop"
   MIME_FILE="$ROOT_DIR/omadesign-mime.xml"
+  ICON_FILE="$ROOT_DIR/assets/omadesign.svg"
   LICENSE_DIR="$ROOT_DIR/vendor"
 else
   SOURCE_BIN="$SCRIPT_DIR/omadesign"
   DESKTOP_FILE="$SCRIPT_DIR/omadesign.desktop"
   MIME_FILE="$SCRIPT_DIR/omadesign-mime.xml"
+  ICON_FILE="$SCRIPT_DIR/omadesign.svg"
   LICENSE_DIR="$SCRIPT_DIR/licenses"
 fi
 if [ ! -x "$SOURCE_BIN" ]; then
   echo "omadesign: build first with cargo build --release --bin omadesign" >&2
   exit 1
 fi
-if [ ! -f "$DESKTOP_FILE" ] || [ ! -f "$MIME_FILE" ]; then
-  echo "omadesign: installation is missing desktop or MIME metadata" >&2
+if [ ! -f "$DESKTOP_FILE" ] || [ ! -f "$MIME_FILE" ] || [ ! -f "$ICON_FILE" ]; then
+  echo "omadesign: installation is missing desktop, icon, or MIME metadata" >&2
   exit 1
 fi
 if [ ! -f "$LICENSE_DIR/libraw/LibRaw-0.22.2.tar.gz" ] || \
@@ -52,6 +54,7 @@ fi
 APP="$DATA/applications"
 MIME="$DATA/mime"
 mkdir -p "$BIN" "$APP" "$MIME/packages"
+install -Dm644 "$ICON_FILE" "$DATA/icons/hicolor/scalable/apps/omadesign.svg"
 mkdir -p "$DATA/omadesign/licenses/libraw" "$DATA/omadesign/licenses/native-notices"
 cp "$LICENSE_DIR/libraw/"* "$DATA/omadesign/licenses/libraw/"
 cp "$LICENSE_DIR/native-notices/"* "$DATA/omadesign/licenses/native-notices/"

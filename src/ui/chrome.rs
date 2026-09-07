@@ -25,8 +25,10 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
                     file_menu(ui, studio);
                     edit_menu(ui, studio);
                     ui.menu_button("Select", |ui| super::selection::menu(ui, studio));
-                    object_menu(ui, studio);
-                    arrange_menu(ui, studio);
+                    ui.add_enabled_ui(studio.persona != Persona::Photo, |ui| {
+                        object_menu(ui, studio);
+                        arrange_menu(ui, studio);
+                    });
                     view_menu(ui, studio);
                 });
                 if !studio.show_welcome {
@@ -158,7 +160,7 @@ fn file_menu(ui: &mut Ui, studio: &mut Studio) {
         if ui
             .add(
                 Button::new(if studio.persona == Persona::Photo {
-                    "Save photo settings"
+                    "Save selected photo settings"
                 } else {
                     "Save"
                 })
@@ -288,6 +290,35 @@ fn edit_menu(ui: &mut Ui, studio: &mut Studio) {
             ui.close();
         }
         ui.separator();
+        if studio.persona == Persona::Photo {
+            ui.add_enabled_ui(!studio.photo.is_batching(), |ui| {
+                if ui
+                    .add_enabled(
+                        studio.photo.selected().is_some(),
+                        Button::new("Copy adjustments").shortcut_text("Ctrl+Shift+C"),
+                    )
+                    .clicked()
+                {
+                    super::photo::copy_adjustments(studio);
+                    ui.close();
+                }
+                if ui
+                    .add_enabled(
+                        studio.photo.copied_adjustments.is_some(),
+                        Button::new("Paste adjustments…").shortcut_text("Ctrl+Shift+V"),
+                    )
+                    .clicked()
+                {
+                    super::photo::paste_adjustments(ui.ctx(), studio);
+                    ui.close();
+                }
+                if ui.button("Photo presets…").clicked() {
+                    super::photo::preset_library(ui.ctx(), studio);
+                    ui.close();
+                }
+            });
+            return;
+        }
         if ui.add(Button::new("Cut").shortcut_text("Ctrl+X")).clicked() {
             studio.cut_selection(ui.ctx());
             ui.close();

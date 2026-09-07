@@ -7,12 +7,12 @@ export function FilePreview() {
     <section className="section shell file-preview" id="file-support">
       <div className="file-preview-heading">
         <div>
-          <p className="preview-label">New in {RELEASE_TAG}</p>
-          <h2>Bring your layers.<br />Develop your originals.</h2>
+          <p className="preview-label">Included in {RELEASE_TAG}</p>
+          <h2>Bring your layers.<br />Grade the whole shoot.</h2>
         </div>
         <p className="file-preview-intro">
-          More of your work, in one native studio. Layered interchange and camera
-          RAW development are included in {RELEASE_TAG}, with native Linux
+          Copy a look across photos, save presets, and develop a folder in the
+          background. {RELEASE_TAG} includes layered interchange and native Linux
           downloads for ARM64 and x86_64.
         </p>
       </div>
@@ -31,14 +31,14 @@ export function FilePreview() {
         </article>
         <article>
           <span className="file-preview-formats">DNG · CR2 / CR3 · NEF · ARW · RAF + more</span>
-          <h3>Start with the sensor.</h3>
+          <h3>One look. Every photo.</h3>
           <p>
-            Develop full-resolution RAW photos with 16-bit linear pixels, inspect
-            real detail at 100%, and export 16-bit PNG or TIFF. Save adjustments
-            beside the original in an <code>.omaphoto</code> file.
+            Develop a RAW photo, copy its adjustments, and apply them to selected
+            photos or a whole folder. Save shareable <code>.omapreset</code> looks
+            and keep each original’s edits in its own <code>.omaphoto</code> file.
           </p>
-          <a className="text-link" href={`${sitePath("docs/formats/")}#camera-raw`}>
-            Explore RAW development <Arrow />
+          <a className="text-link" href={`${sitePath("docs/manual/")}#photo`}>
+            Explore Photo workflows <Arrow />
           </a>
         </article>
       </div>

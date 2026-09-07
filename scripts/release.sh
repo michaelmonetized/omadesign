@@ -84,6 +84,7 @@ package() {
   esac
   "$strip_bin" "$stage/omadesign" 2>/dev/null || strip "$stage/omadesign" 2>/dev/null || true
   install -Dm644 omadesign.desktop "$stage/omadesign.desktop"
+  install -Dm644 assets/omadesign.svg "$stage/omadesign.svg"
   install -Dm644 omadesign-mime.xml "$stage/omadesign-mime.xml"
   # The archive has no source checkout; make its documentation links usable.
   sed "s|](docs/|](https://github.com/michaelmonetized/omadesign/blob/v${VERSION}/docs/|g; s|](examples/|](https://github.com/michaelmonetized/omadesign/tree/v${VERSION}/examples/|g" \

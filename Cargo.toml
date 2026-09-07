@@ -1,6 +1,6 @@
 [package]
 name = "omadesign"
-version = "0.0.2-alpha"
+version = "0.0.3-alpha"
 edition = "2024"
 description = "Native Linux studio for design, painting, photography, and motion"
 license = "MIT"
@@ -56,6 +56,8 @@ tar = "0.4"
 # winit 0.30 only emits PinchGesture on macOS/iOS. This tree adds Wayland
 # zwp_pointer_gestures_v1 so a trackpad pinch zooms the canvas.
 [patch.crates-io]
+# Retain native clipboard key presses for modifier-aware application shortcuts.
+egui-winit = { path = "vendor/egui-winit" }
 winit = { path = "vendor/winit" }
 
 [profile.release]

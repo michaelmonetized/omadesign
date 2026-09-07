@@ -1,5 +1,7 @@
 pub mod edits;
+pub mod presets;
 mod raw_photo;
+pub mod transfer;
 pub use raw_photo::LinearImage;
 
 use image::ImageEncoder;
