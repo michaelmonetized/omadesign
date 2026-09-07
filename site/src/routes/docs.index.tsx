@@ -39,8 +39,8 @@ function DocsOverview() {
           <div>
             <dt>Photo</dt>
             <dd>
-              Adjust light and color, compare edits and crop. Place the result
-              back into Design.
+              Grade a photo, copy its look across a shoot, and save reusable
+              presets. Export or place the result into Design.
             </dd>
           </div>
           <div>
@@ -70,8 +70,8 @@ function DocsOverview() {
         </pre>
         <aside className="docs-note" aria-label="Version information">
           <p>
-            {RELEASE_TAG} includes layered interchange, RAW development and saved
-            photo adjustments. Affinity import also needs the optional{" "}
+            {RELEASE_TAG} includes layered interchange, RAW development, batch
+            photo adjustments and shareable presets. Affinity import also needs the optional{" "}
             <Link to="/docs/affinity">bridge setup</Link>. Read the{" "}
             <a href={RELEASE_URL}>release notes</a> for features and limitations.
           </p>

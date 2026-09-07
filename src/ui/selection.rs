@@ -5,6 +5,34 @@ use crate::app::{
 use eframe::egui::{self, Ui};
 
 pub fn menu(ui: &mut Ui, studio: &mut Studio) {
+    if studio.persona == crate::tools::Persona::Photo {
+        ui.add_enabled_ui(!studio.photo.is_batching(), |ui| {
+            if ui
+                .add(egui::Button::new("All photos").shortcut_text("Ctrl+A"))
+                .clicked()
+            {
+                studio.photo.select_all_images();
+                ui.close();
+            }
+            if ui
+                .add_enabled(
+                    studio.photo.selected_count() > 0,
+                    egui::Button::new("Deselect all photos"),
+                )
+                .clicked()
+            {
+                studio.photo.deselect_all_images();
+                ui.close();
+            }
+            if ui.button("Invert photo selection").clicked() {
+                studio.photo.selection = (0..studio.photo.images.len())
+                    .filter(|i| !studio.photo.selection.contains(i))
+                    .collect();
+                ui.close();
+            }
+        });
+        return;
+    }
     if ui.button("All objects  Ctrl+A").clicked() {
         studio.select_all();
         ui.close();

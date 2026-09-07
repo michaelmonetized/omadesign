@@ -1,7 +1,14 @@
 use crate::geom::Pt;
 use crate::photo::{self, DevelopParams, Histogram, PhotoImage, RgbaImage};
 use eframe::egui;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
+#[path = "photo_session/batch.rs"]
+mod batch;
+#[path = "photo_session/preset_library.rs"]
+mod preset_library;
+pub use batch::BatchProgress;
+use photo::transfer::{AdjustmentSnapshot, Categories};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 
@@ -10,6 +17,7 @@ const MAX_FOLDER_FILES: usize = 10_000;
 const MAX_UNDO: usize = 128;
 
 struct ImportJob {
+    cancelled: bool,
     path: PathBuf,
     receiver: mpsc::Receiver<Result<PhotoImage, String>>,
 }
@@ -18,6 +26,7 @@ struct FolderListing {
     path: String,
     files: Vec<(String, String)>,
     truncated: bool,
+    settings: BTreeMap<PathBuf, Vec<PathBuf>>,
 }
 
 struct FolderJob {
@@ -42,16 +51,45 @@ struct SavedSettings {
     result: Result<PathBuf, String>,
 }
 
-struct EditHistory {
-    undo: Vec<DevelopParams>,
-    redo: Vec<DevelopParams>,
-    saved: DevelopParams,
-    coalescing: bool,
+#[derive(Clone)]
+struct ImageChange {
+    index: usize,
+    source: Option<PathBuf>,
+    before: DevelopParams,
+    after: DevelopParams,
+}
+
+#[derive(Clone, Default)]
+struct PhotoEdit {
+    images: Vec<ImageChange>,
+    disk: Vec<batch::DiskChange>,
+}
+
+impl PhotoEdit {
+    fn is_empty(&self) -> bool {
+        self.images.is_empty() && self.disk.is_empty()
+    }
+    fn bytes(&self) -> usize {
+        self.disk.iter().map(batch::DiskChange::bytes).sum()
+    }
 }
 
 pub struct PhotoSession {
     pub images: Vec<PhotoImage>,
     pub selected: Option<usize>,
+    pub selection: BTreeSet<usize>,
+    selection_anchor: Option<usize>,
+    pub copied_adjustments: Option<AdjustmentSnapshot>,
+    pub edit_revision: u64,
+    undo_edits: Vec<PhotoEdit>,
+    redo_edits: Vec<PhotoEdit>,
+    coalescing: Option<usize>,
+    import_queue: VecDeque<PathBuf>,
+    import_errors: Vec<String>,
+    batch_job: Option<batch::BatchJob>,
+    batch_progress: Option<BatchProgress>,
+    pub presets: Vec<photo::presets::Preset>,
+    preset_state: preset_library::PresetState,
     pub folder: String,
     pub folder_files: Vec<(String, String)>,
     pub view_scale: f32,
@@ -74,7 +112,7 @@ pub struct PhotoSession {
     folder_job: Option<FolderJob>,
     save_job: Option<SaveJob>,
     save_error: String,
-    history: Vec<EditHistory>,
+    saved: Vec<DevelopParams>,
 }
 
 impl Default for PhotoSession {
@@ -88,6 +126,19 @@ impl PhotoSession {
         Self {
             images: vec![],
             selected: None,
+            selection: BTreeSet::new(),
+            selection_anchor: None,
+            copied_adjustments: None,
+            edit_revision: 0,
+            undo_edits: vec![],
+            redo_edits: vec![],
+            coalescing: None,
+            import_queue: VecDeque::new(),
+            import_errors: vec![],
+            batch_job: None,
+            batch_progress: None,
+            presets: vec![],
+            preset_state: Default::default(),
             folder: String::new(),
             folder_files: vec![],
             view_scale: 1.0,
@@ -110,7 +161,7 @@ impl PhotoSession {
             folder_job: None,
             save_job: None,
             save_error: String::new(),
-            history: vec![],
+            saved: vec![],
         }
     }
 
@@ -123,8 +174,34 @@ impl PhotoSession {
     }
 
     pub fn select_image(&mut self, index: usize) {
-        if index < self.images.len() {
-            self.finish_edit();
+        self.select_with(index, false, false);
+    }
+
+    pub fn select_with(&mut self, index: usize, ctrl: bool, shift: bool) {
+        if index >= self.images.len() || self.is_batching() {
+            return;
+        }
+        self.finish_edit();
+        if shift {
+            let anchor = self
+                .selection_anchor
+                .unwrap_or(index)
+                .min(self.images.len() - 1);
+            if !ctrl {
+                self.selection.clear();
+            }
+            self.selection.extend(anchor.min(index)..=anchor.max(index));
+        } else if ctrl {
+            if !self.selection.remove(&index) {
+                self.selection.insert(index);
+            }
+            self.selection_anchor = Some(index);
+        } else {
+            self.selection.clear();
+            self.selection.insert(index);
+            self.selection_anchor = Some(index);
+        }
+        if self.selected != Some(index) {
             self.selected = Some(index);
             self.view_scale = 1.0;
             self.view_offset = egui::Vec2::ZERO;
@@ -134,38 +211,90 @@ impl PhotoSession {
         }
     }
 
+    pub fn select_all_images(&mut self) {
+        self.selection.extend(0..self.images.len());
+    }
+    pub fn deselect_all_images(&mut self) {
+        self.selection.clear();
+        self.selection_anchor = self.selected;
+    }
+    pub fn selected_count(&self) -> usize {
+        self.selection.len()
+    }
+
     pub fn import_file(&mut self, path: &Path) {
-        if self.import_jobs.iter().any(|job| job.path == path) {
+        if self.is_batching() {
+            self.status = "Finish or cancel the folder batch before opening more photos.".into();
             return;
         }
-        if self.import_jobs.len() >= MAX_IMPORT_JOBS {
-            self.status = "Wait for the current photos to finish opening.".into();
-            return;
-        }
-        let path = path.to_path_buf();
-        let input = path.clone();
-        let (tx, receiver) = mpsc::channel();
-        if let Err(error) = std::thread::Builder::new()
-            .name("photo-open".into())
-            .spawn(move || {
-                let _ = tx.send(PhotoImage::load(&input));
-            })
+        if self.import_jobs.iter().any(|job| job.path == path)
+            || self.import_queue.iter().any(|queued| queued == path)
         {
-            self.status = format!("Could not start opening the photo: {error}");
             return;
         }
-        self.status = format!(
-            "Opening {}…",
-            path.file_name().unwrap_or_default().to_string_lossy()
-        );
-        self.import_jobs.push(ImportJob { path, receiver });
+        if self.import_queue.len() >= MAX_FOLDER_FILES {
+            self.status = format!(
+                "The opening queue is full ({MAX_FOLDER_FILES} photos). Wait before adding more."
+            );
+            return;
+        }
+        if !self.is_loading() {
+            self.import_errors.clear();
+        }
+        self.import_queue.push_back(path.to_path_buf());
+        self.start_imports();
+    }
+
+    pub fn import_errors(&self) -> &[String] {
+        &self.import_errors
+    }
+
+    pub fn queued_imports(&self) -> usize {
+        self.import_queue.len() + self.import_jobs.len()
+    }
+    pub fn cancel_imports(&mut self) {
+        self.import_queue.clear();
+        for job in &mut self.import_jobs {
+            job.cancelled = true;
+        }
+        self.status = "Photo opening cancelled.".into();
+    }
+
+    fn start_imports(&mut self) {
+        while self.import_jobs.len() < MAX_IMPORT_JOBS {
+            let Some(path) = self.import_queue.pop_front() else {
+                break;
+            };
+            let input = path.clone();
+            let (tx, receiver) = mpsc::channel();
+            if let Err(error) =
+                std::thread::Builder::new()
+                    .name("photo-open".into())
+                    .spawn(move || {
+                        let _ = tx.send(PhotoImage::load(&input));
+                    })
+            {
+                self.status = format!("Could not start opening the photo: {error}");
+                continue;
+            }
+            self.status = format!(
+                "Opening {}… ({} queued)",
+                path.file_name().unwrap_or_default().to_string_lossy(),
+                self.import_queue.len()
+            );
+            self.import_jobs.push(ImportJob {
+                path,
+                receiver,
+                cancelled: false,
+            });
+        }
     }
 
     pub fn import_photo(&mut self, image: PhotoImage) {
         let name = image.name.clone();
         self.images.push(image);
-        self.ensure_history();
-        self.select_image(self.images.len() - 1);
+        self.ensure_saved();
+        self.select_with(self.images.len() - 1, true, false);
         self.status = format!("Opened {name}");
     }
 
@@ -188,13 +317,17 @@ impl PhotoSession {
             let (name, full) = photo::sample_photo(kind);
             self.images.push(PhotoImage::from_full(name, full));
         }
-        self.ensure_history();
+        self.ensure_saved();
         self.select_image(0);
         self.samples_loaded = true;
         self.status = "sample photos loaded".into();
     }
 
     pub fn set_folder(&mut self, path: &str) {
+        if self.is_batching() {
+            self.status = "Finish or cancel the folder batch first.".into();
+            return;
+        }
         if let Some(job) = self.folder_job.take() {
             job.cancel.store(true, Ordering::Relaxed);
         }
@@ -211,6 +344,9 @@ impl PhotoSession {
 
     /// Complete background reads and writes even when another persona is shown.
     pub fn poll(&mut self, ctx: &egui::Context) {
+        self.poll_batch();
+        self.poll_presets();
+        let was_loading = self.is_loading();
         let mut index = 0;
         while index < self.import_jobs.len() {
             let Some(result) = completed(&self.import_jobs[index].receiver) else {
@@ -218,6 +354,9 @@ impl PhotoSession {
                 continue;
             };
             let job = self.import_jobs.remove(index);
+            if job.cancelled {
+                continue;
+            }
             match result {
                 Ok(image) => {
                     self.import_photo(image);
@@ -225,8 +364,27 @@ impl PhotoSession {
                         self.status = "Photo and saved settings restored".into();
                     }
                 }
-                Err(error) => self.status = error,
+                Err(error) => {
+                    self.import_errors.push(format!(
+                        "{}: {error}",
+                        job.path.file_name().unwrap_or_default().to_string_lossy()
+                    ));
+                    self.status = error;
+                }
             }
+        }
+        self.start_imports();
+        if was_loading && !self.is_loading() && !self.import_errors.is_empty() {
+            self.status = format!(
+                "{} photo{} could not be opened. {}",
+                self.import_errors.len(),
+                if self.import_errors.len() == 1 {
+                    ""
+                } else {
+                    "s"
+                },
+                self.import_errors[0]
+            );
         }
         if let Some(result) = self
             .folder_job
@@ -259,7 +417,7 @@ impl PhotoSession {
                 Ok(results) => {
                     let mut errors = vec![];
                     let mut count = 0;
-                    self.ensure_history();
+                    self.ensure_saved();
                     for saved in results {
                         match saved.result {
                             Ok(_) => {
@@ -270,7 +428,7 @@ impl PhotoSession {
                                         && image.settings_path.as_ref()
                                             == Some(&saved.request.destination)
                                 }) {
-                                    self.history[saved.request.index].saved = saved.request.params;
+                                    self.saved[saved.request.index] = saved.request.params;
                                 }
                                 count += 1;
                             }
@@ -306,17 +464,22 @@ impl PhotoSession {
                 }
             }
         }
-        if self.is_loading() || self.is_saving() || self.folder_job.is_some() {
+        if self.is_loading()
+            || self.is_saving()
+            || self.folder_job.is_some()
+            || self.is_loading_presets()
+            || self.is_saving_presets()
+        {
             ctx.request_repaint_after(std::time::Duration::from_millis(40));
         }
     }
 
     pub fn is_loading(&self) -> bool {
-        !self.import_jobs.is_empty()
+        !self.import_jobs.is_empty() || !self.import_queue.is_empty()
     }
 
     pub fn is_saving(&self) -> bool {
-        self.save_job.is_some()
+        self.save_job.is_some() || self.is_batching() || self.is_saving_presets()
     }
 
     pub fn save_settings(&mut self) {
@@ -324,6 +487,11 @@ impl PhotoSession {
             return;
         };
         self.save_indices(&[index]);
+    }
+
+    pub fn save_selected_settings(&mut self) {
+        let indices = self.selection.iter().copied().collect::<Vec<_>>();
+        self.save_indices(&indices);
     }
 
     pub fn save_all_settings(&mut self) {
@@ -335,7 +503,7 @@ impl PhotoSession {
         if self.is_saving() || indices.is_empty() {
             return;
         }
-        self.ensure_history();
+        self.ensure_saved();
         let mut requests: Vec<SaveRequest> = vec![];
         for &index in indices {
             let Some(image) = self.images.get(index) else {
@@ -400,11 +568,9 @@ impl PhotoSession {
         self.selected
             .and_then(|index| self.images.get(index).map(|image| (index, image)))
             .is_some_and(|(index, image)| {
-                self.history
+                self.saved
                     .get(index)
-                    .map_or(!image.develop.is_default(), |history| {
-                        history.saved != image.develop
-                    })
+                    .map_or(!image.develop.is_default(), |saved| *saved != image.develop)
             })
     }
 
@@ -419,11 +585,9 @@ impl PhotoSession {
             .filter_map(|(index, image)| {
                 (image.source.is_some()
                     && self
-                        .history
+                        .saved
                         .get(index)
-                        .map_or(!image.develop.is_default(), |history| {
-                            history.saved != image.develop
-                        }))
+                        .map_or(!image.develop.is_default(), |saved| *saved != image.develop))
                 .then_some(index)
             })
             .collect()
@@ -440,103 +604,212 @@ impl PhotoSession {
         if self.is_saving() {
             return;
         }
-        self.ensure_history();
-        for (image, history) in self.images.iter_mut().zip(&mut self.history) {
+        self.ensure_saved();
+        for (image, saved) in self.images.iter_mut().zip(&mut self.saved) {
             if image.source.is_some() {
-                image.develop = history.saved.clone();
-                history.undo.clear();
-                history.redo.clear();
-                history.coalescing = false;
+                image.develop = saved.clone();
             }
         }
+        self.undo_edits.clear();
+        self.redo_edits.clear();
+        self.coalescing = None;
         self.save_error.clear();
         self.crop_drag = None;
         self.dirty = true;
         self.sel_version += 1;
     }
 
-    fn ensure_history(&mut self) {
-        while self.history.len() < self.images.len() {
-            self.history.push(EditHistory {
-                undo: vec![],
-                redo: vec![],
-                saved: self.images[self.history.len()].develop.clone(),
-                coalescing: false,
-            });
+    fn ensure_saved(&mut self) {
+        while self.saved.len() < self.images.len() {
+            self.saved
+                .push(self.images[self.saved.len()].develop.clone());
         }
     }
 
-    /// Call after a change, with the parameters captured before it. Repeated
-    /// frames of one pointer gesture form one undo step; finish_edit ends it.
-    pub fn record_edit(&mut self, before: DevelopParams, coalesce: bool) {
-        self.ensure_history();
-        let Some(index) = self.selected.filter(|index| *index < self.images.len()) else {
-            return;
-        };
-        if self.images[index].develop == before {
+    fn push_edit(&mut self, edit: PhotoEdit) {
+        if edit.is_empty() {
             return;
         }
-        let history = &mut self.history[index];
-        if !coalesce || !history.coalescing {
-            if history.undo.len() == MAX_UNDO {
-                history.undo.remove(0);
-            }
-            history.undo.push(before);
+        self.undo_edits.push(edit);
+        self.redo_edits.clear();
+        while self.undo_edits.len() > MAX_UNDO
+            || self.undo_edits.iter().map(PhotoEdit::bytes).sum::<usize>() > 64 * 1024 * 1024
+        {
+            self.undo_edits.remove(0);
         }
-        history.redo.clear();
-        history.coalescing = coalesce;
+        self.edit_revision += 1;
         self.dirty = true;
         self.sel_version += 1;
     }
 
+    /// Repeated pointer frames form one undo step; explicit batches update edit_revision.
+    pub fn record_edit(&mut self, before: DevelopParams, coalesce: bool) {
+        self.ensure_saved();
+        let Some(index) = self.selected.filter(|i| *i < self.images.len()) else {
+            return;
+        };
+        let after = self.images[index].develop.clone();
+        if after == before {
+            return;
+        }
+        if coalesce && self.coalescing == Some(index) {
+            if let Some(change) = self
+                .undo_edits
+                .last_mut()
+                .and_then(|edit| edit.images.first_mut())
+            {
+                change.after = after;
+            }
+            self.redo_edits.clear();
+            self.edit_revision += 1;
+            self.dirty = true;
+            self.sel_version += 1;
+        } else {
+            self.push_edit(PhotoEdit {
+                images: vec![ImageChange {
+                    index,
+                    source: self.images[index].source.clone(),
+                    before,
+                    after,
+                }],
+                disk: vec![],
+            });
+        }
+        self.coalescing = coalesce.then_some(index);
+    }
+
     pub fn finish_edit(&mut self) {
-        if let Some(history) = self.selected.and_then(|index| self.history.get_mut(index)) {
-            history.coalescing = false;
-        }
+        self.coalescing = None;
     }
-
     pub fn can_undo(&self) -> bool {
-        self.selected
-            .and_then(|index| self.history.get(index))
-            .is_some_and(|history| !history.undo.is_empty())
+        !self.undo_edits.is_empty() && !self.is_saving()
     }
-
     pub fn can_redo(&self) -> bool {
-        self.selected
-            .and_then(|index| self.history.get(index))
-            .is_some_and(|history| !history.redo.is_empty())
+        !self.redo_edits.is_empty() && !self.is_saving()
     }
-
     pub fn undo(&mut self) {
-        self.ensure_history();
-        let Some(index) = self.selected.filter(|index| *index < self.images.len()) else {
+        self.replay_edit(true);
+    }
+    pub fn redo(&mut self) {
+        self.replay_edit(false);
+    }
+
+    fn restore_images(&mut self, edit: &PhotoEdit, undo: bool) {
+        for change in &edit.images {
+            if let Some(image) = self
+                .images
+                .get_mut(change.index)
+                .filter(|i| i.source == change.source)
+            {
+                image.develop = if undo { &change.before } else { &change.after }.clone();
+            }
+        }
+        for disk in &edit.disk {
+            // Saved baselines are disk settings, which may differ from pre-batch unsaved edits.
+            let before: DevelopParams = disk
+                .before
+                .as_ref()
+                .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(bytes).ok())
+                .and_then(|value| serde_json::from_value(value["develop"].clone()).ok())
+                .unwrap_or_default();
+            let (expected, restored) = if undo {
+                (&disk.after_params, &before)
+            } else {
+                (&before, &disk.after_params)
+            };
+            for (index, image) in self.images.iter_mut().enumerate() {
+                if image.source.as_ref() == Some(&disk.source)
+                    && image.settings_path.as_ref() == Some(&disk.path)
+                {
+                    // Photos opened after the batch are absent from its image
+                    // journal. Follow the restored file only if they still show
+                    // that file's previous state; later edits stay dirty.
+                    let recorded = edit.images.iter().any(|change| change.index == index);
+                    if !recorded && &image.develop == expected {
+                        image.develop = restored.clone();
+                    }
+                    self.saved[index] = restored.clone();
+                }
+            }
+        }
+        self.crop_drag = None;
+        self.edit_revision += 1;
+        self.dirty = true;
+        self.sel_version += 1;
+    }
+
+    fn replay_edit(&mut self, undo: bool) {
+        if self.is_saving() {
+            return;
+        }
+        self.finish_edit();
+        self.ensure_saved();
+        let Some(edit) = (if undo {
+            &mut self.undo_edits
+        } else {
+            &mut self.redo_edits
+        })
+        .pop() else {
             return;
         };
-        let history = &mut self.history[index];
-        if let Some(params) = history.undo.pop() {
-            history
-                .redo
-                .push(std::mem::replace(&mut self.images[index].develop, params));
-            history.coalescing = false;
-            self.dirty = true;
-            self.sel_version += 1;
+        if edit.disk.is_empty() {
+            self.restore_images(&edit, undo);
+            (if undo {
+                &mut self.redo_edits
+            } else {
+                &mut self.undo_edits
+            })
+            .push(edit);
+        } else {
+            self.start_replay(edit, undo);
         }
     }
 
-    pub fn redo(&mut self) {
-        self.ensure_history();
-        let Some(index) = self.selected.filter(|index| *index < self.images.len()) else {
-            return;
+    pub fn copy_adjustments(&mut self) -> bool {
+        let Some(image) = self.selected() else {
+            return false;
         };
-        let history = &mut self.history[index];
-        if let Some(params) = history.redo.pop() {
-            history
-                .undo
-                .push(std::mem::replace(&mut self.images[index].develop, params));
-            history.coalescing = false;
-            self.dirty = true;
-            self.sel_version += 1;
+        self.copied_adjustments = Some(AdjustmentSnapshot {
+            name: image.name.chars().take(80).collect(),
+            params: image.develop.clone(),
+            categories: Categories::default(),
+        });
+        self.status = "Adjustments copied. Crop and rotation are excluded.".into();
+        true
+    }
+
+    pub fn apply_adjustments(&mut self, snapshot: &AdjustmentSnapshot) -> Result<usize, String> {
+        if self.is_batching() {
+            return Err("Finish the folder batch first.".into());
         }
+        snapshot.validate()?;
+        self.finish_edit();
+        self.ensure_saved();
+        let mut edit = PhotoEdit::default();
+        for &index in &self.selection {
+            let Some(image) = self.images.get_mut(index) else {
+                continue;
+            };
+            let before = image.develop.clone();
+            snapshot
+                .categories
+                .apply(&snapshot.params, &mut image.develop);
+            if image.develop != before {
+                edit.images.push(ImageChange {
+                    index,
+                    source: image.source.clone(),
+                    before,
+                    after: image.develop.clone(),
+                });
+            }
+        }
+        let count = edit.images.len();
+        self.push_edit(edit);
+        self.status = format!(
+            "Applied adjustments to {count} photo{}; save settings to keep them on disk.",
+            if count == 1 { "" } else { "s" }
+        );
+        Ok(count)
     }
 
     pub fn rebuild(&mut self) {
@@ -580,6 +853,8 @@ fn list_folder(path: &str, cancel: &AtomicBool) -> Result<FolderListing, String>
         .map_err(|error| format!("Could not read the photo folder: {error}"))?;
     let mut files = vec![];
     let mut truncated = false;
+    let mut settings: BTreeMap<PathBuf, Vec<PathBuf>> = BTreeMap::new();
+    let mut settings_count = 0;
     for entry in read {
         if cancel.load(Ordering::Relaxed) {
             return Err("Folder scan cancelled.".into());
@@ -587,6 +862,19 @@ fn list_folder(path: &str, cancel: &AtomicBool) -> Result<FolderListing, String>
         let entry =
             entry.map_err(|error| format!("Could not inspect the photo folder: {error}"))?;
         let path = entry.path();
+        if photo::edits::is_sidecar(&path) {
+            settings_count += 1;
+            if settings_count > MAX_FOLDER_FILES * 2 {
+                return Err(
+                    "This folder contains too many settings files. Choose a smaller folder.".into(),
+                );
+            }
+            settings
+                .entry(path.with_extension(""))
+                .or_default()
+                .push(path);
+            continue;
+        }
         if !matches!(crate::import::classify(&path), "raster" | "raw") || !path.is_file() {
             continue;
         }
@@ -608,11 +896,15 @@ fn list_folder(path: &str, cancel: &AtomicBool) -> Result<FolderListing, String>
         path: path.into(),
         files,
         truncated,
+        settings,
     })
 }
 
 impl Drop for PhotoSession {
     fn drop(&mut self) {
+        if let Some(job) = &self.batch_job {
+            job.cancel.store(true, Ordering::Relaxed);
+        }
         if let Some(job) = &self.folder_job {
             job.cancel.store(true, Ordering::Relaxed);
         }
@@ -623,16 +915,267 @@ impl Drop for PhotoSession {
 mod tests {
     use super::*;
 
-    fn image() -> PhotoImage {
+    pub(super) fn image() -> PhotoImage {
         PhotoImage::from_full(
             "Photo".into(),
             RgbaImage::new(4, 3, [64, 96, 128, 255].repeat(12)).unwrap(),
         )
     }
 
-    struct Fixture(PathBuf);
+    #[test]
+    fn selective_transfer_has_one_batch_undo_and_keeps_target_geometry() {
+        let mut session = PhotoSession::new();
+        for _ in 0..4 {
+            session.import_photo(image());
+        }
+        session.select_image(0);
+        session.selected_mut().unwrap().develop = DevelopParams {
+            exposure: 1.5,
+            temperature: 20.0,
+            rotate: 90,
+            crop: Some([0.1, 0.2, 0.9, 0.8]),
+            ..Default::default()
+        };
+        assert!(session.copy_adjustments());
+        let snapshot = session.copied_adjustments.clone().unwrap();
+        session.selected_mut().unwrap().develop.exposure = -2.0;
+        session.select_image(1);
+        session.select_with(3, false, true);
+        assert_eq!(session.selection, [1, 2, 3].into_iter().collect());
+        assert_eq!(session.selected, Some(3));
+        session.images[2].develop.rotate = 270;
+        session.images[2].develop.crop = Some([0.2, 0.1, 0.7, 0.9]);
+        let before: Vec<_> = session.images.iter().map(|i| i.develop.clone()).collect();
+        assert_eq!(session.apply_adjustments(&snapshot).unwrap(), 3);
+        assert_eq!(session.images[0].develop.exposure, -2.0);
+        assert_eq!(session.images[1].develop.exposure, 1.5);
+        assert_eq!(session.images[2].develop.rotate, 270);
+        assert_eq!(session.images[2].develop.crop, before[2].crop);
+        assert_eq!(session.undo_edits.len(), 1);
+        session.undo();
+        assert_eq!(
+            session
+                .images
+                .iter()
+                .map(|i| i.develop.clone())
+                .collect::<Vec<_>>(),
+            before
+        );
+        session.redo();
+        assert_eq!(session.images[3].develop.temperature, 20.0);
+        session.select_with(2, true, false);
+        assert_eq!(session.selection, [1, 3].into_iter().collect());
+        assert_eq!(session.selected, Some(2));
+        session.deselect_all_images();
+        assert_eq!(session.apply_adjustments(&snapshot).unwrap(), 0);
+        assert_eq!(session.selected, Some(2));
+        session.select_all_images();
+        assert_eq!(session.selected_count(), 4);
+    }
+
+    #[test]
+    fn opening_more_than_two_photos_queues_every_request_and_reports_failures() {
+        let fixture = Fixture::new();
+        let original = image().full.encode_png().unwrap();
+        let mut session = PhotoSession::new();
+        for index in 0..7 {
+            let path = fixture.0.join(format!("{index}.png"));
+            std::fs::write(&path, &original).unwrap();
+            session.import_file(&path);
+        }
+        let invalid = fixture.0.join("invalid.png");
+        std::fs::write(&invalid, b"not an image").unwrap();
+        session.import_file(&invalid);
+        assert_eq!(session.import_jobs.len(), 2);
+        assert_eq!(session.queued_imports(), 8);
+        wait(&mut session);
+        assert_eq!(session.images.len(), 7);
+        assert_eq!(session.selected_count(), 7);
+        assert_eq!(session.import_errors().len(), 1);
+        assert!(session.status.contains("could not be opened"));
+        assert_eq!(
+            session
+                .images
+                .iter()
+                .map(|image| image.name.clone())
+                .collect::<BTreeSet<_>>()
+                .len(),
+            7
+        );
+    }
+
+    #[test]
+    fn folder_apply_saves_without_loading_pixels_and_undo_restores_unsaved_loaded_edits() {
+        let fixture = Fixture::new();
+        let original = image().full.encode_png().unwrap();
+        for name in ["first.png", "second.png", "invalid.png", "ambiguous.png"] {
+            std::fs::write(fixture.0.join(name), &original).unwrap();
+        }
+        std::fs::write(fixture.0.join("invalid.png.omaphoto"), b"invalid settings").unwrap();
+        let second = fixture.0.join("second.png");
+        let upper = fixture.0.join("second.png.OMAPHOTO");
+        let existing = DevelopParams {
+            rotate: 90,
+            crop: Some([0.1, 0.2, 0.8, 0.9]),
+            ..Default::default()
+        };
+        photo::edits::save_to(
+            &upper,
+            &second,
+            &photo::edits::SourceIdentity::read(&second).unwrap(),
+            &existing,
+        )
+        .unwrap();
+        let original_settings = std::fs::read(&upper).unwrap();
+        let ambiguous = fixture.0.join("ambiguous.png");
+        let identity = photo::edits::SourceIdentity::read(&ambiguous).unwrap();
+        let first_settings =
+            photo::edits::save(&ambiguous, &identity, &DevelopParams::default()).unwrap();
+        let second_settings = fixture.0.join("ambiguous.png.OMAPHOTO");
+        photo::edits::save_to(&second_settings, &ambiguous, &identity, &existing).unwrap();
+        let ambiguous_bytes = [
+            std::fs::read(&first_settings).unwrap(),
+            std::fs::read(&second_settings).unwrap(),
+        ];
+        let mut session = PhotoSession::new();
+        session.import_photo(PhotoImage::load(&fixture.0.join("first.png")).unwrap());
+        session.images[0].develop.temperature = 12.0;
+        session.folder = fixture.0.to_string_lossy().into_owned();
+        let snapshot = AdjustmentSnapshot {
+            name: "Light".into(),
+            params: DevelopParams {
+                exposure: 1.0,
+                ..Default::default()
+            },
+            categories: Categories {
+                color: false,
+                ..Default::default()
+            },
+        };
+        session.start_folder_batch(snapshot).unwrap();
+        assert!(session.is_saving());
+        wait(&mut session);
+        assert_eq!(session.images.len(), 1);
+        assert_eq!(session.batch_progress().unwrap().failed, 2);
+        assert_eq!(session.batch_progress().unwrap().completed, 4);
+        assert!(session.save_error().contains("Multiple settings files"));
+        assert_eq!(session.images[0].develop.temperature, 12.0);
+        assert_eq!(session.images[0].develop.exposure, 1.0);
+        assert!(!session.has_unsaved_settings());
+        assert_eq!(PhotoImage::load(&upper).unwrap().develop.exposure, 1.0);
+        assert_eq!(
+            PhotoImage::load(&upper).unwrap().develop.crop,
+            existing.crop
+        );
+        assert_eq!(
+            PhotoImage::load(&upper).unwrap().develop.rotate,
+            existing.rotate
+        );
+        assert!(!fixture.0.join("second.png.omaphoto").exists());
+        session.undo();
+        wait(&mut session);
+        assert_eq!(session.images[0].develop.temperature, 12.0);
+        assert_eq!(session.images[0].develop.exposure, 0.0);
+        assert!(session.has_unsaved_settings());
+        assert!(!fixture.0.join("first.png.omaphoto").exists());
+        assert_eq!(std::fs::read(&upper).unwrap(), original_settings);
+        session.redo();
+        wait(&mut session);
+        assert_eq!(session.images[0].develop.exposure, 1.0);
+        assert!(!session.has_unsaved_settings());
+        let external = DevelopParams {
+            exposure: -3.0,
+            ..Default::default()
+        };
+        photo::edits::save_to(
+            &upper,
+            &second,
+            &photo::edits::SourceIdentity::read(&second).unwrap(),
+            &external,
+        )
+        .unwrap();
+        session.undo();
+        wait(&mut session);
+        assert_eq!(PhotoImage::load(&upper).unwrap().develop, external);
+        assert!(session.save_error().contains("outside this batch"));
+        for name in ["first.png", "second.png", "invalid.png", "ambiguous.png"] {
+            assert_eq!(std::fs::read(fixture.0.join(name)).unwrap(), original);
+        }
+        assert_eq!(std::fs::read(first_settings).unwrap(), ambiguous_bytes[0]);
+        assert_eq!(std::fs::read(second_settings).unwrap(), ambiguous_bytes[1]);
+        assert_eq!(
+            std::fs::read(fixture.0.join("invalid.png.omaphoto")).unwrap(),
+            b"invalid settings"
+        );
+    }
+
+    #[test]
+    fn folder_replay_updates_later_imports_without_erasing_newer_edits() {
+        let fixture = Fixture::new();
+        let source = fixture.0.join("photo.png");
+        std::fs::write(&source, image().full.encode_png().unwrap()).unwrap();
+        let original = DevelopParams {
+            temperature: 14.0,
+            ..Default::default()
+        };
+        let sidecar = photo::edits::save(
+            &source,
+            &photo::edits::SourceIdentity::read(&source).unwrap(),
+            &original,
+        )
+        .unwrap();
+        let snapshot = AdjustmentSnapshot {
+            name: "Bright".into(),
+            params: DevelopParams {
+                exposure: 2.0,
+                ..Default::default()
+            },
+            categories: Categories {
+                color: false,
+                ..Default::default()
+            },
+        };
+        let mut session = PhotoSession::new();
+        session.folder = fixture.0.to_string_lossy().into_owned();
+        session.start_folder_batch(snapshot).unwrap();
+        wait(&mut session);
+        assert!(session.images.is_empty());
+        session.import_file(&sidecar);
+        wait(&mut session);
+        assert_eq!(session.images[0].develop.exposure, 2.0);
+        let revision = session.edit_revision;
+        session.undo();
+        wait(&mut session);
+        assert_eq!(session.images[0].develop, original);
+        assert!(!session.has_unsaved_settings());
+        assert!(session.edit_revision > revision);
+        session.import_file(&sidecar);
+        wait(&mut session);
+        session.redo();
+        wait(&mut session);
+        assert!(
+            session
+                .images
+                .iter()
+                .all(|image| image.develop.exposure == 2.0)
+        );
+        assert!(!session.has_unsaved_settings());
+        session.undo();
+        wait(&mut session);
+        // Simulate a later in-memory adjustment arriving during replay. The
+        // normal UI is disabled then; backend reconciliation still preserves it.
+        session.redo();
+        session.images[1].develop.exposure = -1.0;
+        wait(&mut session);
+        assert_eq!(session.images[0].develop.exposure, 2.0);
+        assert_eq!(session.images[1].develop.exposure, -1.0);
+        assert!(session.has_unsaved_settings());
+        assert_eq!(PhotoImage::load(&sidecar).unwrap().develop.exposure, 2.0);
+    }
+
+    pub(super) struct Fixture(pub(super) PathBuf);
     impl Fixture {
-        fn new() -> Self {
+        pub(super) fn new() -> Self {
             let path = std::env::temp_dir().join(format!(
                 "omadesign-photo-session-{}-{}",
                 std::process::id(),
@@ -662,7 +1205,7 @@ mod tests {
     }
 
     #[test]
-    fn edit_history_coalesces_one_gesture_and_stays_with_its_photo() {
+    fn edit_history_coalesces_gestures_across_photo_switches() {
         let mut session = PhotoSession::new();
         session.import_photo(image());
         for exposure in [0.5, 1.0, 1.5] {

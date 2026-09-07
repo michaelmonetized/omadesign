@@ -35,6 +35,8 @@ impl Shortcut {
             Paste => ("Ctrl+V", "Paste"),
             CopyStyle => ("Ctrl+Alt+C", "Copy style"),
             PasteStyle => ("Ctrl+Alt+V", "Paste style"),
+            CopyAdjustments => ("Ctrl+Shift+C", "Copy adjustments"),
+            PasteAdjustments => ("Ctrl+Shift+V", "Paste adjustments"),
             Duplicate => ("Ctrl+D", "Duplicate"),
             SelectAll => ("Ctrl+A", "Select all"),
             Combine => ("Ctrl+G", "Combine paths"),
@@ -132,7 +134,8 @@ impl Studio {
             let Some(shortcut) = key_shortcut(key, mods) else {
                 continue;
             };
-            if seen.contains(&shortcut)
+            if !shortcut.available(self.persona)
+                || seen.contains(&shortcut)
                 || ((focus == ShortcutFocus::Field || self.show_welcome) && !shortcut.global())
                 || (focus == ShortcutFocus::Text && !shortcut.global() && !shortcut.edits_text())
             {
@@ -140,8 +143,13 @@ impl Studio {
             }
             seen.push(shortcut);
             let (keys, mut label) = shortcut.hint(mods.shift);
-            if shortcut == Shortcut::Fit && self.persona == Persona::Photo {
-                label = "Fit photo";
+            if self.persona == Persona::Photo {
+                label = match shortcut {
+                    Shortcut::Fit => "Fit photo",
+                    Shortcut::Save => "Save selected settings",
+                    Shortcut::SelectAll => "Select all photos",
+                    _ => label,
+                };
             }
             hints.keys.push(KeyHint {
                 keys,
@@ -247,6 +255,14 @@ impl Studio {
                 },
                 false,
             );
+            if !self.photo.images.is_empty() && !self.photo.is_batching() {
+                add(
+                    "Ctrl+click",
+                    "Toggle photo selection",
+                    command && !mods.shift,
+                );
+                add("Shift+click", "Select photo range", mods.shift && !command);
+            }
             add("Pinch", "Zoom photo", false);
             add("Ctrl+scroll", "Zoom photo", command);
             add("Alt+scroll", "Zoom photo", mods.alt);
@@ -604,6 +620,39 @@ mod tests {
         let shifted = hints(&studio, Modifiers::CTRL | Modifiers::SHIFT);
         assert!(shifted.keys.iter().any(|hint| hint.label == "Save as"));
         assert!(!shifted.keys.iter().any(|hint| hint.label == "Save"));
+        assert!(
+            !shifted
+                .keys
+                .iter()
+                .any(|hint| hint.label == "Copy adjustments")
+        );
+        studio.persona = Persona::Photo;
+        let photo_shifted = hints(&studio, Modifiers::CTRL | Modifiers::SHIFT);
+        assert!(
+            photo_shifted
+                .keys
+                .iter()
+                .any(|hint| hint.keys == "Ctrl+Shift+C" && hint.label == "Copy adjustments")
+        );
+        assert!(
+            photo_shifted
+                .keys
+                .iter()
+                .any(|hint| hint.keys == "Ctrl+Shift+V" && hint.label == "Paste adjustments")
+        );
+        let photo_commands = hints(&studio, Modifiers::CTRL);
+        assert!(
+            photo_commands
+                .keys
+                .iter()
+                .any(|hint| hint.keys == "Ctrl+S" && hint.label == "Save selected settings")
+        );
+        assert!(
+            photo_commands
+                .keys
+                .iter()
+                .any(|hint| hint.keys == "Ctrl+A" && hint.label == "Select all photos")
+        );
 
         let ctx = egui::Context::default();
         let initial = studio.show_key_hud;

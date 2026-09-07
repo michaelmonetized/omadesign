@@ -55,7 +55,7 @@ export function Install() {
         </a>
       </div>
       <p className="install-version">
-        {RELEASE_TAG} includes layered interchange and camera RAW development.
+        {RELEASE_TAG} adds batch photo adjustments and reusable presets.
         {" "}<a href={RELEASE_URL}>Read the release notes</a>.
       </p>
       <p className="copy-status" role="status">

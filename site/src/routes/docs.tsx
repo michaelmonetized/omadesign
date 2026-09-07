@@ -60,7 +60,7 @@ function Docs() {
         <aside className="docs-note docs-availability" aria-label="Documentation version">
           <p>
             These guides cover {RELEASE_TAG}, including layered interchange,
-            RAW development and saved photo settings. Get the{" "}
+            RAW development, batch adjustments and shareable presets. Get the{" "}
             <Link to="/docs" hash="get-the-app">Linux release</Link>.
             {" "}Affinity import needs the optional{" "}
             <Link to="/docs/affinity">bridge setup</Link>.

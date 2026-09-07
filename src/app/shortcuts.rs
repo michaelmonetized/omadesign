@@ -16,6 +16,8 @@ pub(super) enum Shortcut {
     Paste,
     CopyStyle,
     PasteStyle,
+    CopyAdjustments,
+    PasteAdjustments,
     Duplicate,
     SelectAll,
     Combine,
@@ -36,6 +38,26 @@ pub(super) enum Shortcut {
 }
 
 impl Shortcut {
+    pub(super) fn available(self, persona: Persona) -> bool {
+        if persona == Persona::Photo {
+            self.global()
+                || matches!(
+                    self,
+                    Self::Undo
+                        | Self::Redo
+                        | Self::CopyAdjustments
+                        | Self::PasteAdjustments
+                        | Self::SelectAll
+                        | Self::Fit
+                        | Self::ActualSize
+                        | Self::ZoomIn
+                        | Self::ZoomOut
+                )
+        } else {
+            !matches!(self, Self::CopyAdjustments | Self::PasteAdjustments)
+        }
+    }
+
     pub(super) fn global(self) -> bool {
         matches!(
             self,
@@ -79,8 +101,10 @@ pub(super) fn key_shortcut(key: Key, mods: Modifiers) -> Option<Shortcut> {
         (Key::Z, false) => Undo,
         (Key::Z, true) | (Key::Y, false) => Redo,
         (Key::C, false) => Copy,
+        (Key::C, true) => CopyAdjustments,
         (Key::X, false) => Cut,
         (Key::V, false) => Paste,
+        (Key::V, true) => PasteAdjustments,
         (Key::D, false) => Duplicate,
         (Key::T, false) => FreeTransform,
         (Key::A, false) => SelectAll,
@@ -139,7 +163,7 @@ impl Studio {
             })
         }) {
             ShortcutFocus::Field
-        } else if self.type_edit.is_some() {
+        } else if self.type_edit.is_some() && self.persona != Persona::Photo {
             ShortcutFocus::Text
         } else {
             ShortcutFocus::Canvas
@@ -178,38 +202,66 @@ impl Studio {
                 }
                 Event::Key {
                     key,
-                    modifiers,
+                    modifiers: pressed_modifiers,
                     pressed: true,
                     ..
-                } => key_shortcut(*key, *modifiers),
+                } => {
+                    // The retained native press is also the reliable modifier
+                    // snapshot for its following Copy/Cut/Paste event.
+                    modifiers = *pressed_modifiers;
+                    key_shortcut(*key, *pressed_modifiers)
+                }
                 Event::Copy => Some(if modifiers.alt {
                     Shortcut::CopyStyle
+                } else if modifiers.shift && self.persona == Persona::Photo {
+                    Shortcut::CopyAdjustments
                 } else {
                     Shortcut::Copy
                 }),
                 Event::Cut => Some(Shortcut::Cut),
                 Event::Paste(_) => Some(if modifiers.alt {
                     Shortcut::PasteStyle
+                } else if modifiers.shift && self.persona == Persona::Photo {
+                    Shortcut::PasteAdjustments
                 } else {
                     Shortcut::Paste
                 }),
                 _ => None,
             };
             if let Some(shortcut) = shortcut {
-                if field_focused && !shortcut.global() {
+                if (field_focused && !shortcut.global()) || !shortcut.available(self.persona) {
+                    continue;
+                }
+                // egui-winit retains the key press immediately before its native
+                // clipboard event. Dispatch that pair once, using the latter's
+                // payload; an empty clipboard leaves the key press usable alone.
+                if matches!(event, Event::Key { .. })
+                    && matches!(
+                        (shortcut, events.get(index + 1)),
+                        (
+                            Shortcut::Copy | Shortcut::CopyStyle | Shortcut::CopyAdjustments,
+                            Some(Event::Copy)
+                        ) | (Shortcut::Cut, Some(Event::Cut))
+                            | (
+                                Shortcut::Paste | Shortcut::PasteStyle | Shortcut::PasteAdjustments,
+                                Some(Event::Paste(_))
+                            )
+                    )
+                {
+                    consumed.push(index);
                     continue;
                 }
                 let payload = match event {
                     Event::Paste(text) => Some(text.as_str()),
                     _ => None,
                 };
-                if self.type_edit.is_some() && !shortcut.global() {
+                if focus == ShortcutFocus::Text && !shortcut.global() {
                     self.type_shortcut(ctx, shortcut, payload);
                 } else {
                     self.run_shortcut(ctx, shortcut, payload);
                 }
                 consumed.push(index);
-            } else if !field_focused && self.type_edit.is_some() {
+            } else if focus == ShortcutFocus::Text {
                 if self.type_event(event) {
                     consumed.push(index);
                 }
@@ -270,8 +322,7 @@ impl Studio {
             Shortcut::Paste => self.paste_clipboard(payload),
             Shortcut::CopyStyle => {
                 self.copy_style();
-                // Native Ctrl+Alt+V is delivered only if the system clipboard has
-                // text. Publishing the style also makes it portable between windows.
+                // Publishing the style makes it portable between windows.
                 if let Some(style) = &self.style_clip
                     && let Ok(json) = serde_json::to_string(style)
                 {
@@ -286,8 +337,18 @@ impl Studio {
                 }
                 self.paste_style();
             }
+            Shortcut::CopyAdjustments => crate::ui::photo::copy_adjustments(self),
+            Shortcut::PasteAdjustments => crate::ui::photo::paste_adjustments(ctx, self),
             Shortcut::Duplicate => self.duplicate_selection(),
-            Shortcut::SelectAll => self.select_all(),
+            Shortcut::SelectAll => {
+                if self.persona == Persona::Photo {
+                    if !self.photo.is_batching() {
+                        self.photo.select_all_images();
+                    }
+                } else {
+                    self.select_all();
+                }
+            }
             Shortcut::Combine => self.combine_selected(),
             Shortcut::Release => self.release_compound(),
             Shortcut::Forward => self.bring_forward(),
@@ -418,15 +479,28 @@ impl Studio {
     }
 
     fn canvas_key(&mut self, key: Key, shift: bool) -> bool {
-        if self.persona == Persona::Photo
-            && matches!(key, Key::Enter | Key::Escape)
-            && let Some((start, cur)) = self.photo.crop_drag.take()
-        {
-            if key == Key::Enter {
-                self.commit_photo_crop(start, cur);
-            } else {
-                self.photo.status = "Crop cancelled".into();
+        if self.persona == Persona::Photo {
+            if self.photo.is_batching() {
+                return false;
             }
+            if matches!(key, Key::Enter | Key::Escape) {
+                if let Some((start, cur)) = self.photo.crop_drag.take() {
+                    if key == Key::Enter {
+                        self.commit_photo_crop(start, cur);
+                    } else {
+                        self.photo.status = "Crop cancelled".into();
+                    }
+                }
+                return true;
+            }
+            let tool = match (key, shift) {
+                (Key::H, false) => Tool::Hand,
+                (Key::Z, false) => Tool::Zoom,
+                (Key::C, false) => Tool::Crop,
+                (Key::I, false) => Tool::Eyedropper,
+                _ => return false,
+            };
+            self.set_tool(tool);
             return true;
         }
         if self.persona == Persona::Motion {
@@ -649,7 +723,9 @@ mod tests {
             (Key::X, ctrl, Cut),
             (Key::V, ctrl, Paste),
             (Key::C, alt, CopyStyle),
+            (Key::C, shift, CopyAdjustments),
             (Key::V, alt, PasteStyle),
+            (Key::V, shift, PasteAdjustments),
             (Key::D, ctrl, Duplicate),
             (Key::T, ctrl, FreeTransform),
             (Key::A, ctrl, SelectAll),
@@ -792,16 +868,31 @@ mod tests {
             &mut studio,
             vec![
                 Event::ModifiersChanged(Modifiers::CTRL),
+                key(Key::C, Modifiers::CTRL),
                 Event::Copy,
                 Event::ModifiersChanged(Modifiers::NONE),
             ],
         ));
         assert!(payload.starts_with(Studio::CLIP_PREFIX));
         assert_eq!(studio.clipboard[0].id, first);
-        frame(&ctx, &mut studio, vec![Event::Paste(payload.clone())]);
+        let history = studio.history.len();
+        frame(
+            &ctx,
+            &mut studio,
+            vec![key(Key::V, Modifiers::CTRL), Event::Paste(payload.clone())],
+        );
+        assert_eq!(
+            studio.history.len(),
+            history + 1,
+            "one native paste creates one undo step"
+        );
         assert_eq!(count(&studio), 2);
         assert_ne!(studio.selection[0].1, first);
-        frame(&ctx, &mut studio, vec![Event::Cut]);
+        frame(
+            &ctx,
+            &mut studio,
+            vec![key(Key::X, Modifiers::CTRL), Event::Cut],
+        );
         assert_eq!(count(&studio), 1);
         frame(
             &ctx,
@@ -832,6 +923,267 @@ mod tests {
             1,
             "OS clipboard works without an internal clipboard"
         );
+    }
+
+    #[test]
+    fn photo_adjustment_chords_fire_on_press_and_save_the_selected_set() {
+        use crate::photo::{PhotoImage, edits};
+        let ctx = context();
+        let mut studio = Studio::new();
+        studio.persona = Persona::Photo;
+        studio.show_welcome = false;
+        let folder = std::env::temp_dir().join(format!(
+            "omadesign-photo-shortcuts-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&folder).unwrap();
+        let paths: Vec<_> = (0..3)
+            .map(|i| folder.join(format!("photo-{i}.png")))
+            .collect();
+        for path in &paths {
+            image::RgbaImage::from_pixel(4, 4, image::Rgba([100, 80, 60, 255]))
+                .save(path)
+                .unwrap();
+            studio.photo.images.push(PhotoImage::load(path).unwrap());
+        }
+        studio.photo.select_image(0);
+        studio.photo.images[0].develop.exposure = 0.6;
+        let shift = Modifiers::CTRL | Modifiers::COMMAND | Modifiers::SHIFT;
+        let output = frame(
+            &ctx,
+            &mut studio,
+            vec![
+                key(Key::C, shift),
+                Event::Copy,
+                Event::ModifiersChanged(Modifiers::NONE),
+            ],
+        );
+        assert!(
+            output.is_empty(),
+            "adjustment copy must not replace the system clipboard"
+        );
+        let copied = studio.photo.copied_adjustments.clone().unwrap();
+        assert_eq!(copied.params.exposure, 0.6);
+        assert!(!copied.categories.crop && !copied.categories.rotation);
+        studio.photo.images[0].develop.exposure = 0.9;
+        frame(
+            &ctx,
+            &mut studio,
+            vec![
+                key(Key::A, Modifiers::CTRL),
+                Event::ModifiersChanged(Modifiers::NONE),
+            ],
+        );
+        assert_eq!(studio.photo.selected_count(), 3);
+        assert_eq!(
+            studio.photo.selected,
+            Some(0),
+            "select all preserves the active source"
+        );
+        // No Paste event: this is exactly what the patched native bridge emits
+        // when the OS clipboard is empty. Opening the dialog cannot modify photos.
+        frame(
+            &ctx,
+            &mut studio,
+            vec![key(Key::V, shift), Event::ModifiersChanged(Modifiers::NONE)],
+        );
+        fn contains_text(shape: &egui::Shape, text: &str) -> bool {
+            match shape {
+                egui::Shape::Text(text_shape) => text_shape.galley.text().contains(text),
+                egui::Shape::Vec(shapes) => shapes.iter().any(|shape| contains_text(shape, text)),
+                _ => false,
+            }
+        }
+        let mut dialog_visible = false;
+        // Egui's first modal pass measures the content before painting it.
+        for _ in 0..3 {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1200., 800.),
+                    )),
+                    ..Default::default()
+                },
+                |ui| crate::ui::photo::show(ui, &mut studio),
+            );
+            output.textures_delta.clear();
+            dialog_visible |= output
+                .shapes
+                .iter()
+                .any(|shape| contains_text(&shape.shape, "Apply adjustments"));
+        }
+        assert!(
+            dialog_visible,
+            "empty OS clipboard still opens the category dialog on key press"
+        );
+        assert_eq!(studio.photo.images[1].develop.exposure, 0.0);
+        assert_eq!(
+            studio
+                .photo
+                .copied_adjustments
+                .as_ref()
+                .unwrap()
+                .params
+                .exposure,
+            0.6,
+            "copied adjustments are an immutable snapshot"
+        );
+        // Dismiss the modal before exercising the save chord independently.
+        let save_ctx = context();
+        studio.photo.select_with(1, false, false);
+        studio.photo.select_with(2, true, false);
+        studio.photo.images[1].develop.exposure = 0.4;
+        studio.photo.images[2].develop.exposure = 0.8;
+        frame(
+            &save_ctx,
+            &mut studio,
+            vec![
+                key(Key::S, Modifiers::CTRL),
+                Event::ModifiersChanged(Modifiers::NONE),
+            ],
+        );
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while studio.photo.is_saving() && std::time::Instant::now() < deadline {
+            studio.photo.poll(&save_ctx);
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        assert!(!studio.photo.is_saving());
+        assert!(
+            studio.photo.save_error().is_empty(),
+            "{}",
+            studio.photo.save_error()
+        );
+        assert!(
+            !edits::sidecar_path(&paths[0]).exists(),
+            "unselected source stays unsaved"
+        );
+        for (index, expected) in [(1, 0.4), (2, 0.8)] {
+            assert_eq!(
+                edits::load(
+                    &paths[index],
+                    &edits::SourceIdentity::read(&paths[index]).unwrap()
+                )
+                .unwrap()
+                .unwrap()
+                .exposure,
+                expected
+            );
+        }
+        std::fs::remove_dir_all(folder).unwrap();
+    }
+
+    #[test]
+    fn photo_shortcuts_cannot_edit_hidden_design_artwork() {
+        let ctx = context();
+        let mut studio = Studio::new();
+        let id = add_rectangle(&mut studio, 25.0);
+        let shape = studio.doc.find_shape(1, id).unwrap().clone();
+        let history = studio.history.len();
+        let style = studio.style.clone();
+        let payload = copied(frame(&ctx, &mut studio, vec![Event::Copy]));
+        studio.persona = Persona::Photo;
+        studio.tool = Tool::Hand;
+        let ctrl = Modifiers::CTRL | Modifiers::COMMAND;
+        for key_code in [
+            Key::C,
+            Key::X,
+            Key::V,
+            Key::D,
+            Key::G,
+            Key::T,
+            Key::OpenBracket,
+            Key::CloseBracket,
+            Key::Semicolon,
+        ] {
+            for modifiers in [ctrl, ctrl | Modifiers::SHIFT, ctrl | Modifiers::ALT] {
+                // Adjustment paste is separately tested; there is no copied look here.
+                frame(
+                    &ctx,
+                    &mut studio,
+                    vec![
+                        key(key_code, modifiers),
+                        Event::ModifiersChanged(Modifiers::NONE),
+                    ],
+                );
+            }
+        }
+        frame(
+            &ctx,
+            &mut studio,
+            vec![Event::Cut, Event::Paste(payload), Event::Copy],
+        );
+        for key_code in [
+            Key::Delete,
+            Key::Backspace,
+            Key::ArrowLeft,
+            Key::ArrowRight,
+            Key::ArrowUp,
+            Key::ArrowDown,
+            Key::X,
+            Key::D,
+            Key::OpenBracket,
+            Key::CloseBracket,
+        ] {
+            for modifiers in [Modifiers::NONE, Modifiers::SHIFT] {
+                frame(&ctx, &mut studio, vec![key(key_code, modifiers)]);
+            }
+        }
+        assert_eq!(studio.doc.find_shape(1, id), Some(&shape));
+        assert_eq!(count(&studio), 1);
+        assert_eq!(studio.selection, vec![(1, id)]);
+        assert_eq!(studio.history.len(), history);
+        assert_eq!(studio.style, style);
+        assert_eq!(studio.tool, Tool::Hand);
+        let hints = studio.key_hints(&ctx);
+        assert!(!hints.keys.iter().any(|hint| matches!(
+            hint.label,
+            "Copy" | "Cut" | "Paste" | "Duplicate" | "Free transform" | "Combine paths"
+        )));
+    }
+
+    #[test]
+    fn retained_native_clipboard_keys_leave_focused_text_fields_in_charge() {
+        let ctx = context();
+        let mut studio = Studio::new();
+        studio.persona = Persona::Photo;
+        studio.show_welcome = false;
+        let mut value = "Before".to_owned();
+        let command = Modifiers::CTRL | Modifiers::COMMAND;
+        for (index, events) in [
+            vec![],
+            vec![key(Key::A, command)],
+            vec![
+                key(Key::V, command | Modifiers::SHIFT),
+                Event::Paste("After".into()),
+                Event::ModifiersChanged(Modifiers::NONE),
+            ],
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    studio.handle_shortcuts(ui.ctx());
+                    let response = ui.text_edit_singleline(&mut value);
+                    if index == 0 {
+                        response.request_focus();
+                    }
+                },
+            );
+            output.textures_delta.clear();
+        }
+        assert_eq!(value, "After", "native text paste is applied exactly once");
+        assert!(studio.photo.copied_adjustments.is_none());
+        assert!(!studio.photo.status.contains("Copy adjustments"));
     }
 
     #[test]

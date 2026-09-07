@@ -145,6 +145,23 @@ Use **Save settings** to keep development adjustments beside the original photo 
 
 Export JPEG, PNG or TIFF in the background at the full developed resolution, including crop and rotation. RAW PNG/TIFF exports keep 16-bit channels. **Place in Design** adds an 8-bit developed pixel layer with Undo; retain the RAW and settings for later development. The initial display preview has a maximum edge of 1600 pixels. Zoom in for full-resolution detail, prepared in the background and displayed as visible tiles while the preview keeps the view responsive. See [RAW format limits](format-support.md#camera-raw) for supported camera families and color-rendering differences.
 
+### Copy a look across photos
+
+1. Develop the source photo, then choose **Copy adjustments** or press **Ctrl+Shift+C**.
+2. Select target photos in the Library. **Ctrl-click** toggles individual photos, **Shift-click** selects a range, and **Ctrl+A** selects all loaded photos. The active photo remains the one shown in the viewer; the selection count tells you how many photos will receive the look.
+3. Choose **Paste adjustments** or press **Ctrl+Shift+V**. Select the adjustment categories and apply. Light, color, detail, tone curve, color mixer and color grading can travel independently. **Crop and rotation are off by default**, so each photo keeps its framing.
+4. **Ctrl+S** saves the selected photos' settings beside their originals. The batch is one Undo/Redo operation; ordinary slider edits also use the Photo history.
+
+Copying captures the source settings at that moment. Later source edits do not change the copied look. Applying the same values again makes no additional undo entry. Samples and pasted images can receive adjustments but need an original on disk before settings can be saved.
+
+### Presets and whole folders
+
+The Photo preset library saves named looks, filters them by name, and imports or exports **`.omapreset`** files. Presets contain development values and the chosen categories, so they work across unrelated originals. Their library persists between sessions. Imported name conflicts retain both looks with distinct names.
+
+Choose **Library → … → Browse folder…**, open a representative photo from that folder, and copy its adjustments or choose **Presets… → Use preset…**. In **Apply adjustments**, choose **Whole folder**, then **Write settings for N photos**. It processes supported photo filenames directly in that folder, writes each original's **`.omaphoto`** settings in the background, and leaves image pixels untouched. It does not load the whole shoot into memory or recursively scan subfolders. Existing adjustments in excluded categories are retained. Progress and file-specific errors remain visible; cancellation stops remaining work, and Undo restores completed changes. A file changed outside the batch is preserved and reported instead of overwritten during Undo/Redo.
+
+Folder jobs check that undo data fits before writing. The limits are 10,000 photos and 32 MiB of settings history per job; larger jobs need smaller folders. Invalid or mismatched existing settings are reported. Filename recognition does not guarantee that every camera file can be decoded; open a representative RAW photo first. Folder changes are already saved on disk, while pasting to a loaded selection requires Save settings. Export still processes the active photo.
+
 Hold Space or choose Hand to drag the view; middle-drag and two-finger scroll also pan. Pinch, Ctrl+scroll, and Alt+scroll zoom. Ctrl+0 fits the photo; Ctrl+1 shows it at 100%.
 
 ## Motion

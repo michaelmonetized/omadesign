@@ -1,4 +1,6 @@
 use crate::app::Studio;
+#[path = "photo_workflow.rs"]
+mod workflow;
 use crate::photo::{self, DevelopParams, HSL_NAMES, Histogram};
 use crate::ui::theme::{accent, accent_soft, bg_canvas, bg_extreme, bg_panel, fg_weak};
 use eframe::egui::{
@@ -25,12 +27,27 @@ pub(crate) fn is_exporting(ctx: &eframe::egui::Context) -> bool {
     super::jobs::is_running::<std::path::PathBuf>(ctx, "photo-export")
 }
 
+pub(crate) fn copy_adjustments(studio: &mut Studio) {
+    studio.photo.copy_adjustments();
+}
+
+pub(crate) fn paste_adjustments(ctx: &eframe::egui::Context, studio: &mut Studio) {
+    workflow::paste(ctx, studio);
+}
+
+pub(crate) fn preset_library(ctx: &eframe::egui::Context, studio: &mut Studio) {
+    workflow::presets(ctx, studio);
+}
+
 pub fn show(ui: &mut Ui, studio: &mut Studio) {
     poll_jobs(ui.ctx(), studio);
-    let before = studio
-        .photo
-        .selected()
-        .map(|image| (studio.photo.selected, image.develop.clone()));
+    let before = studio.photo.selected().map(|image| {
+        (
+            studio.photo.selected,
+            image.develop.clone(),
+            studio.photo.edit_revision,
+        )
+    });
     if studio.photo.dirty || studio.photo.built_version != studio.photo.sel_version {
         studio.photo.rebuild();
     }
@@ -52,22 +69,24 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         .show(ui, |ui| {
             super::library::tabs(ui, studio);
             if studio.libraries.sidebar == crate::app::libraries::Sidebar::Inspector {
-                develop_panel(ui, studio);
+                ui.add_enabled_ui(!studio.photo.is_batching(), |ui| develop_panel(ui, studio));
             } else {
                 super::library::show(ui, studio);
             }
         });
-    if let Some((index, params)) = before
+    if let Some((index, params, revision)) = before
         && index == studio.photo.selected
+        && revision == studio.photo.edit_revision
     {
         studio
             .photo
             .record_edit(params, ui.input(|i| i.pointer.primary_down()));
     }
-    viewer(ui, studio);
+    ui.add_enabled_ui(!studio.photo.is_batching(), |ui| viewer(ui, studio));
     if !ui.input(|i| i.pointer.primary_down()) {
         studio.photo.finish_edit();
     }
+    workflow::dialogs(ui.ctx(), studio);
 }
 
 fn upload_textures(ui: &mut Ui, studio: &mut Studio) {
@@ -151,6 +170,20 @@ fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
                     ui.close();
                     studio.photo.import_samples();
                 }
+                if ui
+                    .add_enabled(
+                        !studio.photo.is_saving() && studio.photo.has_unsaved_settings(),
+                        Button::new("Save all changed settings"),
+                    )
+                    .clicked()
+                {
+                    studio.photo.save_all_settings();
+                    ui.close();
+                }
+                if ui.button("Photo presets…").clicked() {
+                    workflow::presets(ui.ctx(), studio);
+                    ui.close();
+                }
             });
         });
     });
@@ -158,6 +191,16 @@ fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
         eframe::egui::Label::new(RichText::new(&studio.photo.status).small().color(fg_weak()))
             .wrap(),
     );
+    workflow::progress(ui, studio);
+    if studio.photo.queued_imports() > 0 {
+        ui.horizontal(|ui| {
+            ui.spinner();
+            ui.label(format!("{} opening", studio.photo.queued_imports()));
+            if ui.small_button("Cancel").clicked() {
+                studio.photo.cancel_imports();
+            }
+        });
+    }
     if !studio.photo.folder_files.is_empty() {
         ui.add_space(8.0);
         ui.add(
@@ -185,11 +228,39 @@ fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
             });
     }
     ui.add_space(12.0);
+    ui.add_enabled_ui(!studio.photo.is_batching(), |ui| {
+        ui.horizontal(|ui| {
+            ui.label(
+                RichText::new(format!(
+                    "{} / {} selected",
+                    studio.photo.selected_count(),
+                    studio.photo.images.len()
+                ))
+                .small(),
+            );
+            if ui
+                .small_button("All")
+                .on_hover_text("Select all loaded photos · Ctrl+A")
+                .clicked()
+            {
+                studio.photo.select_all_images();
+            }
+            if ui
+                .small_button("None")
+                .on_hover_text("Clear selection; keep the active preview")
+                .clicked()
+            {
+                studio.photo.deselect_all_images();
+            }
+        });
+    });
+    ui.add_space(4.0);
     ScrollArea::vertical()
         .id_salt("photo-library")
         .show(ui, |ui| {
             for i in 0..studio.photo.images.len() {
-                let selected = studio.photo.selected == Some(i);
+                let selected = studio.photo.selection.contains(&i);
+                let active = studio.photo.selected == Some(i);
                 let width = ui.available_width();
                 let row = Frame::new()
                     .fill(if selected {
@@ -197,6 +268,14 @@ fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
                     } else {
                         Color32::TRANSPARENT
                     })
+                    .stroke(Stroke::new(
+                        1.0,
+                        if active {
+                            accent()
+                        } else {
+                            Color32::TRANSPARENT
+                        },
+                    ))
                     .corner_radius(7.0)
                     .inner_margin(Margin::same(6))
                     .show(ui, |ui| {
@@ -220,9 +299,10 @@ fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
                                 );
                                 ui.label(
                                     RichText::new(format!(
-                                        "{} × {}",
+                                        "{} × {}{}",
                                         img.dimensions().0,
-                                        img.dimensions().1
+                                        img.dimensions().1,
+                                        if active { " · Active" } else { "" }
                                     ))
                                     .size(10.0)
                                     .color(fg_weak()),
@@ -232,9 +312,33 @@ fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
                     })
                     .response
                     .interact(Sense::click())
-                    .on_hover_text(&studio.photo.images[i].name);
+                    .on_hover_text(format!(
+                        "{}\nCtrl-click to toggle · Shift-click for a range",
+                        studio.photo.images[i].name
+                    ));
+                let press_id = ui.id().with(("photo-selection-press", i));
+                if let Some(modifiers) = ui.input(|input| {
+                    input.events.iter().find_map(|event| match event {
+                        eframe::egui::Event::PointerButton {
+                            pos,
+                            button: PointerButton::Primary,
+                            pressed: true,
+                            modifiers,
+                        } if row.rect.contains(*pos) => Some(*modifiers),
+                        _ => None,
+                    })
+                }) {
+                    ui.data_mut(|data| data.insert_temp(press_id, modifiers));
+                }
                 if row.clicked() {
-                    studio.photo.select_image(i);
+                    let modifiers = ui
+                        .data_mut(|data| data.remove_temp::<eframe::egui::Modifiers>(press_id))
+                        .unwrap_or_else(|| ui.input(|input| input.modifiers));
+                    studio.photo.select_with(
+                        i,
+                        modifiers.command || modifiers.ctrl,
+                        modifiers.shift,
+                    );
                 }
             }
         });
@@ -299,6 +403,8 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
             }
         });
     }
+    ui.add_space(8.0);
+    workflow::toolbar(ui, studio);
     ui.add_space(10.0);
     draw_hist(ui, &studio.photo.hists);
     ui.add_space(8.0);
@@ -428,21 +534,23 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
     ui.add_space(10.0);
     ui.separator();
     ui.add_enabled_ui(
-        !studio.photo.is_saving() && studio.photo.selected().is_some_and(|p| p.source.is_some()),
+        !studio.photo.is_saving() && studio.photo.selected_count() > 0 && studio.photo.selection.iter().all(|i| studio.photo.images.get(*i).is_some_and(|p| p.source.is_some())),
         |ui| {
             if ui
                 .add_sized(
                     [ui.available_width(), 28.0],
                     Button::new(if studio.photo.is_saving() {
-                        "Saving…"
+                        "Saving…".to_owned()
+                    } else if studio.photo.selected_count() > 1 {
+                        format!("Save {} selected settings", studio.photo.selected_count())
                     } else if studio.photo.settings_dirty() {
-                        "Save settings •"
+                        "Save settings •".to_owned()
                     } else {
-                        "Save settings"
+                        "Save settings".to_owned()
                     }),
                 )
                 .on_hover_text(
-                    "Save adjustments beside the original (Ctrl+S). Open the photo or its .omaphoto file to resume editing.",
+                    "Save selected photos' adjustments beside their originals (Ctrl+S). Open a photo or its .omaphoto file to resume editing.",
                 )
                 .on_disabled_hover_text(if studio.photo.is_saving() {
                     "The current save is still finishing."
@@ -451,7 +559,7 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
                 })
                 .clicked()
             {
-                studio.photo.save_settings();
+                studio.photo.save_selected_settings();
             }
         },
     );
@@ -546,6 +654,9 @@ fn draw_hist(ui: &mut Ui, hists: &[Histogram; 4]) {
 }
 
 fn viewer(ui: &mut Ui, studio: &mut Studio) {
+    if !ui.is_enabled() {
+        studio.photo.crop_drag = None;
+    }
     let (rect, _) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
     let painter = ui.painter().with_clip_rect(rect);
     let resp = ui.interact(
@@ -602,6 +713,10 @@ fn viewer(ui: &mut Ui, studio: &mut Studio) {
     );
 
     super::photo_detail::draw(ui, studio, dest, rect, size);
+
+    if !ui.is_enabled() {
+        return;
+    }
 
     let panning = ui.ctx().input(|i| i.key_down(eframe::egui::Key::Space))
         || studio.tool == crate::tools::Tool::Hand;
@@ -681,6 +796,9 @@ fn to_img(p: Pos2, dest: Rect, size: eframe::egui::Vec2) -> crate::geom::Pt {
 }
 
 fn handle_drops(ui: &mut Ui, studio: &mut Studio) {
+    if !ui.is_enabled() {
+        return;
+    }
     let files: Vec<_> = ui.ctx().input(|i| i.raw.dropped_files.clone());
     for f in files {
         studio.ingest_dropped(f.path(), None);
@@ -736,6 +854,192 @@ mod tests {
             },
         );
         output.textures_delta.clear();
+    }
+
+    #[test]
+    fn library_selection_and_paste_dialog_apply_once_and_keep_framing() {
+        use std::collections::HashMap;
+        fn show_frame(
+            ctx: &Context,
+            studio: &mut Studio,
+            events: Vec<Event>,
+        ) -> HashMap<String, Rect> {
+            let mut output = ctx.run_ui(
+                RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1200., 900.))),
+                    events,
+                    ..Default::default()
+                },
+                |ui| show(ui, studio),
+            );
+            fn collect(shape: &eframe::egui::Shape, result: &mut HashMap<String, Rect>) {
+                match shape {
+                    eframe::egui::Shape::Text(t) => {
+                        result
+                            .entry(t.galley.job.text.clone())
+                            .or_insert(t.galley.rect.translate(t.pos.to_vec2()));
+                    }
+                    eframe::egui::Shape::Vec(shapes) => {
+                        for s in shapes {
+                            collect(s, result);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            let mut result = HashMap::new();
+            for shape in output.shapes {
+                collect(&shape.shape, &mut result);
+            }
+            output.textures_delta.clear();
+            result
+        }
+        fn click(
+            ctx: &Context,
+            studio: &mut Studio,
+            at: Pos2,
+            modifiers: Modifiers,
+        ) -> HashMap<String, Rect> {
+            show_frame(
+                ctx,
+                studio,
+                vec![
+                    Event::PointerMoved(at),
+                    Event::PointerButton {
+                        pos: at,
+                        button: PointerButton::Primary,
+                        pressed: true,
+                        modifiers,
+                    },
+                ],
+            );
+            show_frame(
+                ctx,
+                studio,
+                vec![
+                    Event::PointerButton {
+                        pos: at,
+                        button: PointerButton::Primary,
+                        pressed: false,
+                        modifiers,
+                    },
+                    Event::ModifiersChanged(Modifiers::NONE),
+                ],
+            );
+            show_frame(ctx, studio, vec![])
+        }
+        let ctx = Context::default();
+        crate::ui::theme::apply(&ctx);
+        let mut studio = Studio::new();
+        studio.persona = crate::tools::Persona::Photo;
+        for name in ["Source", "Second", "Third"] {
+            studio.photo.import_image(
+                name.into(),
+                photo::RgbaImage::new(8, 8, [80, 100, 120, 255].repeat(64)).unwrap(),
+            );
+        }
+        studio.photo.images[0].develop.exposure = 1.25;
+        studio.photo.images[1].develop.crop = Some([0.1, 0.2, 0.8, 0.9]);
+        studio.photo.images[1].develop.rotate = 90;
+        studio.photo.select_image(0);
+        let labels = show_frame(&ctx, &mut studio, vec![]);
+        let labels = click(
+            &ctx,
+            &mut studio,
+            labels["Copy adjustments"].center(),
+            Modifiers::NONE,
+        );
+        assert!(studio.photo.copied_adjustments.is_some());
+        let labels = click(
+            &ctx,
+            &mut studio,
+            labels["Second"].center(),
+            Modifiers::CTRL,
+        );
+        assert_eq!(studio.photo.selected_count(), 2);
+        let labels = click(
+            &ctx,
+            &mut studio,
+            labels["Second"].center(),
+            Modifiers::CTRL,
+        );
+        assert_eq!(
+            studio.photo.selection.iter().copied().collect::<Vec<_>>(),
+            vec![0]
+        );
+        let labels = click(
+            &ctx,
+            &mut studio,
+            labels["Source"].center(),
+            Modifiers::NONE,
+        );
+        let labels = click(
+            &ctx,
+            &mut studio,
+            labels["Third"].center(),
+            Modifiers::SHIFT,
+        );
+        assert_eq!(studio.photo.selected_count(), 3);
+        click(
+            &ctx,
+            &mut studio,
+            labels["Paste…"].center(),
+            Modifiers::NONE,
+        );
+        let labels = show_frame(&ctx, &mut studio, vec![]);
+        assert!(labels.contains_key("Crop"));
+        click(
+            &ctx,
+            &mut studio,
+            labels["Apply to 3 photos"].center(),
+            Modifiers::NONE,
+        );
+        assert!(
+            studio
+                .photo
+                .images
+                .iter()
+                .all(|image| image.develop.exposure == 1.25)
+        );
+        assert_eq!(
+            studio.photo.images[1].develop.crop,
+            Some([0.1, 0.2, 0.8, 0.9])
+        );
+        assert_eq!(studio.photo.images[1].develop.rotate, 90);
+        show_frame(&ctx, &mut studio, vec![]);
+        studio.photo.undo();
+        assert_eq!(studio.photo.images[1].develop.exposure, 0.0);
+        assert_eq!(studio.photo.images[2].develop.exposure, 0.0);
+        assert!(
+            !studio.photo.can_undo(),
+            "One application must create exactly one history entry"
+        );
+        studio.photo.redo();
+        assert_eq!(studio.photo.images[2].develop.exposure, 1.25);
+    }
+
+    #[test]
+    fn disabled_photo_view_cancels_pending_crop_without_committing_it() {
+        let (ctx, mut studio) = fixture();
+        studio.persona = crate::tools::Persona::Photo;
+        studio.tool = crate::tools::Tool::Crop;
+        studio.photo.import_image(
+            "Original".into(),
+            photo::RgbaImage::new(80, 60, [100, 100, 100, 255].repeat(80 * 60)).unwrap(),
+        );
+        studio.photo.crop_drag = Some((
+            crate::geom::Pt::new(10., 10.),
+            crate::geom::Pt::new(50., 40.),
+        ));
+        let mut output = ctx.run_ui(RawInput::default(), |ui| {
+            ui.add_enabled_ui(false, |ui| viewer(ui, &mut studio));
+        });
+        output.textures_delta.clear();
+        assert!(studio.photo.crop_drag.is_none());
+        assert!(studio.photo.selected().unwrap().develop.crop.is_none());
+        assert!(!studio.photo.can_undo());
+        frame(&ctx, &mut studio, vec![]);
+        assert!(studio.photo.selected().unwrap().develop.crop.is_none());
     }
 
     #[test]

@@ -353,6 +353,35 @@ pub fn shortcut_groups() -> &'static [(&'static str, &'static [ShortcutRow])] {
             ],
         ),
         (
+            "Photo",
+            &[
+                ShortcutRow {
+                    action: "Copy adjustments",
+                    keys: "Ctrl+Shift+C",
+                },
+                ShortcutRow {
+                    action: "Paste adjustments",
+                    keys: "Ctrl+Shift+V",
+                },
+                ShortcutRow {
+                    action: "Select all photos",
+                    keys: "Ctrl+A",
+                },
+                ShortcutRow {
+                    action: "Toggle photo selection",
+                    keys: "Ctrl+click",
+                },
+                ShortcutRow {
+                    action: "Select photo range",
+                    keys: "Shift+click",
+                },
+                ShortcutRow {
+                    action: "Save selected settings",
+                    keys: "Ctrl+S",
+                },
+            ],
+        ),
+        (
             "Arrange",
             &[
                 ShortcutRow {

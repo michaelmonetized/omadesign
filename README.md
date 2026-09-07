@@ -1,6 +1,6 @@
 # omadesign
 
-[Download v0.0.2-alpha](https://github.com/michaelmonetized/omadesign/releases/tag/v0.0.2-alpha) · [Explore the studio](https://michaelmonetized.github.io/omadesign/) · [User manual](https://michaelmonetized.github.io/omadesign/docs/manual/) · [Build from source](docs/CONTRIBUTING.md)
+[Download v0.0.3-alpha](https://github.com/michaelmonetized/omadesign/releases/tag/v0.0.3-alpha) · [Explore the studio](https://michaelmonetized.github.io/omadesign/) · [User manual](https://michaelmonetized.github.io/omadesign/docs/manual/) · [Build from source](docs/CONTRIBUTING.md)
 
 A native Linux studio for **design, paint, photograph, and motion**. One
 document, one layer stack. Built so a designer coming from macOS can sit down
@@ -69,7 +69,11 @@ Brush, eraser, clone, healing, fill, marquees, wand, and editable layer masks. P
 Open camera RAW files including DNG, CR2/CR3, NEF, ARW and RAF with the built-in
 LibRaw decoder. Photo keeps the 16-bit linear source for exposure and color edits;
 export full-resolution 16-bit PNG/TIFF or JPEG. **Save settings** stores an adjacent
-`.omaphoto` file and preserves the camera original. Camera and compression support,
+`.omaphoto` file and preserves the camera original. Copy adjustments with
+**Ctrl+Shift+C**, select photos with Ctrl/Shift-click or **Ctrl+A**, and paste with
+**Ctrl+Shift+V**. Choose the categories to apply; crop and rotation are opt-in.
+Save named looks as shareable `.omapreset` files, or apply a look to a whole
+folder in the background without decoding every RAW. Camera and compression support,
 color rendering and Design placement have
 [documented limits](docs/format-support.md#camera-raw).
 

@@ -1,5 +1,42 @@
 # Changelog
 
+## 2026-09-07 · Pass 18 — One good edit. The whole camera roll.
+
+Version **0.0.3-alpha** gives Photo a batch workflow. Copy a developed look with
+**Ctrl+Shift+C**, select photos with Ctrl-click, Shift-click or Ctrl+A, then paste
+with **Ctrl+Shift+V**. Choose which adjustments travel; crop and rotation stay off
+unless invited. The active photo and the selected batch have distinct markers.
+One Undo restores the whole application, and Ctrl+S saves selected settings.
+
+Looks can leave home. Save a named preset, filter the library, and export or
+import a small **`.omapreset`** file. Presets hold adjustments and category
+choices without tying them to a particular original. Duplicate imported names
+retain both looks. Library reads and writes run in the background.
+
+A folder of RAWs no longer needs a procession through the viewer. Apply a look
+to the folder in the background, with progress, cancellation and per-file errors.
+The worker changes settings files, never original pixels, and reserves undo data
+before writing. Cancel leaves completed changes undoable. Undo/Redo checks for
+outside changes before touching settings. A real import queue also replaces the
+old two-photo limit that silently left later drops unopened.
+
+Clipboard shortcuts now retain their exact key press and modifiers, including
+when the system clipboard is empty. Photo commands stay in Photo: selection,
+Delete, copy/paste and stacking shortcuts cannot change hidden Design artwork.
+Typing into fields keeps normal clipboard behavior.
+
+This release includes Pass 17's Shift-selection, layer ordering and Photo reopen
+fixes, plus the two review corrections for rapid marquees and layer insertion.
+The Linux installer and archives now carry the app icon. Website downloads,
+source links and documentation all point to the same release.
+
+Validation: **352 tests pass**, plus three native input-bridge tests; five
+existing optional fixtures remain opt-in. Real Wayland Ctrl+Shift+C/V preserves
+the system clipboard. Native WGPU replay verifies selection, categories, presets,
+selected saves and single-step Undo/Redo. A 15-photo folder run loads only three
+images, writes all settings, undoes/redoes the batch, and preserves every original
+SHA-256. Formatting, desktop metadata and TypeScript pass; Clippy adds no warnings.
+
 ## 2026-09-07 · Pass 17 — Two squares walk into a selection.
 
 And both stay there. Shift-click now adds or removes an object once, instead of
