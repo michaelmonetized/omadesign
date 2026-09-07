@@ -568,7 +568,8 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
         && resp.ctx.layer_id_at(at) == Some(resp.layer_id)
     {
         let pick = studio.view.pointer_to_world(origin, from_egui(at));
-        start_drag(studio, pick, snap, modifiers.shift, false);
+        let press_snap = studio.snap_tool_point(pick, None);
+        start_drag(studio, pick, press_snap, modifiers.shift, false);
     }
     if resp.drag_started_by(PointerButton::Primary) {
         if alt && matches!(studio.op, Some(Op::Move { .. })) {
@@ -3145,6 +3146,36 @@ mod tests {
         assert_eq!(studio.selection, ids);
         assert_eq!(studio.history.len(), history);
         assert!(!studio.dirty);
+    }
+
+    #[test]
+    fn marquee_uses_press_origin_when_motion_arrives_in_the_same_frame() {
+        use eframe::egui::{Event, Modifiers};
+        let (ctx, mut studio, ids) = selection_input_studio();
+        studio.selection.clear();
+        let origin = studio.canvas_rect.unwrap().min;
+        let start = origin + vec2(175.0, 25.0);
+        let end = origin + vec2(285.0, 140.0);
+        canvas_frame(
+            &ctx,
+            &mut studio,
+            vec![
+                Event::PointerMoved(start),
+                pen_pointer_button(start, true, Modifiers::NONE),
+                Event::PointerMoved(end),
+            ],
+        );
+        let expected = studio
+            .view
+            .pointer_to_world(from_egui(origin), from_egui(start));
+        assert!(matches!(&studio.op, Some(Op::Marquee { start, .. }) if *start == expected));
+        canvas_frame(&ctx, &mut studio, vec![Event::PointerMoved(end)]);
+        canvas_frame(
+            &ctx,
+            &mut studio,
+            vec![pen_pointer_button(end, false, Modifiers::NONE)],
+        );
+        assert_eq!(studio.selection, vec![ids[1]]);
     }
 
     fn assert_pen_preview(shapes: &[eframe::egui::epaint::ClippedShape], from: Pos2, to: Pos2) {

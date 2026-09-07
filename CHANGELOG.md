@@ -31,7 +31,9 @@ multi-object movement, layer dragging, all four ordering shortcuts, and undo/red
 The supplied Photo sidecar reopens natively with its exact saved adjustments and
 both original file hashes unchanged. The recording's 34:04 quit dialog and logs
 show a normal exit, not an established crash. Formatting and desktop metadata
-validation pass; Clippy completes with existing warnings.
+validation pass; Clippy completes with existing warnings. Follow-up review also
+checks marquee presses and motion arriving in one frame, and keeps selections
+attached to their original layers through insertion, removal, and undo.
 
 ## 2026-09-06 · Pass 16 — Layers and originals, shipped.
 

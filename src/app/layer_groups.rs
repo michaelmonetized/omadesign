@@ -151,14 +151,14 @@ impl Studio {
     /// Layer references in the UI use indices; history records index moves too.
     /// Preserve their stable identities around both forward and inverse batches.
     pub(super) fn apply_with_layer_selection(&mut self, cmd: &Cmd) {
-        fn reorders(cmd: &Cmd) -> bool {
+        fn changes_layer_indices(cmd: &Cmd) -> bool {
             match cmd {
-                Cmd::ReorderLayer { .. } => true,
-                Cmd::Batch(commands) => commands.iter().any(reorders),
+                Cmd::ReorderLayer { .. } | Cmd::AddLayer { .. } | Cmd::RemoveLayer { .. } => true,
+                Cmd::Batch(commands) => commands.iter().any(changes_layer_indices),
                 _ => false,
             }
         }
-        if !reorders(cmd) {
+        if !changes_layer_indices(cmd) {
             apply_cmd(&mut self.doc, cmd);
             return;
         }
@@ -402,5 +402,29 @@ mod tests {
         studio.doc.layers[0].locked = true;
         studio.delete_layer_tree(2);
         assert_eq!(studio.doc.layers.len(), 4);
+    }
+
+    #[test]
+    fn inserting_and_removing_layers_preserves_selected_object_identity() {
+        let mut studio = nested_studio();
+        studio.active_layer = Some(3);
+        studio.finish_create(CreateKind::Rect, Pt::ZERO, Pt::new(20., 20.));
+        let object = studio.primary().unwrap().1;
+        let layer_id = studio.doc.layers[3].id;
+        studio.selected_layer = Some(layer_id);
+        studio.history = History::default();
+        studio.commit(Cmd::Batch(vec![Cmd::AddLayer {
+            index: 0,
+            layer: Layer::vector("Inserted"),
+        }]));
+        assert_eq!(studio.selection, vec![(4, object)]);
+        assert_eq!(studio.active_layer, Some(4));
+        assert_eq!(studio.selected_layer, Some(layer_id));
+        studio.undo();
+        assert_eq!(studio.selection, vec![(3, object)]);
+        assert_eq!(studio.active_layer, Some(3));
+        studio.redo();
+        assert_eq!(studio.selection, vec![(4, object)]);
+        assert_eq!(studio.active_layer, Some(4));
     }
 }
