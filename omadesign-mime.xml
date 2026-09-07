@@ -6,6 +6,12 @@
     <generic-icon name="image-x-generic"/>
     <glob pattern="*.oma"/>
   </mime-type>
+  <mime-type type="application/x-omadesign-photo">
+    <comment>Omadesign photo settings</comment>
+    <sub-class-of type="application/json"/>
+    <generic-icon name="image-x-generic"/>
+    <glob pattern="*.omaphoto"/>
+  </mime-type>
   <!-- Canva's Affinity document MIME type. Register documents, not add-ons. -->
   <mime-type type="application/affinity">
     <comment>Affinity document</comment>

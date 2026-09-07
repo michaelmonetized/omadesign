@@ -135,9 +135,9 @@ fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
         ui.label(RichText::new("Library").strong());
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             ui.menu_button("···", |ui| {
-                if ui.button("Open photo…").clicked() {
+                if ui.button("Open photo or settings…").clicked() {
                     ui.close();
-                    if let Some(path) = crate::project::dialog_open() {
+                    if let Some(path) = crate::project::dialog_photo() {
                         studio.photo.import_file(&path);
                     }
                 }
@@ -441,7 +441,14 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
                         "Save settings"
                     }),
                 )
-                .on_hover_text("Save adjustments beside the original (Ctrl+S)")
+                .on_hover_text(
+                    "Save adjustments beside the original (Ctrl+S). Open the photo or its .omaphoto file to resume editing.",
+                )
+                .on_disabled_hover_text(if studio.photo.is_saving() {
+                    "The current save is still finishing."
+                } else {
+                    "Open a photo from disk before saving settings. Samples and pasted images have no original file."
+                })
                 .clicked()
             {
                 studio.photo.save_settings();

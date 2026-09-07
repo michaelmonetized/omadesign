@@ -127,6 +127,8 @@ pub enum Op {
     Move {
         orig: Vec<ObjSnap>,
         start: Pt,
+        /// A click may collapse/toggle the selection; a drag keeps it intact.
+        selection_on_click: Vec<(usize, u64)>,
     },
     Resize {
         orig: Vec<ObjSnap>,
@@ -255,6 +257,8 @@ pub struct Studio {
     pub op: Option<Op>,
     pub deformation: Option<deform::DeformSession>,
     pub selection: Vec<(usize, u64)>,
+    /// Explicit sidebar layer target, independent of its selected descendants.
+    pub selected_layer: Option<u64>,
     pub active_layer: Option<usize>,
     pub history: History,
     pub style: Style,
@@ -413,6 +417,7 @@ impl Studio {
             op: None,
             deformation: None,
             selection: vec![],
+            selected_layer: None,
             active_layer: Some(1),
             history: History::default(),
             style: Style::default(),
@@ -695,6 +700,7 @@ impl Studio {
         }
 
         self.selection.clear();
+        self.selected_layer = None;
         self.need_fit = true;
         self.canvas_key = None;
         self.mark();
@@ -1081,7 +1087,7 @@ impl Studio {
     pub fn commit(&mut self, cmd: Cmd) {
         self.end_pixel_stroke(false);
         self.end_deform(false);
-        apply_cmd(&mut self.doc, &cmd);
+        self.apply_with_layer_selection(&cmd);
         self.history.push(cmd);
         self.dirty = true;
         self.mark();
@@ -1106,7 +1112,7 @@ impl Studio {
             return;
         }
         if let Some(inv) = self.history.undo() {
-            apply_cmd(&mut self.doc, &inv);
+            self.apply_with_layer_selection(&inv);
             self.dirty = true;
             self.sanitize();
             self.mark();
@@ -1125,7 +1131,7 @@ impl Studio {
         self.end_deform(true);
         self.reset_snap_gesture();
         if let Some(cmd) = self.history.redo() {
-            apply_cmd(&mut self.doc, &cmd);
+            self.apply_with_layer_selection(&cmd);
             self.dirty = true;
             self.sanitize();
             self.mark();
@@ -1134,6 +1140,9 @@ impl Studio {
     }
 
     fn sanitize(&mut self) {
+        self.selected_layer = self
+            .selected_layer
+            .filter(|id| self.doc.layers.iter().any(|l| l.id == *id));
         if let Some(e) = &self.type_edit
             && self.doc.find_shape(e.layer, e.id).is_none()
         {
@@ -1223,8 +1232,11 @@ impl Studio {
         };
         let (index, parent) = self.new_layer_parent();
         layer.parent = parent;
+        let id = layer.id;
+        self.deselect_all();
         self.commit(Cmd::AddLayer { index, layer });
         self.active_layer = Some(index);
+        self.selected_layer = Some(id);
     }
 
     pub fn delete_layer(&mut self) {
@@ -1272,6 +1284,7 @@ impl Studio {
                 self.commit(Cmd::RemoveLayer { index: li, layer });
             }
         }
+        self.selected_layer = None;
         self.selection.clear();
     }
 
@@ -1306,6 +1319,7 @@ impl Studio {
         }
         if !commands.is_empty() {
             self.commit(Cmd::Batch(commands));
+            self.selected_layer = None;
             self.selection = selected;
             self.status = format!("Duplicated {} objects", self.selection.len());
         }
@@ -1486,6 +1500,7 @@ impl Studio {
         let shape = Shape::new(geom.clone(), self.style.clone());
         let id = shape.id;
         self.commit(Cmd::AddShape { layer: li, shape });
+        self.selected_layer = None;
         self.selection = vec![(li, id)];
         let n = 4; // "Type"
         self.type_edit = Some(TypeEdit {
@@ -1499,6 +1514,7 @@ impl Studio {
     }
 
     pub fn begin_type_edit(&mut self, hit: (usize, u64), world: Pt) {
+        self.selected_layer = None;
         if self.editing_text(hit.0, hit.1) {
             let caret = self
                 .doc
@@ -1833,6 +1849,7 @@ impl Studio {
         let shape = Shape::new(geom, self.style.clone());
         let id = shape.id;
         self.commit(Cmd::AddShape { layer: li, shape });
+        self.selected_layer = None;
         self.selection = vec![(li, id)];
         self.status = "created".into();
     }
@@ -1907,6 +1924,7 @@ impl Studio {
                     source: Some((li, id, s.geom.clone())),
                     press: pick,
                 });
+                self.selected_layer = None;
                 self.selection = vec![(li, id)];
                 self.status = "continuing path".into();
                 return;
@@ -2019,6 +2037,7 @@ impl Studio {
                 rot_before: rot,
                 rot_after: rot,
             });
+            self.selected_layer = None;
             self.selection = vec![(li, id)];
             self.status = if closed { "path closed" } else { "path" }.into();
             return;
@@ -2036,6 +2055,7 @@ impl Studio {
         let shape = Shape::new(Geom::Path { anchors, closed }, style);
         let id = shape.id;
         self.commit(Cmd::AddShape { layer: li, shape });
+        self.selected_layer = None;
         self.selection = vec![(li, id)];
         self.status = if closed { "closed path" } else { "open path" }.into();
     }
@@ -2216,6 +2236,7 @@ impl Studio {
         );
         let id = shape.id;
         self.commit(Cmd::AddShape { layer: li, shape });
+        self.selected_layer = None;
         self.selection = vec![(li, id)];
     }
 
@@ -2291,6 +2312,7 @@ impl Studio {
             to: insert,
         });
         self.commit(Cmd::Batch(commands));
+        self.selected_layer = None;
         self.selection = vec![(layer, id)];
         self.status = "combined into compound (even-odd)".into();
     }
@@ -2376,6 +2398,7 @@ impl Studio {
             });
         }
         self.commit(Cmd::Batch(commands));
+        self.selected_layer = None;
         self.selection = new_ids;
         self.status = "compound released".into();
     }
@@ -2499,6 +2522,7 @@ impl Studio {
             self.commit(Cmd::AddLayer { index, layer });
             neu.push((index, RASTER_ID));
         }
+        self.selected_layer = None;
         self.selection = neu;
         self.status = format!("pasted {}", self.selection.len());
     }
@@ -2598,91 +2622,65 @@ impl Studio {
     }
 
     fn reorder_selected(&mut self, forward: bool, extreme: bool) {
+        if let Some(id) = self.selected_layer
+            && let Some(index) = self.doc.layers.iter().position(|l| l.id == id)
+        {
+            if extreme {
+                self.move_layer_tree_extreme(index, forward);
+            } else {
+                self.move_layer_tree(index, forward);
+            }
+            return;
+        }
         if self.selection.is_empty() {
             return;
         }
-        let mut by_layer: std::collections::BTreeMap<usize, Vec<u64>> =
-            std::collections::BTreeMap::new();
-        for (li, id) in &self.selection {
-            by_layer.entry(*li).or_default().push(*id);
-        }
-        for (layer, ids) in by_layer {
-            let index_of = |studio: &Studio, id: u64| {
-                studio
-                    .doc
-                    .layers
-                    .get(layer)
-                    .and_then(|l| l.kind.shapes())
-                    .and_then(|s| s.iter().position(|sh| sh.id == id))
-            };
-            let last_of = |studio: &Studio| {
-                studio
-                    .doc
-                    .layers
-                    .get(layer)
-                    .and_then(|l| l.kind.shapes())
-                    .map(|s| s.len().saturating_sub(1))
-                    .unwrap_or(0)
-            };
-            let mut ordered: Vec<(usize, u64)> = ids
-                .iter()
-                .filter_map(|id| index_of(self, *id).map(|i| (i, *id)))
-                .collect();
-            ordered.sort_by_key(|(i, _)| *i);
-            ordered.dedup_by_key(|(i, _)| *i);
-            if ordered.is_empty() {
+        let mut commands = Vec::new();
+        let selected: HashSet<_> = self.selection.iter().copied().collect();
+        for (layer, item) in self.doc.layers.iter().enumerate() {
+            if !self.doc.layer_editable(layer) {
                 continue;
             }
-            if forward {
-                if extreme {
-                    for (_, id) in ordered {
-                        if let Some(from) = index_of(self, id) {
-                            let last = last_of(self);
-                            if from < last {
-                                self.commit(Cmd::ReorderShape {
-                                    layer,
-                                    from,
-                                    to: last,
-                                });
-                            }
-                        }
-                    }
-                } else {
-                    for (_, id) in ordered.into_iter().rev() {
-                        if let Some(from) = index_of(self, id) {
-                            let last = last_of(self);
-                            if from < last {
-                                self.commit(Cmd::ReorderShape {
-                                    layer,
-                                    from,
-                                    to: from + 1,
-                                });
-                            }
-                        }
-                    }
-                }
-            } else if extreme {
-                for (_, id) in ordered.into_iter().rev() {
-                    if let Some(from) = index_of(self, id)
-                        && from > 0
-                    {
-                        self.commit(Cmd::ReorderShape { layer, from, to: 0 });
+            let Some(shapes) = item.kind.shapes() else {
+                continue;
+            };
+            let movable: HashSet<_> = shapes
+                .iter()
+                .filter(|s| !s.locked && selected.contains(&(layer, s.id)))
+                .map(|s| s.id)
+                .collect();
+            let picked = |id| movable.contains(&id);
+            let mut order: Vec<_> = shapes.iter().map(|s| s.id).collect();
+            let mut desired = order.clone();
+            if extreme {
+                desired.sort_by_key(|&id| picked(id) == forward);
+            } else if forward {
+                for i in (0..desired.len().saturating_sub(1)).rev() {
+                    if picked(desired[i]) && !picked(desired[i + 1]) {
+                        desired.swap(i, i + 1);
                     }
                 }
             } else {
-                for (_, id) in ordered {
-                    if let Some(from) = index_of(self, id)
-                        && from > 0
-                    {
-                        self.commit(Cmd::ReorderShape {
-                            layer,
-                            from,
-                            to: from - 1,
-                        });
+                for i in 1..desired.len() {
+                    if picked(desired[i]) && !picked(desired[i - 1]) {
+                        desired.swap(i, i - 1);
                     }
                 }
             }
+            for to in 0..order.len() {
+                if order[to] == desired[to] {
+                    continue;
+                }
+                let from = order.iter().position(|id| *id == desired[to]).unwrap();
+                let id = order.remove(from);
+                order.insert(to, id);
+                commands.push(Cmd::ReorderShape { layer, from, to });
+            }
         }
+        if commands.is_empty() {
+            return;
+        }
+        self.commit(Cmd::Batch(commands));
         self.status = if forward {
             if extreme {
                 "brought to front"
@@ -2966,6 +2964,7 @@ impl Studio {
                     });
                 }
                 self.commit_motion(imp.motion);
+                self.selected_layer = None;
                 self.selection = neu;
                 self.persona = Persona::Motion;
                 self.tool = Tool::Select;
@@ -3101,6 +3100,7 @@ impl Studio {
         let index = self.doc.layers.len();
         self.commit(Cmd::AddLayer { index, layer });
         self.active_layer = Some(index);
+        self.selected_layer = None;
         self.selection = vec![(index, RASTER_ID)];
         self.status = format!("{name} placed");
     }
@@ -3184,6 +3184,7 @@ impl Studio {
             self.commit(Cmd::AddShape { layer: li, shape });
         }
         self.active_layer = Some(li);
+        self.selected_layer = None;
         self.selection = neu;
         self.status = format!("{name} placed");
     }
@@ -3249,6 +3250,7 @@ impl Studio {
             });
         }
         self.active_layer = Some(index);
+        self.selected_layer = None;
         self.selection = sel;
         self.persona = Persona::Design;
         self.tool = Tool::Select;

@@ -42,6 +42,7 @@ impl Studio {
     }
 
     fn selected_objects(&mut self, objects: Vec<(usize, u64)>) {
+        self.selected_layer = None;
         self.end_deform(true);
         self.reset_snap_gesture();
         self.selection = objects;

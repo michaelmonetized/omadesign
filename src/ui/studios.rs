@@ -1,3 +1,6 @@
+#[path = "layer_drag.rs"]
+mod layer_drag;
+
 use crate::app::Studio;
 use crate::color::{Blend, Rgba};
 use crate::document::{Cap, Fill, Join, Stroke as DocStroke};
@@ -1629,8 +1632,21 @@ fn paint_color_studio(ui: &mut Ui, studio: &mut Studio) {
     });
 }
 
-fn object_name(ui: &mut Ui, name: &str, width: f32, strong: bool) -> eframe::egui::Response {
-    let (rect, response) = ui.allocate_exact_size(vec2(width, 28.0), eframe::egui::Sense::click());
+fn object_name(
+    ui: &mut Ui,
+    name: &str,
+    width: f32,
+    strong: bool,
+    draggable: bool,
+) -> eframe::egui::Response {
+    let (rect, response) = ui.allocate_exact_size(
+        vec2(width, 28.0),
+        if draggable {
+            eframe::egui::Sense::click_and_drag()
+        } else {
+            eframe::egui::Sense::click()
+        },
+    );
     if response.hovered() {
         ui.painter()
             .rect_filled(rect, 4.0, crate::ui::theme::bg_widget_hover());
@@ -1718,6 +1734,7 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
         });
     });
 
+    let mut rows = Vec::new();
     let mut activate = None;
     let mut mask_action = None;
     let mut vis = None;
@@ -1813,8 +1830,10 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
         let indent = ancestors.len() as f32 * 14.0;
         ui.push_id(studio.doc.layers[i].id, |ui| {
             let active = studio.active_layer == Some(i);
-            Frame::new()
-                .fill(if active {
+            let header = Frame::new()
+                .fill(if studio.selected_layer == Some(studio.doc.layers[i].id) {
+                    accent_soft()
+                } else if active {
                     bg_widget()
                 } else {
                     Color32::TRANSPARENT
@@ -1880,8 +1899,9 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                 &layer.name,
                                 name_width,
                                 studio.doc.layer_visible(i),
+                                true,
                             );
-                            if response.clicked() {
+                            if response.clicked() || layer_drag::source(&response, studio, i) {
                                 activate = Some(i);
                             }
                             if response.double_clicked() && studio.layer_unlocked(i) {
@@ -1889,7 +1909,7 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                             }
                             response
                                 .on_hover_text(format!(
-                                    "{} · {}",
+                                    "{} · {} · drag to reorder within this group",
                                     layer.name,
                                     if layer.is_group {
                                         "Group"
@@ -1977,7 +1997,9 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                             lock = Some(i);
                         }
                     });
-                });
+                })
+                .response
+                .rect;
             if !studio.doc.layers[i].is_group
                 && studio.layer_expanded.contains(&studio.doc.layers[i].id)
             {
@@ -2060,6 +2082,7 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                                 name_width,
                                                 studio.selection.contains(&(i, shape.id))
                                                     && shape.visible,
+                                                false,
                                             );
                                             if response.clicked()
                                                 && objects_editable
@@ -2130,8 +2153,16 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                     }
                 }
             }
+            rows.push((
+                i,
+                eframe::egui::Rect::from_min_max(
+                    header.min,
+                    eframe::egui::pos2(header.right(), ui.cursor().top()),
+                ),
+            ));
         });
     }
+    let drop = layer_drag::drop_target(ui, studio, &rows);
     if let Some(i) = start_rename {
         if i == usize::MAX {
             if let Some((idx, name)) = studio.layer_rename.take()
@@ -2202,6 +2233,7 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
         if studio.active_layer != Some(li) {
             studio.paint_mask = false;
         }
+        studio.selected_layer = None;
         studio.selection = vec![(li, id)];
         studio.active_layer = Some(li);
         studio.artboard_sel.clear();
@@ -2272,6 +2304,9 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
     }
     if let Some((index, action)) = mask_action {
         action.run(studio, index);
+    }
+    if let Some((source, target, above)) = drop {
+        studio.reorder_layer_tree(source, target, above);
     }
 }
 

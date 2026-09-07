@@ -244,6 +244,7 @@ mod tests {
         let shape = studio.doc.find_shape(0, moving).unwrap();
         let start = Pt::new(60.0, 20.0);
         studio.op = Some(Op::Move {
+            selection_on_click: vec![],
             orig: vec![ObjSnap {
                 layer: 0,
                 id: moving,

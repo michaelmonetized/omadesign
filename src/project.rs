@@ -181,6 +181,7 @@ fn supported_extensions() -> Vec<String> {
         .iter()
         .map(|extension| (*extension).to_owned())
         .chain(raw_extensions())
+        .chain(["omaphoto".into(), "OMAPHOTO".into()])
         .collect()
 }
 
@@ -188,6 +189,7 @@ pub fn dialog_open() -> Option<PathBuf> {
     rfd::FileDialog::new()
         .add_filter("All supported", &supported_extensions())
         .add_filter("omadesign", &["oma"])
+        .add_filter("Photo settings", &["omaphoto", "OMAPHOTO"])
         .add_filter("Camera RAW", &raw_extensions())
         .add_filter(
             "Layered documents",
@@ -210,6 +212,22 @@ pub fn dialog_open() -> Option<PathBuf> {
             ],
         )
         .add_filter("Vector", &["svg", "svgz", "pdf", "ai", "eps"])
+        .pick_file()
+}
+
+pub fn dialog_photo() -> Option<PathBuf> {
+    let extensions: Vec<String> = [
+        "png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "omaphoto",
+    ]
+    .iter()
+    .flat_map(|extension| [(*extension).to_owned(), extension.to_ascii_uppercase()])
+    .chain(raw_extensions())
+    .collect();
+    rfd::FileDialog::new()
+        .set_title("Open a photo or saved settings")
+        .add_filter("Photos and saved settings", &extensions)
+        .add_filter("Photo settings", &["omaphoto", "OMAPHOTO"])
+        .add_filter("Camera RAW", &raw_extensions())
         .pick_file()
 }
 

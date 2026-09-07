@@ -19,6 +19,7 @@ pub fn classify(path: &Path) -> &'static str {
     }
     match ext.as_str() {
         "oma" => "oma",
+        "omaphoto" => "photo-settings",
         "svg" | "svgz" => "svg",
         "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" | "tif" | "tiff" => "raster",
         "pdf" => "pdf",
@@ -37,7 +38,7 @@ pub fn classify(path: &Path) -> &'static str {
 pub fn open_any(path: &Path) -> Result<Imported, String> {
     let name = file_name(path);
     let kind = classify(path);
-    if kind == "raw" {
+    if matches!(kind, "raw" | "photo-settings") {
         return crate::photo::PhotoImage::load(path).map(|photo| Imported::Photo(Box::new(photo)));
     }
     let document = |mut doc: crate::document::Document, notes: Vec<String>| {
@@ -117,7 +118,7 @@ pub fn open_any(path: &Path) -> Result<Imported, String> {
         }),
         Err(error) if kind == "raster" => Err(error),
         Err(_) => Err(format!(
-            "Cannot open {name}. Choose OMA, SVG/SVGZ, PNG, JPEG, WebP, GIF, TIFF, BMP, PSD/PSB, PDF, AI, EPS, or an Affinity document."
+            "Cannot open {name}. Choose OMA, OMAPHOTO, camera RAW, SVG/SVGZ, PNG, JPEG, WebP, GIF, TIFF, BMP, PSD/PSB, PDF, AI, EPS, or an Affinity document."
         )),
     }
 }

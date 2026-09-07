@@ -117,7 +117,7 @@ fn main() -> eframe::Result {
                 cc.egui_ctx.set_pixels_per_point(1.0);
                 let mut studio = Studio::new();
                 if let Some(path) = &shot_file {
-                    if omadesign::import::classify(path) == "raw" {
+                    if matches!(omadesign::import::classify(path), "raw" | "photo-settings") {
                         match omadesign::photo::PhotoImage::load(path) {
                             Ok(photo) => studio.photo.import_photo(photo),
                             Err(error) => {

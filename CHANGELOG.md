@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-09-07 · Pass 17 — Two squares walk into a selection.
+
+And both stay there. Shift-click now adds or removes an object once, instead of
+selecting it on press and undoing that choice on release. Fast modifier releases
+and clicks delivered in one frame work too. Shift-marquee adds to the selection;
+dragging keeps the selected objects together. Selection-only clicks leave the
+document and its undo history clean.
+
+Layers can finally take their turn. Drag a layer name to the insertion line, or
+select its row and use Ctrl+[ / Ctrl+] to move it backward or forward. Add Shift
+to move it to the back or front of its group. Groups bring their children along,
+locked layers stay put, and each reorder is one undo step. Object and layer
+selections keep their identities through undo, redo, and tab changes. Clicking
+artwork returns the same shortcuts to object stacking. Selected objects no longer
+swap places when already at the front of the stack.
+
+Photo settings have a front door. File Open, dropping a file, and the Photo
+library's **Open photo or settings…** accept `.omaphoto`. Keep it beside the
+matching original image; the file restores its adjustments and original pixels,
+including RAW precision. Saving updates the exact settings file opened, including
+uppercase extensions. Missing originals, invalid settings, and failed writes
+produce useful errors while retaining current edits. New edits made during a
+save stay marked unsaved. The desktop installer registers the settings file type
+for Open With.
+
+Validation: **337 tests pass**; five existing optional fixture/interoperability
+tests remain opt-in. Real WGPU pointer/key replay verifies Shift selection,
+multi-object movement, layer dragging, all four ordering shortcuts, and undo/redo.
+The supplied Photo sidecar reopens natively with its exact saved adjustments and
+both original file hashes unchanged. The recording's 34:04 quit dialog and logs
+show a normal exit, not an established crash. Formatting and desktop metadata
+validation pass; Clippy completes with existing warnings. Follow-up review also
+checks marquee presses and motion arriving in one frame, and keeps selections
+attached to their original layers through insertion, removal, and undo.
+
 ## 2026-09-06 · Pass 16 — Layers and originals, shipped.
 
 Version **0.0.2-alpha** brings layered document interchange and camera RAW

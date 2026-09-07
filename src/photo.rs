@@ -195,6 +195,8 @@ pub struct PhotoImage {
     pub raw_preview: Option<std::sync::Arc<LinearImage>>,
     pub source: Option<std::path::PathBuf>,
     pub source_identity: Option<edits::SourceIdentity>,
+    /// Keep an explicitly opened sidecar's spelling and location on subsequent saves.
+    pub settings_path: Option<std::path::PathBuf>,
     pub notes: Vec<String>,
 }
 
@@ -212,6 +214,7 @@ impl PhotoImage {
             raw_preview: None,
             source: None,
             source_identity: None,
+            settings_path: None,
             notes: vec![],
         }
     }

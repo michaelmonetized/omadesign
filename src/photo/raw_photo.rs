@@ -62,15 +62,33 @@ impl PhotoImage {
             raw_preview: Some(Arc::new(linear)),
             source: None,
             source_identity: None,
+            settings_path: None,
         }
     }
 
     /// Decode on a worker, then restore settings associated with this exact source.
     pub fn load(path: &Path) -> Result<Self, String> {
-        let path = path
+        let settings = if edits::is_sidecar(path) {
+            Some(
+                path.canonicalize()
+                    .map_err(|error| format!("Could not open photo settings: {error}"))?,
+            )
+        } else {
+            None
+        };
+        let source = if let Some(settings) = &settings {
+            edits::source_path(settings)?
+        } else {
+            path.to_owned()
+        };
+        let path = source
             .canonicalize()
             .map_err(|e| format!("Could not open photo: {e}"))?;
         let identity = edits::SourceIdentity::read(&path)?;
+        let explicit = settings
+            .as_ref()
+            .map(|settings| edits::load_file(settings, &identity))
+            .transpose()?;
         let file = std::fs::File::open(&path).map_err(|e| e.to_string())?;
         if file.metadata().map_err(|e| e.to_string())?.len() > 512 * 1024 * 1024 {
             return Err("Choose a photo smaller than 512 MiB".into());
@@ -104,13 +122,18 @@ impl PhotoImage {
         if edits::SourceIdentity::read(&path)? != identity {
             return Err("The photo changed while it was opening. Open it again.".into());
         }
-        match edits::load(&path, &identity) {
-            Ok(Some(params)) => photo.develop = params,
-            Ok(None) => {}
-            Err(error) => photo
-                .notes
-                .push(format!("Saved photo settings were not loaded: {error}")),
+        if let Some(params) = explicit {
+            photo.develop = params;
+        } else {
+            match edits::load(&path, &identity) {
+                Ok(Some(params)) => photo.develop = params,
+                Ok(None) => {}
+                Err(error) => photo
+                    .notes
+                    .push(format!("Saved photo settings were not loaded: {error}")),
+            }
         }
+        photo.settings_path = Some(settings.unwrap_or_else(|| edits::sidecar_path(&path)));
         photo.source = Some(path);
         photo.source_identity = Some(identity);
         Ok(photo)

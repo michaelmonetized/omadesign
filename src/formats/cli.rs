@@ -67,11 +67,22 @@ pub fn run(args: &[String]) -> Option<Result<(), String>> {
             .get(index + 1)
             .ok_or("Use --inspect FILE or --convert FILE --output FILE")?;
         let mut opened_photo = None;
-        if crate::import::classify(Path::new(input)) == "raw" {
+        if matches!(
+            crate::import::classify(Path::new(input)),
+            "raw" | "photo-settings"
+        ) {
             let photo = crate::photo::PhotoImage::load(Path::new(input))?;
             if inspect.is_some() {
-                let raw = photo.raw.as_ref().ok_or("Missing RAW source")?;
-                println!("{}",serde_json::to_string_pretty(&serde_json::json!({"name":photo.name,"width":raw.width,"height":raw.height,"kind":"camera RAW","bits":16,"color_space":"linear sRGB","decoder":super::raw::VERSION,"metadata":raw.metadata,"develop":photo.develop,"notes":photo.notes})).map_err(|e|e.to_string())?);
+                let info = if let Some(raw) = &photo.raw {
+                    serde_json::json!({"name":photo.name,"width":raw.width,"height":raw.height,"kind":"camera RAW","bits":16,"color_space":"linear sRGB","decoder":super::raw::VERSION,"metadata":raw.metadata,"develop":photo.develop,"notes":photo.notes,"source":photo.source,"settings":photo.settings_path})
+                } else {
+                    let (width, height) = photo.dimensions();
+                    serde_json::json!({"name":photo.name,"width":width,"height":height,"kind":"photo","bits":8,"color_space":"sRGB","develop":photo.develop,"notes":photo.notes,"source":photo.source,"settings":photo.settings_path})
+                };
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&info).map_err(|e| e.to_string())?
+                );
                 return Ok(());
             }
             let output = args
@@ -89,7 +100,7 @@ pub fn run(args: &[String]) -> Option<Result<(), String>> {
                 for note in &photo.notes {
                     eprintln!("{note}");
                 }
-                println!("Developed full-resolution RAW to {}", output.display());
+                println!("Developed full-resolution photo to {}", output.display());
                 return Ok(());
             }
             opened_photo = Some(photo);
