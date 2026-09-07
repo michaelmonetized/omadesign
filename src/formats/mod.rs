@@ -4,6 +4,7 @@ pub mod cli;
 pub mod openraster;
 pub mod pdf;
 pub mod psd;
+pub mod raw;
 pub mod svg;
 
 pub fn decode_image(bytes: &[u8]) -> Result<crate::document::Pixels, String> {

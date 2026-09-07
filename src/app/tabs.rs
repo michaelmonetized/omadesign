@@ -272,7 +272,7 @@ impl Studio {
             Some(PendingNav::CloseTab(i)) => {
                 if save {
                     self.switch_tab(i);
-                    self.save();
+                    self.save_artwork();
                     if self.dirty {
                         self.pending_nav = Some(PendingNav::CloseTab(self.active_tab));
                         return;
@@ -287,7 +287,7 @@ impl Studio {
                     for i in 0..self.tabs.len() {
                         self.switch_tab(i);
                         if self.dirty {
-                            self.save();
+                            self.save_artwork();
                             if self.dirty {
                                 self.pending_nav = Some(PendingNav::Quit);
                                 return;
@@ -451,5 +451,80 @@ mod tests {
         studio.dirty = false;
         studio.redo();
         assert!(studio.has_unsaved_changes());
+    }
+
+    #[test]
+    fn photo_active_quit_and_tab_close_save_the_actual_artwork() {
+        let root = if let Some(root) = std::env::var_os("OMADESIGN_PHOTO_ARTWORK_QUIT_TEST_DIR") {
+            PathBuf::from(root)
+        } else {
+            let root = std::env::temp_dir().join(format!(
+                "omadesign-photo-artwork-quit-{}-{}",
+                std::process::id(),
+                crate::document::next_id()
+            ));
+            std::fs::create_dir(&root).unwrap();
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "app::tabs::tests::photo_active_quit_and_tab_close_save_the_actual_artwork",
+                    "--nocapture",
+                ])
+                .env("OMADESIGN_PHOTO_ARTWORK_QUIT_TEST_DIR", &root)
+                .env("XDG_CONFIG_HOME", root.join("config"))
+                .env("XDG_STATE_HOME", root.join("state"))
+                .env("XDG_DATA_HOME", root.join("data"))
+                .output()
+                .unwrap();
+            let _ = std::fs::remove_dir_all(root);
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        };
+        let ctx = egui::Context::default();
+        let a = root.join("first.oma");
+        let b = root.join("second.oma");
+        let mut studio = Studio::new();
+        studio.doc.name = "First artwork".into();
+        studio.path = Some(a.clone());
+        studio.dirty = true;
+        studio.new_tab();
+        studio.doc.name = "Second artwork".into();
+        studio.path = Some(b.clone());
+        studio.dirty = true;
+        studio.persona = Persona::Photo;
+        studio.pending_nav = Some(PendingNav::Quit);
+        studio.execute_nav(&ctx, true);
+        assert!(studio.allow_close && studio.pending_nav.is_none());
+        assert!(!studio.has_unsaved_changes());
+        assert_eq!(crate::project::load_from(&a).unwrap().name, "First artwork");
+        assert_eq!(
+            crate::project::load_from(&b).unwrap().name,
+            "Second artwork"
+        );
+        assert!(
+            !studio.photo.is_saving(),
+            "artwork save must not enqueue a Photo settings write"
+        );
+
+        let mut studio = Studio::new();
+        let path = root.join("closed-tab.oma");
+        studio.doc.name = "Artwork from a closed tab".into();
+        studio.path = Some(path.clone());
+        studio.dirty = true;
+        studio.persona = Persona::Photo;
+        studio.pending_nav = Some(PendingNav::CloseTab(0));
+        studio.execute_nav(&ctx, true);
+        assert_eq!(
+            crate::project::load_from(&path).unwrap().name,
+            "Artwork from a closed tab"
+        );
+        assert!(studio.pending_nav.is_none());
+        assert!(!studio.dirty);
+        assert!(!studio.photo.is_saving());
     }
 }

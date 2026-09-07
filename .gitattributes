@@ -1,1 +1,4 @@
 vendor/** linguist-vendored
+# Preserve upstream license notices byte for byte, including their line endings.
+vendor/libraw/LICENSE* -whitespace
+vendor/libraw/COPYRIGHT -whitespace

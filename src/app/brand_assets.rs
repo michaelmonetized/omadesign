@@ -4,7 +4,7 @@ use crate::document::{Pixels, next_id};
 use crate::import::Imported;
 use std::path::Path;
 
-const MAX_PIXELS: usize = 32_000_000;
+const MAX_PIXELS: usize = crate::formats::raw::MAX_PIXELS as usize;
 
 impl Studio {
     /// Synchronous entry point for callers outside the frame loop. The sidebar
@@ -44,6 +44,11 @@ impl Studio {
             return Err("The placement point is invalid".into());
         }
         let (name, mut layers, motion, notes) = match imported {
+            Imported::Photo(_) => {
+                return Err(
+                    "Open camera RAW in Photo or use File → Place to develop it first".into(),
+                );
+            }
             Imported::Document(doc) => {
                 doc.validate_hierarchy()?;
                 (doc.name, doc.layers, doc.motion, doc.import_notes)

@@ -6,16 +6,31 @@ use eframe::egui::{
     Rect, RichText, ScrollArea, Sense, Slider, Stroke, TextureOptions, Ui, pos2, vec2,
 };
 
-pub fn show(ui: &mut Ui, studio: &mut Studio) {
-    if let Some(result) = super::jobs::poll::<std::path::PathBuf>(ui.ctx(), "photo-export") {
+pub(crate) fn poll_jobs(ctx: &eframe::egui::Context, studio: &mut Studio) {
+    if let Some(result) = super::jobs::poll::<std::path::PathBuf>(ctx, "photo-export") {
         studio.photo.status = match result {
             Ok(path) => format!(
                 "Exported {}",
                 path.file_name().unwrap_or_default().to_string_lossy()
             ),
-            Err(error) => format!("Export failed: {error}"),
+            Err(error) => {
+                studio.photo.report_write_error(error.clone());
+                format!("Export failed: {error}")
+            }
         };
     }
+}
+
+pub(crate) fn is_exporting(ctx: &eframe::egui::Context) -> bool {
+    super::jobs::is_running::<std::path::PathBuf>(ctx, "photo-export")
+}
+
+pub fn show(ui: &mut Ui, studio: &mut Studio) {
+    poll_jobs(ui.ctx(), studio);
+    let before = studio
+        .photo
+        .selected()
+        .map(|image| (studio.photo.selected, image.develop.clone()));
     if studio.photo.dirty || studio.photo.built_version != studio.photo.sel_version {
         studio.photo.rebuild();
     }
@@ -42,7 +57,17 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
                 super::library::show(ui, studio);
             }
         });
+    if let Some((index, params)) = before
+        && index == studio.photo.selected
+    {
+        studio
+            .photo
+            .record_edit(params, ui.input(|i| i.pointer.primary_down()));
+    }
     viewer(ui, studio);
+    if !ui.input(|i| i.pointer.primary_down()) {
+        studio.photo.finish_edit();
+    }
 }
 
 fn upload_textures(ui: &mut Ui, studio: &mut Studio) {
@@ -194,9 +219,13 @@ fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
                                         .truncate(),
                                 );
                                 ui.label(
-                                    RichText::new(format!("{} × {}", img.full.w, img.full.h))
-                                        .size(10.0)
-                                        .color(fg_weak()),
+                                    RichText::new(format!(
+                                        "{} × {}",
+                                        img.dimensions().0,
+                                        img.dimensions().1
+                                    ))
+                                    .size(10.0)
+                                    .color(fg_weak()),
                                 );
                             });
                         });
@@ -237,6 +266,39 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
         return;
     };
     ui.add(eframe::egui::Label::new(RichText::new(&img.name).small().color(fg_weak())).truncate());
+    if let Some(raw) = &img.raw {
+        ui.label(
+            RichText::new(format!(
+                "RAW · {} {}",
+                raw.metadata.make, raw.metadata.model
+            ))
+            .small(),
+        );
+        let m = &raw.metadata;
+        let mut exposure = Vec::new();
+        if m.iso > 0. {
+            exposure.push(format!("ISO {:.0}", m.iso));
+        }
+        if m.aperture > 0. {
+            exposure.push(format!("f/{:.1}", m.aperture));
+        }
+        if m.shutter > 0. {
+            exposure.push(if m.shutter < 1. {
+                format!("1/{:.0} s", 1. / m.shutter)
+            } else {
+                format!("{:.1} s", m.shutter)
+            });
+        }
+        ui.label(RichText::new(exposure.join(" · ")).small().color(fg_weak()))
+            .on_hover_text(format!("{} · {:.0} mm", m.lens, m.focal_length));
+    }
+    if !img.notes.is_empty() {
+        ui.collapsing("Photo notes", |ui| {
+            for note in &img.notes {
+                ui.label(note);
+            }
+        });
+    }
     ui.add_space(10.0);
     draw_hist(ui, &studio.photo.hists);
     ui.add_space(8.0);
@@ -274,7 +336,7 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
     ui.data_mut(|data| data.insert_temp(tab_id, tab));
     ui.add_space(12.0);
 
-    let footer_height = 88.0;
+    let footer_height = 130.0;
     let mut p = studio.photo.selected().unwrap().develop.clone();
     let mut changed = false;
     ScrollArea::vertical()
@@ -365,21 +427,58 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
     }
     ui.add_space(10.0);
     ui.separator();
-    let exporting = super::jobs::is_running::<std::path::PathBuf>(ui.ctx(), "photo-export");
+    ui.add_enabled_ui(
+        !studio.photo.is_saving() && studio.photo.selected().is_some_and(|p| p.source.is_some()),
+        |ui| {
+            if ui
+                .add_sized(
+                    [ui.available_width(), 28.0],
+                    Button::new(if studio.photo.is_saving() {
+                        "Saving…"
+                    } else if studio.photo.settings_dirty() {
+                        "Save settings •"
+                    } else {
+                        "Save settings"
+                    }),
+                )
+                .on_hover_text("Save adjustments beside the original (Ctrl+S)")
+                .clicked()
+            {
+                studio.photo.save_settings();
+            }
+        },
+    );
+    let exporting = is_exporting(ui.ctx());
     ui.add_enabled_ui(!exporting, |ui| {
-        if ui
-            .add_sized(
-                [ui.available_width(), 30.0],
-                Button::new(if exporting {
+        ui.horizontal(|ui| {
+            let id = ui.id().with("photo-export-format");
+            let mut extension =
+                ui.data_mut(|data| data.get_temp::<String>(id).unwrap_or_else(|| "jpg".into()));
+            eframe::egui::ComboBox::from_id_salt("photo-export-format")
+                .selected_text(match extension.as_str() {
+                    "png" => "PNG",
+                    "tif" => "TIFF",
+                    _ => "JPEG",
+                })
+                .width(78.)
+                .show_ui(ui, |ui| {
+                    for (ext, label) in [("jpg", "JPEG"), ("png", "PNG"), ("tif", "TIFF")] {
+                        ui.selectable_value(&mut extension, ext.into(), label);
+                    }
+                });
+            ui.data_mut(|data| data.insert_temp(id, extension.clone()));
+            if ui
+                .button(if exporting {
                     "Exporting…"
                 } else {
-                    "Export JPEG"
-                }),
-            )
-            .clicked()
-        {
-            export_developed(ui.ctx(), studio);
-        }
+                    "Export…"
+                })
+                .on_hover_text("Full resolution. RAW PNG and TIFF retain 16-bit precision.")
+                .clicked()
+            {
+                export_developed(ui.ctx(), studio, &extension);
+            }
+        });
     });
     if ui
         .add_sized(
@@ -441,19 +540,20 @@ fn draw_hist(ui: &mut Ui, hists: &[Histogram; 4]) {
 
 fn viewer(ui: &mut Ui, studio: &mut Studio) {
     let (rect, _) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
+    let painter = ui.painter().with_clip_rect(rect);
     let resp = ui.interact(
         rect,
         eframe::egui::Id::new("studio-photo-canvas"),
         Sense::click_and_drag(),
     );
-    ui.painter().rect_filled(rect, 0.0, bg_canvas());
+    painter.rect_filled(rect, 0.0, bg_canvas());
     let tex = if studio.photo.show_original {
         studio.photo.orig_tex.as_ref()
     } else {
         studio.photo.tex.as_ref().or(studio.photo.orig_tex.as_ref())
     };
     let Some(tex) = tex else {
-        ui.painter().text(
+        painter.text(
             rect.center(),
             eframe::egui::Align2::CENTER_CENTER,
             "Drop photos here, or load samples",
@@ -464,28 +564,41 @@ fn viewer(ui: &mut Ui, studio: &mut Studio) {
         return;
     };
     let size = tex.size_vec2();
-    let preview_fit = (rect.width() / size.x).min(rect.height() / size.y) * 0.96;
-    let full_width = studio.photo.selected().map_or(size.x, |image| {
-        if studio.photo.show_original {
-            image.full.w as f32
+    let full_size = studio.photo.selected().map_or(size, |image| {
+        let (w, h) = image.dimensions();
+        let (w, h) = if studio.photo.show_original {
+            (w, h)
         } else {
-            image.develop.output_dim(image.full.w, image.full.h).0 as f32
-        }
+            image.develop.output_dim(w, h)
+        };
+        vec2(w as f32, h as f32)
     });
-    studio.photo.fit_scale = preview_fit * size.x / full_width.max(1.0);
-    let scale = preview_fit * studio.photo.view_scale;
-    let vis = size * scale;
-    let dest = Rect::from_center_size(rect.center() + studio.photo.view_offset, vis);
-    ui.painter().image(
+    studio.photo.fit_scale = (rect.width() / full_size.x).min(rect.height() / full_size.y) * 0.96;
+    let scale = studio.photo.fit_scale * studio.photo.view_scale;
+    let vis = full_size * scale;
+    let mut dest = Rect::from_center_size(rect.center() + studio.photo.view_offset, vis);
+    let ppp = ui.ctx().pixels_per_point();
+    if (scale * ppp - 1.0).abs() < 0.001 {
+        // At actual size, align source samples to physical pixels. Rounded
+        // preview dimensions must not distort or blur the full-resolution tile.
+        let min = pos2(
+            (dest.min.x * ppp).round() / ppp,
+            (dest.min.y * ppp).round() / ppp,
+        );
+        dest = Rect::from_min_size(min, full_size / ppp);
+    }
+    painter.image(
         tex.id(),
         dest,
         Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
         Color32::WHITE,
     );
 
+    super::photo_detail::draw(ui, studio, dest, rect, size);
+
     let panning = ui.ctx().input(|i| i.key_down(eframe::egui::Key::Space))
         || studio.tool == crate::tools::Tool::Hand;
-    if studio.tool == crate::tools::Tool::Crop && !panning {
+    if studio.tool == crate::tools::Tool::Crop && !panning && !studio.photo.show_original {
         if resp.ctx.input(|i| i.pointer.primary_pressed())
             && let Some(a) = resp.interact_pointer_pos()
         {
@@ -513,7 +626,7 @@ fn viewer(ui: &mut Ui, studio: &mut Studio) {
                     cur.x / size.x * dest.width(),
                     cur.y / size.y * dest.height(),
                 );
-            ui.painter().rect_stroke(
+            painter.rect_stroke(
                 Rect::from_two_pos(ra, rb),
                 0.0,
                 Stroke::new(1.0, accent()),
@@ -567,29 +680,21 @@ fn handle_drops(ui: &mut Ui, studio: &mut Studio) {
     }
 }
 
-fn export_developed(ctx: &eframe::egui::Context, studio: &mut Studio) {
-    let Some(img) = studio.photo.selected() else {
+pub(crate) fn export_developed(ctx: &eframe::egui::Context, studio: &mut Studio, extension: &str) {
+    if is_exporting(ctx) {
+        return;
+    }
+    let Some(img) = studio.photo.selected().cloned() else {
         return;
     };
-    let Some(path) = crate::project::dialog_export("JPEG", "jpg") else {
+    let Some(path) = crate::project::dialog_export(&extension.to_ascii_uppercase(), extension)
+    else {
         return;
     };
-    let (full, params) = (img.full.clone(), img.develop.clone());
-    studio.photo.status = "Exporting photo…".into();
+    studio.photo.status = "Exporting full-resolution photo…".into();
+    studio.photo.clear_save_error();
     super::jobs::start(ctx, "photo-export", move || {
-        let out = photo::develop(&full, &params);
-        let mut rgb = Vec::with_capacity(out.w as usize * out.h as usize * 3);
-        for pixel in out.data.chunks_exact(4) {
-            let alpha = u32::from(pixel[3]);
-            for channel in &pixel[..3] {
-                rgb.push(((u32::from(*channel) * alpha + 127) / 255 + 255 - alpha) as u8);
-            }
-        }
-        let mut encoded = Vec::new();
-        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut encoded, 92)
-            .encode(&rgb, out.w, out.h, image::ExtendedColorType::Rgb8)
-            .map_err(|error| error.to_string())?;
-        std::fs::write(&path, encoded).map_err(|error| error.to_string())?;
+        img.export_to(&path)?;
         Ok(path)
     });
 }
@@ -627,6 +732,33 @@ mod tests {
     }
 
     #[test]
+    fn zoomed_photo_is_clipped_to_the_canvas() {
+        let (ctx, mut studio) = fixture();
+        studio.photo.view_scale = 4.0;
+        let texture = studio.photo.tex.as_ref().unwrap().id();
+        let mut output = ctx.run_ui(
+            RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(400.0, 300.0))),
+                ..Default::default()
+            },
+            |ui| {
+                eframe::egui::Panel::left("photo-test-sidebar")
+                    .exact_size(100.0)
+                    .show(ui, |ui| {
+                        ui.label("Photo tools");
+                    });
+                viewer(ui, &mut studio);
+            },
+        );
+        let image = output.shapes.iter().find(|shape| matches!(&shape.shape, eframe::egui::Shape::Mesh(mesh) if mesh.texture_id == texture)).expect("photo was painted");
+        assert!(
+            image.clip_rect.min.x >= 100.0,
+            "zoomed pixels must not cover the sidebar"
+        );
+        output.textures_delta.clear();
+    }
+
+    #[test]
     fn photo_crop_enter_and_escape_finish_the_gesture_until_the_next_press() {
         for key in [Key::Enter, Key::Escape] {
             let (ctx, mut studio) = fixture();
@@ -643,6 +775,11 @@ mod tests {
             studio.photo.selected = Some(0);
             let original = Some([0.1, 0.1, 0.9, 0.9]);
             studio.photo.selected_mut().unwrap().develop.crop = original;
+            studio.photo.tex = Some(ctx.load_texture(
+                "cropped-photo-gesture-fixture",
+                eframe::egui::ColorImage::filled([64, 48], Color32::GRAY),
+                TextureOptions::LINEAR,
+            ));
             let press = |pos, pressed| Event::PointerButton {
                 pos,
                 button: PointerButton::Primary,
@@ -676,10 +813,10 @@ mod tests {
                 assert_eq!(
                     committed,
                     Some([
-                        a.x.min(b.x) / 80.0,
-                        a.y.min(b.y) / 60.0,
-                        a.x.max(b.x) / 80.0,
-                        a.y.max(b.y) / 60.0
+                        0.1 + a.x.min(b.x) / 64.0 * (0.9 - 0.1),
+                        0.1 + a.y.min(b.y) / 48.0 * (0.9 - 0.1),
+                        0.1 + a.x.max(b.x) / 64.0 * (0.9 - 0.1),
+                        0.1 + a.y.max(b.y) / 48.0 * (0.9 - 0.1)
                     ])
                 );
                 assert_eq!(studio.photo.sel_version, version + 1);
@@ -804,7 +941,7 @@ mod tests {
             data: vec![128; 800 * 600 * 4],
         };
         let mut image = photo::PhotoImage::from_full("Full-size fixture".into(), full);
-        image.preview = image.full.downscaled(80);
+        image.preview = image.full.downscaled(80).into();
         studio.photo.images.push(image);
         studio.photo.selected = Some(0);
         frame(&ctx, &mut studio, vec![]);

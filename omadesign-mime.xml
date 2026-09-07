@@ -21,4 +21,16 @@
   <mime-type type="image/vnd.adobe.photoshop">
     <glob pattern="*.psb"/>
   </mime-type>
+  <!-- RAW families without a dedicated shared-mime-info type. Existing vendor
+       types retain their more specific identification. -->
+  <mime-type type="image/x-dcraw">
+    <comment>Camera RAW photograph</comment>
+    <generic-icon name="image-x-generic"/>
+    <glob pattern="*.bay"/>
+    <glob pattern="*.dcs"/>
+    <glob pattern="*.drf"/>
+    <glob pattern="*.ptx"/>
+    <glob pattern="*.pxn"/>
+    <glob pattern="*.rwz"/>
+  </mime-type>
 </mime-info>

@@ -136,7 +136,11 @@ Masks work on pixel and vector layers and remain editable in the project. Invert
 
 ## Photo
 
-Open a folder, drop files, or load samples. The Develop panel groups adjustments into **Light**, **Color**, and **Detail**. Tone curve, color mixer, and color grading expand when needed. **Before** compares the original; **Auto light** balances exposure and contrast. Export JPEG runs in the background. **Place in Design** drops the developed image as a pixel layer.
+Open a photo, browse a folder, drop files, or load samples. Camera RAW files such as DNG, CR2/CR3, NEF, ARW, RAF, ORF and RW2 use the built-in decoder. The Photo library shows camera metadata when available, and imports run in the background. The Develop panel groups adjustments into **Light**, **Color**, and **Detail**. Tone curve, color mixer, and color grading expand when needed. **Before** compares the default development; **Auto light** balances exposure and contrast. RAW exposure and white-balance changes use the 16-bit linear source.
+
+Use **Save settings** to keep development adjustments beside the original photo as a small `.omaphoto` file. Reopening the source restores those settings. Keep both files together; the original photograph is never rewritten. A changed source file or invalid settings file produces a note. Photo edits have their own Undo/Redo history. Quitting offers Save all, Discard or Cancel for unsaved photo settings before the palette and artwork save steps, and waits for writes to finish. Saving a Design `.oma` does not store the RAW source or its settings.
+
+Export JPEG, PNG or TIFF in the background at the full developed resolution, including crop and rotation. RAW PNG/TIFF exports keep 16-bit channels. **Place in Design** adds an 8-bit developed pixel layer with Undo; retain the RAW and settings for later development. The initial display preview has a maximum edge of 1600 pixels. Zoom in for full-resolution detail, prepared in the background and displayed as visible tiles while the preview keeps the view responsive. See [RAW format limits](format-support.md#camera-raw) for supported camera families and color-rendering differences.
 
 Hold Space or choose Hand to drag the view; middle-drag and two-finger scroll also pan. Pinch, Ctrl+scroll, and Alt+scroll zoom. Ctrl+0 fits the photo; Ctrl+1 shows it at 100%.
 
@@ -312,6 +316,7 @@ receive stable filenames automatically. Share fonts only under their license ter
 
 - Project: `.oma` (JSON, rasters PNG-packed, motion clip)
 - **File → Open** reads layered PSD/PSB, every page of PDF and PDF-compatible AI, OpenRaster, SVG/SVGZ, and supported Affinity documents through the optional bridge. Imported documents open in their own tab at their original dimensions. **Save** uses `.oma` and preserves the source file.
+- Camera RAW files open in Photo for development. **Save settings** creates `.omaphoto` alongside the source; Photo export creates a separate JPEG, PNG or TIFF. The original RAW is not changed.
 - **File → Place…** `Ctrl+Shift+P` loads artwork in the background, then lets you click or drag to place it. Nested layers and masks travel together, and Undo removes the placement in one step. Enter places at the center; Esc cancels.
 - Drop layered documents on the canvas or welcome screen to open them; ordinary images place, `.oma` opens, and Lottie imports.
 - Groups in the layer tree expand, rename, hide, lock and reorder as units. **Pass through** controls whether child blend modes interact with the backdrop. Disable it for isolated group blending.

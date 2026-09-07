@@ -65,6 +65,13 @@ when idle, command keys with Ctrl/Shift/Alt, and contextual drawing gestures.
 
 Brush, eraser, clone, healing, fill, marquees, wand, and editable layer masks. Photo: develop sliders, histogram, crop, Place in Design.
 
+Open camera RAW files including DNG, CR2/CR3, NEF, ARW and RAF with the built-in
+LibRaw decoder. Photo keeps the 16-bit linear source for exposure and color edits;
+export full-resolution 16-bit PNG/TIFF or JPEG. **Save settings** stores an adjacent
+`.omaphoto` file and preserves the camera original. Camera and compression support,
+color rendering and Design placement have
+[documented limits](docs/format-support.md#camera-raw).
+
 ## Motion
 
 13 editable presets: draw stroke, pop in, slam, shake, fill up, four slide directions,

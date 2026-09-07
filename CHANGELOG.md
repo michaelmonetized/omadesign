@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-09-06 · Pass 14 — Develop your originals.
+
+Camera RAW files now open directly in Photo with a bundled LibRaw decoder.
+DNG, Canon CR2/CR3, Nikon NEF, Sony ARW, Fujifilm RAF and other supported camera
+families keep their full-resolution 16-bit linear pixels. Exposure adjustments
+happen before display conversion, including DNG baseline exposure. PNG and TIFF
+exports retain 16-bit channels; JPEG remains available for sharing.
+
+Loading, folder scans, full-resolution detail and export work run in background
+workers. Zooming in requests detail from the full image. Save settings writes an
+adjacent `.omaphoto` file, leaving the original untouched; reopening restores the
+adjustments. Undo and Redo belong to the selected photo. Quitting waits for writes
+and offers to save every edited photograph before handling Design documents.
+
+Place in Design develops a full-resolution pixel layer in the background and
+preserves the destination artwork. A new document takes the photo's actual size.
+Cropping an already cropped or rotated photo now uses the visible image correctly,
+and cropped exports no longer acquire a transparent edge. File-menu exports and
+keyboard shortcuts act on Photo while that studio is active.
+
+Validation: **329 tests pass**, including asynchronous imports, settings and quit
+safety, full-resolution placement, crop/rotation and zoom clipping. Real ProRAW
+DNG, Canon CR3 and Fujifilm X-Trans RAF decode and PNG16 exports match independent
+references exactly. A saved exposure/crop/rotation edit also matches an independent
+TIFF16 reference; source checksums remain unchanged. ARM64 and x86_64 packages
+pass static-dependency and glibc 2.35 checks, including x86 RAW decoding against
+Ubuntu 22.04's runtime. Clippy completes with existing repository warnings.
+
+Known limits: camera/compression support follows the bundled decoder. Camera
+looks, full Adobe profiles, automatic lens corrections and some DNG processing
+instructions are not reproduced. Later edits cannot recover sensor/channel
+clipping. Design placement becomes 8-bit pixels; the original and its settings
+remain separate. RAW writing and preservation of all export metadata are not
+provided. See [format support](docs/format-support.md#camera-raw).
+
 ## 2026-09-06 · Pass 13 — Bring your layers.
 
 Open Photoshop PSD/PSB, PDF-compatible Illustrator files, multi-page PDFs,

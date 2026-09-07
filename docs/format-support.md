@@ -1,4 +1,4 @@
-# Layered file formats
+# File formats
 
 Omadesign imports supported content into its native layer tree and records conversion notes with the document. A format appearing in Open is not a promise of complete application compatibility. Save imported work as `.oma` to retain Omadesign's editable document and the import notes; retain the source when a conversion reports losses.
 
@@ -13,7 +13,26 @@ Omadesign imports supported content into its native layer tree and records conve
 | `.svg`, `.svgz` | Objects, layer/group hierarchy, names, transforms, text, images, styles, visibility and supported masks | SVG | Complex text can become editable outlines. Clips/masks can become pixel masks; unsupported effects may be rendered into pixel layers. Scripts, animation and foreign content are not imported. |
 | `.ora` | OpenRaster pixel layers/groups, offsets, names, visibility, opacity, isolation and supported blends | OpenRaster with layers, stack.xml, merged preview and thumbnail | Vectors/text become pixels per layer. Masked/effected groups become one pixel layer. Extended SVG layer sources and unsupported compositing operations are rejected. |
 | `.eps`, `.ps` | Ghostscript conversion to PDF, then native PDF import | No direct writer | Ghostscript must be installed. Conversion can discard original layer metadata or flatten artwork. |
+| Camera RAW: DNG, CR2/CR3, NEF/NRW, ARW, RAF, ORF, RW2, PEF and others | Full-resolution sensor decoding and Photo development | Developed PNG/TIFF with 16-bit channels, or JPEG; no camera RAW writer | Support depends on the camera and compression mode. Lens corrections, proprietary camera looks and unsupported DNG opcodes/profiles are not recreated. Design placement becomes 8-bit pixels. |
 | PNG, JPEG, WebP, GIF, BMP, TIFF | Pixel image | PNG and JPEG through headless conversion; other existing export actions remain separate | This path imports a single image, not layered TIFF or animated GIF structure. |
+
+## Camera RAW
+
+RAW decoding is built into Omadesign using the pinned [LibRaw 0.22.2 source](https://github.com/LibRaw/LibRaw/tree/0.22.2). It does not require an installed converter or a download when opening a photo. The decoder reads sensor data at full resolution, subtracts black levels, demosaics supported Bayer/X-Trans sensors, applies the camera white balance and color matrix, and honors image orientation. It returns 16-bit linear sRGB with automatic brightness disabled. DNG baseline exposure and the Photo exposure/white-balance adjustments are applied before the display transfer function.
+
+Recognized extensions are `.3fr`, `.arw`, `.bay`, `.cap`, `.cr2`, `.cr3`, `.crw`, `.dcr`, `.dcs`, `.dng`, `.drf`, `.erf`, `.fff`, `.iiq`, `.k25`, `.kdc`, `.mdc`, `.mef`, `.mos`, `.mrw`, `.nef`, `.nrw`, `.orf`, `.pef`, `.ptx`, `.pxn`, `.raf`, `.raw`, `.rw2`, `.rwl`, `.rwz`, `.sr2`, `.srf`, `.srw`, `.sti` and `.x3f`. An extension identifies a family; it does not establish support for every camera or compression mode. JPEG XL-compressed DNG, GPR, EIP packages and R3D video are not supported by this build. Only the first image of a multi-image RAW is developed, with a conversion note.
+
+Open a RAW through **File → Open**, the Photo library, a folder, a file-manager Open With action, or a drop. Loading and folder scans run in background workers. Photo keeps the original decoded linear pixels separate from its development settings and its 1600-pixel display preview. Camera/lens information and exposure metadata are shown when present. **Before** shows the default camera-balanced development, not the camera's embedded JPEG. At close zoom, a background worker develops full-resolution detail and the viewer uploads only the visible tiles. The previous preview stays visible while detail is prepared; results from an older photo or adjustment are discarded.
+
+**Save settings** writes a small adjacent file such as `DSC_0001.NEF.omaphoto`; opening the source again restores it. The source photograph is never rewritten. Keep the settings file with its source. Settings are bound to the source size and modification time, and a changed source or malformed settings file produces a note instead of applying possibly unrelated adjustments. This metadata check is not a cryptographic content identity. Unsaved changes exist only in the current Photo session. A `.oma` Design document does not contain the RAW source or its development settings.
+
+Photo export develops the full-resolution source, including crop and rotation. RAW PNG/TIFF exports retain 16-bit developed channels; JPEG is an 8-bit delivery image. Exported files use display sRGB values and do not preserve the sensor mosaic, camera edit history, or all source metadata. **Place in Design** and general document conversion produce an 8-bit raster layer; keep the RAW and `.omaphoto` settings for further development. Native RAW writing is not provided.
+
+Rendering is not intended to match Lightroom, Capture One or an in-camera JPEG exactly. Proprietary looks, full Adobe camera profiles, automatic lens correction, some DNG opcodes and multi-frame computational rendering are not implemented. Sensor/channel clipping cannot be recovered by later exposure changes. The decoder rejects images larger than 64 megapixels and inputs larger than 512 MiB, limits LibRaw's sensor unpacking buffers, and requests cancellation through LibRaw's progress callback after 120 seconds. Total working memory also includes decoded pixels and development buffers. The callback is a cooperative limit, not a process deadline.
+
+Real-file verification covers an iPhone 16 Pro Max ProRAW DNG, a compressed Canon EOS R6 CR3 and a compressed Fujifilm X-T30 II X-Trans RAF. These exercise different sensor layouts, compression, camera metadata and orientation. On the validated native build, the decoded 16-bit RGB and full-resolution PNG exports matched independently generated system LibRaw and sRGB-transfer references pixel for pixel. The files cover 3024 × 4032, 3407 × 2271 and 6246 × 4170 pixels. A separate sidecar round trip restored exposure, rotation and crop; its 3024 × 1512 TIFF retained 16-bit pixels and exactly matched an independent development/crop reference, while the JPEG retained the same dimensions. Source SHA-256 checks remained unchanged. These checks do not establish support for every listed camera family or bit-identical output across architectures.
+
+LibRaw is distributed under its CDDL option, with its source and license in `vendor/libraw`. Release packages and the installer retain that source and the native JPEG/zlib notices. Omadesign's own code remains MIT-licensed.
 
 ## Affinity
 
@@ -64,12 +83,14 @@ The command line uses the same readers and writers as the desktop. Inspection wr
 ```sh
 omadesign --inspect artwork.afdesign
 omadesign --inspect artwork.psd
+omadesign --inspect photograph.NEF
+omadesign --convert photograph.dng --output photograph.tif
 omadesign --convert artwork.afphoto --output artwork.oma
 omadesign --convert artwork.oma --output artwork.psd
 omadesign --convert artwork.oma --output artwork.pdf
 omadesign --convert artwork.oma --output artwork.ora
 ```
 
-Headless output formats are `.oma`, `.svg`, `.png`, `.jpg`/`.jpeg`, `.psd`, `.psb`, `.pdf` and `.ora`. Same-file conversion is refused to protect the original. General source-file size is limited to 512 MiB; specific readers also enforce object, pixel, decompression or process limits.
+Headless document output formats are `.oma`, `.svg`, `.png`, `.jpg`/`.jpeg`, `.psd`, `.psb`, `.pdf` and `.ora`. RAW inspection includes camera metadata, source dimensions, precision and saved development settings. RAW-to-PNG/TIFF conversion uses the full-resolution 16-bit Photo pipeline; RAW-to-JPEG produces an 8-bit image. Saved `.omaphoto` settings are applied automatically. Converting RAW to a document format renders an 8-bit pixel layer. Same-file conversion is refused to protect the original. General source-file size is limited to 512 MiB; specific readers also enforce object, pixel, decompression or process limits.
 
 Primary references: [Affinity V3 converter source](https://gitlab.com/inkscape/extras/extension-afdesign/-/commit/cd5cf29d5df22e07b1e9209219079ca44015b7fe), [OpenRaster archive specification](https://www.openraster.org/baseline/file-layout-spec.html), [OpenRaster layer-stack specification](https://www.openraster.org/baseline/layer-stack-spec.html).

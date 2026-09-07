@@ -1,3 +1,7 @@
+pub mod edits;
+mod raw_photo;
+pub use raw_photo::LinearImage;
+
 use image::ImageEncoder;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -62,10 +66,6 @@ impl RgbaImage {
             h: out.height(),
             data: out.into_raw(),
         }
-    }
-
-    fn alpha(&self, x: u32, y: u32) -> u8 {
-        self.data[((y * self.w + x) as usize) * 4 + 3]
     }
 
     pub fn encode_png(&self) -> Option<Vec<u8>> {
@@ -185,22 +185,34 @@ impl DevelopParams {
 #[derive(Clone)]
 pub struct PhotoImage {
     pub name: String,
-    pub full: RgbaImage,
-    pub preview: RgbaImage,
-    pub thumb: RgbaImage,
+    /// Full raster source, or a display preview when `raw` owns the linear source.
+    /// Use dimensions()/render_full() for source-sized operations.
+    pub full: std::sync::Arc<RgbaImage>,
+    pub preview: std::sync::Arc<RgbaImage>,
+    pub thumb: std::sync::Arc<RgbaImage>,
     pub develop: DevelopParams,
+    pub raw: Option<std::sync::Arc<crate::formats::raw::RawImage>>,
+    pub raw_preview: Option<std::sync::Arc<LinearImage>>,
+    pub source: Option<std::path::PathBuf>,
+    pub source_identity: Option<edits::SourceIdentity>,
+    pub notes: Vec<String>,
 }
 
 impl PhotoImage {
     pub fn from_full(name: String, full: RgbaImage) -> Self {
-        let preview = full.downscaled(1600);
-        let thumb = full.downscaled(192);
+        let preview = std::sync::Arc::new(full.downscaled(1600));
+        let thumb = std::sync::Arc::new(full.downscaled(192));
         Self {
             name,
-            full,
+            full: std::sync::Arc::new(full),
             preview,
             thumb,
             develop: DevelopParams::default(),
+            raw: None,
+            raw_preview: None,
+            source: None,
+            source_identity: None,
+            notes: vec![],
         }
     }
 }
@@ -227,6 +239,85 @@ fn pixel_luma(r: f32, g: f32, b: f32) -> f32 {
 }
 
 pub fn develop(src: &RgbaImage, p: &DevelopParams) -> RgbaImage {
+    let (w, h, data) = develop_inner::<u8>(DevelopSource::rgba(src), p);
+    RgbaImage { w, h, data }
+}
+
+#[derive(Clone, Copy)]
+struct DevelopSource<'a> {
+    w: u32,
+    h: u32,
+    rgba: Option<&'a [u8]>,
+    linear: Option<&'a [u16]>,
+}
+impl<'a> DevelopSource<'a> {
+    fn rgba(image: &'a RgbaImage) -> Self {
+        Self {
+            w: image.w,
+            h: image.h,
+            rgba: Some(&image.data),
+            linear: None,
+        }
+    }
+    fn linear(w: u32, h: u32, pixels: &'a [u16]) -> Self {
+        Self {
+            w,
+            h,
+            rgba: None,
+            linear: Some(pixels),
+        }
+    }
+    fn pixel(self, index: usize) -> [f32; 4] {
+        if let Some(data) = self.linear {
+            let i = index * 3;
+            [
+                data[i] as f32 / 65535.,
+                data[i + 1] as f32 / 65535.,
+                data[i + 2] as f32 / 65535.,
+                1.,
+            ]
+        } else {
+            let data = self.rgba.unwrap();
+            let i = index * 4;
+            [
+                data[i] as f32 / 255.,
+                data[i + 1] as f32 / 255.,
+                data[i + 2] as f32 / 255.,
+                data[i + 3] as f32 / 255.,
+            ]
+        }
+    }
+    fn alpha(self, x: u32, y: u32) -> f32 {
+        self.rgba.map_or(1., |data| {
+            data[(y as usize * self.w as usize + x as usize) * 4 + 3] as f32 / 255.
+        })
+    }
+}
+trait OutputChannel: Copy + Default + Send + Sync {
+    fn encode(value: f32) -> Self;
+}
+impl OutputChannel for u8 {
+    fn encode(value: f32) -> Self {
+        (value.clamp(0., 1.) * 255.).round() as u8
+    }
+}
+impl OutputChannel for u16 {
+    fn encode(value: f32) -> Self {
+        (value.clamp(0., 1.) * 65535.).round() as u16
+    }
+}
+fn srgb_encode(linear: f32) -> f32 {
+    let x = linear.clamp(0., 1.);
+    if x <= 0.0031308 {
+        x * 12.92
+    } else {
+        1.055 * x.powf(1. / 2.4) - 0.055
+    }
+}
+fn develop_inner<T: OutputChannel>(
+    src: DevelopSource<'_>,
+    p: &DevelopParams,
+) -> (u32, u32, Vec<T>) {
     let (rw, rh) = p.rotated_dim(src.w, src.h);
     let (cw, ch) = p.output_dim(src.w, src.h);
 
@@ -252,16 +343,20 @@ pub fn develop(src: &RgbaImage, p: &DevelopParams) -> RgbaImage {
             .any(|band| band.hue.abs() + band.sat.abs() + band.luma.abs() > 0.001);
 
     col.par_chunks_mut(3).enumerate().for_each(|(i, px)| {
-        let base = i * 4;
-        let a = src.data[base + 3] as f32 / 255.0;
-        let mut r = src.data[base] as f32 / 255.0;
-        let mut g = src.data[base + 1] as f32 / 255.0;
-        let mut b = src.data[base + 2] as f32 / 255.0;
+        let [mut r, mut g, mut b, a] = src.pixel(i);
 
         if a > 0.0 {
-            r = pil(r * exp * temp_r);
-            g = pil(g * exp * temp_g);
-            b = pil(b * exp * temp_b);
+            // RAW exposure and WB operate on scene-linear channels before the
+            // display transfer curve. Original 16-bit samples remain unchanged.
+            if src.linear.is_some() {
+                r = srgb_encode(r * exp * temp_r);
+                g = srgb_encode(g * exp * temp_g);
+                b = srgb_encode(b * exp * temp_b);
+            } else {
+                r = pil(r * exp * temp_r);
+                g = pil(g * exp * temp_g);
+                b = pil(b * exp * temp_b);
+            }
 
             let l = pixel_luma(r, g, b);
 
@@ -367,7 +462,7 @@ pub fn develop(src: &RgbaImage, p: &DevelopParams) -> RgbaImage {
     let grain = p.grain.clamp(0.0, 1.0);
     let vign = p.vignette.clamp(-1.0, 1.0);
 
-    let mut out = vec![0u8; cw as usize * ch as usize * 4];
+    let mut out = vec![T::default(); cw as usize * ch as usize * 4];
     out.par_chunks_mut(cw as usize * 4)
         .enumerate()
         .for_each(|(y, row)| {
@@ -380,9 +475,9 @@ pub fn develop(src: &RgbaImage, p: &DevelopParams) -> RgbaImage {
                 if let Some(c) = &p.crop {
                     let (cwf, chf) = (cw as f64, ch as f64);
                     sx = c[0] as f64 * rw as f64
-                        + (x as f64 / cwf) * (c[2] - c[0]) as f64 * rw as f64;
+                        + ((x as f64 + 0.5) / cwf) * (c[2] - c[0]) as f64 * rw as f64;
                     sy = c[1] as f64 * rh as f64
-                        + (y as f64 / chf) * (c[3] - c[1]) as f64 * rh as f64;
+                        + ((y as f64 + 0.5) / chf) * (c[3] - c[1]) as f64 * rh as f64;
                 }
 
                 let (mut ux, mut uy) = (sx, sy);
@@ -442,18 +537,14 @@ pub fn develop(src: &RgbaImage, p: &DevelopParams) -> RgbaImage {
                     b = pil(b + gv * band);
                 }
 
-                px[0] = (r * 255.0).round() as u8;
-                px[1] = (g * 255.0).round() as u8;
-                px[2] = (b * 255.0).round() as u8;
-                px[3] = a;
+                px[0] = T::encode(r);
+                px[1] = T::encode(g);
+                px[2] = T::encode(b);
+                px[3] = T::encode(a);
             }
         });
 
-    RgbaImage {
-        w: cw,
-        h: ch,
-        data: out,
-    }
+    (cw, ch, out)
 }
 
 fn rgb_to_hsl(r: f32, g: f32, b: f32) -> (f32, f32, f32) {

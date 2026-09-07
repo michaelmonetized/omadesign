@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+export ZIG_GLIBC_TARGET="${ZIG_GLIBC_TARGET:-x86_64-linux-gnu.2.35}"
+export ZIG_DRIVER=c++
+exec "$(dirname "$0")/zig-cc" "$@"

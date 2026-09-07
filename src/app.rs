@@ -33,7 +33,7 @@ use crate::document::{
 use crate::geom::{Anchor, Bounds, Geom, Pt, TypeRun};
 use crate::motion::{self, Ease, Motion, Pose, Prop};
 use crate::paint::{self, Brush};
-use crate::photo::{self, RgbaImage};
+use crate::photo::RgbaImage;
 use crate::presets::Preset;
 use crate::snap::{self, SnapSettings};
 use crate::tools::{Persona, Tool};
@@ -1089,6 +1089,10 @@ impl Studio {
     }
 
     pub fn undo(&mut self) {
+        if self.persona == Persona::Photo {
+            self.photo.undo();
+            return;
+        }
         if self.end_pixel_stroke(true) {
             return;
         }
@@ -1111,6 +1115,10 @@ impl Studio {
     }
 
     pub fn redo(&mut self) {
+        if self.persona == Persona::Photo {
+            self.photo.redo();
+            return;
+        }
         if self.end_pixel_stroke(true) {
             return;
         }
@@ -2706,6 +2714,10 @@ impl Studio {
     }
 
     pub fn save_as(&mut self) {
+        if self.persona == Persona::Photo {
+            self.photo.save_settings();
+            return;
+        }
         self.end_deform(false);
         self.end_pixel_stroke(false);
         self.commit_type_edit();
@@ -2798,6 +2810,15 @@ impl Studio {
     }
 
     pub fn save(&mut self) {
+        if self.persona == Persona::Photo {
+            self.photo.save_settings();
+            return;
+        }
+        self.save_artwork();
+    }
+
+    /// Document close/save flows must save artwork even when Photo is active.
+    pub(super) fn save_artwork(&mut self) {
         self.end_deform(false);
         self.end_pixel_stroke(false);
         self.commit_type_edit();
@@ -2961,32 +2982,6 @@ impl Studio {
         std::fs::write(path, bytes).map_err(|e| e.to_string())
     }
 
-    pub fn send_photo_to_design(&mut self) {
-        let Some(img) = self.photo.selected() else {
-            self.status = "no photo selected".into();
-            return;
-        };
-        let developed = photo::develop(&img.full, &img.develop);
-        let w = developed.w;
-        let h = developed.h;
-        let mut layer = Layer::raster(img.name.clone(), w, h);
-        if let LayerKind::Raster { pixels, .. } = &mut layer.kind {
-            *pixels = crate::document::Pixels::from_rgba(w, h, developed.data)
-                .unwrap_or_else(|| crate::document::Pixels::new(w, h));
-        }
-        if self.doc.layers.is_empty() {
-            self.doc = Document::new(&img.name, w as f32, h as f32, 72.0);
-            self.doc.layers.clear();
-        }
-        let index = self.doc.layers.len();
-        self.commit(Cmd::AddLayer { index, layer });
-        self.active_layer = Some(index);
-        self.persona = Persona::Design;
-        self.tool = Tool::Select;
-        self.need_fit = true;
-        self.status = "photo placed on a pixel layer".into();
-    }
-
     pub fn begin_place(&mut self) {
         let Some(path) = crate::project::dialog_place() else {
             return;
@@ -3018,7 +3013,9 @@ impl Studio {
             }
             return;
         }
-        if self.persona == Persona::Photo && is_raster_ext(&ext) {
+        if self.persona == Persona::Photo
+            && (is_raster_ext(&ext) || crate::formats::raw::is_extension(&ext))
+        {
             self.photo.import_file(path);
             return;
         }
@@ -3263,18 +3260,29 @@ impl Studio {
     }
 
     pub fn commit_photo_crop(&mut self, start: Pt, cur: Pt) {
+        // The gesture is measured on the currently displayed, already cropped preview.
+        if self.photo.show_original {
+            return;
+        }
         let Some(img) = self.photo.selected_mut() else {
             return;
         };
-        let (w, h) = (img.preview.w as f32, img.preview.h as f32);
+        let before = img.develop.clone();
+        let (w, h) = img.develop.output_dim(img.preview.w, img.preview.h);
+        let (w, h) = (w.max(1) as f32, h.max(1) as f32);
         let x0 = (start.x.min(cur.x) / w).clamp(0.0, 1.0);
         let y0 = (start.y.min(cur.y) / h).clamp(0.0, 1.0);
         let x1 = (start.x.max(cur.x) / w).clamp(0.0, 1.0);
         let y1 = (start.y.max(cur.y) / h).clamp(0.0, 1.0);
         if x1 - x0 > 0.02 && y1 - y0 > 0.02 {
-            img.develop.crop = Some([x0, y0, x1, y1]);
-            self.photo.dirty = true;
-            self.photo.sel_version += 1;
+            let [a, b, c, d] = before.crop.unwrap_or([0., 0., 1., 1.]);
+            img.develop.crop = Some([
+                a + x0 * (c - a),
+                b + y0 * (d - b),
+                a + x1 * (c - a),
+                b + y1 * (d - b),
+            ]);
+            self.photo.record_edit(before, false);
             self.status = "cropped".into();
         }
     }
@@ -3325,11 +3333,14 @@ impl eframe::App for Studio {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             if !self.libraries.close_requested {
                 self.libraries.close_error.clear();
+                self.photo.clear_save_error();
             }
             self.libraries.close_requested = true;
             self.pending_nav = None;
         }
         self.poll_file_jobs(&ctx);
+        self.photo.poll(&ctx);
+        crate::ui::photo::poll_jobs(&ctx, self);
         crate::ui::run(ui, self);
         self.import_notes_window(&ctx);
     }

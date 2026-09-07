@@ -257,7 +257,11 @@ impl Studio {
             Shortcut::New => self.new_tab(),
             Shortcut::Export => {
                 self.commit_type_edit();
-                self.export_png();
+                if self.persona == Persona::Photo {
+                    crate::ui::photo::export_developed(ctx, self, "png");
+                } else {
+                    self.export_png();
+                }
             }
             Shortcut::Undo => self.undo(),
             Shortcut::Redo => self.redo(),

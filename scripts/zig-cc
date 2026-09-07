@@ -40,4 +40,4 @@ for a in "${filtered[@]}"; do
 done
 filtered=("${filtered2[@]}")
 
-exec "$zig" cc -target "$triple" -fno-sanitize=undefined "${filtered[@]}"
+exec "$zig" "${ZIG_DRIVER:-cc}" -target "$triple" -fno-sanitize=undefined "${filtered[@]}"
