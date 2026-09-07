@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-09-06 · Pass 16 — Layers and originals, shipped.
+
+Version **0.0.2-alpha** brings layered document interchange and camera RAW
+development into the ARM64 and x86_64 Linux release packages. PSD/PSB, PDF,
+PDF-compatible AI, SVG and OpenRaster import supported layered artwork; the
+optional Affinity bridge stays a separate setup. Photo keeps full-resolution
+linear pixels, saves `.omaphoto` adjustments and exports 16-bit PNG/TIFF or JPEG.
+
+The website, source download and installer now describe the same release.
+Development-only notices become release availability notes, and source links use
+the release tag. Source-build prerequisites now include the C/C++ toolchain used
+by the bundled decoder. Compatibility limits remain in the format guide.
+
+Validation: **329 tests pass**, plus all three optional librsvg/Poppler PDF
+checks. Formatting passes and Clippy reports no new warnings. Portable packaging
+enforces a glibc 2.35 ceiling and bundles the RAW decoder's source and licenses.
+
 ## 2026-09-06 · Pass 15 — See what opens.
 
 The website now introduces layered interchange and camera RAW development with

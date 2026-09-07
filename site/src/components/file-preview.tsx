@@ -7,13 +7,13 @@ export function FilePreview() {
     <section className="section shell file-preview" id="file-support">
       <div className="file-preview-heading">
         <div>
-          <p className="preview-label">Development preview</p>
+          <p className="preview-label">New in {RELEASE_TAG}</p>
           <h2>Bring your layers.<br />Develop your originals.</h2>
         </div>
         <p className="file-preview-intro">
           More of your work, in one native studio. Layered interchange and camera
-          RAW development are ready to try from source. Published downloads remain{" "}
-          {RELEASE_TAG}.
+          RAW development are included in {RELEASE_TAG}, with native Linux
+          downloads for ARM64 and x86_64.
         </p>
       </div>
       <div className="file-preview-workflows">
@@ -64,8 +64,8 @@ export function FilePreview() {
           import is partial; the new unified <code>.af</code> format is still
           awaiting verification with a real file. RAW placement in Design uses 8-bit pixels.
         </p>
-        <a className="button" href={`${sitePath("docs/")}#development-preview`}>
-          Try the preview <Arrow />
+        <a className="button" href="#install">
+          Get {RELEASE_TAG} <Arrow />
         </a>
       </div>
     </section>

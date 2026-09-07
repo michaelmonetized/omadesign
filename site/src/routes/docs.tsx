@@ -59,10 +59,11 @@ function Docs() {
       >
         <aside className="docs-note docs-availability" aria-label="Documentation version">
           <p>
-            These guides include the development preview. Layered interchange,
-            RAW and saved photo settings require a{" "}
-            <Link to="/docs" hash="development-preview">preview source build</Link>.
-            {" "}Published downloads remain {RELEASE_TAG}.
+            These guides cover {RELEASE_TAG}, including layered interchange,
+            RAW development and saved photo settings. Get the{" "}
+            <Link to="/docs" hash="get-the-app">Linux release</Link>.
+            {" "}Affinity import needs the optional{" "}
+            <Link to="/docs/affinity">bridge setup</Link>.
           </p>
         </aside>
         <Outlet />

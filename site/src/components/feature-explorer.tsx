@@ -75,7 +75,7 @@ export function FeatureExplorer() {
               {group.features.map((feature) => (
                 <article key={feature.name}>
                   <h3>{feature.name}</h3>
-                  {feature.preview ? <span className="feature-preview-label">Development preview</span> : null}
+                  {feature.since ? <span className="feature-preview-label">New in v{feature.since}</span> : null}
                   <p>{feature.description}</p>
                 </article>
               ))}
@@ -100,9 +100,7 @@ export function FeatureExplorer() {
         </div>
       ) : null}
       <p className="feature-note">
-        Preview features require a{" "}
-        <a href={`${sitePath("docs/")}#development-preview`}>preview source build</a>.
-        {" "}See the <a href={sitePath("docs/formats/")}>format guide</a> for
+        See the <a href={sitePath("docs/formats/")}>format guide</a> for
         import, export and compatibility limits, or the{" "}
         <a href={sitePath("docs/manual/")}>manual</a> for editing workflows.
       </p>

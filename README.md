@@ -1,12 +1,13 @@
 # omadesign
 
-[Download v0.0.1-alpha](https://github.com/michaelmonetized/omadesign/releases/tag/v0.0.1-alpha) · [Explore the studio](https://michaelmonetized.github.io/omadesign/) · [User manual](https://michaelmonetized.github.io/omadesign/docs/manual/) · [Build from source](docs/CONTRIBUTING.md)
+[Download v0.0.2-alpha](https://github.com/michaelmonetized/omadesign/releases/tag/v0.0.2-alpha) · [Explore the studio](https://michaelmonetized.github.io/omadesign/) · [User manual](https://michaelmonetized.github.io/omadesign/docs/manual/) · [Build from source](docs/CONTRIBUTING.md)
 
 A native Linux studio for **design, paint, photograph, and motion**. One
 document, one layer stack. Built so a designer coming from macOS can sit down
 and start working.
 
-Pure Rust. No GTK app, no Electron. `cargo` is the toolchain.
+Native Rust UI and editing, with bundled LibRaw for camera decoding. No GTK app,
+no Electron. `cargo` is the toolchain.
 
 UI chrome follows **your** desktop: Omarchy theme colors and the fontconfig /
 `omarchy font current` face. Icons are **Phosphor Light**. There is no baked-in
