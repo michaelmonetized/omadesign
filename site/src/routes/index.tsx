@@ -9,6 +9,7 @@ import { RevealText } from "../components/reveal-text";
 import { ShortcutHud } from "../components/shortcut-hud";
 import { FeatureExplorer } from "../components/feature-explorer";
 import { Install } from "../components/install";
+import { FilePreview } from "../components/file-preview";
 import { Arrow, Shot } from "../components/studio-ui";
 import { useScrollMotion } from "../components/scroll-motion";
 
@@ -54,6 +55,7 @@ function Home() {
           <span>FOSS. MIT.</span>
         </div>
       </div>
+      <FilePreview />
       <section className="section shell native-section" id="native">
         <div className="section-heading">
           <RevealText text="Omarchy first." />

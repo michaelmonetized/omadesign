@@ -4,7 +4,7 @@ export type FeatureGroup = {
   id: string;
   title: string;
   intro: string;
-  features: { name: string; description: string }[];
+  features: { name: string; description: string; preview?: boolean }[];
 };
 
 export const featureGroups: FeatureGroup[] = [
@@ -182,6 +182,24 @@ export const featureGroups: FeatureGroup[] = [
         description:
           "Crop and rotate, inspect at 100%, export a developed JPEG in the background or place the result as a pixel layer in Design.",
       },
+      {
+        name: "Camera RAW development",
+        preview: true,
+        description:
+          "Open DNG, Canon CR2/CR3, Nikon NEF, Sony ARW, Fujifilm RAF and other supported camera files with the bundled decoder. Develop full-resolution 16-bit linear pixels; camera and compression coverage varies.",
+      },
+      {
+        name: "Saved photo adjustments",
+        preview: true,
+        description:
+          "Save exposure, color, crop and other settings beside the original in an .omaphoto file. Reopening restores them; Undo and Redo track each photo’s edits. The original stays untouched.",
+      },
+      {
+        name: "Full-resolution detail and 16-bit export",
+        preview: true,
+        description:
+          "Inspect source detail at 100% while work runs in the background. Export developed RAW photos to 16-bit PNG or TIFF, or 8-bit JPEG. Placement in Design becomes an 8-bit pixel layer.",
+      },
     ],
   },
   {
@@ -313,9 +331,22 @@ export const featureGroups: FeatureGroup[] = [
           "Open .oma, SVG, PNG, JPEG, WebP, GIF, BMP and TIFF. SVG uses a supported subset; Lottie has a separate basic shape-animation importer.",
       },
       {
-        name: "Converted document imports",
+        name: "Layered document imports",
+        preview: true,
         description:
-          "Import PDF, PDF-based AI, EPS and PSD with installed conversion tools. PDF handling starts with the first page; PSD imports are raster images.",
+          "Import supported PSD/PSB layers and masks, multi-page PDF and PDF-compatible AI artwork, SVG/SVGZ groups and OpenRaster layers. Photoshop text and smart objects use saved layer pixels. EPS/PS requires Ghostscript.",
+      },
+      {
+        name: "Affinity document bridge",
+        preview: true,
+        description:
+          "Import supported .afdesign, .afphoto, .afpub, template and package documents with an optional converter. Compatibility is partial; many effects and publishing features are lost. New unified .af support awaits verification with a real document.",
+      },
+      {
+        name: "Layered PSD, PSB, PDF and OpenRaster export",
+        preview: true,
+        description:
+          "Share supported layer structures and PDF pages, with conversion notes for substitutions or flattened appearances. Keep .oma as the editable working source. Native AI and Affinity writing are not available.",
       },
       {
         name: "PNG, JPEG and SVG export",
@@ -339,12 +370,12 @@ export const faqs: { question: string; answer: string }[] = [
   },
   {
     question: "Does the published download include everything shown here?",
-    answer: `Yes. ${RELEASE_TAG} includes the tools, templates, palettes, brand assets, and typography shown here. The app remains an alpha; the release notes describe its current limitations and fixes.`,
+    answer: `The installer and download buttons provide ${RELEASE_TAG}. Features marked “Development preview” — layered interchange, the Affinity bridge, camera RAW development, saved photo adjustments and 16-bit photo export — require the preview source build. The app remains an alpha.`,
   },
   {
     question: "Can I open Affinity files?",
     answer:
-      "Affinity .afdesign, .afphoto and .afpub files cannot be opened directly. Export SVG or PDF from Affinity first. SVG import supports a subset of the format; PDF conversion requires tools such as Poppler or Inkscape and may not preserve every editable detail.",
+      "The development preview imports supported .afdesign, .afphoto and .afpub artwork through an optional Affinity bridge. This is partial compatibility: most adjustments, live effects and publishing structures are not retained. The bridge includes new unified .af support, but a real .af document has not yet been verified. Keep your original; native Affinity export is not available.",
   },
   {
     question: "Do I need an account or an internet connection?",
@@ -359,6 +390,6 @@ export const faqs: { question: string; answer: string }[] = [
   {
     question: "What is outside the current scope?",
     answer:
-      "RAW development, advanced publishing and text layout, reusable symbols and collaboration are not available. Photo adjustments are session-based; export or place the result to keep it. Motion exports to animated SVG or supported Lottie, not MP4 or GIF. Lottie cannot preserve pixel layers, layer masks or effects, and there is no PDF/X or CMYK print workflow.",
+      "Advanced publishing and text layout, reusable symbols and collaboration are not available. There is no complete Affinity or Illustrator round trip, PDF/X or CMYK print workflow. RAW camera support varies, and proprietary camera looks and automatic lens corrections are not reproduced. Motion exports to animated SVG or supported Lottie, not MP4 or GIF; Lottie cannot preserve pixel layers, layer masks or effects.",
   },
 ];

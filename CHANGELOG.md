@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-09-06 · Pass 15 — See what opens.
+
+The website now introduces layered interchange and camera RAW development with
+an actual native Photo screenshot. A file-format comparison and Affinity setup
+guide sit alongside the manual, with import, export and fidelity limits in one
+place. The screenshot uses a verified CC0 Fujifilm sample.
+
+Download notes, searchable feature labels and source-build instructions distinguish
+the development preview from the published alpha. Outdated claims that RAW is
+unavailable, Photo settings cannot be saved, and Affinity requires export first
+are corrected. Manual links to the new guides stay on the website; other source
+links select the documented preview revision.
+
+Validation: TypeScript and the GitHub Pages production build pass, including
+prerendered routes and local asset/link checks. Desktop and mobile browser checks
+cover both themes, RAW/PSD/Affinity search, preview instructions and guide
+navigation, with no page overflow or application errors. No app version or
+published application package changes in this website update.
+
 ## 2026-09-06 · Pass 14 — Develop your originals.
 
 Camera RAW files now open directly in Photo with a bundled LibRaw decoder.

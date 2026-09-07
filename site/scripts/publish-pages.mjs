@@ -23,6 +23,8 @@ const required = [
   "index.html",
   "docs/index.html",
   "docs/manual/index.html",
+  "docs/formats/index.html",
+  "docs/affinity/index.html",
   "docs/contributing/index.html",
   "docs/roadmap/index.html",
   "install",
