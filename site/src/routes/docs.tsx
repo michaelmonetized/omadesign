@@ -1,5 +1,5 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
-import { RELEASE_TAG } from "../release";
+import { RELEASE_TAG, RELEASE_SOURCE_URL } from "../release";
 
 export const Route = createFileRoute("/docs")({ component: Docs });
 
@@ -36,12 +36,12 @@ function Docs() {
           <p className="docs-nav-title">Keep exploring</p>
           <ul>
             <li>
-              <a href="https://github.com/michaelmonetized/omadesign/tree/master/examples/fieldwork">
+              <a href={`${RELEASE_SOURCE_URL}/examples/fieldwork`}>
                 Fieldwork brand kit ↗
               </a>
             </li>
             <li>
-              <a href="https://github.com/michaelmonetized/omadesign/blob/master/docs/template-drops.md">
+              <a href={`${RELEASE_SOURCE_URL}/docs/template-drops.md`}>
                 Template collection notes ↗
               </a>
             </li>
@@ -59,10 +59,11 @@ function Docs() {
       >
         <aside className="docs-note docs-availability" aria-label="Documentation version">
           <p>
-            These guides include the development preview. Layered interchange,
-            RAW and saved photo settings require a{" "}
-            <Link to="/docs" hash="development-preview">preview source build</Link>.
-            {" "}Published downloads remain {RELEASE_TAG}.
+            These guides cover {RELEASE_TAG}, including layered interchange,
+            RAW development and saved photo settings. Get the{" "}
+            <Link to="/docs" hash="get-the-app">Linux release</Link>.
+            {" "}Affinity import needs the optional{" "}
+            <Link to="/docs/affinity">bridge setup</Link>.
           </p>
         </aside>
         <Outlet />

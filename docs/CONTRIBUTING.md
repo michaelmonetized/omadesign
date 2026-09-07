@@ -11,7 +11,9 @@ cargo test
 cargo run --release --bin omadesign
 ```
 
-Rust 2024. `cargo` is the toolchain. No GTK app, no Electron, no GitHub Actions.
+Rust 2024. Install Git, stable Rust, a C/C++ compiler and pkg-config. The C++
+compiler builds the bundled RAW decoder; no installed LibRaw is needed.
+`cargo` is the toolchain. No GTK app, no Electron, no GitHub Actions.
 
 ### Layout
 

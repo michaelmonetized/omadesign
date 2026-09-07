@@ -1,6 +1,6 @@
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { PREVIEW_COMMIT } from "./release";
+import { RELEASE_TAG } from "./release";
 
 const REPOSITORY = "https://github.com/michaelmonetized/omadesign";
 const DOC_ROUTES: Record<string, string> = {
@@ -40,7 +40,7 @@ export function documentationUrl(
 
   // Examples and planning documents live in the repository, not on site routes.
   const kind = /\.[^/]+$/.test(pathname) ? "blob" : "tree";
-  return `${REPOSITORY}/${kind}/${PREVIEW_COMMIT}${pathname}${suffix}`;
+  return `${REPOSITORY}/${kind}/${RELEASE_TAG}${pathname}${suffix}`;
 }
 
 type MarkdownNode = {

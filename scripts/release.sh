@@ -85,7 +85,10 @@ package() {
   "$strip_bin" "$stage/omadesign" 2>/dev/null || strip "$stage/omadesign" 2>/dev/null || true
   install -Dm644 omadesign.desktop "$stage/omadesign.desktop"
   install -Dm644 omadesign-mime.xml "$stage/omadesign-mime.xml"
-  install -Dm644 README.md "$stage/README.md"
+  # The archive has no source checkout; make its documentation links usable.
+  sed "s|](docs/|](https://github.com/michaelmonetized/omadesign/blob/v${VERSION}/docs/|g; s|](examples/|](https://github.com/michaelmonetized/omadesign/tree/v${VERSION}/examples/|g" \
+    README.md > "$stage/README.md"
+  chmod 644 "$stage/README.md"
   install -Dm644 LICENSE "$stage/LICENSE"
   install -Dm644 assets/phosphor/LICENSE-MIT "$stage/LICENSE-Phosphor"
   mkdir -p "$stage/licenses/libraw" "$stage/licenses/native-notices"

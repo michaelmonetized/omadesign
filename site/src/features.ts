@@ -4,7 +4,7 @@ export type FeatureGroup = {
   id: string;
   title: string;
   intro: string;
-  features: { name: string; description: string; preview?: boolean }[];
+  features: { name: string; description: string; since?: string }[];
 };
 
 export const featureGroups: FeatureGroup[] = [
@@ -184,19 +184,19 @@ export const featureGroups: FeatureGroup[] = [
       },
       {
         name: "Camera RAW development",
-        preview: true,
+        since: "0.0.2-alpha",
         description:
           "Open DNG, Canon CR2/CR3, Nikon NEF, Sony ARW, Fujifilm RAF and other supported camera files with the bundled decoder. Develop full-resolution 16-bit linear pixels; camera and compression coverage varies.",
       },
       {
         name: "Saved photo adjustments",
-        preview: true,
+        since: "0.0.2-alpha",
         description:
           "Save exposure, color, crop and other settings beside the original in an .omaphoto file. Reopening restores them; Undo and Redo track each photo’s edits. The original stays untouched.",
       },
       {
         name: "Full-resolution detail and 16-bit export",
-        preview: true,
+        since: "0.0.2-alpha",
         description:
           "Inspect source detail at 100% while work runs in the background. Export developed RAW photos to 16-bit PNG or TIFF, or 8-bit JPEG. Placement in Design becomes an 8-bit pixel layer.",
       },
@@ -332,19 +332,19 @@ export const featureGroups: FeatureGroup[] = [
       },
       {
         name: "Layered document imports",
-        preview: true,
+        since: "0.0.2-alpha",
         description:
           "Import supported PSD/PSB layers and masks, multi-page PDF and PDF-compatible AI artwork, SVG/SVGZ groups and OpenRaster layers. Photoshop text and smart objects use saved layer pixels. EPS/PS requires Ghostscript.",
       },
       {
         name: "Affinity document bridge",
-        preview: true,
+        since: "0.0.2-alpha",
         description:
           "Import supported .afdesign, .afphoto, .afpub, template and package documents with an optional converter. Compatibility is partial; many effects and publishing features are lost. New unified .af support awaits verification with a real document.",
       },
       {
         name: "Layered PSD, PSB, PDF and OpenRaster export",
-        preview: true,
+        since: "0.0.2-alpha",
         description:
           "Share supported layer structures and PDF pages, with conversion notes for substitutions or flattened appearances. Keep .oma as the editable working source. Native AI and Affinity writing are not available.",
       },
@@ -370,12 +370,12 @@ export const faqs: { question: string; answer: string }[] = [
   },
   {
     question: "Does the published download include everything shown here?",
-    answer: `The installer and download buttons provide ${RELEASE_TAG}. Features marked “Development preview” — layered interchange, the Affinity bridge, camera RAW development, saved photo adjustments and 16-bit photo export — require the preview source build. The app remains an alpha.`,
+    answer: `Yes. ${RELEASE_TAG} includes layered interchange, camera RAW development, saved photo adjustments and 16-bit photo export alongside the existing studios, templates and brand tools. Affinity import requires a separate optional bridge setup. The app remains an alpha; the format guide explains compatibility limits.`,
   },
   {
     question: "Can I open Affinity files?",
     answer:
-      "The development preview imports supported .afdesign, .afphoto and .afpub artwork through an optional Affinity bridge. This is partial compatibility: most adjustments, live effects and publishing structures are not retained. The bridge includes new unified .af support, but a real .af document has not yet been verified. Keep your original; native Affinity export is not available.",
+      "Import supported .afdesign, .afphoto and .afpub artwork through the optional Affinity bridge. This is partial compatibility: most adjustments, live effects and publishing structures are not retained. The bridge includes new unified .af support, but a real .af document has not yet been verified. Keep your original; native Affinity export is not available.",
   },
   {
     question: "Do I need an account or an internet connection?",
