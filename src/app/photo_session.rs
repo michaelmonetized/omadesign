@@ -32,6 +32,7 @@ struct SaveJob {
 struct SaveRequest {
     index: usize,
     source: PathBuf,
+    destination: PathBuf,
     identity: photo::edits::SourceIdentity,
     params: DevelopParams,
 }
@@ -144,9 +145,15 @@ impl PhotoSession {
         let path = path.to_path_buf();
         let input = path.clone();
         let (tx, receiver) = mpsc::channel();
-        std::thread::spawn(move || {
-            let _ = tx.send(PhotoImage::load(&input));
-        });
+        if let Err(error) = std::thread::Builder::new()
+            .name("photo-open".into())
+            .spawn(move || {
+                let _ = tx.send(PhotoImage::load(&input));
+            })
+        {
+            self.status = format!("Could not start opening the photo: {error}");
+            return;
+        }
         self.status = format!(
             "Opening {}…",
             path.file_name().unwrap_or_default().to_string_lossy()
@@ -210,9 +217,14 @@ impl PhotoSession {
                 index += 1;
                 continue;
             };
-            self.import_jobs.remove(index);
+            let job = self.import_jobs.remove(index);
             match result {
-                Ok(image) => self.import_photo(image),
+                Ok(image) => {
+                    self.import_photo(image);
+                    if photo::edits::is_sidecar(&job.path) {
+                        self.status = "Photo and saved settings restored".into();
+                    }
+                }
                 Err(error) => self.status = error,
             }
         }
@@ -251,12 +263,13 @@ impl PhotoSession {
                     for saved in results {
                         match saved.result {
                             Ok(_) => {
-                                if self
-                                    .images
-                                    .get(saved.request.index)
-                                    .and_then(|image| image.source.as_ref())
-                                    == Some(&saved.request.source)
-                                {
+                                if self.images.get(saved.request.index).is_some_and(|image| {
+                                    image.source.as_ref() == Some(&saved.request.source)
+                                        && image.source_identity.as_ref()
+                                            == Some(&saved.request.identity)
+                                        && image.settings_path.as_ref()
+                                            == Some(&saved.request.destination)
+                                }) {
                                     self.history[saved.request.index].saved = saved.request.params;
                                 }
                                 count += 1;
@@ -274,10 +287,15 @@ impl PhotoSession {
                     }
                     self.save_error = errors.join("\n");
                     self.status = if errors.is_empty() {
-                        format!(
+                        let status = format!(
                             "Saved settings for {count} photo{}",
                             if count == 1 { "" } else { "s" }
-                        )
+                        );
+                        if self.has_unsaved_settings() {
+                            format!("{status}. Newer edits are still unsaved.")
+                        } else {
+                            status
+                        }
                     } else {
                         self.save_error.clone()
                     };
@@ -342,14 +360,24 @@ impl PhotoSession {
             requests.push(SaveRequest {
                 index,
                 source: source.clone(),
+                destination: image
+                    .settings_path
+                    .clone()
+                    .unwrap_or_else(|| photo::edits::sidecar_path(source)),
                 identity: identity.clone(),
                 params: image.develop.clone(),
             });
         }
         let (tx, receiver) = mpsc::channel();
-        std::thread::spawn(move || {
-            let _ = tx.send(Ok(write_settings(requests)));
-        });
+        if let Err(error) = std::thread::Builder::new()
+            .name("photo-save".into())
+            .spawn(move || {
+                let _ = tx.send(Ok(write_settings(requests)));
+            })
+        {
+            self.report_write_error(format!("Could not start saving photo settings: {error}"));
+            return;
+        }
         self.save_error.clear();
         self.save_job = Some(SaveJob { receiver });
         self.status = "Saving photo settings…".into();
@@ -536,7 +564,12 @@ fn write_settings(requests: Vec<SaveRequest>) -> Vec<SavedSettings> {
     requests
         .into_iter()
         .map(|request| {
-            let result = photo::edits::save(&request.source, &request.identity, &request.params);
+            let result = photo::edits::save_to(
+                &request.destination,
+                &request.source,
+                &request.identity,
+                &request.params,
+            );
             SavedSettings { request, result }
         })
         .collect()
@@ -724,5 +757,174 @@ mod tests {
             assert_eq!(std::fs::read(&path).unwrap(), original);
             assert_eq!(PhotoImage::load(&path).unwrap().develop.exposure, exposure);
         }
+    }
+
+    #[test]
+    fn saved_sidecars_reopen_raster_and_raw_after_moving_the_pair() {
+        let fixture = Fixture::new();
+        for (name, original) in [
+            ("Photo.png", image().full.encode_png().unwrap()),
+            (
+                "Camera.DNG",
+                include_bytes!("../formats/raw/synthetic.dng").to_vec(),
+            ),
+        ] {
+            let folder = fixture.0.join(name);
+            std::fs::create_dir(&folder).unwrap();
+            let source = folder.join(name);
+            std::fs::write(&source, &original).unwrap();
+            let mut session = PhotoSession::new();
+            session.import_file(&source);
+            wait(&mut session);
+            let params = DevelopParams {
+                exposure: -0.7,
+                rotate: 90,
+                crop: Some([0.0, 0.0, 0.75, 1.0]),
+                ..Default::default()
+            };
+            let before = session.selected().unwrap().develop.clone();
+            session.selected_mut().unwrap().develop = params.clone();
+            session.record_edit(before, false);
+            let rendered = session.selected().unwrap().render_full();
+            session.save_settings();
+            wait(&mut session);
+            assert!(session.save_error().is_empty());
+            assert!(!session.settings_dirty());
+            drop(session);
+
+            let moved = fixture.0.join(format!("moved-{name}"));
+            std::fs::rename(folder, &moved).unwrap();
+            let source = moved.join(name);
+            let lower = photo::edits::sidecar_path(&source);
+            let settings = lower.with_extension("OMAPHOTO");
+            std::fs::rename(&lower, &settings).unwrap();
+            let mut reopened = PhotoSession::new();
+            reopened.import_file(&settings);
+            wait(&mut reopened);
+            let loaded = reopened.selected().unwrap();
+            assert_eq!(loaded.develop, params);
+            assert_eq!(loaded.render_full(), rendered);
+            assert_eq!(loaded.source.as_ref(), Some(&source));
+            assert_eq!(loaded.settings_path.as_ref(), Some(&settings));
+            assert_eq!(loaded.raw.is_some(), name.ends_with("DNG"));
+            assert!(!reopened.settings_dirty());
+
+            let before = reopened.selected().unwrap().develop.clone();
+            reopened.selected_mut().unwrap().develop.exposure = 0.4;
+            reopened.record_edit(before, false);
+            reopened.save_settings();
+            wait(&mut reopened);
+            assert!(reopened.save_error().is_empty());
+            assert!(!reopened.settings_dirty());
+            assert_eq!(PhotoImage::load(&settings).unwrap().develop.exposure, 0.4);
+            assert!(
+                !lower.exists(),
+                "Save must keep the opened sidecar's spelling"
+            );
+            let export = moved.join("developed.tif");
+            crate::formats::cli::run(&[
+                "--convert".into(),
+                settings.to_string_lossy().into_owned(),
+                "--output".into(),
+                export.to_string_lossy().into_owned(),
+            ])
+            .unwrap()
+            .unwrap();
+            let exported = image::open(export).unwrap();
+            assert_eq!(
+                exported.color().bits_per_pixel(),
+                if name.ends_with("DNG") { 64 } else { 32 }
+            );
+            assert_eq!(std::fs::read(&source).unwrap(), original);
+        }
+    }
+
+    #[test]
+    fn invalid_or_orphaned_sidecar_does_not_replace_current_photo_or_edits() {
+        let fixture = Fixture::new();
+        let source = fixture.0.join("photo.png");
+        std::fs::write(&source, image().full.encode_png().unwrap()).unwrap();
+        let settings = photo::edits::save(
+            &source,
+            &photo::edits::SourceIdentity::read(&source).unwrap(),
+            &DevelopParams {
+                exposure: 0.7,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let mut session = PhotoSession::new();
+        session.import_photo(image());
+        let before = session.selected().unwrap().develop.clone();
+        session.selected_mut().unwrap().develop.exposure = -0.5;
+        session.record_edit(before, false);
+        let expected = session.selected().unwrap().render_full();
+        std::fs::write(&settings, b"not valid settings").unwrap();
+        session.import_file(&settings);
+        wait(&mut session);
+        assert!(session.status.contains("Could not read photo settings"));
+        assert_eq!(session.images.len(), 1);
+        assert_eq!(session.selected, Some(0));
+        assert!(session.settings_dirty());
+        assert_eq!(session.selected().unwrap().render_full(), expected);
+        let original = PhotoImage::load(&source).unwrap();
+        assert!(original.develop.is_default());
+        assert!(
+            original
+                .notes
+                .iter()
+                .any(|note| note.contains("not loaded"))
+        );
+
+        std::fs::remove_file(&source).unwrap();
+        session.import_file(&settings);
+        wait(&mut session);
+        assert!(session.status.contains("original photo, photo.png"));
+        assert_eq!(session.images.len(), 1);
+        assert_eq!(session.selected().unwrap().render_full(), expected);
+    }
+
+    #[test]
+    fn failed_save_preserves_edits_and_recovers_after_the_destination_is_fixed() {
+        let fixture = Fixture::new();
+        let source = fixture.0.join("photo.png");
+        let original = image().full.encode_png().unwrap();
+        std::fs::write(&source, &original).unwrap();
+        let mut session = PhotoSession::new();
+        session.import_file(&source);
+        wait(&mut session);
+        let before = session.selected().unwrap().develop.clone();
+        session.selected_mut().unwrap().develop.exposure = 0.5;
+        session.record_edit(before, false);
+        let destination = photo::edits::sidecar_path(&source);
+        std::fs::create_dir(&destination).unwrap();
+        session.save_settings();
+        assert!(session.is_saving());
+        // Switching photos must not redirect the pending write or clear its edits.
+        session.import_photo(image());
+        wait(&mut session);
+        assert!(
+            session
+                .save_error()
+                .contains("Could not save photo settings")
+        );
+        assert_eq!(session.selected, Some(1));
+        assert!(session.has_unsaved_settings());
+        assert_eq!(std::fs::read(&source).unwrap(), original);
+        assert!(std::fs::read_dir(&fixture.0).unwrap().all(|entry| {
+            !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".omadesign-export-")
+        }));
+        std::fs::remove_dir(destination).unwrap();
+        session.select_image(0);
+        session.save_settings();
+        wait(&mut session);
+        assert!(session.save_error().is_empty());
+        assert!(!session.settings_dirty());
+        assert_eq!(PhotoImage::load(&source).unwrap().develop.exposure, 0.5);
+        assert_eq!(std::fs::read(&source).unwrap(), original);
     }
 }

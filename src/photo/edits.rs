@@ -53,13 +53,48 @@ pub fn sidecar_path(source: &Path) -> PathBuf {
     PathBuf::from(path)
 }
 
+pub fn is_sidecar(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("omaphoto"))
+}
+
+/// Version 1 sidecars are named after their original, including its extension.
+/// Resolve beside the chosen settings file so moving the pair needs no path edits.
+pub fn source_path(settings: &Path) -> Result<PathBuf, String> {
+    if !is_sidecar(settings) {
+        return Err("Choose a .omaphoto settings file.".into());
+    }
+    let source = settings.with_extension("");
+    if !source.is_file() {
+        return Err(format!(
+            "These settings need the original photo, {}. Keep both files together in the same folder.",
+            source.file_name().unwrap_or_default().to_string_lossy()
+        ));
+    }
+    Ok(source)
+}
+
 pub fn load(source: &Path, identity: &SourceIdentity) -> Result<Option<DevelopParams>, String> {
     let path = sidecar_path(source);
-    let file = match std::fs::File::open(&path) {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(format!("Could not read photo settings: {error}")),
-    };
+    match std::fs::metadata(&path) {
+        Ok(_) => load_file(&path, identity).map(Some),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("Could not read photo settings: {error}")),
+    }
+}
+
+/// Opening settings explicitly must not silently substitute default development.
+pub fn load_file(path: &Path, identity: &SourceIdentity) -> Result<DevelopParams, String> {
+    let metadata = std::fs::metadata(path)
+        .map_err(|error| format!("Could not read photo settings: {error}"))?;
+    if !metadata.is_file() {
+        return Err("Choose a regular .omaphoto settings file.".into());
+    }
+    if metadata.len() > MAX_SETTINGS_BYTES {
+        return Err("Photo settings exceed the 64 KiB limit.".into());
+    }
+    let file = std::fs::File::open(path)
+        .map_err(|error| format!("Could not read photo settings: {error}"))?;
     let mut bytes = Vec::new();
     file.take(MAX_SETTINGS_BYTES + 1)
         .read_to_end(&mut bytes)
@@ -76,10 +111,10 @@ pub fn load(source: &Path, identity: &SourceIdentity) -> Result<Option<DevelopPa
         ));
     }
     if &settings.source != identity {
-        return Err("Saved photo settings belong to an older or different source. The original development is shown.".into());
+        return Err("Saved photo settings belong to an older or different source. Open the matching original photo with its settings.".into());
     }
     validate(&settings.develop)?;
-    Ok(Some(settings.develop))
+    Ok(settings.develop)
 }
 
 pub fn save(
@@ -87,23 +122,34 @@ pub fn save(
     identity: &SourceIdentity,
     develop: &DevelopParams,
 ) -> Result<PathBuf, String> {
+    save_to(&sidecar_path(source), source, identity, develop)
+}
+
+pub fn save_to(
+    path: &Path,
+    source: &Path,
+    identity: &SourceIdentity,
+    develop: &DevelopParams,
+) -> Result<PathBuf, String> {
     validate(develop)?;
+    if !is_sidecar(path) || source_path(path)?.canonicalize().ok() != source.canonicalize().ok() {
+        return Err("Save settings beside the matching original photograph.".into());
+    }
     if &SourceIdentity::read(source)? != identity {
         return Err(
             "The source photograph changed after it was opened. Reopen it before saving settings."
                 .into(),
         );
     }
-    let path = sidecar_path(source);
     let bytes = serde_json::to_vec_pretty(&Settings {
         version: VERSION,
         source: identity.clone(),
         develop: develop.clone(),
     })
     .map_err(|error| format!("Could not encode photo settings: {error}"))?;
-    crate::formats::write_atomic(&path, &bytes)
+    crate::formats::write_atomic(path, &bytes)
         .map_err(|error| format!("Could not save photo settings: {error}"))?;
-    Ok(path)
+    Ok(path.to_owned())
 }
 
 /// Sidecars are editable JSON; reject invalid geometry and nonfinite or extreme

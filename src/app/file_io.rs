@@ -25,7 +25,8 @@ enum Completed {
 impl Studio {
     pub(super) fn queue_import(&mut self, path: PathBuf, mode: ImportMode) {
         let kind = crate::import::classify(&path);
-        if (kind == "raw" && matches!(mode, ImportMode::Open | ImportMode::Drop(_)))
+        if (matches!(kind, "raw" | "photo-settings")
+            && matches!(mode, ImportMode::Open | ImportMode::Drop(_)))
             || (self.persona == Persona::Photo
                 && kind == "raster"
                 && matches!(mode, ImportMode::Open))
@@ -402,6 +403,49 @@ mod tests {
         assert_eq!((placed.w, placed.h), (13, 9));
         assert_eq!(placed.data, image.data);
         assert!(studio.pending_place.is_none());
+    }
+
+    #[test]
+    fn settings_open_and_drop_restore_photo_without_replacing_dirty_artwork() {
+        let folder = TestFolder::new();
+        let source = folder.0.join("photo.png");
+        let pixels = RgbaImage::new(13, 9, [80, 120, 160, 255].repeat(13 * 9)).unwrap();
+        let original = pixels.encode_png().unwrap();
+        std::fs::write(&source, &original).unwrap();
+        let params = crate::photo::DevelopParams {
+            exposure: -0.7,
+            rotate: 90,
+            ..Default::default()
+        };
+        let settings = crate::photo::edits::save(
+            &source,
+            &crate::photo::edits::SourceIdentity::read(&source).unwrap(),
+            &params,
+        )
+        .unwrap();
+        for drop in [false, true] {
+            let mut studio = Studio::new();
+            studio.doc.name = "Keep this artwork".into();
+            studio.dirty = true;
+            let artwork = serde_json::to_vec(&studio.doc).unwrap();
+            if drop {
+                studio.ingest_dropped(&settings, None);
+            } else {
+                studio.open_path(settings.clone());
+            }
+            finish_jobs(&mut studio);
+            assert!(studio.persona == Persona::Photo);
+            assert!(!studio.show_welcome);
+            assert!(studio.pending_place.is_none() && studio.file_jobs.is_empty());
+            assert_eq!(studio.photo.selected().unwrap().develop, params);
+            assert_eq!(
+                studio.photo.selected().unwrap().source.as_ref(),
+                Some(&source)
+            );
+            assert!(studio.dirty);
+            assert_eq!(serde_json::to_vec(&studio.doc).unwrap(), artwork);
+            assert_eq!(std::fs::read(&source).unwrap(), original);
+        }
     }
 
     #[test]

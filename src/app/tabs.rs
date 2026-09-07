@@ -9,6 +9,7 @@ pub(super) struct TabState {
     pub(super) dirty: bool,
     view: View,
     selection: Vec<(usize, u64)>,
+    selected_layer: Option<u64>,
     active_layer: Option<usize>,
     history: History,
     clone_source: Option<Pt>,
@@ -43,6 +44,7 @@ impl TabState {
             dirty: false,
             view: View::default(),
             selection: vec![],
+            selected_layer: None,
             active_layer,
             history: History::default(),
             clone_source: None,
@@ -82,6 +84,7 @@ impl Studio {
         swap(&mut self.dirty, &mut t.dirty);
         swap(&mut self.view, &mut t.view);
         swap(&mut self.selection, &mut t.selection);
+        swap(&mut self.selected_layer, &mut t.selected_layer);
         swap(&mut self.active_layer, &mut t.active_layer);
         swap(&mut self.history, &mut t.history);
         swap(&mut self.clone_source, &mut t.clone_source);
@@ -375,6 +378,8 @@ mod tests {
         studio.show_welcome = false;
         studio.finish_create(CreateKind::Rect, Pt::ZERO, Pt::new(20.0, 20.0));
         let selection = studio.selection.clone();
+        let selected_layer = Some(studio.doc.layers[selection[0].0].id);
+        studio.selected_layer = selected_layer;
         let pixels = studio.doc.layers[0].kind.pixels().unwrap().data.as_ptr();
         studio.pixel_sel = Some(vec![255; 64]);
         let mask = studio.pixel_sel.as_ref().unwrap().as_ptr();
@@ -393,6 +398,7 @@ mod tests {
         );
         assert!(!studio.history.can_undo());
         assert!(studio.selection.is_empty());
+        assert!(studio.selected_layer.is_none());
 
         studio.switch_tab(0);
         assert_eq!(
@@ -401,6 +407,7 @@ mod tests {
         );
         assert_eq!(studio.pixel_sel.as_ref().unwrap().as_ptr(), mask);
         assert_eq!(studio.selection, selection);
+        assert_eq!(studio.selected_layer, selected_layer);
         assert_eq!(studio.view.scale, 2.5);
         studio.undo();
         assert!(

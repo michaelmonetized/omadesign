@@ -13,6 +13,7 @@ Omadesign imports supported content into its native layer tree and records conve
 | `.svg`, `.svgz` | Objects, layer/group hierarchy, names, transforms, text, images, styles, visibility and supported masks | SVG | Complex text can become editable outlines. Clips/masks can become pixel masks; unsupported effects may be rendered into pixel layers. Scripts, animation and foreign content are not imported. |
 | `.ora` | OpenRaster pixel layers/groups, offsets, names, visibility, opacity, isolation and supported blends | OpenRaster with layers, stack.xml, merged preview and thumbnail | Vectors/text become pixels per layer. Masked/effected groups become one pixel layer. Extended SVG layer sources and unsupported compositing operations are rejected. |
 | `.eps`, `.ps` | Ghostscript conversion to PDF, then native PDF import | No direct writer | Ghostscript must be installed. Conversion can discard original layer metadata or flatten artwork. |
+| `.omaphoto` | Reopens the matching original in Photo with saved development, crop and rotation | Save settings beside the original | Contains settings, not pixels. Keep the original and sidecar together with matching names; the source size and modification time must still match. |
 | Camera RAW: DNG, CR2/CR3, NEF/NRW, ARW, RAF, ORF, RW2, PEF and others | Full-resolution sensor decoding and Photo development | Developed PNG/TIFF with 16-bit channels, or JPEG; no camera RAW writer | Support depends on the camera and compression mode. Lens corrections, proprietary camera looks and unsupported DNG opcodes/profiles are not recreated. Design placement becomes 8-bit pixels. |
 | PNG, JPEG, WebP, GIF, BMP, TIFF | Pixel image | PNG and JPEG through headless conversion; other existing export actions remain separate | This path imports a single image, not layered TIFF or animated GIF structure. |
 
@@ -24,7 +25,7 @@ Recognized extensions are `.3fr`, `.arw`, `.bay`, `.cap`, `.cr2`, `.cr3`, `.crw`
 
 Open a RAW through **File → Open**, the Photo library, a folder, a file-manager Open With action, or a drop. Loading and folder scans run in background workers. Photo keeps the original decoded linear pixels separate from its development settings and its 1600-pixel display preview. Camera/lens information and exposure metadata are shown when present. **Before** shows the default camera-balanced development, not the camera's embedded JPEG. At close zoom, a background worker develops full-resolution detail and the viewer uploads only the visible tiles. The previous preview stays visible while detail is prepared; results from an older photo or adjustment are discarded.
 
-**Save settings** writes a small adjacent file such as `DSC_0001.NEF.omaphoto`; opening the source again restores it. The source photograph is never rewritten. Keep the settings file with its source. Settings are bound to the source size and modification time, and a changed source or malformed settings file produces a note instead of applying possibly unrelated adjustments. This metadata check is not a cryptographic content identity. Unsaved changes exist only in the current Photo session. A `.oma` Design document does not contain the RAW source or its development settings.
+**Save settings** writes a small adjacent file such as `DSC_0001.NEF.omaphoto`. Resume with **File → Open**, a drop, or **Photo → Library → ··· → Open photo or settings…**, choosing either the original or the settings file. Opening `.omaphoto` restores the original source, including RAW precision, and its development settings. The source photograph is never rewritten. Keep the settings file and original together with matching names. Settings are bound to the source size and modification time. An explicit settings open fails without replacing the current photo when the original is missing or changed, or the settings are invalid. Opening the original instead shows default development and a note if its settings cannot be used. Failed saves retain unsaved edits for retry. This metadata check is not a cryptographic content identity. Unsaved changes exist only in the current Photo session. A `.oma` Design document does not contain the RAW source or its development settings.
 
 Photo export develops the full-resolution source, including crop and rotation. RAW PNG/TIFF exports retain 16-bit developed channels; JPEG is an 8-bit delivery image. Exported files use display sRGB values and do not preserve the sensor mosaic, camera edit history, or all source metadata. **Place in Design** and general document conversion produce an 8-bit raster layer; keep the RAW and `.omaphoto` settings for further development. Native RAW writing is not provided.
 
@@ -84,6 +85,8 @@ The command line uses the same readers and writers as the desktop. Inspection wr
 omadesign --inspect artwork.afdesign
 omadesign --inspect artwork.psd
 omadesign --inspect photograph.NEF
+omadesign --inspect photograph.NEF.omaphoto
+omadesign --convert photograph.NEF.omaphoto --output developed.tif
 omadesign --convert photograph.dng --output photograph.tif
 omadesign --convert artwork.afphoto --output artwork.oma
 omadesign --convert artwork.oma --output artwork.psd

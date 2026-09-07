@@ -74,7 +74,12 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     } else {
         super::deform::input(studio, &resp, rect, space_pan || studio.tool == Tool::Hand)
     };
-    if !brand_input && !guide_input && !deform_input && live_op_should_close(studio, &resp) {
+    if !brand_input
+        && !guide_input
+        && !deform_input
+        && studio.tool != Tool::Select
+        && live_op_should_close(studio, &resp)
+    {
         end_drag(studio, studio.cursor.unwrap_or(Pt::ZERO), alt, ctrl, shift);
     }
 
@@ -89,6 +94,25 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         studio.view.offset.y += d.y;
     } else {
         handle_pointer(studio, &resp, space_pan);
+    }
+    if !brand_input
+        && !guide_input
+        && !deform_input
+        && studio.tool == Tool::Select
+        && live_op_should_close(studio, &resp)
+    {
+        // Resolve a Select gesture once, after input so a press and release in
+        // the same frame work too. Dragging preserves the whole selection;
+        // only an actual click applies the press-time toggle/collapse.
+        if resp.clicked()
+            && !resp.drag_stopped()
+            && let Some(Op::Move {
+                selection_on_click, ..
+            }) = &studio.op
+        {
+            studio.selection = selection_on_click.clone();
+        }
+        end_drag(studio, studio.cursor.unwrap_or(Pt::ZERO), alt, ctrl, shift);
     }
 
     // The rubber band uses the exact point a click would place. Keep the raw
@@ -284,6 +308,7 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
     studio.snap_override = ctrl;
     if resp.ctx.input(|i| i.pointer.primary_pressed()) {
         studio.reset_snap_gesture();
+        studio.selected_layer = None;
     }
     let snap = if is_text
         || (studio.pending_place.is_none()
@@ -502,7 +527,7 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
             continue_drag(studio, pick, shift, alt);
         }
         if resp.clicked() && !resp.dragged() && !resp.drag_stopped() {
-            click(studio, pick, shift, alt);
+            node_click(studio, pick, alt);
         }
         return;
     }
@@ -524,13 +549,26 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
     // so scale/rotate/corner handles and thin strokes are grabbed where the
     // pointer went down, not 6px later. Do not end a live op on drag_started —
     // that would kill the press lock and re-hit at the moved point.
-    let press = resp.ctx.input(|i| i.pointer.primary_pressed());
-    if press
+    let press = resp.ctx.input(|i| {
+        i.events.iter().find_map(|event| match event {
+            eframe::egui::Event::PointerButton {
+                pos,
+                button: PointerButton::Primary,
+                pressed: true,
+                modifiers,
+            } => Some((*pos, *modifiers)),
+            _ => None,
+        })
+    });
+    if let Some((at, modifiers)) = press
         && studio.op.is_none()
         && studio.type_edit.is_none()
-        && pointer_down_starts_op(studio.tool, alt)
+        && pointer_down_starts_op(studio.tool, modifiers.alt)
+        && crect.contains(at)
+        && resp.ctx.layer_id_at(at) == Some(resp.layer_id)
     {
-        start_drag(studio, pick, snap, shift, false);
+        let pick = studio.view.pointer_to_world(origin, from_egui(at));
+        start_drag(studio, pick, snap, modifiers.shift, false);
     }
     if resp.drag_started_by(PointerButton::Primary) {
         if alt && matches!(studio.op, Some(Op::Move { .. })) {
@@ -550,23 +588,13 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
         continue_drag(studio, world, shift, alt);
     }
 
-    if resp.clicked() && !resp.dragged() && !resp.drag_stopped() {
-        click(studio, pick, shift, alt);
-    }
-
     if resp.double_clicked() {
-        if let Some(Op::Pen {
-            anchors, source, ..
-        }) = studio.op.take()
+        let slack = 8.0 / studio.view.scale.max(0.01);
+        if let Some(hit) = hit_shape(studio, pick, slack)
+            && is_text_hit(studio, hit)
         {
-            studio.finish_pen(anchors, false, source);
-        } else {
-            let slack = 8.0 / studio.view.scale.max(0.01);
-            if let Some(hit) = hit_shape(studio, pick, slack)
-                && is_text_hit(studio, hit)
-            {
-                studio.begin_type_edit(hit, pick);
-            }
+            studio.op = None;
+            studio.begin_type_edit(hit, pick);
         }
     }
 }
@@ -631,6 +659,22 @@ fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
     match studio.tool {
         Tool::Select => {
             if let Some(hit) = hit_shape(studio, pick, 6.0 / studio.view.scale.max(0.01)) {
+                let selection_on_click = if shift {
+                    if studio.selection.contains(&hit) {
+                        studio
+                            .selection
+                            .iter()
+                            .copied()
+                            .filter(|item| *item != hit)
+                            .collect()
+                    } else {
+                        let mut selection = studio.selection.clone();
+                        selection.push(hit);
+                        selection
+                    }
+                } else {
+                    vec![hit]
+                };
                 if !studio.selection.contains(&hit) {
                     if shift {
                         studio.selection.push(hit);
@@ -645,6 +689,7 @@ fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
                 studio.op = Some(Op::Move {
                     orig: snapshot(studio),
                     start: pick,
+                    selection_on_click,
                 });
             } else {
                 studio.op = Some(Op::Marquee {
@@ -1316,7 +1361,7 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                 pts.push(world);
             }
         }
-        Some(Op::Move { orig, start }) => {
+        Some(Op::Move { orig, start, .. }) => {
             let d = world - *start;
             if studio.persona == Persona::Motion {
                 studio.playing = false;
@@ -2019,7 +2064,7 @@ fn end_drag(studio: &mut Studio, _world: Pt, alt: bool, ctrl: bool, shift: bool)
                     max: Pt::new(start.x.max(cur.x), start.y.max(cur.y)),
                 };
                 if b.width() > 4.0 && b.height() > 4.0 {
-                    studio.selection = if studio.is_motion() {
+                    let hits = if studio.is_motion() {
                         crate::motion::hits_in_rect(
                             &studio.doc,
                             studio.playhead,
@@ -2029,6 +2074,13 @@ fn end_drag(studio: &mut Studio, _world: Pt, alt: bool, ctrl: bool, shift: bool)
                     } else {
                         studio.doc.hits_in_rect(b)
                     };
+                    // Pointer-down already cleared the selection unless Shift
+                    // was held. Keep that base even after a quick Shift release.
+                    for hit in hits {
+                        if !studio.selection.contains(&hit) {
+                            studio.selection.push(hit);
+                        }
+                    }
                 }
             } else if let Some(li) = studio.raster_target()
                 && let Some(px) = studio.doc.layers[li].kind.pixels()
@@ -2086,91 +2138,52 @@ fn end_drag(studio: &mut Studio, _world: Pt, alt: bool, ctrl: bool, shift: bool)
     }
 }
 
-fn click(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
-    match studio.tool {
-        Tool::Select => {
-            if hit_handle(studio, world).is_some() {
-                return;
-            }
-            if let Some(hit) = hit_shape(studio, world, 6.0 / studio.view.scale.max(0.01)) {
-                if shift {
-                    if let Some(i) = studio.selection.iter().position(|x| *x == hit) {
-                        studio.selection.remove(i);
-                    } else {
-                        studio.selection.push(hit);
-                    }
-                } else {
-                    studio.selection = vec![hit];
-                }
-                studio.active_layer = Some(hit.0);
-            } else if !shift {
-                studio.selection.clear();
-            }
+fn node_click(studio: &mut Studio, world: Pt, alt: bool) {
+    if let Some((li, id)) = studio.primary() {
+        if id != RASTER_ID {
+            studio.ensure_path(li, id);
         }
-        Tool::Node => {
-            if let Some((li, id)) = studio.primary() {
-                if id != RASTER_ID {
-                    studio.ensure_path(li, id);
+        let slack = 8.0 / studio.view.scale.max(0.01);
+        let Some(shape) = studio.doc.find_shape(li, id) else {
+            return;
+        };
+        let Geom::Path { anchors, closed } = &shape.geom else {
+            if let Some(hit) = hit_shape(studio, world, slack) {
+                studio.selection = vec![hit];
+                studio.node_sel.clear();
+            }
+            return;
+        };
+        let anchors = anchors.clone();
+        let closed = *closed;
+        let orig = shape.geom.clone();
+        let rot = shape.rotation;
+        if let Some(hit) = hit_node(&anchors, world, slack, closed) {
+            match hit {
+                NodeHit::Point(i) => {
+                    if alt {
+                        let mut after = orig.clone();
+                        if let Geom::Path { anchors, .. } = &mut after
+                            && let Some(a) = anchors.get_mut(i)
+                        {
+                            if a.is_corner() {
+                                a.make_smooth();
+                            } else {
+                                a.make_corner();
+                            }
+                        }
+                        studio.commit(crate::document::Cmd::SetGeom {
+                            layer: li,
+                            id,
+                            before: orig,
+                            after,
+                            rot_before: rot,
+                            rot_after: rot,
+                        });
+                    }
                 }
-                let slack = 8.0 / studio.view.scale.max(0.01);
-                let Some(shape) = studio.doc.find_shape(li, id) else {
-                    return;
-                };
-                let Geom::Path { anchors, closed } = &shape.geom else {
-                    if let Some(hit) = hit_shape(studio, world, slack) {
-                        studio.selection = vec![hit];
-                        studio.node_sel.clear();
-                    }
-                    return;
-                };
-                let anchors = anchors.clone();
-                let closed = *closed;
-                let orig = shape.geom.clone();
-                let rot = shape.rotation;
-                if let Some(hit) = hit_node(&anchors, world, slack, closed) {
-                    match hit {
-                        NodeHit::Point(i) => {
-                            if alt {
-                                let mut after = orig.clone();
-                                if let Geom::Path { anchors, .. } = &mut after
-                                    && let Some(a) = anchors.get_mut(i)
-                                {
-                                    if a.is_corner() {
-                                        a.make_smooth();
-                                    } else {
-                                        a.make_corner();
-                                    }
-                                }
-                                studio.commit(crate::document::Cmd::SetGeom {
-                                    layer: li,
-                                    id,
-                                    before: orig,
-                                    after,
-                                    rot_before: rot,
-                                    rot_after: rot,
-                                });
-                            }
-                        }
-                        NodeHit::HandleIn(_) | NodeHit::HandleOut(_) => {}
-                        NodeHit::Segment(_) => {
-                            let mut anchors = anchors;
-                            if let Some(idx) =
-                                insert_anchor(&mut anchors, closed, world, slack * 2.0)
-                            {
-                                studio.node_sel.clear();
-                                studio.node_sel.insert(idx);
-                                studio.commit(crate::document::Cmd::SetGeom {
-                                    layer: li,
-                                    id,
-                                    before: orig,
-                                    after: Geom::Path { anchors, closed },
-                                    rot_before: rot,
-                                    rot_after: rot,
-                                });
-                            }
-                        }
-                    }
-                } else {
+                NodeHit::HandleIn(_) | NodeHit::HandleOut(_) => {}
+                NodeHit::Segment(_) => {
                     let mut anchors = anchors;
                     if let Some(idx) = insert_anchor(&mut anchors, closed, world, slack * 2.0) {
                         studio.node_sel.clear();
@@ -2183,20 +2196,33 @@ fn click(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                             rot_before: rot,
                             rot_after: rot,
                         });
-                    } else if let Some(hit) = hit_shape(studio, world, slack) {
-                        studio.selection = vec![hit];
-                        studio.node_sel.clear();
                     }
                 }
-            } else if let Some(hit) = hit_shape(studio, world, 6.0 / studio.view.scale.max(0.01)) {
+            }
+        } else {
+            let mut anchors = anchors;
+            if let Some(idx) = insert_anchor(&mut anchors, closed, world, slack * 2.0) {
+                studio.node_sel.clear();
+                studio.node_sel.insert(idx);
+                studio.commit(crate::document::Cmd::SetGeom {
+                    layer: li,
+                    id,
+                    before: orig,
+                    after: Geom::Path { anchors, closed },
+                    rot_before: rot,
+                    rot_after: rot,
+                });
+            } else if let Some(hit) = hit_shape(studio, world, slack) {
                 studio.selection = vec![hit];
                 studio.node_sel.clear();
-                if hit.1 != RASTER_ID {
-                    studio.ensure_path(hit.0, hit.1);
-                }
             }
         }
-        _ => {}
+    } else if let Some(hit) = hit_shape(studio, world, 6.0 / studio.view.scale.max(0.01)) {
+        studio.selection = vec![hit];
+        studio.node_sel.clear();
+        if hit.1 != RASTER_ID {
+            studio.ensure_path(hit.0, hit.1);
+        }
     }
 }
 
@@ -2959,6 +2985,168 @@ mod tests {
         }
     }
 
+    fn selection_input_studio() -> (eframe::egui::Context, Studio, [(usize, u64); 2]) {
+        let (ctx, mut studio) = pen_input_studio();
+        studio.view.offset = Pt::ZERO;
+        studio.view.scale = 1.0;
+        studio.finish_create(CreateKind::Rect, Pt::new(30.0, 40.0), Pt::new(110.0, 120.0));
+        let first = studio.primary().unwrap();
+        studio.finish_create(
+            CreateKind::Rect,
+            Pt::new(190.0, 40.0),
+            Pt::new(270.0, 120.0),
+        );
+        let second = studio.primary().unwrap();
+        studio.tool = Tool::Select;
+        studio.selection.clear();
+        studio.dirty = false;
+        canvas_frame(&ctx, &mut studio, vec![]);
+        (ctx, studio, [first, second])
+    }
+
+    #[test]
+    fn shift_click_adds_and_removes_once_with_separate_and_batched_pointer_frames() {
+        use eframe::egui::{Event, Modifiers};
+        for (batched, release_shift) in [(false, false), (false, true), (true, false), (true, true)]
+        {
+            let (ctx, mut studio, [first, second]) = selection_input_studio();
+            let history = studio.history.len();
+            let origin = studio.canvas_rect.unwrap().min;
+            for (point, modifiers, expected) in [
+                (vec2(70.0, 80.0), Modifiers::NONE, vec![first]),
+                (vec2(230.0, 80.0), Modifiers::SHIFT, vec![first, second]),
+                (vec2(30.0, 40.0), Modifiers::SHIFT, vec![first, second]),
+                (vec2(70.0, 80.0), Modifiers::SHIFT, vec![second]),
+                (vec2(340.0, 180.0), Modifiers::SHIFT, vec![second]),
+                (vec2(340.0, 180.0), Modifiers::NONE, vec![]),
+            ] {
+                let at = origin + point;
+                let mut down = vec![
+                    Event::PointerMoved(at),
+                    pen_pointer_button(at, true, modifiers),
+                ];
+                // Fast modifier release must not replace the click's modifiers.
+                let mut up = vec![pen_pointer_button(at, false, modifiers)];
+                if release_shift {
+                    up.push(Event::ModifiersChanged(Modifiers::NONE));
+                }
+                if batched {
+                    down.extend(up);
+                    canvas_frame(&ctx, &mut studio, down);
+                } else {
+                    canvas_frame(&ctx, &mut studio, down);
+                    canvas_frame(&ctx, &mut studio, up);
+                }
+                canvas_frame(&ctx, &mut studio, vec![]);
+                assert_eq!(
+                    studio.selection, expected,
+                    "batched={batched}, point={point:?}"
+                );
+                assert!(studio.op.is_none());
+                assert_eq!(
+                    studio.history.len(),
+                    history,
+                    "selection is not a document edit"
+                );
+                assert!(!studio.dirty);
+            }
+        }
+    }
+
+    #[test]
+    fn shift_drag_moves_the_existing_selection_and_single_click_collapses_it() {
+        use eframe::egui::{Event, Modifiers};
+        let (ctx, mut studio, ids) = selection_input_studio();
+        studio.selection = ids.to_vec();
+        let original =
+            ids.map(|(layer, id)| studio.doc.find_shape(layer, id).unwrap().geom.clone());
+        let at = studio.canvas_rect.unwrap().min + vec2(70.0, 80.0);
+        canvas_frame(
+            &ctx,
+            &mut studio,
+            vec![
+                Event::PointerMoved(at),
+                pen_pointer_button(at, true, Modifiers::SHIFT),
+            ],
+        );
+        canvas_frame(
+            &ctx,
+            &mut studio,
+            vec![
+                Event::ModifiersChanged(Modifiers::SHIFT),
+                Event::PointerMoved(at + vec2(40.0, 6.0)),
+            ],
+        );
+        canvas_frame(
+            &ctx,
+            &mut studio,
+            vec![pen_pointer_button(
+                at + vec2(40.0, 6.0),
+                false,
+                Modifiers::SHIFT,
+            )],
+        );
+        assert_eq!(studio.selection, ids);
+        for ((layer, id), before) in ids.into_iter().zip(&original) {
+            let delta =
+                studio.doc.find_shape(layer, id).unwrap().geom.bbox().min - before.bbox().min;
+            assert!(
+                (delta.x - 40.0).abs() < 1.0 && delta.y.abs() < 0.01,
+                "constrained group movement: {delta:?}"
+            );
+        }
+        studio.undo();
+        for ((layer, id), before) in ids.into_iter().zip(&original) {
+            assert_eq!(&studio.doc.find_shape(layer, id).unwrap().geom, before);
+        }
+        studio.selection = ids.to_vec();
+        canvas_frame(
+            &ctx,
+            &mut studio,
+            vec![
+                Event::PointerMoved(at),
+                pen_pointer_button(at, true, Modifiers::NONE),
+            ],
+        );
+        canvas_frame(
+            &ctx,
+            &mut studio,
+            vec![pen_pointer_button(at, false, Modifiers::NONE)],
+        );
+        assert_eq!(studio.selection, vec![ids[0]]);
+    }
+
+    #[test]
+    fn shift_marquee_keeps_the_original_selection_after_modifier_release() {
+        use eframe::egui::{Event, Modifiers};
+        let (ctx, mut studio, ids) = selection_input_studio();
+        studio.selection = vec![ids[0]];
+        let history = studio.history.len();
+        let origin = studio.canvas_rect.unwrap().min;
+        let start = origin + vec2(175.0, 25.0);
+        let end = origin + vec2(285.0, 140.0);
+        canvas_frame(
+            &ctx,
+            &mut studio,
+            vec![
+                Event::PointerMoved(start),
+                pen_pointer_button(start, true, Modifiers::SHIFT),
+            ],
+        );
+        canvas_frame(&ctx, &mut studio, vec![Event::PointerMoved(end)]);
+        canvas_frame(
+            &ctx,
+            &mut studio,
+            vec![
+                pen_pointer_button(end, false, Modifiers::SHIFT),
+                Event::ModifiersChanged(Modifiers::NONE),
+            ],
+        );
+        assert_eq!(studio.selection, ids);
+        assert_eq!(studio.history.len(), history);
+        assert!(!studio.dirty);
+    }
+
     fn assert_pen_preview(shapes: &[eframe::egui::epaint::ClippedShape], from: Pos2, to: Pos2) {
         fn matches(shape: &eframe::egui::Shape, from: Pos2, to: Pos2) -> bool {
             match shape {
@@ -3444,15 +3632,6 @@ mod tests {
             }) => {}
             other => panic!("expected node 1, got op? {}", other.is_some()),
         }
-    }
-
-    #[test]
-    fn click_on_oval_handle_keeps_selection() {
-        let mut s = oval();
-        let id = s.selection[0];
-        let b = posed_bounds(&s).unwrap();
-        click(&mut s, b.handle(1), false, false);
-        assert_eq!(s.selection, vec![id]);
     }
 
     #[test]
