@@ -1,4 +1,4 @@
-import{j as e}from"./index-BgEyxwvk.js";import{M as t}from"./md-DYBlZmOF.js";import"./release-DuqKHh6r.js";const n=`# omadesign user manual
+import{j as e}from"./index-D5NqmCia.js";import{M as t}from"./md-54_nl6k5.js";import"./release-BgmMATed.js";const n=`# omadesign user manual
 
 A native Linux studio. Design, paint, retouch and animate. One document, one layer stack.
 
@@ -47,7 +47,10 @@ Chrome follows your desktop: Omarchy theme colors and the font from \`omarchy fo
 
 ## Design
 
-- **Move** \`V\` — click to select, drag to move, eight handles scale, the handle above the box rotates. Shift-click adds to the selection. Alt-drag clones. Corner dots round a rectangle.
+- **Move** \`V\` — click to select, drag to move, eight handles scale, the handle above the box rotates. Shift-click adds or removes an object; Shift-drag a selection box to add objects. Dragging a selected object moves the whole selection, and Shift constrains that movement. Alt-drag clones. Corner dots round a rectangle.
+
+Select a layer row to reorder it with **Ctrl+[ / Ctrl+]**; add **Shift** to send it to the back or front of its group. Drag a layer name onto an insertion line to reorder it. Groups move with their children. Clicking an object on the canvas returns these shortcuts to object stacking. Each reorder can be undone in one step.
+
 - **Free transform** \`Ctrl+T\` — puts the current selection into Move with its scale and rotation handles ready. Also under Object. It keeps live text and shape parameters editable.
 - **Node** \`A\` — drag points and Bézier handles. Shift-click adds nodes. Drag a box around nodes to select them. Drag a segment to move the line. Click a curve to insert. Alt-click converts corner/smooth. Alt-drag a handle breaks symmetry. Delete removes selected points. Object → Break path. Shapes convert to a path the first time you edit them.
 - **Pen** \`P\` — click a corner, click-drag a smooth point (a twitch under 3px stays a corner). Shift constrains 45°. Alt-drag breaks handle symmetry. The cubic is drawn as you go. Enter or double-click finishes an **open** path. Esc removes the last point, then cancels. Click the first point to close. Click an open endpoint to continue it, or to join it to the path you're drawing.
@@ -138,9 +141,26 @@ Masks work on pixel and vector layers and remain editable in the project. Invert
 
 Open a photo, browse a folder, drop files, or load samples. Camera RAW files such as DNG, CR2/CR3, NEF, ARW, RAF, ORF and RW2 use the built-in decoder. The Photo library shows camera metadata when available, and imports run in the background. The Develop panel groups adjustments into **Light**, **Color**, and **Detail**. Tone curve, color mixer, and color grading expand when needed. **Before** compares the default development; **Auto light** balances exposure and contrast. RAW exposure and white-balance changes use the 16-bit linear source.
 
-Use **Save settings** to keep development adjustments beside the original photo as a small \`.omaphoto\` file. Reopening the source restores those settings. Keep both files together; the original photograph is never rewritten. A changed source file or invalid settings file produces a note. Photo edits have their own Undo/Redo history. Quitting offers Save all, Discard or Cancel for unsaved photo settings before the palette and artwork save steps, and waits for writes to finish. Saving a Design \`.oma\` does not store the RAW source or its settings.
+Use **Save settings** to keep development adjustments beside the original photo as a small \`.omaphoto\` file. Resume through **File → Open**, a drop, or **Photo → Library → ··· → Open photo or settings…**. Choose the original image or its \`.omaphoto\` file; both restore the original pixels and saved adjustments. Keep the pair together with their matching names, such as \`photo.png\` and \`photo.png.omaphoto\`; settings do not contain the image. The original photograph is never rewritten. Opening settings explicitly reports a missing or changed original, or invalid settings, without replacing the current photo. Opening the original with unusable settings shows default development and a note. Failed saves keep your edits available to retry, and edits made while a save finishes remain marked unsaved. Photo edits have their own Undo/Redo history. Quitting offers Save all, Discard or Cancel for unsaved photo settings before the palette and artwork save steps, and waits for writes to finish. Saving a Design \`.oma\` does not store the RAW source or its settings.
 
 Export JPEG, PNG or TIFF in the background at the full developed resolution, including crop and rotation. RAW PNG/TIFF exports keep 16-bit channels. **Place in Design** adds an 8-bit developed pixel layer with Undo; retain the RAW and settings for later development. The initial display preview has a maximum edge of 1600 pixels. Zoom in for full-resolution detail, prepared in the background and displayed as visible tiles while the preview keeps the view responsive. See [RAW format limits](format-support.md#camera-raw) for supported camera families and color-rendering differences.
+
+### Copy a look across photos
+
+1. Develop the source photo, then choose **Copy adjustments** or press **Ctrl+Shift+C**.
+2. Select target photos in the Library. **Ctrl-click** toggles individual photos, **Shift-click** selects a range, and **Ctrl+A** selects all loaded photos. The active photo remains the one shown in the viewer; the selection count tells you how many photos will receive the look.
+3. Choose **Paste adjustments** or press **Ctrl+Shift+V**. Select the adjustment categories and apply. Light, color, detail, tone curve, color mixer and color grading can travel independently. **Crop and rotation are off by default**, so each photo keeps its framing.
+4. **Ctrl+S** saves the selected photos' settings beside their originals. The batch is one Undo/Redo operation; ordinary slider edits also use the Photo history.
+
+Copying captures the source settings at that moment. Later source edits do not change the copied look. Applying the same values again makes no additional undo entry. Samples and pasted images can receive adjustments but need an original on disk before settings can be saved.
+
+### Presets and whole folders
+
+The Photo preset library saves named looks, filters them by name, and imports or exports **\`.omapreset\`** files. Presets contain development values and the chosen categories, so they work across unrelated originals. Their library persists between sessions. Imported name conflicts retain both looks with distinct names.
+
+Choose **Library → … → Browse folder…**, open a representative photo from that folder, and copy its adjustments or choose **Presets… → Use preset…**. In **Apply adjustments**, choose **Whole folder**, then **Write settings for N photos**. It processes supported photo filenames directly in that folder, writes each original's **\`.omaphoto\`** settings in the background, and leaves image pixels untouched. It does not load the whole shoot into memory or recursively scan subfolders. Existing adjustments in excluded categories are retained. Progress and file-specific errors remain visible; cancellation stops remaining work, and Undo restores completed changes. A file changed outside the batch is preserved and reported instead of overwritten during Undo/Redo.
+
+Folder jobs check that undo data fits before writing. The limits are 10,000 photos and 32 MiB of settings history per job; larger jobs need smaller folders. Invalid or mismatched existing settings are reported. Filename recognition does not guarantee that every camera file can be decoded; open a representative RAW photo first. Folder changes are already saved on disk, while pasting to a loaded selection requires Save settings. Export still processes the active photo.
 
 Hold Space or choose Hand to drag the view; middle-drag and two-finger scroll also pan. Pinch, Ctrl+scroll, and Alt+scroll zoom. Ctrl+0 fits the photo; Ctrl+1 shows it at 100%.
 

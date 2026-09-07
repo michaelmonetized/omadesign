@@ -1,4 +1,4 @@
-import{R as a}from"./index-BgEyxwvk.js";const s="0.0.2-alpha",e=`v${s}`,t=`${a}/releases/tag/${e}`,o=`${a}/tree/${e}`,R=`git clone ${a}.git
+import{R as a}from"./index-D5NqmCia.js";const s="0.0.3-alpha",e=`v${s}`,t=`${a}/releases/tag/${e}`,o=`${a}/tree/${e}`,R=`git clone ${a}.git
 cd omadesign
 git checkout ${e}
 cargo build --release --bin omadesign

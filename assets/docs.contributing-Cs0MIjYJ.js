@@ -1,4 +1,4 @@
-import{j as e}from"./index-BgEyxwvk.js";import{M as n}from"./md-DYBlZmOF.js";import"./release-DuqKHh6r.js";const s=`# Contributing to omadesign
+import{j as e}from"./index-D5NqmCia.js";import{M as n}from"./md-54_nl6k5.js";import"./release-BgmMATed.js";const s=`# Contributing to omadesign
 
 Build and contribute to the native Linux app.
 
