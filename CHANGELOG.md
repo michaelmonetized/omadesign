@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-09-08 · First-File Setup offer withdrawn.
+
+The optional $297 First-File Setup service has been withdrawn. Its README
+promotion and scope page are removed. The earlier changelog entry remains as a
+historical record; it is not a current offer. No replacement paid service is added.
+
+Validation: the documentation diff and remaining README links were checked.
+Omadesign's app code, release, installation instructions, and license are unchanged.
+
 ## 2026-09-08 · Optional help for one file.
 
 The README now links a bounded **$297 First-File Setup** service: guided Linux
