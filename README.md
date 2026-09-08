@@ -34,6 +34,16 @@ Tarball by hand:
 | Apple Silicon Asahi, aarch64 Linux | `omadesign-*-aarch64-unknown-linux-gnu.tar.gz` |
 | x86_64 Linux | `omadesign-*-x86_64-unknown-linux-gnu.tar.gz` |
 
+## Optional first-file setup
+
+Omadesign is free, open-source software; its own code is [MIT licensed](LICENSE).
+If you want help getting one simple SVG working on an existing Linux workstation,
+Michael offers **First-File Setup for $297 USD**: installation guidance, a checked
+editable `.oma`, PNG/SVG/PDF exports, and a written handoff. File and machine
+preflight comes before scope acceptance, a delivery date, or payment.
+
+[Read the exact scope and request preflight](docs/FIRST_FILE_SETUP.md).
+
 ## Personas
 
 | Persona | You are… | First tools |
