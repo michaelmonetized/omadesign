@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-09-08 · Optional help for one file.
+
+The README now links a bounded **$297 First-File Setup** service: guided Linux
+installation, one approved simple SVG, an editable master, checked PNG/SVG/PDF
+exports, and a written handoff. Omadesign remains free. File and machine preflight
+comes before accepting the scope, delivery date, or payment; no call is included.
+
+This is documentation only. The offer states the completed ARM64 fixture proof
+and its observed file-dialog, undo, and SVG round-trip limits. It excludes
+unverified recoloring, palette/bank work, and broad application migrations.
+Markdown links and the final diff were checked; no app code, version, installer,
+or production deployment changed, and the full application suite was not rerun.
+
 ## 2026-09-07 · Pass 19 — The handles got the memo.
 
 Version **0.0.4-alpha** fixes the split between a rotated path and its editable
