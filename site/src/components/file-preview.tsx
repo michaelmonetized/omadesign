@@ -18,7 +18,7 @@ export function FilePreview() {
       </div>
       <div className="file-preview-workflows">
         <article>
-          <span className="file-preview-formats">PSD · PSB · PDF · AI · SVG · ORA</span>
+          <span className="file-preview-formats">PSD · PSB · XCF · PDF · AI · SVG · ORA</span>
           <h3>Pick up with your layers.</h3>
           <p>
             Open supported layers, groups, masks and artboards. Import Affinity

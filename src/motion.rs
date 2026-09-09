@@ -274,6 +274,30 @@ impl Motion {
         self.tracks.retain(|tr| !tr.keys.is_empty());
     }
 
+    pub fn has_shape(&self, id: u64) -> bool {
+        self.tracks.iter().any(|tr| tr.shape == id)
+    }
+
+    pub fn key_after_remove(
+        &self,
+        shape: u64,
+        prop: Prop,
+        index: usize,
+    ) -> Option<(u64, Prop, usize)> {
+        if let Some(track) = self
+            .tracks
+            .iter()
+            .find(|tr| tr.shape == shape && tr.prop == prop)
+            && !track.keys.is_empty()
+        {
+            return Some((shape, prop, index.min(track.keys.len() - 1)));
+        }
+        self.tracks
+            .iter()
+            .find(|tr| tr.shape == shape && !tr.keys.is_empty())
+            .map(|tr| (shape, tr.prop, 0))
+    }
+
     pub fn drop_shape(&mut self, id: u64) {
         self.tracks.retain(|tr| tr.shape != id);
     }
@@ -1203,6 +1227,23 @@ mod tests {
         let y1 = m.value(7, Prop::Y, 1.0).unwrap();
         assert!((y0 - 0.0).abs() < 1e-5);
         assert!((y1 - 40.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn removing_a_key_selects_a_neighbor_then_another_channel() {
+        let mut m = Motion::default();
+        m.set_key(3, Prop::X, 0.0, 0.0, Ease::Linear);
+        m.set_key(3, Prop::X, 1.0, 10.0, Ease::Linear);
+        m.set_key(3, Prop::X, 2.0, 20.0, Ease::Linear);
+        m.set_key(3, Prop::Y, 0.0, 0.0, Ease::Linear);
+        m.remove_key(3, Prop::X, 2);
+        assert_eq!(m.key_after_remove(3, Prop::X, 2), Some((3, Prop::X, 1)));
+        m.remove_key(3, Prop::X, 0);
+        m.remove_key(3, Prop::X, 0);
+        assert_eq!(m.key_after_remove(3, Prop::X, 0), Some((3, Prop::Y, 0)));
+        m.remove_key(3, Prop::Y, 0);
+        assert_eq!(m.key_after_remove(3, Prop::Y, 0), None);
+        assert!(!m.has_shape(3));
     }
 
     #[test]

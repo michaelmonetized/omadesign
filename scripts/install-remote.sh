@@ -55,5 +55,4 @@ fi
 cd "$DIR"
 ./install.sh
 echo
-echo "omadesign ${VER} is on PATH as ~/.local/bin/omadesign"
-echo "run: omadesign"
+echo "omadesign ${VER} is at ~/.local/bin/omadesign"

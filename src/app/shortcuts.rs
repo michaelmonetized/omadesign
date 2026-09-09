@@ -270,10 +270,11 @@ impl Studio {
                     key,
                     modifiers,
                     pressed: true,
+                    repeat,
                     ..
                 } = event
                 && !(modifiers.ctrl || modifiers.command || modifiers.alt || modifiers.mac_cmd)
-                && self.canvas_key(*key, modifiers.shift)
+                && self.canvas_key(*key, modifiers.shift, *repeat)
             {
                 consumed.push(index);
             }
@@ -478,7 +479,7 @@ impl Studio {
         true
     }
 
-    fn canvas_key(&mut self, key: Key, shift: bool) -> bool {
+    fn canvas_key(&mut self, key: Key, shift: bool, repeat: bool) -> bool {
         if self.persona == Persona::Photo {
             if self.photo.is_batching() {
                 return false;
@@ -533,7 +534,17 @@ impl Studio {
         }
         let step = if shift { 10.0 } else { 1.0 };
         match key {
-            Key::Delete | Key::Backspace => self.delete_selection(),
+            Key::Delete | Key::Backspace => {
+                if repeat {
+                    if self.tool == Tool::Node && !self.node_sel.is_empty() {
+                        self.delete_node();
+                    } else {
+                        self.remove_selected_motion();
+                    }
+                } else {
+                    self.delete_selection();
+                }
+            }
             Key::Escape => {
                 self.end_pixel_stroke(true);
                 if self.pending_place.is_some() {
@@ -1569,5 +1580,78 @@ mod tests {
         assert_eq!(studio.playhead, studio.doc.motion.duration);
         frame(&ctx, &mut studio, vec![key(Key::Home, Modifiers::NONE)]);
         assert_eq!(studio.playhead, 0.0);
+    }
+
+    fn key_repeat(key: Key, modifiers: Modifiers) -> Event {
+        Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: true,
+            modifiers,
+        }
+    }
+
+    #[test]
+    fn motion_delete_strips_animation_and_ignores_a_held_key() {
+        let ctx = context();
+        let mut studio = Studio::new();
+        studio.persona = Persona::Motion;
+        let id = add_rectangle(&mut studio, 10.0);
+        studio
+            .doc
+            .motion
+            .set_key(id, Prop::X, 0.0, 0.0, Ease::Linear);
+        studio
+            .doc
+            .motion
+            .set_key(id, Prop::X, 1.0, 24.0, Ease::Linear);
+        frame(&ctx, &mut studio, vec![key(Key::Delete, Modifiers::NONE)]);
+        assert_eq!(count(&studio), 1);
+        assert!(!studio.doc.motion.has_shape(id));
+        frame(
+            &ctx,
+            &mut studio,
+            vec![key_repeat(Key::Delete, Modifiers::NONE)],
+        );
+        assert_eq!(count(&studio), 1);
+        assert!(studio.doc.find_shape(1, id).is_some());
+        frame(
+            &ctx,
+            &mut studio,
+            vec![Event::Key {
+                key: Key::Delete,
+                physical_key: None,
+                pressed: false,
+                repeat: false,
+                modifiers: Modifiers::NONE,
+            }],
+        );
+        frame(&ctx, &mut studio, vec![key(Key::Delete, Modifiers::NONE)]);
+        assert_eq!(count(&studio), 0);
+    }
+
+    #[test]
+    fn motion_delete_of_a_selected_key_does_not_take_the_object() {
+        let ctx = context();
+        let mut studio = Studio::new();
+        studio.persona = Persona::Motion;
+        let id = add_rectangle(&mut studio, 10.0);
+        studio
+            .doc
+            .motion
+            .set_key(id, Prop::Scale, 0.0, 0.2, Ease::EaseOut);
+        studio
+            .doc
+            .motion
+            .set_key(id, Prop::Scale, 1.0, 1.0, Ease::Linear);
+        studio.selected_key = Some((id, Prop::Scale, 1));
+        frame(&ctx, &mut studio, vec![key(Key::Delete, Modifiers::NONE)]);
+        assert_eq!(count(&studio), 1);
+        assert!(studio.doc.motion.has_shape(id));
+        assert_eq!(studio.selected_key, Some((id, Prop::Scale, 0)));
+        frame(&ctx, &mut studio, vec![key(Key::Delete, Modifiers::NONE)]);
+        assert_eq!(count(&studio), 1);
+        assert!(!studio.doc.motion.has_shape(id));
     }
 }

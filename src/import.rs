@@ -24,6 +24,7 @@ pub fn classify(path: &Path) -> &'static str {
         "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" | "tif" | "tiff" => "raster",
         "pdf" => "pdf",
         "ora" => "ora",
+        "xcf" => "xcf",
         "ai" => "ai",
         "eps" | "ps" => "eps",
         "psd" | "psb" => "psd",
@@ -87,6 +88,10 @@ pub fn open_any(path: &Path) -> Result<Imported, String> {
         let (doc, notes) = crate::formats::openraster::read(&bytes, &name)?;
         return document(doc, notes);
     }
+    if kind == "xcf" || crate::formats::xcf::looks_like(&bytes) {
+        let (doc, notes) = crate::formats::xcf::read(&bytes, &name)?;
+        return document(doc, notes);
+    }
     if kind == "psd" || bytes.starts_with(b"8BPS") {
         let result = crate::formats::psd::decode(&bytes, &name)?;
         return document(result.document, result.warnings);
@@ -118,7 +123,7 @@ pub fn open_any(path: &Path) -> Result<Imported, String> {
         }),
         Err(error) if kind == "raster" => Err(error),
         Err(_) => Err(format!(
-            "Cannot open {name}. Choose OMA, OMAPHOTO, camera RAW, SVG/SVGZ, PNG, JPEG, WebP, GIF, TIFF, BMP, PSD/PSB, PDF, AI, EPS, or an Affinity document."
+            "Cannot open {name}. Choose OMA, OMAPHOTO, camera RAW, SVG/SVGZ, PNG, JPEG, WebP, GIF, TIFF, BMP, PSD/PSB, XCF, PDF, AI, EPS, or an Affinity document."
         )),
     }
 }
@@ -266,6 +271,7 @@ mod tests {
         assert_eq!(classify(Path::new("a.png")), "raster");
         assert_eq!(classify(Path::new("a.pdf")), "pdf");
         assert_eq!(classify(Path::new("a.afdesign")), "affinity");
+        assert_eq!(classify(Path::new("a.XCF")), "xcf");
     }
 
     #[test]

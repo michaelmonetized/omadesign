@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-09-09 · Home is the install. GIMP comes with it.
+
+Version **0.0.5-alpha** answers two Reddit notes and the motion Delete
+footgun from the same thread.
+
+The installer never needed `/usr`. It already lived in `~/.local`. The
+site just did not say so, and `~/.local/bin` is often missing from PATH
+on Silverblue, Bazzite, NixOS and SteamOS desktop. The same curl line
+now prints the full path, refuses to imply a system package, and tells
+you how to add the directory to PATH. Immutable distros use the home
+directory. There is no ostree overlay and no Flatpak in this pass.
+
+GIMP `.xcf` files open as layered pixel work: groups, names, visibility,
+opacity, offsets, supported blends, applied masks, RLE, zlib and 64-bit
+pointers. Live text and effects become pixels with notes. There is no
+XCF writer; export OpenRaster or PSD back to GIMP. Save remains `.oma`.
+
+Delete in Motion peels animation first. A selected diamond loses that
+key. No diamond selected strips every track and leaves the drawing. A
+held key cannot then eat the object. Cut still cuts. Design still
+deletes the object.
+
+Validation: XCF fixtures cover grouped RLE layers, zlib tiles, 64-bit
+pointers and oversize rejection. Motion tests cover selected-key delete,
+preset-style delete, Design delete, Cut and a held Delete. Installer
+copy names the home-directory path.
+
 ## 2026-09-08 · First-File Setup offer withdrawn.
 
 The optional $297 First-File Setup service has been withdrawn. Its README

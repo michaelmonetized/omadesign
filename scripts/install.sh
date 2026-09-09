@@ -83,4 +83,17 @@ if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database "$APP" || echo "omadesign: could not refresh the desktop database" >&2
 fi
 echo "installed ${BIN}/omadesign"
-echo "relaunch it from your app launcher, or run: omadesign"
+if [ -n "$INSTALL_PREFIX" ]; then
+  echo "files stay under ${INSTALL_PREFIX}; nothing is written to /usr"
+else
+  echo "files stay under your home directory; nothing is written to /usr"
+fi
+case ":${PATH}:" in
+  *:"$BIN":*)
+    echo "relaunch it from your app launcher, or run: omadesign"
+    ;;
+  *)
+    echo "relaunch it from your app launcher, or run: ${BIN}/omadesign"
+    echo "add ${BIN} to PATH if you want the short command"
+    ;;
+esac

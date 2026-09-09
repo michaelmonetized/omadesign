@@ -62,7 +62,8 @@ function DocsOverview() {
         <h2 id="get-the-app">Install</h2>
         <p>
           The installer chooses the published Linux package for your machine and
-          adds a desktop entry. You can also download a package from{" "}
+          adds a desktop entry under your home directory. Nothing is written to{" "}
+          <code>/usr</code>. Immutable systems use the same command. You can also download a package from{" "}
           <a href={RELEASE_URL}>{RELEASE_TAG} on GitHub Releases</a>.
         </p>
         <pre aria-label="Install omadesign">
