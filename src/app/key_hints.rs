@@ -343,9 +343,16 @@ impl Studio {
                         add("Alt+drag", "Clone and move", mods.alt);
                         add("Shift+click", "Add to selection", mods.shift);
                         if !self.selection.is_empty() || !self.artboard_sel.is_empty() {
+                            let label = if self.is_motion() && self.selected_key.is_some() {
+                                "Remove key"
+                            } else if self.is_motion() && self.selection_has_motion() {
+                                "Remove animation"
+                            } else {
+                                "Delete selection"
+                            };
                             add(
                                 "Delete",
-                                "Delete selection",
+                                label,
                                 plain_keys && ctx.input(|i| i.key_down(Key::Delete)),
                             );
                         }
@@ -503,7 +510,10 @@ impl Studio {
         if self.is_motion() {
             context = "Motion";
             hints.sort_by_key(|hint| {
-                !matches!(hint.keys, "Space" | "K" | "Home / End" | "Middle-drag")
+                !matches!(
+                    hint.keys,
+                    "Space" | "K" | "Delete" | "Home / End" | "Middle-drag"
+                )
             });
         }
         (context, hints)
@@ -528,6 +538,51 @@ mod tests {
         );
         output.textures_delta.clear();
         hints
+    }
+
+    #[test]
+    fn motion_delete_hint_names_the_animation_not_the_object() {
+        let mut studio = Studio::new();
+        studio.show_welcome = false;
+        studio.persona = Persona::Motion;
+        let shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(8.0, 8.0),
+                size: Pt::new(20.0, 20.0),
+                radius: 0.0,
+            },
+            Style::default(),
+        );
+        let id = shape.id;
+        studio.commit(Cmd::AddShape { layer: 1, shape });
+        studio.selection = vec![(1, id)];
+        studio
+            .doc
+            .motion
+            .set_key(id, Prop::Opacity, 0.0, 0.0, Ease::Linear);
+        let animated = hints(&studio, Modifiers::NONE);
+        assert!(
+            animated
+                .gestures
+                .iter()
+                .any(|hint| hint.keys == "Delete" && hint.label == "Remove animation")
+        );
+        studio.selected_key = Some((id, Prop::Opacity, 0));
+        let keyed = hints(&studio, Modifiers::NONE);
+        assert!(
+            keyed
+                .gestures
+                .iter()
+                .any(|hint| hint.keys == "Delete" && hint.label == "Remove key")
+        );
+        studio.selected_key = None;
+        studio.doc.motion.drop_shape(id);
+        let idle = hints(&studio, Modifiers::NONE);
+        assert!(
+            idle.gestures
+                .iter()
+                .any(|hint| hint.keys == "Delete" && hint.label == "Delete selection")
+        );
     }
 
     #[test]

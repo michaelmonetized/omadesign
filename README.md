@@ -1,6 +1,6 @@
 # omadesign
 
-[Download v0.0.4-alpha](https://github.com/michaelmonetized/omadesign/releases/tag/v0.0.4-alpha) · [Explore the studio](https://michaelmonetized.github.io/omadesign/) · [User manual](https://michaelmonetized.github.io/omadesign/docs/manual/) · [Build from source](docs/CONTRIBUTING.md)
+[Download v0.0.5-alpha](https://github.com/michaelmonetized/omadesign/releases/tag/v0.0.5-alpha) · [Explore the studio](https://michaelmonetized.github.io/omadesign/) · [User manual](https://michaelmonetized.github.io/omadesign/docs/manual/) · [Build from source](docs/CONTRIBUTING.md)
 
 A native Linux studio for **design, paint, photograph, and motion**. One
 document, one layer stack. Built so a designer coming from macOS can sit down
@@ -24,8 +24,11 @@ curl -fsSL https://raw.githubusercontent.com/michaelmonetized/omadesign/master/s
 ```
 
 That is the whole line. It picks aarch64 or x86_64, downloads the latest
-release, checks its SHA-256, and puts `omadesign` on `~/.local/bin`.
-Run `omadesign --version` to confirm the installed version.
+release, checks its SHA-256, and puts the app in `~/.local`. Nothing is
+written to `/usr`. That is the install path on immutable systems
+(Silverblue, Bazzite, NixOS, SteamOS desktop) as well as Omarchy.
+Run `omadesign --version` to confirm. If the short command is missing,
+run `~/.local/bin/omadesign` or add `~/.local/bin` to PATH.
 
 Tarball by hand:
 
@@ -115,7 +118,7 @@ Project kits travel as `.omacolors`, `.omatype` and the `.omabrand/` folder. Sta
 
 ## Layered files
 
-Open and edit supported PSD/PSB layers, all PDF pages, PDF-compatible Illustrator
+Open and edit supported PSD/PSB layers, GIMP `.xcf`, all PDF pages, PDF-compatible Illustrator
 artwork, OpenRaster, and SVG/SVGZ. Nested groups keep their order, visibility,
 opacity, blend settings and editable masks. Export layered PSD, PSB, PDF and
 OpenRaster from File. Imported documents save as `.oma`; source files are preserved.

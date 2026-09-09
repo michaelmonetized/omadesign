@@ -355,6 +355,12 @@ export const featureGroups: FeatureGroup[] = [
           "Import supported PSD/PSB layers and masks, multi-page PDF and PDF-compatible AI artwork, SVG/SVGZ groups and OpenRaster layers. Photoshop text and smart objects use saved layer pixels. EPS/PS requires Ghostscript.",
       },
       {
+        name: "GIMP XCF import",
+        since: "0.0.5-alpha",
+        description:
+          "Open GIMP .xcf files as pixel layers and groups, with names, visibility, opacity, offsets, supported blends and applied masks. Text and effects become pixels. Export OpenRaster or PSD back to GIMP.",
+      },
+      {
         name: "Affinity document bridge",
         since: "0.0.2-alpha",
         description:

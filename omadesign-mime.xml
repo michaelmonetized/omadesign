@@ -27,6 +27,11 @@
   <mime-type type="image/vnd.adobe.photoshop">
     <glob pattern="*.psb"/>
   </mime-type>
+  <mime-type type="image/x-xcf">
+    <comment>GIMP image</comment>
+    <generic-icon name="image-x-generic"/>
+    <glob pattern="*.xcf"/>
+  </mime-type>
   <!-- RAW families without a dedicated shared-mime-info type. Existing vendor
        types retain their more specific identification. -->
   <mime-type type="image/x-dcraw">

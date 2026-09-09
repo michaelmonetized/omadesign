@@ -1367,24 +1367,77 @@ impl Studio {
     }
 
     pub fn delete_selection(&mut self) {
+        if self.delete_focused_edit() {
+            return;
+        }
+        if self.remove_selected_motion() {
+            return;
+        }
+        self.delete_objects();
+    }
+
+    fn delete_focused_edit(&mut self) -> bool {
         if self.tool == Tool::Node && !self.node_sel.is_empty() {
             self.delete_node();
-            return;
+            return true;
         }
         if self.tool == Tool::Artboard && !self.artboard_sel.is_empty() {
             self.delete_artboards();
-            return;
+            return true;
         }
-        if self.is_motion()
-            && let Some((id, prop, index)) = self.selected_key.take()
-        {
+        false
+    }
+
+    fn selection_has_motion(&self) -> bool {
+        self.selection
+            .iter()
+            .any(|(_, id)| self.doc.motion.has_shape(*id))
+    }
+
+    pub(crate) fn forget_stale_key(&mut self) {
+        let Some((id, prop, index)) = self.selected_key else {
+            return;
+        };
+        let exists = self
+            .doc
+            .motion
+            .tracks
+            .iter()
+            .any(|tr| tr.shape == id && tr.prop == prop && index < tr.keys.len());
+        let selected = self.selection.iter().any(|(_, sid)| *sid == id);
+        if !exists || !selected {
+            self.selected_key = None;
+        }
+    }
+
+    fn remove_selected_motion(&mut self) -> bool {
+        if !self.is_motion() {
+            return false;
+        }
+        self.forget_stale_key();
+        if let Some((id, prop, index)) = self.selected_key.take() {
             let mut after = self.doc.motion.clone();
             after.remove_key(id, prop, index);
+            let next = after.key_after_remove(id, prop, index);
             self.commit_motion(after);
+            self.selected_key = next;
             self.status = "key removed".into();
-            return;
+            return true;
         }
+        if !self.selection_has_motion() {
+            return false;
+        }
+        let ids: Vec<u64> = self.selection.iter().map(|(_, id)| *id).collect();
+        let mut after = self.doc.motion.clone();
+        after.drop_shapes(&ids);
+        self.commit_motion(after);
+        self.status = "animation removed".into();
+        true
+    }
+
+    fn delete_objects(&mut self) {
         self.type_edit = None;
+        self.selected_key = None;
         let mut by_layer: std::collections::BTreeMap<usize, Vec<Shape>> =
             std::collections::BTreeMap::new();
         let mut rasters = vec![];
@@ -2596,7 +2649,9 @@ impl Studio {
     pub fn cut_selection(&mut self, ctx: &egui::Context) {
         self.copy_selection(ctx);
         if !self.clipboard.is_empty() || !self.clipboard_rasters.is_empty() {
-            self.delete_selection();
+            if !self.delete_focused_edit() {
+                self.delete_objects();
+            }
             self.status = "cut".into();
         }
     }
@@ -4390,5 +4445,98 @@ mod flip_tests {
         studio.undo();
         assert_eq!(studio.doc.find_shape(1, id), Some(&shape));
         assert_eq!(studio.doc.find_shape(1, text.id), Some(&text));
+    }
+}
+
+#[cfg(test)]
+mod motion_delete_tests {
+    use super::*;
+
+    fn animated_rect() -> (Studio, u64) {
+        let mut studio = Studio::new();
+        studio.show_welcome = false;
+        studio.persona = Persona::Motion;
+        let shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(20.0, 20.0),
+                size: Pt::new(40.0, 30.0),
+                radius: 0.0,
+            },
+            Style::default(),
+        );
+        let id = shape.id;
+        studio.commit(Cmd::AddShape { layer: 1, shape });
+        studio.selection = vec![(1, id)];
+        studio
+            .doc
+            .motion
+            .set_key(id, Prop::X, 0.0, 0.0, Ease::Linear);
+        studio
+            .doc
+            .motion
+            .set_key(id, Prop::X, 1.0, 40.0, Ease::Linear);
+        studio
+            .doc
+            .motion
+            .set_key(id, Prop::Y, 0.0, 0.0, Ease::Linear);
+        (studio, id)
+    }
+
+    #[test]
+    fn delete_with_a_selected_key_keeps_the_object() {
+        let (mut studio, id) = animated_rect();
+        studio.selected_key = Some((id, Prop::X, 1));
+        studio.delete_selection();
+        assert!(studio.doc.find_shape(1, id).is_some());
+        assert_eq!(
+            studio
+                .doc
+                .motion
+                .tracks
+                .iter()
+                .find(|tr| tr.shape == id && tr.prop == Prop::X)
+                .map(|tr| tr.keys.len()),
+            Some(1)
+        );
+        assert_eq!(studio.selected_key, Some((id, Prop::X, 0)));
+        assert_eq!(studio.status, "key removed");
+        assert_eq!(studio.selection, vec![(1, id)]);
+    }
+
+    #[test]
+    fn delete_without_a_selected_key_strips_animation_not_the_object() {
+        let (mut studio, id) = animated_rect();
+        studio.selected_key = None;
+        studio.delete_selection();
+        assert!(studio.doc.find_shape(1, id).is_some());
+        assert!(!studio.doc.motion.has_shape(id));
+        assert_eq!(studio.selection, vec![(1, id)]);
+        assert_eq!(studio.status, "animation removed");
+        studio.undo();
+        assert!(studio.doc.motion.has_shape(id));
+        assert!(studio.doc.find_shape(1, id).is_some());
+        studio.delete_selection();
+        studio.delete_selection();
+        assert!(studio.doc.find_shape(1, id).is_none());
+        assert!(studio.selection.is_empty());
+    }
+
+    #[test]
+    fn delete_in_design_still_removes_animated_objects() {
+        let (mut studio, id) = animated_rect();
+        studio.persona = Persona::Design;
+        studio.delete_selection();
+        assert!(studio.doc.find_shape(1, id).is_none());
+        assert!(!studio.doc.motion.has_shape(id));
+    }
+
+    #[test]
+    fn cut_in_motion_still_removes_the_object() {
+        let (mut studio, id) = animated_rect();
+        let ctx = egui::Context::default();
+        studio.cut_selection(&ctx);
+        assert!(studio.doc.find_shape(1, id).is_none());
+        assert!(!studio.doc.motion.has_shape(id));
+        assert_eq!(studio.status, "cut");
     }
 }

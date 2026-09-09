@@ -12,6 +12,7 @@ Omadesign imports supported content into its native layer tree and records conve
 | `.ai` | PDF-compatible Illustrator artwork; older PostScript artwork through conversion | No Illustrator-native writer | Private Illustrator data, live effects, symbols and appearance stacks are not reconstructed. Export PDF or SVG for interchange. |
 | `.svg`, `.svgz` | Objects, layer/group hierarchy, names, transforms, text, images, styles, visibility and supported masks | SVG | Complex text can become editable outlines. Clips/masks can become pixel masks; unsupported effects may be rendered into pixel layers. Scripts, animation and foreign content are not imported. |
 | `.ora` | OpenRaster pixel layers/groups, offsets, names, visibility, opacity, isolation and supported blends | OpenRaster with layers, stack.xml, merged preview and thumbnail | Vectors/text become pixels per layer. Masked/effected groups become one pixel layer. Extended SVG layer sources and unsupported compositing operations are rejected. |
+| `.xcf` | Native GIMP reader: pixel layers, groups, names, visibility, opacity, offsets, supported blends and applied layer masks | No XCF writer; export OpenRaster or PSD | Live text, layer effects, paths and floating selections are not reconstructed. High bit depth becomes 8-bit RGBA. Unmapped blend modes display as Normal. Save `.oma` to keep the imported stack. |
 | `.eps`, `.ps` | Ghostscript conversion to PDF, then native PDF import | No direct writer | Ghostscript must be installed. Conversion can discard original layer metadata or flatten artwork. |
 | `.omaphoto` | Reopens the matching original in Photo with saved development, crop and rotation | Save settings beside the original | Contains settings, not pixels. Keep the original and sidecar together with matching names; the source size and modification time must still match. |
 | `.omapreset` | Photo preset library Import | Photo preset library Export | Source-independent, named adjustment collections in versioned JSON. No image pixels or source identity. Crop and rotation are opt-in. |
@@ -78,6 +79,12 @@ Export renders vector artwork separately for each layer; masked/effected groups 
 
 Verification includes a fixture generated independently with Python's ZIP, PNG and compression primitives, plus independent Python `zipfile`, XML and Pillow inspection of Omadesign's exported archive. These checks cover order, nested groups, hidden layers, exact pixel channels, negative offsets and required previews.
 
+## GIMP XCF
+
+The reader follows the [GIMP XCF specification](https://developer.gimp.org/core/standards/xcf/). It does not launch GIMP or write `.xcf`. Pixel layers, groups, names, visibility, opacity, offsets, supported blend modes and applied layer masks become native layers. 32-bit and 64-bit pointers, RLE, uncompressed and zlib tiles are accepted. 8-bit RGB, grayscale and indexed documents are preferred; higher precision is reduced to 8-bit RGBA with a note. Live text, layer effects, paths and floating selections are not reconstructed. Unmapped blend modes display as Normal. Export OpenRaster or PSD for GIMP; keep `.oma` as the editable source.
+
+Verification uses independently encoded fixtures for grouped RLE layers, 64-bit pointers and zlib tiles, plus a bounded oversize rejection.
+
 ## Headless inspection and conversion
 
 The command line uses the same readers and writers as the desktop. Inspection writes JSON with canvas dimensions, pages, layer metadata and import notes. Conversion prints notes to stderr and writes a separate destination file:
@@ -85,6 +92,7 @@ The command line uses the same readers and writers as the desktop. Inspection wr
 ```sh
 omadesign --inspect artwork.afdesign
 omadesign --inspect artwork.psd
+omadesign --inspect artwork.xcf
 omadesign --inspect photograph.NEF
 omadesign --inspect photograph.NEF.omaphoto
 omadesign --convert photograph.NEF.omaphoto --output developed.tif

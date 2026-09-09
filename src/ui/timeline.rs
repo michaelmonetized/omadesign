@@ -186,7 +186,9 @@ fn paint_timeline(ui: &mut Ui, studio: &mut Studio, rect: Rect, resp: &eframe::e
     }
     rows.truncate(((lane.height() / ROW).floor() as usize).max(1));
 
+    studio.forget_stale_key();
     let mut clicked_key: Option<(u64, Prop, usize)> = None;
+    let mut clicked_row: Option<(usize, u64)> = None;
     let mut dragged_key: Option<(u64, Prop, usize, f32)> = None;
     let pointer = resp.interact_pointer_pos();
     let press = resp.ctx.input(|i| i.pointer.primary_pressed());
@@ -250,6 +252,15 @@ fn paint_timeline(ui: &mut Ui, studio: &mut Studio, rect: Rect, resp: &eframe::e
             studio.playhead = t;
             studio.key_selection(Ease::EaseInOut);
         }
+        if let Some(p) = pointer
+            && resp.clicked()
+            && row.contains(p)
+            && p.x < lane.min.x
+            && clicked_key.is_none()
+            && let Some(hit) = find_shape_layer(studio, *id)
+        {
+            clicked_row = Some(hit);
+        }
     }
 
     let px = t_to_x(studio.playhead);
@@ -275,6 +286,12 @@ fn paint_timeline(ui: &mut Ui, studio: &mut Studio, rect: Rect, resp: &eframe::e
     {
         studio.playhead = x_to_t(p.x);
         studio.playing = false;
+    }
+    if let Some(hit) = clicked_row {
+        studio.selection = vec![hit];
+        studio.selected_key = None;
+        studio.active_layer = Some(hit.0);
+        studio.status = shape_name(studio, hit.1);
     }
     if let Some((id, prop, i)) = clicked_key {
         studio.selected_key = Some((id, prop, i));

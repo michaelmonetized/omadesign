@@ -159,6 +159,7 @@ const PLACE_EXTS: &[&str] = &[
     "psd",
     "psb",
     "ora",
+    "xcf",
     "af",
     "afdesign",
     "afphoto",
@@ -197,6 +198,7 @@ pub fn dialog_open() -> Option<PathBuf> {
                 "psd",
                 "psb",
                 "ora",
+                "xcf",
                 "af",
                 "afdesign",
                 "afphoto",
@@ -208,7 +210,7 @@ pub fn dialog_open() -> Option<PathBuf> {
         .add_filter(
             "Images",
             &[
-                "png", "jpg", "jpeg", "webp", "gif", "tif", "tiff", "bmp", "psd",
+                "png", "jpg", "jpeg", "webp", "gif", "tif", "tiff", "bmp", "psd", "xcf",
             ],
         )
         .add_filter("Vector", &["svg", "svgz", "pdf", "ai", "eps"])

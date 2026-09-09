@@ -24,7 +24,7 @@ shows or hides the strip; **F1** opens the complete shortcut list.
 curl -fsSL https://raw.githubusercontent.com/michaelmonetized/omadesign/master/scripts/install-remote.sh | sh
 ```
 
-That installs `~/.local/bin/omadesign` and a desktop entry. Binaries are glibc 2.35, so they run on Asahi Omarchy, Ubuntu 22.04+, and current Arch.
+That installs `~/.local/bin/omadesign` and a desktop entry under your home directory. Nothing is written to `/usr`. The same line works on immutable systems (Silverblue, Bazzite, NixOS, SteamOS desktop) as well as Omarchy. If `omadesign` is not on PATH, run `~/.local/bin/omadesign` or add `~/.local/bin` to PATH. Binaries are glibc 2.35, so they run on Asahi Omarchy, Ubuntu 22.04+, and current Arch.
 
 ## First five minutes
 
@@ -176,7 +176,7 @@ The artboard you drew is the rest pose. Motion does not rewrite it. Tracks inclu
 - Select vector artwork and choose **Draw stroke, Pop in, Slam, Shake, Fill up, Slide up/down/left/right, Fly, Zoom, Buzz, or Fade in** in the inspector. Draw stroke needs a visible stroke; Fill up needs a closed shape with a fill. Incompatible, locked, hidden and guide objects are skipped.
 - Duration sits above the presets. **Timing & energy** opens delay, stagger, intensity and start-at-playhead options. Presets become ordinary keys; each application has its own Undo. They replace only the affected channels inside their time interval and extend the clip if needed. Space previews the result.
 - Select a shape. Drag it — that writes keys at the playhead. First key at t > 0 also plants rest at 0, so it animates from where you drew it.
-- `K` keys X/Y/rotate/scale for the selection. Diamonds on the row are keys. Drag a diamond to retime. Click it, Delete removes it. Cycle ease on a selected key.
+- `K` keys X/Y/rotate/scale for the selection. Diamonds on the row are keys. Drag a diamond to retime. Click a diamond, Delete removes that key. Click the object name on the timeline, or leave the keys unselected, and Delete removes the animation from the selected artwork. The drawing stays. Delete again to remove the object itself. Cycle ease on a selected key.
 - Space plays. Home / End jump. Loop is the repeat icon.
 - **File → Export animated SVG…** writes animated transforms plus stroke/fill reveals, retaining masks and effects. **Export Lottie…** writes Bodymovin 5.x shape animation with trim paths and fill masks. Pixel layers, layer masks and effects cannot be preserved by this Lottie exporter and produce a clear error; choose animated SVG for those compositions. **Import Lottie…** brings a shape-layer Lottie onto the timeline.
 
@@ -339,7 +339,7 @@ receive stable filenames automatically. Share fonts only under their license ter
 ## Files
 
 - Project: `.oma` (JSON, rasters PNG-packed, motion clip)
-- **File → Open** reads layered PSD/PSB, every page of PDF and PDF-compatible AI, OpenRaster, SVG/SVGZ, and supported Affinity documents through the optional bridge. Imported documents open in their own tab at their original dimensions. **Save** uses `.oma` and preserves the source file.
+- **File → Open** reads layered PSD/PSB, GIMP `.xcf`, every page of PDF and PDF-compatible AI, OpenRaster, SVG/SVGZ, and supported Affinity documents through the optional bridge. Imported documents open in their own tab at their original dimensions. **Save** uses `.oma` and preserves the source file. GIMP text and effects import as pixels; export OpenRaster or PSD back to GIMP.
 - Camera RAW files open in Photo for development. **Save settings** creates `.omaphoto` alongside the source; Photo export creates a separate JPEG, PNG or TIFF. The original RAW is not changed.
 - **File → Place…** `Ctrl+Shift+P` loads artwork in the background, then lets you click or drag to place it. Nested layers and masks travel together, and Undo removes the placement in one step. Enter places at the center; Esc cancels.
 - Drop layered documents on the canvas or welcome screen to open them; ordinary images place, `.oma` opens, and Lottie imports.
@@ -363,7 +363,7 @@ Combine Ctrl+G · Release Ctrl+Shift+G · Front Ctrl+Shift+] · Back Ctrl+Shift+
 Free transform Ctrl+T · Guides Ctrl+; · Snapping Ctrl+Shift+; · Hold Ctrl to reverse snapping
 Shortcut HUD Ctrl+/ · All shortcuts F1
 Fit Ctrl+0 · 100% Ctrl+1 · Zoom in Ctrl++ · Zoom out Ctrl+- · Pan Space · Pinch / Ctrl+scroll zoom
-Motion: Space play · K key · Home start · End end
+Motion: Space play · K key · Home start · End end · Delete removes a selected key, or the animation if no key is selected
 ```
 
 ## Theme and font

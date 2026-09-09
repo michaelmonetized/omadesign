@@ -24,7 +24,7 @@ export function Install() {
   }
   return (
     <div className="hero-install" id="install" data-motion>
-      <p className="install-speed">get started in under 1m</p>
+      <p className="install-speed">home directory, under 1m</p>
       <div className="install-command">
         <span aria-hidden="true">$</span>
         <code ref={command}>{CURL}</code>
@@ -55,7 +55,7 @@ export function Install() {
         </a>
       </div>
       <p className="install-version">
-        {RELEASE_TAG} fixes rotated node editing and adds right-click flip controls.
+        {RELEASE_TAG} installs into ~/.local, never /usr, and opens GIMP .xcf files.
         {" "}<a href={RELEASE_URL}>Read the release notes</a>.
       </p>
       <p className="copy-status" role="status">
