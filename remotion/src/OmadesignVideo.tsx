@@ -9,7 +9,7 @@ import {
   Sequence,
 } from "remotion";
 
-const CURL = "curl -fsSL https://raw.githubusercontent.com/michaelmonetized/omadesign/master/scripts/install-remote.sh | sh";
+const CURL = "curl -fsSL https://omadesign.app/install | sh";
 
 const Tag: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <span
@@ -348,7 +348,7 @@ export const OmadesignVideo: React.FC = () => {
               maxWidth: 760,
             }}
           >
-            curl -fsSL https://raw.githubusercontent.com/michaelmonetized/omadesign/master/scripts/install-remote.sh | sh
+            curl -fsSL https://omadesign.app/install | sh
           </div>
           <div style={{ marginTop: 16, display: "flex", gap: 12 }}>
             <span style={{ background: "#b4befe", color: "#1e1e2e", padding: "8px 18px", borderRadius: 999, fontSize: 13, fontWeight: 600 }}>aarch64 Asahi</span>

@@ -21,7 +21,7 @@ shows or hides the strip; **F1** opens the complete shortcut list.
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/michaelmonetized/omadesign/master/scripts/install-remote.sh | sh
+curl -fsSL https://omadesign.app/install | sh
 ```
 
 That installs `~/.local/bin/omadesign` and a desktop entry under your home directory. Nothing is written to `/usr`. The same line works on immutable systems (Silverblue, Bazzite, NixOS, SteamOS desktop) as well as Omarchy. If `omadesign` is not on PATH, run `~/.local/bin/omadesign` or add `~/.local/bin` to PATH. Binaries are glibc 2.35, so they run on Asahi Omarchy, Ubuntu 22.04+, and current Arch.

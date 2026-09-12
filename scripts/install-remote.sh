@@ -1,5 +1,5 @@
 #!/bin/sh
-# One-liner: curl -fsSL https://raw.githubusercontent.com/michaelmonetized/omadesign/master/scripts/install-remote.sh | sh
+# One-liner: curl -fsSL https://omadesign.app/install | sh
 set -eu
 REPO="michaelmonetized/omadesign"
 if [ "$(uname -s)" != Linux ]; then

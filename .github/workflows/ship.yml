@@ -82,7 +82,9 @@ jobs:
         run: |
           test -f .vercel/output/config.json
           test -d .vercel/output/static
-          bun --eval 'const fs=require("node:fs"); const config=JSON.parse(fs.readFileSync(".vercel/output/config.json","utf8")); if (config.version !== 3) throw new Error(`unexpected build output version: ${config.version}`); console.log(JSON.stringify({ version: config.version, routes: config.routes?.length ?? 0 }));'
+          test -f .vercel/output/static/install
+          head -1 .vercel/output/static/install | grep -qx '#!/bin/sh'
+          bun --eval 'const fs=require("node:fs"); const config=JSON.parse(fs.readFileSync(".vercel/output/config.json","utf8")); if (config.version !== 3) throw new Error(`unexpected build output version: ${config.version}`); const install=fs.readFileSync(".vercel/output/static/install","utf8"); if (!install.includes("omadesign.app/install")) throw new Error("static /install is not the remote installer"); console.log(JSON.stringify({ version: config.version, routes: config.routes?.length ?? 0, installBytes: install.length }));'
 
       - name: Deploy prebuilt output
         if: ${{ github.event.inputs.deploy_prod }}

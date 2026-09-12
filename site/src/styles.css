@@ -349,8 +349,9 @@ p {
 .install-command code {
   flex: 1;
   min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: 11px;
+  white-space: nowrap;
+  overflow-x: auto;
+  font-size: 13px;
   line-height: 1.7;
   color: var(--muted);
 }
@@ -1220,7 +1221,7 @@ details[open] > summary .disclosure-plus {
     padding: 10px;
   }
   .install-command code {
-    font-size: 9px;
+    font-size: 12px;
   }
   .install-command button {
     font-size: 10px;

@@ -29,7 +29,22 @@ export default defineConfig(({ mode }) => {
       }),
       viteReact(),
       // Start prerenders its own static client output; Pages has no server runtime.
-      ...(pages ? [] : [nitro({ preset: "vercel" })]),
+      ...(pages
+        ? []
+        : [
+            nitro({
+              preset: "vercel",
+              routeRules: {
+                "/install": {
+                  headers: {
+                    "content-type": "text/plain; charset=utf-8",
+                    "cache-control": "public, max-age=300",
+                  },
+                },
+                "/install/": { redirect: "/install" },
+              },
+            }),
+          ]),
     ],
   };
 });

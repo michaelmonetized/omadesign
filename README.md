@@ -20,7 +20,7 @@ Asahi Omarchy, current Arch ARM, and anything newer.
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/michaelmonetized/omadesign/master/scripts/install-remote.sh | sh
+curl -fsSL https://omadesign.app/install | sh
 ```
 
 That is the whole line. It picks aarch64 or x86_64, downloads the latest
