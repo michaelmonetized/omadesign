@@ -1,0 +1,50 @@
+{
+  "$id": "https://omadesign.app/schema/cloud.json",
+  "title": "omadesign cloud document link and comments",
+  "type": "object",
+  "properties": {
+    "cloud": {
+      "type": ["object", "null"],
+      "properties": {
+        "project_id": { "type": "string" },
+        "document_id": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "collaborators": { "type": "array", "items": { "type": "string" } },
+        "published": { "type": "boolean" },
+        "gallery_id": { "type": "string" }
+      },
+      "required": ["project_id", "document_id", "enabled"]
+    },
+    "comments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "frame_id": { "type": ["integer", "null"] },
+          "pos": {
+            "type": "object",
+            "properties": { "x": { "type": "number" }, "y": { "type": "number" } },
+            "required": ["x", "y"]
+          },
+          "author": { "type": "string" },
+          "created": { "type": "integer" },
+          "resolved": { "type": "boolean" },
+          "thread": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "author": { "type": "string" },
+                "body": { "type": "string" },
+                "created": { "type": "integer" }
+              },
+              "required": ["author", "body", "created"]
+            }
+          }
+        },
+        "required": ["id", "pos", "author", "created", "resolved", "thread"]
+      }
+    }
+  }
+}

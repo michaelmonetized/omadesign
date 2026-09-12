@@ -300,6 +300,7 @@ fn modifier_rows_stay_bounded_at_both_window_sizes_in_every_persona() {
             Persona::Pixel,
             Persona::Photo,
             Persona::Motion,
+            Persona::Layout,
         ] {
             for shown in [true, false] {
                 let (ctx, mut studio) = fixture();
@@ -309,6 +310,7 @@ fn modifier_rows_stay_bounded_at_both_window_sizes_in_every_persona() {
                     Persona::Pixel => Tool::Heal,
                     Persona::Photo => Tool::Crop,
                     Persona::Motion => Tool::Select,
+                    Persona::Layout => Tool::Frame,
                 };
                 studio.show_key_hud = shown;
                 for _ in 0..3 {

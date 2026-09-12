@@ -221,6 +221,80 @@ export const featureGroups: FeatureGroup[] = [
     ],
   },
   {
+    id: "layout",
+    title: "Layout",
+    intro: "UI and web mockups from nested frames, without leaving the native file.",
+    features: [
+      {
+        name: "Layout persona",
+        since: "0.5.0",
+        description:
+          "A fifth studio beside Design, Pixel, Photo and Motion. Frame tool, rectangles, type and image placeholders. F draws a frame.",
+      },
+      {
+        name: "Nested frames",
+        since: "0.5.0",
+        description:
+          "Frames contain frames. Children move with their parent. Save and reopen keeps the graph.",
+      },
+      {
+        name: "Auto-layout stacks",
+        since: "0.5.0",
+        description:
+          "Vertical or horizontal packing with gap, padding and stretch. Imperfect on purpose. Good enough to mock a screen.",
+      },
+      {
+        name: "Constraints",
+        since: "0.5.0",
+        description:
+          "Pin a child to min, max, both, center or scale when the frame resizes.",
+      },
+      {
+        name: "Layout starters",
+        since: "0.5.0",
+        description:
+          "Mobile screen, landing hero, dashboard and a card stack. Open them from the template library.",
+      },
+      {
+        name: "Frame export",
+        since: "0.5.0",
+        description:
+          "PNG, SVG or a simple HTML snapshot of the selected frame.",
+      },
+    ],
+  },
+  {
+    id: "cloud",
+    title: "Cloud and showcase",
+    intro: "Opt-in sync, comments on frames, a public gallery. Private by default.",
+    features: [
+      {
+        name: "Opt-in cloud sync",
+        since: "0.5.0",
+        description:
+          "Off until you enable it on a document. Identity lives in your account. Last write wins. Comments travel; CRDTs can wait.",
+      },
+      {
+        name: "Pins and threads",
+        since: "0.5.0",
+        description:
+          "Drop a pin on a frame, reply, resolve, reopen. The inspector shows how many are still open.",
+      },
+      {
+        name: "Public showcase",
+        since: "0.5.0",
+        description:
+          "Publish a title, tags and a still. Unpublished work never appears. Live at omadesign.app/showcase.",
+      },
+      {
+        name: "Best design waitlist",
+        since: "0.5.0",
+        description:
+          "Rules and a waitlist for a later competition. No entries required on day one.",
+      },
+    ],
+  },
+  {
     id: "motion",
     title: "Motion",
     intro:

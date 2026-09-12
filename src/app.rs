@@ -1,11 +1,13 @@
 //! Studio: document + tool state. Mutations go through commands.
 
 mod brand_assets;
+mod cloud;
 pub mod deform;
 mod file_io;
 mod guides;
 mod key_hints;
 mod layer_groups;
+mod layout;
 pub mod libraries;
 mod masking;
 mod motion_presets;
@@ -50,6 +52,7 @@ pub enum CreateKind {
     Polygon,
     Star,
     Line,
+    Frame,
 }
 
 #[derive(Clone)]
@@ -369,6 +372,22 @@ pub struct Studio {
     file_jobs: Vec<file_io::ImportJob>,
     pub show_import_notes: bool,
     pub transfer_notes: Vec<String>,
+    pub cloud_identity: crate::cloud::Identity,
+    pub cloud_modal: CloudModal,
+    pub pinning_comment: bool,
+    pub comment_draft: String,
+    pub invite_email: String,
+    pub publish_title: String,
+    pub publish_tags: String,
+    pub publish_summary: String,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum CloudModal {
+    None,
+    SignIn,
+    Invite,
+    Publish,
 }
 
 #[derive(Clone, Copy)]
@@ -528,6 +547,14 @@ impl Studio {
             file_jobs: vec![],
             show_import_notes: false,
             transfer_notes: vec![],
+            cloud_identity: crate::cloud::load_identity(),
+            cloud_modal: CloudModal::None,
+            pinning_comment: false,
+            comment_draft: String::new(),
+            invite_email: String::new(),
+            publish_title: String::new(),
+            publish_tags: String::new(),
+            publish_summary: String::new(),
         };
         s.ensure_tabs();
         s.doc.grid.visible = false;
@@ -1964,6 +1991,10 @@ impl Studio {
     }
 
     pub fn use_template(&mut self, id: &str, width: f32, height: f32, dpi: f32) {
+        if crate::layout_templates::is_layout_template(id) {
+            self.use_layout_template(id, width, height, dpi);
+            return;
+        }
         match crate::templates::build(id, width, height, dpi) {
             Ok(document) => {
                 self.ensure_tabs();
@@ -1998,7 +2029,7 @@ impl Studio {
             return;
         }
         let geom = match kind {
-            CreateKind::Rect => Geom::Rect {
+            CreateKind::Rect | CreateKind::Frame => Geom::Rect {
                 origin: min,
                 size,
                 radius: self.rect_radius,
@@ -2020,9 +2051,28 @@ impl Studio {
             },
             CreateKind::Line => Geom::Line { a: start, b: cur },
         };
-        let shape = Shape::new(geom, self.style.clone());
+        let mut shape = if matches!(kind, CreateKind::Frame) {
+            crate::layout::make_frame(min, size)
+        } else {
+            Shape::new(geom, self.style.clone())
+        };
+        let parent = self
+            .selected_frame()
+            .filter(|(layer, _)| *layer == li)
+            .map(|(_, id)| id)
+            .or_else(|| {
+                if matches!(kind, CreateKind::Frame) {
+                    None
+                } else {
+                    crate::layout::containing_frame(&self.doc, li, min)
+                }
+            });
+        if let Some(parent) = parent {
+            shape.layout.parent = Some(parent);
+        }
         let id = shape.id;
-        self.commit(Cmd::AddShape { layer: li, shape });
+        let commands = self.add_and_reflow(li, shape, parent);
+        self.commit(Cmd::Batch(commands));
         self.selected_layer = None;
         self.selection = vec![(li, id)];
         self.status = "created".into();
@@ -4538,5 +4588,94 @@ mod motion_delete_tests {
         assert!(studio.doc.find_shape(1, id).is_none());
         assert!(!studio.doc.motion.has_shape(id));
         assert_eq!(studio.status, "cut");
+    }
+}
+
+#[cfg(test)]
+mod layout_persona_tests {
+    use super::*;
+    use crate::layout::{self, Constraint};
+
+    #[test]
+    fn nested_frames_save_undo_and_multi_select() {
+        let mut studio = Studio::new();
+        studio.show_welcome = false;
+        studio.persona = Persona::Layout;
+        studio.finish_create(
+            CreateKind::Frame,
+            Pt::new(20.0, 20.0),
+            Pt::new(320.0, 420.0),
+        );
+        let outer = studio.selection[0].1;
+        assert!(studio.doc.find_shape(1, outer).unwrap().layout.frame);
+        studio.finish_create(
+            CreateKind::Frame,
+            Pt::new(40.0, 40.0),
+            Pt::new(200.0, 180.0),
+        );
+        let inner = studio.selection[0].1;
+        assert_eq!(
+            studio.doc.find_shape(1, inner).unwrap().layout.parent,
+            Some(outer)
+        );
+        studio.selection = vec![(1, inner)];
+        studio.finish_create(CreateKind::Rect, Pt::new(50.0, 50.0), Pt::new(120.0, 90.0));
+        let child = studio.selection[0].1;
+        assert_eq!(
+            studio.doc.find_shape(1, child).unwrap().layout.parent,
+            Some(inner)
+        );
+        studio.selection = vec![(1, outer), (1, inner)];
+        assert_eq!(studio.selection.len(), 2);
+        let encoded = crate::project::encode(&studio.doc).unwrap();
+        let restored = crate::project::decode(&encoded).unwrap();
+        assert_eq!(
+            restored.find_shape(1, inner).unwrap().layout.parent,
+            Some(outer)
+        );
+        studio.wrap_selection_frame();
+        assert!(studio.history.can_undo());
+        let wrapped = studio.selection[0].1;
+        assert!(studio.doc.find_shape(1, wrapped).unwrap().layout.frame);
+        studio.undo();
+        assert!(studio.doc.find_shape(1, wrapped).is_none());
+        assert!(studio.doc.find_shape(1, outer).is_some());
+        studio
+            .doc
+            .find_shape_mut(1, child)
+            .unwrap()
+            .layout
+            .constraint_x = Constraint::Stretch;
+        let orig = vec![
+            (
+                1,
+                inner,
+                studio.doc.find_shape(1, inner).unwrap().geom.clone(),
+            ),
+            (
+                1,
+                child,
+                studio.doc.find_shape(1, child).unwrap().geom.clone(),
+            ),
+        ];
+        layout::set_bounds(
+            &mut studio.doc.find_shape_mut(1, inner).unwrap().geom,
+            crate::geom::Bounds::from_min_size(Pt::new(40.0, 40.0), Pt::new(280.0, 180.0)),
+        );
+        layout::apply_resize(&mut studio.doc, &orig, &[(1, inner)]);
+        let child_box = studio.doc.find_shape(1, child).unwrap().geom.bbox();
+        assert!(child_box.width() > 70.0);
+    }
+
+    #[test]
+    fn layout_template_opens_in_layout_persona() {
+        let mut studio = Studio::new();
+        studio.use_template("layout-hero", 1440.0, 900.0, 72.0);
+        assert_eq!(studio.persona, Persona::Layout);
+        assert!(studio.doc.layers.iter().any(|l| {
+            l.kind
+                .shapes()
+                .is_some_and(|s| s.iter().any(|sh| sh.layout.stack.is_some()))
+        }));
     }
 }

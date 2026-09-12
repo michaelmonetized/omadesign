@@ -1,8 +1,8 @@
 [package]
 name = "omadesign"
-version = "0.0.5-alpha"
+version = "0.5.0"
 edition = "2024"
-description = "Native Linux studio for design, painting, photography, and motion"
+description = "Native Linux studio for design, layout, painting, photography, and motion"
 license = "MIT"
 repository = "https://github.com/michaelmonetized/omadesign"
 

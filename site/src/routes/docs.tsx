@@ -30,6 +30,9 @@ function Docs() {
             <li>
               <Link to="/docs/roadmap">Project status</Link>
             </li>
+            <li>
+              <Link to="/docs/cloud">Cloud and domain</Link>
+            </li>
           </ul>
         </nav>
         <nav aria-label="Project resources">
@@ -59,8 +62,10 @@ function Docs() {
       >
         <aside className="docs-note docs-availability" aria-label="Documentation version">
           <p>
-            These guides cover {RELEASE_TAG}, including layered interchange,
-            RAW development, batch adjustments and shareable presets. Get the{" "}
+            These guides cover {RELEASE_TAG}, including Layout frames, opt-in
+            cloud comments, layered interchange, RAW development, batch
+            adjustments and shareable presets. The public site is{" "}
+            <a href="https://omadesign.app">omadesign.app</a>. Get the{" "}
             <Link to="/docs" hash="get-the-app">Linux release</Link>.
             {" "}Affinity import needs the optional{" "}
             <Link to="/docs/affinity">bridge setup</Link>.

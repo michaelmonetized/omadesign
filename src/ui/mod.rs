@@ -64,6 +64,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     browsers::show_shape_browser(ui, studio);
     browsers::show_asset_browser(ui, studio);
     templates::window(ui, studio);
+    cloud_modal(ui, studio);
 
     if studio.show_shortcuts {
         egui_shortcuts(ui, studio);
@@ -79,6 +80,98 @@ pub fn scene_ready(ctx: &eframe::egui::Context, studio: &Studio) -> bool {
         && (!(studio.show_templates
             || (studio.show_welcome && studio.welcome_page == crate::app::WelcomePage::Templates))
             || templates::previews_ready(ctx))
+}
+
+fn cloud_modal(ui: &mut Ui, studio: &mut Studio) {
+    use crate::app::CloudModal;
+    if studio.cloud_modal == CloudModal::None {
+        return;
+    }
+    let ctx = ui.ctx().clone();
+    let title = match studio.cloud_modal {
+        CloudModal::SignIn => "Sign in to cloud",
+        CloudModal::Invite => "Invite a collaborator",
+        CloudModal::Publish => "Publish to the showcase",
+        CloudModal::None => return,
+    };
+    let dialog = eframe::egui::Modal::new(eframe::egui::Id::new("cloud-modal")).show(&ctx, |ui| {
+        ui.set_width(360.0);
+        ui.heading(title);
+        ui.add_space(8.0);
+        match studio.cloud_modal {
+            CloudModal::SignIn => {
+                ui.label("Clerk signs the website. The desktop keeps a matching identity so sync stays opt-in and local until you connect a cloud URL.");
+                ui.add_space(8.0);
+                ui.add(
+                    eframe::egui::TextEdit::singleline(&mut studio.cloud_identity.email)
+                        .hint_text("email"),
+                );
+                ui.add(
+                    eframe::egui::TextEdit::singleline(&mut studio.cloud_identity.name)
+                        .hint_text("name"),
+                );
+                ui.add(
+                    eframe::egui::TextEdit::singleline(&mut studio.cloud_identity.cloud_url)
+                        .hint_text("https://omadesign.app/api/cloud"),
+                );
+                ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Cancel").clicked() {
+                        studio.cloud_modal = CloudModal::None;
+                    }
+                    if ui.button("Sign in").clicked() {
+                        let email = studio.cloud_identity.email.clone();
+                        let name = studio.cloud_identity.name.clone();
+                        studio.sign_in_cloud(&email, &name);
+                    }
+                });
+            }
+            CloudModal::Invite => {
+                ui.label("Invite by email. The owner can resolve comments. Viewers need the same cloud.");
+                ui.add(
+                    eframe::egui::TextEdit::singleline(&mut studio.invite_email)
+                        .hint_text("collaborator@example.com"),
+                );
+                ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Cancel").clicked() {
+                        studio.cloud_modal = CloudModal::None;
+                    }
+                    if ui.button("Invite").clicked() {
+                        studio.invite_collaborator();
+                    }
+                });
+            }
+            CloudModal::Publish => {
+                ui.label("Publishing is opt-in. Unpublished documents stay private.");
+                ui.add(
+                    eframe::egui::TextEdit::singleline(&mut studio.publish_title)
+                        .hint_text("Title"),
+                );
+                ui.add(
+                    eframe::egui::TextEdit::singleline(&mut studio.publish_tags)
+                        .hint_text("tags, comma, separated"),
+                );
+                ui.add(
+                    eframe::egui::TextEdit::multiline(&mut studio.publish_summary)
+                        .hint_text("What should people see?"),
+                );
+                ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Cancel").clicked() {
+                        studio.cloud_modal = CloudModal::None;
+                    }
+                    if ui.button("Publish").clicked() {
+                        studio.publish_showcase();
+                    }
+                });
+            }
+            CloudModal::None => {}
+        }
+    });
+    if dialog.should_close() {
+        studio.cloud_modal = CloudModal::None;
+    }
 }
 
 fn unsaved_dialog(ui: &mut Ui, studio: &mut Studio) {

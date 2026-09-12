@@ -5,8 +5,9 @@ import {
   Scripts,
   createRootRoute,
 } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { ThemeProvider, useTheme } from "../theme";
-import { REPO, sitePath } from "../site";
+import { REPO, SITE_ORIGIN, sitePath } from "../site";
 import appCss from "../styles.css?url";
 
 export { CURL } from "../site";
@@ -30,13 +31,13 @@ export const Route = createRootRoute({
       {
         property: "og:description",
         content:
-          "Omarchy first. Native Rust. Design, Pixel, Photo, and Motion, with portable colors, assets, and fonts. Free and open source for ARM64 and x86_64 Linux.",
+          "Omarchy first. Native Rust. Design, Layout, Pixel, Photo, and Motion, with portable colors, assets, and fonts. Free and open source for ARM64 and x86_64 Linux.",
       },
       { property: "og:type", content: "website" },
+      { property: "og:url", content: SITE_ORIGIN },
       {
         property: "og:image",
-        content:
-          "https://michaelmonetized.github.io/omadesign/media/studio/omadesign-logo.webp",
+        content: `${SITE_ORIGIN}/media/studio/omadesign-logo.webp`,
       },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -68,6 +69,14 @@ export const Route = createRootRoute({
 
 function Document() {
   const { theme, setTheme } = useTheme();
+  useEffect(() => {
+    if (window.location.hostname === "michaelmonetized.github.io") {
+      const path = window.location.pathname.replace(/^\/omadesign/, "") || "/";
+      window.location.replace(
+        `${SITE_ORIGIN}${path}${window.location.search}${window.location.hash}`,
+      );
+    }
+  }, []);
   return (
     <html
       lang="en-US"
@@ -101,6 +110,8 @@ function Document() {
               <a className="nav-features" href={sitePath("#features")}>
                 Features
               </a>
+              <a href={sitePath("showcase")}>Showcase</a>
+              <a href={sitePath("compete")}>Compete</a>
               <a href={sitePath("docs")}>Docs</a>
               <a href={REPO}>
                 GitHub <span aria-hidden="true">↗</span>

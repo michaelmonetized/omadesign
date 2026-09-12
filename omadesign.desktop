@@ -2,7 +2,7 @@
 Type=Application
 Name=omadesign
 GenericName=Design Studio
-Comment=Design, paint, photograph, and motion
+Comment=Design, layout, paint, photograph, and motion
 Exec=omadesign %F
 Icon=omadesign
 Terminal=false

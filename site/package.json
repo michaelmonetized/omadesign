@@ -6,6 +6,8 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "ship": "bun ../scripts/ship.mts",
     "build:pages": "node scripts/publish-pages.mjs",
     "publish:pages": "node scripts/publish-pages.mjs --publish"
   },

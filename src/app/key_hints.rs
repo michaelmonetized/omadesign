@@ -168,6 +168,7 @@ impl Studio {
                 Persona::Pixel => Tool::pixel_well(),
                 Persona::Photo => Tool::photo_well(),
                 Persona::Motion => Tool::motion_well(),
+                Persona::Layout => Tool::layout_well(),
             };
             let mut tool_keys: Vec<_> = tools
                 .iter()
@@ -396,7 +397,7 @@ impl Studio {
                             add("Shift+[ / ]", "Brush hardness", plain_keys && mods.shift);
                         }
                     }
-                    Tool::Rect | Tool::Ellipse | Tool::Polygon | Tool::Star => {
+                    Tool::Rect | Tool::Ellipse | Tool::Polygon | Tool::Star | Tool::Frame => {
                         add("Shift", "Equal width and height", mods.shift);
                         add("Drag", "Draw shape", false);
                         snapping = true;

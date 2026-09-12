@@ -292,6 +292,33 @@ pub fn export(doc: &Document) -> Result<String, String> {
     export_inner(doc, false)
 }
 
+pub fn export_frame(doc: &Document, layer: usize, frame_id: u64) -> Result<String, String> {
+    let frame = doc
+        .find_shape(layer, frame_id)
+        .ok_or_else(|| "Select a frame to export".to_string())?;
+    let bounds = frame.world_bbox();
+    let mut crop = doc.clone();
+    crop.width = bounds.width().max(1.0);
+    crop.height = bounds.height().max(1.0);
+    crop.artboards = vec![crate::document::Artboard::new(
+        0,
+        Pt::ZERO,
+        Pt::new(crop.width, crop.height),
+    )];
+    let delta = Pt::new(-bounds.min.x, -bounds.min.y);
+    for layer in &mut crop.layers {
+        if let Some(shapes) = layer.kind.shapes_mut() {
+            for shape in shapes {
+                shape.geom.translate(delta);
+            }
+        }
+        if let Some((origin, size, rot)) = layer.kind.raster_xform() {
+            layer.kind.set_raster_xform(origin + delta, size, rot);
+        }
+    }
+    export_inner(&crop, false)
+}
+
 pub fn export_animated(doc: &Document) -> Result<String, String> {
     export_inner(doc, true)
 }

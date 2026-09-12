@@ -228,6 +228,8 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     super::guides::draw(&painter, rect, studio);
     draw_snap_feedback(&painter, rect, studio);
     draw_artboard_frames(&painter, rect, studio);
+    draw_layout_frames(&painter, rect, studio);
+    draw_comment_pins(&painter, rect, studio);
     draw_bleed_safe(&painter, rect, studio);
     draw_overlays(&painter, rect, studio, pen_preview);
     super::deform::paint(&painter, rect, studio);
@@ -254,7 +256,7 @@ fn preview_shape(kind: CreateKind, start: Pt, cur: Pt, studio: &Studio) -> Geom 
     let max = Pt::new(start.x.max(cur.x), start.y.max(cur.y));
     let size = max - min;
     match kind {
-        CreateKind::Rect => Geom::Rect {
+        CreateKind::Rect | CreateKind::Frame => Geom::Rect {
             origin: min,
             size,
             radius: studio.rect_radius,
@@ -349,6 +351,11 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
 
     if studio.tool == Tool::Eyedropper && resp.clicked() {
         studio.eyedrop(pick);
+        return;
+    }
+
+    if studio.pinning_comment && resp.clicked() {
+        studio.drop_comment_pin(pick);
         return;
     }
 
@@ -670,7 +677,7 @@ fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
         if let Some(sel) = hit_handle(studio, pick) {
             match sel {
                 HandleKind::Rotate(center) => {
-                    let orig = snapshot(studio);
+                    let orig = snapshot_moving(studio);
                     studio.op = Some(Op::Rotate {
                         orig,
                         center,
@@ -680,7 +687,7 @@ fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
                 }
                 HandleKind::Scale(i, b) => {
                     studio.op = Some(Op::Resize {
-                        orig: snapshot(studio),
+                        orig: snapshot_with_children(studio),
                         handle: i,
                         start_box: b,
                     });
@@ -720,7 +727,7 @@ fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
                     studio.duplicate_selection_by(Pt::ZERO);
                 }
                 studio.op = Some(Op::Move {
-                    orig: snapshot(studio),
+                    orig: snapshot_moving(studio),
                     start: pick,
                     selection_on_click,
                 });
@@ -847,6 +854,13 @@ fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
         Tool::Rect => {
             studio.op = Some(Op::Create {
                 kind: CreateKind::Rect,
+                start: snap,
+                cur: snap,
+            })
+        }
+        Tool::Frame => {
+            studio.op = Some(Op::Create {
+                kind: CreateKind::Frame,
                 start: snap,
                 cur: snap,
             })
@@ -1024,9 +1038,28 @@ fn commit_obj_snaps(studio: &mut Studio, orig: Vec<ObjSnap>) {
 }
 
 fn snapshot(studio: &Studio) -> Vec<ObjSnap> {
-    studio
-        .selection
-        .iter()
+    snaps_for(studio, &studio.selection)
+}
+
+fn snapshot_moving(studio: &Studio) -> Vec<ObjSnap> {
+    let mut ids = studio.selection.clone();
+    for &(li, id) in &studio.selection {
+        for child in crate::layout::descendants(&studio.doc, li, id) {
+            let key = (li, child);
+            if !ids.contains(&key) {
+                ids.push(key);
+            }
+        }
+    }
+    snaps_for(studio, &ids)
+}
+
+fn snapshot_with_children(studio: &Studio) -> Vec<ObjSnap> {
+    snapshot_moving(studio)
+}
+
+fn snaps_for(studio: &Studio, ids: &[(usize, u64)]) -> Vec<ObjSnap> {
+    ids.iter()
         .filter_map(|(li, id)| {
             if *id == RASTER_ID {
                 let layer = studio.doc.layers.get(*li)?;
@@ -1563,6 +1596,12 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                         s.rotation = snap.rot;
                     }
                 }
+                let orig_geoms: Vec<_> = orig
+                    .iter()
+                    .filter_map(|s| s.geom.clone().map(|g| (s.layer, s.id, g)))
+                    .collect();
+                let changed: Vec<_> = orig.iter().map(|s| (s.layer, s.id)).collect();
+                crate::layout::apply_resize(&mut studio.doc, &orig_geoms, &changed);
             }
         }
         Some(Op::Rotate {
@@ -2334,6 +2373,65 @@ fn draw_grid(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
             Stroke::new(1.0, col),
         );
         y += step;
+    }
+}
+
+fn draw_layout_frames(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
+    if studio.persona != Persona::Layout && studio.tool != Tool::Frame {
+        return;
+    }
+    for (li, layer) in studio.doc.layers.iter().enumerate() {
+        let Some(shapes) = layer.kind.shapes() else {
+            continue;
+        };
+        for shape in shapes {
+            if !shape.layout.frame || !shape.visible {
+                continue;
+            }
+            let b = shape.world_bbox();
+            let a = win(rect, studio.view, b.min);
+            let c = win(rect, studio.view, b.max);
+            let on = studio.selection.contains(&(li, shape.id));
+            p.rect_stroke(
+                Rect::from_two_pos(a, c),
+                0.0,
+                Stroke::new(
+                    if on { 1.6 } else { 1.0 },
+                    if on {
+                        accent()
+                    } else {
+                        Color32::from_rgb(140, 150, 165)
+                    },
+                ),
+                eframe::egui::StrokeKind::Outside,
+            );
+            p.text(
+                a + vec2(4.0, 2.0),
+                eframe::egui::Align2::LEFT_TOP,
+                &shape.name,
+                eframe::egui::FontId::monospace(10.0),
+                fg_weak(),
+            );
+        }
+    }
+}
+
+fn draw_comment_pins(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
+    for (index, pin) in studio.doc.comments.iter().enumerate() {
+        let pos = win(rect, studio.view, pin.pos);
+        let color = if pin.resolved {
+            Color32::from_rgb(110, 180, 120)
+        } else {
+            Color32::from_rgb(232, 106, 60)
+        };
+        p.circle_filled(pos, 8.0, color);
+        p.text(
+            pos,
+            eframe::egui::Align2::CENTER_CENTER,
+            format!("{}", index + 1),
+            eframe::egui::FontId::monospace(10.0),
+            Color32::WHITE,
+        );
     }
 }
 

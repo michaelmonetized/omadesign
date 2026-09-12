@@ -31,6 +31,7 @@ function Home() {
             <span>Developed for Omarchy BTW.</span>
             <span className="hero-modes">
               <span>Illustrate</span>
+              <span>Layout</span>
               <span>Paint</span>
               <span>Refine</span>
               <span>Animate</span>

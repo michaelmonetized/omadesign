@@ -41,9 +41,23 @@ Chrome follows your desktop: Omarchy theme colors and the font from `omarchy fon
 | Persona | You are… | First tools |
 |---|---|---|
 | **Design** | a mark, a poster, a layout | Move `V`, Pen `P`, Rectangle `R`, Type `T` |
+| **Layout** | a screen, a landing, a dashboard | Frame `F`, Rectangle `R`, Type `T` |
 | **Pixel**  | painting or retouching | Brush `B`, Eraser `E`, Clone `J`, Wand `W` |
 | **Photo**  | grading a photograph | Crop `C`, develop sliders, Place in Design |
 | **Motion** | animating the artboard | Space play, `K` key, File → Lottie |
+
+## Layout
+
+Frames for UI mockups, in the same document as the drawing.
+
+- **Frame** `F` — drag a frame. Draw another frame inside it and it nests. Object → Wrap selection in frame. Image placeholders live in the inspector.
+- **Auto-layout** — select a frame, turn on **Stack children**. Vertical or horizontal, with gap, padding and stretch. Children pack in layer order.
+- **Constraints** — a child of a frame can pin to min, max, both edges, center, or scale when you resize the parent.
+- **Export** — File → Export frame PNG / SVG / HTML for the selected frame.
+- **Templates** — Template library → Layout starters: mobile screen, landing hero, dashboard, card stack.
+- **Comments** — write a note, pin it on the canvas, resolve it. The inspector shows open counts on the frame.
+
+Cloud is opt-in. File → Sign in, Enable cloud sync, Invite, Publish to showcase. Unpublished files stay private. See [cloud](cloud.md).
 
 ## Design
 

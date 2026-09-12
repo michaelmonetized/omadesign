@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => {
               enabled: true,
               autoSubfolderIndex: true,
               autoStaticPathsDiscovery: true,
-              crawlLinks: false,
+              crawlLinks: true,
               failOnError: true,
             }
           : undefined,

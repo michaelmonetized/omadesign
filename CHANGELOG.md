@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-09-11 · Layout, then show it.
+
+Version **0.5.0** is a fifth studio and a front door.
+
+**Layout** sits next to Design. `F` draws a frame. Frames nest. Auto-layout
+packs children with gap, padding and stretch. Constraints hold a child to an
+edge, both edges, the center, or scale it with the parent. Image placeholders
+are dashed rectangles with a name. Four starters ship: mobile screen, landing
+hero, dashboard, card stack. File exports the selected frame as PNG, SVG or a
+plain HTML snapshot. Undo still undoes.
+
+Cloud is off until you turn it on. Sign in, enable sync on a document, invite
+one email, pin a comment on a frame, resolve it. Publish to the showcase is a
+second opt-in. Unpublished files stay private. Last write wins. No CRDT.
+
+The site is **https://omadesign.app**. GitHub Pages redirects there. Showcase,
+competition waitlist and account pages ship with the 0.5.0 starters. Clerk and
+Convex take over when their keys are present; until then the desktop keeps a
+local identity and store.
+
+Project files move to version 5. Older omadesign still opens 1–4. 0.5.0 opens
+those and writes 5.
+
+Validation: layout engine tests cover vertical stacks, stretch and scale
+constraints, nested parent links and every starter template. Project encode
+round-trips frames, comments and a private cloud link. Studio tests wrap a
+multi-frame selection, undo it, and open a layout template in the Layout
+persona. Site routes cover showcase, compete, account and the cloud API.
+
+Known limits: Layout is not Figma import. HTML export is a snapshot, not a
+website. Cloud without Clerk/Convex keys is local-plus-HTTP. Domain TLS
+depends on assigning `omadesign.app` to the Vercel project.
+
 ## 2026-09-09 · Home is the install. GIMP comes with it.
 
 Version **0.0.5-alpha** answers two Reddit notes and the motion Delete

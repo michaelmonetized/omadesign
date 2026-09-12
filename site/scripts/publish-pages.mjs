@@ -27,6 +27,10 @@ const required = [
   "docs/affinity/index.html",
   "docs/contributing/index.html",
   "docs/roadmap/index.html",
+  "docs/cloud/index.html",
+  "showcase/index.html",
+  "compete/index.html",
+  "account/index.html",
   "install",
 ];
 

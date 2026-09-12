@@ -1,11 +1,36 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
+  "installCommand": "bun install --frozen-lockfile",
   "buildCommand": "bun run build",
-  "outputDirectory": ".output/public",
+  "git": {
+    "deploymentEnabled": {
+      "main": false,
+      "master": false
+    }
+  },
   "headers": [
     {
       "source": "/install",
       "headers": [{ "key": "Content-Type", "value": "text/plain; charset=utf-8" }]
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/omadesign",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/omadesign/:path*",
+      "destination": "/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.omadesign.app" }],
+      "destination": "https://omadesign.app/:path*",
+      "permanent": true
     }
   ]
 }

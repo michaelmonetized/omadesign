@@ -611,6 +611,7 @@ impl Studio {
                     (Key::J, true, Persona::Pixel) => Tool::Heal,
                     (Key::O, true, Persona::Pixel) => Tool::EllipseMarquee,
                     (Key::O, true, Persona::Design) => Tool::Artboard,
+                    (Key::F, false, Persona::Layout) => Tool::Frame,
                     (Key::V, false, _) => Tool::Select,
                     (Key::A, false, _) => Tool::Node,
                     (Key::P, false, _) => Tool::Pen,
@@ -1541,6 +1542,7 @@ mod tests {
             (Persona::Pixel, Tool::pixel_well()),
             (Persona::Photo, Tool::photo_well()),
             (Persona::Motion, Tool::motion_well()),
+            (Persona::Layout, Tool::layout_well()),
         ] {
             studio.persona = persona;
             for &tool in tools {

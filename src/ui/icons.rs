@@ -162,6 +162,7 @@ fn tool_glyph(tool: Tool) -> &'static str {
         Tool::Hand => ph::HAND,
         Tool::Zoom => ph::MAGNIFYING_GLASS_PLUS,
         Tool::Artboard => ph::FRAME_CORNERS,
+        Tool::Frame => ph::STACK,
     }
 }
 

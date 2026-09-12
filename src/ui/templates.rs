@@ -183,6 +183,19 @@ pub fn library(ui: &mut Ui, studio: &mut Studio) {
             .color(fg_weak())
             .size(12.0),
     );
+    ui.add_space(10.0);
+    ui.label(RichText::new("Layout starters").strong().size(12.0));
+    ui.horizontal_wrapped(|ui| {
+        for template in crate::layout_templates::CATALOG {
+            if ui
+                .button(template.name)
+                .on_hover_text(template.description)
+                .clicked()
+            {
+                studio.use_layout_template(template.id, state.width, state.height, state.dpi);
+            }
+        }
+    });
     ui.add_space(14.0);
     ui.horizontal_wrapped(|ui| {
         ui.label(RichText::new("Make it fit").strong().size(12.0));

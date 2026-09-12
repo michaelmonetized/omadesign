@@ -13,7 +13,8 @@ cargo run --release --bin omadesign
 
 Rust 2024. Install Git, stable Rust, a C/C++ compiler and pkg-config. The C++
 compiler builds the bundled RAW decoder; no installed LibRaw is needed.
-`cargo` is the toolchain. No GTK app, no Electron, no GitHub Actions.
+`cargo` is the toolchain. No GTK app, no Electron. The website ships on
+Blacksmith (`bun scripts/ship.mts`), not GitHub-hosted billed runners.
 
 ### Layout
 
@@ -21,6 +22,8 @@ compiler builds the bundled RAW decoder; no installed LibRaw is needed.
 src/
   geom.rs         points, bounds, Bézier, hit testing     (no UI)
   document.rs     layers, shapes, command history
+  layout.rs       frames, auto-stack, constraints
+  cloud.rs        opt-in sync, comments, showcase publish
   compositor.rs   tiny-skia renderer + PNG/JPEG export
   paint.rs        brush, erase, smudge, clone, fill, wand
   photo.rs        develop pipeline + histograms
@@ -38,7 +41,9 @@ src/
     jobs.rs       background asset, icon and font requests
 assets/phosphor/  Phosphor Light (MIT)
 docs/             manual, project status, contributing
-site/             landing page (TanStack Start)
+site/             landing page (TanStack Start), showcase, compete
+convex/           optional Convex schema for cloud
+packages/schema/  shared Layout and cloud JSON schemas
 scripts/          local release + curl installer
 ```
 

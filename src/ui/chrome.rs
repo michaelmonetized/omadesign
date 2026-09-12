@@ -252,6 +252,56 @@ fn file_menu(ui: &mut Ui, studio: &mut Studio) {
             ui.close();
         }
         ui.separator();
+        ui.label(RichText::new("Layout frame").small().color(fg_weak()));
+        if ui
+            .add_enabled(
+                studio.selected_frame().is_some(),
+                Button::new("Export frame PNG…"),
+            )
+            .clicked()
+        {
+            studio.export_selected_frame_png();
+            ui.close();
+        }
+        if ui
+            .add_enabled(
+                studio.selected_frame().is_some(),
+                Button::new("Export frame SVG…"),
+            )
+            .clicked()
+        {
+            studio.export_selected_frame_svg();
+            ui.close();
+        }
+        if ui
+            .add_enabled(
+                studio.selected_frame().is_some(),
+                Button::new("Export frame HTML…"),
+            )
+            .clicked()
+        {
+            studio.export_selected_frame_html();
+            ui.close();
+        }
+        ui.separator();
+        ui.label(RichText::new("Cloud").small().color(fg_weak()));
+        if ui.button("Sign in…").clicked() {
+            studio.cloud_modal = crate::app::CloudModal::SignIn;
+            ui.close();
+        }
+        if ui.button("Enable cloud sync").clicked() {
+            studio.enable_cloud_sync();
+            ui.close();
+        }
+        if ui.button("Invite collaborator…").clicked() {
+            studio.cloud_modal = crate::app::CloudModal::Invite;
+            ui.close();
+        }
+        if ui.button("Publish to showcase…").clicked() {
+            studio.cloud_modal = crate::app::CloudModal::Publish;
+            ui.close();
+        }
+        ui.separator();
         if ui.button("Import Lottie…").clicked() {
             studio.import_lottie();
             ui.close();
@@ -484,6 +534,16 @@ fn object_menu(ui: &mut Ui, studio: &mut Studio) {
             ui.close();
         }
         ui.separator();
+        if ui
+            .add_enabled(
+                !studio.selection.is_empty(),
+                Button::new("Wrap selection in frame"),
+            )
+            .clicked()
+        {
+            studio.wrap_selection_frame();
+            ui.close();
+        }
         if ui
             .add_enabled(
                 !studio.selection.is_empty(),
@@ -722,7 +782,7 @@ fn switch_persona(studio: &mut Studio, persona: Persona) {
     studio.op = None;
     studio.playing = false;
     studio.tool = match persona {
-        Persona::Design | Persona::Motion => Tool::Select,
+        Persona::Design | Persona::Motion | Persona::Layout => Tool::Select,
         Persona::Pixel => Tool::Brush,
         Persona::Photo => Tool::Hand,
     };
@@ -732,6 +792,7 @@ fn switch_persona(studio: &mut Studio, persona: Persona) {
 fn persona_picker(ui: &mut Ui, studio: &mut Studio, compact: bool) {
     let personas = [
         Persona::Design,
+        Persona::Layout,
         Persona::Pixel,
         Persona::Photo,
         Persona::Motion,
@@ -878,6 +939,7 @@ pub fn left_toolbar(ui: &mut Ui, studio: &mut Studio) {
                 Persona::Pixel => Tool::pixel_well(),
                 Persona::Photo => Tool::photo_well(),
                 Persona::Motion => Tool::motion_well(),
+                Persona::Layout => Tool::layout_well(),
             };
             ScrollArea::vertical()
                 .id_salt("tools-scroll")
@@ -893,7 +955,8 @@ pub fn left_toolbar(ui: &mut Ui, studio: &mut Studio) {
                             | Tool::Polygon
                             | Tool::Star
                             | Tool::Line
-                            | Tool::Artboard => "shape",
+                            | Tool::Artboard
+                            | Tool::Frame => "shape",
                             Tool::Text | Tool::Gradient | Tool::Eyedropper | Tool::Trace => "look",
                             Tool::Brush
                             | Tool::Eraser

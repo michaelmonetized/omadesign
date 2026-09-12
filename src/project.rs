@@ -5,7 +5,7 @@ use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub(crate) const VERSION: u32 = 4;
+pub(crate) const VERSION: u32 = 5;
 
 #[derive(Serialize, Deserialize)]
 struct File {
@@ -589,6 +589,54 @@ mod tests {
         let back = decode(&s).unwrap();
         assert_eq!(back.width, 320.0);
         assert_eq!(back.layers[1].kind.shapes().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn layout_frames_round_trip_with_comments() {
+        let mut doc = crate::layout_templates::build("layout-mobile", 390.0, 844.0, 72.0).unwrap();
+        doc.comments.push(crate::cloud::CommentPin::new(
+            Pt::new(40.0, 60.0),
+            "Ada",
+            "Tighten the stack",
+            doc.layers[0]
+                .kind
+                .shapes()
+                .unwrap()
+                .iter()
+                .find(|s| s.layout.frame)
+                .map(|s| s.id),
+        ));
+        doc.cloud = Some(crate::cloud::CloudLink {
+            project_id: "proj-1".into(),
+            document_id: "doc-1".into(),
+            enabled: true,
+            collaborators: vec!["ada@example.com".into()],
+            published: false,
+            gallery_id: String::new(),
+        });
+        let encoded = encode(&doc).unwrap();
+        assert!(encoded.contains("\"version\":5"));
+        let back = decode(&encoded).unwrap();
+        let frames: Vec<_> = back.layers[0]
+            .kind
+            .shapes()
+            .unwrap()
+            .iter()
+            .filter(|s| s.layout.frame)
+            .collect();
+        assert!(!frames.is_empty());
+        assert!(
+            back.layers[0]
+                .kind
+                .shapes()
+                .unwrap()
+                .iter()
+                .any(|s| s.layout.parent.is_some())
+        );
+        assert_eq!(back.comments.len(), 1);
+        assert!(!back.comments[0].resolved);
+        assert_eq!(back.cloud.as_ref().unwrap().project_id, "proj-1");
+        assert!(!back.cloud.as_ref().unwrap().published);
     }
 
     #[test]

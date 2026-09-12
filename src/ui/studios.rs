@@ -2,9 +2,11 @@
 mod layer_drag;
 
 use crate::app::Studio;
+use crate::cloud;
 use crate::color::{Blend, Rgba};
 use crate::document::{Cap, Fill, Join, Stroke as DocStroke};
 use crate::geom::Geom;
+use crate::layout::{AutoStack, Constraint, StackAlign, StackAxis};
 use crate::tools::{Persona, Tool};
 use crate::ui::icons::{self, ph};
 use crate::ui::theme::{accent, accent_soft, bg_panel, bg_widget, border, fg, fg_weak};
@@ -39,8 +41,9 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
             }
             inspector_title(ui, studio);
             section_gap(ui);
-            let design = studio.persona == Persona::Design;
+            let design = studio.persona == Persona::Design || studio.persona == Persona::Layout;
             let motion = studio.persona == Persona::Motion;
+            let layout = studio.persona == Persona::Layout;
             let paint = pixel_context(studio);
             let reshaping = studio.deformation.is_some();
             let typing = studio.type_edit.is_some()
@@ -64,13 +67,21 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                         character_studio(ui, studio);
                         section_gap(ui);
                     }
+                    if layout {
+                        layout_studio(ui, studio);
+                        section_gap(ui);
+                    }
                     if design
                         && !reshaping
                         && (!studio.selection.is_empty()
                             || !studio.artboard_sel.is_empty()
                             || matches!(
                                 studio.tool,
-                                Tool::Rect | Tool::Polygon | Tool::Star | Tool::Artboard
+                                Tool::Rect
+                                    | Tool::Polygon
+                                    | Tool::Star
+                                    | Tool::Artboard
+                                    | Tool::Frame
                             ))
                     {
                         if typing || ui.ctx().viewport_rect().height() < 760.0 {
@@ -117,6 +128,150 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                 .auto_shrink([false, false])
                 .show(ui, |ui| layers_studio(ui, studio));
         });
+}
+
+fn layout_studio(ui: &mut Ui, studio: &mut Studio) {
+    heading(ui, "Frames");
+    ui.add_space(6.0);
+    if ui.button("Wrap selection in frame").clicked() {
+        studio.wrap_selection_frame();
+    }
+    if ui.button("Image placeholder").clicked() {
+        studio.add_placeholder();
+    }
+    let frame = studio.selected_frame().and_then(|(li, id)| {
+        studio
+            .doc
+            .find_shape(li, id)
+            .map(|s| (li, id, s.layout.clone()))
+    });
+    if let Some((li, id, layout)) = frame {
+        ui.add_space(8.0);
+        ui.label(RichText::new("Auto-layout").size(11.0).color(fg_weak()));
+        let stacked = layout.stack.is_some();
+        if ui.selectable_label(stacked, "Stack children").clicked() {
+            studio.set_frame_stack(if stacked {
+                None
+            } else {
+                Some(AutoStack::default())
+            });
+        }
+        if let Some(mut stack) = layout.stack {
+            let mut changed = false;
+            ui.horizontal(|ui| {
+                for axis in [StackAxis::Vertical, StackAxis::Horizontal] {
+                    if ui
+                        .selectable_label(stack.direction == axis, axis.name())
+                        .clicked()
+                    {
+                        stack.direction = axis;
+                        changed = true;
+                    }
+                }
+            });
+            ui.horizontal(|ui| {
+                for align in [
+                    StackAlign::Start,
+                    StackAlign::Center,
+                    StackAlign::End,
+                    StackAlign::Stretch,
+                ] {
+                    if ui
+                        .selectable_label(stack.align == align, align.name())
+                        .clicked()
+                    {
+                        stack.align = align;
+                        changed = true;
+                    }
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Gap").size(11.0).color(fg_weak()));
+                changed |= ui
+                    .add(eframe::egui::DragValue::new(&mut stack.gap).range(0.0..=240.0))
+                    .changed();
+            });
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Pad").size(11.0).color(fg_weak()));
+                changed |= ui
+                    .add(eframe::egui::DragValue::new(&mut stack.padding[0]).range(0.0..=240.0))
+                    .changed();
+            });
+            if changed {
+                studio.set_frame_stack(Some(stack));
+            }
+        }
+        let open = cloud::unresolved_count(&studio.doc, Some(id));
+        if open > 0 {
+            ui.label(
+                RichText::new(format!("{open} open comments"))
+                    .size(11.0)
+                    .color(fg_weak()),
+            );
+        }
+        let _ = (li, id);
+    }
+    if let Some((li, id)) = studio.primary()
+        && let Some(shape) = studio.doc.find_shape(li, id)
+        && (shape.layout.parent.is_some() || !shape.layout.frame)
+    {
+        let layout = shape.layout.clone();
+        ui.add_space(8.0);
+        ui.label(RichText::new("Constraints").size(11.0).color(fg_weak()));
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new("X").size(11.0).color(fg_weak()));
+            for constraint in Constraint::all() {
+                if ui
+                    .selectable_label(layout.constraint_x == constraint, constraint.name())
+                    .clicked()
+                {
+                    studio.set_constraints(constraint, layout.constraint_y);
+                }
+            }
+        });
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new("Y").size(11.0).color(fg_weak()));
+            for constraint in Constraint::all() {
+                if ui
+                    .selectable_label(layout.constraint_y == constraint, constraint.name())
+                    .clicked()
+                {
+                    studio.set_constraints(layout.constraint_x, constraint);
+                }
+            }
+        });
+    }
+    ui.add_space(8.0);
+    heading(ui, "Comments");
+    ui.add_space(4.0);
+    ui.add(eframe::egui::TextEdit::singleline(&mut studio.comment_draft).hint_text("Write a note"));
+    if ui
+        .selectable_label(studio.pinning_comment, "Pin on canvas")
+        .clicked()
+    {
+        studio.pinning_comment = !studio.pinning_comment;
+    }
+    let pins: Vec<_> = studio
+        .doc
+        .comments
+        .iter()
+        .map(|p| {
+            (
+                p.id,
+                p.resolved,
+                p.thread.first().map(|m| m.body.clone()).unwrap_or_default(),
+            )
+        })
+        .collect();
+    for (id, resolved, body) in pins {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(&body).size(11.0).color(fg()));
+            let label = if resolved { "Reopen" } else { "Resolve" };
+            if ui.small_button(label).clicked() {
+                studio.resolve_comment(id, !resolved);
+            }
+        });
+    }
 }
 
 fn section_gap(ui: &mut Ui) {

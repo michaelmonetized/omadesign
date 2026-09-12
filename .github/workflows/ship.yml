@@ -1,0 +1,114 @@
+name: Ship
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Vercel environment to pull before building
+        required: true
+        default: production
+        type: choice
+        options:
+          - production
+      deploy_prod:
+        description: Deploy prebuilt output to Vercel production
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: ship-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ship:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: site
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Restore Bun cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('site/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Pull Vercel environment
+        run: bunx --bun vercel pull --yes --environment="${{ github.event.inputs.environment || 'production' }}" --token="$VERCEL_TOKEN"
+
+      - name: Build Vercel output
+        run: bunx --bun vercel build --prod --token="$VERCEL_TOKEN"
+
+      - name: Archive Vercel output
+        if: ${{ github.event.inputs.deploy_prod }}
+        run: |
+          export GZ_OPT="-9"
+          tar -czf vercel-output.tgz .vercel/output
+
+      - name: Upload Vercel output artifact
+        if: ${{ github.event.inputs.deploy_prod }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: vercel-output-${{ github.sha }}
+          path: site/vercel-output.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Validate Vercel build output
+        run: |
+          test -f .vercel/output/config.json
+          test -d .vercel/output/static
+          bun --eval 'const fs=require("node:fs"); const config=JSON.parse(fs.readFileSync(".vercel/output/config.json","utf8")); if (config.version !== 3) throw new Error(`unexpected build output version: ${config.version}`); console.log(JSON.stringify({ version: config.version, routes: config.routes?.length ?? 0 }));'
+
+      - name: Deploy prebuilt output
+        if: ${{ github.event.inputs.deploy_prod }}
+        timeout-minutes: 10
+        run: |
+          bunx --bun vercel deploy --prebuilt --prod --archive=tgz --yes --token="$VERCEL_TOKEN" | tee deployment.log
+          tail -n 1 deployment.log > deployment-url.txt
+          {
+            echo "### omadesign.app"
+            echo ""
+            echo "- Deployment URL: $(cat deployment-url.txt)"
+            echo "- Build output: site/.vercel/output"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify Vercel deployment
+        if: ${{ github.event.inputs.deploy_prod }}
+        timeout-minutes: 5
+        run: |
+          deployment_url="$(cat deployment-url.txt)"
+          bunx --bun vercel inspect "$deployment_url" --wait --timeout 3m --token="$VERCEL_TOKEN" --format=json > deployment.json
+          page_status="ok"
+          if ! curl --fail --show-error --silent --location --max-time 20 "$deployment_url" > /dev/null; then
+            page_status="blocked-or-unavailable"
+          fi
+          {
+            echo "- Deployment status: $(bun --eval 'const fs=require("node:fs"); const d=JSON.parse(fs.readFileSync("deployment.json","utf8")); console.log(d.readyState ?? d.state ?? "unknown")')"
+            echo "- Deployment page: $deployment_url"
+            echo "- Deployment page check: $page_status"
+          } >> "$GITHUB_STEP_SUMMARY"

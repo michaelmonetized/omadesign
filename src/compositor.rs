@@ -198,6 +198,32 @@ pub fn export_png(doc: &Document, scale: u32) -> Result<Vec<u8>, String> {
         .map_err(|e| e.to_string())
 }
 
+pub fn export_png_bounds(
+    doc: &Document,
+    scale: u32,
+    bounds: crate::geom::Bounds,
+) -> Result<Vec<u8>, String> {
+    let s = scale.clamp(1, 8) as f32;
+    let full = render_export(doc, scale)?;
+    let x = (bounds.min.x * s).floor().max(0.0) as u32;
+    let y = (bounds.min.y * s).floor().max(0.0) as u32;
+    let w = (bounds.width() * s).ceil().max(1.0) as u32;
+    let h = (bounds.height() * s).ceil().max(1.0) as u32;
+    let w = w.min(full.width().saturating_sub(x)).max(1);
+    let h = h.min(full.height().saturating_sub(y)).max(1);
+    let mut crop = Pixmap::new(w, h).ok_or("could not allocate frame pixmap")?;
+    crop.fill(tiny_skia::Color::TRANSPARENT);
+    crop.draw_pixmap(
+        -(x as i32),
+        -(y as i32),
+        full.as_ref(),
+        &tiny_skia::PixmapPaint::default(),
+        Transform::identity(),
+        None,
+    );
+    crop.encode_png().map_err(|e| e.to_string())
+}
+
 pub fn export_jpeg(doc: &Document, scale: u32, quality: u8) -> Result<Vec<u8>, String> {
     let pm = render_export(doc, scale)?;
     let mut rgb = Vec::with_capacity(pm.width() as usize * pm.height() as usize * 3);

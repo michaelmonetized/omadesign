@@ -6,6 +6,7 @@ pub enum Persona {
     Pixel,
     Photo,
     Motion,
+    Layout,
 }
 
 impl Persona {
@@ -15,6 +16,7 @@ impl Persona {
             Persona::Pixel => "Pixel",
             Persona::Photo => "Photo",
             Persona::Motion => "Motion",
+            Persona::Layout => "Layout",
         }
     }
 
@@ -24,6 +26,7 @@ impl Persona {
             Persona::Pixel => "paint, retouch, selections",
             Persona::Photo => "develop, grade, crop",
             Persona::Motion => "timeline, keyframes, Lottie",
+            Persona::Layout => "frames, stacks, constraints, UI mockups",
         }
     }
 }
@@ -57,6 +60,7 @@ pub enum Tool {
     Hand,
     Zoom,
     Artboard,
+    Frame,
 }
 
 impl Tool {
@@ -89,6 +93,7 @@ impl Tool {
             Tool::Hand => "Hand",
             Tool::Zoom => "Zoom",
             Tool::Artboard => "Artboard",
+            Tool::Frame => "Frame",
         }
     }
 
@@ -121,6 +126,7 @@ impl Tool {
             Tool::Hand => "H",
             Tool::Zoom => "Z",
             Tool::Artboard => "Shift+O",
+            Tool::Frame => "F",
         }
     }
 
@@ -171,6 +177,9 @@ impl Tool {
             Tool::Artboard => {
                 "Click a board to select · drag a handle to resize · drag inside to move · drag empty to draw · Alt clones · wrap from Object"
             }
+            Tool::Frame => {
+                "Drag a frame. Nested frames clip a UI. Auto-layout and constraints live in the inspector."
+            }
         }
     }
 
@@ -218,6 +227,10 @@ impl Tool {
                 Tool::Hand | Tool::Zoom | Tool::Crop | Tool::Eyedropper
             ),
             Persona::Motion => matches!(self, Tool::Select | Tool::Hand | Tool::Zoom),
+            Persona::Layout => matches!(
+                self,
+                Tool::Select | Tool::Frame | Tool::Rect | Tool::Text | Tool::Hand | Tool::Zoom
+            ),
         }
     }
 
@@ -268,6 +281,17 @@ impl Tool {
 
     pub fn photo_well() -> &'static [Tool] {
         &[Tool::Hand, Tool::Zoom, Tool::Crop, Tool::Eyedropper]
+    }
+
+    pub fn layout_well() -> &'static [Tool] {
+        &[
+            Tool::Select,
+            Tool::Frame,
+            Tool::Rect,
+            Tool::Text,
+            Tool::Hand,
+            Tool::Zoom,
+        ]
     }
 }
 
@@ -530,6 +554,10 @@ pub fn shortcut_groups() -> &'static [(&'static str, &'static [ShortcutRow])] {
                     keys: "Shift+O",
                 },
                 ShortcutRow {
+                    action: "Frame (Layout)",
+                    keys: "F",
+                },
+                ShortcutRow {
                     action: "Marquee (Pixel)",
                     keys: "Shift+M",
                 },
@@ -675,12 +703,14 @@ mod tests {
             Tool::Hand,
             Tool::Zoom,
             Tool::Artboard,
+            Tool::Frame,
         ];
         for t in all {
             let ok = t.in_persona(Persona::Design)
                 || t.in_persona(Persona::Pixel)
                 || t.in_persona(Persona::Photo)
-                || t.in_persona(Persona::Motion);
+                || t.in_persona(Persona::Motion)
+                || t.in_persona(Persona::Layout);
             assert!(ok, "{:?} belongs nowhere", t);
         }
     }

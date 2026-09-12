@@ -1,8 +1,8 @@
 # omadesign
 
-[Download v0.0.5-alpha](https://github.com/michaelmonetized/omadesign/releases/tag/v0.0.5-alpha) · [Explore the studio](https://michaelmonetized.github.io/omadesign/) · [User manual](https://michaelmonetized.github.io/omadesign/docs/manual/) · [Build from source](docs/CONTRIBUTING.md)
+[Download v0.5.0](https://github.com/michaelmonetized/omadesign/releases/tag/v0.5.0) · [Explore the studio](https://omadesign.app/) · [User manual](https://omadesign.app/docs/manual/) · [Showcase](https://omadesign.app/showcase) · [Build from source](docs/CONTRIBUTING.md)
 
-A native Linux studio for **design, paint, photograph, and motion**. One
+A native Linux studio for **design, layout, paint, photograph, and motion**. One
 document, one layer stack. Built so a designer coming from macOS can sit down
 and start working.
 
@@ -42,6 +42,7 @@ Tarball by hand:
 | Persona | You are… | First tools |
 |---|---|---|
 | **Design** | drawing a logo, a poster, a mark | Move `V`, Pen `P`, Rectangle `R`, Type `T` |
+| **Layout** | a screen, a landing, a dashboard | Frame `F`, Rectangle `R`, Type `T` |
 | **Pixel**  | painting or retouching | Brush `B`, Eraser `E`, Heal `Shift+J`, Wand `W` |
 | **Photo**  | grading a photograph | Crop `C`, develop sliders, Place in Design |
 | **Motion** | a mark that moves | Space plays, `K` keys, File → Lottie |

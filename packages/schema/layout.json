@@ -1,0 +1,32 @@
+{
+  "$id": "https://omadesign.app/schema/layout.json",
+  "title": "omadesign Layout frame",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "frame": { "type": "boolean" },
+    "parent": { "type": ["integer", "null"] },
+    "placeholder": { "type": "boolean" },
+    "constraint_x": {
+      "enum": ["Start", "End", "Stretch", "Center", "Scale"]
+    },
+    "constraint_y": {
+      "enum": ["Start", "End", "Stretch", "Center", "Scale"]
+    },
+    "stack": {
+      "type": ["object", "null"],
+      "properties": {
+        "direction": { "enum": ["Vertical", "Horizontal"] },
+        "gap": { "type": "number" },
+        "padding": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "align": { "enum": ["Start", "Center", "End", "Stretch"] }
+      },
+      "required": ["direction", "gap", "padding", "align"]
+    }
+  }
+}

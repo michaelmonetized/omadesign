@@ -1403,3 +1403,91 @@ details[open] > summary .disclosure-plus {
     white-space: normal;
   }
 }
+
+.gallery-page h1 {
+  font-size: clamp(40px, 5vw, 72px);
+  margin-bottom: 12px;
+}
+.gallery-page .hero-intro {
+  max-width: 42rem;
+  color: var(--muted);
+  margin-bottom: 28px;
+}
+.gallery-grid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 18px;
+}
+.gallery-card {
+  display: block;
+  min-height: 220px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.gallery-card h2 {
+  font-size: 28px;
+  margin: 8px 0 12px;
+}
+.gallery-kicker {
+  color: var(--accent);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.gallery-foot,
+.gallery-detail {
+  margin-top: 36px;
+  max-width: 40rem;
+}
+.rules {
+  margin: 32px 0;
+  max-width: 40rem;
+}
+.rules ol {
+  padding-left: 1.2em;
+  color: var(--muted);
+}
+.waitlist {
+  display: grid;
+  gap: 12px;
+  max-width: 28rem;
+  margin: 32px 0;
+}
+.waitlist label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.waitlist input {
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+}
+.comment-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.comment-list li {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.comment-list .resolved {
+  opacity: 0.55;
+}
+.account-links {
+  margin-top: 28px;
+  color: var(--muted);
+}

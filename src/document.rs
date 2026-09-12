@@ -1,7 +1,9 @@
 //! Hybrid document: vector and raster layers, command history, hit testing.
 
+use crate::cloud::{CloudLink, CommentPin};
 use crate::color::{Blend, Rgba};
 use crate::geom::{Bounds, Geom, Pt};
+use crate::layout::FrameLayout;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -158,6 +160,8 @@ pub struct Shape {
     /// Per-corner radii (TL, TR, BR, BL). All zero → use `Geom::Rect.radius`.
     #[serde(default)]
     pub corners: [f32; 4],
+    #[serde(default, skip_serializing_if = "FrameLayout::is_empty")]
+    pub layout: FrameLayout,
     #[serde(skip)]
     cached_path: RefCell<Option<Arc<CachedPath>>>,
 }
@@ -185,6 +189,7 @@ impl PartialEq for Shape {
             && self.guide == other.guide
             && self.filters == other.filters
             && self.corners == other.corners
+            && self.layout == other.layout
     }
 }
 
@@ -203,6 +208,7 @@ impl Shape {
             guide: false,
             filters: crate::filter::FilterStack::default(),
             corners: [0.0; 4],
+            layout: FrameLayout::default(),
             cached_path: RefCell::new(None),
         }
     }
@@ -1017,6 +1023,10 @@ pub struct Document {
     pub bleed: f32,
     #[serde(default)]
     pub motion: crate::motion::Motion,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cloud: Option<CloudLink>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comments: Vec<CommentPin>,
 }
 
 impl Document {
@@ -1125,6 +1135,8 @@ impl Document {
             show_safe,
             bleed: 36.0, // 0.125" at 300dpi or 0.5" at 72dpi ~ 36px
             motion: crate::motion::Motion::default(),
+            cloud: None,
+            comments: vec![],
         };
         // Fill background white when not transparent
         if !transparent && let Some(px) = doc.layers[0].kind.pixels_mut() {
@@ -1310,6 +1322,9 @@ impl Document {
         for a in &self.artboards {
             max = max.max(a.id);
         }
+        for pin in &self.comments {
+            max = max.max(pin.id);
+        }
         bump_id(max);
         self.migrate_artboards();
     }
@@ -1463,6 +1478,20 @@ pub enum Cmd {
         after: [f32; 4],
         radius_before: f32,
         radius_after: f32,
+    },
+    SetLayout {
+        layer: usize,
+        id: u64,
+        before: FrameLayout,
+        after: FrameLayout,
+    },
+    SetCloud {
+        before: Option<CloudLink>,
+        after: Option<CloudLink>,
+    },
+    SetComments {
+        before: Vec<CommentPin>,
+        after: Vec<CommentPin>,
     },
 }
 
@@ -1638,6 +1667,28 @@ fn coalesce(prev: &mut Cmd, next: &Cmd) -> bool {
         ) if *layer == *l2 && *id == *i2 => {
             *after = *a2;
             *radius_after = *r2;
+            true
+        }
+        (
+            Cmd::SetLayout {
+                layer, id, after, ..
+            },
+            Cmd::SetLayout {
+                layer: l2,
+                id: i2,
+                after: a2,
+                ..
+            },
+        ) if *layer == *l2 && *id == *i2 => {
+            *after = a2.clone();
+            true
+        }
+        (Cmd::SetCloud { after, .. }, Cmd::SetCloud { after: a2, .. }) => {
+            *after = a2.clone();
+            true
+        }
+        (Cmd::SetComments { after, .. }, Cmd::SetComments { after: a2, .. }) => {
+            *after = a2.clone();
             true
         }
         (
@@ -1869,6 +1920,25 @@ fn invert_cmd(cmd: Cmd) -> Cmd {
             radius_before: radius_after,
             radius_after: radius_before,
         },
+        Cmd::SetLayout {
+            layer,
+            id,
+            before,
+            after,
+        } => Cmd::SetLayout {
+            layer,
+            id,
+            before: after,
+            after: before,
+        },
+        Cmd::SetCloud { before, after } => Cmd::SetCloud {
+            before: after,
+            after: before,
+        },
+        Cmd::SetComments { before, after } => Cmd::SetComments {
+            before: after,
+            after: before,
+        },
     }
 }
 
@@ -2066,6 +2136,15 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
         Cmd::SetGuides { after, .. } => doc.guides.clone_from(after),
         Cmd::SetRuler { after, .. } => doc.ruler = *after,
         Cmd::AddGuide { guide } => doc.guides.push(*guide),
+        Cmd::SetLayout {
+            layer, id, after, ..
+        } => {
+            if let Some(s) = doc.find_shape_mut(*layer, *id) {
+                s.layout = after.clone();
+            }
+        }
+        Cmd::SetCloud { after, .. } => doc.cloud = after.clone(),
+        Cmd::SetComments { after, .. } => doc.comments.clone_from(after),
         Cmd::RemoveGuide { index, guide } => {
             if *index < doc.guides.len() {
                 doc.guides.remove(*index);

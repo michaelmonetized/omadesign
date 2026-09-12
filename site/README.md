@@ -2,7 +2,8 @@
 
 The homepage and documentation share one TanStack Start source in `src/`. Markdown
 pages read the repository's manuals directly. GitHub Pages serves the generated
-site at <https://michaelmonetized.github.io/omadesign/>.
+site at <https://omadesign.app/>. GitHub Pages still publishes so the old URL
+can redirect.
 
 ## Develop
 
@@ -56,6 +57,14 @@ node site/scripts/publish-pages.mjs --publish
 ## Optional server deployment
 
 The default `bun run build` retains Nitro's Vercel preset and root-relative URLs.
-No Vercel project is currently linked in this checkout; link the intended project
-explicitly before using Vercel deployment commands. GitHub Pages remains the
-current production host.
+Production is **https://omadesign.app**. Git auto-deploys are off. Ship through
+Blacksmith:
+
+```sh
+bun scripts/ship.mts
+```
+
+That pushes the current branch and runs `.github/workflows/ship.yml` on
+`blacksmith-4vcpu-ubuntu-2404`: typecheck, `vercel build --prod`, then
+`vercel deploy --prebuilt --prod`. GitHub Pages still prerenders a redirect
+copy of the old URL.

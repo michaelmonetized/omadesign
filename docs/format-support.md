@@ -4,7 +4,7 @@ Omadesign imports supported content into its native layer tree and records conve
 
 | Format | Import | Export | Main limits |
 | --- | --- | --- | --- |
-| `.oma` | Native document, groups, vectors, text, pixels, masks, effects, pages and conversion notes | Native | Omadesign's editable working format; it cannot recreate unsupported features already lost during import. |
+| `.oma` | Native document, groups, vectors, layout frames, comments, text, pixels, masks, effects, pages and conversion notes | Native | Version 5 adds frames, auto-layout, constraints and opt-in cloud metadata. Older apps cannot open v5 files. |
 | `.af`, `.affinity` | Supported new Affinity document objects through the optional converter | No native writer | Upstream V3 support is installed; no real unified `.af` fixture has yet been verified in this change. |
 | `.afdesign`, `.afphoto`, `.afpub`, `.aftemplate`, `.afpackage` | Supported Affinity vectors, text, pixel layers, groups, visibility, opacity, masks and artboards via SVG | No native writer | Partial Affinity interoperability. Most adjustments/live effects, publishing structures, custom profiles and edit history are not retained. Multi-spread documents can fail. |
 | `.psd`, `.psb` | Native layered reader, including groups, names, placement, visibility, opacity, blends, pixel masks and supported Normal color overlays | Native layered RGB/8-bit PSD and PSB | Text and smart objects import as their saved layer pixels. Other effects, fills, adjustments and high-depth/color-management limits produce notes. |
