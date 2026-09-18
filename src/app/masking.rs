@@ -58,6 +58,72 @@ impl Studio {
         true
     }
 
+    pub fn pixel_sel_mask(&self, layer: usize) -> Option<&[u8]> {
+        let pixels = self.doc.layers.get(layer)?.kind.pixels()?;
+        let mask = self.pixel_sel.as_ref()?;
+        (mask.len() == pixels.w as usize * pixels.h as usize).then_some(mask.as_slice())
+    }
+
+    pub fn set_pixel_sel(&mut self, mask: Option<Vec<u8>>) {
+        self.pixel_sel = mask;
+        self.pixel_sel_gen = self.pixel_sel_gen.wrapping_add(1);
+        self.status = match self.pixel_sel.as_ref() {
+            None => "Pixel selection cleared".into(),
+            Some(mask) => {
+                let n = paint::selected_count(mask);
+                if n == 0 {
+                    "Empty pixel selection".into()
+                } else {
+                    format!("{n} pixels selected")
+                }
+            }
+        };
+    }
+
+    pub fn merge_pixel_sel(&mut self, next: Vec<u8>, add: bool) {
+        let combined = paint::combine_masks(self.pixel_sel.as_deref(), next, add);
+        self.set_pixel_sel(Some(combined));
+    }
+
+    pub fn clear_selected_pixels(&mut self) -> bool {
+        let Some(layer) = self.raster_target() else {
+            return false;
+        };
+        let Some(mask) = self.pixel_sel_mask(layer).map(|mask| mask.to_vec()) else {
+            return false;
+        };
+        if !mask.iter().any(|value| *value > 0) {
+            return false;
+        }
+        let Some(pixels) = self
+            .doc
+            .layers
+            .get(layer)
+            .and_then(|layer| layer.kind.pixels())
+        else {
+            return false;
+        };
+        let before = pixels.data.clone();
+        let mut after = before.clone();
+        for (index, &selected) in mask.iter().enumerate() {
+            if selected != 0 {
+                let offset = index * 4;
+                after[offset..offset + 4].fill(0);
+            }
+        }
+        if after == before {
+            return true;
+        }
+        self.commit(Cmd::Pixels {
+            layer,
+            mask: false,
+            before,
+            after,
+        });
+        self.status = "Selected pixels cleared".into();
+        true
+    }
+
     pub fn mask_target(&self) -> Option<usize> {
         let index = self.active_layer?;
         self.doc

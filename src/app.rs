@@ -206,11 +206,16 @@ pub enum Op {
     Smudge {
         layer: usize,
         last: Option<Pt>,
+        buf: Pixmap,
+        original: Option<Pixmap>,
         before: Vec<u8>,
     },
     Clone {
         layer: usize,
         last: Option<Pt>,
+        offset: Pt,
+        buf: Pixmap,
+        original: Option<Pixmap>,
         before: Vec<u8>,
     },
     Marquee {
@@ -270,6 +275,7 @@ pub struct Studio {
     pub fill_tolerance: f32,
     pub clone_source: Option<Pt>,
     pub pixel_sel: Option<Vec<u8>>,
+    pub pixel_sel_gen: u64,
     pub paint_mask: bool,
     pub snap: SnapSettings,
     pub snap_scene: Option<snap::Scene>,
@@ -445,6 +451,7 @@ impl Studio {
             fill_tolerance: 32.0,
             clone_source: None,
             pixel_sel: None,
+            pixel_sel_gen: 0,
             paint_mask: false,
             snap: SnapSettings::default(),
             snap_scene: None,
@@ -1347,7 +1354,7 @@ impl Studio {
             .map(|(i, _)| i)
     }
 
-    pub fn raster_target(&mut self) -> Option<usize> {
+    pub fn raster_target(&self) -> Option<usize> {
         let editable =
             |layer: &Layer| layer.visible && !layer.locked && layer.kind.pixels().is_some();
         if let Some(index) = self.active_layer {
@@ -1398,6 +1405,9 @@ impl Studio {
             return;
         }
         if self.remove_selected_motion() {
+            return;
+        }
+        if self.clear_selected_pixels() {
             return;
         }
         self.delete_objects();
@@ -3003,11 +3013,15 @@ impl Studio {
     }
 
     pub fn eyedrop(&mut self, p: Pt) {
+        if self.persona == Persona::Pixel && self.sample_raster(p) {
+            return;
+        }
         if let Some((_, id)) = self.doc.hit_test(p, 4.0 / self.view.scale.max(0.01)) {
             for layer in &self.doc.layers {
                 if let Some(s) = layer.find(id) {
                     self.style.fill = s.style.fill.clone();
                     if let Fill::Solid(c) = s.style.fill {
+                        self.brush.color = c;
                         self.push_recent(c);
                     }
                     self.status = "sampled fill".into();
@@ -3015,20 +3029,32 @@ impl Studio {
                 }
             }
         }
-        if let Some(li) = self.raster_target()
-            && let Some(px) = self.doc.layers[li].kind.pixels()
-        {
-            let x = p.x.round().clamp(0.0, px.w as f32 - 1.0) as u32;
-            let y = p.y.round().clamp(0.0, px.h as f32 - 1.0) as u32;
-            let i = ((y * px.w + x) * 4) as usize;
-            if i + 3 < px.data.len() {
-                let c = Rgba::new(px.data[i], px.data[i + 1], px.data[i + 2], px.data[i + 3]);
-                self.style.fill = Fill::Solid(c);
-                self.brush.color = c;
-                self.push_recent(c);
-                self.status = format!("sampled {}", c.hex());
-            }
+        let _ = self.sample_raster(p);
+    }
+
+    fn sample_raster(&mut self, p: Pt) -> bool {
+        let Some(li) = self.raster_target() else {
+            return false;
+        };
+        let local = self.mask_point(li, p);
+        let Some(px) = self.doc.layers[li].kind.pixels() else {
+            return false;
+        };
+        if local.x < 0.0 || local.y < 0.0 || local.x >= px.w as f32 || local.y >= px.h as f32 {
+            return false;
         }
+        let x = local.x.floor() as u32;
+        let y = local.y.floor() as u32;
+        let i = ((y * px.w + x) * 4) as usize;
+        if i + 3 >= px.data.len() {
+            return false;
+        }
+        let c = Rgba::new(px.data[i], px.data[i + 1], px.data[i + 2], px.data[i + 3]);
+        self.style.fill = Fill::Solid(c);
+        self.brush.color = c;
+        self.push_recent(c);
+        self.status = format!("sampled {}", c.hex());
+        true
     }
 
     pub fn push_recent(&mut self, c: Rgba) {

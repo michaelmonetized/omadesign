@@ -571,6 +571,10 @@ impl Studio {
                 }
                 self.op = None;
                 self.bool_pick = None;
+                if self.pixel_sel.is_some() {
+                    self.set_pixel_sel(None);
+                    return true;
+                }
             }
             Key::Enter => {
                 if self.pending_place.is_some() {

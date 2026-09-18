@@ -77,6 +77,7 @@ pub(super) fn start(studio: &mut Studio, world: Pt) {
     } else {
         paint::stamp(&mut buf, point, &brush, erase && !mask);
     }
+    clip_working(studio, layer, mask, &mut buf, None, &before);
     publish(studio, layer, mask, &buf);
     studio.op = Some(Op::Retouch {
         layer,
@@ -89,6 +90,191 @@ pub(super) fn start(studio: &mut Studio, world: Pt) {
         last: world,
         before,
     });
+}
+
+fn clip_working(
+    studio: &Studio,
+    layer: usize,
+    mask_edit: bool,
+    buf: &mut tiny_skia::Pixmap,
+    original: Option<&tiny_skia::Pixmap>,
+    before: &[u8],
+) {
+    if mask_edit {
+        return;
+    }
+    let Some(sel) = studio.pixel_sel_mask(layer) else {
+        return;
+    };
+    if let Some(original) = original {
+        paint::restrict_pixmap(buf, original, sel);
+        return;
+    }
+    if let Some(original) =
+        crate::document::Pixels::from_rgba(buf.width(), buf.height(), before.to_vec())
+            .and_then(|pixels| pixels.to_pixmap())
+    {
+        paint::restrict_pixmap(buf, &original, sel);
+    }
+}
+
+fn clip_overlay(studio: &Studio, layer: usize, buf: &mut tiny_skia::Pixmap) {
+    if let Some(sel) = studio.pixel_sel_mask(layer) {
+        paint::clip_overlay(buf, sel);
+    }
+}
+
+fn layer_pixels(studio: &Studio, layer: usize) -> Option<(u32, u32, Vec<u8>)> {
+    let pixels = studio.doc.layers.get(layer)?.kind.pixels()?;
+    Some((pixels.w, pixels.h, pixels.data.clone()))
+}
+
+pub(super) fn start_brush(studio: &mut Studio, world: Pt) {
+    let Some(layer) = studio.raster_target() else {
+        studio.status = "add a pixel layer to paint".into();
+        return;
+    };
+    let Some((w, h, before)) = layer_pixels(studio, layer) else {
+        return;
+    };
+    let Some(mut buf) = tiny_skia::Pixmap::new(w, h) else {
+        return;
+    };
+    let point = studio.mask_point(layer, world);
+    paint::stamp(&mut buf, point, &studio.brush, false);
+    clip_overlay(studio, layer, &mut buf);
+    studio.op = Some(Op::Brush {
+        layer,
+        erase: false,
+        buf,
+        last: Some(world),
+        before,
+    });
+}
+
+pub(super) fn start_smudge(studio: &mut Studio, world: Pt) {
+    let Some(layer) = studio.raster_target() else {
+        studio.status = "Choose an unlocked pixel layer to smudge".into();
+        return;
+    };
+    let Some((_w, _h, before)) = layer_pixels(studio, layer) else {
+        return;
+    };
+    let Some(buf) = pixels(studio, layer, false).and_then(Pixels::to_pixmap) else {
+        return;
+    };
+    let original = studio.pixel_sel_mask(layer).is_some().then(|| buf.clone());
+    studio.op = Some(Op::Smudge {
+        layer,
+        last: Some(world),
+        buf,
+        original,
+        before,
+    });
+}
+
+pub(super) fn start_clone(studio: &mut Studio, world: Pt) {
+    if studio.clone_source.is_none() {
+        studio.status = "Alt-click to set clone source".into();
+        return;
+    }
+    let Some(layer) = studio.raster_target() else {
+        studio.status = "Choose an unlocked pixel layer to clone".into();
+        return;
+    };
+    let Some((_w, _h, before)) = layer_pixels(studio, layer) else {
+        return;
+    };
+    let Some(mut buf) = pixels(studio, layer, false).and_then(Pixels::to_pixmap) else {
+        return;
+    };
+    let dest = studio.mask_point(layer, world);
+    let source = studio
+        .clone_source
+        .map_or(dest, |source| studio.mask_point(layer, source));
+    let offset = source - dest;
+    let original = studio.pixel_sel_mask(layer).is_some().then(|| buf.clone());
+    paint::clone_stamp(&mut buf, dest, dest + offset, &studio.brush);
+    if let Some(original) = &original
+        && let Some(sel) = studio.pixel_sel_mask(layer)
+    {
+        paint::restrict_pixmap(&mut buf, original, sel);
+    }
+    publish(studio, layer, false, &buf);
+    studio.op = Some(Op::Clone {
+        layer,
+        last: Some(world),
+        offset,
+        buf,
+        original,
+        before,
+    });
+}
+
+pub(super) fn apply_wand(studio: &mut Studio, world: Pt, add: bool) {
+    let Some(layer) = studio.raster_target() else {
+        studio.status = "Choose an unlocked pixel layer to select".into();
+        return;
+    };
+    let Some(pm) = pixels(studio, layer, false).and_then(Pixels::to_pixmap) else {
+        return;
+    };
+    let seed = studio.mask_point(layer, world);
+    let clip = add
+        .then(|| studio.pixel_sel_mask(layer).map(|mask| mask.to_vec()))
+        .flatten();
+    let mask = paint::wand_mask_clipped(&pm, seed, studio.fill_tolerance, clip.as_deref());
+    if add {
+        studio.merge_pixel_sel(mask, true);
+    } else {
+        studio.set_pixel_sel(Some(mask));
+    }
+}
+
+pub(super) fn commit_marquee(studio: &mut Studio, start: Pt, cur: Pt, ellipse: bool, add: bool) {
+    let Some(layer) = studio.raster_target() else {
+        studio.status = "Choose an unlocked pixel layer to select".into();
+        return;
+    };
+    let Some((w, h, _)) = layer_pixels(studio, layer) else {
+        return;
+    };
+    if (cur - start).length() < 2.0 {
+        if !add {
+            studio.set_pixel_sel(None);
+        }
+        return;
+    }
+    let a = studio.mask_point(layer, start);
+    let b = studio.mask_point(layer, cur);
+    let mask = if ellipse {
+        paint::fill_ellipse_mask(w, h, a.x, a.y, b.x, b.y)
+    } else {
+        paint::fill_rect_mask(w, h, a.x, a.y, b.x, b.y)
+    };
+    studio.merge_pixel_sel(mask, add);
+}
+
+pub(super) fn commit_lasso(studio: &mut Studio, pts: &[Pt], add: bool) {
+    let Some(layer) = studio.raster_target() else {
+        studio.status = "Choose an unlocked pixel layer to select".into();
+        return;
+    };
+    let Some((w, h, _)) = layer_pixels(studio, layer) else {
+        return;
+    };
+    if pts.len() < 3 {
+        if !add {
+            studio.set_pixel_sel(None);
+        }
+        return;
+    }
+    let mapped: Vec<Pt> = pts
+        .iter()
+        .map(|point| studio.mask_point(layer, *point))
+        .collect();
+    let mask = paint::fill_poly_mask(w, h, &mapped);
+    studio.merge_pixel_sel(mask, add);
 }
 
 pub(super) fn drag(studio: &mut Studio, world: Pt) {
@@ -119,6 +305,7 @@ pub(super) fn drag(studio: &mut Studio, world: Pt) {
         } else {
             paint::stroke_to(&mut buf, from, point, &brush, erase && !mask);
         }
+        clip_working(studio, layer, mask, &mut buf, None, &before);
         publish(studio, layer, mask, &buf);
     }
     studio.op = Some(Op::Retouch {
@@ -175,9 +362,138 @@ pub(super) fn fill(studio: &mut Studio, world: Pt) {
             _ => studio.brush.color,
         }
     };
-    paint::flood_fill(&mut buffer, point, color, studio.fill_tolerance);
+    let clip = if mask {
+        None
+    } else {
+        studio.pixel_sel_mask(layer).map(|mask| mask.to_vec())
+    };
+    paint::flood_fill_clipped(
+        &mut buffer,
+        point,
+        color,
+        studio.fill_tolerance,
+        clip.as_deref(),
+    );
     publish(studio, layer, mask, &buffer);
     finish(studio, layer, mask, before);
+}
+
+pub(super) fn brush_drag(studio: &mut Studio, world: Pt) {
+    let Some(Op::Brush {
+        layer,
+        erase,
+        mut buf,
+        last,
+        before,
+    }) = (match &studio.op {
+        Some(Op::Brush { .. }) => studio.op.take(),
+        _ => None,
+    })
+    else {
+        return;
+    };
+    if last.is_some_and(|prev| (prev - world).length_sq() < 0.0001) {
+        studio.op = Some(Op::Brush {
+            layer,
+            erase,
+            buf,
+            last,
+            before,
+        });
+        return;
+    }
+    let from = last.map_or_else(
+        || studio.mask_point(layer, world),
+        |p| studio.mask_point(layer, p),
+    );
+    let to = studio.mask_point(layer, world);
+    if let Some(_) = last {
+        paint::stroke_to(&mut buf, from, to, &studio.brush, erase);
+    } else {
+        paint::stamp(&mut buf, to, &studio.brush, erase);
+    }
+    clip_overlay(studio, layer, &mut buf);
+    studio.op = Some(Op::Brush {
+        layer,
+        erase,
+        buf,
+        last: Some(world),
+        before,
+    });
+}
+
+pub(super) fn smudge_drag(studio: &mut Studio, world: Pt) {
+    let Some(Op::Smudge {
+        layer,
+        last,
+        mut buf,
+        original,
+        before,
+    }) = (match &studio.op {
+        Some(Op::Smudge { .. }) => studio.op.take(),
+        _ => None,
+    })
+    else {
+        return;
+    };
+    if let Some(prev) = last
+        && (prev - world).length_sq() > 0.0001
+    {
+        let from = studio.mask_point(layer, prev);
+        let to = studio.mask_point(layer, world);
+        paint::smudge_stroke(&mut buf, from, to, &studio.brush);
+        if let Some(original) = &original
+            && let Some(sel) = studio.pixel_sel_mask(layer)
+        {
+            paint::restrict_pixmap(&mut buf, original, sel);
+        }
+        publish(studio, layer, false, &buf);
+    }
+    studio.op = Some(Op::Smudge {
+        layer,
+        last: Some(world),
+        buf,
+        original,
+        before,
+    });
+}
+
+pub(super) fn clone_drag(studio: &mut Studio, world: Pt) {
+    let Some(Op::Clone {
+        layer,
+        last,
+        offset,
+        mut buf,
+        original,
+        before,
+    }) = (match &studio.op {
+        Some(Op::Clone { .. }) => studio.op.take(),
+        _ => None,
+    })
+    else {
+        return;
+    };
+    if let Some(prev) = last
+        && (prev - world).length_sq() > 0.0001
+    {
+        let from = studio.mask_point(layer, prev);
+        let to = studio.mask_point(layer, world);
+        paint::clone_stroke(&mut buf, from, to, from + offset, &studio.brush);
+        if let Some(original) = &original
+            && let Some(sel) = studio.pixel_sel_mask(layer)
+        {
+            paint::restrict_pixmap(&mut buf, original, sel);
+        }
+        publish(studio, layer, false, &buf);
+    }
+    studio.op = Some(Op::Clone {
+        layer,
+        last: Some(world),
+        offset,
+        buf,
+        original,
+        before,
+    });
 }
 
 #[cfg(test)]
@@ -358,5 +674,117 @@ mod tests {
         studio.set_tool(Tool::Hand);
         assert_eq!(pixels(&studio, 0, true).unwrap().data, mask_before);
         assert!(studio.op.is_none());
+    }
+
+    #[test]
+    fn marquee_wand_and_lasso_create_pixel_selections() {
+        let mut studio = studio(16, 16);
+        studio.tool = Tool::Marquee;
+        commit_marquee(
+            &mut studio,
+            Pt::new(2.0, 2.0),
+            Pt::new(8.0, 8.0),
+            false,
+            false,
+        );
+        let mask = studio.pixel_sel.as_ref().expect("rect selection");
+        assert_eq!(mask.len(), 16 * 16);
+        assert!(paint::selected_count(mask) >= 25);
+        assert_eq!(mask[(2 * 16 + 2) as usize], 255);
+        assert_eq!(mask[0], 0);
+
+        studio.tool = Tool::EllipseMarquee;
+        commit_marquee(
+            &mut studio,
+            Pt::new(0.0, 0.0),
+            Pt::new(16.0, 16.0),
+            true,
+            false,
+        );
+        let ellipse = studio.pixel_sel.as_ref().unwrap();
+        assert_eq!(ellipse[(8 * 16 + 8) as usize], 255);
+        assert_eq!(ellipse[0], 0);
+
+        studio.tool = Tool::Lasso;
+        commit_lasso(
+            &mut studio,
+            &[
+                Pt::new(1.0, 1.0),
+                Pt::new(10.0, 1.0),
+                Pt::new(10.0, 10.0),
+                Pt::new(1.0, 10.0),
+            ],
+            false,
+        );
+        assert!(paint::selected_count(studio.pixel_sel.as_ref().unwrap()) > 20);
+
+        apply_wand(&mut studio, Pt::new(4.0, 4.0), false);
+        assert!(paint::selected_count(studio.pixel_sel.as_ref().unwrap()) > 1);
+    }
+
+    #[test]
+    fn brush_stays_inside_a_pixel_selection() {
+        let mut studio = studio(16, 16);
+        studio.tool = Tool::Brush;
+        studio.brush.color = Rgba::rgb(255, 0, 0);
+        studio.brush.size = 8.0;
+        studio.brush.flow = 1.0;
+        studio.brush.opacity = 1.0;
+        commit_marquee(
+            &mut studio,
+            Pt::new(0.0, 0.0),
+            Pt::new(6.0, 16.0),
+            false,
+            false,
+        );
+        start_brush(&mut studio, Pt::new(3.0, 8.0));
+        brush_drag(&mut studio, Pt::new(12.0, 8.0));
+        assert!(studio.end_pixel_stroke(false));
+        let painted = rgba(&studio, 3, 8, false);
+        assert!(painted[0] > 100, "selected side should paint {painted:?}");
+        let outside = rgba(&studio, 12, 8, false);
+        assert_eq!(outside, [160, 170, 180, 255], "unselected pixels stay put");
+    }
+
+    #[test]
+    fn eyedropper_samples_placed_raster_and_sets_brush_color() {
+        let mut studio = studio(8, 8);
+        if let LayerKind::Raster { origin, size, .. } = &mut studio.doc.layers[0].kind {
+            *origin = Pt::new(100.0, 40.0);
+            *size = Pt::new(16.0, 16.0);
+        }
+        let pixels = studio.doc.layers[0].kind.pixels_mut().unwrap();
+        pixels.data[(3 * 8 + 2) * 4..(3 * 8 + 2) * 4 + 4].copy_from_slice(&[12, 34, 56, 255]);
+        pixels.touch();
+        studio.persona = crate::tools::Persona::Pixel;
+        studio.tool = Tool::Eyedropper;
+        let transform = crate::compositor::layer_pixel_transform(&studio.doc.layers[0]);
+        let mut point = tiny_skia::Point::from_xy(2.5, 3.5);
+        transform.map_point(&mut point);
+        studio.eyedrop(Pt::new(point.x, point.y));
+        assert_eq!(studio.brush.color, Rgba::new(12, 34, 56, 255));
+        assert!(studio.status.contains("#"));
+    }
+
+    #[test]
+    fn smudge_live_stroke_has_one_undo() {
+        let mut studio = studio(24, 8);
+        let image = studio.doc.layers[0].kind.pixels_mut().unwrap();
+        for x in 0..6usize {
+            image.data[(4 * 24 + x) * 4..(4 * 24 + x) * 4 + 4].copy_from_slice(&[220, 30, 30, 255]);
+        }
+        image.touch();
+        let original = image.data.clone();
+        studio.tool = Tool::Smudge;
+        studio.brush.size = 6.0;
+        studio.brush.flow = 0.9;
+        start_smudge(&mut studio, Pt::new(3.0, 4.0));
+        smudge_drag(&mut studio, Pt::new(18.0, 4.0));
+        assert!(studio.end_pixel_stroke(false));
+        assert_eq!(studio.history.len(), 1);
+        let smeared = rgba(&studio, 14, 4, false);
+        assert!(smeared[0] > 80, "smudge should move paint {smeared:?}");
+        studio.undo();
+        assert_eq!(pixels(&studio, 0, false).unwrap().data, original);
     }
 }

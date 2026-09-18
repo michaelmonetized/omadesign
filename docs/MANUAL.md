@@ -147,7 +147,7 @@ Paint lives on a **pixel layer**. Add one from the Layers studio if the document
 - Brush `B` — size `[` `]`, hardness `Shift+[` `]`.
 - Eraser `E`, Fill `K`, Clone `J` (Alt-click sets source), Smudge `M`.
 - Healing brush `Shift+J` — Alt-click clean texture on the active image, then paint over a blemish. It blends sampled texture with the destination's local color and preserves transparency. The source stays fixed for the stroke; Undo restores the whole stroke.
-- Marquee, elliptical marquee, lasso, wand. Tolerance is in Brush.
+- Marquee, elliptical marquee, lasso, wand. Drag to select; the marching ants stay until Esc. Shift adds. Delete clears selected pixels. Paint, fill, clone, heal and smudge stay inside the selection. Wand tolerance is in Brush. Eyedropper `I` shows the sampled color in the sidebar.
 
 ### Masks
 

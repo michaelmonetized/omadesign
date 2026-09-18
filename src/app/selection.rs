@@ -96,6 +96,9 @@ impl Studio {
     }
     pub fn deselect_all(&mut self) {
         self.selected_objects(vec![]);
+        if self.pixel_sel.is_some() {
+            self.set_pixel_sel(None);
+        }
     }
     pub fn invert_selection(&mut self) {
         let selected: HashSet<_> = self.selection.iter().copied().collect();

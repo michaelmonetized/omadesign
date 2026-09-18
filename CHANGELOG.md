@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-09-18 · Pixel tools that actually select.
+
+Pixel mode was a well of icons that mostly shrugged. Marquee, ellipse,
+lasso and wand now leave marching ants on the layer. Paint, fill, clone,
+heal and smudge stay inside that selection. Delete punches the selected
+pixels. Esc and Deselect clear it. Shift adds.
+
+The eyedropper puts the sampled color on the inspector chip and in the
+Brush/Fill color row, so you can see what you picked up. Smudge pulls
+color along the stroke instead of stamping a disk every mouse event.
+Clone tracks the source offset. Brush, clone and smudge follow the
+pointer from the press, not six pixels later, and they map through a
+placed image's transform the same way healing already did.
+
+Validation: paint tests cover smudge tracking, clone offset, mask clip
+and selection helpers. Canvas retouch tests cover marquee/ellipse/lasso
+/wand, selection-clipped brush, eyedropper on a placed raster, and
+smudge undo. `cargo test` is the gate.
+
 ## 2026-09-11 · Layout, then show it.
 
 Version **0.5.0** is a fifth studio and a front door.

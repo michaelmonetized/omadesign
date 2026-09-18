@@ -440,9 +440,11 @@ impl Studio {
                     }
                     Tool::Marquee | Tool::EllipseMarquee | Tool::Lasso => {
                         add("Drag", "Select pixels", false);
+                        add("Shift+drag", "Add to selection", mods.shift);
                     }
                     Tool::Wand => {
                         add("Click", "Select similar color", false);
+                        add("Shift+click", "Add to selection", mods.shift);
                     }
                     Tool::Hand => {
                         add("Drag", "Pan canvas", false);
