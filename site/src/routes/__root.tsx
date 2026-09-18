@@ -111,6 +111,7 @@ function Document() {
                 Features
               </a>
               <a href={sitePath("showcase")}>Showcase</a>
+              <a href={sitePath("updates")}>Updates</a>
               <a href={sitePath("compete")}>Compete</a>
               <a href={sitePath("docs")}>Docs</a>
               <a href={REPO}>
@@ -161,6 +162,7 @@ function Document() {
               © {new Date().getFullYear()} omadesign contributors · MIT licensed
             </span>
             <div>
+              <a href={sitePath("updates")}>Updates</a>
               <a href={sitePath("docs/roadmap")}>Roadmap</a>
               <a href={sitePath("docs/contributing")}>Contribute</a>
               <a href={`${REPO}/issues`}>Report a bug</a>

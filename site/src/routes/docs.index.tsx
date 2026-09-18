@@ -71,10 +71,12 @@ function DocsOverview() {
         </pre>
         <aside className="docs-note" aria-label="Version information">
           <p>
-            {RELEASE_TAG} includes layered interchange, RAW development, batch
-            photo adjustments and shareable presets. Affinity import also needs the optional{" "}
+            {RELEASE_TAG} includes working Pixel selections, Layout frames,
+            layered interchange, RAW development, batch photo adjustments and
+            shareable presets. Affinity import also needs the optional{" "}
             <Link to="/docs/affinity">bridge setup</Link>. Read the{" "}
-            <a href={RELEASE_URL}>release notes</a> for features and limitations.
+            <Link to="/updates">studio log</Link> or the{" "}
+            <a href={RELEASE_URL}>release notes</a>.
           </p>
         </aside>
       </section>

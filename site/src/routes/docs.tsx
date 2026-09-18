@@ -62,9 +62,10 @@ function Docs() {
       >
         <aside className="docs-note docs-availability" aria-label="Documentation version">
           <p>
-            These guides cover {RELEASE_TAG}, including Layout frames, opt-in
-            cloud comments, layered interchange, RAW development, batch
-            adjustments and shareable presets. The public site is{" "}
+            These guides cover {RELEASE_TAG}, including working Pixel
+            selections, Layout frames, opt-in cloud comments, layered
+            interchange, RAW development, batch adjustments and shareable
+            presets. The public site is{" "}
             <a href="https://omadesign.app">omadesign.app</a>. Get the{" "}
             <Link to="/docs" hash="get-the-app">Linux release</Link>.
             {" "}Affinity import needs the optional{" "}

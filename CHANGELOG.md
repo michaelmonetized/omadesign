@@ -1,23 +1,58 @@
 # Changelog
 
-## 2026-09-18 · Pixel tools that actually select.
+## 2026-09-18 · 0.5.1 — You can see the selection now.
 
-Pixel mode was a well of icons that mostly shrugged. Marquee, ellipse,
-lasso and wand now leave marching ants on the layer. Paint, fill, clone,
-heal and smudge stay inside that selection. Delete punches the selected
-pixels. Esc and Deselect clear it. Shift adds.
+Version **0.5.1** is Pixel mode, finished enough to use.
 
-The eyedropper puts the sampled color on the inspector chip and in the
-Brush/Fill color row, so you can see what you picked up. Smudge pulls
-color along the stroke instead of stamping a disk every mouse event.
-Clone tracks the source offset. Brush, clone and smudge follow the
-pointer from the press, not six pixels later, and they map through a
-placed image's transform the same way healing already did.
+0.5.0 shipped a well of Pixel tools. Brush, eraser, clone and zoom
+worked. Marquee, elliptical marquee, lasso and wand wrote a mask and
+threw it away. You dragged a box. Nothing stayed on the canvas. Paint
+ignored it. Eyedropper sampled a color and hid it. Smudge stamped a
+disk. Clone copied the same patch instead of tracking the source.
+Pointer tools waited six pixels before they believed you.
 
-Validation: paint tests cover smudge tracking, clone offset, mask clip
-and selection helpers. Canvas retouch tests cover marquee/ellipse/lasso
-/wand, selection-clipped brush, eyedropper on a placed raster, and
-smudge undo. `cargo test` is the gate.
+That is gone.
+
+**Selections.** Rectangular marquee, elliptical marquee, lasso and wand
+leave a tinted mask and marching ants on the active pixel layer. Shift
+adds. A click without a drag clears. Esc and Deselect clear. Delete
+punches the selected pixels, one undo. Paint, fill, clone, heal and
+smudge stay inside the selection. Wand tolerance still lives in Brush.
+
+**Eyedropper.** Click a pixel, see the color. The inspector chip and the
+Color row both show it. Pixel mode samples the raster first, through a
+placed image's position, scale and rotation.
+
+**Smudge and clone.** Smudge pulls color along the stroke. Clone locks
+an offset from the Alt-click source and tracks it. Both keep a working
+buffer instead of cloning the whole layer on every mouse event.
+
+**Pointer.** Brush, clone, smudge, marquees and lasso follow from the
+press, not after a six-pixel delay. Pixel tools no longer steal object
+handles. Healing already mapped through a placed image; brush, clone,
+smudge, fill, wand and eyedropper do the same.
+
+The site grows **https://omadesign.app/updates**. 0.5.1 leads. 0.5.0
+follows. It is a studio log, not a dump of tickets.
+
+Install is the same curl line. It now resolves to 0.5.1.
+
+```sh
+curl -fsSL https://omadesign.app/install | sh
+```
+
+Validation: **391 library tests pass**, five existing optional
+fixture/interoperability tests remain opt-in. New coverage includes
+smudge tracking, clone offset, selection clip, marquee/ellipse/lasso/
+wand, selection-clipped brush, eyedropper on a placed raster, and
+smudge undo. Linux downloads keep the glibc 2.35 ceiling on ARM64 and
+x86_64.
+
+Known limits: the marching-ants stroke is the selection's bounding box;
+the tint is the real mask, so a wand still reads as its shape. Pixel
+selections live in the session, not the saved `.oma` file. Layout is
+still not Figma import. Cloud without Clerk/Convex keys is
+local-plus-HTTP.
 
 ## 2026-09-11 · Layout, then show it.
 

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { CURL, REPO } from "../site";
+import { CURL, REPO, sitePath } from "../site";
 import { RELEASE_TAG, RELEASE_VERSION, RELEASE_URL } from "../release";
 
 const release = `${REPO}/releases/download/${RELEASE_TAG}/omadesign-${RELEASE_VERSION}`;
@@ -55,8 +55,11 @@ export function Install() {
         </a>
       </div>
       <p className="install-version">
-        {RELEASE_TAG} installs into ~/.local, never /usr, and opens GIMP .xcf files.
-        {" "}<a href={RELEASE_URL}>Read the release notes</a>.
+        {RELEASE_TAG} installs into ~/.local. Pixel selections stay on the
+        canvas.{" "}
+        <a href={sitePath("updates")}>What shipped</a>
+        {" · "}
+        <a href={RELEASE_URL}>Release notes</a>.
       </p>
       <p className="copy-status" role="status">
         {status === "selected"
