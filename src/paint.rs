@@ -127,6 +127,36 @@ fn sample(pm: &Pixmap, x: i32, y: i32) -> [u8; 4] {
     [d[i], d[i + 1], d[i + 2], d[i + 3]]
 }
 
+fn sample_at(pm: &Pixmap, x: f32, y: f32) -> [u8; 4] {
+    let x0 = x.floor() as i32;
+    let y0 = y.floor() as i32;
+    let fx = (x - x0 as f32).clamp(0.0, 1.0);
+    let fy = (y - y0 as f32).clamp(0.0, 1.0);
+    let p00 = sample(pm, x0, y0);
+    let p10 = sample(pm, x0 + 1, y0);
+    let p01 = sample(pm, x0, y0 + 1);
+    let p11 = sample(pm, x0 + 1, y0 + 1);
+    let mix = |a: u8, b: u8, t: f32| a as f32 + (b as f32 - a as f32) * t;
+    let a = [
+        mix(p00[0], p10[0], fx),
+        mix(p00[1], p10[1], fx),
+        mix(p00[2], p10[2], fx),
+        mix(p00[3], p10[3], fx),
+    ];
+    let b = [
+        mix(p01[0], p11[0], fx),
+        mix(p01[1], p11[1], fx),
+        mix(p01[2], p11[2], fx),
+        mix(p01[3], p11[3], fx),
+    ];
+    [
+        (a[0] + (b[0] - a[0]) * fy).round() as u8,
+        (a[1] + (b[1] - a[1]) * fy).round() as u8,
+        (a[2] + (b[2] - a[2]) * fy).round() as u8,
+        (a[3] + (b[3] - a[3]) * fy).round() as u8,
+    ]
+}
+
 fn set_px(pm: &mut Pixmap, x: i32, y: i32, px: [u8; 4]) {
     if x < 0 || y < 0 || x >= pm.width() as i32 || y >= pm.height() as i32 {
         return;
@@ -135,63 +165,100 @@ fn set_px(pm: &mut Pixmap, x: i32, y: i32, px: [u8; 4]) {
     pm.data_mut()[i..i + 4].copy_from_slice(&px);
 }
 
+fn dab_spacing(brush: &Brush) -> f32 {
+    (brush.size * brush.spacing.max(0.05)).clamp(0.5, 64.0)
+}
+
+/// Pull pixels from behind the stroke so a drag smears instead of stamping a disk.
 pub fn smudge(pm: &mut Pixmap, from: Pt, to: Pt, brush: &Brush) {
-    let r = (brush.size * 0.5).max(1.0) as i32;
-    let dir = to - from;
-    if dir.length_sq() < 0.01 {
+    let delta = to - from;
+    let dist = delta.length();
+    if dist < 0.01 {
         return;
     }
+    let dir = delta * (1.0 / dist);
+    let radius = (brush.size * 0.5).max(1.0);
     let strength = brush.flow.clamp(0.05, 1.0);
-    let cx = to.x as i32;
-    let cy = to.y as i32;
-    let sx = from.x as i32;
-    let sy = from.y as i32;
-    for dy in -r..=r {
-        for dx in -r..=r {
-            if dx * dx + dy * dy > r * r {
+    let hardness = brush.hardness.clamp(0.0, 0.98);
+    let pull = radius * (0.25 + 0.55 * strength);
+    let extent = radius.ceil() as i32;
+    let mut writes = Vec::with_capacity(((extent * 2 + 1) as usize).pow(2));
+    for dy in -extent..=extent {
+        for dx in -extent..=extent {
+            let d = ((dx * dx + dy * dy) as f32).sqrt() / radius;
+            if d >= 1.0 {
                 continue;
             }
-            let src = sample(pm, sx + dx, sy + dy);
-            let dst = sample(pm, cx + dx, cy + dy);
-            let mix =
-                |a: u8, b: u8| (a as f32 * (1.0 - strength) + b as f32 * strength).round() as u8;
-            set_px(
-                pm,
-                cx + dx,
-                cy + dy,
+            let edge = ((1.0 - d) / (1.0 - hardness)).clamp(0.0, 1.0);
+            let amount = strength * edge * edge * (3.0 - 2.0 * edge);
+            if amount < 0.002 {
+                continue;
+            }
+            let x = to.x + dx as f32;
+            let y = to.y + dy as f32;
+            let ix = x.round() as i32;
+            let iy = y.round() as i32;
+            let src = sample_at(pm, x - dir.x * pull, y - dir.y * pull);
+            let dst = sample(pm, ix, iy);
+            let mix = |a: u8, b: u8| (a as f32 * (1.0 - amount) + b as f32 * amount).round() as u8;
+            writes.push((
+                ix,
+                iy,
                 [
                     mix(dst[0], src[0]),
                     mix(dst[1], src[1]),
                     mix(dst[2], src[2]),
                     mix(dst[3], src[3]).max(dst[3]),
                 ],
-            );
+            ));
         }
+    }
+    for (x, y, px) in writes {
+        set_px(pm, x, y, px);
+    }
+}
+
+pub fn smudge_stroke(pm: &mut Pixmap, from: Pt, to: Pt, brush: &Brush) {
+    let dist = (to - from).length();
+    if dist < 0.01 {
+        return;
+    }
+    let spacing = dab_spacing(brush);
+    let steps = (dist / spacing).ceil().max(1.0) as usize;
+    for step in 1..=steps {
+        let a = from.lerp(to, (step - 1) as f32 / steps as f32);
+        let b = from.lerp(to, step as f32 / steps as f32);
+        smudge(pm, a, b, brush);
     }
 }
 
 pub fn clone_stamp(pm: &mut Pixmap, pos: Pt, source: Pt, brush: &Brush) {
     let r = (brush.size * 0.5).max(1.0) as i32;
-    let cx = pos.x as i32;
-    let cy = pos.y as i32;
-    let ox = (source.x - pos.x) as i32;
-    let oy = (source.y - pos.y) as i32;
+    let cx = pos.x;
+    let cy = pos.y;
+    let ox = source.x - pos.x;
+    let oy = source.y - pos.y;
     let strength = (brush.flow * brush.opacity).clamp(0.05, 1.0);
+    let hardness = brush.hardness.clamp(0.0, 0.98);
     for dy in -r..=r {
         for dx in -r..=r {
-            let d2 = dx * dx + dy * dy;
-            if d2 > r * r {
+            let d = ((dx * dx + dy * dy) as f32).sqrt() / (r as f32).max(1.0);
+            if d >= 1.0 {
                 continue;
             }
-            let fall = 1.0 - (d2 as f32).sqrt() / (r as f32).max(1.0);
-            let k = strength * (brush.hardness * 0.6 + fall * (1.0 - brush.hardness * 0.6));
-            let src = sample(pm, cx + dx + ox, cy + dy + oy);
-            let dst = sample(pm, cx + dx, cy + dy);
+            let edge = ((1.0 - d) / (1.0 - hardness)).clamp(0.0, 1.0);
+            let k = strength * edge * edge * (3.0 - 2.0 * edge);
+            let src = sample_at(pm, cx + dx as f32 + ox, cy + dy as f32 + oy);
+            let dst = sample(
+                pm,
+                (cx + dx as f32).round() as i32,
+                (cy + dy as f32).round() as i32,
+            );
             let mix = |a: u8, b: u8| (a as f32 * (1.0 - k) + b as f32 * k).round() as u8;
             set_px(
                 pm,
-                cx + dx,
-                cy + dy,
+                (cx + dx as f32).round() as i32,
+                (cy + dy as f32).round() as i32,
                 [
                     mix(dst[0], src[0]),
                     mix(dst[1], src[1]),
@@ -201,6 +268,107 @@ pub fn clone_stamp(pm: &mut Pixmap, pos: Pt, source: Pt, brush: &Brush) {
             );
         }
     }
+}
+
+pub fn clone_stroke(pm: &mut Pixmap, from: Pt, to: Pt, source_from: Pt, brush: &Brush) {
+    let offset = source_from - from;
+    let dist = (to - from).length();
+    let spacing = dab_spacing(brush);
+    let steps = (dist / spacing).ceil().max(1.0) as usize;
+    for step in 1..=steps {
+        let t = step as f32 / steps as f32;
+        let pos = from.lerp(to, t);
+        clone_stamp(pm, pos, pos + offset, brush);
+    }
+}
+
+/// Restore unselected pixels from the stroke-start image (both premul pixmaps).
+pub fn restrict_pixmap(dst: &mut Pixmap, original: &Pixmap, mask: &[u8]) {
+    if dst.width() != original.width() || dst.height() != original.height() {
+        return;
+    }
+    let n = (dst.width() * dst.height()) as usize;
+    if mask.len() != n {
+        return;
+    }
+    let src = original.data();
+    let out = dst.data_mut();
+    for i in 0..n {
+        if mask[i] == 0 {
+            let o = i * 4;
+            out[o..o + 4].copy_from_slice(&src[o..o + 4]);
+        }
+    }
+}
+
+/// Zero overlay pixels outside the selection.
+pub fn clip_overlay(pm: &mut Pixmap, mask: &[u8]) {
+    let n = (pm.width() * pm.height()) as usize;
+    if mask.len() != n {
+        return;
+    }
+    for (i, pixel) in pm.pixels_mut().iter_mut().enumerate() {
+        if mask[i] == 0 {
+            *pixel = tiny_skia::ColorU8::from_rgba(0, 0, 0, 0).premultiply();
+        }
+    }
+}
+
+pub fn combine_masks(base: Option<&[u8]>, next: Vec<u8>, add: bool) -> Vec<u8> {
+    if add
+        && let Some(base) = base
+        && base.len() == next.len()
+    {
+        return base
+            .iter()
+            .zip(next.iter())
+            .map(|(a, b)| (*a).max(*b))
+            .collect();
+    }
+    next
+}
+
+pub fn selected_count(mask: &[u8]) -> usize {
+    mask.iter().filter(|value| **value > 0).count()
+}
+
+pub fn selection_bounds(mask: &[u8], w: u32, h: u32) -> Option<(u32, u32, u32, u32)> {
+    if mask.len() != w as usize * h as usize {
+        return None;
+    }
+    let mut min_x = w;
+    let mut min_y = h;
+    let mut max_x = 0u32;
+    let mut max_y = 0u32;
+    let mut any = false;
+    for y in 0..h {
+        for x in 0..w {
+            if mask[(y * w + x) as usize] != 0 {
+                any = true;
+                min_x = min_x.min(x);
+                min_y = min_y.min(y);
+                max_x = max_x.max(x + 1);
+                max_y = max_y.max(y + 1);
+            }
+        }
+    }
+    any.then_some((min_x, min_y, max_x, max_y))
+}
+
+pub fn selection_overlay_rgba(mask: &[u8], color: [u8; 3], alpha: u8) -> Vec<u8> {
+    let mut out = vec![0u8; mask.len() * 4];
+    for (i, &m) in mask.iter().enumerate() {
+        if m == 0 {
+            continue;
+        }
+        let a = (u16::from(alpha) * u16::from(m) / 255) as u8;
+        let o = i * 4;
+        out[o] = color[0];
+        out[o + 1] = color[1];
+        out[o + 2] = color[2];
+        out[o + 3] = a;
+    }
+    out
 }
 
 /// Transfer fine source texture onto the destination's surrounding colour and
@@ -379,7 +547,17 @@ fn color_dist(a: [u8; 4], b: [u8; 4]) -> f32 {
 }
 
 pub fn flood_fill(pm: &mut Pixmap, seed: Pt, color: Rgba, tolerance: f32) {
-    let mask = wand_mask(pm, seed, tolerance);
+    flood_fill_clipped(pm, seed, color, tolerance, None);
+}
+
+pub fn flood_fill_clipped(
+    pm: &mut Pixmap,
+    seed: Pt,
+    color: Rgba,
+    tolerance: f32,
+    clip: Option<&[u8]>,
+) {
+    let mask = wand_mask_clipped(pm, seed, tolerance, clip);
     let fill = tiny_skia::ColorU8::from_rgba(color.r, color.g, color.b, color.a).premultiply();
     for (pixel, selected) in pm.pixels_mut().iter_mut().zip(mask) {
         if selected != 0 {
@@ -390,12 +568,20 @@ pub fn flood_fill(pm: &mut Pixmap, seed: Pt, color: Rgba, tolerance: f32) {
 
 /// Returns a mask (255 = selected) from a wand click.
 pub fn wand_mask(pm: &Pixmap, seed: Pt, tolerance: f32) -> Vec<u8> {
+    wand_mask_clipped(pm, seed, tolerance, None)
+}
+
+pub fn wand_mask_clipped(pm: &Pixmap, seed: Pt, tolerance: f32, clip: Option<&[u8]>) -> Vec<u8> {
     let w = pm.width() as i32;
     let h = pm.height() as i32;
     let mut mask = vec![0u8; (w * h) as usize];
     let x = seed.x.round() as i32;
     let y = seed.y.round() as i32;
     if x < 0 || y < 0 || x >= w || y >= h {
+        return mask;
+    }
+    let seed_idx = (y * w + x) as usize;
+    if clip.is_some_and(|clip| clip.get(seed_idx).copied().unwrap_or(0) == 0) {
         return mask;
     }
     let target = sample(pm, x, y);
@@ -406,6 +592,9 @@ pub fn wand_mask(pm: &Pixmap, seed: Pt, tolerance: f32) -> Vec<u8> {
         }
         let idx = (cy * w + cx) as usize;
         if mask[idx] != 0 {
+            continue;
+        }
+        if clip.is_some_and(|clip| clip.get(idx).copied().unwrap_or(0) == 0) {
             continue;
         }
         let px = sample(pm, cx, cy);
@@ -644,5 +833,77 @@ mod tests {
         assert_eq!(pm.data(), &[0, 128, 0, 128, 0, 0, 0, 255, 0, 0, 0, 0]);
         flood_fill(&mut pm, Pt::new(2.0, 0.0), Rgba::BLACK, 8.0);
         assert_eq!(&pm.data()[8..], &[0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn smudge_pulls_colour_along_the_stroke_instead_of_stamping_a_disk() {
+        let mut pm = Pixmap::new(24, 8).unwrap();
+        for x in 0..6 {
+            set_px(&mut pm, x, 4, [220, 30, 30, 255]);
+        }
+        let brush = Brush {
+            size: 6.0,
+            hardness: 0.85,
+            flow: 0.9,
+            opacity: 1.0,
+            spacing: 0.2,
+            ..Default::default()
+        };
+        smudge_stroke(&mut pm, Pt::new(3.0, 4.0), Pt::new(18.0, 4.0), &brush);
+        let smeared = sample(&pm, 14, 4);
+        assert!(
+            smeared[0] > 80,
+            "smudge should carry red along the stroke {smeared:?}"
+        );
+        assert!(smeared[1] < 80 && smeared[2] < 80);
+        assert_eq!(sample(&pm, 22, 4), [0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn clone_stroke_tracks_the_source_offset() {
+        let mut pm = Pixmap::new(20, 8).unwrap();
+        set_px(&mut pm, 2, 4, [10, 200, 10, 255]);
+        set_px(&mut pm, 4, 4, [10, 10, 200, 255]);
+        let brush = Brush {
+            size: 3.0,
+            hardness: 1.0,
+            flow: 1.0,
+            opacity: 1.0,
+            spacing: 0.4,
+            ..Default::default()
+        };
+        clone_stamp(&mut pm, Pt::new(10.0, 4.0), Pt::new(2.0, 4.0), &brush);
+        clone_stroke(
+            &mut pm,
+            Pt::new(10.0, 4.0),
+            Pt::new(12.0, 4.0),
+            Pt::new(2.0, 4.0),
+            &brush,
+        );
+        assert_eq!(sample(&pm, 10, 4), [10, 200, 10, 255]);
+        assert_eq!(sample(&pm, 12, 4), [10, 10, 200, 255]);
+    }
+
+    #[test]
+    fn pixel_selection_helpers_combine_clip_and_bound() {
+        let mut overlay = Pixmap::new(4, 1).unwrap();
+        overlay
+            .data_mut()
+            .copy_from_slice(&[9, 9, 9, 255, 8, 8, 8, 255, 7, 7, 7, 255, 6, 6, 6, 255]);
+        let mask = vec![0, 255, 255, 0];
+        clip_overlay(&mut overlay, &mask);
+        assert_eq!(overlay.data()[3], 0);
+        assert!(overlay.data()[7] > 0);
+        assert!(overlay.data()[11] > 0);
+        assert_eq!(overlay.data()[15], 0);
+        let added = combine_masks(Some(&[255, 0, 0, 0]), vec![0, 255, 0, 0], true);
+        assert_eq!(added, vec![255, 255, 0, 0]);
+        assert_eq!(selected_count(&added), 2);
+        assert_eq!(selection_bounds(&added, 4, 1), Some((0, 0, 2, 1)));
+        let original = Pixmap::new(2, 1).unwrap();
+        let mut dst = original.clone();
+        dst.data_mut()[..4].copy_from_slice(&[1, 2, 3, 255]);
+        restrict_pixmap(&mut dst, &original, &[0, 255]);
+        assert_eq!(&dst.data()[..4], &original.data()[..4]);
     }
 }

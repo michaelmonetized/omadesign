@@ -421,8 +421,8 @@ fn draw_content(
             }
         }
         LayerKind::Raster { pixels, .. } => {
+            let xf = t.pre_concat(layer_pixel_transform(layer));
             let _ = pixels.with_pm(|src| {
-                let xf = t.pre_concat(layer_pixel_transform(layer));
                 pm.draw_pixmap(
                     0,
                     0,
@@ -446,7 +446,7 @@ fn draw_content(
                         blend_mode: blend,
                         ..Default::default()
                     },
-                    t,
+                    xf,
                     None,
                 );
             }

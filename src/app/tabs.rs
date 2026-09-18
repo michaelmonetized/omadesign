@@ -116,6 +116,7 @@ impl Studio {
         self.cursor = None;
         self.canvas_key = None;
         self.canvas_gen = self.canvas_gen.wrapping_add(1);
+        self.pixel_sel_gen = self.pixel_sel_gen.wrapping_add(1);
     }
 
     pub fn ensure_tabs(&mut self) {

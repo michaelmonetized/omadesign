@@ -99,7 +99,7 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                         section_gap(ui);
                     }
                     if !studio.paint_mask {
-                        if matches!(studio.tool, Tool::Brush | Tool::Fill) {
+                        if matches!(studio.tool, Tool::Brush | Tool::Fill | Tool::Eyedropper) {
                             paint_color_studio(ui, studio);
                         } else if !paint {
                             if motion {
@@ -305,6 +305,10 @@ fn pixel_context(studio: &Studio) -> bool {
                 | Tool::Heal
                 | Tool::Smudge
                 | Tool::Wand
+                | Tool::Eyedropper
+                | Tool::Marquee
+                | Tool::EllipseMarquee
+                | Tool::Lasso
         )
 }
 
@@ -328,9 +332,13 @@ fn inspector_title(ui: &mut Ui, studio: &Studio) {
             Tool::Eraser => (ph::ERASER, "Eraser"),
             Tool::Fill => (ph::PAINT_BUCKET, "Fill"),
             Tool::Wand => (ph::MAGIC_WAND, "Magic wand"),
+            Tool::Eyedropper => (ph::EYEDROPPER, "Eyedropper"),
+            Tool::Marquee => (ph::SELECTION, "Marquee"),
+            Tool::EllipseMarquee => (ph::CIRCLE_DASHED, "Elliptical marquee"),
+            Tool::Lasso => (ph::POLYGON, "Lasso"),
             _ => (ph::PAINT_BRUSH, studio.tool.label()),
         };
-        let description = studio
+        let layer_name = studio
             .active_layer
             .and_then(|index| studio.doc.layers.get(index))
             .filter(|layer| layer.kind.pixels().is_some())
@@ -338,6 +346,18 @@ fn inspector_title(ui: &mut Ui, studio: &Studio) {
                 || "Choose a pixel layer".into(),
                 |layer| format!("Pixels · {}", layer.name),
             );
+        let description = if matches!(studio.tool, Tool::Eyedropper | Tool::Brush | Tool::Fill) {
+            format!("{} · {}", studio.brush.color.hex(), layer_name)
+        } else if let Some(mask) = &studio.pixel_sel {
+            let n = crate::paint::selected_count(mask);
+            if n == 0 {
+                layer_name
+            } else {
+                format!("{n} px selected · {layer_name}")
+            }
+        } else {
+            layer_name
+        };
         (icon, name, description)
     } else if let Some(group) = studio
         .active_layer
@@ -377,15 +397,29 @@ fn inspector_title(ui: &mut Ui, studio: &Studio) {
     };
     ui.horizontal(|ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(34.0, 38.0), eframe::egui::Sense::hover());
-        ui.painter()
-            .rect_filled(rect.shrink2(vec2(0.0, 2.0)), 9.0, accent_soft());
-        ui.painter().text(
-            rect.center(),
-            eframe::egui::Align2::CENTER_CENTER,
-            icon,
-            icons::font(22.0),
-            accent(),
-        );
+        let chip = matches!(studio.tool, Tool::Eyedropper | Tool::Brush | Tool::Fill)
+            && (pixel_context(studio) || studio.persona == Persona::Pixel);
+        if chip {
+            let color = studio.brush.color.to_egui();
+            ui.painter()
+                .rect_filled(rect.shrink2(vec2(0.0, 2.0)), 9.0, color);
+            ui.painter().rect_stroke(
+                rect.shrink2(vec2(0.0, 2.0)),
+                9.0,
+                Stroke::new(1.0, border()),
+                eframe::egui::StrokeKind::Middle,
+            );
+        } else {
+            ui.painter()
+                .rect_filled(rect.shrink2(vec2(0.0, 2.0)), 9.0, accent_soft());
+            ui.painter().text(
+                rect.center(),
+                eframe::egui::Align2::CENTER_CENTER,
+                icon,
+                icons::font(22.0),
+                accent(),
+            );
+        }
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 3.0;
             ui.add(eframe::egui::Label::new(RichText::new(name).size(14.0).strong()).truncate());

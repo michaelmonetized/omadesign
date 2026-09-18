@@ -5,7 +5,10 @@ use crate::geom::{Anchor, Bounds, Geom, Pt, insert_anchor};
 use crate::paint;
 use crate::tools::{Persona, Tool};
 use crate::ui::theme::{accent, fg_weak, select, select_fill};
-use eframe::egui::{Color32, PointerButton, Pos2, Rect, Sense, Stroke, Ui, Vec2, pos2, vec2};
+use eframe::egui::{
+    Color32, ColorImage, PointerButton, Pos2, Rect, Sense, Shape, Stroke, TextureOptions, Ui, Vec2,
+    pos2, vec2,
+};
 use std::collections::BTreeSet;
 
 pub fn show(ui: &mut Ui, studio: &mut Studio) {
@@ -419,13 +422,24 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
         return;
     }
 
-    if studio.tool == Tool::Wand && resp.clicked() {
-        if let Some(li) = studio.raster_target()
-            && let Some(px) = studio.doc.layers[li].kind.pixels()
-            && let Some(pm) = px.to_pixmap()
+    if studio.tool == Tool::Wand {
+        let press = resp.ctx.input(|i| {
+            i.events.iter().find_map(|event| match event {
+                eframe::egui::Event::PointerButton {
+                    pos,
+                    button: PointerButton::Primary,
+                    pressed: true,
+                    modifiers,
+                } => Some((*pos, *modifiers)),
+                _ => None,
+            })
+        });
+        if let Some((at, modifiers)) = press
+            && crect.contains(at)
+            && resp.ctx.layer_id_at(at) == Some(resp.layer_id)
         {
-            studio.pixel_sel = Some(paint::wand_mask(&pm, pick, studio.fill_tolerance));
-            studio.status = "wand selection".into();
+            let point = studio.view.pointer_to_world(origin, from_egui(at));
+            super::retouch::apply_wand(studio, point, modifiers.shift);
         }
         return;
     }
@@ -623,9 +637,14 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
         }
     }
 
-    if resp.dragged_by(PointerButton::Primary) {
-        let world = pick;
-        continue_drag(studio, world, shift, alt);
+    let primary_down = resp
+        .ctx
+        .input(|i| i.pointer.button_down(PointerButton::Primary));
+    if studio.op.is_some()
+        && primary_down
+        && (resp.dragged_by(PointerButton::Primary) || pointer_down_starts_op(studio.tool, alt))
+    {
+        continue_drag(studio, pick, shift, alt);
     }
 
     if resp.double_clicked() {
@@ -666,7 +685,23 @@ fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
     if studio.type_edit.is_none()
         && !matches!(
             studio.tool,
-            Tool::Hand | Tool::Zoom | Tool::Node | Tool::Pen | Tool::Trace | Tool::Artboard
+            Tool::Hand
+                | Tool::Zoom
+                | Tool::Node
+                | Tool::Pen
+                | Tool::Trace
+                | Tool::Artboard
+                | Tool::Brush
+                | Tool::Eraser
+                | Tool::Fill
+                | Tool::Clone
+                | Tool::Heal
+                | Tool::Smudge
+                | Tool::Marquee
+                | Tool::EllipseMarquee
+                | Tool::Lasso
+                | Tool::Wand
+                | Tool::Eyedropper
         )
         && !studio.selection.is_empty()
     {
@@ -901,51 +936,9 @@ fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
         }
         Tool::Eraser | Tool::Heal => super::retouch::start(studio, pick),
         Tool::Brush if studio.paint_mask => super::retouch::start(studio, pick),
-        Tool::Brush => {
-            if let Some(li) = studio.raster_target() {
-                if let Some(px) = studio.doc.layers[li].kind.pixels()
-                    && let Some(buf) = tiny_skia::Pixmap::new(px.w, px.h)
-                {
-                    let mut buf = buf;
-                    paint::stamp(&mut buf, pick, &studio.brush, studio.tool == Tool::Eraser);
-                    studio.op = Some(Op::Brush {
-                        layer: li,
-                        erase: studio.tool == Tool::Eraser,
-                        buf,
-                        last: Some(pick),
-                        before: px.data.clone(),
-                    });
-                }
-            } else {
-                studio.status = "add a pixel layer to paint".into();
-            }
-        }
-        Tool::Smudge => {
-            if let Some(li) = studio.raster_target()
-                && let Some(px) = studio.doc.layers[li].kind.pixels()
-            {
-                studio.op = Some(Op::Smudge {
-                    layer: li,
-                    last: Some(pick),
-                    before: px.data.clone(),
-                });
-            }
-        }
-        Tool::Clone => {
-            if studio.clone_source.is_none() {
-                studio.status = "Alt-click to set clone source".into();
-                return;
-            }
-            if let Some(li) = studio.raster_target()
-                && let Some(px) = studio.doc.layers[li].kind.pixels()
-            {
-                studio.op = Some(Op::Clone {
-                    layer: li,
-                    last: Some(pick),
-                    before: px.data.clone(),
-                });
-            }
-        }
+        Tool::Brush => super::retouch::start_brush(studio, pick),
+        Tool::Smudge => super::retouch::start_smudge(studio, pick),
+        Tool::Clone => super::retouch::start_clone(studio, pick),
         Tool::Marquee => {
             studio.op = Some(Op::Marquee {
                 start: snap,
@@ -1722,55 +1715,20 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                 s.geom.preserve_rotation_pivot(center, rotation);
             }
         }
-        Some(Op::Brush {
-            buf, last, erase, ..
-        }) => {
-            if let Some(prev) = *last {
-                paint::stroke_to(buf, prev, world, &studio.brush, *erase);
-            } else {
-                paint::stamp(buf, world, &studio.brush, *erase);
-            }
-            *last = Some(world);
-        }
+        Some(Op::Brush { .. }) => super::retouch::brush_drag(studio, world),
         Some(Op::Retouch { .. }) => super::retouch::drag(studio, world),
-        Some(Op::Smudge { layer, last, .. }) => {
-            let li = *layer;
-            let prev = *last;
-            if let Some(px) = studio
-                .doc
-                .layers
-                .get_mut(li)
-                .and_then(|l| l.kind.pixels_mut())
-                && let Some(mut pm) = px.to_pixmap()
-            {
-                if let Some(p0) = prev {
-                    paint::smudge(&mut pm, p0, world, &studio.brush);
-                }
-                *px = crate::document::Pixels::from_pixmap(&pm);
-            }
-            if let Some(Op::Smudge { last, .. }) = &mut studio.op {
-                *last = Some(world);
-            }
-        }
-        Some(Op::Clone { layer, last, .. }) => {
-            let li = *layer;
-            let src = studio.clone_source;
-            if let (Some(source), Some(px)) = (
-                src,
-                studio
-                    .doc
-                    .layers
-                    .get_mut(li)
-                    .and_then(|l| l.kind.pixels_mut()),
-            ) && let Some(mut pm) = px.to_pixmap()
-            {
-                paint::clone_stamp(&mut pm, world, source, &studio.brush);
-                *px = crate::document::Pixels::from_pixmap(&pm);
-            }
-            let _ = last;
-        }
+        Some(Op::Smudge { .. }) => super::retouch::smudge_drag(studio, world),
+        Some(Op::Clone { .. }) => super::retouch::clone_drag(studio, world),
         Some(Op::Marquee { cur, .. }) => *cur = world,
-        Some(Op::Lasso { pts }) => pts.push(world),
+        Some(Op::Lasso { pts }) => {
+            if pts
+                .last()
+                .map(|point| (*point - world).length() > 1.5)
+                .unwrap_or(true)
+            {
+                pts.push(world);
+            }
+        }
         Some(Op::Gradient { cur, .. }) => *cur = world,
         Some(Op::CropPhoto { cur, .. }) => *cur = world,
         Some(Op::ZoomBox { cur, .. }) => *cur = world,
@@ -2166,22 +2124,12 @@ fn end_drag(studio: &mut Studio, _world: Pt, alt: bool, ctrl: bool, shift: bool)
                         }
                     }
                 }
-            } else if let Some(li) = studio.raster_target()
-                && let Some(px) = studio.doc.layers[li].kind.pixels()
-            {
-                studio.pixel_sel = Some(if ellipse {
-                    paint::fill_ellipse_mask(px.w, px.h, start.x, start.y, cur.x, cur.y)
-                } else {
-                    paint::fill_rect_mask(px.w, px.h, start.x, start.y, cur.x, cur.y)
-                });
+            } else {
+                super::retouch::commit_marquee(studio, start, cur, ellipse, shift);
             }
         }
         Some(Op::Lasso { pts }) => {
-            if let Some(li) = studio.raster_target()
-                && let Some(px) = studio.doc.layers[li].kind.pixels()
-            {
-                studio.pixel_sel = Some(paint::fill_poly_mask(px.w, px.h, &pts));
-            }
+            super::retouch::commit_lasso(studio, &pts, shift);
         }
         Some(Op::Gradient { start, cur }) => {
             if (cur - start).length() < 2.0 {
@@ -2597,8 +2545,34 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio, pen_pre
             p.add(eframe::egui::Shape::line(scr, Stroke::new(1.5, select())));
         }
     }
-    if let Some(Op::Marquee { start, cur, .. })
-    | Some(Op::Gradient { start, cur })
+    if let Some(Op::Marquee {
+        start,
+        cur,
+        ellipse,
+    }) = &studio.op
+    {
+        if *ellipse {
+            let min = Pt::new(start.x.min(cur.x), start.y.min(cur.y));
+            let max = Pt::new(start.x.max(cur.x), start.y.max(cur.y));
+            let g = Geom::Ellipse {
+                center: (min + max) * 0.5,
+                radii: (max - min) * 0.5,
+            };
+            stroke_geom(p, rect, &g, v);
+        } else {
+            let a = win(rect, v, *start);
+            let b = win(rect, v, *cur);
+            let r = Rect::from_two_pos(a, b);
+            p.rect_filled(r, 0.0, select_fill());
+            p.rect_stroke(
+                r,
+                0.0,
+                Stroke::new(1.0, select()),
+                eframe::egui::StrokeKind::Middle,
+            );
+        }
+    }
+    if let Some(Op::Gradient { start, cur })
     | Some(Op::CropPhoto { start, cur })
     | Some(Op::ZoomBox { start, cur })
     | Some(Op::Place { start, cur }) = &studio.op
@@ -2616,10 +2590,18 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio, pen_pre
     }
     if let Some(Op::Lasso { pts }) = &studio.op {
         let scr: Vec<Pos2> = pts.iter().map(|q| win(rect, v, *q)).collect();
-        if scr.len() >= 2 {
+        if scr.len() >= 3 {
+            p.add(eframe::egui::epaint::PathShape {
+                points: scr,
+                closed: true,
+                fill: select_fill(),
+                stroke: Stroke::new(1.2, select()).into(),
+            });
+        } else if scr.len() == 2 {
             p.add(eframe::egui::Shape::line(scr, Stroke::new(1.2, select())));
         }
     }
+    draw_pixel_sel(p, rect, studio);
 
     // Draw selection outlines. For multi-selection we show a single group bbox;
     // otherwise per-shape bbox is the same as group, but we still use group
@@ -2743,6 +2725,88 @@ fn draw_type_caret(
         let bot = win(rect, v, Pt::new(c.x, c.y + run.px * 0.2));
         p.line_segment([top, bot], Stroke::new(1.5, select()));
     }
+}
+
+fn draw_pixel_sel(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
+    let Some(mask) = studio.pixel_sel.as_ref() else {
+        return;
+    };
+    let Some(layer_index) = studio.raster_target() else {
+        return;
+    };
+    let Some(layer) = studio.doc.layers.get(layer_index) else {
+        return;
+    };
+    let Some(pixels) = layer.kind.pixels() else {
+        return;
+    };
+    if mask.len() != pixels.w as usize * pixels.h as usize {
+        return;
+    }
+    let Some((x0, y0, x1, y1)) = paint::selection_bounds(mask, pixels.w, pixels.h) else {
+        return;
+    };
+    let id = eframe::egui::Id::new("pixel-sel-overlay");
+    let tex = p.ctx().data(|data| {
+        data.get_temp::<(u64, eframe::egui::TextureHandle)>(id)
+            .filter(|(generation, _)| *generation == studio.pixel_sel_gen)
+            .map(|(_, tex)| tex)
+    });
+    let tex = tex.unwrap_or_else(|| {
+        let color = select();
+        let rgba = paint::selection_overlay_rgba(mask, [color.r(), color.g(), color.b()], 72);
+        let image =
+            ColorImage::from_rgba_unmultiplied([pixels.w as usize, pixels.h as usize], &rgba);
+        let tex = p
+            .ctx()
+            .load_texture("pixel-sel", image, TextureOptions::NEAREST);
+        p.ctx().data_mut(|data| {
+            data.insert_temp(id, (studio.pixel_sel_gen, tex.clone()));
+        });
+        tex
+    });
+    if let Some(bounds) = layer.kind.raster_bounds() {
+        let screen = Rect::from_min_max(
+            win(rect, studio.view, bounds.min),
+            win(rect, studio.view, bounds.max),
+        );
+        p.image(
+            tex.id(),
+            screen,
+            Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+            Color32::WHITE,
+        );
+    }
+    let transform = compositor::layer_pixel_transform(layer);
+    let corner = |x: u32, y: u32| {
+        let mut point = tiny_skia::Point::from_xy(x as f32, y as f32);
+        transform.map_point(&mut point);
+        win(rect, studio.view, Pt::new(point.x, point.y))
+    };
+    let outline = [
+        corner(x0, y0),
+        corner(x1, y0),
+        corner(x1, y1),
+        corner(x0, y1),
+        corner(x0, y0),
+    ];
+    let phase = (p.ctx().input(|i| i.time) * 28.0) as f32;
+    p.extend(Shape::dashed_line_with_offset(
+        &outline,
+        Stroke::new(1.0, Color32::WHITE),
+        &[5.0],
+        &[5.0],
+        phase,
+    ));
+    p.extend(Shape::dashed_line_with_offset(
+        &outline,
+        Stroke::new(1.0, Color32::BLACK),
+        &[5.0],
+        &[5.0],
+        phase + 5.0,
+    ));
+    p.ctx()
+        .request_repaint_after(std::time::Duration::from_millis(32));
 }
 
 fn stroke_geom(p: &eframe::egui::Painter, rect: Rect, g: &Geom, view: crate::compositor::View) {
