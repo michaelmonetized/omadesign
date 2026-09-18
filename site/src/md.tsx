@@ -15,6 +15,9 @@ const DOC_ROUTES: Record<string, string> = {
   "/docs/contributing.md": "docs/contributing/",
   "/docs/roadmap": "docs/roadmap/",
   "/docs/roadmap.md": "docs/roadmap/",
+  "/updates": "updates/",
+  "/updates/0.5.1": "updates/0.5.1/",
+  "/updates/0.5.0": "updates/0.5.0/",
 };
 
 /** Keep source-relative Markdown links useful in a GitHub Pages subdirectory. */

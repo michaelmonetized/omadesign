@@ -137,17 +137,18 @@ export const featureGroups: FeatureGroup[] = [
       {
         name: "Erase, fill and smudge",
         description:
-          "Remove pixels, fill connected areas and blend nearby color with dedicated tools and controls for the current task.",
+          "Remove pixels, fill connected areas and smear color along the stroke. Smudge pulls paint instead of stamping a disk.",
       },
       {
         name: "Clone and healing brushes",
         description:
-          "Alt-click a source, then paint. Clone copies texture; healing blends sampled texture with the destination’s local color. Undo restores the stroke.",
+          "Alt-click a source, then paint. Clone tracks the offset across the stroke. Healing blends sampled texture with the destination’s local color. Undo restores the stroke.",
       },
       {
         name: "Pixel selections",
+        since: "0.5.1",
         description:
-          "Isolate an area with rectangular or elliptical marquees, a freehand lasso or a tolerance-based magic wand.",
+          "Marquee, ellipse, lasso and wand leave a visible selection. Paint, fill, clone, heal and smudge stay inside it. Delete clears the pixels. Esc deselects.",
       },
       {
         name: "Editable layer masks",
