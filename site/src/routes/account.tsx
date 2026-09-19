@@ -1,73 +1,72 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
-
-export const Route = createFileRoute("/account")({
-  head: () => ({ meta: [{ title: "Account · omadesign" }] }),
-  component: Account,
-});
-
+import { createFileRoute } from "@tanstack/react-router";
+import { SignInButton, UserButton } from "@clerk/tanstack-react-start";
+import {
+  Authenticated,
+  Unauthenticated,
+  AuthLoading,
+  useMutation,
+  useQuery,
+} from "convex/react";
+import { useState } from "react";
+import { api } from "../../convex/_generated/api";
+import { message } from "../cloud/files";
+import "../cloud/cloud.css";
+export const Route = createFileRoute("/account")({ component: Account });
 function Account() {
-  const clerk = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-  const [saved, setSaved] = useState("");
-  const save = (event: FormEvent) => {
-    event.preventDefault();
-    localStorage.setItem(
-      "omadesign-identity",
-      JSON.stringify({ email, name, savedAt: Date.now() }),
-    );
-    setSaved("Saved in this browser. Match it in the app under File → Sign in.");
-  };
   return (
-    <main id="main" className="section shell gallery-page">
-      <h1>Account</h1>
-      <p className="hero-intro">
-        Cloud is opt-in. Sign in here, then enable sync on a document. Private
-        stays private.
-      </p>
-      {clerk ? (
-        <p className="muted">
-          Clerk is configured for this deploy. Use the hosted sign-in on the
-          live domain.
-        </p>
-      ) : (
-        <form className="waitlist" onSubmit={save}>
-          <p className="muted">
-            Clerk keys are not on this build yet. This identity is enough for
-            desktop sync and comments until they are.
-          </p>
-          <label>
-            Name
-            <input value={name} onChange={(e) => setName(e.target.value)} required />
-          </label>
-          <label>
-            Email
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </label>
-          <button className="button" type="submit">
-            Save identity
-          </button>
-          {saved ? <p className="muted">{saved}</p> : null}
-        </form>
-      )}
-      <ul className="account-links">
-        <li>
-          <Link to="/showcase">Public showcase</Link>
-        </li>
-        <li>
-          <Link to="/compete">Competition waitlist</Link>
-        </li>
-        <li>
-          Invite a collaborator from File in the app. They need this same
-          identity email.
-        </li>
-      </ul>
+    <main id="main" className="section shell cloud-app">
+      <h1>Your account</h1>
+      <UserButton />
+      <Unauthenticated>
+        <SignInButton mode="modal">
+          <button className="button">Sign in ↗</button>
+        </SignInButton>
+      </Unauthenticated>
+      <AuthLoading>
+        <p>Connecting…</p>
+      </AuthLoading>
+      <Authenticated>
+        <Devices />
+      </Authenticated>
+      <a className="text-link" href="/cloud">
+        Open cloud projects ↗
+      </a>
     </main>
+  );
+}
+function Devices() {
+  const devices = useQuery(api.devices.list, {});
+  const revoke = useMutation(api.devices.revoke);
+  const [notice, setNotice] = useState("");
+  return (
+    <section className="cloud-invites">
+      <h2>Connected desktops</h2>
+      <p>
+        Connect from Omadesign’s Cloud menu. Revoke access here if a device is
+        lost or shared.
+      </p>
+      {devices?.map((d) => (
+        <article key={d.id}>
+          <div>
+            <strong>{d.label}</strong>
+            <p>Access expires {new Date(d.expires).toLocaleDateString()}</p>
+          </div>
+          <button
+            onClick={async () => {
+              try {
+                await revoke({ id: d.id });
+                setNotice("Device access revoked.");
+              } catch (e) {
+                setNotice(message(e));
+              }
+            }}
+          >
+            Revoke access
+          </button>
+        </article>
+      ))}
+      {devices?.length === 0 && <p>No desktops connected yet.</p>}
+      <p role="status">{notice}</p>
+    </section>
   );
 }
