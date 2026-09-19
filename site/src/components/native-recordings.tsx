@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { recordings, type Recording } from "../recordings";
 import { sitePath } from "../site";
-import type { StudioName } from "./studio-carousel";
+import { studioNames as studios, type StudioName } from "./studio-carousel";
 import { RevealText } from "./reveal-text";
 import "./native-recordings.css";
 
@@ -19,22 +19,22 @@ export function StudioRecordings({
   onSelect: (studio: StudioName) => void;
 }) {
   const id = useId();
-  const active = recordings.find((recording) => recording.name === studio)!;
+  const active = recordings.find((recording) => recording.name === studio);
   function navigate(event: KeyboardEvent<HTMLDivElement>) {
-    const index = recordings.indexOf(active);
+    const index = studios.indexOf(studio);
     const next =
       event.key === "ArrowRight"
-        ? (index + 1) % 4
+        ? (index + 1) % studios.length
         : event.key === "ArrowLeft"
-          ? (index + 3) % 4
+          ? (index + studios.length - 1) % studios.length
           : event.key === "Home"
             ? 0
             : event.key === "End"
-              ? 3
+              ? studios.length - 1
               : null;
     if (next === null) return;
     event.preventDefault();
-    onSelect(recordings[next].name as StudioName);
+    onSelect(studios[next]);
     event.currentTarget
       .querySelectorAll<HTMLButtonElement>("button")
       [next]?.focus();
@@ -50,30 +50,30 @@ export function StudioRecordings({
       <div
         className="recording-studio-tabs"
         role="tablist"
-        aria-label="Studio recordings"
+        aria-label="Studios"
         onKeyDown={navigate}
       >
-        {recordings.map((recording) => (
+        {studios.map((name) => (
           <button
             type="button"
             role="tab"
-            key={recording.id}
-            id={`${id}-${recording.id}`}
+            key={name}
+            id={`${id}-${name.toLowerCase()}`}
             aria-controls={`${id}-player`}
-            aria-selected={recording === active}
-            tabIndex={recording === active ? 0 : -1}
-            onClick={() => onSelect(recording.name as StudioName)}
+            aria-selected={name === studio}
+            tabIndex={name === studio ? 0 : -1}
+            onClick={() => onSelect(name)}
           >
-            {recording.name}
+            {name}
           </button>
         ))}
       </div>
       <div
         id={`${id}-player`}
         role="tabpanel"
-        aria-labelledby={`${id}-${active.id}`}
+        aria-labelledby={`${id}-${studio.toLowerCase()}`}
       >
-        <RecordingPlayer key={active.id} recording={active} />
+        {active ? <RecordingPlayer key={active.id} recording={active} /> : <LayoutOverview />}
       </div>
       <noscript>
         <style>{`.recording-studio-tabs,.recording-chapters{display:none}`}</style>
@@ -87,6 +87,28 @@ export function StudioRecordings({
         </p>
       </noscript>
     </section>
+  );
+}
+
+function LayoutOverview() {
+  return (
+    <div className="layout-overview">
+      <div className="layout-overview-copy">
+        <h3>Frames. Stacks. Screens.</h3>
+        <p>Build UI and web mockups in the same editable document as your artwork.</p>
+        <dl>
+          <div><dt>Nested frames</dt><dd>Press F to draw a frame. Nest frames and add type, shapes, and image placeholders.</dd></div>
+          <div><dt>Auto-layout</dt><dd>Arrange children in horizontal or vertical stacks with gap, padding, and stretch.</dd></div>
+          <div><dt>Constraints</dt><dd>Pin, center, stretch, or scale children when their parent frame resizes.</dd></div>
+          <div><dt>Frame exports</dt><dd>Export a selected frame to PNG, SVG, or HTML.</dd></div>
+        </dl>
+        <a className="text-link" href={`${sitePath("docs/manual")}#layout`}>Explore Layout ↗</a>
+      </div>
+      <figure>
+        <img src={sitePath("media/showcase/layout.webp")} width="1600" height="1000" loading="lazy" alt="Form: an editable studio dashboard exported from Omadesign Layout." />
+        <figcaption>Form · Editable Layout example <a href={sitePath("media/showcase/layout.oma")} download>Download editable project ↗</a></figcaption>
+      </figure>
+    </div>
   );
 }
 

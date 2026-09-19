@@ -3,7 +3,7 @@ import type { KeyboardEvent } from "react";
 import { sitePath } from "../site";
 import "./studio-carousel.css";
 
-export type StudioName = "Design" | "Pixel" | "Photo" | "Motion";
+export type StudioName = "Design" | "Layout" | "Pixel" | "Photo" | "Motion";
 
 type StudioCarouselProps = {
   selected?: StudioName;
@@ -15,6 +15,11 @@ const works: { name: StudioName; image: string; alt: string }[] = [
     name: "Design",
     image: "design.webp",
     alt: "Block Party: an original coral and citron poster made with editable vectors in omadesign.",
+  },
+  {
+    name: "Layout",
+    image: "layout.webp",
+    alt: "Form: an editable studio dashboard made with nested Layout frames in Omadesign.",
   },
   {
     name: "Pixel",
@@ -32,6 +37,7 @@ const works: { name: StudioName; image: string; alt: string }[] = [
     alt: "After Hours: cream typography and concentric rings made as editable animated artwork in omadesign.",
   },
 ];
+export const studioNames = works.map((work) => work.name);
 const count = works.length;
 const wrap = (index: number) => ((index % count) + count) % count;
 const nearestTurn = (index: number, position: number) =>
@@ -53,7 +59,7 @@ type Drag = {
   moving: boolean;
 };
 
-/** Four DOM planes travel through actual X/Y/Z space; frames never rerender React. */
+/** Studio artwork planes travel through actual X/Y/Z space; frames never rerender React. */
 export function StudioCarousel({
   selected,
   onSelect,
@@ -107,7 +113,7 @@ export function StudioCarousel({
       scene!.style.transform = `rotateX(${cameraY * -5}deg) rotateY(${cameraX * 8}deg) translate3d(${cameraX * -22}px,${cameraY * -12}px,0)`;
       cards.current.forEach((card, index) => {
         if (!card) return;
-        const angle = ((index - position - drift) * Math.PI) / 2;
+        const angle = ((index - position - drift) * Math.PI * 2) / count;
         const cosine = Math.cos(angle);
         const sine = Math.sin(angle);
         const depth = (1 - cosine) * 0.5;
@@ -122,7 +128,7 @@ export function StudioCarousel({
         const z = (cosine - 1) * width * (narrow ? 0.8 : 0.76);
         const yaw = -sine * 34;
         const pitch = cosine * -5;
-        const roll = sine * 11 + [-4, 5, -3, 4][index];
+        const roll = sine * 11 + [-4, 5, -3, 4, -2][index];
         card.style.transform = `translate(-50%,-50%) translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,${z.toFixed(2)}px) rotateY(${yaw.toFixed(2)}deg) rotateX(${pitch.toFixed(2)}deg) rotateZ(${roll.toFixed(2)}deg)`;
         card.style.opacity = String(1 - depth * 0.34);
       });

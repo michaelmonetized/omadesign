@@ -267,3 +267,12 @@
     gap: 25px;
   }
 }
+/* Keep the fifth plane behind the opening card before hydration. */
+.orb-artwork[data-work="4"] {
+  transform: translate(-50%, -50%) translate3d(-70vw, -28svh, -60vw) rotateY(32deg) rotateZ(-12deg);
+  opacity: 0.8;
+}
+@media (max-width: 600px) {
+  .orb-nav { flex-wrap: wrap; justify-content: center; }
+  .orb-nav button { padding-inline: 11px; }
+}
