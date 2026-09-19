@@ -13,8 +13,10 @@ const features = [
 export function CloudWaitlist() {
   const dialog = useRef<HTMLDialogElement>(null);
   const video = useRef<HTMLVideoElement>(null);
+  const autoStart = useRef(true);
   const [open, setOpen] = useState(true);
   const [playing, setPlaying] = useState(false);
+  const [playBlocked, setPlayBlocked] = useState(false);
   const [muted, setMuted] = useState(true);
   const [visibleCount, setVisibleCount] = useState(0);
   const [ready, setReady] = useState(false);
@@ -38,17 +40,44 @@ export function CloudWaitlist() {
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     modal.showModal();
+    // Set the DOM properties before play(): Safari must see a muted, inline
+    // player even when React hydrates an already-rendered video element.
+    player.defaultMuted = true;
+    player.muted = true;
+    player.playsInline = true;
+    player.setAttribute("muted", "");
+    player.setAttribute("playsinline", "");
+    setMuted(true);
+    autoStart.current = true;
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let active = true;
+    let started = false;
+    const markStarted = () => { started = true; setPlayBlocked(false); };
+    const start = () => {
+      if (!active || started || !autoStart.current || preference.matches) return;
+      void player.play().catch(error => {
+        if (!active || started || !autoStart.current || preference.matches) return;
+        if (error.name === "NotAllowedError") setPlayBlocked(true);
+        else if (error.name !== "AbortError") revealSignup();
+      });
+    };
     const apply = () => {
       if (preference.matches) { player.pause(); revealSignup(); }
-      else void player.play().catch(revealSignup);
+      else { started = false; start(); }
     };
+    player.addEventListener("playing", markStarted);
+    player.addEventListener("canplay", start);
     apply();
+    const frame = window.requestAnimationFrame(start);
     preference.addEventListener("change", apply);
     // A stalled download must never block access to the waitlist.
-    const fallback = window.setTimeout(() => { if (player.readyState < 2) revealSignup(); }, 8000);
+    const fallback = window.setTimeout(() => { if (!started) revealSignup(); }, 8000);
     return () => {
+      active = false;
+      window.cancelAnimationFrame(frame);
       window.clearTimeout(fallback);
+      player.removeEventListener("playing", markStarted);
+      player.removeEventListener("canplay", start);
       preference.removeEventListener("change", apply);
       player.pause();
       modal.close();
@@ -96,7 +125,7 @@ export function CloudWaitlist() {
         <video ref={video} className="cloud-film" muted={muted} playsInline preload="auto"
           poster={sitePath("media/cloud/reveal.webp")} width="1280" height="720"
           aria-label="Omadesign logo emerging from moonlit clouds"
-          onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
+          onPlaying={() => { setPlaying(true); setPlayBlocked(false); }} onPause={() => setPlaying(false)}
           onEnded={() => { setPlaying(false); revealSignup(); }} onError={revealSignup}
           onTimeUpdate={event => setVisibleCount(Math.min(features.length, Math.max(0, Math.floor((event.currentTarget.currentTime - 3) / 2.7) + 1)))}>
           <source src={sitePath("media/cloud/reveal.mp4")} type="video/mp4" />
@@ -140,12 +169,16 @@ export function CloudWaitlist() {
             <button type="button" onClick={() => {
               const player = video.current;
               if (!player) return;
+              autoStart.current = false;
               if (playing) player.pause();
               else { if (player.ended) player.currentTime = 0; void player.play().catch(revealSignup); }
-            }}>{playing ? "Pause" : "Play"}</button>
-            <button type="button" aria-pressed={!muted} onClick={() => setMuted(!muted)}>{muted ? "Sound on" : "Sound off"}</button>
+            }}>{playing ? "Pause" : playBlocked ? "Tap to play" : "Play"}</button>
+            <button type="button" aria-pressed={!muted} onClick={() => {
+              if (video.current) video.current.muted = !muted;
+              setMuted(!muted);
+            }}>{muted ? "Sound on" : "Sound off"}</button>
           </div>
-          {!ready && <button type="button" onClick={() => { video.current?.pause(); revealSignup(); }}>Skip to waitlist ↓</button>}
+          {!ready && <button type="button" onClick={() => { autoStart.current = false; video.current?.pause(); revealSignup(); }}>Skip to waitlist ↓</button>}
           {ready && <span className="cloud-release-note">Planned for 0.5.2</span>}
         </footer>
       </div>
