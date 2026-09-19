@@ -1,7 +1,9 @@
 import { defineSchema, defineTable } from "convex/server";
+import { cloudTables } from "./cloudSchema";
 import { v } from "convex/values";
 
 export default defineSchema({
+  ...cloudTables,
   waitlistSignups: defineTable({
     email: v.string(), name: v.string(),
     list: v.union(v.literal("cloud"), v.literal("competition")),

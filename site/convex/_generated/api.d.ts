@@ -8,7 +8,15 @@
  * @module
  */
 
+import type * as cloudAuth from "../cloudAuth.js";
+import type * as cloudSchema from "../cloudSchema.js";
 import type * as crons from "../crons.js";
+import type * as devices from "../devices.js";
+import type * as files from "../files.js";
+import type * as http from "../http.js";
+import type * as projects from "../projects.js";
+import type * as review from "../review.js";
+import type * as showcase from "../showcase.js";
 import type * as waitlist from "../waitlist.js";
 
 import type {
@@ -18,7 +26,15 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  cloudAuth: typeof cloudAuth;
+  cloudSchema: typeof cloudSchema;
   crons: typeof crons;
+  devices: typeof devices;
+  files: typeof files;
+  http: typeof http;
+  projects: typeof projects;
+  review: typeof review;
+  showcase: typeof showcase;
   waitlist: typeof waitlist;
 }>;
 
@@ -48,4 +64,6 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  resend: import("@convex-dev/resend/_generated/component.js").ComponentApi<"resend">;
+};
