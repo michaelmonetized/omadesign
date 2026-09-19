@@ -70,3 +70,13 @@ then encode that PNG to `site/public/media/studio/templates.webp`.
 The five continuous studio clips use real native UI input and viewport capture.
 See [recordings.md](recordings.md) for provenance, chapter timings, dependencies
 and the isolated recording and publishing commands.
+
+### Layout: Form
+
+`render-layout.rs` builds the Form studio dashboard with editable native nested
+frames and text. Its exported image and `.oma` project are used by the homepage
+carousel and Layout overview. This is example artwork, not a screen recording.
+It uses the local Nimbus Sans font at `/usr/share/fonts/gsfonts/NimbusSans-Regular.otf`.
+Build it against a current Omadesign library using the same rustc flags as
+`render.rs`, run from the repository root, then encode `/tmp/layout.png` to
+`site/public/media/showcase/layout.webp` with FFmpeg's `libwebp` encoder at quality 90.
