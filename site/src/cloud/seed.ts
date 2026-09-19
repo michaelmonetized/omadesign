@@ -21,7 +21,8 @@ export const showcaseSeed: ShowcaseItem[] = [
     title: "Harbor landing",
     author: "omadesign",
     tags: ["layout", "web"],
-    summary: "A landing hero with a stretching copy column and a pinned call to action.",
+    summary:
+      "A landing hero with a stretching copy column and a pinned call to action.",
     published: true,
   },
   {

@@ -1,0 +1,322 @@
+.cloud-app {
+  padding-block: 70px 100px;
+  max-width: 1440px;
+}
+.cloud-app-heading,
+.cloud-app-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 30px;
+}
+.cloud-app h1 {
+  font-size: clamp(40px, 6vw, 76px);
+  letter-spacing: -0.055em;
+  margin: 8px 0 30px;
+}
+.cloud-app h2 {
+  font-size: 32px;
+  letter-spacing: -0.035em;
+}
+.cloud-app h3 {
+  font-size: 23px;
+  margin-bottom: 18px;
+}
+.cloud-app .eyebrow {
+  font: 12px var(--font-mono);
+  color: var(--muted);
+  letter-spacing: 0.12em;
+}
+.cloud-app section {
+  margin-top: 48px;
+}
+.cloud-app input,
+.cloud-app select,
+.cloud-app textarea {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 12px 14px;
+  background: var(--panel);
+  color: var(--ink);
+  min-width: 0;
+}
+.cloud-app textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+.cloud-app button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.cloud-app button:focus-visible,
+.cloud-app input:focus-visible,
+.cloud-app textarea:focus-visible,
+.cloud-app select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.cloud-create {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.cloud-create input {
+  flex: 1;
+  min-width: 180px;
+}
+.cloud-projects {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
+  margin-top: 30px;
+}
+.cloud-project-card {
+  border: 1px solid var(--line);
+  padding: 28px;
+  border-radius: 12px;
+  text-align: left;
+  background: var(--panel);
+  transition: border-color 0.2s;
+}
+.cloud-project-card:hover {
+  border-color: var(--accent);
+}
+.cloud-project-card span,
+.cloud-project-card p {
+  font-size: 13px;
+  color: var(--muted);
+}
+.cloud-project-card h3 {
+  margin: 24px 0;
+}
+.cloud-project-card p {
+  margin-bottom: 28px;
+}
+.cloud-empty {
+  padding: 48px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  line-height: 1.7;
+}
+.cloud-empty p {
+  max-width: 650px;
+  margin-bottom: 24px;
+  color: var(--muted);
+}
+.cloud-device-code {
+  display: block;
+  font-size: 28px;
+  letter-spacing: 0.2em;
+  margin: 30px 0;
+}
+.cloud-badge {
+  border: 1px solid var(--line);
+  border-radius: 30px;
+  padding: 7px 15px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.cloud-upload-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.cloud-upload {
+  display: grid;
+  gap: 10px;
+  padding: 20px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.cloud-upload span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.cloud-upload input {
+  width: 100%;
+  font-size: 12px;
+  padding: 8px;
+}
+.cloud-review-tools {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.cloud-review-tools button {
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.cloud-review-tools button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--button-ink);
+}
+.cloud-review-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(260px, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.cloud-review-image {
+  position: relative;
+  touch-action: none;
+  background: var(--panel-deep);
+  border: 1px solid var(--line);
+  user-select: none;
+}
+.cloud-review-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+.cloud-pin {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  min-width: 26px;
+  min-height: 26px;
+  border: 2px solid #292134;
+  border-radius: 4px;
+  background: #d5ff72cc;
+  color: #171220;
+  font: bold 13px var(--font-mono);
+  cursor: pointer;
+}
+.cloud-pin.resolved {
+  opacity: 0.5;
+}
+.cloud-pin.draft {
+  pointer-events: none;
+}
+.cloud-comment-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 22px;
+}
+.cloud-comment-form label {
+  font-size: 14px;
+}
+.cloud-threads {
+  max-height: 850px;
+  overflow: auto;
+  display: grid;
+  gap: 14px;
+}
+.cloud-threads article {
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.cloud-threads article[data-selected="true"] {
+  border-color: var(--accent);
+}
+.cloud-thread-heading {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.cloud-thread-heading span {
+  color: var(--muted);
+}
+.cloud-threads p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+  margin: 14px 0;
+}
+.cloud-reply {
+  border-left: 2px solid var(--line);
+  padding-left: 14px;
+  font-size: 14px;
+}
+.cloud-threads form {
+  display: flex;
+  gap: 8px;
+  margin: 15px 0;
+}
+.cloud-threads input {
+  width: 100%;
+}
+.cloud-file-list,
+.cloud-invites {
+  margin-top: 24px;
+}
+.cloud-file-list article,
+.cloud-invites article {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+.cloud-file-list p,
+.cloud-team > p,
+.cloud-publish > p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.cloud-file-list button,
+.cloud-invites button {
+  padding: 8px 12px;
+  color: var(--accent);
+}
+.cloud-publish-form {
+  max-width: 650px;
+  display: grid;
+  gap: 14px;
+  margin-top: 24px;
+}
+.cloud-notice {
+  font-size: 14px;
+  min-height: 24px;
+  overflow-wrap: anywhere;
+}
+.cloud-showcase img {
+  width: 100%;
+  aspect-ratio: 16/10;
+  object-fit: cover;
+  border-radius: 8px;
+  margin-bottom: 18px;
+}
+.cloud-showcase p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 800px) {
+  .cloud-app {
+    padding-top: 40px;
+  }
+  .cloud-upload-row,
+  .cloud-review-grid {
+    grid-template-columns: 1fr;
+  }
+  .cloud-empty {
+    padding: 26px;
+  }
+  .cloud-app-toolbar {
+    flex-wrap: wrap;
+  }
+  .cloud-app-toolbar select {
+    max-width: 100%;
+  }
+  .cloud-file-list article {
+    flex-wrap: wrap;
+  }
+  .cloud-threads {
+    max-height: none;
+  }
+  .cloud-app h2 {
+    font-size: 28px;
+  }
+}
