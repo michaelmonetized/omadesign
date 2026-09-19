@@ -1,3 +1,4 @@
+import { CloudWaitlist } from "../components/cloud-waitlist";
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { faqs } from "../features";
@@ -20,10 +21,11 @@ function Home() {
   const [studio, setStudio] = useState<StudioName>("Design");
   return (
     <main id="main" ref={motion}>
+      <CloudWaitlist />
       <section className="hero shell">
         <div className="hero-heading">
           <RevealText
-            as="h1"
+            as="h2"
             hero
             lines={["Professional Grade", "Graphic Design Tool Suite"]}
           />

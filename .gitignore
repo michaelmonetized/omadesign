@@ -15,3 +15,5 @@ omadesign-demo-export.png
 
 site/.pages
 site/.pages-build
+
+site/.env.local

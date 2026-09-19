@@ -1,11 +1,9 @@
-# Convex
+# Convex backend
 
-The 0.5.0 cloud tables. Install the Convex CLI when you are ready to deploy:
+The backend now lives in `site/convex/`, beside the website’s package and lockfile.
+The original cloud schema is preserved there, with durable waitlist storage.
 
-```sh
-npx convex dev
-```
-
-Point the site at the deployment with `VITE_CONVEX_URL`. Until then
-`/api/cloud` on omadesign.app is the sync door, and the desktop can run
-against a local store.
+From `site/`, run `bunx convex dev --once` for development and `bunx convex deploy`
+for production. Set `WAITLIST_SECRET` on Convex and the same secret plus
+`CONVEX_URL` on Vercel. Deploy backend changes before deploying the site.
+See [cloud operations](../docs/cloud.md#cloud-collaboration-waitlist).

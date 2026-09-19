@@ -1562,3 +1562,11 @@ details[open] > summary .disclosure-plus {
   margin-top: 28px;
   color: var(--muted);
 }
+
+/* Keep the expanded navigation usable alongside the Cloud link. */
+@media (max-width: 1100px) {
+  .header-inner { height: auto; min-height: 106px; flex-wrap: wrap; padding-block: 8px 14px; gap: 4px 20px; }
+  .header-inner nav { order: 3; flex: 0 0 100%; min-width: 0; overflow-x: auto; gap: 24px; padding: 8px 2px; font-size: .875rem; white-space: nowrap; }
+  .header-inner nav a { flex-shrink: 0; }
+  .header-actions { margin-left: auto; }
+}

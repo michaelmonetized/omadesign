@@ -1,12 +1,11 @@
+import { handleWaitlist } from "../../server/waitlist";
 import { createFileRoute } from "@tanstack/react-router";
 import { publishedShowcase, showcaseSeed, type ShowcaseItem } from "../../cloud/seed";
 
-type WaitlistEntry = { email: string; name: string; created: number };
-type Store = { gallery: ShowcaseItem[]; waitlist: WaitlistEntry[] };
+type Store = { gallery: ShowcaseItem[] };
 
 const memory: Store = {
   gallery: [...showcaseSeed],
-  waitlist: [],
 };
 
 function json(data: unknown, status = 200) {
@@ -42,16 +41,7 @@ export const Route = createFileRoute("/api/cloud")({
           snapshot?: string;
         };
         if (body.action === "waitlist") {
-          const email = (body.email ?? "").trim();
-          if (!email.includes("@")) return json({ error: "email" }, 400);
-          if (!memory.waitlist.some((entry) => entry.email === email)) {
-            memory.waitlist.push({
-              email,
-              name: (body.name ?? "").trim(),
-              created: Date.now(),
-            });
-          }
-          return json({ ok: true });
+          return handleWaitlist(request, body);
         }
         if (body.action === "publish" && body.item) {
           if (!body.item.published) return json({ error: "private" }, 400);

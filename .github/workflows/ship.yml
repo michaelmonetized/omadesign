@@ -54,14 +54,15 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Typecheck
-        run: bun run typecheck
-
       - name: Pull Vercel environment
         run: bunx --bun vercel pull --yes --environment="${{ github.event.inputs.environment || 'production' }}" --token="$VERCEL_TOKEN"
 
       - name: Build Vercel output
         run: bunx --bun vercel build --prod --token="$VERCEL_TOKEN"
+
+      # The Vite build generates TanStack's routeTree before the typecheck.
+      - name: Typecheck
+        run: bun run typecheck
 
       - name: Archive Vercel output
         if: ${{ github.event.inputs.deploy_prod }}
