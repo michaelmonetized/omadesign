@@ -37,5 +37,33 @@
 @keyframes cloud-scene-in { from { opacity: 0; transform: translateY(32px); } to { opacity: 1; transform: none; } }
 @media (min-width: 1500px) { .cloud-columns { padding-bottom: 6vh; } }
 @media (max-height: 780px) and (min-width: 801px) { .cloud-topline { padding-block: 12px; } .cloud-columns { padding-block: 12px; } .cloud-feature-stack { gap: 15px; margin-top: 25px; } .cloud-feature-stack p { font-size: .8125rem; } .cloud-copy h1 { font-size: 3.8rem; } }
-@media (max-width: 800px) { .cloud-columns { grid-template-columns: 1fr; gap: 35px; padding-top: 24px; } .cloud-copy { max-width: 520px; } .cloud-copy h1 { font-size: clamp(3rem, 10vw, 5rem); } .cloud-feature-stack { margin-top: 28px; gap: 18px; } .cloud-feature-stack p { max-width: 400px; } .cloud-invitation { padding-bottom: 0; } .cloud-invitation:not([data-ready="true"]) { display: none; } .cloud-signup { margin-left: 0; } .cloud-film { object-position: 58% center; } .cloud-shade { background: linear-gradient(90deg, #090615c9, #09061540), linear-gradient(0deg, #090615e6, #09061500); } .cloud-topline, .cloud-controls { padding-inline: 24px; } }
+@media (max-width: 800px) {
+  .cloud-scene { min-height: 100dvh; }
+  .cloud-topline { order: 0; padding: 8px 22px; }
+  .cloud-film { order: 1; position: relative; inset: auto; z-index: 0; width: 100%; height: clamp(130px, 23svh, 230px); flex-shrink: 0; object-fit: contain; object-position: center; background: #0d091a; }
+  .cloud-shade { background: linear-gradient(155deg, #27153b50, #090615); }
+  .cloud-columns { order: 2; flex: 1; grid-template-columns: 1fr; align-content: center; align-items: start; gap: 22px; padding: 18px 24px 10px; }
+  .cloud-copy { max-width: none; }
+  .cloud-copy h1 { font-size: clamp(2.4rem, 9vw, 3.6rem); }
+  .cloud-kicker { margin-top: 8px; font-size: .875rem; }
+  .cloud-feature-stack { margin-top: 20px; gap: 12px; }
+  .cloud-feature-stack li { gap: 12px; }
+  .cloud-feature-stack h2 { font-size: 1rem; }
+  .cloud-feature-stack p { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); overflow: hidden; }
+  .cloud-invitation { padding-bottom: 0; }
+  .cloud-signup { max-width: none; margin: 0; }
+  .cloud-signup h2 { font-size: 1.9rem; margin-bottom: 13px; }
+  .cloud-email-row input { padding: 9px 10px; }
+  .cloud-email-row button { padding: 9px 14px; min-height: 44px; }
+  .cloud-consent { margin-top: 9px; }
+  .cloud-status:empty { margin: 0; }
+  .cloud-controls { order: 3; padding: 3px 24px max(8px, env(safe-area-inset-bottom)); }
+}
+@media (max-width: 800px) and (max-height: 700px) {
+  .cloud-film { height: 19svh; min-height: 105px; }
+  .cloud-columns { gap: 16px; padding-top: 8px; }
+  .cloud-feature-stack { margin-top: 15px; gap: 9px; }
+  .cloud-copy h1 { font-size: 2.4rem; }
+  .cloud-signup h2 { font-size: 1.65rem; margin-bottom: 10px; }
+}
 @media (prefers-reduced-motion: reduce) { .cloud-takeover[open] .cloud-scene { animation: none; } .cloud-feature-stack li, .cloud-invitation { transition: none; transform: none; } }
