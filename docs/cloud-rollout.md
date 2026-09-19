@@ -36,6 +36,8 @@ Disposable dev/prod QA accounts and their projects/files were removed after veri
 
 ## Release gates still open
 
-GitHub Actions run https://github.com/michaelmonetized/omadesign/actions/runs/35452482385 was rejected before any job steps: account locked due to a billing issue. Do not describe x86_64/ARM64 CI artifacts as produced. After billing is restored, rerun the nightly workflow. Its daily schedule becomes active when the workflow is promoted to the default branch; until then use pushes to nightly or manual dispatch.
+Desktop builds and tests always run locally. Use `cargo test --lib --locked` and `./scripts/release.sh`; the release script locally builds and packages both ARM64 and x86_64 against glibc 2.35, with archive checksums. The earlier hosted native workflow has been removed. GitHub billing is not a release requirement and must not be enabled or paid.
 
-Final human acceptance of the new cloud/native release, x86_64 artifact validation, and reconciliation of the separate Layout working tree remain part of #67. This rollout does not change the accepted stable 0.5.0 QA status. The five proposed [mode competition briefs](competition-ideas.md) remain unpublished; dates, prizes and final rules are unset. Motion requires animated media support before that round can open.
+Site checks and deployment run only on Blacksmith. Site CI triggers for website-related pushes/PRs and manual dispatch; desktop-only changes do not start site jobs. The workflows use no GitHub cache or artifact storage.
+
+Final human acceptance of the new cloud/native release, local x86_64 artifact and runtime validation, and reconciliation of the separate Layout working tree remain part of #67. This rollout does not change the accepted stable 0.5.0 QA status. The five proposed [mode competition briefs](competition-ideas.md) remain unpublished; dates, prizes and final rules are unset. Motion requires animated media support before that round can open.
