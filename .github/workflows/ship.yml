@@ -1,5 +1,7 @@
 name: Ship
 
+# Site-only Blacksmith execution; do not add GitHub-hosted compute, caches or artifacts.
+
 on:
   workflow_dispatch:
     inputs:
@@ -42,15 +44,6 @@ jobs:
         with:
           bun-version: 1.4.2
 
-      - name: Restore Bun cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('site/bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-
-
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
@@ -63,21 +56,6 @@ jobs:
       # The Vite build generates TanStack's routeTree before the typecheck.
       - name: Typecheck
         run: bun run typecheck
-
-      - name: Archive Vercel output
-        if: ${{ github.event.inputs.deploy_prod }}
-        run: |
-          export GZ_OPT="-9"
-          tar -czf vercel-output.tgz .vercel/output
-
-      - name: Upload Vercel output artifact
-        if: ${{ github.event.inputs.deploy_prod }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: vercel-output-${{ github.sha }}
-          path: site/vercel-output.tgz
-          if-no-files-found: error
-          retention-days: 7
 
       - name: Validate Vercel build output
         run: |
