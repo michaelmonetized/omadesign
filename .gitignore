@@ -17,3 +17,9 @@ site/.pages
 site/.pages-build
 
 site/.env.local
+
+.env*
+site/.env*
+!.env.example
+!site/.env.example
+.clerk/

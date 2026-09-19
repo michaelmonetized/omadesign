@@ -1,58 +1,18 @@
-import { handleWaitlist } from "../../server/waitlist";
 import { createFileRoute } from "@tanstack/react-router";
-import { publishedShowcase, showcaseSeed, type ShowcaseItem } from "../../cloud/seed";
-
-type Store = { gallery: ShowcaseItem[] };
-
-const memory: Store = {
-  gallery: [...showcaseSeed],
-};
-
-function json(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-    },
-  });
-}
-
-export const Route = createFileRoute("/api/cloud")({
-  component: () => null,
-  server: {
-    handlers: {
-      GET: async () => json({ gallery: publishedShowcase(memory.gallery) }),
-      OPTIONS: async () =>
-        new Response(null, {
-          status: 204,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type,Authorization",
-          },
-        }),
-      POST: async ({ request }) => {
-        const body = (await request.json().catch(() => ({}))) as {
-          action?: string;
-          email?: string;
-          name?: string;
-          item?: ShowcaseItem;
-          snapshot?: string;
-        };
-        if (body.action === "waitlist") {
-          return handleWaitlist(request, body);
-        }
-        if (body.action === "publish" && body.item) {
-          if (!body.item.published) return json({ error: "private" }, 400);
-          memory.gallery.push(body.item);
-          return json({ ok: true, id: body.item.id });
-        }
-        if (body.action === "sync") {
-          return json({ ok: true });
-        }
-        return json({ error: "unknown" }, 400);
-      },
-    },
-  },
-});
+import { ConvexHttpClient } from "convex/browser";
+import { makeFunctionReference } from "convex/server";
+const queries=new Set(["devices:me","devices:list","projects:list","projects:get","projects:members","projects:invitations","review:list","showcase:project","showcase:competitions","showcase:entries"]);
+const mutations=new Set(["devices:begin","devices:approve","devices:revoke","projects:create","projects:invite","projects:accept","projects:changeMember","projects:cancelInvite","files:begin","files:finish","review:annotate","review:reply","review:resolve","showcase:publish","showcase:unpublish","showcase:enter","showcase:withdraw"]);
+const json=(data:unknown,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store"}});
+export const Route=createFileRoute("/api/cloud")({server:{handlers:{
+ GET:async()=>json({version:1,convexUrl:process.env.CONVEX_URL,convexSiteUrl:process.env.CONVEX_SITE_URL||process.env.VITE_CONVEX_SITE_URL}),
+ POST:async({request})=>{
+  if(Number(request.headers.get("content-length"))>16384)return json({error:"Request too large"},413);
+  const body=await request.text();if(body.length>16384)return json({error:"Request too large"},413);
+  try{const {operation,args}=JSON.parse(body);if(!queries.has(operation)&&!mutations.has(operation))return json({error:"Unsupported cloud operation. Update Omadesign."},400);
+   if(!args||typeof args!=="object"||Array.isArray(args))return json({error:"Invalid arguments"},400);
+   const client=new ConvexHttpClient(process.env.CONVEX_URL!);const bearer=request.headers.get("Authorization");if(bearer?.startsWith("Bearer "))client.setAuth(bearer.slice(7));
+   const value=queries.has(operation)?await client.query(makeFunctionReference<"query">(operation),args):await client.mutation(makeFunctionReference<"mutation">(operation),args);return json({ok:true,value});
+  }catch(error){const detail=error instanceof Error?error.message:"Cloud request failed";return json({error:detail.slice(0,500)},400);}
+ }
+}}});

@@ -12,6 +12,8 @@
     "publish:pages": "node scripts/publish-pages.mjs --publish"
   },
   "dependencies": {
+    "@clerk/tanstack-react-start": "^1.5.15",
+    "@convex-dev/resend": "^0.2.8",
     "@tanstack/react-router": "^1.132.0",
     "@tanstack/react-start": "^1.132.0",
     "convex": "^1.46.0",
@@ -28,9 +30,11 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "convex-test": "^0.0.59",
     "nitro": "latest",
     "tailwindcss": "^4.1.0",
     "typescript": "^5.9.0",
-    "vite": "^7.1.0"
+    "vite": "^7.1.0",
+    "vitest": "^5.0.1"
   }
 }
