@@ -63,7 +63,7 @@ not 404 while DNS settles.
 
 ## Cloud collaboration waitlist
 
-The homepage at `/#cloud` lists planned 0.5.2 collaboration features and accepts
+The fullscreen homepage takeover at `/#cloud` lists planned 0.5.2 collaboration features and accepts
 cloud access signups through `POST /api/waitlist`. This is a waitlist, not a
 claim that collaborative editing is already released.
 
@@ -89,3 +89,18 @@ bunx convex run waitlist:removeSignup '{"email":"address@example.com","list":"cl
 ```
 
 The removal function is internal and cannot be invoked through the public API.
+
+### 0.5.2 scope
+
+Cloud collaboration means project file and asset sharing with team member access
+control; client review, comments and annotations on flat snapshots; publishing
+finished public work to the Omadesign user showcase; and entering showcased work
+into competitions. The browser is for sharing and review, not a live online
+Omadesign editor. Live multi-user editing, presence and browser authoring are
+outside this scope.
+
+The homepage takeover plays the supplied film muted when interactive, introduces
+the five features from the bottom of the left stack upward, and reveals the
+email-only waitlist in the right column when the film ends. Visitors can skip to
+the signup or leave for the native app site. Reduced motion and playback failure
+reveal signup immediately.
