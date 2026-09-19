@@ -7,14 +7,14 @@ export async function upload(
   file: File,
   kind: "source" | "asset" | "snapshot",
 ) {
+  if (file.size > (kind === "snapshot" ? 20 : 100) * 1024 * 1024)
+    throw new Error("File exceeds the upload limit.");
   let dimensions: {} | { width: number; height: number } = {};
   if (kind === "snapshot") {
     const image = await createImageBitmap(file);
     dimensions = { width: image.width, height: image.height };
     image.close();
   }
-  if (file.size > (kind === "snapshot" ? 20 : 100) * 1024 * 1024)
-    throw new Error("File exceeds the upload limit.");
   const pending = await client.mutation(api.files.begin, { projectId, kind });
   const response = await fetch(pending.url, {
     method: "POST",
