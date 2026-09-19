@@ -14,7 +14,10 @@ cargo run --release --bin omadesign
 Rust 2024. Install Git, stable Rust, a C/C++ compiler and pkg-config. The C++
 compiler builds the bundled RAW decoder; no installed LibRaw is needed.
 `cargo` is the toolchain. No GTK app, no Electron. The website ships on
-Blacksmith (`bun scripts/ship.mts`), not GitHub-hosted billed runners.
+Blacksmith (`bun scripts/ship.mts`). Website checks and deployment may run on
+Blacksmith. Desktop Cargo tests, compilation and packaging always run locally,
+including both ARM64 and x86_64 builds. Do not use GitHub-hosted runners, paid
+GitHub cache/artifact storage, or Blacksmith for Rust builds.
 
 ### Layout
 
@@ -58,7 +61,7 @@ Keep file and network work outside the frame loop. Tab switches transfer documen
 - **Icons are Phosphor Light.** Use the glyphs in `src/ui/icons.rs`.
 - **UI font is the desktop font.** Resolve it through Omarchy and fontconfig.
 - **Deep modules.** `geom` and `text` have no egui types. Tests share the same seams.
-- **Local builds.** `./scripts/release.sh` zig-links glibc 2.35 for aarch64 and x86_64. Build release packages locally; do not add GitHub Actions workflows that use billed runners.
+- **Local builds.** `./scripts/release.sh` zig-links glibc 2.35 for aarch64 and x86_64. Run Cargo tests and build release packages locally. Blacksmith is reserved for the website; GitHub-hosted compute and paid GitHub services are prohibited.
 
 ### Pull requests
 
