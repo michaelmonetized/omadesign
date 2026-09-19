@@ -25,7 +25,7 @@ function Home() {
       <section className="hero shell">
         <div className="hero-heading">
           <RevealText
-            as="h2"
+            as="h1"
             hero
             lines={["Professional Grade", "Graphic Design Tool Suite"]}
           />
