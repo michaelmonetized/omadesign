@@ -13,3 +13,11 @@ Its source SHA-256 is
 The sample's license was verified against its catalog metadata before publication.
 The screenshot contains no private user photograph. Omadesign's UI is part of
 the MIT-licensed project.
+
+## Cloud collaboration reveal
+
+`public/media/cloud/reveal.mp4` is Michael’s supplied Grok Imagine video,
+already edited in a separate session: `grok-video-dc5e39f6-2774-49c0-ab72-f67dc95afb83-trimmed.mp4`.
+The 1280 × 720 H.264/AAC clip is 24.542 seconds. It is remuxed for fast-start
+streaming without re-encoding or further trimming. `reveal.webp` is its
+12-second frame, used as the poster and reduced-motion fallback.

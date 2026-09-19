@@ -39,7 +39,7 @@ when the Vercel API is live. Without a URL the desktop keeps a local store under
 
 ## Convex and Clerk
 
-Schema lives in `convex/schema.ts`. Shared field names live in
+Schema lives in `site/convex/schema.ts`. Shared field names live in
 `packages/schema/`. Deploy Convex and set:
 
 ```
@@ -60,3 +60,32 @@ so TLS terminates there. `www.omadesign.app` redirects to the apex.
 GitHub Pages (`https://michaelmonetized.github.io/omadesign/`) redirects in the
 browser to `https://omadesign.app`. Keep publishing Pages so the old URL does
 not 404 while DNS settles.
+
+## Cloud collaboration waitlist
+
+The homepage at `/#cloud` lists planned 0.5.2 collaboration features and accepts
+cloud access signups through `POST /api/waitlist`. This is a waitlist, not a
+claim that collaborative editing is already released.
+
+Signups are persisted in Convex `waitlistSignups`, indexed by list and normalized
+email. Cloud and competition audiences are separate; duplicate submissions do
+not create duplicate records or disclose whether an address has signed up.
+No emails are sent by signup. The legacy `/api/cloud` waitlist action uses the
+same durable backend for the competition list.
+
+The server requires `CONVEX_URL` and `WAITLIST_SECRET`; the same secret must be
+set on the Convex deployment. These are server-only variables. An unavailable
+backend returns an error and never claims to have saved a signup. Requests are
+validated, origin-checked, and limited to five attempts per minute per hashed
+visitor address. Raw addresses are not stored; expired counters are cleaned up.
+
+For operations, use the authenticated Convex dashboard to review or export
+`waitlistSignups`. There is no public signup-list or lookup endpoint.
+
+To remove an address on request, an authenticated operator can run from `site/`:
+
+```sh
+bunx convex run waitlist:removeSignup '{"email":"address@example.com","list":"cloud"}' --prod
+```
+
+The removal function is internal and cannot be invoked through the public API.
