@@ -56,6 +56,8 @@ function Workspace() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const projects = useQuery(api.projects.list, {});
+  const archived = useQuery(api.projects.archived, {});
+  const restore = useMutation(api.projects.restore);
   const invites = useQuery(api.projects.invitations, {});
   const create = useMutation(api.projects.create);
   const accept = useMutation(api.projects.accept);
@@ -134,6 +136,7 @@ function Workspace() {
           ))}
         </section>
       )}
+      {!!archived?.length && <details><summary>Archived projects ({archived.length})</summary>{archived.map(p => <div className="cloud-file-list" key={p._id}><span>{p.title}</span><button onClick={async()=>{try {await restore({projectId:p._id});} catch(e) {setNotice(message(e));}}}>Restore</button></div>)}</details>}
       <div className="cloud-projects">
         {projects?.map((p) => (
           <button

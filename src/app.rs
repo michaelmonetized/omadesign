@@ -380,6 +380,8 @@ pub struct Studio {
     pub transfer_notes: Vec<String>,
     pub cloud_identity: crate::cloud::Identity,
     pub cloud_modal: CloudModal,
+    pub cloud_panel: crate::cloud::client::Panel,
+    cloud_job: Option<std::sync::mpsc::Receiver<Result<crate::cloud::client::Event,String>>>,
     pub pinning_comment: bool,
     pub comment_draft: String,
     pub invite_email: String,
@@ -394,6 +396,8 @@ pub enum CloudModal {
     SignIn,
     Invite,
     Publish,
+    Projects,
+    Review,
 }
 
 #[derive(Clone, Copy)]
@@ -556,6 +560,8 @@ impl Studio {
             transfer_notes: vec![],
             cloud_identity: crate::cloud::load_identity(),
             cloud_modal: CloudModal::None,
+            cloud_panel: Default::default(),
+            cloud_job: None,
             pinning_comment: false,
             comment_draft: String::new(),
             invite_email: String::new(),
@@ -3596,6 +3602,7 @@ impl eframe::App for Studio {
             self.libraries.close_requested = true;
             self.pending_nav = None;
         }
+        self.poll_cloud(&ctx);
         self.poll_file_jobs(&ctx);
         self.photo.poll(&ctx);
         crate::ui::photo::poll_jobs(&ctx, self);

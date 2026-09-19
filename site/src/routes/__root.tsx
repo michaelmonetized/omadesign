@@ -108,7 +108,7 @@ function Document() {
               />
             </a>
             <nav aria-label="Main navigation">
-              <a href={sitePath("#cloud")}>Cloud</a>
+              <a href={sitePath("cloud")}>Cloud</a>
               <a className="nav-features" href={sitePath("#features")}>
                 Features
               </a>
