@@ -90,6 +90,12 @@ impl Studio {
             let _ = tx.send(result);
         });
     }
+    pub fn disconnect_cloud(&mut self) {
+        self.cloud_task(|client| {
+            client.call("devices:disconnect", json!({}))?;
+            Ok(Event::Disconnected)
+        });
+    }
     pub fn connect_cloud(&mut self) {
         if self.cloud_job.is_some() {
             return;
@@ -143,6 +149,10 @@ impl Studio {
         self.cloud_task(move |client| client.push(&doc).map(|link| Event::Uploaded(link, tab)));
     }
     pub fn show_cloud_projects(&mut self) {
+        if !cloud::signed_in(&self.cloud_identity) {
+            self.cloud_modal = CloudModal::SignIn;
+            return;
+        }
         self.cloud_modal = CloudModal::Projects;
         self.cloud_task(|client| client.projects().map(Event::Projects));
     }
@@ -226,7 +236,27 @@ impl Studio {
     }
     pub fn load_cloud_preview(&mut self) {
         let id = self.cloud_panel.selected_snapshot.clone();
-        self.cloud_task(move |client| Ok(Event::Preview(client.download(&id)?, id)));
+        self.cloud_task(move |client| {
+            let bytes = client.download(&id)?;
+            let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes))
+                .with_guessed_format()
+                .map_err(|e| e.to_string())?;
+            let mut limits = image::Limits::default();
+            limits.max_alloc = Some(256 * 1024 * 1024);
+            limits.max_image_width = Some(16384);
+            limits.max_image_height = Some(16384);
+            reader.limits(limits);
+            let pixels = reader
+                .decode()
+                .map_err(|e| e.to_string())?
+                .thumbnail(2048, 2048)
+                .to_rgba8();
+            let color = egui::ColorImage::from_rgba_unmultiplied(
+                [pixels.width() as usize, pixels.height() as usize],
+                pixels.as_raw(),
+            );
+            Ok(Event::Preview(color, id))
+        });
     }
     pub fn poll_cloud(&mut self, ctx: &egui::Context) {
         let result = self.cloud_job.as_ref().map(|rx| rx.try_recv());
@@ -239,23 +269,21 @@ impl Studio {
                 self.cloud_job = None;
                 match result {
                     Err(error) => self.status = error,
-                    Ok(Event::Preview(bytes, id)) => match image::load_from_memory(&bytes) {
-                        Ok(image) => {
-                            let pixels = image.to_rgba8();
-                            let color = egui::ColorImage::from_rgba_unmultiplied(
-                                [pixels.width() as usize, pixels.height() as usize],
-                                pixels.as_raw(),
-                            );
-                            self.cloud_panel.preview = Some(ctx.load_texture(
-                                "cloud-review",
-                                color,
-                                egui::TextureOptions::LINEAR,
-                            ));
-                            self.cloud_panel.preview_file = id;
-                            self.status = "Flat export loaded".into();
-                        }
-                        Err(error) => self.status = error.to_string(),
-                    },
+                    Ok(Event::Preview(color, id)) => {
+                        self.cloud_panel.preview = Some(ctx.load_texture(
+                            "cloud-review",
+                            color,
+                            egui::TextureOptions::LINEAR,
+                        ));
+                        self.cloud_panel.preview_file = id;
+                        self.status = "Flat export loaded".into();
+                    }
+                    Ok(Event::Disconnected) => {
+                        self.cloud_identity = Default::default();
+                        let _ = cloud::save_identity(&self.cloud_identity);
+                        self.cloud_panel = Default::default();
+                        self.status = "Desktop access revoked".into();
+                    }
                     Ok(Event::Connected(identity)) => {
                         self.cloud_identity = identity;
                         self.cloud_panel.code.clear();

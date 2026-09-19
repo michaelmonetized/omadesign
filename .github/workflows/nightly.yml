@@ -1,0 +1,66 @@
+name: Nightly
+on:
+  push:
+    branches: [nightly]
+  pull_request:
+    branches: [nightly]
+  workflow_dispatch:
+  schedule:
+    - cron: '30 4 * * *'
+permissions:
+  contents: read
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    env:
+      CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: gcc
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
+      - run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libxkbcommon-dev libwayland-dev libudev-dev libssl-dev libfontconfig1-dev cmake nasm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --lib --locked
+      - run: cargo build --release --bin omadesign --locked
+      - run: |
+          mkdir -p nightly-artifact
+          cp target/release/omadesign nightly-artifact/
+          cd nightly-artifact
+          sha256sum omadesign > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: omadesign-nightly-${{ matrix.arch }}-${{ github.sha }}
+          path: nightly-artifact/
+          retention-days: 14
+  cloud:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bunx vitest run
+      - run: bun run build
+        env:
+          VITE_CONVEX_URL: https://hidden-clownfish-96.convex.cloud
+          VITE_CONVEX_SITE_URL: https://hidden-clownfish-96.convex.site
+          VITE_CLERK_PUBLISHABLE_KEY: pk_test_Y2xldmVyLWZsZWEtODQ2Ny5jbGVyay5hY2NvdW50cy5kZXYk
+      - run: bun run typecheck

@@ -57,7 +57,7 @@ Frames for UI mockups, in the same document as the drawing.
 - **Templates** — Template library → Layout starters: mobile screen, landing hero, dashboard, card stack.
 - **Comments** — write a note, pin it on the canvas, resolve it. The inspector shows open counts on the frame.
 
-Cloud is opt-in. File → Sign in, Enable cloud sync, Invite, Publish to showcase. Unpublished files stay private. See [cloud](cloud.md).
+Cloud is opt-in. File → Sign in opens a secure browser approval. Push project + review export uploads a versioned design and flat snapshot; Cloud projects pulls shared designs into a new document. Review annotations loads cloud feedback. Publishing and competition entry are separate owner actions. See [cloud](cloud.md).
 
 ## Design
 

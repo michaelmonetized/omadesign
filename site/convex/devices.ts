@@ -1,11 +1,13 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { actor, clean, fail, hash, deviceArg } from "./cloudAuth";
+import { limit } from "./cloudMaintenance";
 export const begin = mutation({
   args: { token: v.string(), code: v.string(), label: v.string() },
   handler: async (ctx, a) => {
     if (!/^[a-f0-9]{64}$/.test(a.token) || !/^[A-Z0-9]{12}$/.test(a.code))
       fail("Invalid device request.");
+    await limit(ctx, "device-requests", 300, 60000);
     const tokenHash = await hash(a.token);
     if (
       await ctx.db
@@ -35,6 +37,12 @@ export const approve = mutation({
   args: { code: v.string() },
   handler: async (ctx, { code }) => {
     const user = await actor(ctx);
+    const devices = await ctx.db
+      .query("cloudDevices")
+      .withIndex("by_user", (q) => q.eq("userId", user.userId))
+      .take(100);
+    if (devices.filter((d) => d.expires > Date.now()).length >= 20)
+      fail("Revoke an existing desktop in Account before connecting another.");
     const d = await ctx.db
       .query("cloudDevices")
       .withIndex("by_code", (q) =>
@@ -70,5 +78,19 @@ export const revoke = mutation({
     const d = await ctx.db.get(id);
     if (!d || d.userId !== u.userId) fail("Device not found.");
     await ctx.db.delete(id);
+  },
+});
+
+export const disconnect = mutation({
+  args: deviceArg,
+  handler: async (ctx, a) => {
+    await actor(ctx, a.deviceToken);
+    if (!a.deviceToken) fail("Use Account to revoke a device.");
+    const tokenHash = await hash(a.deviceToken);
+    const device = await ctx.db
+      .query("cloudDevices")
+      .withIndex("by_hash", (q) => q.eq("tokenHash", tokenHash))
+      .unique();
+    if (device) await ctx.db.delete(device._id);
   },
 });

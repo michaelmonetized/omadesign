@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, Authenticated } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 import { useState } from "react";
 import "../cloud/cloud.css";
 export const Route = createFileRoute("/compete")({ component: Competitions });
@@ -27,6 +28,7 @@ function Competitions() {
                   ? "Entries closed"
                   : "Open for entries"}
             </p>
+            <CompetitionEntries id={c._id} />
             <a className="text-link" href="/cloud">
               Choose a project ↗
             </a>
@@ -56,7 +58,18 @@ function MyEntries() {
         (e) =>
           e && (
             <article className="cloud-file-list" key={e._id}>
-              <span>Entered {new Date(e.created).toLocaleDateString()}</span>
+              <span>
+                <strong>{e.title}</strong>
+                {"competition" in e && (
+                  <>
+                    {" "}
+                    · {e.competition}
+                    {!e.visible && " · Not publicly visible"}
+                  </>
+                )}
+                <br />
+                Entered {new Date(e.created).toLocaleDateString()}
+              </span>
               <button
                 onClick={async () => {
                   try {
@@ -74,5 +87,27 @@ function MyEntries() {
       )}
       <p role="status">{notice}</p>
     </section>
+  );
+}
+
+function CompetitionEntries({ id }: { id: Id<"cloudCompetitions"> }) {
+  const entries = useQuery(api.showcase.entries, { competitionId: id });
+  return (
+    <details>
+      <summary>View entries ({entries?.length ?? 0})</summary>
+      <div className="cloud-projects cloud-showcase">
+        {entries?.map(
+          (e) =>
+            e && (
+              <a href={`/showcase/${e.showcaseId}`} key={e._id}>
+                {"image" in e && e.image && <img src={e.image} alt={e.title} />}
+                <strong>{e.title}</strong>
+                {"author" in e && <p>By {e.author}</p>}
+              </a>
+            ),
+        )}
+      </div>
+      {entries?.length === 0 && <p>No public entries yet.</p>}
+    </details>
   );
 }

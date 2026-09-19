@@ -11,6 +11,13 @@ export const fileKind = v.union(
   v.literal("snapshot"),
 );
 export const cloudTables = {
+  cloudLimits: defineTable({
+    key: v.string(),
+    count: v.number(),
+    expires: v.number(),
+  })
+    .index("by_key", ["key"])
+    .index("by_expires", ["expires"]),
   cloudProjects: defineTable({
     title: v.string(),
     owner: v.string(),
@@ -60,7 +67,9 @@ export const cloudTables = {
     userId: v.string(),
     created: v.number(),
     kind: fileKind,
-  }).index("by_user", ["userId"]),
+  })
+    .index("by_user", ["userId"])
+    .index("by_created", ["created"]),
   cloudAnnotations: defineTable({
     projectId: v.id("cloudProjects"),
     snapshotId: v.id("cloudFiles"),
@@ -122,6 +131,7 @@ export const cloudTables = {
     email: v.optional(v.string()),
     name: v.optional(v.string()),
   })
+    .index("by_expires", ["expires"])
     .index("by_hash", ["tokenHash"])
     .index("by_code", ["code"])
     .index("by_user", ["userId"]),

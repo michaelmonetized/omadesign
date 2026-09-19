@@ -1,6 +1,6 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
-import { api, components } from "./_generated/api";
+import { api, internal, components } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { Resend } from "@convex-dev/resend";
 const http = httpRouter();
@@ -55,6 +55,30 @@ http.route({
       });
     } catch {
       return new Response("Access denied", { status: 403, headers: h });
+    }
+  }),
+});
+http.route({
+  path: "/showcase-image",
+  method: "GET",
+  handler: httpAction(async (ctx, req) => {
+    const h = {
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    };
+    try {
+      const id = new URL(req.url).searchParams.get("id") as Id<"cloudShowcase">;
+      const f = await ctx.runQuery(internal.showcase.publicFile, { id });
+      if (!f)
+        return new Response("Work unavailable", { status: 404, headers: h });
+      const data = await ctx.storage.get(f.storageId);
+      if (!data)
+        return new Response("Work unavailable", { status: 404, headers: h });
+      return new Response(data, {
+        headers: { ...h, "Content-Type": f.contentType },
+      });
+    } catch {
+      return new Response("Work unavailable", { status: 404, headers: h });
     }
   }),
 });

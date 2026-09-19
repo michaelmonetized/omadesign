@@ -226,6 +226,7 @@ impl eframe::App for ShotRunner {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.studio.poll_cloud(ui.ctx());
         omadesign::ui::run(ui, &mut self.studio);
         let ctx = ui.ctx().clone();
         self.frame += 1;

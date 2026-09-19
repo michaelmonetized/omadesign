@@ -1,4 +1,9 @@
-import { mutation, query, internalMutation } from "./_generated/server";
+import {
+  mutation,
+  query,
+  internalMutation,
+  internalQuery,
+} from "./_generated/server";
 import { v } from "convex/values";
 import { actor, access, clean, fail, deviceArg } from "./cloudAuth";
 export const list = query({
@@ -15,7 +20,9 @@ export const list = query({
         const f = await ctx.db.get(item.snapshotId);
         return {
           ...item,
-          image: f ? await ctx.storage.getUrl(f.storageId) : null,
+          image: f
+            ? `${process.env.CONVEX_SITE_URL}/showcase-image?id=${item._id}`
+            : null,
         };
       }),
     ),
@@ -46,6 +53,8 @@ export const publish = mutation({
       .query("cloudShowcase")
       .withIndex("by_project", (q) => q.eq("projectId", f.projectId))
       .take(100);
+    if (rows.length >= 100)
+      fail("This project has reached its showcase limit.");
     if (rows.find((r) => r.snapshotId === a.snapshotId && r.published))
       fail("This snapshot is already public.");
     return ctx.db.insert("cloudShowcase", {
@@ -82,11 +91,25 @@ export const entries = query({
   handler: async (ctx, a) => {
     if (!a.competitionId) {
       const u = await actor(ctx, a.deviceToken);
-      return ctx.db
+      const entries = await ctx.db
         .query("cloudEntries")
         .withIndex("by_owner", (q) => q.eq("owner", u.userId))
         .take(100);
+      return Promise.all(
+        entries.map(async (e) => {
+          const work = await ctx.db.get(e.showcaseId);
+          const contest = await ctx.db.get(e.competitionId);
+          return {
+            ...e,
+            title: work?.title || "Removed work",
+            competition: contest?.title || "Competition",
+            visible: !!work?.published && !!contest?.active,
+          };
+        }),
+      );
     }
+    const competition = await ctx.db.get(a.competitionId);
+    if (!competition?.active) return [];
     const rows = await ctx.db
       .query("cloudEntries")
       .withIndex("by_competition", (q) =>
@@ -102,7 +125,9 @@ export const entries = query({
           ...e,
           title: item.title,
           author: item.author,
-          image: f ? await ctx.storage.getUrl(f.storageId) : null,
+          image: f
+            ? `${process.env.CONVEX_SITE_URL}/showcase-image?id=${item._id}`
+            : null,
         };
       }),
     );
@@ -170,11 +195,30 @@ export const configureCompetition = internalMutation({
 });
 
 export const get = query({
+  args: { id: v.string() },
+  handler: async (ctx, a) => {
+    const id = ctx.db.normalizeId("cloudShowcase", a.id);
+    if (!id) return null;
+    const item = await ctx.db.get(id);
+    if (!item?.published) return null;
+    const file = await ctx.db.get(item.snapshotId);
+    return {
+      ...item,
+      image: file
+        ? `${process.env.CONVEX_SITE_URL}/showcase-image?id=${item._id}`
+        : null,
+    };
+  },
+});
+
+export const publicFile = internalQuery({
   args: { id: v.id("cloudShowcase") },
   handler: async (ctx, a) => {
     const item = await ctx.db.get(a.id);
     if (!item?.published) return null;
+    const project = await ctx.db.get(item.projectId);
+    if (!project || project.archived) return null;
     const file = await ctx.db.get(item.snapshotId);
-    return { ...item, image: file ? await ctx.storage.getUrl(file.storageId) : null };
+    return file?.kind === "snapshot" ? file : null;
   },
 });

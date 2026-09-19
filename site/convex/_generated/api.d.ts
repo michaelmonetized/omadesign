@@ -9,6 +9,7 @@
  */
 
 import type * as cloudAuth from "../cloudAuth.js";
+import type * as cloudMaintenance from "../cloudMaintenance.js";
 import type * as cloudSchema from "../cloudSchema.js";
 import type * as crons from "../crons.js";
 import type * as devices from "../devices.js";
@@ -28,6 +29,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   cloudAuth: typeof cloudAuth;
+  cloudMaintenance: typeof cloudMaintenance;
   cloudSchema: typeof cloudSchema;
   crons: typeof crons;
   devices: typeof devices;
