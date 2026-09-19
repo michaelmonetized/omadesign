@@ -381,7 +381,7 @@ pub struct Studio {
     pub cloud_identity: crate::cloud::Identity,
     pub cloud_modal: CloudModal,
     pub cloud_panel: crate::cloud::client::Panel,
-    cloud_job: Option<std::sync::mpsc::Receiver<Result<crate::cloud::client::Event,String>>>,
+    cloud_job: Option<std::sync::mpsc::Receiver<Result<crate::cloud::client::Event, String>>>,
     pub pinning_comment: bool,
     pub comment_draft: String,
     pub invite_email: String,

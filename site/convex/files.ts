@@ -78,6 +78,11 @@ export const finish = mutation({
         a.height > 32768)
     )
       fail("Choose a PNG, JPEG, or WebP flat export.");
+    const count = await ctx.db
+      .query("cloudFiles")
+      .withIndex("by_project", (q) => q.eq("projectId", pending.projectId))
+      .take(200);
+    if (count.length >= 200) fail("This project has reached its file limit.");
     const last = await ctx.db
       .query("cloudFiles")
       .withIndex("by_project_kind", (q) =>

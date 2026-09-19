@@ -25,7 +25,7 @@ pub fn modal(ui: &mut Ui, studio: &mut Studio) {
  let busy=studio.cloud_busy();
  match studio.cloud_modal {
   CloudModal::SignIn=>{
-   if cloud::signed_in(&studio.cloud_identity){ui.label(format!("Connected as {}",studio.cloud_identity.email));if ui.button("Disconnect this desktop").clicked(){studio.cloud_identity=Default::default();let _=cloud::save_identity(&studio.cloud_identity);studio.status="Disconnected locally. Revoke the device from Account on the website.".into();}}
+   if cloud::signed_in(&studio.cloud_identity){ui.label(format!("Connected as {}",studio.cloud_identity.email));if ui.button("Disconnect this desktop").clicked(){studio.disconnect_cloud();}}
    else{ui.label("Sign in securely in your browser, then approve this desktop. Your project files stay local until you push them.");if !studio.cloud_panel.code.is_empty(){ui.heading(&studio.cloud_panel.code);ui.label("Check that this code matches the code in your browser.");}if ui.add_enabled(!busy,egui::Button::new("Open browser to sign in")).clicked(){studio.connect_cloud();}}
   },
   CloudModal::Projects=>{
@@ -35,13 +35,13 @@ pub fn modal(ui: &mut Ui, studio: &mut Studio) {
   },
   CloudModal::Invite=>{ui.label("Reviewers can see flat exports and comments. Manage editor access from the cloud project on the website.");ui.text_edit_singleline(&mut studio.invite_email);if ui.add_enabled(!busy,egui::Button::new("Send review invitation")).clicked(){studio.invite_collaborator();}},
   CloudModal::Review|CloudModal::Publish=>{
-   ui.horizontal(|ui|{if ui.add_enabled(!busy,egui::Button::new("Refresh cloud review")).clicked(){studio.refresh_cloud_review();}if ui.button("Open web project ↗").clicked(){if let Some(link)=&studio.doc.cloud{let _=std::process::Command::new("xdg-open").arg(format!("https://omadesign.app/cloud?project={}",link.project_id)).spawn();}}});
+   ui.horizontal(|ui|{if ui.add_enabled(!busy,egui::Button::new("Refresh cloud review")).clicked(){studio.refresh_cloud_review();}if ui.button("Open web project ↗").clicked(){if !studio.cloud_panel.project_id.is_empty(){let _=std::process::Command::new("xdg-open").arg(format!("https://omadesign.app/cloud?project={}",studio.cloud_panel.project_id)).spawn();}}});
    let snapshots:Vec<_>=studio.cloud_panel.files.iter().filter(|f|f.kind=="snapshot").cloned().collect();
    egui::ComboBox::from_id_salt("cloud-snapshot").selected_text(snapshots.iter().find(|f|f.id==studio.cloud_panel.selected_snapshot).map(|f|format!("{} · v{}",f.name,f.version)).unwrap_or_else(||"Choose a flat export".into())).show_ui(ui,|ui|{for f in &snapshots{ui.selectable_value(&mut studio.cloud_panel.selected_snapshot,f.id.clone(),format!("{} · v{}",f.name,f.version));}});
    if ui.add_enabled(!busy&&!studio.cloud_panel.selected_snapshot.is_empty(),egui::Button::new("View selected export")).clicked(){studio.load_cloud_preview();}
    let annotations=studio.cloud_panel.annotations.clone();let selected=studio.cloud_panel.selected_snapshot.clone();
    egui::ScrollArea::vertical().max_height(510.).show(ui,|ui|{
-    if studio.cloud_panel.preview_file==selected {if let Some(texture)=&studio.cloud_panel.preview{let size=texture.size_vec2();let width=ui.available_width().min(700.);let response=ui.image((texture.id(),size*(width/size.x)));for (index,a) in annotations.iter().filter(|a|value(a,"snapshotId")==selected).enumerate(){let x=a["x"].as_f64().unwrap_or(0.) as f32;let y=a["y"].as_f64().unwrap_or(0.) as f32;let point=response.rect.min+response.rect.size()*egui::vec2(x,y);ui.painter().circle_filled(point,11.,egui::Color32::from_rgb(213,255,114));ui.painter().text(point,egui::Align2::CENTER_CENTER,(index+1).to_string(),egui::FontId::proportional(12.),egui::Color32::BLACK);}}}
+    if studio.cloud_panel.preview_file==selected {if let Some(texture)=&studio.cloud_panel.preview{let size=texture.size_vec2();let scale=(ui.available_width().min(700.)/size.x).min(320./size.y);let response=ui.image((texture.id(),size*scale));for (index,a) in annotations.iter().filter(|a|value(a,"snapshotId")==selected).enumerate(){let x=a["x"].as_f64().unwrap_or(0.) as f32;let y=a["y"].as_f64().unwrap_or(0.) as f32;let point=response.rect.min+response.rect.size()*egui::vec2(x,y);if value(a,"shape")=="rectangle" {let end=response.rect.min+response.rect.size()*egui::vec2(a["endX"].as_f64().unwrap_or(x as f64) as f32,a["endY"].as_f64().unwrap_or(y as f64) as f32);ui.painter().rect_stroke(egui::Rect::from_two_pos(point,end),0.,egui::Stroke::new(2.,egui::Color32::from_rgb(213,255,114)),egui::StrokeKind::Inside);}ui.painter().circle_filled(point,11.,egui::Color32::from_rgb(213,255,114));ui.painter().text(point,egui::Align2::CENTER_CENTER,(index+1).to_string(),egui::FontId::proportional(12.),egui::Color32::BLACK);}}}
     for (index,a) in annotations.iter().filter(|a|value(a,"snapshotId")==selected).enumerate(){ui.separator();ui.label(format!("{} · {} · {}",index+1,value(a,"authorName"),if a["resolved"]==true{"Resolved"}else{"Open"}));ui.label(value(a,"body"));if let Some(replies)=a["replies"].as_array(){for reply in replies{ui.label(format!("{}: {}",value(reply,"authorName"),value(reply,"body")));}}
      ui.horizontal(|ui|{let id=value(a,"_id").to_string();let resolved=a["resolved"]!=true;if ui.add_enabled(!busy,egui::Button::new(if resolved{"Resolve"}else{"Reopen"})).clicked(){studio.cloud_task(move|c|{c.call("review:resolve",json!({"id":id,"resolved":resolved}))?;Ok(Event::Notice("Thread updated. Refresh to load the latest review.".into()))});}
       if ui.add_enabled(!busy&&!studio.cloud_panel.reply.trim().is_empty(),egui::Button::new("Reply with draft")).clicked(){let id=value(a,"_id").to_string();let body=studio.cloud_panel.reply.clone();studio.cloud_task(move|c|{c.call("review:reply",json!({"id":id,"body":body}))?;Ok(Event::Notice("Reply posted. Refresh to load the latest review.".into()))});studio.cloud_panel.reply.clear();}
@@ -59,6 +59,9 @@ pub fn modal(ui: &mut Ui, studio: &mut Studio) {
  }
  ui.separator();if busy{ui.spinner();}ui.label(&studio.status);if ui.button("Close").clicked(){studio.cloud_modal=CloudModal::None;}
  });
+    if studio.cloud_busy() {
+        ctx.request_repaint_after(std::time::Duration::from_millis(150));
+    }
     if dialog.should_close() {
         studio.cloud_modal = CloudModal::None;
     }

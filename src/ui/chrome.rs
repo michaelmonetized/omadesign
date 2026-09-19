@@ -293,9 +293,18 @@ fn file_menu(ui: &mut Ui, studio: &mut Studio) {
             studio.enable_cloud_sync();
             ui.close();
         }
-        if ui.button("Cloud projects…").clicked() { studio.show_cloud_projects(); ui.close(); }
-        if ui.button("Review cloud annotations…").clicked() { studio.refresh_cloud_review(); ui.close(); }
-        if ui.button("Upload project asset…").clicked() { studio.upload_cloud_asset(); ui.close(); }
+        if ui.button("Cloud projects…").clicked() {
+            studio.show_cloud_projects();
+            ui.close();
+        }
+        if ui.button("Review cloud annotations…").clicked() {
+            studio.refresh_cloud_review();
+            ui.close();
+        }
+        if ui.button("Upload project asset…").clicked() {
+            studio.upload_cloud_asset();
+            ui.close();
+        }
         if ui.button("Invite collaborator…").clicked() {
             studio.cloud_modal = crate::app::CloudModal::Invite;
             ui.close();

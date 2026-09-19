@@ -152,7 +152,27 @@ export function ProjectView({
           </div>
         </section>
       )}
-      {project.role === "owner" && <details className="cloud-archive"><summary>Archive project</summary><p>Archive hides this project from collaborators and unpublishes its showcase work. You can restore it from your project list.</p><button onClick={async()=>{try{await archive({projectId:id});onBack();}catch(e){setNotice(message(e));}}}>Archive this project</button></details>}
+      {project.role === "owner" && (
+        <details className="cloud-archive">
+          <summary>Archive project</summary>
+          <p>
+            Archive hides this project from collaborators and unpublishes its
+            showcase work. You can restore it from your project list.
+          </p>
+          <button
+            onClick={async () => {
+              try {
+                await archive({ projectId: id });
+                onBack();
+              } catch (e) {
+                setNotice(message(e));
+              }
+            }}
+          >
+            Archive this project
+          </button>
+        </details>
+      )}
       {project.role === "owner" && (
         <>
           <Team id={id} />

@@ -1,7 +1,7 @@
-mod cloud;
 mod browsers;
 mod canvas;
 mod chrome;
+mod cloud;
 mod deform;
 mod guides;
 mod icons;
@@ -76,7 +76,8 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
 
 /// Screenshot scenes wait for their actual template previews, not a fixed sleep.
 pub fn scene_ready(ctx: &eframe::egui::Context, studio: &Studio) -> bool {
-    library::ready(ctx, studio)
+    !studio.cloud_busy()
+        && library::ready(ctx, studio)
         && (studio.persona != Persona::Photo || photo_detail::ready(ctx))
         && (!(studio.show_templates
             || (studio.show_welcome && studio.welcome_page == crate::app::WelcomePage::Templates))

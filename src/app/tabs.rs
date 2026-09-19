@@ -541,7 +541,10 @@ impl Studio {
     /// A background upload must never link whichever document happens to be active.
     pub(super) fn link_cloud_tab(&mut self, swap_id: &str, link: crate::cloud::CloudLink) {
         if self.swap_id == swap_id {
-            self.commit(Cmd::SetCloud { before: self.doc.cloud.clone(), after: Some(link) });
+            self.commit(Cmd::SetCloud {
+                before: self.doc.cloud.clone(),
+                after: Some(link),
+            });
         } else if let Some(tab) = self.tabs.iter_mut().find(|tab| tab.swap_id == swap_id) {
             tab.doc.cloud = Some(link);
             tab.dirty = true;

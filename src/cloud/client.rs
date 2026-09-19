@@ -44,7 +44,8 @@ pub struct Panel {
     pub preview_file: String,
 }
 pub enum Event {
-    Preview(Vec<u8>, String),
+    Disconnected,
+    Preview(eframe::egui::ColorImage, String),
     DeviceCode(String, String),
     Connected(Identity),
     Projects(Vec<Project>),
@@ -87,7 +88,9 @@ impl Client {
             .to_string())
     }
     pub fn call(&self, operation: &str, mut args: Value) -> Result<Value, String> {
-        if !self.identity.token.is_empty() && operation != "devices:begin" {
+        if !self.identity.token.is_empty()
+            && !matches!(operation, "devices:begin" | "showcase:competitions")
+        {
             args["deviceToken"] = json!(self.identity.token);
         }
         let result = self
@@ -260,6 +263,9 @@ impl Client {
         Ok(data)
     }
     pub fn pull(&self, project_id: &str) -> Result<Document, String> {
+        if project_id.is_empty() || !project_id.bytes().all(|c| c.is_ascii_alphanumeric()) {
+            return Err("Invalid project id".into());
+        }
         let p = self.call("projects:get", json!({"projectId":project_id}))?;
         let files: Vec<File> =
             serde_json::from_value(p["files"].clone()).map_err(|e| e.to_string())?;

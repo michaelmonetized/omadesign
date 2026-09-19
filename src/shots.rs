@@ -102,6 +102,43 @@ pub const SCENES: &[Scene] = &[
 
 pub fn apply(studio: &mut Studio, id: &str) -> Result<(), String> {
     match id {
+        "cloud-review" => {
+            let path = std::env::var("OMADESIGN_QA_IDENTITY")
+                .map_err(|_| "Cloud shot requires a QA identity")?;
+            let identity: crate::cloud::Identity =
+                serde_json::from_str(&std::fs::read_to_string(path).map_err(|e| e.to_string())?)
+                    .map_err(|e| e.to_string())?;
+            if !identity.cloud_url.starts_with("http://localhost:") {
+                return Err("Cloud shot requires development services".into());
+            }
+            let project = std::env::var("OMADESIGN_QA_PROJECT")
+                .map_err(|_| "Cloud shot requires a QA project")?;
+            let client = crate::cloud::client::Client::new(identity.clone());
+            studio.doc = client.pull(&project)?;
+            studio.cloud_identity = identity;
+            if let crate::cloud::client::Event::Refreshed {
+                project_id,
+                files,
+                annotations,
+                showcase,
+                competitions,
+            } = client.refresh(&project)?
+            {
+                studio.cloud_panel.project_id = project_id;
+                studio.cloud_panel.selected_snapshot = files
+                    .iter()
+                    .find(|f| f.kind == "snapshot")
+                    .map(|f| f.id.clone())
+                    .unwrap_or_default();
+                studio.cloud_panel.files = files;
+                studio.cloud_panel.annotations = annotations;
+                studio.cloud_panel.showcase = showcase;
+                studio.cloud_panel.competitions = competitions;
+            }
+            studio.cloud_modal = crate::app::CloudModal::Review;
+            studio.show_welcome = false;
+            studio.load_cloud_preview();
+        }
         "brand-library" => project_library(studio, false)?,
         "palette-library" => project_library(studio, true)?,
         "hud-pen" => key_hud(studio),

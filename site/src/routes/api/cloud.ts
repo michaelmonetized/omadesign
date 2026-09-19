@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
+import { ConvexError } from "convex/values";
 const queries = new Set([
   "devices:me",
   "devices:list",
@@ -18,6 +19,7 @@ const mutations = new Set([
   "devices:begin",
   "devices:approve",
   "devices:revoke",
+  "devices:disconnect",
   "projects:create",
   "projects:archive",
   "projects:restore",
@@ -76,8 +78,11 @@ export const Route = createFileRoute("/api/cloud")({
               );
           return json({ ok: true, value });
         } catch (error) {
+          // Validation failures may include request arguments, including device credentials.
           const detail =
-            error instanceof Error ? error.message : "Cloud request failed";
+            error instanceof ConvexError && typeof error.data === "string"
+              ? error.data
+              : "Cloud request failed. Check access or update Omadesign and retry.";
           return json({ error: detail.slice(0, 500) }, 400);
         }
       },

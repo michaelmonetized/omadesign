@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { actor, access, clean, fail, deviceArg } from "./cloudAuth";
 import { Resend } from "@convex-dev/resend";
 import { components } from "./_generated/api";
+import { limit } from "./cloudMaintenance";
 const mail = new Resend(components.resend, { testMode: false });
 export const list = query({
   args: deviceArg,
@@ -111,6 +112,7 @@ export const invite = mutation({
     };
     if (old) await ctx.db.patch(old._id, data);
     else await ctx.db.insert("cloudInvites", data);
+    await limit(ctx, `invites:${user.userId}`, 20, 3600000);
     await mail.sendEmail(ctx, {
       from: "Omadesign <collab@mail.omadesign.app>",
       to: email,
@@ -153,6 +155,16 @@ export const accept = mutation({
         q.eq("projectId", i.projectId).eq("userId", u.userId),
       )
       .unique();
+    const membership = await ctx.db
+      .query("cloudMembers")
+      .withIndex("by_user", (q) => q.eq("userId", u.userId))
+      .take(100);
+    const team = await ctx.db
+      .query("cloudMembers")
+      .withIndex("by_project", (q) => q.eq("projectId", i.projectId))
+      .take(100);
+    if (!old && (membership.length >= 100 || team.length >= 100))
+      fail("Project membership limit reached.");
     if (!old)
       await ctx.db.insert("cloudMembers", {
         projectId: i.projectId,
@@ -201,8 +213,12 @@ export const archive = mutation({
   args: { ...deviceArg, projectId: v.id("cloudProjects") },
   handler: async (ctx, a) => {
     await access(ctx, a.projectId, a.deviceToken, "owner");
-    const published = await ctx.db.query("cloudShowcase").withIndex("by_project", q => q.eq("projectId", a.projectId)).take(100);
-    for (const item of published) await ctx.db.patch(item._id, { published: false });
+    const published = await ctx.db
+      .query("cloudShowcase")
+      .withIndex("by_project", (q) => q.eq("projectId", a.projectId))
+      .take(100);
+    for (const item of published)
+      await ctx.db.patch(item._id, { published: false });
     await ctx.db.patch(a.projectId, { archived: true, updated: Date.now() });
   },
 });
@@ -219,6 +235,11 @@ export const archived = query({
   args: deviceArg,
   handler: async (ctx, a) => {
     const user = await actor(ctx, a.deviceToken);
-    return (await ctx.db.query("cloudProjects").withIndex("by_owner", q => q.eq("owner", user.userId)).take(100)).filter(p => p.archived);
+    return (
+      await ctx.db
+        .query("cloudProjects")
+        .withIndex("by_owner", (q) => q.eq("owner", user.userId))
+        .take(100)
+    ).filter((p) => p.archived);
   },
 });

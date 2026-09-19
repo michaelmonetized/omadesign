@@ -7,7 +7,7 @@ import {
   useMutation,
   useQuery,
 } from "convex/react";
-import { useState } from "react";
+import { Component, useState, type ReactNode } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { ProjectView } from "../cloud/project-view";
@@ -67,12 +67,19 @@ function Workspace() {
   if (search.device) return <DeviceApproval code={search.device} />;
   if (search.project)
     return (
-      <ProjectView
-        id={search.project as Id<"cloudProjects">}
+      <ProjectAccess
+        key={search.project}
         onBack={() =>
           navigate({ search: { project: undefined, device: undefined } })
         }
-      />
+      >
+        <ProjectView
+          id={search.project as Id<"cloudProjects">}
+          onBack={() =>
+            navigate({ search: { project: undefined, device: undefined } })
+          }
+        />
+      </ProjectAccess>
     );
   return (
     <>
@@ -136,7 +143,27 @@ function Workspace() {
           ))}
         </section>
       )}
-      {!!archived?.length && <details><summary>Archived projects ({archived.length})</summary>{archived.map(p => <div className="cloud-file-list" key={p._id}><span>{p.title}</span><button onClick={async()=>{try {await restore({projectId:p._id});} catch(e) {setNotice(message(e));}}}>Restore</button></div>)}</details>}
+      {!!archived?.length && (
+        <details>
+          <summary>Archived projects ({archived.length})</summary>
+          {archived.map((p) => (
+            <div className="cloud-file-list" key={p._id}>
+              <span>{p.title}</span>
+              <button
+                onClick={async () => {
+                  try {
+                    await restore({ projectId: p._id });
+                  } catch (e) {
+                    setNotice(message(e));
+                  }
+                }}
+              >
+                Restore
+              </button>
+            </div>
+          ))}
+        </details>
+      )}
       <div className="cloud-projects">
         {projects?.map((p) => (
           <button
@@ -192,4 +219,30 @@ function DeviceApproval({ code }: { code: string }) {
       <p role="status">{status}</p>
     </div>
   );
+}
+
+class ProjectAccess extends Component<
+  { children: ReactNode; onBack: () => void },
+  { failed: boolean }
+> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? (
+      <div className="cloud-empty">
+        <h2>Project unavailable</h2>
+        <p>
+          Your access may have changed, or the project was archived. Ask its
+          owner for a new invitation.
+        </p>
+        <button className="button" onClick={this.props.onBack}>
+          Back to projects
+        </button>
+      </div>
+    ) : (
+      this.props.children
+    );
+  }
 }
