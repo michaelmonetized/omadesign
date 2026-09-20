@@ -57,6 +57,7 @@ fn prepare(
                 }
                 prepared.layers.extend(item.layers);
                 prepared.notes.extend(item.notes);
+                check_prepared_size(prepared)?;
             }
         }
         ClipboardContent::Image { name, image } => {
@@ -162,6 +163,10 @@ fn prepare(
             prepared.notes.extend(notes);
         }
     }
+    check_prepared_size(prepared)
+}
+
+fn check_prepared_size(prepared: &PreparedClipboard) -> Result<(), String> {
     let pixels: u64 = prepared
         .layers
         .iter()
@@ -243,7 +248,7 @@ impl Studio {
         self.key_drag = None;
         self.paint_mask = false;
         self.tool = Tool::Select;
-        if matches!(self.persona, Persona::Photo | Persona::Pixel) {
+        if self.persona == Persona::Photo {
             self.persona = Persona::Design;
         }
         self.show_welcome = false;
@@ -300,6 +305,7 @@ mod tests {
     #[test]
     fn image_paste_preserves_native_size_center_camera_document_and_atomic_history() {
         let mut studio = studio();
+        studio.persona = Persona::Pixel;
         let original = crate::project::encode(&studio.doc).unwrap();
         let center = Pt::new(740.0, -135.0);
         studio
@@ -322,6 +328,7 @@ mod tests {
         assert_eq!(studio.selection, vec![(1, RASTER_ID)]);
         assert_eq!(studio.active_layer, Some(1));
         assert_eq!(studio.history.len(), 1);
+        assert_eq!(studio.persona, Persona::Pixel);
         let encoded = crate::project::encode(&studio.doc).unwrap();
         let restored = crate::project::decode(&encoded).unwrap();
         assert_center(restored.layers[1].kind.raster_bounds().unwrap(), center);

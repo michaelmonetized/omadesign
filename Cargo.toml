@@ -52,6 +52,7 @@ mozjpeg-sys = { version = "2.2.3", default-features = false, features = ["unwind
 [target.'cfg(target_os = "linux")'.dependencies]
 wl-clipboard-rs = "0.9.3"
 x11-clipboard = "0.9.3"
+x11rb = "0.13.2"
 rustix = { version = "1.1", features = ["fs"] }
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]

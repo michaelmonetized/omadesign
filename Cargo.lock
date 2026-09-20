@@ -2757,6 +2757,7 @@ dependencies = [
  "usvg",
  "wl-clipboard-rs",
  "x11-clipboard",
+ "x11rb",
  "zip",
 ]
 

@@ -1460,8 +1460,10 @@ fn is_copy_command(modifiers: egui::Modifiers, keycode: egui::Key) -> bool {
 
 fn is_paste_command(modifiers: egui::Modifiers, keycode: egui::Key) -> bool {
     keycode == egui::Key::Paste
-        || (modifiers.command && keycode == egui::Key::V)
-        || (cfg!(target_os = "windows") && modifiers.shift && keycode == egui::Key::Insert)
+        || ((modifiers.command || modifiers.ctrl || modifiers.mac_cmd) && keycode == egui::Key::V)
+        // Linux clipboard-history pickers also inject Shift+Insert, including
+        // image-only selections for which read_clipboard returns no text.
+        || (modifiers.shift && keycode == egui::Key::Insert)
 }
 
 fn translate_mouse_button(button: winit::event::MouseButton) -> Option<egui::PointerButton> {
@@ -2414,5 +2416,43 @@ mod clipboard_chord_tests {
             || { panic!("plain typing does not read the clipboard") }
         ));
         assert!(events.is_empty());
+    }
+
+    #[test]
+    fn history_shift_insert_and_command_paste_keep_image_only_key_events() {
+        for (key, modifiers) in [
+            (Key::Insert, Modifiers::SHIFT),
+            (Key::Insert, Modifiers::SHIFT | Modifiers::ALT),
+            (Key::Paste, Modifiers::NONE),
+            (Key::V, Modifiers::CTRL),
+            (Key::V, Modifiers::COMMAND),
+            (
+                Key::V,
+                Modifiers {
+                    mac_cmd: true,
+                    ..Modifiers::NONE
+                },
+            ),
+        ] {
+            for contents in [None, Some(String::new()), Some("history\r\ntext".into())] {
+                let has_text = contents.as_ref().is_some_and(|text| !text.is_empty());
+                let mut events = Vec::new();
+                assert!(push_clipboard_command(
+                    &mut events,
+                    key,
+                    None,
+                    modifiers,
+                    || contents
+                ));
+                assert!(
+                    matches!(&events[0], Event::Key { key: actual, modifiers: actual_mods, pressed: true, .. }
+                    if *actual == key && *actual_mods == modifiers)
+                );
+                assert_eq!(events.len(), if has_text { 2 } else { 1 });
+                if has_text {
+                    assert_eq!(events[1], Event::Paste("history\ntext".into()));
+                }
+            }
+        }
     }
 }

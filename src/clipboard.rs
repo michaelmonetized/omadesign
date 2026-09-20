@@ -5,8 +5,12 @@ use std::path::{Path, PathBuf};
 
 const MAX_BYTES: usize = 256 * 1024 * 1024;
 const MAX_TEXT_BYTES: usize = 16 * 1024 * 1024;
-const MAX_PIXELS: u64 = 64 * 1024 * 1024;
+const MAX_PIXELS: u64 = 64_000_000;
 const MAX_FILES: usize = 256;
+
+fn internal_objects(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"omadesign-objects:") || bytes.starts_with(b"omadesign-shapes:")
+}
 
 #[derive(Debug, PartialEq)]
 pub enum ClipboardContent {
@@ -66,6 +70,13 @@ pub fn read() -> Result<ClipboardContent, String> {
 
 /// Classifies egui's text paste event, preserving plain text exactly as copied.
 pub fn parse_text(text: &str) -> Result<ClipboardContent, String> {
+    if internal_objects(text.as_bytes()) {
+        return if text.len() <= MAX_BYTES {
+            Ok(ClipboardContent::Text(text.to_owned()))
+        } else {
+            Err("Copied objects exceed 256 MiB".into())
+        };
+    }
     if text.len() > MAX_TEXT_BYTES {
         return Err("Clipboard text exceeds 16 MiB".into());
     }
@@ -170,6 +181,9 @@ pub fn read_file(path: &Path) -> Result<ClipboardContent, String> {
             path.display()
         ));
     }
+    if !path.is_file() {
+        return Err("Clipboard image must be a regular file".into());
+    }
     let file =
         std::fs::File::open(path).map_err(|e| format!("Could not open {}: {e}", path.display()))?;
     let metadata = file.metadata().map_err(|e| e.to_string())?;
@@ -234,13 +248,16 @@ fn decode_image(bytes: &[u8], name: String) -> Result<ClipboardContent, String> 
 }
 
 fn parse_mime(mime: &str, bytes: &[u8]) -> Result<ClipboardContent, String> {
+    let mime = mime.split(';').next().unwrap_or(mime).trim();
     if bytes.is_empty() {
         return Ok(ClipboardContent::Empty);
     }
     if mime.starts_with("image/") && mime != "image/svg+xml" {
         return decode_image(bytes, "Pasted image".into());
     }
-    if bytes.len() > MAX_TEXT_BYTES {
+    let internal =
+        matches!(mime, "text/plain" | "UTF8_STRING" | "STRING" | "TEXT") && internal_objects(bytes);
+    if bytes.len() > MAX_BYTES || (bytes.len() > MAX_TEXT_BYTES && !internal) {
         return Err("Clipboard text exceeds 16 MiB".into());
     }
     let text = if mime == "STRING" {
@@ -258,6 +275,31 @@ fn parse_mime(mime: &str, bytes: &[u8]) -> Result<ClipboardContent, String> {
     }
 }
 
+// File managers may provide previews, so prefer a local file. Browsers also
+// advertise text/uri-list, but their remote image URL must yield to image bytes.
+fn read_candidates(
+    mut get: impl FnMut(&str) -> Result<Option<Vec<u8>>, String>,
+) -> Result<ClipboardContent, String> {
+    let mut file_error = None;
+    for mime in MIME_TYPES {
+        let Some(bytes) = get(mime)? else { continue };
+        match parse_mime(mime, &bytes) {
+            Ok(ClipboardContent::Empty) => continue,
+            Ok(content) => return Ok(content),
+            Err(error)
+                if matches!(
+                    *mime,
+                    "text/uri-list" | "x-special/gnome-copied-files" | "application/x-kde4-urilist"
+                ) =>
+            {
+                file_error = Some(error);
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    file_error.map_or(Ok(ClipboardContent::Empty), Err)
+}
+
 #[cfg(target_os = "linux")]
 enum WaylandError {
     Unavailable(String),
@@ -266,7 +308,7 @@ enum WaylandError {
 
 #[cfg(target_os = "linux")]
 fn read_wayland() -> Result<ClipboardContent, WaylandError> {
-    use wl_clipboard_rs::paste::{self, ClipboardType, Error, MimeType, Seat};
+    use wl_clipboard_rs::paste::{self, ClipboardType, Error, Seat};
     let types = match paste::get_mime_types(ClipboardType::Regular, Seat::Unspecified) {
         Ok(types) => types,
         Err(Error::ClipboardEmpty | Error::NoSeats | Error::NoMimeType) => {
@@ -278,40 +320,52 @@ fn read_wayland() -> Result<ClipboardContent, WaylandError> {
             )));
         }
     };
-    let Some(mime) = MIME_TYPES.iter().find(|mime| types.contains(**mime)) else {
-        return Err(WaylandError::Content(
-            "Clipboard has no supported image, SVG, file or text content".into(),
-        ));
-    };
-    let (mut pipe, actual_mime) = paste::get_contents(
+    read_candidates(|mime| {
+        let offered = types.get(mime).or_else(|| {
+            types.iter().find(|offered| {
+                !mime.contains(';')
+                    && offered
+                        .split(';')
+                        .next()
+                        .is_some_and(|base| base.eq_ignore_ascii_case(mime))
+            })
+        });
+        let Some(offered) = offered else {
+            return Ok(None);
+        };
+        read_wayland_mime(offered).map(Some)
+    })
+    .map_err(WaylandError::Content)
+}
+
+#[cfg(target_os = "linux")]
+fn read_wayland_mime(mime: &str) -> Result<Vec<u8>, String> {
+    use wl_clipboard_rs::paste::{self, ClipboardType, MimeType, Seat};
+    let (mut pipe, _) = paste::get_contents(
         ClipboardType::Regular,
         Seat::Unspecified,
         MimeType::Specific(mime),
     )
-    .map_err(|error| WaylandError::Content(format!("Could not read clipboard: {error}")))?;
+    .map_err(|error| format!("Could not read clipboard: {error}"))?;
     // Bound both memory and time if a clipboard owner stops serving a transfer.
-    let flags = rustix::fs::fcntl_getfl(&pipe).map_err(|e| WaylandError::Content(e.to_string()))?;
+    let flags = rustix::fs::fcntl_getfl(&pipe).map_err(|e| e.to_string())?;
     rustix::fs::fcntl_setfl(&pipe, flags | rustix::fs::OFlags::NONBLOCK)
-        .map_err(|e| WaylandError::Content(e.to_string()))?;
+        .map_err(|e| e.to_string())?;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    let limit = if mime.starts_with("image/") && *mime != "image/svg+xml" {
-        MAX_BYTES
-    } else {
-        MAX_TEXT_BYTES
-    };
+    // Native object copies are UTF-8 text carrying compressed raster pixels and
+    // may exceed ordinary text limits. Classify and enforce text limits below.
+    let limit = MAX_BYTES;
     let mut bytes = Vec::new();
     let mut buffer = [0; 65536];
     loop {
         if std::time::Instant::now() >= deadline {
-            return Err(WaylandError::Content("Clipboard transfer timed out".into()));
+            return Err("Clipboard transfer timed out".into());
         }
         match pipe.read(&mut buffer) {
             Ok(0) => break,
             Ok(len) => {
                 if bytes.len() + len > limit {
-                    return Err(WaylandError::Content(
-                        "Clipboard content is too large".into(),
-                    ));
+                    return Err("Clipboard content is too large".into());
                 }
                 bytes.extend_from_slice(&buffer[..len]);
             }
@@ -319,32 +373,195 @@ fn read_wayland() -> Result<ClipboardContent, WaylandError> {
                 std::thread::sleep(std::time::Duration::from_millis(2))
             }
             Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
-            Err(error) => return Err(WaylandError::Content(error.to_string())),
+            Err(error) => return Err(error.to_string()),
         }
     }
-    parse_mime(&actual_mime, &bytes).map_err(WaylandError::Content)
+    Ok(bytes)
 }
 
 #[cfg(target_os = "linux")]
 fn read_x11() -> Result<ClipboardContent, String> {
-    let clipboard =
-        x11_clipboard::Clipboard::new().map_err(|e| format!("Could not open clipboard: {e}"))?;
-    let context = &clipboard.getter;
-    for mime in MIME_TYPES {
+    let context =
+        x11_clipboard::Context::new(None).map_err(|e| format!("Could not open clipboard: {e}"))?;
+    let offered = x11_targets(&context)?;
+    read_candidates(|mime| {
         let target = context.get_atom(mime).map_err(|e| e.to_string())?;
-        let bytes = clipboard
-            .load(
-                context.atoms.clipboard,
-                target,
-                context.atoms.property,
-                std::time::Duration::from_secs(3),
-            )
-            .map_err(|e| format!("Could not read clipboard: {e}"))?;
-        if !bytes.is_empty() {
-            return parse_mime(mime, &bytes);
+        if offered
+            .as_ref()
+            .is_some_and(|types| !types.contains(&target))
+        {
+            return Ok(None);
         }
-    }
-    Ok(ClipboardContent::Empty)
+        x11_contents(&context, target)
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn x11_contents(context: &x11_clipboard::Context, target: u32) -> Result<Option<Vec<u8>>, String> {
+    use x11rb::connection::Connection;
+    use x11rb::protocol::{
+        Event,
+        xproto::{AtomEnum, ConnectionExt, Property},
+    };
+    let connection = &context.connection;
+    let result = (|| -> Result<_, Box<dyn std::error::Error>> {
+        let cookie = connection.convert_selection(
+            context.window,
+            context.atoms.clipboard,
+            target,
+            context.atoms.property,
+            x11rb::CURRENT_TIME,
+        )?;
+        let sequence = cookie.sequence_number();
+        cookie.check()?;
+        connection.flush()?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut incremental = false;
+        let mut bytes = Vec::new();
+        loop {
+            if std::time::Instant::now() >= deadline {
+                return Err("Clipboard transfer timed out".into());
+            }
+            let Some((event, event_sequence)) = connection.poll_for_event_with_sequence()? else {
+                // A fixed 50ms sleep per INCR chunk makes even ordinary copied
+                // images take minutes. Let the owner feed data without UI work.
+                std::thread::sleep(std::time::Duration::from_micros(100));
+                continue;
+            };
+            if event_sequence < sequence {
+                continue;
+            }
+            let read_property = match event {
+                Event::SelectionNotify(event)
+                    if event.requestor == context.window
+                        && event.selection == context.atoms.clipboard
+                        && event.target == target =>
+                {
+                    if event.property == 0 {
+                        return Ok(None);
+                    }
+                    true
+                }
+                Event::PropertyNotify(event)
+                    if incremental
+                        && event.window == context.window
+                        && event.atom == context.atoms.property
+                        && event.state == Property::NEW_VALUE =>
+                {
+                    true
+                }
+                _ => false,
+            };
+            if !read_property {
+                continue;
+            }
+            let remaining = MAX_BYTES - bytes.len();
+            let reply = connection
+                .get_property(
+                    true,
+                    context.window,
+                    context.atoms.property,
+                    AtomEnum::ANY,
+                    0,
+                    (remaining / 4 + 1) as u32,
+                )?
+                .reply()?;
+            if reply.type_ == context.atoms.incr && !incremental {
+                if reply
+                    .value32()
+                    .and_then(|mut values| values.next())
+                    .is_some_and(|size| size as usize > MAX_BYTES)
+                {
+                    return Err("Clipboard content is too large".into());
+                }
+                incremental = true;
+                connection.flush()?;
+                continue;
+            }
+            if reply.type_ != target {
+                // Legacy owners can return their original type instead of
+                // refusing an unsupported target. Try the next offered format.
+                return Ok(None);
+            }
+            if reply.bytes_after != 0 || reply.value.len() > remaining {
+                return Err("Clipboard content is too large".into());
+            }
+            let done = !incremental || reply.value.is_empty();
+            bytes.extend_from_slice(&reply.value);
+            if done {
+                return Ok(Some(bytes));
+            }
+            connection.flush()?;
+        }
+    })();
+    result.map_err(|error| format!("Could not read clipboard: {error}"))
+}
+
+#[cfg(target_os = "linux")]
+fn x11_targets(
+    context: &x11_clipboard::Context,
+) -> Result<Option<std::collections::HashSet<u32>>, String> {
+    use x11rb::connection::Connection;
+    use x11rb::protocol::{
+        Event,
+        xproto::{AtomEnum, ConnectionExt},
+    };
+    let connection = &context.connection;
+    let result = (|| -> Result<_, Box<dyn std::error::Error>> {
+        if connection
+            .get_selection_owner(context.atoms.clipboard)?
+            .reply()?
+            .owner
+            == 0
+        {
+            return Ok(Some(std::collections::HashSet::new()));
+        }
+        connection
+            .convert_selection(
+                context.window,
+                context.atoms.clipboard,
+                context.atoms.targets,
+                context.atoms.property,
+                x11rb::CURRENT_TIME,
+            )?
+            .check()?;
+        connection.flush()?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        loop {
+            if std::time::Instant::now() >= deadline {
+                return Err("Clipboard target discovery timed out".into());
+            }
+            match connection.poll_for_event()? {
+                Some(Event::SelectionNotify(event))
+                    if event.selection == context.atoms.clipboard
+                        && event.target == context.atoms.targets =>
+                {
+                    if event.property == 0 {
+                        return Ok(None);
+                    }
+                    // ICCCM TARGETS replies have type ATOM, not TARGETS. The
+                    // generic x11-clipboard loader requires the requested type.
+                    let reply = connection
+                        .get_property(
+                            true,
+                            context.window,
+                            event.property,
+                            AtomEnum::ATOM,
+                            0,
+                            4096,
+                        )?
+                        .reply()?;
+                    if reply.bytes_after != 0 {
+                        return Err("Clipboard offers too many formats".into());
+                    }
+                    return Ok(reply.value32().map(|atoms| atoms.collect()));
+                }
+                Some(_) => {}
+                None => std::thread::sleep(std::time::Duration::from_millis(2)),
+            }
+        }
+    })();
+    result.map_err(|error| format!("Could not inspect clipboard formats: {error}"))
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -401,6 +618,21 @@ mod tests {
     }
 
     #[test]
+    fn large_internal_objects_cross_native_text_limit_without_allowing_large_plain_text() {
+        let plain = "A".repeat(MAX_TEXT_BYTES + 1);
+        assert!(parse_text(&plain).is_err());
+        assert!(parse_mime("text/plain", plain.as_bytes()).is_err());
+        let payload = format!("omadesign-objects:{plain}");
+        assert!(
+            matches!(parse_text(&payload).unwrap(), ClipboardContent::Text(text) if text == payload)
+        );
+        assert!(
+            matches!(parse_mime("text/plain;charset=utf-8", payload.as_bytes()).unwrap(), ClipboardContent::Text(text) if text == payload)
+        );
+        assert!(parse_mime("image/svg+xml", payload.as_bytes()).is_err());
+    }
+
+    #[test]
     fn file_lists_handle_spaces_unicode_comments_and_gnome_copy_cut() {
         for header in ["", "copy\n", "cut\n"] {
             let list = format!(
@@ -448,6 +680,79 @@ mod tests {
             ClipboardContent::Svg(svg.into())
         );
         assert!(parse_mime("image/png", b"broken PNG").is_err());
+    }
+
+    #[test]
+    fn browser_remote_image_uri_yields_to_pixels_but_local_file_wins() {
+        let pixels = RgbaImage::new(2, 1, [50, 100, 150, 255].repeat(2)).unwrap();
+        let png = pixels.encode_png().unwrap();
+        let read_offer = |uri: &str| {
+            read_candidates(|mime| {
+                Ok(match mime {
+                    "text/uri-list" => Some(uri.as_bytes().to_vec()),
+                    "image/png" => Some(png.clone()),
+                    "text/plain" => Some(b"https://example.com/image.png".to_vec()),
+                    _ => None,
+                })
+            })
+        };
+        assert!(
+            matches!(read_offer("https://example.com/image.png").unwrap(), ClipboardContent::Image { image, .. } if image == pixels)
+        );
+        assert_eq!(
+            read_offer("file:///tmp/image.png").unwrap(),
+            ClipboardContent::Files(vec!["/tmp/image.png".into()])
+        );
+        assert!(
+            read_candidates(|mime| Ok(
+                (mime == "text/uri-list").then(|| b"file://remote/image.png".to_vec())
+            ))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn browser_remote_uri_with_plain_text_pastes_text() {
+        let url = "https://example.com/image.png";
+        let content = read_candidates(|mime| {
+            Ok(matches!(mime, "text/uri-list" | "text/plain").then(|| url.as_bytes().to_vec()))
+        })
+        .unwrap();
+        assert_eq!(content, ClipboardContent::Text(url.into()));
+    }
+
+    #[test]
+    fn copied_files_decode_original_pixels_and_svg_without_rasterizing() {
+        let root = std::env::temp_dir().join(format!(
+            "omadesign-clipboard-{}-{}",
+            std::process::id(),
+            crate::document::next_id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let png_path = root.join("screen shot.png");
+        let svg_path = root.join("vector.svg");
+        let pixels = RgbaImage::new(1, 1, vec![50, 100, 150, 255]).unwrap();
+        std::fs::write(&png_path, pixels.encode_png().unwrap()).unwrap();
+        std::fs::write(&svg_path, "<svg xmlns=\"http://www.w3.org/2000/svg\"/>").unwrap();
+        assert!(
+            matches!(read_file(&png_path).unwrap(), ClipboardContent::Image { image, .. } if image == pixels)
+        );
+        assert!(matches!(
+            read_file(&svg_path).unwrap(),
+            ClipboardContent::Svg(_)
+        ));
+        assert_eq!(
+            parse_text(png_path.to_str().unwrap()).unwrap(),
+            ClipboardContent::Files(vec![png_path])
+        );
+        let oversized = std::fs::File::create(root.join("oversized.png")).unwrap();
+        oversized.set_len(MAX_BYTES as u64 + 1).unwrap();
+        assert!(
+            read_file(&root.join("oversized.png"))
+                .unwrap_err()
+                .contains("too large")
+        );
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

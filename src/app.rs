@@ -1,9 +1,9 @@
 //! Studio: document + tool state. Mutations go through commands.
 
 mod brand_assets;
-mod cloud;
 mod clipboard;
 mod clipboard_insert;
+mod cloud;
 pub mod deform;
 mod file_io;
 mod guides;
@@ -3744,8 +3744,14 @@ mod tests {
         s.paste_clipboard(None);
         assert_eq!(s.selection.len(), 1);
         assert_ne!(s.selection[0].1, orig[0].1);
-        assert_eq!(s.doc.find_shape(s.selection[0].0, s.selection[0].1).unwrap().geom.bbox(),
-                   s.doc.find_shape(orig[0].0, orig[0].1).unwrap().geom.bbox());
+        assert_eq!(
+            s.doc
+                .find_shape(s.selection[0].0, s.selection[0].1)
+                .unwrap()
+                .geom
+                .bbox(),
+            s.doc.find_shape(orig[0].0, orig[0].1).unwrap().geom.bbox()
+        );
         let n: usize = s
             .doc
             .layers
