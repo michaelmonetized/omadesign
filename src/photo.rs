@@ -203,6 +203,34 @@ pub struct PhotoImage {
 }
 
 impl PhotoImage {
+    /// Small live preview, including saved edits, crop, rotation and linear RAW
+    /// adjustments. It never renders or retains a full-resolution developed image.
+    pub fn render_thumbnail(&self, max_edge: u32) -> RgbaImage {
+        if let Some(raw) = &self.raw_preview {
+            let scale = (max_edge as f32 / raw.w.max(raw.h) as f32).min(1.0);
+            let w = (raw.w as f32 * scale).round().max(1.0) as u32;
+            let h = (raw.h as f32 * scale).round().max(1.0) as u32;
+            let mut pixels = Vec::with_capacity(w as usize * h as usize * 3);
+            for y in 0..h {
+                for x in 0..w {
+                    let sx = (x as u64 * raw.w as u64 / w as u64) as u32;
+                    let sy = (y as u64 * raw.h as u64 / h as u64) as u32;
+                    let index = (sy as usize * raw.w as usize + sx as usize) * 3;
+                    pixels.extend_from_slice(&raw.pixels[index..index + 3]);
+                }
+            }
+            let mut params = self.develop.clone();
+            params.exposure += self
+                .raw
+                .as_ref()
+                .map_or(0.0, |raw| raw.metadata.baseline_exposure);
+            let (w, h, data) = develop_inner::<u8>(DevelopSource::linear(w, h, &pixels), &params);
+            RgbaImage { w, h, data }
+        } else {
+            develop(&self.preview.downscaled(max_edge), &self.develop)
+        }
+    }
+
     pub fn from_full(name: String, full: RgbaImage) -> Self {
         let preview = std::sync::Arc::new(full.downscaled(1600));
         let thumb = std::sync::Arc::new(full.downscaled(192));
@@ -935,6 +963,34 @@ mod tests {
             px.copy_from_slice(&[v, v, v, 255]);
         }
         RgbaImage { w, h, data }
+    }
+
+    #[test]
+    fn live_thumbnails_apply_raster_and_linear_raw_edits_and_framing() {
+        let raster = PhotoImage::from_full("Raster".into(), gray_rgba(64, 80, 40));
+        let raw = PhotoImage::from_raw(
+            "RAW".into(),
+            crate::formats::raw::RawImage {
+                width: 80,
+                height: 40,
+                pixels: [4096, 4096, 4096].repeat(80 * 40),
+                metadata: crate::formats::raw::RawMetadata {
+                    baseline_exposure: 0.5,
+                    ..Default::default()
+                },
+                warnings: vec![],
+            },
+        );
+        for mut image in [raster, raw] {
+            let before = image.render_thumbnail(80);
+            assert_eq!(before, image.render_preview());
+            image.develop.exposure = 1.0;
+            image.develop.rotate = 90;
+            image.develop.crop = Some([0.0, 0.0, 1.0, 0.5]);
+            let after = image.render_thumbnail(40);
+            assert_eq!((after.w, after.h), (20, 20));
+            assert!(after.data[0] > before.data[0]);
+        }
     }
 
     #[test]

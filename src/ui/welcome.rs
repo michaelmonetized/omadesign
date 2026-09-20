@@ -109,13 +109,41 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
                                 if studio.welcome_page != page {
                                     clear_file_cache(ui);
                                 }
-                                studio.welcome_page = page;
+                                studio.set_welcome_page(page);
                             }
                         }
                     });
                     ui.add_space(8.0);
                     ui.separator();
                     ui.add_space(16.0);
+                    if studio.welcome_page != WelcomePage::Templates {
+                        ui.horizontal_wrapped(|ui| {
+                            if ui
+                                .add_sized(
+                                    vec2(150.0, 34.0),
+                                    Button::new("Open Photo").fill(accent_soft()),
+                                )
+                                .clicked()
+                            {
+                                studio.switch_persona(crate::tools::Persona::Photo);
+                            }
+                            if ui
+                                .add_sized(
+                                    vec2(150.0, 34.0),
+                                    Button::new("Open Layout").fill(accent_soft()),
+                                )
+                                .clicked()
+                            {
+                                studio.switch_persona(crate::tools::Persona::Layout);
+                            }
+                            ui.label(
+                                RichText::new("Start without an artboard")
+                                    .small()
+                                    .color(fg_weak()),
+                            );
+                        });
+                        ui.add_space(14.0);
+                    }
                     match studio.welcome_page {
                         WelcomePage::New => new_page(ui, studio),
                         WelcomePage::Templates => super::templates::library(ui, studio),
@@ -130,16 +158,75 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
                                 studio.seed_demo();
                             }
                             if ui.add(Button::new("Photo samples").frame(false)).clicked() {
-                                studio.show_welcome = false;
-                                studio.persona = crate::tools::Persona::Photo;
+                                studio.switch_persona(crate::tools::Persona::Photo);
                                 studio.photo.import_samples();
                             }
                         });
                     }
+                    ui.add_space(16.0);
+                    ui.collapsing("Startup preferences", |ui| startup_preferences(ui, studio));
                     ui.add_space(24.0);
                 });
             });
         });
+}
+
+pub(super) fn startup_preferences(ui: &mut Ui, studio: &mut Studio) {
+    use crate::app::startup::{StartPage, StartTab};
+    use crate::tools::Persona;
+    let previous = studio.startup_preferences.clone();
+    ui.label("Open at launch");
+    let label = match studio.startup_preferences.start_tab {
+        StartTab::Welcome => "Start screen",
+        StartTab::Mode(mode) => mode.name(),
+        StartTab::RememberLast => "Remember last mode",
+    };
+    eframe::egui::ComboBox::from_id_salt("startup-mode")
+        .selected_text(label)
+        .width(190.0)
+        .show_ui(ui, |ui| {
+            let choice = &mut studio.startup_preferences.start_tab;
+            ui.selectable_value(choice, StartTab::Welcome, "Start screen");
+            for persona in [
+                Persona::Design,
+                Persona::Pixel,
+                Persona::Layout,
+                Persona::Photo,
+                Persona::Motion,
+            ] {
+                ui.selectable_value(choice, StartTab::Mode(persona), persona.name());
+            }
+            ui.selectable_value(choice, StartTab::RememberLast, "Remember last mode");
+        });
+    ui.label("Start screen tab");
+    let page_name = |page| match page {
+        WelcomePage::New => "New document",
+        WelcomePage::Templates => "Templates",
+        WelcomePage::Recents => "Recent",
+        WelcomePage::Recovered => "Recovered",
+    };
+    let label = match studio.startup_preferences.start_page {
+        StartPage::Page(page) => page_name(page),
+        StartPage::RememberLast => "Remember last tab",
+    };
+    eframe::egui::ComboBox::from_id_salt("startup-page")
+        .selected_text(label)
+        .width(190.0)
+        .show_ui(ui, |ui| {
+            let choice = &mut studio.startup_preferences.start_page;
+            for page in [
+                WelcomePage::New,
+                WelcomePage::Templates,
+                WelcomePage::Recents,
+                WelcomePage::Recovered,
+            ] {
+                ui.selectable_value(choice, StartPage::Page(page), page_name(page));
+            }
+            ui.selectable_value(choice, StartPage::RememberLast, "Remember last tab");
+        });
+    if studio.startup_preferences != previous {
+        studio.save_startup_preferences();
+    }
 }
 
 fn new_page(ui: &mut Ui, studio: &mut Studio) {

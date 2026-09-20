@@ -85,15 +85,19 @@ pub(super) fn palettes(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
                 .clicked()
             {
                 ui.close();
-                if let Some(file) = rfd::FileDialog::new()
-                    .add_filter("Color palettes", &["omacolors", "json"])
-                    .pick_file()
-                {
-                    let root = root.clone();
-                    start_palette(ui.ctx(), root, move || {
-                        Ok(PaletteChange::Imported(crate::palette::load_file(&file)?))
-                    });
-                }
+                let root = root.clone();
+                studio.request_file_dialog(
+                    || {
+                        rfd::FileDialog::new()
+                            .add_filter("Color palettes", &["omacolors", "json"])
+                            .pick_file()
+                    },
+                    move |ctx, _, file| {
+                        start_palette(ctx, root, move || {
+                            Ok(PaletteChange::Imported(crate::palette::load_file(&file)?))
+                        });
+                    },
+                );
             }
             if ui
                 .add_enabled(
@@ -103,18 +107,22 @@ pub(super) fn palettes(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
                 .clicked()
             {
                 ui.close();
-                if let Some(file) = rfd::FileDialog::new()
-                    .set_file_name(".omacolors")
-                    .add_filter("Color palettes", &["omacolors", "json"])
-                    .save_file()
-                {
-                    let saved = d.palettes.clone();
-                    let root = root.clone();
-                    start_palette(ui.ctx(), root, move || {
-                        crate::palette::save_file(file, &saved)?;
-                        Ok(PaletteChange::Exported)
-                    });
-                }
+                let saved = d.palettes.clone();
+                let root = root.clone();
+                studio.request_file_dialog(
+                    || {
+                        rfd::FileDialog::new()
+                            .set_file_name(".omacolors")
+                            .add_filter("Color palettes", &["omacolors", "json"])
+                            .save_file()
+                    },
+                    move |ctx, _, file| {
+                        start_palette(ctx, root, move || {
+                            crate::palette::save_file(file, &saved)?;
+                            Ok(PaletteChange::Exported)
+                        });
+                    },
+                );
             }
             if ui
                 .add_enabled(
@@ -124,17 +132,21 @@ pub(super) fn palettes(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
                 .clicked()
             {
                 ui.close();
-                if let Some(file) = rfd::FileDialog::new()
-                    .set_file_name("palette.omacolors")
-                    .save_file()
-                {
-                    let saved = vec![d.palettes[d.selected].clone()];
-                    let root = root.clone();
-                    start_palette(ui.ctx(), root, move || {
-                        crate::palette::save_file(file, &saved)?;
-                        Ok(PaletteChange::Exported)
-                    });
-                }
+                let saved = vec![d.palettes[d.selected].clone()];
+                let root = root.clone();
+                studio.request_file_dialog(
+                    || {
+                        rfd::FileDialog::new()
+                            .set_file_name("palette.omacolors")
+                            .save_file()
+                    },
+                    move |ctx, _, file| {
+                        start_palette(ctx, root, move || {
+                            crate::palette::save_file(file, &saved)?;
+                            Ok(PaletteChange::Exported)
+                        });
+                    },
+                );
             }
             if ui
                 .button("Reload saved colors")

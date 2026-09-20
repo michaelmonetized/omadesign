@@ -83,20 +83,26 @@ pub fn inspector(ui: &mut Ui, studio: &mut Studio) {
                     "Choose image…"
                 })
                 .clicked()
-                && let Some(path) = rfd::FileDialog::new()
-                    .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "tiff"])
-                    .pick_file()
             {
                 let document = studio.swap_id.clone();
-                super::jobs::start(ui.ctx(), "layout-image-load", move || {
-                    let image = crate::layout_images::load(&path)?;
-                    Ok(LoadedImage {
-                        document,
-                        layer,
-                        id,
-                        image,
-                    })
-                });
+                studio.request_file_dialog(
+                    || {
+                        rfd::FileDialog::new()
+                            .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "tiff"])
+                            .pick_file()
+                    },
+                    move |ctx, _, path| {
+                        super::jobs::start(ctx, "layout-image-load", move || {
+                            let image = crate::layout_images::load(&path)?;
+                            Ok(LoadedImage {
+                                document,
+                                layer,
+                                id,
+                                image,
+                            })
+                        });
+                    },
+                );
             }
             if let Some(image) = &mut props.image {
                 ui.horizontal(|ui| {
@@ -483,6 +489,9 @@ struct LoadedImage {
     image: crate::layout_images::ImageFill,
 }
 pub fn poll_image(ctx: &egui::Context, studio: &mut Studio) {
+    if studio.file_dialog_pending() {
+        return;
+    }
     if let Some(result) = super::jobs::poll::<LoadedImage>(ctx, "layout-image-load") {
         match result {
             Ok(image) if image.document == studio.swap_id => {

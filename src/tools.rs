@@ -1,6 +1,7 @@
 //! Tool identity, personas, and the shortcut table designers already have in their fingers.
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Persona {
     Design,
     Pixel,

@@ -664,6 +664,9 @@ impl Studio {
     }
 
     pub(super) fn poll_clipboard_jobs(&mut self, ctx: &egui::Context) {
+        if self.file_dialog_pending() {
+            return;
+        }
         while let Some(job) = self.clipboard_jobs.first() {
             let result = match job.receiver.try_recv() {
                 Ok(result) => result,

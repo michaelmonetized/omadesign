@@ -840,6 +840,9 @@ fn paper_color(doc: &Document) -> Rgba {
 
 fn draw_plates(pm: &mut Pixmap, doc: &Document, view: View) {
     if doc.artboards.is_empty() {
+        if doc.artboardless {
+            return;
+        }
         let origin = view.to_screen(Pt::ZERO);
         let size = Pt::new(doc.width * view.scale, doc.height * view.scale);
         if doc.transparent {
@@ -1088,6 +1091,31 @@ mod tests {
         )
         .unwrap();
         assert_ne!(rest.data(), posed.data(), "a keyed translate must redraw");
+    }
+
+    #[test]
+    fn artboardless_workspace_has_no_fallback_plate_but_explicit_boards_render() {
+        let mut doc = Document::new("Layout", 80.0, 60.0, 72.0);
+        doc.artboards.clear();
+        doc.artboardless = true;
+        doc.transparent = true;
+        let mut pixels = Pixmap::new(80, 60).unwrap();
+        draw_plates(&mut pixels, &doc, View::default());
+        assert!(pixels.data().iter().all(|byte| *byte == 0));
+
+        doc.artboards.push(crate::document::Artboard::new(
+            0,
+            Pt::new(20.0, 10.0),
+            Pt::new(40.0, 30.0),
+        ));
+        draw_plates(&mut pixels, &doc, View::default());
+        assert_eq!(pixels.pixel(0, 0).unwrap().alpha(), 0);
+        assert_eq!(pixels.pixel(30, 20).unwrap().alpha(), 255);
+
+        doc.artboards.clear();
+        doc.artboardless = false;
+        draw_plates(&mut pixels, &doc, View::default());
+        assert_eq!(pixels.pixel(0, 0).unwrap().alpha(), 255);
     }
 
     #[test]

@@ -1072,6 +1072,8 @@ mod tests {
     fn photo_adjustment_chords_fire_on_press_and_save_the_selected_set() {
         use crate::photo::{PhotoImage, edits};
         let ctx = context();
+        // This test renders the complete Photo workspace, including its icon toolbar.
+        crate::ui::theme::apply(&ctx);
         let mut studio = Studio::new();
         studio.persona = Persona::Photo;
         studio.show_welcome = false;

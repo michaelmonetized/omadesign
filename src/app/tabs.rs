@@ -146,6 +146,18 @@ impl Studio {
         (if name.is_empty() { "Untitled" } else { name }, dirty)
     }
 
+    /// Stable identity and content revision travel with the document, so a
+    /// thumbnail remains correct when documents are switched or closed.
+    pub(crate) fn tab_preview_source(&self, i: usize) -> Option<(&Document, &str, Instant, f32)> {
+        if i == self.active_tab {
+            Some((&self.doc, &self.swap_id, self.last_input, self.playhead))
+        } else {
+            self.tabs
+                .get(i)
+                .map(|tab| (&tab.doc, tab.swap_id.as_str(), tab.last_input, tab.playhead))
+        }
+    }
+
     pub fn has_unsaved_changes(&self) -> bool {
         self.dirty
             || self
@@ -204,7 +216,7 @@ impl Studio {
     pub fn new_tab_welcome(&mut self) {
         self.new_tab();
         self.show_welcome = true;
-        self.welcome_page = WelcomePage::New;
+        self.welcome_page = self.startup_preferences.welcome_page();
     }
 
     fn blank_tab_state() -> TabState {
@@ -238,6 +250,7 @@ impl Studio {
             if self.tabs.len() == 1 {
                 self.replace_active_tab(Self::blank_tab_state());
                 self.show_welcome = true;
+                self.welcome_page = self.startup_preferences.welcome_page();
                 return;
             }
             self.exchange_tab(i);
@@ -375,6 +388,30 @@ impl Studio {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preview_identity_and_content_revision_follow_the_document() {
+        let mut studio = Studio::new();
+        studio.ensure_tabs();
+        studio.show_welcome = false;
+        studio.doc.name = "First".into();
+        let (_, id, revision, _) = studio.tab_preview_source(0).unwrap();
+        let first_id = id.to_owned();
+        studio.new_tab();
+        let (doc, id, inactive_revision, _) = studio.tab_preview_source(0).unwrap();
+        assert_eq!(doc.name, "First");
+        assert_eq!(id, first_id);
+        assert_eq!(inactive_revision, revision);
+        studio.switch_tab(0);
+        studio.finish_create(CreateKind::Rect, Pt::ZERO, Pt::new(20.0, 20.0));
+        let (_, id, edited, _) = studio.tab_preview_source(0).unwrap();
+        assert_eq!(id, first_id);
+        assert!(edited > revision);
+        studio.switch_tab(1);
+        assert_eq!(studio.tab_preview_source(0).unwrap().2, edited);
+        studio.close_tab(1);
+        assert_eq!(studio.tab_preview_source(0).unwrap().1, first_id);
+    }
 
     #[test]
     fn tabs_move_rasters_and_restore_independent_history_and_selection() {
