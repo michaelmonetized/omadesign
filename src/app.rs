@@ -2,6 +2,8 @@
 
 mod brand_assets;
 mod cloud;
+mod clipboard;
+mod clipboard_insert;
 pub mod deform;
 mod file_io;
 mod guides;
@@ -376,6 +378,7 @@ pub struct Studio {
     pub shape_rename: Option<(usize, u64, String)>,
     pub clipboard_rasters: Vec<Layer>,
     file_jobs: Vec<file_io::ImportJob>,
+    clipboard_jobs: Vec<clipboard::PasteJob>,
     pub show_import_notes: bool,
     pub transfer_notes: Vec<String>,
     pub cloud_identity: crate::cloud::Identity,
@@ -556,6 +559,7 @@ impl Studio {
             shape_rename: None,
             clipboard_rasters: vec![],
             file_jobs: vec![],
+            clipboard_jobs: vec![],
             show_import_notes: false,
             transfer_notes: vec![],
             cloud_identity: crate::cloud::load_identity(),
@@ -2680,99 +2684,6 @@ impl Studio {
         }
     }
 
-    const CLIP_PREFIX: &'static str = "omadesign-shapes:";
-
-    pub fn copy_selection(&mut self, ctx: &egui::Context) {
-        let shapes: Vec<Shape> = self
-            .selection
-            .iter()
-            .filter_map(|(li, id)| self.doc.find_shape(*li, *id).cloned())
-            .collect();
-        self.clipboard_rasters = self
-            .selection
-            .iter()
-            .filter_map(|(li, id)| {
-                if *id == RASTER_ID {
-                    self.doc.layers.get(*li).cloned()
-                } else {
-                    None
-                }
-            })
-            .collect();
-        if shapes.is_empty() && self.clipboard_rasters.is_empty() {
-            self.status = "nothing to copy".into();
-            return;
-        }
-        self.clipboard = shapes.clone();
-        self.paste_nudge = 0;
-        if let Ok(s) = serde_json::to_string(&shapes) {
-            ctx.copy_text(format!("{}{s}", Self::CLIP_PREFIX));
-        }
-        let n = shapes.len() + self.clipboard_rasters.len();
-        self.status = format!("copied {n} {}", if n == 1 { "object" } else { "objects" });
-    }
-
-    pub fn cut_selection(&mut self, ctx: &egui::Context) {
-        self.copy_selection(ctx);
-        if !self.clipboard.is_empty() || !self.clipboard_rasters.is_empty() {
-            if !self.delete_focused_edit() {
-                self.delete_objects();
-            }
-            self.status = "cut".into();
-        }
-    }
-
-    pub fn paste_clipboard(&mut self, payload: Option<&str>) {
-        let mut shapes = None;
-        if let Some(p) = payload
-            && let Some(json) = p.strip_prefix(Self::CLIP_PREFIX)
-            && let Ok(v) = serde_json::from_str::<Vec<Shape>>(json)
-            && !v.is_empty()
-        {
-            shapes = Some(v);
-        }
-        let shapes = shapes.unwrap_or_else(|| self.clipboard.clone());
-        if shapes.is_empty() && self.clipboard_rasters.is_empty() {
-            self.status = "clipboard is empty".into();
-            return;
-        }
-        self.paste_nudge += 1;
-        let nudge = Pt::new(
-            16.0 * self.paste_nudge as f32,
-            16.0 * self.paste_nudge as f32,
-        );
-        let mut neu = Vec::new();
-        if !shapes.is_empty() {
-            let Some(li) = self.vector_target() else {
-                self.status = "add a vector layer first".into();
-                return;
-            };
-            for mut s in shapes {
-                s.id = crate::document::next_id();
-                s.geom.translate(nudge);
-                crate::text::fill_contours(&mut s.geom);
-                neu.push((li, s.id));
-                self.commit(Cmd::AddShape {
-                    layer: li,
-                    shape: s,
-                });
-            }
-        }
-        for mut layer in self.clipboard_rasters.clone() {
-            layer.id = crate::document::next_id();
-            layer.parent = None;
-            if let Some((o, sz, rot)) = layer.kind.raster_xform() {
-                layer.kind.set_raster_xform(o + nudge, sz, rot);
-            }
-            let index = self.doc.layers.len();
-            self.commit(Cmd::AddLayer { index, layer });
-            neu.push((index, RASTER_ID));
-        }
-        self.selected_layer = None;
-        self.selection = neu;
-        self.status = format!("pasted {}", self.selection.len());
-    }
-
     pub fn copy_style(&mut self) {
         if let Some((li, id)) = self.primary()
             && let Some(s) = self.doc.find_shape(li, id)
@@ -3604,6 +3515,7 @@ impl eframe::App for Studio {
         }
         self.poll_cloud(&ctx);
         self.poll_file_jobs(&ctx);
+        self.poll_clipboard_jobs(&ctx);
         self.photo.poll(&ctx);
         crate::ui::photo::poll_jobs(&ctx, self);
         crate::ui::run(ui, self);
@@ -3817,7 +3729,7 @@ mod tests {
     }
 
     #[test]
-    fn copy_paste_reids_and_offsets() {
+    fn copy_paste_reids_and_preserves_position() {
         let mut s = Studio::new();
         s.show_welcome = false;
         s.place_text(Pt::new(40.0, 80.0));
@@ -3832,6 +3744,8 @@ mod tests {
         s.paste_clipboard(None);
         assert_eq!(s.selection.len(), 1);
         assert_ne!(s.selection[0].1, orig[0].1);
+        assert_eq!(s.doc.find_shape(s.selection[0].0, s.selection[0].1).unwrap().geom.bbox(),
+                   s.doc.find_shape(orig[0].0, orig[0].1).unwrap().geom.bbox());
         let n: usize = s
             .doc
             .layers

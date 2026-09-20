@@ -320,7 +320,7 @@ impl Studio {
             Shortcut::Redo => self.redo(),
             Shortcut::Copy => self.copy_selection(ctx),
             Shortcut::Cut => self.cut_selection(ctx),
-            Shortcut::Paste => self.paste_clipboard(payload),
+            Shortcut::Paste => self.request_clipboard_paste(ctx, payload),
             Shortcut::CopyStyle => {
                 self.copy_style();
                 // Publishing the style makes it portable between windows.

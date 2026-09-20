@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import clipboard from "../../../docs/blog/0.5.3-paste-onto-the-canvas.md?raw";
 import pixel from "../../../docs/blog/0.5.1-pixel-is-real.md?raw";
 import layout from "../../../docs/blog/0.5.0-layout-cloud.md?raw";
 import { Markdown } from "../md";
@@ -6,6 +7,7 @@ import { CURL } from "../site";
 import { latestUpdate, updates } from "../updates";
 
 const bodies: Record<string, { markdown: string; path: string }> = {
+  "0.5.3": { markdown: clipboard, path: "docs/blog/0.5.3-paste-onto-the-canvas.md" },
   "0.5.1": { markdown: pixel, path: "docs/blog/0.5.1-pixel-is-real.md" },
   "0.5.0": { markdown: layout, path: "docs/blog/0.5.0-layout-cloud.md" },
 };
@@ -17,7 +19,7 @@ export const Route = createFileRoute("/updates")({
       {
         name: "description",
         content:
-          "Studio notes from omadesign. 0.5.1 makes Pixel selections real. 0.5.0 shipped Layout.",
+          "Studio notes from omadesign. 0.5.3 fixes pasting screenshots, images, text, and SVG onto the canvas.",
       },
     ],
   }),

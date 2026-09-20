@@ -4,6 +4,7 @@ pub mod asset_browser;
 pub mod boolean;
 pub mod brand;
 pub mod cloud;
+pub mod clipboard;
 pub mod color;
 pub mod compositor;
 pub mod compound;

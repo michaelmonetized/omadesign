@@ -2905,7 +2905,7 @@ fn context_menu(resp: &eframe::egui::Response, studio: &mut Studio) {
             ui.close();
         }
         if ui.button("Paste                  Ctrl+V").clicked() {
-            studio.paste_clipboard(None);
+            studio.request_clipboard_paste(ui.ctx(), None);
             ui.close();
         }
         if ui.button("Duplicate              Ctrl+D").clicked() {
