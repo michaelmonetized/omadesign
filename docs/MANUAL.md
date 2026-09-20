@@ -360,7 +360,8 @@ receive stable filenames automatically. Share fonts only under their license ter
 - Groups in the layer tree expand, rename, hide, lock and reorder as units. **Pass through** controls whether child blend modes interact with the backdrop. Disable it for isolated group blending.
 - **View → Document conversion notes** lists unsupported or converted features. Notes also stay in `.oma` projects. Affinity native features, Photoshop live text/smart objects/effects, and Illustrator private editing data are not universally supported. See the [format support matrix](format-support.md) and [Affinity setup](affinity-import.md).
 - Export: PNG (1×/2×/3×), JPEG, SVG, animated SVG, Lottie JSON, layered PSD/PSB, PDF and OpenRaster. Layers unsupported by an export format may become individual pixel layers; conversion notes describe those changes. Native `.af*` and `.ai` writers are not available.
-- Copy / cut / paste objects. Status bar says so. Copy style `Ctrl+Alt+C`, paste style `Ctrl+Alt+V`. Alt-drag clones.
+- Copy / cut / paste objects. Objects copied in Omadesign paste at their original positions, including when pasted onto another artboard. Status bar says so. Copy style `Ctrl+Alt+C`, paste style `Ctrl+Alt+V`. Alt-drag clones.
+- **Paste** `Ctrl+V` also accepts screenshots, images copied from a browser, copied image files, plain text, and SVG source or files from other applications. External content appears in the center of the visible canvas: images become pixel layers, text becomes an editable text layer, and SVG becomes vector artwork. Command+V works through Omarchy’s universal paste binding; Shift+Insert from the Alt+V clipboard-history picker is also supported. Pasting while editing text inserts into that text instead.
 - Native file dialogs. Right-click the canvas for Place, Trace, and the same edits.
 
 ## Keys

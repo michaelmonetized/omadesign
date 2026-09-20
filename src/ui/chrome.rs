@@ -397,7 +397,7 @@ fn edit_menu(ui: &mut Ui, studio: &mut Studio) {
             .add(Button::new("Paste").shortcut_text("Ctrl+V"))
             .clicked()
         {
-            studio.paste_clipboard(None);
+            studio.request_clipboard_paste(ui.ctx(), None);
             ui.close();
         }
         if ui

@@ -131,6 +131,11 @@ impl Studio {
         ];
         let mut seen = Vec::new();
         for &key in priority.iter().chain(Key::ALL) {
+            // Dedicated/history paste events are accepted with the picker's
+            // residual modifiers, but are not Ctrl+V chords for the key HUD.
+            if matches!(key, Key::Paste | Key::Insert) {
+                continue;
+            }
             let Some(shortcut) = key_shortcut(key, mods) else {
                 continue;
             };

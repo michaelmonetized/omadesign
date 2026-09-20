@@ -8,6 +8,13 @@ export type UpdatePost = {
 
 export const updates: UpdatePost[] = [
   {
+    slug: "0.5.3",
+    version: "0.5.3",
+    date: "2026-09-20",
+    title: "Paste it onto the canvas",
+    dek: "Screenshots, copied images, text, and SVG now paste into the visible canvas center. Objects copied inside Omadesign keep their positions.",
+  },
+  {
     slug: "0.5.1",
     version: "0.5.1",
     date: "2026-09-18",

@@ -1,6 +1,6 @@
 # omadesign
 
-[Download v0.5.1](https://github.com/michaelmonetized/omadesign/releases/tag/v0.5.1) · [Explore the studio](https://omadesign.app/) · [Updates](https://omadesign.app/updates) · [User manual](https://omadesign.app/docs/manual/) · [Showcase](https://omadesign.app/showcase) · [Build from source](docs/CONTRIBUTING.md)
+[Download v0.5.3](https://github.com/michaelmonetized/omadesign/releases/tag/v0.5.3) · [Explore the studio](https://omadesign.app/) · [Updates](https://omadesign.app/updates) · [User manual](https://omadesign.app/docs/manual/) · [Showcase](https://omadesign.app/showcase) · [Build from source](docs/CONTRIBUTING.md)
 
 A native Linux studio for **design, layout, paint, photograph, and motion**. One
 document, one layer stack. Built so a designer coming from macOS can sit down
@@ -65,6 +65,7 @@ when idle, command keys with Ctrl/Shift/Alt, and contextual drawing gestures.
 - Convert artwork to editable object guides; release it back with its original style
 - Vector distort, skew, perspective, and a nine-handle warp mesh
 - File → Place, drop files on the canvas, Trace (`U`) turns a pixel layer into paths
+- Paste screenshots, copied image files, browser images, text, and SVG with `Ctrl+V`. External content appears in the visible canvas center; copied Omadesign objects keep their original positions.
 
 ## Pixel / Photo
 
