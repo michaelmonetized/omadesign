@@ -130,6 +130,7 @@ fn save_edits(
 
 fn file_actions(
     ui: &mut Ui,
+    studio: &mut Studio,
     root: &std::path::Path,
     expected: Option<u128>,
     busy: bool,
@@ -141,14 +142,20 @@ fn file_actions(
         if ui
             .add_enabled(available, egui::Button::new("Add fonts…"))
             .clicked()
-            && let Some(paths) = rfd::FileDialog::new()
-                .add_filter("Font files", &["ttf", "otf"])
-                .pick_files()
         {
             let target = root.to_path_buf();
-            start(ui.ctx(), target.clone(), move || {
-                crate::typography::add_fonts(&target, &paths, expected).map(Some)
-            });
+            studio.request_file_dialog(
+                || {
+                    rfd::FileDialog::new()
+                        .add_filter("Font files", &["ttf", "otf"])
+                        .pick_files()
+                },
+                move |ctx, _, paths| {
+                    start(ctx, target.clone(), move || {
+                        crate::typography::add_fonts(&target, &paths, expected).map(Some)
+                    });
+                },
+            );
         }
         ui.add_enabled_ui(!busy, |ui| {
             ui.menu_button("···", |ui| {
@@ -157,15 +164,19 @@ fn file_actions(
                     .clicked()
                 {
                     ui.close();
-                    if let Some(path) = rfd::FileDialog::new()
-                        .add_filter("Typography kit", &["omatype", "json"])
-                        .pick_file()
-                    {
-                        let target = root.to_path_buf();
-                        start(ui.ctx(), target.clone(), move || {
-                            crate::typography::import_file(&path, &target, expected).map(Some)
-                        });
-                    }
+                    let target = root.to_path_buf();
+                    studio.request_file_dialog(
+                        || {
+                            rfd::FileDialog::new()
+                                .add_filter("Typography kit", &["omatype", "json"])
+                                .pick_file()
+                        },
+                        move |ctx, _, path| {
+                            start(ctx, target.clone(), move || {
+                                crate::typography::import_file(&path, &target, expected).map(Some)
+                            });
+                        },
+                    );
                 }
                 if ui
                     .add_enabled(
@@ -175,13 +186,16 @@ fn file_actions(
                     .clicked()
                 {
                     ui.close();
-                    if let Some(target) = crate::project::dialog_folder() {
-                        let source = root.to_path_buf();
-                        start(ui.ctx(), source.clone(), move || {
-                            crate::typography::export_copy(&source, &target)?;
-                            Ok(None)
-                        });
-                    }
+                    let source = root.to_path_buf();
+                    studio.request_file_dialog(
+                        crate::project::dialog_folder,
+                        move |ctx, _, target| {
+                            start(ctx, source.clone(), move || {
+                                crate::typography::export_copy(&source, &target)?;
+                                Ok(None)
+                            });
+                        },
+                    );
                 }
                 ui.separator();
                 if ui
@@ -240,7 +254,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio, state: &mut Libraries) {
             let expected = loaded.as_ref().map(|loaded| loaded.stamp);
             note(ui, "Project fonts stay with this brand. Nothing is installed globally.");
             note(ui, &state.typography_message);
-            if file_actions(ui, &root, expected, busy, state.typography_edit_stamp.is_some()) {
+            if file_actions(ui, studio, &root, expected, busy, state.typography_edit_stamp.is_some()) {
                 state.typography_edit_stamp = None;
                 state.typography_name.clear();
                 state.typography_role.clear();

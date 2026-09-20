@@ -108,6 +108,9 @@ fn draft_at<'a>(s: &'a mut Libraries, root: &Option<PathBuf>) -> &'a mut Palette
 }
 
 pub fn tick(ctx: &egui::Context, studio: &mut Studio) {
+    if studio.file_dialog_pending() {
+        return;
+    }
     let s = &mut studio.libraries;
     let source = Source {
         document: studio.swap_id.clone(),
@@ -363,7 +366,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     }
     studio.libraries = state;
 }
-fn project_picker(ui: &mut Ui, studio: &Studio, s: &mut Libraries) {
+fn project_picker(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
     ui.horizontal_wrapped(|ui| {
         let name = s
             .root
@@ -380,9 +383,10 @@ fn project_picker(ui: &mut Ui, studio: &Studio, s: &mut Libraries) {
                     .unwrap_or_else(|| "Link a folder to this document".into()),
             )
             .clicked()
-            && let Some(folder) = crate::project::dialog_folder()
         {
-            s.choose_folder(&studio.swap_id, folder);
+            studio.request_file_dialog(crate::project::dialog_folder, |_, studio, folder| {
+                studio.libraries.choose_folder(&studio.swap_id, folder);
+            });
         }
         if jobs::is_running::<Snapshot>(ui.ctx(), SYNC) {
             ui.spinner();

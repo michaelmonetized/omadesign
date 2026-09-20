@@ -312,15 +312,16 @@ pub(super) fn brand(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
     }
 }
 
-fn bank_actions(ui: &mut Ui, studio: &Studio, state: &mut Libraries, busy: bool) {
+fn bank_actions(ui: &mut Ui, studio: &mut Studio, state: &mut Libraries, busy: bool) {
     ui.horizontal_wrapped(|ui| {
         if ui
             .button("Load bank…")
             .on_hover_text("Choose a project folder or its .omabrand directory")
             .clicked()
-            && let Some(folder) = crate::project::dialog_folder()
         {
-            state.choose_folder(&studio.swap_id, folder);
+            studio.request_file_dialog(crate::project::dialog_folder, |_, studio, folder| {
+                studio.libraries.choose_folder(&studio.swap_id, folder);
+            });
         }
         if let Some(root) = state.root.clone() {
             if state.catalog.is_none() {
@@ -340,21 +341,22 @@ fn bank_actions(ui: &mut Ui, studio: &Studio, state: &mut Libraries, busy: bool)
                 ui.menu_button("···", |ui| {
                     if ui.add_enabled(!busy, egui::Button::new("Add assets…")).clicked() {
                         ui.close();
-                        if let Some(files) = rfd::FileDialog::new()
-                            .add_filter("Brand artwork", &[
-                                "png", "jpg", "jpeg", "webp", "tif", "tiff", "bmp", "gif", "svg", "oma",
-                            ])
-                            .pick_files()
-                        {
-                            let root = root.clone();
-                            jobs::start(ui.ctx(), BRAND_ACTION, move || {
-                                let added = crate::brand::add_files(&root, &files)?;
-                                Ok(BrandResult {
-                                    root,
-                                    message: format!("Added {} assets. Originals kept in place.", added.len()),
-                                })
-                            });
-                        }
+                        let root = root.clone();
+                        studio.request_file_dialog(
+                            || rfd::FileDialog::new()
+                                .add_filter("Brand artwork", &[
+                                    "png", "jpg", "jpeg", "webp", "tif", "tiff", "bmp", "gif", "svg", "oma",
+                                ]).pick_files(),
+                            move |ctx, _, files| {
+                                jobs::start(ctx, BRAND_ACTION, move || {
+                                    let added = crate::brand::add_files(&root, &files)?;
+                                    Ok(BrandResult {
+                                        root,
+                                        message: format!("Added {} assets. Originals kept in place.", added.len()),
+                                    })
+                                });
+                            },
+                        );
                     }
                     if ui
                         .add_enabled(!busy, egui::Button::new("Save bank copy…"))
@@ -362,16 +364,13 @@ fn bank_actions(ui: &mut Ui, studio: &Studio, state: &mut Libraries, busy: bool)
                         .clicked()
                     {
                         ui.close();
-                        if let Some(destination) = crate::project::dialog_folder() {
-                            let root = root.clone();
-                            jobs::start(ui.ctx(), BRAND_ACTION, move || {
+                        let root = root.clone();
+                        studio.request_file_dialog(crate::project::dialog_folder, move |ctx, _, destination| {
+                            jobs::start(ctx, BRAND_ACTION, move || {
                                 let output = crate::brand::export_copy_bank(&root, &destination)?;
-                                Ok(BrandResult {
-                                    root,
-                                    message: format!("Saved bank copy to {}", output.display()),
-                                })
+                                Ok(BrandResult { root, message: format!("Saved bank copy to {}", output.display()) })
                             });
-                        }
+                        });
                     }
                     if ui.button("Refresh now").clicked() {
                         state.next_sync = Instant::now();

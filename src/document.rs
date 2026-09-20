@@ -1035,8 +1035,9 @@ fn deserialize_artboards<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<Artboard
         List(Vec<Artboard>),
     }
     match Raw::deserialize(d)? {
-        Raw::List(v) if !v.is_empty() => Ok(v),
-        Raw::List(_) => Ok(vec![Artboard::blank()]),
+        // Preserve an explicit empty list until migration can inspect the
+        // document's artboardless flag. Legacy empty pages are restored there.
+        Raw::List(v) => Ok(v),
         Raw::Count(n) => Ok((0..n.max(1)).map(|_| Artboard::blank()).collect()),
     }
 }
@@ -1059,6 +1060,10 @@ pub struct Document {
     pub transparent: bool,
     #[serde(default, deserialize_with = "deserialize_artboards")]
     pub artboards: Vec<Artboard>,
+    /// Explicitly allow an empty workspace without a fallback page. Older
+    /// documents omit this flag and still receive their legacy artboard.
+    #[serde(default)]
+    pub artboardless: bool,
     #[serde(default)]
     pub show_bleed: bool,
     #[serde(default)]
@@ -1083,6 +1088,7 @@ impl Document {
         copy.width = self.width;
         copy.height = self.height;
         copy.artboards = self.artboards.clone();
+        copy.artboardless = self.artboardless;
         copy.layout_tokens = self.layout_tokens.clone();
         copy.layers = self
             .layers
@@ -1206,6 +1212,7 @@ impl Document {
             grid: Grid::default(),
             transparent,
             artboards: boards,
+            artboardless: false,
             show_bleed,
             show_safe,
             bleed: 36.0, // 0.125" at 300dpi or 0.5" at 72dpi ~ 36px
@@ -1250,6 +1257,9 @@ impl Document {
 
     pub fn migrate_artboards(&mut self) {
         if self.artboards.is_empty() {
+            if self.artboardless {
+                return;
+            }
             self.artboards = vec![Artboard::new(
                 0,
                 Pt::ZERO,

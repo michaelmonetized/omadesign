@@ -5,6 +5,7 @@ mod clipboard;
 mod clipboard_insert;
 mod cloud;
 pub mod deform;
+mod file_dialogs;
 mod file_io;
 mod guides;
 mod hierarchy_edit;
@@ -23,6 +24,7 @@ mod recovery;
 pub(crate) mod selection;
 mod shortcuts;
 mod snapping;
+pub mod startup;
 mod tabs;
 mod typography;
 
@@ -104,7 +106,8 @@ pub struct ObjSnap {
     pub rot: f32,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum WelcomePage {
     New,
     Templates,
@@ -377,6 +380,8 @@ pub struct Studio {
     pub pending_nav: Option<PendingNav>,
     pub allow_close: bool,
     pub welcome_page: WelcomePage,
+    pub startup_preferences: startup::Preferences,
+    startup_preferences_path: Option<PathBuf>,
     pub font_query: String,
     pub font_recents: Vec<String>,
     pub font_scroll_once: bool,
@@ -384,6 +389,7 @@ pub struct Studio {
     pub shape_rename: Option<(usize, u64, String)>,
     pub clipboard_rasters: Vec<Layer>,
     file_jobs: Vec<file_io::ImportJob>,
+    file_dialog: Option<file_dialogs::FileDialogJob>,
     clipboard_jobs: Vec<clipboard::PasteJob>,
     pub show_import_notes: bool,
     pub transfer_notes: Vec<String>,
@@ -559,6 +565,8 @@ impl Studio {
             pending_nav: None,
             allow_close: false,
             welcome_page: WelcomePage::New,
+            startup_preferences: startup::Preferences::default(),
+            startup_preferences_path: None,
             font_query: String::new(),
             font_recents: crate::project::load_font_recents(),
             font_scroll_once: true,
@@ -566,6 +574,7 @@ impl Studio {
             shape_rename: None,
             clipboard_rasters: vec![],
             file_jobs: vec![],
+            file_dialog: None,
             clipboard_jobs: vec![],
             show_import_notes: false,
             transfer_notes: vec![],
@@ -2985,10 +2994,7 @@ impl Studio {
         self.end_deform(false);
         self.end_pixel_stroke(false);
         self.commit_type_edit();
-        if let Some(path) = crate::project::dialog_save(&self.doc.name) {
-            self.path = Some(path);
-            self.save();
-        }
+        self.choose_artwork_save_path();
     }
 
     pub fn current_is_blank(&self) -> bool {
@@ -3110,12 +3116,7 @@ impl Studio {
         self.end_deform(false);
         self.end_pixel_stroke(false);
         self.commit_type_edit();
-        let path = if let Some(p) = &self.path {
-            Some(p.clone())
-        } else {
-            crate::project::dialog_save(&self.doc.name)
-        };
-        if let Some(path) = path {
+        if let Some(path) = self.path.clone() {
             match self.save_document(&path) {
                 Ok(()) => {
                     self.remember_path(&path);
@@ -3123,6 +3124,8 @@ impl Studio {
                 }
                 Err(e) => self.status = format!("save failed: {e}"),
             }
+        } else {
+            self.choose_artwork_save_path();
         }
     }
 
@@ -3137,95 +3140,101 @@ impl Studio {
     }
 
     pub fn open(&mut self) {
-        if let Some(path) = crate::project::dialog_open() {
-            self.open_path(path);
-        }
+        self.request_file_dialog(crate::project::dialog_open, |_, studio, path| {
+            studio.open_path(path);
+        });
     }
 
     pub fn export_png(&mut self) {
         self.end_deform(false);
         self.end_pixel_stroke(false);
-        if let Some(path) = crate::project::dialog_export("PNG", "png") {
-            match compositor::export_png(&self.doc, self.export_scale) {
+        self.request_file_dialog(
+            || crate::project::dialog_export("PNG", "png"),
+            |_, studio, path| match compositor::export_png(&studio.doc, studio.export_scale) {
                 Ok(bytes) => {
                     if let Err(e) = std::fs::write(&path, bytes) {
-                        self.status = format!("write failed: {e}");
+                        studio.status = format!("write failed: {e}");
                     } else {
-                        self.status = format!("exported {}", path.display());
+                        studio.status = format!("exported {}", path.display());
                     }
                 }
-                Err(e) => self.status = format!("export failed: {e}"),
-            }
-        }
+                Err(e) => studio.status = format!("export failed: {e}"),
+            },
+        );
     }
 
     pub fn export_jpeg(&mut self) {
         self.end_deform(false);
         self.end_pixel_stroke(false);
-        if let Some(path) = crate::project::dialog_export("JPEG", "jpg") {
-            match compositor::export_jpeg(&self.doc, self.export_scale, 90) {
+        self.request_file_dialog(
+            || crate::project::dialog_export("JPEG", "jpg"),
+            |_, studio, path| match compositor::export_jpeg(&studio.doc, studio.export_scale, 90) {
                 Ok(bytes) => {
                     let _ = std::fs::write(&path, bytes);
-                    self.status = format!("exported {}", path.display());
+                    studio.status = format!("exported {}", path.display());
                 }
-                Err(e) => self.status = format!("export failed: {e}"),
-            }
-        }
+                Err(e) => studio.status = format!("export failed: {e}"),
+            },
+        );
     }
 
     pub fn export_svg(&mut self) {
         self.end_deform(false);
         self.end_pixel_stroke(false);
-        if let Some(path) = crate::project::dialog_export("SVG", "svg") {
-            match crate::svg::export(&self.doc) {
+        self.request_file_dialog(
+            || crate::project::dialog_export("SVG", "svg"),
+            |_, studio, path| match crate::svg::export(&studio.doc) {
                 Ok(s) => {
                     let _ = std::fs::write(&path, s);
-                    self.status = format!("exported {}", path.display());
+                    studio.status = format!("exported {}", path.display());
                 }
-                Err(e) => self.status = format!("export failed: {e}"),
-            }
-        }
+                Err(e) => studio.status = format!("export failed: {e}"),
+            },
+        );
     }
 
     pub fn export_animated_svg(&mut self) {
         self.end_deform(false);
         self.end_pixel_stroke(false);
-        if let Some(path) = crate::project::dialog_export("Animated SVG", "svg") {
-            match crate::svg::export_animated(&self.doc) {
+        self.request_file_dialog(
+            || crate::project::dialog_export("Animated SVG", "svg"),
+            |_, studio, path| match crate::svg::export_animated(&studio.doc) {
                 Ok(s) => {
                     let _ = std::fs::write(&path, s);
-                    self.status = format!("exported {}", path.display());
+                    studio.status = format!("exported {}", path.display());
                 }
-                Err(e) => self.status = format!("export failed: {e}"),
-            }
-        }
+                Err(e) => studio.status = format!("export failed: {e}"),
+            },
+        );
     }
 
     pub fn export_lottie(&mut self) {
         self.end_deform(false);
         self.end_pixel_stroke(false);
-        if let Some(path) = crate::project::dialog_export("Lottie JSON", "json") {
-            match motion::export_lottie(&self.doc) {
+        self.request_file_dialog(
+            || crate::project::dialog_export("Lottie JSON", "json"),
+            |_, studio, path| match motion::export_lottie(&studio.doc) {
                 Ok(s) => {
                     let _ = std::fs::write(&path, s);
-                    self.status = format!("exported {}", path.display());
+                    studio.status = format!("exported {}", path.display());
                 }
-                Err(e) => self.status = format!("export failed: {e}"),
-            }
-        }
+                Err(e) => studio.status = format!("export failed: {e}"),
+            },
+        );
     }
 
     pub fn import_lottie(&mut self) {
-        let Some(path) = rfd::FileDialog::new()
-            .add_filter("Lottie", &["json", "lottie"])
-            .pick_file()
-        else {
-            return;
-        };
-        match std::fs::read_to_string(&path) {
-            Ok(s) => self.import_lottie_str(&s),
-            Err(e) => self.status = format!("read failed: {e}"),
-        }
+        self.request_file_dialog(
+            || {
+                rfd::FileDialog::new()
+                    .add_filter("Lottie", &["json", "lottie"])
+                    .pick_file()
+            },
+            |_, studio, path| match std::fs::read_to_string(&path) {
+                Ok(s) => studio.import_lottie_str(&s),
+                Err(e) => studio.status = format!("read failed: {e}"),
+            },
+        );
     }
 
     pub fn import_lottie_str(&mut self, json: &str) {
@@ -3272,10 +3281,9 @@ impl Studio {
     }
 
     pub fn begin_place(&mut self) {
-        let Some(path) = crate::project::dialog_place() else {
-            return;
-        };
-        self.load_place_path(&path);
+        self.request_file_dialog(crate::project::dialog_place, |_, studio, path| {
+            studio.load_place_path(&path);
+        });
     }
 
     pub fn load_place_path(&mut self, path: &std::path::Path) {
@@ -3283,7 +3291,7 @@ impl Studio {
     }
 
     pub fn ingest_dropped(&mut self, path: &std::path::Path, at: Option<Pt>) {
-        if self.pending_nav.is_some() {
+        if self.pending_nav.is_some() || self.file_dialog_pending() {
             return;
         }
         let ext = path
@@ -3662,7 +3670,9 @@ impl Studio {
 impl eframe::App for Studio {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
-        if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
+        if ctx.input(|i| i.viewport().close_requested()) && self.file_dialog_pending() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        } else if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
             self.commit_type_edit();
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             if !self.libraries.close_requested {
@@ -3672,13 +3682,21 @@ impl eframe::App for Studio {
             self.libraries.close_requested = true;
             self.pending_nav = None;
         }
+        self.poll_file_dialog(&ctx);
+        if self.allow_close {
+            // A successful Save and Quit must not apply queued imports after
+            // the last document has been saved and the window has been closed.
+            return;
+        }
         self.poll_cloud(&ctx);
         self.poll_file_jobs(&ctx);
         self.poll_clipboard_jobs(&ctx);
         self.photo.poll(&ctx);
         crate::ui::photo::poll_jobs(&ctx, self);
         crate::ui::run(ui, self);
-        self.import_notes_window(&ctx);
+        if !self.file_dialog_pending() {
+            self.import_notes_window(&ctx);
+        }
     }
 }
 

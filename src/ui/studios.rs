@@ -55,6 +55,8 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                 .max_height(properties_height)
                 .auto_shrink([false, true])
                 .show(ui, |ui| {
+                    super::selection::arrange_panel(ui, studio);
+                    section_gap(ui);
                     if motion {
                         motion_studio(ui, studio);
                         section_gap(ui);

@@ -222,18 +222,24 @@ impl Studio {
             self.status = "Select a frame to export".into();
             return;
         };
-        if let Some(path) = crate::project::dialog_export("PNG", "png") {
-            match compositor::export_frame_png(&self.doc, li, id, self.export_scale) {
+        self.request_file_dialog(
+            || crate::project::dialog_export("PNG", "png"),
+            move |_, studio, path| match compositor::export_frame_png(
+                &studio.doc,
+                li,
+                id,
+                studio.export_scale,
+            ) {
                 Ok(bytes) => {
                     if let Err(e) = std::fs::write(&path, bytes) {
-                        self.status = format!("write failed: {e}");
+                        studio.status = format!("write failed: {e}");
                     } else {
-                        self.status = format!("exported {}", path.display());
+                        studio.status = format!("exported {}", path.display());
                     }
                 }
-                Err(e) => self.status = format!("export failed: {e}"),
-            }
-        }
+                Err(e) => studio.status = format!("export failed: {e}"),
+            },
+        );
     }
 
     pub fn export_selected_frame_svg(&mut self) {
@@ -241,17 +247,18 @@ impl Studio {
             self.status = "Select a frame to export".into();
             return;
         };
-        if let Some(path) = crate::project::dialog_export("SVG", "svg") {
-            match crate::svg::export_frame(&self.doc, li, id) {
+        self.request_file_dialog(
+            || crate::project::dialog_export("SVG", "svg"),
+            move |_, studio, path| match crate::svg::export_frame(&studio.doc, li, id) {
                 Ok(s) => {
-                    self.status = match std::fs::write(&path, s) {
+                    studio.status = match std::fs::write(&path, s) {
                         Ok(()) => format!("exported {}", path.display()),
                         Err(e) => format!("export failed: {e}"),
                     };
                 }
-                Err(e) => self.status = format!("export failed: {e}"),
-            }
-        }
+                Err(e) => studio.status = format!("export failed: {e}"),
+            },
+        );
     }
 
     pub fn export_selected_frame_html(&mut self) {
@@ -259,17 +266,18 @@ impl Studio {
             self.status = "Select a frame to export".into();
             return;
         };
-        if let Some(path) = crate::project::dialog_export("HTML", "html") {
-            match crate::layout_export::export_html(&self.doc, li, id) {
+        self.request_file_dialog(
+            || crate::project::dialog_export("HTML", "html"),
+            move |_, studio, path| match crate::layout_export::export_html(&studio.doc, li, id) {
                 Ok(s) => {
-                    self.status = match std::fs::write(&path, s) {
+                    studio.status = match std::fs::write(&path, s) {
                         Ok(()) => format!("exported {}", path.display()),
                         Err(e) => format!("export failed: {e}"),
                     };
                 }
-                Err(e) => self.status = format!("export failed: {e}"),
-            }
-        }
+                Err(e) => studio.status = format!("export failed: {e}"),
+            },
+        );
     }
 
     pub fn use_layout_template(&mut self, id: &str, width: f32, height: f32, dpi: f32) {

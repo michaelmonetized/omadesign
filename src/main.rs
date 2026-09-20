@@ -184,6 +184,7 @@ fn main() -> eframe::Result {
             theme::apply(&cc.egui_ctx);
             cc.egui_ctx.set_pixels_per_point(1.0);
             let mut studio = Studio::new();
+            studio.load_startup_preferences();
             for p in &open {
                 studio.open_path(p.clone());
             }

@@ -5,6 +5,8 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
 #[path = "photo_session/batch.rs"]
 mod batch;
+#[path = "photo_session/gallery.rs"]
+mod gallery;
 #[path = "photo_session/preset_library.rs"]
 mod preset_library;
 pub use batch::BatchProgress;
@@ -92,6 +94,7 @@ pub struct PhotoSession {
     preset_state: preset_library::PresetState,
     pub folder: String,
     pub folder_files: Vec<(String, String)>,
+    pub gallery: gallery::FolderGallery,
     pub view_scale: f32,
     pub view_offset: egui::Vec2,
     pub fit_scale: f32,
@@ -101,7 +104,7 @@ pub struct PhotoSession {
     pub hists: [Histogram; 4],
     pub tex: Option<egui::TextureHandle>,
     pub orig_tex: Option<egui::TextureHandle>,
-    pub thumbs: Vec<egui::TextureHandle>,
+    pub thumbs: BTreeMap<usize, (egui::TextureHandle, DevelopParams)>,
     pub sel_version: u64,
     pub built_version: u64,
     pub orig_built: u64,
@@ -141,6 +144,7 @@ impl PhotoSession {
             preset_state: Default::default(),
             folder: String::new(),
             folder_files: vec![],
+            gallery: Default::default(),
             view_scale: 1.0,
             view_offset: egui::Vec2::ZERO,
             fit_scale: 1.0,
@@ -150,7 +154,7 @@ impl PhotoSession {
             hists: Default::default(),
             tex: None,
             orig_tex: None,
-            thumbs: vec![],
+            thumbs: BTreeMap::new(),
             sel_version: 0,
             built_version: 0,
             orig_built: u64::MAX,
@@ -331,6 +335,7 @@ impl PhotoSession {
         if let Some(job) = self.folder_job.take() {
             job.cancel.store(true, Ordering::Relaxed);
         }
+        self.gallery.cancel();
         let path = path.to_owned();
         let cancel = Arc::new(AtomicBool::new(false));
         let worker_cancel = cancel.clone();
@@ -344,7 +349,14 @@ impl PhotoSession {
 
     /// Complete background reads and writes even when another persona is shown.
     pub fn poll(&mut self, ctx: &egui::Context) {
+        let was_batching = self.is_batching();
         self.poll_batch();
+        if was_batching && !self.is_batching() {
+            // Folder edits and their undo/redo can change photos that have never
+            // been opened at full resolution. Refresh those saved previews too.
+            self.gallery.load(&self.folder_files);
+        }
+        self.gallery.poll(ctx);
         self.poll_presets();
         let was_loading = self.is_loading();
         let mut index = 0;
@@ -396,6 +408,7 @@ impl PhotoSession {
                 Ok(listing) => {
                     self.folder = listing.path;
                     self.folder_files = listing.files;
+                    self.gallery.load(&self.folder_files);
                     self.status = if listing.truncated {
                         format!(
                             "Showing the first {MAX_FOLDER_FILES} photos. Open a smaller folder to see the rest."
@@ -404,7 +417,10 @@ impl PhotoSession {
                         format!("{} photos in this folder", self.folder_files.len())
                     };
                 }
-                Err(error) => self.status = error,
+                Err(error) => {
+                    self.status = error;
+                    self.gallery.load(&self.folder_files);
+                }
             }
         }
         if let Some(result) = self
@@ -476,6 +492,10 @@ impl PhotoSession {
 
     pub fn is_loading(&self) -> bool {
         !self.import_jobs.is_empty() || !self.import_queue.is_empty()
+    }
+
+    pub fn is_loading_previews(&self) -> bool {
+        self.folder_job.is_some() || self.gallery.is_loading()
     }
 
     pub fn is_saving(&self) -> bool {
@@ -849,7 +869,10 @@ fn write_settings(requests: Vec<SaveRequest>) -> Vec<SavedSettings> {
 }
 
 fn list_folder(path: &str, cancel: &AtomicBool) -> Result<FolderListing, String> {
-    let read = std::fs::read_dir(path)
+    let canonical = Path::new(path)
+        .canonicalize()
+        .map_err(|error| format!("Could not read the photo folder: {error}"))?;
+    let read = std::fs::read_dir(&canonical)
         .map_err(|error| format!("Could not read the photo folder: {error}"))?;
     let mut files = vec![];
     let mut truncated = false;
@@ -893,7 +916,7 @@ fn list_folder(path: &str, cancel: &AtomicBool) -> Result<FolderListing, String>
             .then(a.0.cmp(&b.0))
     });
     Ok(FolderListing {
-        path: path.into(),
+        path: canonical.to_string_lossy().into_owned(),
         files,
         truncated,
         settings,
@@ -1194,7 +1217,11 @@ mod tests {
     fn wait(session: &mut PhotoSession) {
         let ctx = egui::Context::default();
         let start = std::time::Instant::now();
-        while session.is_loading() || session.is_saving() || session.folder_job.is_some() {
+        while session.is_loading()
+            || session.is_saving()
+            || session.folder_job.is_some()
+            || session.gallery.is_loading()
+        {
             session.poll(&ctx);
             assert!(
                 start.elapsed() < std::time::Duration::from_secs(5),
@@ -1226,6 +1253,79 @@ mod tests {
         session.select_image(0);
         session.undo();
         assert_eq!(session.selected().unwrap().develop.exposure, 0.0);
+    }
+
+    #[test]
+    fn choosing_a_folder_loads_all_previews_without_retaining_full_sources() {
+        let fixture = Fixture::new();
+        let source_pixels = RgbaImage::new(400, 300, [64, 96, 128, 255].repeat(400 * 300)).unwrap();
+        let original = source_pixels.encode_png().unwrap();
+        for name in ["third.png", "first.png", "second.png"] {
+            std::fs::write(fixture.0.join(name), &original).unwrap();
+        }
+        let first = fixture.0.join("first.png");
+        let params = DevelopParams {
+            exposure: 1.0,
+            rotate: 90,
+            crop: Some([0.0, 0.0, 1.0, 0.5]),
+            ..Default::default()
+        };
+        photo::edits::save(
+            &first,
+            &photo::edits::SourceIdentity::read(&first).unwrap(),
+            &params,
+        )
+        .unwrap();
+        std::fs::write(fixture.0.join("broken.png"), b"invalid").unwrap();
+        let mut session = PhotoSession::new();
+        session.set_folder(fixture.0.to_str().unwrap());
+        wait(&mut session);
+        assert_eq!(session.folder_files.len(), 4);
+        assert_eq!(session.gallery.progress(), (4, 4));
+        assert!(session.gallery.previews[0].error.is_some());
+        let preview = session.gallery.previews[1].pixels.as_ref().unwrap();
+        assert_eq!((preview.w, preview.h), (192, 128));
+        assert!(preview.data[0] > source_pixels.data[0]);
+        assert!(
+            session.images.is_empty(),
+            "folder browsing must not retain full photos"
+        );
+        assert!(
+            session.gallery.textures.is_empty(),
+            "only visible cards allocate GPU textures"
+        );
+
+        session.import_file(&first);
+        wait(&mut session);
+        assert_eq!(session.images.len(), 1);
+        assert_eq!(session.images[0].dimensions(), (400, 300));
+        assert_eq!(session.images[0].develop, params);
+    }
+
+    #[test]
+    fn changing_folders_discards_in_flight_previews() {
+        let first = Fixture::new();
+        let second = Fixture::new();
+        let original = image().full.encode_png().unwrap();
+        for index in 0..12 {
+            std::fs::write(first.0.join(format!("{index}.png")), &original).unwrap();
+        }
+        std::fs::write(second.0.join("replacement.png"), &original).unwrap();
+        let mut session = PhotoSession::new();
+        session.set_folder(first.0.to_str().unwrap());
+        let ctx = egui::Context::default();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while session.folder_job.is_some() {
+            session.poll(&ctx);
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        session.set_folder(second.0.to_str().unwrap());
+        wait(&mut session);
+        assert_eq!(session.folder_files.len(), 1);
+        assert_eq!(session.folder_files[0].0, "replacement.png");
+        assert_eq!(session.gallery.previews.len(), 1);
+        assert!(session.gallery.previews[0].pixels.is_some());
     }
 
     #[test]

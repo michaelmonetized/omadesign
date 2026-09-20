@@ -142,6 +142,9 @@ pub(super) fn progress(ui: &mut Ui, studio: &mut Studio) {
 }
 
 pub(super) fn dialogs(ctx: &Context, studio: &mut Studio) {
+    if studio.file_dialog_pending() {
+        return;
+    }
     let mut state = read(ctx);
     let Some(dialog) = state.dialog.clone() else {
         return;
@@ -197,14 +200,23 @@ pub(super) fn dialogs(ctx: &Context, studio: &mut Studio) {
                 let busy = studio.photo.is_loading_presets() || studio.photo.is_saving_presets() || studio.photo.is_batching();
                 ui.horizontal_wrapped(|ui| {
                     if ui.add_enabled(selected.is_some() && !busy, Button::new("Use preset…")).clicked() { next = selected.clone().map(|preset| Dialog::Apply(Box::new(preset))); state.folder = false; }
-                    if ui.add_enabled(!busy, Button::new("Import…")).on_hover_text("Import .omapreset files").clicked()
-                        && let Some(path) = rfd::FileDialog::new().add_filter("Photo presets", &["omapreset"]).pick_file()
-                        && let Err(error) = studio.photo.import_presets(path)
-                    { state.error = error; }
-                    if ui.add_enabled(selected.is_some() && !busy, Button::new("Export…")).clicked()
-                        && let Some(path) = crate::project::dialog_export("Photo preset", "omapreset")
-                        && let Err(error) = studio.photo.export_preset(selected_index.unwrap(), path)
-                    { state.error = error; }
+                    if ui.add_enabled(!busy, Button::new("Import…")).on_hover_text("Import .omapreset files").clicked() {
+                        studio.request_file_dialog(
+                            || rfd::FileDialog::new().add_filter("Photo presets", &["omapreset"]).pick_file(),
+                            |_, studio, path| {
+                                if let Err(error) = studio.photo.import_presets(path) { studio.photo.status = error; }
+                            },
+                        );
+                    }
+                    if ui.add_enabled(selected.is_some() && !busy, Button::new("Export…")).clicked() {
+                        let selected_index = selected_index.unwrap();
+                        studio.request_file_dialog(
+                            || crate::project::dialog_export("Photo preset", "omapreset"),
+                            move |_, studio, path| {
+                                if let Err(error) = studio.photo.export_preset(selected_index, path) { studio.photo.status = error; }
+                            },
+                        );
+                    }
                     if ui.add_enabled(selected.is_some() && !busy, Button::new("Remove")).clicked() {
                         if let Err(error) = studio.photo.delete_preset(selected_index.unwrap()) { state.error = error; } else { state.preset = None; }
                     }

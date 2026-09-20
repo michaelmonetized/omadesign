@@ -112,6 +112,9 @@ impl Studio {
     }
 
     pub(super) fn poll_file_jobs(&mut self, ctx: &egui::Context) {
+        if self.file_dialog_pending() {
+            return;
+        }
         let mut i = 0;
         while i < self.file_jobs.len() {
             let result = match self.file_jobs[i].receiver.try_recv() {
@@ -260,10 +263,16 @@ impl Studio {
         self.end_deform(false);
         self.end_pixel_stroke(false);
         self.commit_type_edit();
-        let Some(path) = crate::project::dialog_export(&extension.to_ascii_uppercase(), extension)
-        else {
-            return;
-        };
+        let extension = extension.to_owned();
+        let kind = extension.to_ascii_uppercase();
+        let picker_extension = extension.clone();
+        self.request_file_dialog(
+            move || crate::project::dialog_export(&kind, &picker_extension),
+            move |_, studio, path| studio.export_layered_to(path, &extension),
+        );
+    }
+
+    fn export_layered_to(&mut self, path: PathBuf, extension: &str) {
         if self.file_jobs.len() >= 4 {
             self.status = "Wait for the current files to finish".into();
             return;
@@ -706,5 +715,47 @@ mod tests {
         studio.switch_tab(0);
         assert_eq!(serde_json::to_value(&studio.doc).unwrap(), previous);
         assert!(studio.dirty);
+    }
+    #[test]
+    fn queued_imports_and_drops_wait_for_the_native_chooser() {
+        let ctx = egui::Context::default();
+        let mut studio = Studio::new();
+        let (release, waiting) = mpsc::channel();
+        studio.request_file_dialog(move || waiting.recv().ok(), |_, _, ()| {});
+        let (tx, receiver) = mpsc::channel();
+        tx.send(Ok(Completed::Imported(crate::import::Imported::Raster {
+            name: "Queued image".into(),
+            image: RgbaImage {
+                w: 2,
+                h: 2,
+                data: vec![0; 16],
+            },
+        })))
+        .ok()
+        .unwrap();
+        studio.file_jobs.push(ImportJob {
+            receiver,
+            path: PathBuf::from("queued.png"),
+            mode: ImportMode::Place,
+            owner: studio.swap_id.clone(),
+            frame: None,
+        });
+        studio.poll_file_jobs(&ctx);
+        studio.ingest_dropped(std::path::Path::new("ignored.oma"), None);
+        assert_eq!(studio.file_jobs.len(), 1);
+        assert!(studio.pending_place.is_none());
+        release.send(()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while studio.file_dialog_pending() {
+            studio.poll_file_dialog(&ctx);
+            assert!(Instant::now() < deadline);
+            std::thread::yield_now();
+        }
+        studio.poll_file_jobs(&ctx);
+        assert!(studio.file_jobs.is_empty());
+        assert!(matches!(
+            studio.pending_place,
+            Some(PendingPlace::Raster { .. })
+        ));
     }
 }

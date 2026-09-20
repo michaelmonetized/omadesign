@@ -174,32 +174,36 @@ impl Studio {
             return;
         };
         let id = link.project_id.clone();
-        if let Some(path) = rfd::FileDialog::new()
-            .set_title("Share project asset")
-            .pick_file()
-        {
-            self.cloud_task(move |client| {
-                let name = path
-                    .file_name()
-                    .ok_or("Invalid asset path")?
-                    .to_string_lossy()
-                    .into_owned();
-                let size = std::fs::metadata(&path).map_err(|e| e.to_string())?.len();
-                if size > 100 * 1024 * 1024 {
-                    return Err("Asset exceeds 100 MB".into());
-                }
-                let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
-                client.upload(
-                    &id,
-                    &name,
-                    "asset",
-                    "application/octet-stream",
-                    &bytes,
-                    None,
-                )?;
-                Ok(Event::Notice("Asset saved to the project".into()))
-            });
-        }
+        self.request_file_dialog(
+            || {
+                rfd::FileDialog::new()
+                    .set_title("Share project asset")
+                    .pick_file()
+            },
+            move |_, studio, path| {
+                studio.cloud_task(move |client| {
+                    let name = path
+                        .file_name()
+                        .ok_or("Invalid asset path")?
+                        .to_string_lossy()
+                        .into_owned();
+                    let size = std::fs::metadata(&path).map_err(|e| e.to_string())?.len();
+                    if size > 100 * 1024 * 1024 {
+                        return Err("Asset exceeds 100 MB".into());
+                    }
+                    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+                    client.upload(
+                        &id,
+                        &name,
+                        "asset",
+                        "application/octet-stream",
+                        &bytes,
+                        None,
+                    )?;
+                    Ok(Event::Notice("Asset saved to the project".into()))
+                });
+            },
+        );
     }
     pub fn invite_collaborator(&mut self) {
         let Some(link) = self.doc.cloud.as_ref().filter(|l| l.enabled) else {
@@ -259,6 +263,9 @@ impl Studio {
         });
     }
     pub fn poll_cloud(&mut self, ctx: &egui::Context) {
+        if self.file_dialog_pending() {
+            return;
+        }
         let result = self.cloud_job.as_ref().map(|rx| rx.try_recv());
         match result {
             Some(Ok(Ok(Event::DeviceCode(code, url)))) => {
