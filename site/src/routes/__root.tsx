@@ -5,6 +5,7 @@ import {
   Scripts,
   createRootRoute,
 } from "@tanstack/react-router";
+import { CloudProvider } from "../cloud/provider";
 import { useEffect } from "react";
 import { ThemeProvider, useTheme } from "../theme";
 import { REPO, SITE_ORIGIN, sitePath } from "../site";
@@ -61,9 +62,9 @@ export const Route = createRootRoute({
     ],
   }),
   component: () => (
-    <ThemeProvider>
+    <CloudProvider><ThemeProvider>
       <Document />
-    </ThemeProvider>
+    </ThemeProvider></CloudProvider>
   ),
 });
 
@@ -107,7 +108,7 @@ function Document() {
               />
             </a>
             <nav aria-label="Main navigation">
-              <a href={sitePath("#cloud")}>Cloud</a>
+              <a href={sitePath("cloud")}>Cloud</a>
               <a className="nav-features" href={sitePath("#features")}>
                 Features
               </a>

@@ -73,12 +73,21 @@ impl Shortcut {
     }
 }
 
+fn plain_paste_key(key: Key, mods: Modifiers) -> bool {
+    key == Key::Paste || (key == Key::Insert && mods.shift)
+}
+
 pub(super) fn key_shortcut(key: Key, mods: Modifiers) -> Option<Shortcut> {
     use Shortcut::*;
+    // Clipboard-history pickers inject Shift+Insert after dismissing their UI.
+    // The picker's Alt/Super may still be held; this always means ordinary Paste.
+    if plain_paste_key(key, mods) {
+        return Some(Paste);
+    }
     if key == Key::F1 && mods.is_none() {
         return Some(Help);
     }
-    if !(mods.command || mods.ctrl) {
+    if !(mods.command || mods.ctrl || mods.mac_cmd) {
         return None;
     }
     if mods.alt {
@@ -219,13 +228,20 @@ impl Studio {
                     Shortcut::Copy
                 }),
                 Event::Cut => Some(Shortcut::Cut),
-                Event::Paste(_) => Some(if modifiers.alt {
-                    Shortcut::PasteStyle
-                } else if modifiers.shift && self.persona == Persona::Photo {
-                    Shortcut::PasteAdjustments
-                } else {
-                    Shortcut::Paste
-                }),
+                Event::Paste(_) => Some(
+                    if index.checked_sub(1).is_some_and(|previous| {
+                        matches!(&events[previous], Event::Key { key, modifiers, pressed: true, .. }
+                        if plain_paste_key(*key, *modifiers))
+                    }) {
+                        Shortcut::Paste
+                    } else if modifiers.alt {
+                        Shortcut::PasteStyle
+                    } else if modifiers.shift && self.persona == Persona::Photo {
+                        Shortcut::PasteAdjustments
+                    } else {
+                        Shortcut::Paste
+                    },
+                ),
                 _ => None,
             };
             if let Some(shortcut) = shortcut {
@@ -320,7 +336,7 @@ impl Studio {
             Shortcut::Redo => self.redo(),
             Shortcut::Copy => self.copy_selection(ctx),
             Shortcut::Cut => self.cut_selection(ctx),
-            Shortcut::Paste => self.paste_clipboard(payload),
+            Shortcut::Paste => self.request_clipboard_paste(ctx, payload),
             Shortcut::CopyStyle => {
                 self.copy_style();
                 // Publishing the style makes it portable between windows.
@@ -717,6 +733,96 @@ mod tests {
 
     fn count(studio: &Studio) -> usize {
         studio.doc.layers[1].kind.shapes().unwrap().len()
+    }
+
+    #[test]
+    fn history_paste_and_control_command_keys_route_to_plain_paste() {
+        for (key, modifiers) in [
+            (Key::Insert, Modifiers::SHIFT),
+            (Key::Insert, Modifiers::SHIFT | Modifiers::ALT),
+            (Key::Paste, Modifiers::NONE),
+            (Key::Paste, Modifiers::ALT | Modifiers::SHIFT),
+            (Key::V, Modifiers::CTRL),
+            (Key::V, Modifiers::COMMAND),
+            (
+                Key::V,
+                Modifiers {
+                    mac_cmd: true,
+                    ..Modifiers::NONE
+                },
+            ),
+        ] {
+            assert_eq!(key_shortcut(key, modifiers), Some(Shortcut::Paste));
+        }
+        assert_eq!(key_shortcut(Key::Insert, Modifiers::NONE), None);
+    }
+
+    #[test]
+    fn native_history_paste_pairs_insert_once_despite_picker_modifiers() {
+        for (paste_key, modifiers) in [
+            (Key::Insert, Modifiers::SHIFT),
+            (Key::Insert, Modifiers::SHIFT | Modifiers::ALT),
+            (Key::Paste, Modifiers::ALT | Modifiers::SHIFT),
+            (
+                Key::V,
+                Modifiers {
+                    mac_cmd: true,
+                    ..Modifiers::NONE
+                },
+            ),
+        ] {
+            let ctx = context();
+            let mut studio = Studio::new();
+            let original = add_rectangle(&mut studio, 42.0);
+            let payload = copied(frame(&ctx, &mut studio, vec![Event::Copy]));
+            let history = studio.history.len();
+            frame(
+                &ctx,
+                &mut studio,
+                vec![
+                    Event::ModifiersChanged(Modifiers::ALT),
+                    key(paste_key, modifiers),
+                    Event::Paste(payload),
+                    Event::ModifiersChanged(Modifiers::NONE),
+                ],
+            );
+            assert_eq!(count(&studio), 2, "{paste_key:?} {modifiers:?}");
+            assert_eq!(studio.history.len(), history + 1);
+            assert_ne!(studio.selection[0].1, original);
+            studio.undo();
+            assert_eq!(count(&studio), 1);
+        }
+    }
+
+    #[test]
+    fn image_only_history_key_requests_native_paste_and_photo_ignores_it() {
+        for (paste_key, modifiers) in [
+            (Key::Insert, Modifiers::SHIFT | Modifiers::ALT),
+            (Key::Paste, Modifiers::ALT),
+        ] {
+            let mut studio = Studio::new();
+            frame(&context(), &mut studio, vec![key(paste_key, modifiers)]);
+            assert_eq!(
+                studio.clipboard_jobs.len(),
+                1,
+                "An image clipboard has no Event::Paste text"
+            );
+            assert_eq!(studio.status, "Pasting…");
+
+            let mut photo = Studio::new();
+            photo.persona = Persona::Photo;
+            frame(
+                &context(),
+                &mut photo,
+                vec![
+                    key(paste_key, modifiers),
+                    Event::Paste("History text".into()),
+                ],
+            );
+            assert!(photo.clipboard_jobs.is_empty());
+            assert!(photo.photo.copied_adjustments.is_none());
+            assert!(!photo.photo.status.contains("Copy adjustments"));
+        }
     }
 
     #[test]
@@ -1377,6 +1483,50 @@ mod tests {
             panic!("text");
         };
         assert_eq!(run.content, "Bonjour\nworld");
+    }
+
+    #[test]
+    fn history_paste_edits_active_type_once_and_preserves_inspector_focus() {
+        let ctx = context();
+        let mut studio = Studio::new();
+        studio.place_text(Pt::new(40.0, 80.0));
+        frame(
+            &ctx,
+            &mut studio,
+            vec![
+                key(Key::Insert, Modifiers::ALT | Modifiers::SHIFT),
+                Event::Paste("History text".into()),
+            ],
+        );
+        assert_eq!(studio.live_type_mut().unwrap().content, "History text");
+        assert_eq!(count(&studio), 1);
+        assert!(studio.clipboard_jobs.is_empty());
+        studio.commit_type_edit();
+
+        let field = egui::Id::new("history-paste-inspector");
+        let mut value = String::new();
+        let mut run = |events| {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    studio.handle_shortcuts(ui.ctx());
+                    ui.add(egui::TextEdit::singleline(&mut value).id(field))
+                        .request_focus();
+                },
+            );
+            output.textures_delta.clear();
+        };
+        run(vec![]);
+        run(vec![
+            key(Key::Insert, Modifiers::ALT | Modifiers::SHIFT),
+            Event::Paste("Field history".into()),
+        ]);
+        assert_eq!(value, "Field history");
+        assert_eq!(count(&studio), 1);
+        assert!(studio.clipboard_jobs.is_empty());
     }
 
     #[test]

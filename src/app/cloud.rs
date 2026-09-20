@@ -1,92 +1,9 @@
 use super::*;
+use crate::cloud::client::{Client, Event};
 use crate::cloud::{self, CommentPin};
+use serde_json::json;
 
 impl Studio {
-    pub fn sign_in_cloud(&mut self, email: &str, name: &str) {
-        let email = email.trim().to_string();
-        let name = name.trim().to_string();
-        if email.is_empty() || !email.contains('@') {
-            self.status = "Enter a real email".into();
-            return;
-        }
-        self.cloud_identity.email = email;
-        self.cloud_identity.name = if name.is_empty() {
-            self.cloud_identity.email.clone()
-        } else {
-            name
-        };
-        if let Err(error) = cloud::save_identity(&self.cloud_identity) {
-            self.status = error;
-            return;
-        }
-        self.cloud_modal = CloudModal::None;
-        self.status = format!("Signed in as {}", self.cloud_identity.email);
-    }
-
-    pub fn enable_cloud_sync(&mut self) {
-        match cloud::enable_sync(&mut self.doc, &self.cloud_identity) {
-            Ok(link) => {
-                let before = self.doc.cloud.clone();
-                self.commit(Cmd::SetCloud {
-                    before,
-                    after: Some(link),
-                });
-                self.status = "Cloud sync is on for this document".into();
-            }
-            Err(error) => {
-                self.status = error;
-                self.cloud_modal = CloudModal::SignIn;
-            }
-        }
-    }
-
-    pub fn invite_collaborator(&mut self) {
-        let mut link = self.doc.cloud.clone().unwrap_or_default();
-        match cloud::invite(&mut link, &self.invite_email) {
-            Ok(()) => {
-                let before = self.doc.cloud.clone();
-                self.commit(Cmd::SetCloud {
-                    before,
-                    after: Some(link),
-                });
-                self.invite_email.clear();
-                self.cloud_modal = CloudModal::None;
-                self.status = "Collaborator invited".into();
-            }
-            Err(error) => self.status = error,
-        }
-    }
-
-    pub fn publish_showcase(&mut self) {
-        let tags: Vec<String> = self
-            .publish_tags
-            .split(',')
-            .map(|t| t.trim().to_string())
-            .filter(|t| !t.is_empty())
-            .collect();
-        match cloud::publish(
-            &self.doc,
-            &self.cloud_identity,
-            &self.publish_title,
-            &tags,
-            &self.publish_summary,
-        ) {
-            Ok(item) => {
-                let mut link = self.doc.cloud.clone().unwrap_or_default();
-                link.published = true;
-                link.gallery_id = item.id;
-                let before = self.doc.cloud.clone();
-                self.commit(Cmd::SetCloud {
-                    before,
-                    after: Some(link),
-                });
-                self.cloud_modal = CloudModal::None;
-                self.status = "Published to the showcase".into();
-            }
-            Err(error) => self.status = error,
-        }
-    }
-
     pub fn drop_comment_pin(&mut self, pos: crate::geom::Pt) {
         let author = if self.cloud_identity.name.is_empty() {
             "You"
@@ -150,5 +67,282 @@ impl Studio {
             before: self.doc.comments.clone(),
             after,
         });
+    }
+}
+
+impl Studio {
+    pub fn cloud_busy(&self) -> bool {
+        self.cloud_job.is_some()
+    }
+    pub fn cloud_task(
+        &mut self,
+        work: impl FnOnce(Client) -> Result<Event, String> + Send + 'static,
+    ) {
+        if self.cloud_job.is_some() {
+            return;
+        }
+        let client = Client::new(self.cloud_identity.clone());
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.cloud_job = Some(rx);
+        self.status = "Connecting to cloud…".into();
+        std::thread::spawn(move || {
+            let result = work(client);
+            let _ = tx.send(result);
+        });
+    }
+    pub fn disconnect_cloud(&mut self) {
+        self.cloud_task(|client| {
+            client.call("devices:disconnect", json!({}))?;
+            Ok(Event::Disconnected)
+        });
+    }
+    pub fn connect_cloud(&mut self) {
+        if self.cloud_job.is_some() {
+            return;
+        }
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.cloud_job = Some(rx);
+        let endpoint =
+            std::env::var("OMADESIGN_CLOUD_URL").unwrap_or_else(|_| "https://omadesign.app".into());
+        std::thread::spawn(move || {
+            let run = || -> Result<Event, String> {
+                let token = cloud::client::random_token()?;
+                let code = token[..12].to_uppercase();
+                let mut identity = cloud::Identity {
+                    token: token.clone(),
+                    cloud_url: endpoint,
+                    ..Default::default()
+                };
+                let client = Client::new(identity.clone());
+                client.call(
+                    "devices:begin",
+                    json!({"token":token,"code":code,"label":"Omadesign on Linux"}),
+                )?;
+                let url = format!("{}/cloud?device={code}", client.endpoint()?);
+                tx.send(Ok(Event::DeviceCode(code, url.clone())))
+                    .map_err(|_| "Sign-in cancelled")?;
+                std::process::Command::new("xdg-open")
+                    .arg(url)
+                    .spawn()
+                    .map_err(|e| e.to_string())?;
+                for _ in 0..300 {
+                    if let Ok(user) = client.call("devices:me", json!({})) {
+                        identity.email = user["email"].as_str().unwrap_or_default().into();
+                        identity.name = user["name"].as_str().unwrap_or_default().into();
+                        cloud::save_identity(&identity)?;
+                        return Ok(Event::Connected(identity));
+                    }
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                }
+                Err("Sign-in timed out. Start again to get a new device code.".into())
+            };
+            let _ = tx.send(run());
+        });
+    }
+    pub fn enable_cloud_sync(&mut self) {
+        if !cloud::signed_in(&self.cloud_identity) {
+            self.cloud_modal = CloudModal::SignIn;
+            return;
+        }
+        let doc = self.doc.clone();
+        let tab = self.swap_id.clone();
+        self.cloud_task(move |client| client.push(&doc).map(|link| Event::Uploaded(link, tab)));
+    }
+    pub fn show_cloud_projects(&mut self) {
+        if !cloud::signed_in(&self.cloud_identity) {
+            self.cloud_modal = CloudModal::SignIn;
+            return;
+        }
+        self.cloud_modal = CloudModal::Projects;
+        self.cloud_task(|client| client.projects().map(Event::Projects));
+    }
+    pub fn refresh_cloud_review(&mut self) {
+        let Some(link) = self.doc.cloud.as_ref().filter(|l| l.enabled) else {
+            self.status = "Push this project to cloud first".into();
+            return;
+        };
+        let id = link.project_id.clone();
+        self.cloud_modal = CloudModal::Review;
+        self.cloud_task(move |client| client.refresh(&id));
+    }
+    pub fn pull_cloud_project(&mut self, id: String) {
+        self.cloud_task(move |client| client.pull(&id).map(Event::Pulled));
+    }
+    pub fn upload_cloud_asset(&mut self) {
+        let Some(link) = self.doc.cloud.as_ref().filter(|l| l.enabled) else {
+            self.status = "Push this project to cloud first".into();
+            return;
+        };
+        let id = link.project_id.clone();
+        if let Some(path) = rfd::FileDialog::new()
+            .set_title("Share project asset")
+            .pick_file()
+        {
+            self.cloud_task(move |client| {
+                let name = path
+                    .file_name()
+                    .ok_or("Invalid asset path")?
+                    .to_string_lossy()
+                    .into_owned();
+                let size = std::fs::metadata(&path).map_err(|e| e.to_string())?.len();
+                if size > 100 * 1024 * 1024 {
+                    return Err("Asset exceeds 100 MB".into());
+                }
+                let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+                client.upload(
+                    &id,
+                    &name,
+                    "asset",
+                    "application/octet-stream",
+                    &bytes,
+                    None,
+                )?;
+                Ok(Event::Notice("Asset saved to the project".into()))
+            });
+        }
+    }
+    pub fn invite_collaborator(&mut self) {
+        let Some(link) = self.doc.cloud.as_ref().filter(|l| l.enabled) else {
+            self.status = "Push this project to cloud first".into();
+            return;
+        };
+        let id = link.project_id.clone();
+        let email = self.invite_email.clone();
+        self.cloud_task(move |client| {
+            client.call(
+                "projects:invite",
+                json!({"projectId":id,"email":email,"role":"reviewer"}),
+            )?;
+            Ok(Event::Notice("Review invitation sent".into()))
+        });
+    }
+    pub fn publish_showcase(&mut self) {
+        let snapshot = self.cloud_panel.selected_snapshot.clone();
+        if snapshot.is_empty() {
+            self.status = "Select a flat review export first".into();
+            return;
+        }
+        let title = self.publish_title.clone();
+        let description = self.publish_summary.clone();
+        self.cloud_task(move |client| {
+            client.call(
+                "showcase:publish",
+                json!({"snapshotId":snapshot,"title":title,"description":description}),
+            )?;
+            Ok(Event::Notice(
+                "Selected export published to showcase".into(),
+            ))
+        });
+    }
+    pub fn load_cloud_preview(&mut self) {
+        let id = self.cloud_panel.selected_snapshot.clone();
+        self.cloud_task(move |client| {
+            let bytes = client.download(&id)?;
+            let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes))
+                .with_guessed_format()
+                .map_err(|e| e.to_string())?;
+            let mut limits = image::Limits::default();
+            limits.max_alloc = Some(256 * 1024 * 1024);
+            limits.max_image_width = Some(16384);
+            limits.max_image_height = Some(16384);
+            reader.limits(limits);
+            let pixels = reader
+                .decode()
+                .map_err(|e| e.to_string())?
+                .thumbnail(2048, 2048)
+                .to_rgba8();
+            let color = egui::ColorImage::from_rgba_unmultiplied(
+                [pixels.width() as usize, pixels.height() as usize],
+                pixels.as_raw(),
+            );
+            Ok(Event::Preview(color, id))
+        });
+    }
+    pub fn poll_cloud(&mut self, ctx: &egui::Context) {
+        let result = self.cloud_job.as_ref().map(|rx| rx.try_recv());
+        match result {
+            Some(Ok(Ok(Event::DeviceCode(code, url)))) => {
+                self.cloud_panel.code = code;
+                self.status = format!("Approve this device in your browser: {url}");
+            }
+            Some(Ok(result)) => {
+                self.cloud_job = None;
+                match result {
+                    Err(error) => self.status = error,
+                    Ok(Event::Preview(color, id)) => {
+                        self.cloud_panel.preview = Some(ctx.load_texture(
+                            "cloud-review",
+                            color,
+                            egui::TextureOptions::LINEAR,
+                        ));
+                        self.cloud_panel.preview_file = id;
+                        self.status = "Flat export loaded".into();
+                    }
+                    Ok(Event::Disconnected) => {
+                        self.cloud_identity = Default::default();
+                        let _ = cloud::save_identity(&self.cloud_identity);
+                        self.cloud_panel = Default::default();
+                        self.status = "Desktop access revoked".into();
+                    }
+                    Ok(Event::Connected(identity)) => {
+                        self.cloud_identity = identity;
+                        self.cloud_panel.code.clear();
+                        self.cloud_modal = CloudModal::None;
+                        self.status = "Connected to Omadesign cloud".into();
+                    }
+                    Ok(Event::Projects(projects)) => {
+                        self.cloud_panel.projects = projects;
+                        self.status = "Cloud projects loaded".into();
+                    }
+                    Ok(Event::Uploaded(link, tab)) => {
+                        self.link_cloud_tab(&tab, link);
+                        self.status = "Project and flat review export saved to cloud".into();
+                    }
+                    Ok(Event::Pulled(doc)) => {
+                        self.open_document(doc, None);
+                        self.cloud_modal = CloudModal::None;
+                        self.status = "Cloud project opened in a new document".into();
+                    }
+                    Ok(Event::Refreshed {
+                        project_id,
+                        files,
+                        annotations,
+                        showcase,
+                        competitions,
+                    }) => {
+                        self.cloud_panel.project_id = project_id;
+                        self.cloud_panel.files = files;
+                        self.cloud_panel.annotations = annotations;
+                        self.cloud_panel.showcase = showcase;
+                        self.cloud_panel.competitions = competitions;
+                        if !self
+                            .cloud_panel
+                            .files
+                            .iter()
+                            .any(|f| f.id == self.cloud_panel.selected_snapshot)
+                        {
+                            self.cloud_panel.selected_snapshot = self
+                                .cloud_panel
+                                .files
+                                .iter()
+                                .find(|f| f.kind == "snapshot")
+                                .map(|f| f.id.clone())
+                                .unwrap_or_default();
+                        }
+                        self.status = "Cloud review updated".into();
+                    }
+                    Ok(Event::Notice(note)) => self.status = note,
+                    Ok(Event::DeviceCode(..)) => {}
+                }
+            }
+            Some(Err(std::sync::mpsc::TryRecvError::Disconnected)) => {
+                self.cloud_job = None;
+                self.status = "Cloud operation stopped before completing".into();
+            }
+            _ => {}
+        }
+        if self.cloud_job.is_some() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(150));
+        }
     }
 }

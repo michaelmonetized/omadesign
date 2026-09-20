@@ -289,8 +289,20 @@ fn file_menu(ui: &mut Ui, studio: &mut Studio) {
             studio.cloud_modal = crate::app::CloudModal::SignIn;
             ui.close();
         }
-        if ui.button("Enable cloud sync").clicked() {
+        if ui.button("Push project + review export").clicked() {
             studio.enable_cloud_sync();
+            ui.close();
+        }
+        if ui.button("Cloud projects…").clicked() {
+            studio.show_cloud_projects();
+            ui.close();
+        }
+        if ui.button("Review cloud annotations…").clicked() {
+            studio.refresh_cloud_review();
+            ui.close();
+        }
+        if ui.button("Upload project asset…").clicked() {
+            studio.upload_cloud_asset();
             ui.close();
         }
         if ui.button("Invite collaborator…").clicked() {
@@ -298,6 +310,7 @@ fn file_menu(ui: &mut Ui, studio: &mut Studio) {
             ui.close();
         }
         if ui.button("Publish to showcase…").clicked() {
+            studio.refresh_cloud_review();
             studio.cloud_modal = crate::app::CloudModal::Publish;
             ui.close();
         }
@@ -384,7 +397,7 @@ fn edit_menu(ui: &mut Ui, studio: &mut Studio) {
             .add(Button::new("Paste").shortcut_text("Ctrl+V"))
             .clicked()
         {
-            studio.paste_clipboard(None);
+            studio.request_clipboard_paste(ui.ctx(), None);
             ui.close();
         }
         if ui

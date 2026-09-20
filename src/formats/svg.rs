@@ -257,7 +257,16 @@ pub fn read(svg: &str, name: &str) -> Result<(Document, Vec<String>), String> {
     if svg.len() > 256 * 1024 * 1024 {
         return Err("SVG exceeds the 256 MiB import limit".into());
     }
-    let xml = roxmltree::Document::parse(svg).map_err(|e| format!("Invalid SVG: {e}"))?;
+    // SVG editors commonly include the standard SVG 1.1 DOCTYPE. roxmltree
+    // never fetches external DTDs and bounds entity expansion itself.
+    let xml = roxmltree::Document::parse_with_options(
+        svg,
+        roxmltree::ParsingOptions {
+            allow_dtd: true,
+            ..Default::default()
+        },
+    )
+    .map_err(|e| format!("Invalid SVG: {e}"))?;
     if xml.descendants().filter(|n| n.is_element()).count() > MAX_ELEMENTS {
         return Err("SVG has too many elements".into());
     }

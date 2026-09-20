@@ -3,6 +3,7 @@ pub mod app;
 pub mod asset_browser;
 pub mod boolean;
 pub mod brand;
+pub mod clipboard;
 pub mod cloud;
 pub mod color;
 pub mod compositor;

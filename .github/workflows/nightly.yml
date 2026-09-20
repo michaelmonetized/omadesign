@@ -1,0 +1,47 @@
+name: Site CI (Blacksmith)
+
+# Desktop Cargo tests, compilation and packaging always run locally.
+# GitHub is only the workflow coordinator; site execution belongs to Blacksmith.
+on:
+  push:
+    branches: [nightly, master]
+    paths:
+      - 'site/**'
+      - 'docs/**'
+      - 'packages/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [nightly, master]
+    paths:
+      - 'site/**'
+      - 'docs/**'
+      - 'packages/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: site-ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  site:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bunx vitest run
+      # Vite generates routeTree before TypeScript checks the site.
+      - run: bun run build
+        env:
+          VITE_CONVEX_URL: https://hidden-clownfish-96.convex.cloud
+          VITE_CONVEX_SITE_URL: https://hidden-clownfish-96.convex.site
+          VITE_CLERK_PUBLISHABLE_KEY: pk_test_Y2xldmVyLWZsZWEtODQ2Ny5jbGVyay5hY2NvdW50cy5kZXYk
+      - run: bun run typecheck

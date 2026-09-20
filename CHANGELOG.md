@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-09-20 · 0.5.3 — Paste it onto the canvas.
+
+Fix pasting external clipboard content into a document. `Ctrl+V` accepts
+screenshots, browser images, copied image files, plain text, and SVG source
+or files. External content appears in the center of the visible canvas,
+accounting for pan and zoom. Images become pixel layers, text becomes an
+editable text layer, and SVG becomes vector artwork. Command+V forwarding
+and Shift+Insert from Omarchy clipboard history use the same paste path.
+
+Objects copied inside Omadesign paste at their original positions. Pasting
+while editing text inserts into the active text instead of creating a layer.
+
+This hotfix builds on the 0.5.2 nightly, including its cloud work.
+[Release validation](docs/releases/0.5.3.md) records the artifact
+and runtime checks separately from the accepted 0.5.0 human QA evidence.
+
 ## 2026-09-18 · 0.5.1 — You can see the selection now.
 
 Version **0.5.1** is Pixel mode, finished enough to use.
