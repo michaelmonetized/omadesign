@@ -217,7 +217,7 @@ pub(super) fn brand(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
                                     format!("{}\n{error}", asset.relative_path.display())
                                 } else {
                                     format!(
-                                        "{} · {}\nDouble-click to place at the artboard centre in Design",
+                                        "{} · {}\nDouble-click to place in the selected frame or at the artboard centre",
                                         asset.relative_path.display(),
                                         asset.kind.label()
                                     )
@@ -226,12 +226,12 @@ pub(super) fn brand(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
                                     .on_hover_text(tip)
                                     .on_hover_cursor(if photo { egui::CursorIcon::PointingHand } else { egui::CursorIcon::Grab });
                                 if response.double_clicked() {
-                                    let center = studio
-                                        .doc
-                                        .artboards
-                                        .iter()
-                                        .find(|a| studio.artboard_sel.contains(&a.id))
-                                        .map(|a| a.bounds().center())
+                                    let target = studio.asset_frame_target();
+                                    let center = target
+                                        .and_then(|frame| studio.asset_frame_center(frame))
+                                        .or_else(|| studio.doc.artboards.iter()
+                                            .find(|a| studio.artboard_sel.contains(&a.id))
+                                            .map(|a| a.bounds().center()))
                                         .unwrap_or(Pt::new(
                                             studio.doc.width * 0.5,
                                             studio.doc.height * 0.5,
@@ -241,6 +241,7 @@ pub(super) fn brand(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
                                         studio,
                                         asset.path(&catalog.root),
                                         center,
+                                        target,
                                     );
                                 }
                                 ui.add(

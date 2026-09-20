@@ -493,15 +493,32 @@ fn object_menu(ui: &mut Ui, studio: &mut Studio) {
         ui.separator();
         if ui
             .add_enabled(
+                !studio.selection.is_empty() || studio.selected_layer.is_some(),
+                Button::new("Group").shortcut_text("Ctrl+G"),
+            )
+            .clicked()
+        {
+            studio.group_selected();
+            ui.close();
+        }
+        if ui
+            .add(Button::new("Ungroup").shortcut_text("Ctrl+Shift+G"))
+            .clicked()
+        {
+            studio.ungroup_selected();
+            ui.close();
+        }
+        if ui
+            .add_enabled(
                 studio.selection.len() >= 2,
-                Button::new("Combine").shortcut_text("Ctrl+G"),
+                Button::new("Compound shape").shortcut_text("Ctrl+8"),
             )
             .clicked()
         {
             studio.combine_selected();
             ui.close();
         }
-        if ui.button("Release         Ctrl+Shift+G").clicked() {
+        if ui.button("Release compound         Ctrl+Shift+8").clicked() {
             studio.release_compound();
             ui.close();
         }

@@ -73,6 +73,60 @@ fn schedule(scene: &str) -> Vec<Action> {
     use ActionKind::*;
     use Target::*;
     match scene {
+        "chroma" => vec![
+            event(1., Click(Text("Chroma key…"))),
+            event(2., Click(Any("Original"))),
+            event(3., Click(Any("Preview"))),
+            event(4., Click(Any("Sample image"))),
+            event(5., Click(At(390., 320.))),
+            event(6., Click(Any("Apply"))),
+            event(8., Key(egui::Key::Z, ctrl())),
+            event(
+                9.,
+                Key(
+                    egui::Key::Z,
+                    Modifiers {
+                        shift: true,
+                        ..ctrl()
+                    },
+                ),
+            ),
+            event(11., Click(Text("Chroma key…"))),
+            event(13., Click(Any("Cancel"))),
+        ],
+        "graphics" => vec![
+            event(1., Click(Text("+"))),
+            drag(2., 0.6, Delta(Field("Angle"), 30.)),
+            event(4., Click(Offset("Stop 2", 68., 0.))),
+            event(6., Key(egui::Key::Escape, Modifiers::NONE)),
+            event(7., Click(Text("Stroke"))),
+            event(8., Click(Text("Linear"))),
+            event(9., Click(Any("Conic"))),
+            event(10., Key(egui::Key::Escape, Modifiers::NONE)),
+            event(11., Key(egui::Key::A, ctrl())),
+            event(12., Key(egui::Key::G, ctrl())),
+            event(
+                13.,
+                Key(
+                    egui::Key::G,
+                    Modifiers {
+                        shift: true,
+                        ..ctrl()
+                    },
+                ),
+            ),
+            event(14., Key(egui::Key::Z, ctrl())),
+            event(
+                15.,
+                Key(
+                    egui::Key::Z,
+                    Modifiers {
+                        shift: true,
+                        ..ctrl()
+                    },
+                ),
+            ),
+        ],
         "design" => vec![
             drag(1., 1.4, Delta(Field("Rotate"), 44.)),
             drag(3.4, 1.3, Delta(Field("Corner radius"), 56.)),
@@ -370,6 +424,12 @@ fn seed(scene: &str) -> Studio {
     s.recents.clear();
     s.path = None;
     match scene {
+        "chroma" => {
+            omadesign::shots::apply(&mut s, "pixel-effects").unwrap();
+        }
+        "graphics" => {
+            omadesign::shots::apply(&mut s, "design-tools").unwrap();
+        }
         "photo" => {
             s.doc = Document::new("Coast / photo study", 1586., 992., 72.);
             s.persona = Persona::Photo;
@@ -490,6 +550,8 @@ impl Capture {
     fn new(scene: String, directory: PathBuf, probe: bool) -> Self {
         let studio = seed(&scene);
         let seconds = match scene.as_str() {
+            "chroma" => 15,
+            "graphics" => 17,
             "design" => 42,
             "photo" => 24,
             "pixel" | "motion" | "brand-kit" => 30,
@@ -809,6 +871,13 @@ impl eframe::App for Capture {
             self.pending = false;
             self.stepped = false;
             if self.frame >= self.total {
+                if matches!(self.scene.as_str(), "graphics" | "chroma") {
+                    omadesign::project::save_to(
+                        &self.studio.doc,
+                        &self.directory.join(format!("{}-final.oma", self.scene)),
+                    )
+                    .unwrap();
+                }
                 self.encoder.take().unwrap().finish();
                 fs::write(
                     self.directory.join(format!("{}-errors.json", self.scene)),

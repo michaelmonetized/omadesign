@@ -95,24 +95,29 @@ Pen and Node gestures:
 - **Pencil** `N` — freehand curve.
 - **Rectangle** `R` / **Ellipse** `O` / **Polygon** `Y` / **Star** `S` / **Line** `L` — drag. Shift constrains. Corner radius, sides, and inner radius live in Transform.
 - **Type** `T` — click to place, type on the canvas. First keystroke replaces the “Type” placeholder. Enter is a new line. Esc or click away finishes. Double-click existing type to edit. Character studio: font, size, tracking, leading, OpenType (kerning, ligatures, tabular figures, small caps).
-- **Gradient** `G` — drag across a selected shape.
+- **Gradient** `G` — drag across a selected shape to place its gradient. The Appearance studio's active **Fill** or **Stroke** row chooses which paint the tool edits; existing stops and gradient type are retained. Endpoints remain visible while the Gradient tool is selected.
+
+Appearance offers **Solid**, **Linear**, **Radial**, **Shape**, and **Conic** paint for both fills and strokes. Click the gradient ramp to insert a stop, drag its handle to move it, and select a stop to edit its color, alpha, and percentage. **+ / −** add and remove stops; **Reverse** flips the stop order, and **Even** distributes them equally. **Angle** rotates linear, radial, and conic gradients. Radial gradients spread outward from the drag start, conic gradients sweep around it, and Shape gradients follow the actual silhouette and holes from interior to boundary. Linear/radial SVG exports keep editable gradient stops; Shape/conic SVG exports use embedded image patterns (up to 4096 pixels per axis). Project files keep all four types editable.
 - **Eyedropper** `I` — sample fill.
 - **Trace** `U` — raster to vector on the active pixel layer. Threshold, color count, and smoothness live in Trace. Object → Trace to vector does the same without switching tools.
 - **Zoom** `Z` — drag a box to that area. Click zooms in, Alt-click zooms out a step. Ctrl-click fits the artboard. Ctrl+Shift-click fits the selection, or every object if nothing is selected. Pinch the trackpad to zoom the canvas. Ctrl++ / Ctrl+- / Ctrl+scroll / Alt-scroll also zoom the canvas, not the chrome. With Z selected, two-finger scroll zooms.
 - **Hand** `H` / Space — pan.
 
-Color studio: HSV, hex, swatches, recent. `X` swaps fill/stroke. `D` restores defaults.
+Color studio: saturation × brightness, hue, alpha, hex, swatches, and recent colors. Open a color chip to see **Current** and **Previous** side by side; click Previous to restore the color from before this edit. Every picker accepts alpha, including gradient stops, paint, Layout color variables, and Design effect colors. Eight-digit hex uses `#RRGGBBAA`. `X` swaps fill/stroke. `D` restores defaults.
+
+Every vector object and Layout frame has **Opacity** and **Blend** controls in its transform inspector. Placed images use the layer's opacity and blend controls above the Layers tree. A frame's opacity/blend applies to its complete subtree, and an object's opacity applies once to its combined fill, image, and stroke. Layer opacity also applies once to its complete contents. Choose from Normal, Multiply, Screen, Overlay, Darken, Lighten, Color Dodge/Burn, Hard/Soft Light, Difference, Exclusion, Hue, Saturation, Color, and Luminosity. These settings survive project saves and SVG export. Regular layers and Layout frames isolate their contents: child blend modes interact with siblings inside the same container, while the container’s own blend mode interacts with artwork below it. This remains consistent at every opacity. Explicit layer groups can enable **Pass through** for child layers to blend with the outside backdrop.
 
 **Select** has All, None, Invert, Same Fill / Stroke / Effects, and With / Without Fill / Stroke / Effects. Matching compares the complete property, including gradient positions, stroke settings, or the effect stack. Hidden and locked objects stay out of the selection.
 
-**Object → Pathfinder** offers Union, Subtract, Intersect, XOR, and Divide. Select two or more vector objects on the same layer. Operations follow the layer stacking order; Divide makes separate pieces, with holes preserved. Each operation is one undo step. Combine `Ctrl+G` and Release `Ctrl+Shift+G` remain available.
+**Object → Pathfinder** offers Union, Subtract, Intersect, XOR, and Divide. Select two or more vector objects on the same layer. Operations follow the layer stacking order; Divide makes separate pieces, with holes preserved. Each operation is one undo step. Compound shape `Ctrl+8` and Release compound `Ctrl+Shift+8` remain available. Group `Ctrl+G` creates an editable layer group; Ungroup `Ctrl+Shift+G` releases it without combining paths. Drag objects or layers between sidebar rows to reorder, and onto the centre of a group or Layout frame to nest. Hold Shift while clicking object rows to select several. Dragging a placed image layer onto a Layout frame converts it to an image fill, retaining position, rotation, opacity, blend mode, and effects. An existing layer mask is baked into the image alpha; Undo restores the original image layer and its editable mask.
 
 **Object → Expand stroke to outline** turns the visible stroke into filled geometry, including caps, joins, and dashes. Existing fills stay in place beneath the new outline. Compound outlines retain their holes; use Reshape to move their contours together.
 
-Combine and Release preserve guide state, rotation, stacking and linear gradients
+Combine and Release preserve guide state, rotation, stacking and gradient endpoints
 in one undo step. Combine and Pathfinder require either artwork or guides, with
-no mixture. Radial fills follow each resulting object's bounds when contours are
-separated; a shared radial center is not currently represented in the document.
+no mixture. Shape gradients follow the resulting silhouette. Older two-color radial
+fills follow the resulting bounds; editing them in Appearance upgrades them to the
+multi-stop format.
 
 ### Guides, rulers, and precision
 
@@ -148,6 +153,26 @@ Paint lives on a **pixel layer**. Add one from the Layers studio if the document
 - Eraser `E`, Fill `K`, Clone `J` (Alt-click sets source), Smudge `M`.
 - Healing brush `Shift+J` — Alt-click clean texture on the active image, then paint over a blemish. It blends sampled texture with the destination's local color and preserves transparency. The source stays fixed for the stroke; Undo restores the whole stroke.
 - Marquee, elliptical marquee, lasso, wand. Drag to select; the marching ants stay until Esc. Shift adds. Delete clears selected pixels. Paint, fill, clone, heal and smudge stay inside the selection. Wand tolerance is in Brush. Eyedropper `I` shows the sampled color in the sidebar.
+
+### Raster filters and effects
+
+Select an unlocked pixel layer in **Pixel**, then open **Raster studio → Filters** or **Effects**. Choose **Mask** first to process the layer mask instead of the image. A marquee, lasso, or wand selection limits the edit; partial selection coverage and the **Strength** slider blend the result with the source.
+
+The dialog previews the result on a transparency checkerboard. **Original** compares the source. Change effects or settings without committing; **Cancel** leaves the document untouched. **Apply** processes the full-resolution image or mask in the background and creates one Undo/Redo step. Applied pixels and masks persist in `.oma` projects and exports. These are applied raster edits, not a live effect stack; duplicate the layer before applying if you want an independent original. Preview spatial distances scale to the preview resolution; fine detail can differ from full-resolution output.
+
+**Filters** includes:
+
+- **Key & transparency:** Chroma key, Alpha threshold, Feather alpha, Grow alpha, Shrink alpha.
+- **Color & tone:** Brightness / contrast, Exposure / gamma, Levels, Hue / saturation, Vibrance, Color balance, Temperature / tint, Grayscale, Sepia, Invert, Threshold, Posterize.
+
+**Effects** includes:
+
+- **Blur:** Gaussian blur, Motion blur with angle.
+- **Detail:** Sharpen, Unsharp mask, Find edges, Emboss.
+- **Stylize:** Pixelate, Film grain, Vignette, Halftone, Solarize.
+- **Distort:** Swirl, Ripple.
+
+For green-screen or blue-screen removal, choose **Chroma key…**, choose Green / Blue or **Sample image**, then click the background in the preview. The color picker also accepts a custom key color. **Similarity** sets how much color is removed; **Falloff** gives partial transparency near the boundary; **Hardness** tightens that transition; **Spill cleanup** removes excess key color near the keyed edges. **Flow** controls how much of the key is applied in this pass by blending the original and keyed result. Other filters call this control **Strength**. The key uses RGB chroma; the key color chip's alpha is not a keying parameter. Existing source transparency is preserved. For local refinement after applying, add or select a layer mask and paint with the brush's **Edge**, **Flow**, and **Opacity** controls.
 
 ### Masks
 
@@ -374,7 +399,7 @@ Fill K · Clone J · Heal Shift+J · Smudge M · Crop C · Wand W · Hand H · Z
 Undo Ctrl+Z · Redo Ctrl+Shift+Z · Duplicate Ctrl+D
 Copy Ctrl+C · Paste Ctrl+V · Cut Ctrl+X · Select all Ctrl+A
 Save Ctrl+S · Save as Ctrl+Shift+S · Open Ctrl+O · New Ctrl+N · Place Ctrl+Shift+P · Export Ctrl+E
-Combine Ctrl+G · Release Ctrl+Shift+G · Front Ctrl+Shift+] · Back Ctrl+Shift+[
+Group Ctrl+G · Ungroup Ctrl+Shift+G · Compound Ctrl+8 · Release Ctrl+Shift+8 · Front Ctrl+Shift+] · Back Ctrl+Shift+[
 Free transform Ctrl+T · Guides Ctrl+; · Snapping Ctrl+Shift+; · Hold Ctrl to reverse snapping
 Shortcut HUD Ctrl+/ · All shortcuts F1
 Fit Ctrl+0 · 100% Ctrl+1 · Zoom in Ctrl++ · Zoom out Ctrl+- · Pan Space · Pinch / Ctrl+scroll zoom

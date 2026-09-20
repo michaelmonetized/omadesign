@@ -62,7 +62,7 @@ fn hex_css(c: Rgba) -> String {
 }
 
 fn svg_color(c: Rgba) -> String {
-    if c.a >= 250 { hex_css(c) } else { rgba_css(c) }
+    if c.a == 255 { hex_css(c) } else { rgba_css(c) }
 }
 
 fn pixel_image(
@@ -140,11 +140,65 @@ fn layer_bounds(layer: &Layer) -> Option<Bounds> {
 }
 
 fn stop_color(c: Rgba) -> String {
-    if c.a >= 250 {
+    if c.a == 255 {
         hex_css(c)
     } else {
         format!("{}\" stop-opacity=\"{:.3}", hex_css(c), c.a as f32 / 255.0)
     }
+}
+
+fn gradient_reference(
+    defs: &mut String,
+    grad_id: &mut usize,
+    gradient: &crate::gradient::Gradient,
+    shape: &Shape,
+    padding: f32,
+) -> String {
+    use crate::gradient::GradientKind;
+    *grad_id += 1;
+    let id = format!("g{grad_id}");
+    let mut gradient = gradient.clone();
+    gradient.normalize();
+    let (a, b) = gradient.endpoints(shape.geom.bbox());
+    if matches!(gradient.kind, GradientKind::Shape | GradientKind::Conic) {
+        if let Some((image, bounds)) = crate::gradient::texture(&gradient, shape, padding, 2.)
+            && let Ok(png) = image.encode_png()
+        {
+            let data = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, png);
+            defs.push_str(&format!("<pattern id=\"{id}\" patternUnits=\"userSpaceOnUse\" patternTransform=\"translate({} {})\" x=\"0\" y=\"0\" width=\"{}\" height=\"{}\"><image href=\"data:image/png;base64,{data}\" x=\"0\" y=\"0\" width=\"{}\" height=\"{}\" preserveAspectRatio=\"none\"/></pattern>\n",bounds.min.x,bounds.min.y,bounds.width(),bounds.height(),bounds.width(),bounds.height()));
+        }
+    } else {
+        let tag = if gradient.kind == GradientKind::Linear {
+            "linearGradient"
+        } else {
+            "radialGradient"
+        };
+        let geometry = if gradient.kind == GradientKind::Linear {
+            format!(
+                "x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\"",
+                a.x, a.y, b.x, b.y
+            )
+        } else {
+            format!(
+                "cx=\"{}\" cy=\"{}\" r=\"{}\"",
+                a.x,
+                a.y,
+                (b - a).length().max(0.001)
+            )
+        };
+        defs.push_str(&format!(
+            "<{tag} id=\"{id}\" gradientUnits=\"userSpaceOnUse\" {geometry}>"
+        ));
+        for stop in &gradient.stops {
+            defs.push_str(&format!(
+                "<stop offset=\"{:.6}\" stop-color=\"{}\"/>",
+                stop.offset,
+                stop_color(stop.color)
+            ));
+        }
+        defs.push_str(&format!("</{tag}>\n"));
+    }
+    format!("url(#{id})")
 }
 
 fn write_shape(
@@ -155,9 +209,53 @@ fn write_shape(
     extra: &str,
     text_as_paths: bool,
 ) {
+    if let Some(image) = &shape.layout.image {
+        if let Ok(pixels) = crate::layout_images::pixmap(image) {
+            let b = shape.geom.bbox();
+            let placed = crate::layout_images::placement(
+                b,
+                Pt::new(pixels.width() as f32, pixels.height() as f32),
+                image.fit,
+                image.focal,
+            );
+            let mut background = shape.clone();
+            background.layout.image = None;
+            background.opacity = 1.;
+            background.blend = crate::color::Blend::Normal;
+            background.rotation = 0.;
+            background.style.stroke = None;
+            body.push_str(&format!(
+                "<g{extra} opacity=\"{:.4}\" style=\"mix-blend-mode:{}\"{}>",
+                shape.opacity,
+                shape.blend.css(),
+                if shape.visible {
+                    ""
+                } else {
+                    " visibility=\"hidden\""
+                }
+            ));
+            write_shape(body, defs, grad_id, &background, "", text_as_paths);
+            let clip_id = format!("oma-image-clip-{}", shape.id);
+            defs.push_str(&format!("<clipPath id=\"{clip_id}\" clipPathUnits=\"userSpaceOnUse\"><path d=\"{}\"/></clipPath>",path_data(&background)));
+            body.push_str(&format!("<image href=\"data:image/png;base64,{}\" x=\"{:.4}\" y=\"{:.4}\" width=\"{:.4}\" height=\"{:.4}\" preserveAspectRatio=\"none\" clip-path=\"url(#{clip_id})\"/>",image.data,placed.min.x,placed.min.y,placed.width(),placed.height()));
+            if shape.style.stroke.is_some() {
+                background.style.fill = Fill::None;
+                background.style.stroke = shape.style.stroke.clone();
+                let mut stroke = String::new();
+                write_shape(&mut stroke, defs, grad_id, &background, "", text_as_paths);
+                body.push_str(&stroke.replace(
+                    &format!("id=\"oma-{}\"", shape.id),
+                    &format!("id=\"oma-image-stroke-{}\"", shape.id),
+                ));
+            }
+            body.push_str("</g>");
+            return;
+        }
+    }
     let extra = format!(
-        " inkscape:label=\"{}\"{}{}",
+        " inkscape:label=\"{}\" style=\"mix-blend-mode:{}\"{}{}",
         xml_escape(&shape.name),
+        shape.blend.css(),
         if shape.visible {
             ""
         } else {
@@ -166,6 +264,10 @@ fn write_shape(
         extra
     );
     let fill_attr = match &shape.style.fill {
+        Fill::Gradient(g) => format!(
+            "fill=\"{}\"",
+            gradient_reference(defs, grad_id, g, shape, 0.)
+        ),
         Fill::None => "fill=\"none\"".to_string(),
         Fill::Solid(c) => format!("fill=\"{}\"", svg_color(*c)),
         Fill::Linear { from, to, c0, c1 } => {
@@ -203,7 +305,10 @@ fn write_shape(
                 .unwrap_or_default();
             format!(
                 " stroke=\"{}\" stroke-width=\"{:.2}\" stroke-linecap=\"{}\" stroke-linejoin=\"{}\"{dash}",
-                svg_color(s.color),
+                s.gradient
+                    .as_ref()
+                    .map(|g| gradient_reference(defs, grad_id, g, shape, s.width * 0.5 + 1.))
+                    .unwrap_or_else(|| svg_color(s.color)),
                 s.width,
                 s.cap.name().to_ascii_lowercase(),
                 s.join.name().to_ascii_lowercase()
@@ -218,17 +323,13 @@ fn write_shape(
         && !run.font.starts_with("omatype:")
     {
         let family = crate::text::label_for(&run.font);
-        let fill = match &shape.style.fill {
-            Fill::Solid(c) => svg_color(*c),
-            _ => "#111111".into(),
-        };
         let escaped = run
             .content
             .replace('&', "&amp;")
             .replace('<', "&lt;")
             .replace('>', "&gt;");
         body.push_str(&format!(
-            "  <text id=\"oma-{}\" x=\"{:.3}\" y=\"{:.3}\" font-family=\"{}\" font-size=\"{:.2}\" fill=\"{fill}\" opacity=\"{:.3}\"{extra}>{}</text>\n",
+            "  <text id=\"oma-{}\" x=\"{:.3}\" y=\"{:.3}\" font-family=\"{}\" font-size=\"{:.2}\" {fill_attr}{stroke_attr} opacity=\"{:.3}\"{extra}>{}</text>\n",
             shape.id,
             run.origin.x,
             run.origin.y,
@@ -289,38 +390,19 @@ fn xml_escape(s: &str) -> String {
 }
 
 pub fn export(doc: &Document) -> Result<String, String> {
-    export_inner(doc, false)
+    export_inner(doc, false, false)
 }
 
 pub fn export_frame(doc: &Document, layer: usize, frame_id: u64) -> Result<String, String> {
-    let frame = doc
-        .find_shape(layer, frame_id)
-        .ok_or_else(|| "Select a frame to export".to_string())?;
-    let bounds = frame.world_bbox();
-    let mut crop = doc.clone();
-    crop.width = bounds.width().max(1.0);
-    crop.height = bounds.height().max(1.0);
-    crop.artboards = vec![crate::document::Artboard::new(
-        0,
-        Pt::ZERO,
-        Pt::new(crop.width, crop.height),
-    )];
-    let delta = Pt::new(-bounds.min.x, -bounds.min.y);
-    for layer in &mut crop.layers {
-        if let Some(shapes) = layer.kind.shapes_mut() {
-            for shape in shapes {
-                shape.geom.translate(delta);
-            }
-        }
-        if let Some((origin, size, rot)) = layer.kind.raster_xform() {
-            layer.kind.set_raster_xform(origin + delta, size, rot);
-        }
-    }
-    export_inner(&crop, false)
+    export_inner(
+        &crate::layout_export::frame_document(doc, layer, frame_id)?,
+        false,
+        true,
+    )
 }
 
 pub fn export_animated(doc: &Document) -> Result<String, String> {
-    export_inner(doc, true)
+    export_inner(doc, true, true)
 }
 
 fn animate_attribute(
@@ -516,7 +598,176 @@ fn write_animated_shape(
     body.push_str("</g>\n");
 }
 
-fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
+/// A self-contained vector node for faithful non-rectangular HTML artwork.
+pub(crate) fn shape_fragment(shape: &Shape) -> String {
+    let bounds = shape.world_bbox();
+    let mut body = String::new();
+    let mut defs = String::new();
+    write_shape(
+        &mut body,
+        &mut defs,
+        &mut (shape.id as usize),
+        shape,
+        &xf_attr(shape),
+        true,
+    );
+    body = body.replace(
+        &format!("id=\"oma-{}\"", shape.id),
+        &format!("id=\"oma-vector-{}\"", shape.id),
+    );
+    format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\" viewBox=\"{} {} {} {}\" width=\"100%\" height=\"100%\" preserveAspectRatio=\"none\" aria-hidden=\"true\"><defs>{defs}</defs>{body}</svg>",
+        bounds.min.x,
+        bounds.min.y,
+        bounds.width().max(1.0),
+        bounds.height().max(1.0)
+    )
+}
+
+fn write_shape_tree(
+    shapes: &[Shape],
+    body: &mut String,
+    defs: &mut String,
+    grad_id: &mut usize,
+    css: &mut String,
+    motion: &crate::motion::Motion,
+    animate: bool,
+    text_as_paths: bool,
+) {
+    let frames: std::collections::HashSet<_> = shapes
+        .iter()
+        .filter(|s| s.layout.frame)
+        .map(|s| s.id)
+        .collect();
+    let mut children: std::collections::HashMap<Option<u64>, Vec<&Shape>> =
+        std::collections::HashMap::new();
+    for shape in shapes {
+        children
+            .entry(shape.layout.parent.filter(|id| frames.contains(id)))
+            .or_default()
+            .push(shape);
+    }
+    fn visit(
+        parent: Option<u64>,
+        children: &std::collections::HashMap<Option<u64>, Vec<&Shape>>,
+        body: &mut String,
+        defs: &mut String,
+        grad_id: &mut usize,
+        css: &mut String,
+        motion: &crate::motion::Motion,
+        animate: bool,
+        text_as_paths: bool,
+        depth: usize,
+    ) {
+        if depth >= 64 {
+            return;
+        }
+        for shape in children.get(&parent).into_iter().flatten() {
+            if shape.guide {
+                continue;
+            }
+            let mut extra = String::new();
+            if shape.filters.active() {
+                let fid = format!("oma-fx-s{}", shape.id);
+                let r = shape
+                    .world_bbox()
+                    .inflate(crate::filter::svg_pad(&shape.filters));
+                if let Some(filter) = crate::filter::svg_filter(
+                    &fid,
+                    &shape.filters,
+                    [r.min.x, r.min.y, r.width().max(1.0), r.height().max(1.0)],
+                ) {
+                    defs.push_str(&filter);
+                    extra.push_str(&format!(" filter=\"url(#{fid})\""));
+                }
+            }
+            if shape.layout.frame {
+                let animated = animate
+                    .then(|| {
+                        motion.css_keyframes(shape.id, &format!("oma-{}", shape.id), shape.opacity)
+                    })
+                    .flatten();
+                if let Some(keyframes) = &animated {
+                    css.push_str(keyframes);
+                    let center = shape.world_bbox().center();
+                    body.push_str(&format!("<g class=\"oma-a\" style=\"animation-name:oma-{},oma-{}-opacity;transform-origin:{:.4}px {:.4}px\">\n",shape.id,shape.id,center.x,center.y));
+                }
+                body.push_str(&format!(
+                    "<g id=\"oma-frame-{}\" style=\"mix-blend-mode:{};isolation:isolate\" opacity=\"{:.3}\"{}{}{extra}>\n",
+                    shape.id,
+                    shape.blend.css(),
+                    if animated.is_some() {
+                        1.0
+                    } else {
+                        shape.opacity
+                    },
+                    if shape.visible {
+                        ""
+                    } else {
+                        " visibility=\"hidden\""
+                    },
+                    xf_attr(shape)
+                ));
+                let mut background = (*shape).clone();
+                background.rotation = 0.0;
+                background.opacity = 1.0;
+                background.blend = crate::color::Blend::Normal;
+                write_shape(body, defs, grad_id, &background, "", false);
+                if shape.layout.clip {
+                    let clip_id = format!("oma-frame-clip-{}", shape.id);
+                    defs.push_str(&format!("<clipPath id=\"{clip_id}\" clipPathUnits=\"userSpaceOnUse\"><path d=\"{}\"/></clipPath>\n",path_data(&background)));
+                    body.push_str(&format!("<g clip-path=\"url(#{clip_id})\">\n"));
+                }
+                visit(
+                    Some(shape.id),
+                    children,
+                    body,
+                    defs,
+                    grad_id,
+                    css,
+                    motion,
+                    animate,
+                    text_as_paths,
+                    depth + 1,
+                );
+                if shape.layout.clip {
+                    body.push_str("</g>\n");
+                }
+                body.push_str("</g>\n");
+                if animated.is_some() {
+                    body.push_str("</g>\n");
+                }
+            } else if let Some(keyframes) = animate
+                .then(|| {
+                    motion.css_keyframes(shape.id, &format!("oma-{}", shape.id), shape.opacity)
+                })
+                .flatten()
+            {
+                css.push_str(&keyframes);
+                body.push_str(&format!("<g{extra}>\n"));
+                write_animated_shape(body, defs, grad_id, shape, motion);
+                body.push_str("</g>\n");
+            } else {
+                extra.push_str(&xf_attr(shape));
+                write_shape(body, defs, grad_id, shape, &extra, text_as_paths);
+            }
+        }
+    }
+    visit(
+        None,
+        &children,
+        body,
+        defs,
+        grad_id,
+        css,
+        motion,
+        animate,
+        text_as_paths,
+        0,
+    );
+}
+
+fn export_inner(doc: &Document, animate: bool, text_as_paths: bool) -> Result<String, String> {
     doc.validate_hierarchy()?;
     let mut body = String::new();
     let mut layer_outputs = std::collections::HashMap::<u64, String>::new();
@@ -582,57 +833,16 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
         }
         match &layer.kind {
             LayerKind::Vector { shapes } => {
-                for shape in shapes {
-                    if shape.guide {
-                        continue;
-                    }
-                    let keyframes = animate
-                        .then(|| {
-                            motion.css_keyframes(
-                                shape.id,
-                                &format!("oma-{}", shape.id),
-                                shape.opacity,
-                            )
-                        })
-                        .flatten();
-                    let mut extra = String::new();
-                    if shape.filters.active() {
-                        let fid = format!("oma-fx-s{}", shape.id);
-                        let b = shape.world_bbox();
-                        let pad = crate::filter::svg_pad(&shape.filters);
-                        let r = b.inflate(pad);
-                        if let Some(f) = crate::filter::svg_filter(
-                            &fid,
-                            &shape.filters,
-                            [r.min.x, r.min.y, r.width().max(1.0), r.height().max(1.0)],
-                        ) {
-                            defs.push_str(&f);
-                            extra.push_str(&format!(" filter=\"url(#{fid})\""));
-                        }
-                    }
-                    if let Some(keyframes) = keyframes {
-                        css.push_str(&keyframes);
-                        layer_body.push_str(&format!("<g{extra}>\n"));
-                        write_animated_shape(
-                            &mut layer_body,
-                            &mut defs,
-                            &mut grad_id,
-                            shape,
-                            motion,
-                        );
-                        layer_body.push_str("</g>\n");
-                    } else {
-                        extra.push_str(&xf_attr(shape));
-                        write_shape(
-                            &mut layer_body,
-                            &mut defs,
-                            &mut grad_id,
-                            shape,
-                            &extra,
-                            false,
-                        );
-                    }
-                }
+                write_shape_tree(
+                    shapes,
+                    &mut layer_body,
+                    &mut defs,
+                    &mut grad_id,
+                    &mut css,
+                    motion,
+                    animate,
+                    text_as_paths,
+                );
             }
             LayerKind::Raster { pixels, .. } => {
                 if !pixels.is_invisible() && !crate::compositor::is_paper_raster(layer) {
@@ -652,7 +862,7 @@ fn export_inner(doc: &Document, animate: bool) -> Result<String, String> {
             layer.id, xml_escape(&layer.name), if layer.visible { "" } else { " visibility=\"hidden\"" },
             layer.opacity,
             layer.blend.css(),
-            if layer.is_group && !layer.pass_through { "isolate" } else { "auto" }
+            if layer.is_group && layer.pass_through { "auto" } else { "isolate" }
         ));
         // Canvas masks the layer before applying its effects. Keep the mask on
         // an inner group so SVG's filter-before-mask order cannot reverse that.

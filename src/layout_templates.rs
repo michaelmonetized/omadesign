@@ -16,6 +16,11 @@ pub struct LayoutTemplate {
 
 pub const CATALOG: &[LayoutTemplate] = &[
     LayoutTemplate {
+        id: "layout-fieldwork",
+        name: "Fieldwork · responsive prototype",
+        description: "A complete responsive site with components, hover variants and linked screens.",
+    },
+    LayoutTemplate {
         id: "layout-mobile",
         name: "Mobile screen",
         description: "A phone frame with a stacked header, hero image, and action row.",
@@ -47,6 +52,7 @@ pub fn is_layout_template(id: &str) -> bool {
 
 pub fn build(id: &str, width: f32, height: f32, dpi: f32) -> Result<Document, String> {
     match id {
+        "layout-fieldwork" => Ok(crate::layout_demo::build()),
         "layout-mobile" => mobile(width, height, dpi),
         "layout-hero" => hero(width, height, dpi),
         "layout-dashboard" => dashboard(width, height, dpi),
@@ -127,6 +133,7 @@ fn mobile(width: f32, height: f32, dpi: f32) -> Result<Document, String> {
             gap: 16.0,
             padding: [28.0, 20.0, 24.0, 20.0],
             align: StackAlign::Stretch,
+            ..AutoStack::default()
         });
         frame
     };
@@ -177,6 +184,7 @@ fn hero(width: f32, height: f32, dpi: f32) -> Result<Document, String> {
         gap: 32.0,
         padding: [64.0, 64.0, 64.0, 64.0],
         align: StackAlign::Stretch,
+        ..AutoStack::default()
     });
     let page_id = push(&mut doc, page);
     let mut copy = make_frame(Pt::ZERO, Pt::new(w * 0.42, h * 0.7));
@@ -188,6 +196,7 @@ fn hero(width: f32, height: f32, dpi: f32) -> Result<Document, String> {
         gap: 18.0,
         padding: [8.0, 8.0, 8.0, 8.0],
         align: StackAlign::Start,
+        ..AutoStack::default()
     });
     let copy_id = push(&mut doc, copy);
     push(
@@ -236,6 +245,7 @@ fn dashboard(width: f32, height: f32, dpi: f32) -> Result<Document, String> {
         gap: 0.0,
         padding: [0.0; 4],
         align: StackAlign::Stretch,
+        ..AutoStack::default()
     });
     let page_id = push(&mut doc, page);
     let mut side = make_frame(Pt::ZERO, Pt::new(220.0, h));
@@ -248,6 +258,7 @@ fn dashboard(width: f32, height: f32, dpi: f32) -> Result<Document, String> {
         gap: 12.0,
         padding: [24.0, 18.0, 24.0, 18.0],
         align: StackAlign::Stretch,
+        ..AutoStack::default()
     });
     let side_id = push(&mut doc, side);
     push(
@@ -266,6 +277,7 @@ fn dashboard(width: f32, height: f32, dpi: f32) -> Result<Document, String> {
         gap: 20.0,
         padding: [32.0, 32.0, 32.0, 32.0],
         align: StackAlign::Stretch,
+        ..AutoStack::default()
     });
     let main_id = push(&mut doc, main);
     push(
@@ -280,6 +292,7 @@ fn dashboard(width: f32, height: f32, dpi: f32) -> Result<Document, String> {
         gap: 16.0,
         padding: [0.0; 4],
         align: StackAlign::Stretch,
+        ..AutoStack::default()
     });
     let row_id = push(&mut doc, row);
     for (title, value) in [("Frames", "24"), ("Comments", "7"), ("Published", "3")] {
@@ -293,6 +306,7 @@ fn dashboard(width: f32, height: f32, dpi: f32) -> Result<Document, String> {
             gap: 6.0,
             padding: [16.0, 16.0, 16.0, 16.0],
             align: StackAlign::Start,
+            ..AutoStack::default()
         });
         let metric_id = push(&mut doc, metric);
         push(&mut doc, label(Pt::ZERO, title, 13.0, ink, Some(metric_id)));
@@ -324,6 +338,7 @@ fn cards(width: f32, height: f32, dpi: f32) -> Result<Document, String> {
         gap: 16.0,
         padding: [24.0, 24.0, 24.0, 24.0],
         align: StackAlign::Stretch,
+        ..AutoStack::default()
     });
     let page_id = push(&mut doc, page);
     push(
@@ -341,6 +356,7 @@ fn cards(width: f32, height: f32, dpi: f32) -> Result<Document, String> {
             gap: 4.0,
             padding: [18.0, 18.0, 18.0, 18.0],
             align: StackAlign::Start,
+            ..AutoStack::default()
         });
         let id = push(&mut doc, card_shape);
         push(&mut doc, label(Pt::ZERO, title, 18.0, ink, Some(id)));

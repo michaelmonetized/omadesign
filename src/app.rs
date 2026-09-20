@@ -7,13 +7,18 @@ mod cloud;
 pub mod deform;
 mod file_io;
 mod guides;
+mod hierarchy_edit;
+pub use hierarchy_edit::TreePlacement;
 mod key_hints;
 mod layer_groups;
 mod layout;
+mod layout_components;
+mod layout_edit;
 pub mod libraries;
 mod masking;
 mod motion_presets;
 mod photo_session;
+mod placement;
 mod recovery;
 pub(crate) mod selection;
 mod shortcuts;
@@ -358,6 +363,7 @@ pub struct Studio {
     pub selected_key: Option<(u64, Prop, usize)>,
     pub key_drag: Option<(u64, Prop, usize)>,
     pub pending_place: Option<PendingPlace>,
+    pub pending_place_frame: Option<(usize, u64)>,
     pub trace_opts: crate::trace::TraceOpts,
     tabs: Vec<TabState>,
     recovery_job: Option<RecoveryJob>,
@@ -539,6 +545,7 @@ impl Studio {
             selected_key: None,
             key_drag: None,
             pending_place: None,
+            pending_place_frame: None,
             trace_opts: crate::trace::TraceOpts::default(),
             tabs: vec![],
             recovery_job: None,
@@ -877,7 +884,7 @@ impl Studio {
                 rot_after: -shape.rotation,
             });
             let mut style = shape.style.clone();
-            if let Fill::Linear { from, to, .. } = &mut style.fill {
+            if let Some((from, to)) = style.fill.gradient_endpoints_mut() {
                 let source_bounds = shape.geom.bbox();
                 let target_bounds = after.bbox();
                 for endpoint in [from, to] {
@@ -1253,7 +1260,13 @@ impl Studio {
         self.end_pixel_stroke(false);
         self.end_deform(false);
         self.apply_with_layer_selection(&cmd);
-        self.history.push(cmd);
+        let mut changes = vec![cmd];
+        changes.extend(self.reconcile_layout());
+        self.history.push(if changes.len() == 1 {
+            changes.remove(0)
+        } else {
+            Cmd::Batch(changes)
+        });
         self.dirty = true;
         self.mark();
         self.sanitize();
@@ -1488,7 +1501,15 @@ impl Studio {
         let mut by_layer: std::collections::BTreeMap<usize, Vec<Shape>> =
             std::collections::BTreeMap::new();
         let mut rasters = vec![];
+        let mut delete_ids = self.selection.clone();
         for (li, id) in self.selection.clone() {
+            for child in crate::layout::descendants(&self.doc, li, id) {
+                if !delete_ids.contains(&(li, child)) {
+                    delete_ids.push((li, child));
+                }
+            }
+        }
+        for (li, id) in delete_ids {
             if id == RASTER_ID {
                 rasters.push(li);
             } else if let Some(s) = self.doc.find_shape(li, id).cloned() {
@@ -1496,7 +1517,27 @@ impl Studio {
             }
         }
         for (layer, shapes) in by_layer {
-            self.commit(Cmd::RemoveShapes { layer, shapes });
+            let before = self.doc.layers[layer].kind.shapes().unwrap().to_vec();
+            let removed: HashSet<_> = shapes.iter().map(|s| s.id).collect();
+            let after = before
+                .iter()
+                .filter(|s| !removed.contains(&s.id))
+                .cloned()
+                .collect();
+            let motion_before = self.doc.motion.clone();
+            let mut motion_after = motion_before.clone();
+            motion_after.drop_shapes(&removed.into_iter().collect::<Vec<_>>());
+            self.commit(Cmd::Batch(vec![
+                Cmd::SetVectorShapes {
+                    layer,
+                    before,
+                    after,
+                },
+                Cmd::SetMotion {
+                    before: motion_before,
+                    after: motion_after,
+                },
+            ]));
         }
         rasters.sort_by(|a, b| b.cmp(a));
         for li in rasters {
@@ -1517,7 +1558,32 @@ impl Studio {
         let mut selected = Vec::new();
         let mut commands = Vec::new();
         let mut new_layers = 0;
+        let mut ids = self.selection.clone();
         for (li, id) in self.selection.clone() {
+            for child in crate::layout::descendants(&self.doc, li, id) {
+                if !ids.contains(&(li, child)) {
+                    ids.push((li, child));
+                }
+            }
+        }
+        // Keep original painter order and remap the complete frame subtree.
+        ids.sort_by_key(|(li, id)| {
+            (
+                *li,
+                self.doc
+                    .layers
+                    .get(*li)
+                    .and_then(|l| l.kind.shapes())
+                    .and_then(|s| s.iter().position(|s| s.id == *id))
+                    .unwrap_or(0),
+            )
+        });
+        let remap: HashMap<_, _> = ids
+            .iter()
+            .filter(|(_, id)| *id != RASTER_ID)
+            .map(|(_, id)| (*id, crate::document::next_id()))
+            .collect();
+        for (li, id) in ids {
             if id == RASTER_ID {
                 if let Some(mut layer) = self.doc.layers.get(li).cloned() {
                     layer.id = crate::document::next_id();
@@ -1532,9 +1598,15 @@ impl Studio {
                     selected.push((index, RASTER_ID));
                 }
             } else if let Some(mut shape) = self.doc.find_shape(li, id).cloned() {
-                shape.id = crate::document::next_id();
+                shape.id = remap[&id];
+                crate::layout_components::remap_duplicate(&mut shape, &remap);
+                if let Some(parent) = shape.layout.parent {
+                    shape.layout.parent = Some(*remap.get(&parent).unwrap_or(&parent));
+                }
                 shape.geom.translate(delta);
-                selected.push((li, shape.id));
+                if self.selection.contains(&(li, id)) {
+                    selected.push((li, shape.id));
+                }
                 commands.push(Cmd::AddShape { layer: li, shape });
             }
         }
@@ -1664,20 +1736,12 @@ impl Studio {
             return;
         }
         let d = Pt::new(dx, dy);
-        for (li, id) in self.selection.clone() {
-            if let Some(s) = self.doc.find_shape(li, id) {
-                let mut after = s.geom.clone();
-                after.translate(d);
-                self.commit(Cmd::SetGeom {
-                    layer: li,
-                    id,
-                    before: s.geom.clone(),
-                    after,
-                    rot_before: s.rotation,
-                    rot_after: s.rotation,
-                });
-            }
-        }
+        let deltas: Vec<_> = self
+            .selection
+            .iter()
+            .map(|(li, id)| (*li, *id, d))
+            .collect();
+        self.apply_deltas(&deltas);
     }
 
     pub fn type_defaults(&self) -> TypeRun {
@@ -1687,6 +1751,8 @@ impl Studio {
             px: self.text_px,
             tracking: self.text_tracking,
             leading: self.text_leading,
+            wrap_width: None,
+            align: crate::geom::TextAlign::Start,
             font: self.text_font.clone(),
             kern: self.text_kern,
             liga: self.text_liga,
@@ -1718,11 +1784,21 @@ impl Studio {
         run.content = "Type".into();
         let mut geom = Geom::Text(run);
         crate::text::fill_contours(&mut geom);
-        let shape = Shape::new(geom.clone(), self.style.clone());
+        let mut shape = Shape::new(geom.clone(), self.style.clone());
+        if self.persona == Persona::Layout {
+            shape.layout.parent = crate::layout::containing_frame(&self.doc, li, at);
+            shape.layout.width = crate::layout::Sizing::Hug;
+            shape.layout.height = crate::layout::Sizing::Hug;
+        }
         let id = shape.id;
         self.commit(Cmd::AddShape { layer: li, shape });
         self.selected_layer = None;
         self.selection = vec![(li, id)];
+        let geom = self
+            .doc
+            .find_shape(li, id)
+            .map(|s| s.geom.clone())
+            .unwrap_or(geom);
         let n = 4; // "Type"
         self.type_edit = Some(TypeEdit {
             layer: li,
@@ -1795,14 +1871,16 @@ impl Studio {
         let after = s.geom.clone();
         let rot = s.rotation;
         if after != edit.before {
-            self.history.push(Cmd::SetGeom {
+            let mut changes = vec![Cmd::SetGeom {
                 layer: edit.layer,
                 id: edit.id,
                 before: edit.before,
                 after,
                 rot_before: rot,
                 rot_after: rot,
-            });
+            }];
+            changes.extend(self.reconcile_layout());
+            self.history.push(Cmd::Batch(changes));
             self.dirty = true;
             self.mark();
         }
@@ -2076,17 +2154,20 @@ impl Studio {
         } else {
             Shape::new(geom, self.style.clone())
         };
-        let parent = self
-            .selected_frame()
-            .filter(|(layer, _)| *layer == li)
-            .map(|(_, id)| id)
-            .or_else(|| {
-                if matches!(kind, CreateKind::Frame) {
-                    None
-                } else {
-                    crate::layout::containing_frame(&self.doc, li, min)
-                }
-            });
+        let parent = if self.persona == Persona::Layout {
+            crate::layout::containing_frame(&self.doc, li, min)
+        } else {
+            self.selected_frame()
+                .filter(|(layer, _)| *layer == li)
+                .map(|(_, id)| id)
+                .or_else(|| {
+                    if matches!(kind, CreateKind::Frame) {
+                        None
+                    } else {
+                        crate::layout::containing_frame(&self.doc, li, min)
+                    }
+                })
+        };
         if let Some(parent) = parent {
             shape.layout.parent = Some(parent);
         }
@@ -2296,7 +2377,11 @@ impl Studio {
                 style.stroke = Some(Stroke::default());
             }
         }
-        let shape = Shape::new(Geom::Path { anchors, closed }, style);
+        let parent = (self.persona == Persona::Layout)
+            .then(|| crate::layout::containing_frame(&self.doc, li, anchors[0].pt))
+            .flatten();
+        let mut shape = Shape::new(Geom::Path { anchors, closed }, style);
+        shape.layout.parent = parent;
         let id = shape.id;
         self.commit(Cmd::AddShape { layer: li, shape });
         self.selected_layer = None;
@@ -2472,7 +2557,10 @@ impl Studio {
             return;
         };
         let anchors: Vec<Anchor> = pts.into_iter().map(Anchor::corner).collect();
-        let shape = Shape::new(
+        let parent = (self.persona == Persona::Layout)
+            .then(|| crate::layout::containing_frame(&self.doc, li, anchors[0].pt))
+            .flatten();
+        let mut shape = Shape::new(
             Geom::Path {
                 anchors,
                 closed: false,
@@ -2482,6 +2570,7 @@ impl Studio {
                 stroke: self.style.stroke.clone().or(Some(Stroke::default())),
             },
         );
+        shape.layout.parent = parent;
         let id = shape.id;
         self.commit(Cmd::AddShape { layer: li, shape });
         self.selected_layer = None;
@@ -2523,6 +2612,7 @@ impl Studio {
         let mut combined = shapes[0].clone();
         combined.id = crate::document::next_id();
         combined.style.fill = Self::compound_fill(&shapes[0], &geom, 0.0);
+        combined.style.stroke = Self::compound_stroke(&shapes[0], &geom, 0.0);
         combined.geom = geom;
         combined.rotation = 0.0;
         combined.corners = [0.0; 4];
@@ -2569,7 +2659,7 @@ impl Studio {
     // are stored relative to those bounds, so carry their world positions across.
     fn compound_fill(source: &Shape, geometry: &Geom, rotation: f32) -> Fill {
         let mut fill = source.style.fill.clone();
-        if let Fill::Linear { from, to, .. } = &mut fill {
+        if let Some((from, to)) = fill.gradient_endpoints_mut() {
             let before = source.geom.bbox();
             let after = geometry.bbox();
             for endpoint in [from, to] {
@@ -2584,6 +2674,16 @@ impl Studio {
             }
         }
         fill
+    }
+
+    fn compound_stroke(source: &Shape, geometry: &Geom, rotation: f32) -> Option<Stroke> {
+        let mut stroke = source.style.stroke.clone()?;
+        if let Some(gradient) = &stroke.gradient {
+            let mut painted = source.clone();
+            painted.style.fill = Fill::Gradient(gradient.clone());
+            stroke.gradient = Self::compound_fill(&painted, geometry, rotation).gradient();
+        }
+        Some(stroke)
     }
 
     pub fn release_compound(&mut self) {
@@ -2633,6 +2733,7 @@ impl Studio {
             part.id = crate::document::next_id();
             part.name = format!("{} · part {}", shape.name, index + 1);
             part.style.fill = Self::compound_fill(&shape, &geometry, part.rotation);
+            part.style.stroke = Self::compound_stroke(&shape, &geometry, part.rotation);
             part.geom = geometry;
             new_ids.push((li, part.id));
             commands.push(Cmd::AddShape {
@@ -2670,7 +2771,16 @@ impl Studio {
             return;
         }
         let mut items = Vec::new();
-        for (li, id, d) in deltas {
+        let mut deltas = deltas.to_vec();
+        let mut included: HashSet<_> = deltas.iter().map(|(li, id, _)| (*li, *id)).collect();
+        for (li, id, d) in deltas.clone() {
+            for child in crate::layout::descendants(&self.doc, li, id) {
+                if included.insert((li, child)) {
+                    deltas.push((li, child, d));
+                }
+            }
+        }
+        for (li, id, d) in &deltas {
             if let Some(s) = self.doc.find_shape(*li, *id) {
                 let before = s.geom.clone();
                 let mut after = before.clone();
@@ -2719,42 +2829,41 @@ impl Studio {
     pub fn swap_fill_stroke(&mut self) {
         let fill = self.style.fill.clone();
         let stroke = self.style.stroke.clone();
-        match (fill, stroke) {
-            (Fill::Solid(f), Some(mut st)) => {
-                let sc = st.color;
-                st.color = f;
-                self.style.fill = Fill::Solid(sc);
-                self.style.stroke = Some(st);
-            }
-            (Fill::None, Some(st)) => {
-                self.style.fill = Fill::Solid(st.color);
-                self.style.stroke = None;
-            }
-            (Fill::Solid(f), None) => {
-                let st = crate::document::Stroke {
-                    color: f,
-                    ..Default::default()
-                };
-                self.style.fill = Fill::None;
-                self.style.stroke = Some(st);
-            }
-            (Fill::Linear { c0, .. } | Fill::Radial { c0, .. }, Some(mut st)) => {
-                let sc = st.color;
-                st.color = c0;
-                self.style.fill = Fill::Solid(sc);
-                self.style.stroke = Some(st);
-            }
-            _ => return,
+        if fill.is_none() && stroke.is_none() {
+            return;
         }
-        for (li, id) in self.selection.clone() {
-            if let Some(s) = self.doc.find_shape(li, id) {
-                self.commit(Cmd::SetStyle {
+        self.style.fill = stroke
+            .as_ref()
+            .map(|s| {
+                s.gradient
+                    .clone()
+                    .map(Fill::Gradient)
+                    .unwrap_or(Fill::Solid(s.color))
+            })
+            .unwrap_or(Fill::None);
+        self.style.stroke = if fill.is_none() {
+            None
+        } else {
+            let mut st = stroke.unwrap_or_default();
+            st.color = fill.clone().solid_or(self.brush.color);
+            st.gradient = fill.gradient();
+            Some(st)
+        };
+        let commands = self
+            .selection
+            .iter()
+            .filter_map(|&(li, id)| {
+                let s = self.doc.find_shape(li, id)?;
+                (s.style != self.style).then(|| Cmd::SetStyle {
                     layer: li,
                     id,
                     before: s.style.clone(),
                     after: self.style.clone(),
-                });
-            }
+                })
+            })
+            .collect::<Vec<_>>();
+        if !commands.is_empty() {
+            self.commit(Cmd::Batch(commands));
         }
         if let Fill::Solid(c) = self.style.fill {
             self.push_recent(c);
@@ -2904,7 +3013,15 @@ impl Studio {
         } else {
             self.push_tab(tab);
         }
-        self.persona = Persona::Design;
+        self.persona = if self.doc.layers.iter().any(|l| {
+            l.kind
+                .shapes()
+                .is_some_and(|s| s.iter().any(|s| s.layout.frame))
+        }) {
+            Persona::Layout
+        } else {
+            Persona::Design
+        };
         self.tool = Tool::Select;
         if let Some(p) = path {
             self.remember_path(&p);
@@ -3195,6 +3312,10 @@ impl Studio {
     }
 
     pub fn cancel_place(&mut self) {
+        self.pending_place_frame = None;
+        if matches!(self.op, Some(Op::Place { .. })) {
+            self.op = None;
+        }
         if self.pending_place.take().is_some() {
             self.status = "place cancelled".into();
         }
@@ -3203,6 +3324,20 @@ impl Studio {
     pub fn pending_preview_rect(&self, at: Pt) -> Option<Bounds> {
         let pending = self.pending_place.as_ref()?;
         let (sw, sh) = pending.native_size();
+        if let Some(frame) = self.pending_place_frame.or_else(|| self.asset_frame_at(at))
+            && let Ok(bounds) = self.asset_frame_bounds(frame)
+        {
+            let (w, h) = fit_place_size(sw, sh, bounds.width() * 0.8, bounds.height() * 0.8);
+            let at = self.asset_local_point(frame, at);
+            let center = Pt::new(
+                at.x.clamp(bounds.min.x + w * 0.5, bounds.max.x - w * 0.5),
+                at.y.clamp(bounds.min.y + h * 0.5, bounds.max.y - h * 0.5),
+            );
+            return Some(Bounds::from_min_size(
+                self.asset_world_point(frame, center) - Pt::new(w, h) * 0.5,
+                Pt::new(w, h),
+            ));
+        }
         let (w, h) = fit_place_size(sw, sh, self.doc.width * 0.92, self.doc.height * 0.92);
         Some(place_rect_centered(
             at,
@@ -3214,42 +3349,57 @@ impl Studio {
     }
 
     pub fn commit_place_at(&mut self, at: Pt) {
-        let Some(pending) = self.pending_place.as_ref() else {
+        let target = self.pending_place_frame.or_else(|| self.asset_frame_at(at));
+        let Some(dest) = self.pending_preview_rect(at) else {
             return;
         };
-        let (sw, sh) = pending.native_size();
-        let (w, h) = fit_place_size(sw, sh, self.doc.width * 0.92, self.doc.height * 0.92);
-        let dest = place_rect_centered(at, w, h, self.doc.width, self.doc.height);
-        self.commit_place_dest(dest);
+        self.commit_place_dest(dest, target);
     }
 
     pub fn commit_place_rect(&mut self, start: Pt, cur: Pt) {
-        let Some(pending) = self.pending_place.as_ref() else {
+        if self.pending_place.is_none() {
             return;
-        };
-        let (sw, sh) = pending.native_size();
-        let min = Pt::new(start.x.min(cur.x), start.y.min(cur.y));
-        let max = Pt::new(start.x.max(cur.x), start.y.max(cur.y));
-        let bw = (max.x - min.x).abs();
-        let bh = (max.y - min.y).abs();
-        if bw < 8.0 && bh < 8.0 {
+        }
+        if (cur.x - start.x).abs() < 8.0 && (cur.y - start.y).abs() < 8.0 {
             self.commit_place_at(start);
             return;
         }
-        let s = (bw / sw.max(1.0)).min(bh / sh.max(1.0)).max(0.01);
-        let w = sw * s;
-        let h = sh * s;
-        let dest = Bounds::from_min_size(
-            Pt::new(min.x + (bw - w) * 0.5, min.y + (bh - h) * 0.5),
-            Pt::new(w, h),
-        );
-        self.commit_place_dest(dest);
+        let Some(dest) = self.pending_drag_rect(start, cur) else {
+            return;
+        };
+        let target = self
+            .pending_place_frame
+            .or_else(|| self.asset_frame_at(dest.center()));
+        self.commit_place_dest(dest, target);
     }
 
-    fn commit_place_dest(&mut self, dest: Bounds) {
+    fn commit_place_dest(&mut self, dest: Bounds, target: Option<(usize, u64)>) {
         let Some(pending) = self.pending_place.take() else {
             return;
         };
+        self.op = None;
+        self.pending_place_frame = None;
+        if let Some(target) = target {
+            let imported = match &pending {
+                PendingPlace::Raster { name, image } => crate::import::Imported::Raster {
+                    name: name.clone(),
+                    image: image.clone(),
+                },
+                PendingPlace::Svg { name, svg } => crate::import::Imported::Svg {
+                    name: name.clone(),
+                    svg: svg.clone(),
+                },
+                PendingPlace::Document(doc) => crate::import::Imported::Document(doc.clone()),
+            };
+            if let Err(error) =
+                self.place_imported_in_frame(imported, dest.center(), target, Some(dest))
+            {
+                self.status = format!("{}: {error}", pending.name());
+                self.pending_place = Some(pending);
+                self.pending_place_frame = Some(target);
+            }
+            return;
+        }
         match pending {
             PendingPlace::Raster { name, image } => self.place_raster(name, image, dest),
             PendingPlace::Svg { name, svg } => self.place_svg(name, &svg, dest),
@@ -3335,6 +3485,7 @@ impl Studio {
             let stroke = match el.stroke {
                 crate::shape_browser::SvgPaint::None => None,
                 crate::shape_browser::SvgPaint::Solid(c) => Some(Stroke {
+                    gradient: None,
                     color: c,
                     width: el.stroke_width.max(0.25),
                     cap: Self::cap_from_svg(el.stroke_cap.as_deref()),
@@ -3343,6 +3494,7 @@ impl Studio {
                 }),
                 crate::shape_browser::SvgPaint::Unspecified if el.stroke_width > 0.05 => {
                     Some(Stroke {
+                        gradient: None,
                         color: Rgba::rgb(0, 0, 0),
                         width: el.stroke_width,
                         cap: Self::cap_from_svg(el.stroke_cap.as_deref()),
@@ -3467,23 +3619,30 @@ impl Studio {
         if let Fill::Solid(c) = &fill {
             self.push_recent(*c);
         }
-        for (li, id) in self.selection.clone() {
-            if let Some(s) = self.doc.find_shape(li, id) {
+        let commands = self
+            .selection
+            .iter()
+            .filter_map(|&(li, id)| {
+                let s = self.doc.find_shape(li, id)?;
                 let mut after = s.style.clone();
                 after.fill = fill.clone();
-                self.commit(Cmd::SetStyle {
+                (after != s.style).then(|| Cmd::SetStyle {
                     layer: li,
                     id,
                     before: s.style.clone(),
                     after,
-                });
-            }
+                })
+            })
+            .collect::<Vec<_>>();
+        if !commands.is_empty() {
+            self.commit(Cmd::Batch(commands));
         }
     }
 
     pub fn set_stroke_color(&mut self, c: Rgba) {
         let mut st = self.style.stroke.clone().unwrap_or_default();
         st.color = c;
+        st.gradient = None;
         self.style.stroke = Some(st.clone());
         for (li, id) in self.selection.clone() {
             if let Some(s) = self.doc.find_shape(li, id) {

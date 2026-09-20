@@ -72,6 +72,7 @@ impl Join {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Fill {
+    Gradient(crate::gradient::Gradient),
     None,
     Solid(Rgba),
     Linear {
@@ -91,9 +92,32 @@ impl Fill {
         matches!(self, Fill::None)
     }
 
+    pub fn gradient_endpoints_mut(&mut self) -> Option<(&mut [f32; 2], &mut [f32; 2])> {
+        match self {
+            Self::Gradient(g) => Some((&mut g.from, &mut g.to)),
+            Self::Linear { from, to, .. } => Some((from, to)),
+            _ => None,
+        }
+    }
+    pub fn gradient(&self) -> Option<crate::gradient::Gradient> {
+        use crate::gradient::{Gradient, GradientKind};
+        match self {
+            Self::Gradient(g) => Some(g.clone()),
+            Self::Linear { from, to, c0, c1 } => {
+                let mut g = Gradient::new(GradientKind::Linear, *c0, *c1);
+                g.from = *from;
+                g.to = *to;
+                Some(g)
+            }
+            Self::Radial { c0, c1 } => Some(Gradient::new(GradientKind::Radial, *c0, *c1)),
+            _ => None,
+        }
+    }
+
     pub fn solid_or(self, fallback: Rgba) -> Rgba {
         match self {
             Fill::Solid(c) => c,
+            Fill::Gradient(g) => g.sample(0.),
             Fill::Linear { c0, .. } | Fill::Radial { c0, .. } => c0,
             Fill::None => fallback,
         }
@@ -102,6 +126,8 @@ impl Fill {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Stroke {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gradient: Option<crate::gradient::Gradient>,
     pub color: Rgba,
     pub width: f32,
     pub cap: Cap,
@@ -112,6 +138,7 @@ pub struct Stroke {
 impl Default for Stroke {
     fn default() -> Self {
         Self {
+            gradient: None,
             color: Rgba::rgb(0x1B, 0x24, 0x33),
             width: 2.0,
             cap: Cap::Round,
@@ -125,6 +152,19 @@ impl Default for Stroke {
 pub struct Style {
     pub fill: Fill,
     pub stroke: Option<Stroke>,
+}
+
+impl Style {
+    pub fn gradient_endpoints_mut(&mut self) -> Vec<(&mut [f32; 2], &mut [f32; 2])> {
+        let mut result = Vec::new();
+        if let Some(endpoints) = self.fill.gradient_endpoints_mut() {
+            result.push(endpoints);
+        }
+        if let Some(gradient) = self.stroke.as_mut().and_then(|s| s.gradient.as_mut()) {
+            result.push((&mut gradient.from, &mut gradient.to));
+        }
+        result
+    }
 }
 
 impl Default for Style {
@@ -148,6 +188,8 @@ pub struct Shape {
     pub style: Style,
     pub rotation: f32,
     pub opacity: f32,
+    #[serde(default)]
+    pub blend: Blend,
     #[serde(default = "default_true")]
     pub visible: bool,
     #[serde(default)]
@@ -184,6 +226,7 @@ impl PartialEq for Shape {
             && self.style == other.style
             && self.rotation == other.rotation
             && self.opacity == other.opacity
+            && self.blend == other.blend
             && self.visible == other.visible
             && self.locked == other.locked
             && self.guide == other.guide
@@ -203,6 +246,7 @@ impl Shape {
             style,
             rotation: 0.0,
             opacity: 1.0,
+            blend: Blend::Normal,
             visible: true,
             locked: false,
             guide: false,
@@ -1027,9 +1071,39 @@ pub struct Document {
     pub cloud: Option<CloudLink>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub comments: Vec<CommentPin>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub layout_tokens: Vec<crate::layout_tokens::DesignToken>,
 }
 
 impl Document {
+    /// Editing layout needs vector state only. Preserve layer indices without
+    /// copying image buffers or mask data into temporary solver documents.
+    pub fn layout_snapshot(&self) -> Self {
+        let mut copy = Self::new(&self.name, 1.0, 1.0, self.dpi);
+        copy.width = self.width;
+        copy.height = self.height;
+        copy.artboards = self.artboards.clone();
+        copy.layout_tokens = self.layout_tokens.clone();
+        copy.layers = self
+            .layers
+            .iter()
+            .map(|layer| {
+                let mut out = Layer::vector(&layer.name);
+                out.id = layer.id;
+                out.parent = layer.parent;
+                out.is_group = layer.is_group;
+                out.visible = layer.visible;
+                out.locked = layer.locked;
+                out.opacity = layer.opacity;
+                out.blend = layer.blend;
+                if let Some(shapes) = layer.kind.shapes() {
+                    out.kind.shapes_mut().unwrap().extend_from_slice(shapes);
+                }
+                out
+            })
+            .collect();
+        copy
+    }
     /// Ancestors are bounded even for malformed native documents.
     pub fn layer_ancestors(&self, index: usize) -> Vec<usize> {
         let mut result = Vec::new();
@@ -1091,7 +1165,8 @@ impl Document {
                 parent = target.parent;
             }
         }
-        Ok(())
+        crate::layout::validate_hierarchy(self)?;
+        crate::layout_tokens::validate_tokens(self)
     }
 
     pub fn new(name: impl Into<String>, width: f32, height: f32, dpi: f32) -> Self {
@@ -1137,6 +1212,7 @@ impl Document {
             motion: crate::motion::Motion::default(),
             cloud: None,
             comments: vec![],
+            layout_tokens: vec![],
         };
         // Fill background white when not transparent
         if !transparent && let Some(px) = doc.layers[0].kind.pixels_mut() {
@@ -1257,19 +1333,70 @@ impl Document {
         self.layers.get_mut(layer)?.find_mut(id)
     }
 
+    /// Convert a pointer through the ancestor frames and reject clipped content.
+    pub fn layout_hit_point(&self, layer: usize, id: u64, mut point: Pt) -> Option<Pt> {
+        let mut ancestors = Vec::new();
+        let mut parent = self.find_shape(layer, id)?.layout.parent;
+        while let Some(id) = parent {
+            if ancestors.contains(&id) || ancestors.len() >= 64 {
+                return None;
+            }
+            ancestors.push(id);
+            parent = self.find_shape(layer, id)?.layout.parent;
+        }
+        for id in ancestors.into_iter().rev() {
+            let frame = self.find_shape(layer, id)?;
+            if !frame.visible || frame.locked || (frame.layout.clip && !frame.contains_world(point))
+            {
+                return None;
+            }
+            point = frame.local_point(point);
+        }
+        Some(point)
+    }
+
+    fn layout_paint_order(&self, layer: usize) -> Vec<usize> {
+        let Some(shapes) = self.layers.get(layer).and_then(|l| l.kind.shapes()) else {
+            return Vec::new();
+        };
+        let mut children: std::collections::HashMap<Option<u64>, Vec<usize>> =
+            std::collections::HashMap::new();
+        for (index, s) in shapes.iter().enumerate() {
+            children.entry(s.layout.parent).or_default().push(index);
+        }
+        let mut result = Vec::with_capacity(shapes.len());
+        let mut todo = children.get(&None).cloned().unwrap_or_default();
+        todo.reverse();
+        let mut seen = std::collections::HashSet::new();
+        while let Some(index) = todo.pop() {
+            if !seen.insert(index) {
+                continue;
+            }
+            result.push(index);
+            if let Some(kids) = children.get(&Some(shapes[index].id)) {
+                todo.extend(kids.iter().rev());
+            }
+        }
+        result
+    }
+
     pub fn hit_test(&self, p: Pt, stroke_slack: f32) -> Option<(usize, u64)> {
         for (li, layer) in self.layers.iter().enumerate().rev() {
             if !self.layer_editable(li) {
                 continue;
             }
             if let Some(shapes) = layer.kind.shapes() {
-                for shape in shapes.iter().rev() {
+                for index in self.layout_paint_order(li).into_iter().rev() {
+                    let shape = &shapes[index];
                     if !shape.visible || shape.locked || (shape.guide && !self.ruler.guides_visible)
                     {
                         continue;
                     }
-                    if (!shape.guide && shape.contains_world(p))
-                        || shape.dist_world(p) <= stroke_slack
+                    let Some(point) = self.layout_hit_point(li, shape.id, p) else {
+                        continue;
+                    };
+                    if (!shape.guide && shape.contains_world(point))
+                        || shape.dist_world(point) <= stroke_slack
                     {
                         return Some((li, shape.id));
                     }
@@ -1325,6 +1452,9 @@ impl Document {
         for pin in &self.comments {
             max = max.max(pin.id);
         }
+        for token in &self.layout_tokens {
+            max = max.max(token.id);
+        }
         bump_id(max);
         self.migrate_artboards();
     }
@@ -1332,6 +1462,17 @@ impl Document {
 
 #[derive(Clone, Debug)]
 pub enum Cmd {
+    SetBlend {
+        layer: usize,
+        id: u64,
+        before: Blend,
+        after: Blend,
+    },
+    SetLayerParent {
+        index: usize,
+        before: Option<u64>,
+        after: Option<u64>,
+    },
     SetImportNotes {
         before: Vec<String>,
         after: Vec<String>,
@@ -1484,6 +1625,15 @@ pub enum Cmd {
         id: u64,
         before: FrameLayout,
         after: FrameLayout,
+    },
+    SetVectorShapes {
+        layer: usize,
+        before: Vec<Shape>,
+        after: Vec<Shape>,
+    },
+    SetLayoutTokens {
+        before: Vec<crate::layout_tokens::DesignToken>,
+        after: Vec<crate::layout_tokens::DesignToken>,
     },
     SetCloud {
         before: Option<CloudLink>,
@@ -1720,6 +1870,26 @@ fn coalesce(prev: &mut Cmd, next: &Cmd) -> bool {
 
 fn invert_cmd(cmd: Cmd) -> Cmd {
     match cmd {
+        Cmd::SetBlend {
+            layer,
+            id,
+            before,
+            after,
+        } => Cmd::SetBlend {
+            layer,
+            id,
+            before: after,
+            after: before,
+        },
+        Cmd::SetLayerParent {
+            index,
+            before,
+            after,
+        } => Cmd::SetLayerParent {
+            index,
+            before: after,
+            after: before,
+        },
         Cmd::SetImportNotes { before, after } => Cmd::SetImportNotes {
             before: after,
             after: before,
@@ -1931,6 +2101,19 @@ fn invert_cmd(cmd: Cmd) -> Cmd {
             before: after,
             after: before,
         },
+        Cmd::SetLayoutTokens { before, after } => Cmd::SetLayoutTokens {
+            before: after,
+            after: before,
+        },
+        Cmd::SetVectorShapes {
+            layer,
+            before,
+            after,
+        } => Cmd::SetVectorShapes {
+            layer,
+            before: after,
+            after: before,
+        },
         Cmd::SetCloud { before, after } => Cmd::SetCloud {
             before: after,
             after: before,
@@ -1944,6 +2127,18 @@ fn invert_cmd(cmd: Cmd) -> Cmd {
 
 pub fn apply(doc: &mut Document, cmd: &Cmd) {
     match cmd {
+        Cmd::SetBlend {
+            layer, id, after, ..
+        } => {
+            if let Some(shape) = doc.find_shape_mut(*layer, *id) {
+                shape.blend = *after;
+            }
+        }
+        Cmd::SetLayerParent { index, after, .. } => {
+            if let Some(layer) = doc.layers.get_mut(*index) {
+                layer.parent = *after;
+            }
+        }
         Cmd::SetImportNotes { after, .. } => doc.import_notes = after.clone(),
         Cmd::SetGroupPassThrough { index, after, .. } => {
             if let Some(layer) = doc.layers.get_mut(*index) {
@@ -2141,6 +2336,12 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
         } => {
             if let Some(s) = doc.find_shape_mut(*layer, *id) {
                 s.layout = after.clone();
+            }
+        }
+        Cmd::SetLayoutTokens { after, .. } => doc.layout_tokens.clone_from(after),
+        Cmd::SetVectorShapes { layer, after, .. } => {
+            if let Some(shapes) = doc.layers.get_mut(*layer).and_then(|l| l.kind.shapes_mut()) {
+                shapes.clone_from(after);
             }
         }
         Cmd::SetCloud { after, .. } => doc.cloud = after.clone(),

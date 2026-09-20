@@ -16,6 +16,7 @@ pub(super) struct ImportJob {
     path: PathBuf,
     mode: ImportMode,
     owner: String,
+    frame: Option<(usize, u64)>,
 }
 enum Completed {
     Imported(crate::import::Imported),
@@ -41,6 +42,20 @@ impl Studio {
             self.status = "Wait for the current files to finish opening".into();
             return;
         }
+        let frame = match mode {
+            ImportMode::Drop(Some(at)) => self
+                .asset_frame_at(at)
+                .or_else(|| self.asset_frame_target()),
+            ImportMode::Place | ImportMode::Drop(None) => self.asset_frame_target(),
+            _ => None,
+        };
+        if matches!(mode, ImportMode::Place | ImportMode::Drop(_)) {
+            self.pending_place = None;
+            self.pending_place_frame = None;
+            if matches!(self.op, Some(Op::Place { .. })) {
+                self.op = None;
+            }
+        }
         let (tx, receiver) = mpsc::channel();
         let input = path.clone();
         std::thread::spawn(move || {
@@ -63,6 +78,7 @@ impl Studio {
             path,
             mode,
             owner: self.swap_id.clone(),
+            frame,
         });
     }
 
@@ -91,6 +107,7 @@ impl Studio {
             path,
             mode: ImportMode::PhotoToDesign,
             owner: self.swap_id.clone(),
+            frame: None,
         });
     }
 
@@ -109,7 +126,17 @@ impl Studio {
             };
             let job = self.file_jobs.remove(i);
             match result {
-                Err(error) => self.status = error,
+                Err(error) => {
+                    let action = match job.mode {
+                        ImportMode::Place | ImportMode::Drop(_) => "place",
+                        ImportMode::Export => "export",
+                        _ => "open",
+                    };
+                    self.status = format!(
+                        "Could not {action} {}: {error}",
+                        job.path.file_name().unwrap_or_default().to_string_lossy()
+                    );
+                }
                 Ok(Completed::Exported(notes)) => {
                     self.status = format!(
                         "Exported {}{}",
@@ -127,7 +154,6 @@ impl Studio {
                     // Opening a document always creates a tab. Placement belongs to its original tab.
                     if matches!(job.mode, ImportMode::Place | ImportMode::Drop(_))
                         && job.owner != self.swap_id
-                        && !matches!(imported, crate::import::Imported::Document(_))
                     {
                         self.status="The destination tab changed. Place the file again in the intended tab.".into();
                         continue;
@@ -149,6 +175,7 @@ impl Studio {
                                     self.prepare_file_placement(
                                         PendingPlace::Document(doc),
                                         ImportMode::Place,
+                                        None,
                                     );
                                     self.commit_place_at(Pt::new(
                                         self.doc.width * 0.5,
@@ -159,15 +186,11 @@ impl Studio {
                                 self.tool = Tool::Select;
                                 self.need_fit = true;
                                 self.status = "Photo placed in Design".into();
-                            } else if matches!(job.mode, ImportMode::Place) {
-                                if job.owner != self.swap_id {
-                                    self.status =
-                                        "The destination tab changed. Place the file again.".into();
-                                    continue;
-                                }
+                            } else if matches!(job.mode, ImportMode::Place | ImportMode::Drop(_)) {
                                 self.prepare_file_placement(
                                     PendingPlace::Document(doc),
-                                    ImportMode::Place,
+                                    job.mode,
+                                    job.frame,
                                 );
                                 self.show_import_notes = !self.transfer_notes.is_empty();
                             } else {
@@ -175,12 +198,17 @@ impl Studio {
                             }
                         }
                         crate::import::Imported::Svg { name, svg } => {
-                            self.prepare_file_placement(PendingPlace::Svg { name, svg }, job.mode);
+                            self.prepare_file_placement(
+                                PendingPlace::Svg { name, svg },
+                                job.mode,
+                                job.frame,
+                            );
                         }
                         crate::import::Imported::Raster { name, image } => {
                             self.prepare_file_placement(
                                 PendingPlace::Raster { name, image },
                                 job.mode,
+                                job.frame,
                             );
                         }
                         crate::import::Imported::Photo(photo) => {
@@ -197,15 +225,26 @@ impl Studio {
             ctx.request_repaint_after(std::time::Duration::from_millis(40));
         }
     }
-    fn prepare_file_placement(&mut self, pending: PendingPlace, mode: ImportMode) {
+    fn prepare_file_placement(
+        &mut self,
+        pending: PendingPlace,
+        mode: ImportMode,
+        frame: Option<(usize, u64)>,
+    ) {
         if matches!(mode, ImportMode::Open) && !self.current_is_blank() {
             self.new_tab();
         }
-        self.persona = Persona::Design;
+        if self.persona != Persona::Layout || matches!(mode, ImportMode::Open) {
+            self.persona = Persona::Design;
+        }
         self.show_welcome = false;
         self.tool = Tool::Select;
         self.status = format!("Click or drag to place {}", pending.name());
+        if matches!(self.op, Some(Op::Place { .. })) {
+            self.op = None;
+        }
         self.pending_place = Some(pending);
+        self.pending_place_frame = frame;
         match mode {
             ImportMode::Open => {
                 self.commit_place_at(Pt::new(self.doc.width * 0.5, self.doc.height * 0.5))
@@ -255,6 +294,7 @@ impl Studio {
             path,
             mode: ImportMode::Export,
             owner: self.swap_id.clone(),
+            frame: None,
         });
     }
 
@@ -330,6 +370,92 @@ mod tests {
                 warnings: vec![],
             },
         )
+    }
+
+    #[test]
+    fn layout_file_place_keeps_queued_frame_after_delete_and_reopen() {
+        let folder = TestFolder::new();
+        let path = folder.0.join("Brand mark.svg");
+        std::fs::write(
+            &path,
+            r##"<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 40 20"><path d="M0 0H40V20H0Z" fill="#dd513b"/></svg>"##,
+        )
+        .unwrap();
+        let mut studio = Studio::new();
+        studio.doc = Document::new("Layout", 320.0, 240.0, 72.0);
+        let mut frame = crate::layout::make_frame(Pt::new(30.0, 30.0), Pt::new(260.0, 180.0));
+        frame.name = "Destination".into();
+        let id = frame.id;
+        let mut child = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(50.0, 50.0),
+                size: Pt::new(20.0, 20.0),
+                radius: 0.0,
+            },
+            Style::default(),
+        );
+        child.layout.parent = Some(id);
+        let child_id = child.id;
+        studio.doc.layers[1]
+            .kind
+            .shapes_mut()
+            .unwrap()
+            .extend([frame, child]);
+        studio.active_layer = Some(1);
+        studio.persona = Persona::Layout;
+        for attempt in 0..3 {
+            // An async decode must retain the destination selected at invocation.
+            studio.selection = vec![(1, child_id)];
+            studio.load_place_path(&path);
+            studio.selection.clear();
+            finish_jobs(&mut studio);
+            assert!(studio.persona == Persona::Layout);
+            assert_eq!(studio.pending_place_frame, Some((1, id)));
+            assert!(studio.pending_place.is_some(), "{}", studio.status);
+            studio.commit_place_rect(Pt::new(90.0, 90.0), Pt::new(170.0, 130.0));
+            assert!(!studio.selection.is_empty(), "{}", studio.status);
+            for &(li, selected) in &studio.selection {
+                assert_eq!(li, 1);
+                assert!(crate::layout::descendants(&studio.doc, 1, id).contains(&selected));
+            }
+            studio.doc.validate_hierarchy().unwrap();
+            studio.delete_selection();
+            studio.doc.validate_hierarchy().unwrap();
+            assert_eq!(studio.doc.layers[1].kind.shapes().unwrap().len(), 2);
+            if attempt == 1 {
+                studio.doc =
+                    crate::project::decode(&crate::project::encode(&studio.doc).unwrap()).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn failed_place_names_file_and_clears_previous_placement_gesture() {
+        let folder = TestFolder::new();
+        let path = folder.0.join("Broken mark.svg");
+        std::fs::write(&path, "not an SVG").unwrap();
+        let mut studio = Studio::new();
+        studio.pending_place = Some(PendingPlace::Svg {
+            name: "Previous mark".into(),
+            svg: "<svg/>".into(),
+        });
+        studio.pending_place_frame = Some((1, 999));
+        studio.op = Some(Op::Place {
+            start: Pt::ZERO,
+            cur: Pt::new(20.0, 20.0),
+        });
+        studio.load_place_path(&path);
+        assert!(studio.pending_place.is_none());
+        assert!(studio.pending_place_frame.is_none());
+        assert!(studio.op.is_none());
+        finish_jobs(&mut studio);
+        assert!(
+            studio.status.contains("Could not place Broken mark.svg"),
+            "{}",
+            studio.status
+        );
+        assert!(studio.pending_place.is_none());
     }
 
     #[test]
@@ -558,6 +684,7 @@ mod tests {
             path: input.clone(),
             mode: ImportMode::Open,
             owner: studio.swap_id.clone(),
+            frame: None,
         });
         studio.poll_file_jobs(&egui::Context::default());
         assert_eq!(studio.tab_count(), 2);

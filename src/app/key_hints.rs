@@ -39,8 +39,10 @@ impl Shortcut {
             PasteAdjustments => ("Ctrl+Shift+V", "Paste adjustments"),
             Duplicate => ("Ctrl+D", "Duplicate"),
             SelectAll => ("Ctrl+A", "Select all"),
-            Combine => ("Ctrl+G", "Combine paths"),
-            Release => ("Ctrl+Shift+G", "Release compound"),
+            Group => ("Ctrl+G", "Group objects"),
+            Ungroup => ("Ctrl+Shift+G", "Ungroup"),
+            Combine => ("Ctrl+8", "Compound shape"),
+            Release => ("Ctrl+Shift+8", "Release compound"),
             Forward => ("Ctrl+]", "Bring forward"),
             Front => ("Ctrl+Shift+]", "Bring to front"),
             Backward => ("Ctrl+[", "Send backward"),
@@ -431,7 +433,15 @@ impl Studio {
                         add("Click", "Place or edit text", false);
                     }
                     Tool::Gradient => {
-                        add("Drag", "Set linear fill", false);
+                        add(
+                            "Drag",
+                            if self.fill_active {
+                                "Place fill gradient"
+                            } else {
+                                "Place stroke gradient"
+                            },
+                            false,
+                        );
                         snapping = true;
                     }
                     Tool::Eyedropper => {

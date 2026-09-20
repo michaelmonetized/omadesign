@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { SITE_ORIGIN, sitePath } from "../site";
+import { useEffect, useRef, useState } from "react";
+import { sitePath } from "../site";
 import "./cloud-waitlist.css";
 
 const features = [
@@ -7,26 +7,25 @@ const features = [
   ["Team member access", "Control which team members can access each project."],
   ["Client review + annotations", "Collect comments and annotations on flat snapshots of your work."],
   ["User showcase", "Share finished public work in the Omadesign user showcase."],
-  ["Competitions", "Enter your showcased work into competitions."],
+  ["Competitions", "Submit public showcase work when a competition is open."],
 ];
 
-export function CloudWaitlist() {
+export function CloudIntro() {
   const dialog = useRef<HTMLDialogElement>(null);
   const video = useRef<HTMLVideoElement>(null);
   const autoStart = useRef(true);
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [playBlocked, setPlayBlocked] = useState(false);
   const [muted, setMuted] = useState(true);
   const [visibleCount, setVisibleCount] = useState(0);
   const [ready, setReady] = useState(false);
-  const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
-  const [message, setMessage] = useState("");
 
-  function revealSignup() { setVisibleCount(features.length); setReady(true); }
+  function revealActions() { setVisibleCount(features.length); setReady(true); }
 
   useEffect(() => {
     const reopen = () => { if (window.location.hash === "#cloud") setOpen(true); };
+    reopen();
     window.addEventListener("hashchange", reopen);
     return () => window.removeEventListener("hashchange", reopen);
   }, []);
@@ -58,11 +57,11 @@ export function CloudWaitlist() {
       void player.play().catch(error => {
         if (!active || started || !autoStart.current || preference.matches) return;
         if (error.name === "NotAllowedError") setPlayBlocked(true);
-        else if (error.name !== "AbortError") revealSignup();
+        else if (error.name !== "AbortError") revealActions();
       });
     };
     const apply = () => {
-      if (preference.matches) { player.pause(); revealSignup(); }
+      if (preference.matches) { player.pause(); revealActions(); }
       else { started = false; start(); }
     };
     player.addEventListener("playing", markStarted);
@@ -70,8 +69,8 @@ export function CloudWaitlist() {
     apply();
     const frame = window.requestAnimationFrame(start);
     preference.addEventListener("change", apply);
-    // A stalled download must never block access to the waitlist.
-    const fallback = window.setTimeout(() => { if (!started) revealSignup(); }, 8000);
+    // Playback must never block access to the cloud workspace.
+    const fallback = window.setTimeout(() => { if (!started) revealActions(); }, 8000);
     return () => {
       active = false;
       window.cancelAnimationFrame(frame);
@@ -90,43 +89,15 @@ export function CloudWaitlist() {
     setOpen(false);
     if (window.location.hash === "#cloud") history.replaceState(null, "", window.location.pathname + window.location.search);
   }
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (status === "sending") return;
-    const form = event.currentTarget;
-    const data = new FormData(form);
-    setStatus("sending");
-    setMessage("");
-    try {
-      const response = await fetch(`${import.meta.env.BASE_URL === "/" ? "" : SITE_ORIGIN}/api/waitlist`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: data.get("email"), name: "",
-          website: data.get("website"), list: "cloud",
-        }),
-        signal: AbortSignal.timeout(15000),
-      });
-      const result = await response.json();
-      if (!response.ok || result.ok !== true) throw new Error(result.error || "We couldn’t save your signup. Please try again.");
-      setStatus("success");
-      setMessage("You’re on the list. We’ll email you when cloud collaboration is ready.");
-      form.reset();
-    } catch (error) {
-      setStatus("error");
-      setMessage(error instanceof Error && error.name !== "TimeoutError" && error.name !== "TypeError"
-        ? error.message : "We couldn’t reach the waitlist. Please try again in a moment.");
-    }
-  }
 
   return (
     <dialog ref={dialog} className="cloud-takeover" aria-labelledby="cloud-title" onCancel={close}>
       <div className="cloud-scene">
-        <video ref={video} className="cloud-film" muted={muted} playsInline preload="auto"
+        <video ref={video} className="cloud-film" muted={muted} playsInline preload={open ? "auto" : "none"}
           poster={sitePath("media/cloud/reveal.webp")} width="1280" height="720"
           aria-label="Omadesign logo emerging from moonlit clouds"
           onPlaying={() => { setPlaying(true); setPlayBlocked(false); }} onPause={() => setPlaying(false)}
-          onEnded={() => { setPlaying(false); revealSignup(); }} onError={revealSignup}
+          onEnded={() => { setPlaying(false); revealActions(); }} onError={revealActions}
           onTimeUpdate={event => setVisibleCount(Math.min(features.length, Math.max(0, Math.floor((event.currentTarget.currentTime - 3) / 2.7) + 1)))}>
           <source src={sitePath("media/cloud/reveal.mp4")} type="video/mp4" />
         </video>
@@ -138,8 +109,8 @@ export function CloudWaitlist() {
         <div className="cloud-columns">
           <div className="cloud-copy">
             <h1 id="cloud-title">cloud collab</h1>
-            <p className="cloud-kicker">coming to omadesign 0.5.2</p>
-            <ul className="cloud-feature-stack" aria-label="Planned cloud collaboration features">
+            <p className="cloud-kicker">project sharing and snapshot review</p>
+            <ul className="cloud-feature-stack" aria-label="Cloud collaboration features">
               {features.map(([title, description], index) => (
                 <li key={title} data-visible={ready || visibleCount >= features.length - index}>
                   <span className="cloud-feature-mark" aria-hidden="true">↗</span>
@@ -149,19 +120,15 @@ export function CloudWaitlist() {
             </ul>
           </div>
           <div className="cloud-invitation" data-ready={ready} inert={!ready} aria-hidden={!ready}>
-            <form className="cloud-signup" onSubmit={submit} aria-labelledby="cloud-signup-title" aria-busy={status === "sending"}>
-              <h2 id="cloud-signup-title">join the waitlist</h2>
-              <label className="cloud-sr-only" htmlFor="cloud-email">Email address</label>
-              <div className="cloud-email-row">
-                <input id="cloud-email" name="email" type="email" autoComplete="email" maxLength={254} placeholder="your@email.com" required />
-                <button type="submit" disabled={status === "sending" || status === "success"} aria-label="Join the waitlist">
-                  {status === "sending" ? "Joining…" : status === "success" ? "Joined ✓" : "Join ↗"}
-                </button>
+            <section className="cloud-signup" aria-labelledby="cloud-start-title">
+              <h2 id="cloud-start-title">share the work</h2>
+              <p className="cloud-summary">Sign in to share files, invite reviewers and publish a finished export. Keep designing in the native app.</p>
+              <div className="cloud-actions">
+                <a className="button" href={sitePath("cloud")}>Open cloud projects ↗</a>
+                <a className="text-link" href={sitePath("docs/cloud")}>Read the cloud guide ↗</a>
               </div>
-              <div className="cloud-honey" aria-hidden="true"><label>Website<input name="website" tabIndex={-1} autoComplete="off" /></label></div>
-              <p className="cloud-consent">An email when it’s ready. No newsletters.</p>
-              <p className="cloud-status" role="status" aria-live="polite">{message}</p>
-            </form>
+              <p className="cloud-consent">Private project access. Explicit uploads. No simultaneous canvas editing.</p>
+            </section>
           </div>
         </div>
         <footer className="cloud-controls">
@@ -171,15 +138,15 @@ export function CloudWaitlist() {
               if (!player) return;
               autoStart.current = false;
               if (playing) player.pause();
-              else { if (player.ended) player.currentTime = 0; void player.play().catch(revealSignup); }
+              else { if (player.ended) player.currentTime = 0; void player.play().catch(revealActions); }
             }}>{playing ? "Pause" : playBlocked ? "Tap to play" : "Play"}</button>
             <button type="button" aria-pressed={!muted} onClick={() => {
               if (video.current) video.current.muted = !muted;
               setMuted(!muted);
             }}>{muted ? "Sound on" : "Sound off"}</button>
           </div>
-          {!ready && <button type="button" onClick={() => { autoStart.current = false; video.current?.pause(); revealSignup(); }}>Skip to waitlist ↓</button>}
-          {ready && <span className="cloud-release-note">Planned for 0.5.2</span>}
+          {!ready && <button type="button" onClick={() => { autoStart.current = false; video.current?.pause(); revealActions(); }}>Show cloud links ↓</button>}
+          {ready && <span className="cloud-release-note">Included in Omadesign</span>}
         </footer>
       </div>
     </dialog>

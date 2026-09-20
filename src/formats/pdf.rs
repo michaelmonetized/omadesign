@@ -88,6 +88,7 @@ impl State {
             matrix,
             fill: Rgba::BLACK,
             stroke: Stroke {
+                gradient: None,
                 color: Rgba::BLACK,
                 width: 1.,
                 cap: Cap::Butt,

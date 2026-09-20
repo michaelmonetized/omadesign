@@ -13,7 +13,7 @@ function DocsOverview() {
       <header>
         <h1>Getting started</h1>
         <p>
-          omadesign brings vector design, painting, photo adjustments and motion
+          omadesign brings vector design, responsive layout, painting, photo adjustments and motion
           into one native Linux studio. Save editable artwork in an{" "}
           <code>.oma</code> document.
         </p>
@@ -26,14 +26,21 @@ function DocsOverview() {
             <dt>Design</dt>
             <dd>
               Draw precise paths, edit type, arrange artboards and reshape
-              vector artwork.
+              vector artwork. Use multi-stop gradients on fills and strokes.
+            </dd>
+          </div>
+          <div>
+            <dt>Layout</dt>
+            <dd>
+              Build responsive frames, components and variants. Present an
+              interactive prototype or export it to standalone HTML.
             </dd>
           </div>
           <div>
             <dt>Pixel</dt>
             <dd>
-              Paint, select, clone and heal pixels. Use layer masks to hide and
-              reveal your work.
+              Paint, select, clone and heal pixels. Key out a background and use
+              17 raster filters, 13 effects, or editable pixel masks.
             </dd>
           </div>
           <div>
@@ -71,9 +78,10 @@ function DocsOverview() {
         </pre>
         <aside className="docs-note" aria-label="Version information">
           <p>
-            {RELEASE_TAG} includes working Pixel selections, Layout frames,
-            layered interchange, RAW development, batch photo adjustments and
-            shareable presets. Affinity import also needs the optional{" "}
+            {RELEASE_TAG} adds chroma key, raster filter and effect banks,
+            multi-stop fill/stroke gradients and responsive Layout components
+            and prototypes. Clipboard paste and cloud snapshot review remain
+            included. Affinity import also needs the optional{" "}
             <Link to="/docs/affinity">bridge setup</Link>. Read the{" "}
             <Link to="/updates">studio log</Link> or the{" "}
             <a href={RELEASE_URL}>release notes</a>.

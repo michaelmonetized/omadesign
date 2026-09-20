@@ -153,7 +153,10 @@ impl Studio {
     pub(super) fn apply_with_layer_selection(&mut self, cmd: &Cmd) {
         fn changes_layer_indices(cmd: &Cmd) -> bool {
             match cmd {
-                Cmd::ReorderLayer { .. } | Cmd::AddLayer { .. } | Cmd::RemoveLayer { .. } => true,
+                Cmd::ReorderLayer { .. }
+                | Cmd::AddLayer { .. }
+                | Cmd::RemoveLayer { .. }
+                | Cmd::SetVectorShapes { .. } => true,
                 Cmd::Batch(commands) => commands.iter().any(changes_layer_indices),
                 _ => false,
             }
@@ -183,7 +186,17 @@ impl Studio {
         self.active_layer = active.and_then(|id| indices.get(&id).copied());
         self.selection = objects
             .into_iter()
-            .filter_map(|(layer, object)| indices.get(&layer).map(|&i| (i, object)))
+            .filter_map(|(layer, object)| {
+                if object == RASTER_ID {
+                    indices.get(&layer).map(|&i| (i, object))
+                } else {
+                    self.doc
+                        .layers
+                        .iter()
+                        .position(|l| l.find(object).is_some())
+                        .map(|i| (i, object))
+                }
+            })
             .collect();
         if let Some(edit) = self.type_edit.as_mut()
             && let Some(i) = typing.and_then(|id| indices.get(&id))

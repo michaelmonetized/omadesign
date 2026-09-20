@@ -76,6 +76,7 @@ fn white_stroke() -> Style {
     Style {
         fill: Fill::None,
         stroke: Some(Stroke {
+            gradient: None,
             color: WHITE,
             width: WEIGHT,
             cap: Cap::Square,
@@ -212,6 +213,7 @@ fn guide_shape() -> Shape {
         Style {
             fill: Fill::None,
             stroke: Some(Stroke {
+                gradient: None,
                 color: GREEN,
                 width: 1.,
                 cap: Cap::Butt,

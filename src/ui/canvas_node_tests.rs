@@ -277,7 +277,7 @@ fn rotate_gesture_turns_explicit_geometry_once_and_retains_node_selection() {
         let anchors = before.world_anchors().unwrap();
         let center = before.geom.bbox().center() + Pt::new(11.0, 9.0);
         studio.op = Some(Op::Rotate {
-            orig: snapshot(&studio),
+            orig: snaps_for(&studio, &studio.selection),
             center,
             start_angle: 0.0,
         });

@@ -55,8 +55,8 @@ export function Install() {
         </a>
       </div>
       <p className="install-version">
-        {RELEASE_TAG} installs into ~/.local. Pixel selections stay on the
-        canvas.{" "}
+        {RELEASE_TAG} installs into ~/.local. Chroma key, gradient strokes,
+        responsive Layout.{" "}
         <a href={sitePath("updates")}>What shipped</a>
         {" · "}
         <a href={RELEASE_URL}>Release notes</a>.

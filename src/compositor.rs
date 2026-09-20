@@ -1,5 +1,8 @@
 //! One geometry, two outputs: the live canvas and PNG export.
 
+#[cfg(test)]
+mod appearance_tests;
+mod frames;
 mod groups;
 
 use crate::color::Rgba;
@@ -224,6 +227,17 @@ pub fn export_png_bounds(
     crop.encode_png().map_err(|e| e.to_string())
 }
 
+/// Export only the selected frame and its descendants, independent of artboard bounds.
+pub fn export_frame_png(
+    doc: &Document,
+    layer: usize,
+    frame_id: u64,
+    scale: u32,
+) -> Result<Vec<u8>, String> {
+    let frame = crate::layout_export::frame_document(doc, layer, frame_id)?;
+    export_png(&frame, scale)
+}
+
 pub fn export_jpeg(doc: &Document, scale: u32, quality: u8) -> Result<Vec<u8>, String> {
     let pm = render_export(doc, scale)?;
     let mut rgb = Vec::with_capacity(pm.width() as usize * pm.height() as usize * 3);
@@ -261,7 +275,19 @@ fn draw_layer(
         return;
     }
     let filtered = layer.filters.active();
-    if layer.mask.is_some() || filtered {
+    // A regular layer is an isolated compositing container, including at 100%.
+    // Without this, lowering opacity would change a child's blend backdrop.
+    let blended_content = layer.kind.shapes().is_some_and(|shapes| {
+        shapes
+            .iter()
+            .any(|shape| shape.blend != crate::color::Blend::Normal)
+    });
+    if blended_content
+        || layer.mask.is_some()
+        || filtered
+        || layer.opacity < 1.0
+        || layer.blend != crate::color::Blend::Normal
+    {
         let Some(mut temp) = Pixmap::new(pm.width(), pm.height()) else {
             return;
         };
@@ -405,13 +431,7 @@ fn draw_content(
 ) {
     match &layer.kind {
         LayerKind::Vector { shapes } => {
-            for s in shapes {
-                if !s.visible || s.guide {
-                    continue;
-                }
-                let pose = pose_of(s.id, motion_t, doc, overrides);
-                draw_shape(pm, s, t, opacity, blend, pose);
-            }
+            frames::draw(pm, shapes, t, opacity, blend, motion_t, doc, overrides);
             if let Some(p) = preview
                 && p.visible
                 && !p.guide
@@ -477,6 +497,96 @@ fn draw_shape(
     blend: tiny_skia::BlendMode,
     pose: Pose,
 ) {
+    draw_shape_masked(pm, shape, t, opacity, blend, pose, None);
+}
+
+fn draw_shape_masked(
+    pm: &mut Pixmap,
+    shape: &Shape,
+    t: Transform,
+    opacity: f32,
+    blend: tiny_skia::BlendMode,
+    pose: Pose,
+    mask: Option<&tiny_skia::Mask>,
+) {
+    let alpha = pose.opacity.unwrap_or(shape.opacity).clamp(0.0, 1.0);
+    if alpha <= 0.0 {
+        return;
+    }
+    let blend = if shape.blend == crate::color::Blend::Normal {
+        blend
+    } else {
+        shape.blend.to_skia()
+    };
+    if !shape.filters.active() && (alpha < 1.0 || shape.blend != crate::color::Blend::Normal) {
+        // Composite the complete fill/image/stroke once, using a bounded temporary.
+        let pad = shape
+            .style
+            .stroke
+            .as_ref()
+            .map_or(2.0, |s| s.width * 5.0 + 2.0);
+        let b = pose.map_bounds(shape.world_bbox().inflate(pad));
+        let mut corners = [
+            Point::from_xy(b.min.x, b.min.y),
+            Point::from_xy(b.max.x, b.min.y),
+            Point::from_xy(b.max.x, b.max.y),
+            Point::from_xy(b.min.x, b.max.y),
+        ];
+        t.map_points(&mut corners);
+        let x = corners
+            .iter()
+            .map(|p| p.x)
+            .fold(f32::INFINITY, f32::min)
+            .floor()
+            .max(0.0);
+        let y = corners
+            .iter()
+            .map(|p| p.y)
+            .fold(f32::INFINITY, f32::min)
+            .floor()
+            .max(0.0);
+        let right = corners
+            .iter()
+            .map(|p| p.x)
+            .fold(f32::NEG_INFINITY, f32::max)
+            .ceil()
+            .min(pm.width() as f32);
+        let bottom = corners
+            .iter()
+            .map(|p| p.y)
+            .fold(f32::NEG_INFINITY, f32::max)
+            .ceil()
+            .min(pm.height() as f32);
+        if right <= x || bottom <= y {
+            return;
+        }
+        if let Some(mut temp) = Pixmap::new((right - x) as u32, (bottom - y) as u32) {
+            let mut opaque_pose = pose;
+            opaque_pose.opacity = Some(1.0);
+            draw_shape_inner(
+                &mut temp,
+                shape,
+                Transform::from_translate(-x, -y).pre_concat(t),
+                1.0,
+                tiny_skia::BlendMode::SourceOver,
+                opaque_pose,
+                None,
+            );
+            pm.draw_pixmap(
+                x as i32,
+                y as i32,
+                temp.as_ref(),
+                &PixmapPaint {
+                    opacity: (opacity * alpha).clamp(0.0, 1.0),
+                    blend_mode: blend,
+                    ..Default::default()
+                },
+                Transform::identity(),
+                mask,
+            );
+        }
+        return;
+    }
     if shape.filters.active() {
         let pad = crate::filter::svg_pad(&shape.filters).ceil().max(8.0);
         let b = pose.map_bounds(shape.world_bbox()).inflate(pad);
@@ -484,13 +594,16 @@ fn draw_shape(
         let th = b.height().ceil().max(1.0) as u32;
         if let Some(mut temp) = Pixmap::new(tw, th) {
             let local = Transform::from_translate(-b.min.x, -b.min.y);
+            let mut opaque_pose = pose;
+            opaque_pose.opacity = Some(1.0);
             draw_shape_inner(
                 &mut temp,
                 shape,
                 local,
                 1.0,
                 tiny_skia::BlendMode::SourceOver,
-                pose,
+                opaque_pose,
+                None,
             );
             crate::filter::apply(&mut temp, &shape.filters);
             let xf = t.pre_concat(Transform::from_translate(b.min.x, b.min.y));
@@ -499,17 +612,17 @@ fn draw_shape(
                 0,
                 temp.as_ref(),
                 &PixmapPaint {
-                    opacity: opacity.clamp(0.0, 1.0),
+                    opacity: (opacity * alpha).clamp(0.0, 1.0),
                     blend_mode: blend,
                     quality: tiny_skia::FilterQuality::Bilinear,
                 },
                 xf,
-                None,
+                mask,
             );
         }
         return;
     }
-    draw_shape_inner(pm, shape, t, opacity, blend, pose);
+    draw_shape_inner(pm, shape, t, opacity, blend, pose, mask);
 }
 
 fn draw_shape_inner(
@@ -519,6 +632,7 @@ fn draw_shape_inner(
     opacity: f32,
     blend: tiny_skia::BlendMode,
     pose: Pose,
+    mask: Option<&tiny_skia::Mask>,
 ) {
     let Some(path) = shape.get_cached_path(96) else {
         return;
@@ -532,7 +646,10 @@ fn draw_shape_inner(
     };
     let fill_reveal = pose.fill_reveal.unwrap_or(1.0).clamp(0.0, 1.0);
     if !shape.style.fill.is_none() && shape.geom.is_closed() && fill_reveal > 0.0 {
-        let mut paint = fill_paint(&shape.style.fill, &shape.geom);
+        let texture = shape.style.fill.gradient().and_then(|g| {
+            crate::gradient::texture(&g, shape, 0., xf.get_scale().0.max(xf.get_scale().1))
+        });
+        let mut paint = fill_paint(&shape.style.fill, &shape.geom, texture.as_ref());
         paint.blend_mode = blend;
         if shape.rotation.abs() > 1e-5 {
             let center = shape.geom.bbox().center();
@@ -554,14 +671,23 @@ fn draw_shape_inner(
                 bounds.max.y - bounds.height() * fill_reveal,
                 bounds.width().max(1e-5),
                 (bounds.height() * fill_reveal).max(1e-5),
-            ) && let Some(mut clip) = tiny_skia::Mask::new(pm.width(), pm.height())
+            ) && let Some(mut clip) = mask
+                .cloned()
+                .or_else(|| tiny_skia::Mask::new(pm.width(), pm.height()))
             {
-                clip.fill_path(&PathBuilder::from_rect(rect), FillRule::Winding, true, xf);
+                if mask.is_some() {
+                    clip.intersect_path(&PathBuilder::from_rect(rect), FillRule::Winding, true, xf);
+                } else {
+                    clip.fill_path(&PathBuilder::from_rect(rect), FillRule::Winding, true, xf);
+                }
                 pm.fill_path(&path, &paint, rule, xf, Some(&clip));
             }
         } else {
-            pm.fill_path(&path, &paint, rule, xf, None);
+            pm.fill_path(&path, &paint, rule, xf, mask);
         }
+    }
+    if shape.layout.image.is_some() {
+        crate::layout_images::draw_with_blend(pm, shape, xf, op, blend, mask);
     }
     let stroke_reveal = pose.stroke_reveal.unwrap_or(1.0).clamp(0.0, 1.0);
     if let Some(stroke) = &shape.style.stroke
@@ -578,14 +704,35 @@ fn draw_shape_inner(
         } else {
             &path
         };
+        let texture = stroke.gradient.as_ref().and_then(|g| {
+            crate::gradient::texture(
+                g,
+                shape,
+                stroke.width * 0.5 + 1.,
+                xf.get_scale().0.max(xf.get_scale().1),
+            )
+        });
         let mut paint = Paint {
             anti_alias: true,
             blend_mode: blend,
             ..Paint::default()
         };
-        let mut col = stroke.color.to_skia();
-        col.set_alpha(col.alpha() * op);
-        paint.set_color(col);
+        paint.shader = if let Some(texture) = &texture {
+            crate::gradient::texture_shader(texture)
+        } else if let Some(gradient) = &stroke.gradient {
+            gradient.skia(shape.geom.bbox())
+        } else {
+            tiny_skia::Shader::SolidColor(stroke.color.to_skia())
+        };
+        if shape.rotation.abs() > 1e-5 {
+            let center = shape.geom.bbox().center();
+            paint.shader.transform(Transform::from_rotate_at(
+                shape.rotation.to_degrees(),
+                center.x,
+                center.y,
+            ));
+        }
+        paint.shader.apply_opacity(op);
         let mut sk = SkStroke {
             width: stroke.width,
             line_cap: stroke.cap.to_skia(),
@@ -595,16 +742,25 @@ fn draw_shape_inner(
         if let Some((on, off)) = stroke.dash {
             sk.dash = StrokeDash::new(vec![on, off], 0.0);
         }
-        pm.stroke_path(stroke_path, &paint, &sk, xf, None);
+        pm.stroke_path(stroke_path, &paint, &sk, xf, mask);
     }
 }
 
-fn fill_paint<'a>(fill: &Fill, geom: &Geom) -> Paint<'a> {
+fn fill_paint<'a>(
+    fill: &Fill,
+    geom: &Geom,
+    texture: Option<&'a (std::sync::Arc<Pixmap>, crate::geom::Bounds)>,
+) -> Paint<'a> {
     let mut paint = Paint {
         anti_alias: true,
         ..Paint::default()
     };
     match fill {
+        Fill::Gradient(gradient) => {
+            paint.shader = texture
+                .map(crate::gradient::texture_shader)
+                .unwrap_or_else(|| gradient.skia(geom.bbox()));
+        }
         Fill::None => {}
         Fill::Solid(c) => paint.set_color(c.to_skia()),
         Fill::Linear { from, to, c0, c1 } => {

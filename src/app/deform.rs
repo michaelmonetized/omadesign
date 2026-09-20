@@ -305,7 +305,7 @@ fn mapped_shape(source: &Source, mapper: &Mapper) -> Option<Shape> {
     };
     // The source contours already include the object's rotation.
     after.rotation = 0.0;
-    if let Fill::Linear { from, to, .. } = &mut after.style.fill {
+    if let Some((from, to)) = after.style.fill.gradient_endpoints_mut() {
         let before_bounds = source.shape.geom.bbox();
         let after_bounds = after.geom.bbox();
         for endpoint in [from, to] {

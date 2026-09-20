@@ -1,4 +1,4 @@
-import { CloudWaitlist } from "../components/cloud-waitlist";
+import { CloudIntro } from "../components/cloud-waitlist";
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { faqs } from "../features";
@@ -21,7 +21,7 @@ function Home() {
   const [studio, setStudio] = useState<StudioName>("Design");
   return (
     <main id="main" ref={motion}>
-      <CloudWaitlist />
+      <CloudIntro />
       <section className="hero shell">
         <div className="hero-heading">
           <RevealText

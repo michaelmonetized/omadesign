@@ -14,7 +14,7 @@ impl Studio {
     }
 
     pub fn place_brand_imported(&mut self, imported: Imported, at: Pt) -> Result<(), String> {
-        self.place_imported_at(imported, at, None)
+        self.place_brand_imported_in_frame(imported, at, self.asset_frame_target())
     }
 
     pub(super) fn place_layered_document(
@@ -31,7 +31,7 @@ impl Studio {
         Ok(())
     }
 
-    fn place_imported_at(
+    pub(super) fn place_imported_at(
         &mut self,
         imported: Imported,
         at: Pt,
@@ -43,7 +43,7 @@ impl Studio {
         if !at.x.is_finite() || !at.y.is_finite() {
             return Err("The placement point is invalid".into());
         }
-        let (name, mut layers, motion, notes) = match imported {
+        let (name, mut layers, motion, notes, imported_tokens) = match imported {
             Imported::Photo(_) => {
                 return Err(
                     "Open camera RAW in Photo or use File → Place to develop it first".into(),
@@ -51,7 +51,13 @@ impl Studio {
             }
             Imported::Document(doc) => {
                 doc.validate_hierarchy()?;
-                (doc.name, doc.layers, doc.motion, doc.import_notes)
+                (
+                    doc.name,
+                    doc.layers,
+                    doc.motion,
+                    doc.import_notes,
+                    doc.layout_tokens,
+                )
             }
             Imported::Raster { name, image } => {
                 checked_pixels(image.w, image.h, image.data.len())?;
@@ -63,14 +69,14 @@ impl Studio {
                     Pt::ZERO,
                     Pt::new(image.w as f32, image.h as f32),
                 );
-                (name, vec![layer], Motion::default(), vec![])
+                (name, vec![layer], Motion::default(), vec![], vec![])
             }
             Imported::Svg { name, svg } => {
                 if svg.len() > 16 * 1024 * 1024 {
                     return Err("Choose an SVG smaller than 16 MB".into());
                 }
-                let layer = svg_layer(&name, &svg)?;
-                (name, vec![layer], Motion::default(), vec![])
+                let (doc, notes) = crate::formats::svg::read(&svg, &name)?;
+                (name, doc.layers, doc.motion, notes, doc.layout_tokens)
             }
         };
         if layers.len() > 1024 {
@@ -167,6 +173,32 @@ impl Studio {
             Bounds::from_min_size(at - source.size() * (scale * 0.5), source.size() * scale);
         let offset = destination.min - source.min * scale;
         let mut ids = HashMap::new();
+        // Allocate the entire map first: children/components may precede their
+        // parent or source definition in painter order or another vector layer.
+        for layer in &layers {
+            for shape in layer.kind.shapes().unwrap_or_default() {
+                if ids.insert(shape.id, next_id()).is_some() {
+                    return Err("The asset contains duplicate object IDs".into());
+                }
+            }
+        }
+        let mut tokens = self.doc.layout_tokens.clone();
+        let mut token_ids = HashMap::new();
+        for mut token in imported_tokens {
+            let previous_id = token.id;
+            token.id = next_id();
+            token_ids.insert(previous_id, token.id);
+            let base = token.name.clone();
+            let mut suffix = 2;
+            while tokens
+                .iter()
+                .any(|existing| existing.name.eq_ignore_ascii_case(&token.name))
+            {
+                token.name = format!("{base} {suffix}");
+                suffix += 1;
+            }
+            tokens.push(token);
+        }
         let mut selected = Vec::new();
         let mut commands = Vec::new();
         let layer_ids: HashMap<_, _> = layers.iter().map(|layer| (layer.id, next_id())).collect();
@@ -189,10 +221,19 @@ impl Studio {
                         )?);
                     }
                     for shape in shapes {
-                        let old_id = shape.id;
-                        shape.id = next_id();
-                        if ids.insert(old_id, shape.id).is_some() {
-                            return Err("The asset contains duplicate object IDs".into());
+                        shape.id = ids[&shape.id];
+                        crate::layout_components::remap_duplicate(shape, &ids);
+                        shape.layout.parent =
+                            shape.layout.parent.and_then(|id| ids.get(&id).copied());
+                        remap_asset_tokens(shape, &token_ids);
+                        if let Some(crate::layout_components::ComponentBinding::Instance {
+                            nodes,
+                            ..
+                        }) = &mut shape.layout.component
+                        {
+                            for node in nodes {
+                                remap_asset_tokens(&mut node.baseline, &token_ids);
+                            }
                         }
                         shape.geom.map_into(source, destination);
                         match &mut shape.geom {
@@ -246,6 +287,12 @@ impl Studio {
             scale_filters(&mut layer.filters, scale);
             commands.push(Cmd::AddLayer { index, layer });
         }
+        if tokens != self.doc.layout_tokens {
+            commands.push(Cmd::SetLayoutTokens {
+                before: self.doc.layout_tokens.clone(),
+                after: tokens,
+            });
+        }
         let mut after = self.doc.motion.clone();
         for mut track in motion.tracks {
             let Some(id) = ids.get(&track.shape) else {
@@ -289,6 +336,7 @@ impl Studio {
             .map(|(layer, _)| *layer)
             .or_else(|| self.doc.layers.len().checked_sub(1));
         self.pending_place = None;
+        self.pending_place_frame = None;
         self.op = None;
         self.key_drag = None;
         self.paint_mask = false;
@@ -299,6 +347,19 @@ impl Studio {
         self.show_welcome = false;
         self.status = format!("{name} placed · editable · one Undo");
         Ok(())
+    }
+}
+
+fn remap_asset_tokens(shape: &mut Shape, ids: &HashMap<u64, u64>) {
+    for property in crate::layout_tokens::TokenProperty::all() {
+        shape.layout.tokens.set(
+            property,
+            shape
+                .layout
+                .tokens
+                .get(property)
+                .and_then(|id| ids.get(&id).copied()),
+        );
     }
 }
 
@@ -317,40 +378,6 @@ fn finite_bounds(bounds: Bounds) -> bool {
     [bounds.min.x, bounds.min.y, bounds.max.x, bounds.max.y]
         .into_iter()
         .all(f32::is_finite)
-}
-
-fn svg_layer(name: &str, svg: &str) -> Result<Layer, String> {
-    use crate::shape_browser::SvgPaint;
-    let mut layer = Layer::vector(name);
-    let shapes = layer.kind.shapes_mut().unwrap();
-    for element in crate::shape_browser::svg_to_elements(svg)? {
-        // SVG defaults to black; a brand asset must not inherit the editor's fill.
-        let fill = match element.fill {
-            SvgPaint::None => Fill::None,
-            SvgPaint::Solid(color) => Fill::Solid(color),
-            SvgPaint::Unspecified => Fill::Solid(Rgba::BLACK),
-        };
-        let stroke = match element.stroke {
-            SvgPaint::Solid(color) => Some(Stroke {
-                color,
-                width: element.stroke_width.max(0.25),
-                cap: match element.stroke_cap.as_deref() {
-                    Some("round") => Cap::Round,
-                    Some("square") => Cap::Square,
-                    _ => Cap::Butt,
-                },
-                join: match element.stroke_join.as_deref() {
-                    Some("round") => Join::Round,
-                    Some("bevel") => Join::Bevel,
-                    _ => Join::Miter,
-                },
-                dash: None,
-            }),
-            _ => None,
-        };
-        shapes.push(Shape::new(element.geom, Style { fill, stroke }));
-    }
-    Ok(layer)
 }
 
 fn map_mask(
@@ -391,7 +418,7 @@ fn map_mask(
     Pixels::from_rgba(width, height, bytes).ok_or("The placed mask is invalid".into())
 }
 
-fn scale_filters(stack: &mut crate::filter::FilterStack, scale: f32) {
+pub(super) fn scale_filters(stack: &mut crate::filter::FilterStack, scale: f32) {
     use crate::filter::Fx;
     for effect in &mut stack.items {
         match effect {
@@ -416,6 +443,109 @@ fn scale_filters(stack: &mut crate::filter::FilterStack, scale: f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_layout_asset_remaps_frames_components_and_variables_as_one_undo() {
+        use crate::layout_components::{self, ComponentBinding};
+        use crate::layout_tokens::{DesignToken, TokenProperty};
+        let mut source = document("Component asset", 128.0, 96.0);
+        let mut frame = crate::layout::make_frame(Pt::new(10.0, 10.0), Pt::new(40.0, 30.0));
+        frame.name = "Button".into();
+        let main = frame.id;
+        let mut child = rect(Pt::new(15.0, 15.0), Pt::new(20.0, 10.0), Rgba::WHITE);
+        child.layout.parent = Some(main);
+        let child_id = child.id;
+        source.layers[0]
+            .kind
+            .shapes_mut()
+            .unwrap()
+            .extend([frame, child]);
+        let token = DesignToken::color("Brand fill", Rgba::WHITE);
+        let old_token = token.id;
+        source.layout_tokens.push(token);
+        crate::layout_tokens::bind(
+            &mut source,
+            0,
+            &[child_id],
+            TokenProperty::Fill,
+            Some(old_token),
+        )
+        .unwrap();
+        layout_components::make_component(&mut source, 0, main).unwrap();
+        layout_components::insert_instance(&mut source, main, 0, Pt::new(74.0, 10.0), None)
+            .unwrap();
+        let source_ids: HashSet<_> = source.layers[0]
+            .kind
+            .shapes()
+            .unwrap()
+            .iter()
+            .map(|shape| shape.id)
+            .collect();
+        let mut studio = studio();
+        studio
+            .doc
+            .layout_tokens
+            .push(DesignToken::color("Brand fill", Rgba::BLACK));
+        let before = serde_json::to_value(&studio.doc).unwrap();
+        let layer = studio.doc.layers.len();
+        studio
+            .place_brand_imported(Imported::Document(source), Pt::new(160.0, 120.0))
+            .unwrap();
+        studio.doc.validate_hierarchy().unwrap();
+        let placed = studio.doc.layers[layer].kind.shapes().unwrap();
+        assert!(placed.iter().all(|shape| !source_ids.contains(&shape.id)));
+        let main = placed
+            .iter()
+            .find(|shape| matches!(shape.layout.component, Some(ComponentBinding::Main { .. })))
+            .unwrap()
+            .id;
+        let instance = placed
+            .iter()
+            .find(|shape| {
+                matches!(
+                    shape.layout.component,
+                    Some(ComponentBinding::Instance { .. })
+                )
+            })
+            .unwrap();
+        let Some(ComponentBinding::Instance {
+            main: reference,
+            nodes,
+        }) = &instance.layout.component
+        else {
+            unreachable!()
+        };
+        assert_eq!(*reference, main);
+        assert!(
+            nodes
+                .iter()
+                .all(|node| !source_ids.contains(&node.source)
+                    && !source_ids.contains(&node.instance))
+        );
+        let imported_token = studio
+            .doc
+            .layout_tokens
+            .iter()
+            .find(|token| token.name == "Brand fill 2")
+            .unwrap();
+        assert_ne!(imported_token.id, old_token);
+        assert!(
+            placed
+                .iter()
+                .filter(|shape| shape.layout.tokens.fill.is_some())
+                .all(|shape| shape.layout.tokens.fill == Some(imported_token.id))
+        );
+        assert!(
+            nodes
+                .iter()
+                .filter(|node| node.baseline.layout.tokens.fill.is_some())
+                .all(|node| node.baseline.layout.tokens.fill == Some(imported_token.id))
+        );
+        crate::project::decode(&crate::project::encode(&studio.doc).unwrap()).unwrap();
+        assert_eq!(studio.history.len(), 1);
+        studio.undo();
+        assert_eq!(serde_json::to_value(&studio.doc).unwrap(), before);
+    }
 
     #[test]
     fn layered_place_scales_canvas_geometry_remaps_groups_and_undoes_every_change() {
@@ -622,7 +752,10 @@ mod tests {
                 Pt::new(100.0, 90.0),
             )
             .unwrap();
-        let shapes = studio.doc.layers[1].kind.shapes().unwrap();
+        let shapes: Vec<_> = studio.doc.layers[1..]
+            .iter()
+            .flat_map(|layer| layer.kind.shapes().unwrap_or_default())
+            .collect();
         assert_eq!(shapes.len(), 2);
         assert_eq!(shapes[0].style.fill, Fill::Solid(Rgba::BLACK));
         assert_eq!(shapes[1].style.fill, Fill::None);

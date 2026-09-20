@@ -1,12 +1,12 @@
-#[path = "layer_drag.rs"]
-mod layer_drag;
+#[path = "gradient_editor.rs"]
+mod gradient_editor;
+
+use super::layer_drag;
 
 use crate::app::Studio;
-use crate::cloud;
 use crate::color::{Blend, Rgba};
 use crate::document::{Cap, Fill, Join, Stroke as DocStroke};
 use crate::geom::Geom;
-use crate::layout::{AutoStack, Constraint, StackAlign, StackAxis};
 use crate::tools::{Persona, Tool};
 use crate::ui::icons::{self, ph};
 use crate::ui::theme::{accent, accent_soft, bg_panel, bg_widget, border, fg, fg_weak};
@@ -68,7 +68,7 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                         section_gap(ui);
                     }
                     if layout {
-                        layout_studio(ui, studio);
+                        super::layout::inspector(ui, studio);
                         section_gap(ui);
                     }
                     if design
@@ -90,6 +90,10 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                         } else {
                             transform_studio(ui, studio, true);
                         }
+                        section_gap(ui);
+                    }
+                    if studio.persona == Persona::Pixel {
+                        super::raster::inspector(ui, studio);
                         section_gap(ui);
                     }
                     if paint || studio.paint_mask {
@@ -128,150 +132,6 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                 .auto_shrink([false, false])
                 .show(ui, |ui| layers_studio(ui, studio));
         });
-}
-
-fn layout_studio(ui: &mut Ui, studio: &mut Studio) {
-    heading(ui, "Frames");
-    ui.add_space(6.0);
-    if ui.button("Wrap selection in frame").clicked() {
-        studio.wrap_selection_frame();
-    }
-    if ui.button("Image placeholder").clicked() {
-        studio.add_placeholder();
-    }
-    let frame = studio.selected_frame().and_then(|(li, id)| {
-        studio
-            .doc
-            .find_shape(li, id)
-            .map(|s| (li, id, s.layout.clone()))
-    });
-    if let Some((li, id, layout)) = frame {
-        ui.add_space(8.0);
-        ui.label(RichText::new("Auto-layout").size(11.0).color(fg_weak()));
-        let stacked = layout.stack.is_some();
-        if ui.selectable_label(stacked, "Stack children").clicked() {
-            studio.set_frame_stack(if stacked {
-                None
-            } else {
-                Some(AutoStack::default())
-            });
-        }
-        if let Some(mut stack) = layout.stack {
-            let mut changed = false;
-            ui.horizontal(|ui| {
-                for axis in [StackAxis::Vertical, StackAxis::Horizontal] {
-                    if ui
-                        .selectable_label(stack.direction == axis, axis.name())
-                        .clicked()
-                    {
-                        stack.direction = axis;
-                        changed = true;
-                    }
-                }
-            });
-            ui.horizontal(|ui| {
-                for align in [
-                    StackAlign::Start,
-                    StackAlign::Center,
-                    StackAlign::End,
-                    StackAlign::Stretch,
-                ] {
-                    if ui
-                        .selectable_label(stack.align == align, align.name())
-                        .clicked()
-                    {
-                        stack.align = align;
-                        changed = true;
-                    }
-                }
-            });
-            ui.horizontal(|ui| {
-                ui.label(RichText::new("Gap").size(11.0).color(fg_weak()));
-                changed |= ui
-                    .add(eframe::egui::DragValue::new(&mut stack.gap).range(0.0..=240.0))
-                    .changed();
-            });
-            ui.horizontal(|ui| {
-                ui.label(RichText::new("Pad").size(11.0).color(fg_weak()));
-                changed |= ui
-                    .add(eframe::egui::DragValue::new(&mut stack.padding[0]).range(0.0..=240.0))
-                    .changed();
-            });
-            if changed {
-                studio.set_frame_stack(Some(stack));
-            }
-        }
-        let open = cloud::unresolved_count(&studio.doc, Some(id));
-        if open > 0 {
-            ui.label(
-                RichText::new(format!("{open} open comments"))
-                    .size(11.0)
-                    .color(fg_weak()),
-            );
-        }
-        let _ = (li, id);
-    }
-    if let Some((li, id)) = studio.primary()
-        && let Some(shape) = studio.doc.find_shape(li, id)
-        && (shape.layout.parent.is_some() || !shape.layout.frame)
-    {
-        let layout = shape.layout.clone();
-        ui.add_space(8.0);
-        ui.label(RichText::new("Constraints").size(11.0).color(fg_weak()));
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("X").size(11.0).color(fg_weak()));
-            for constraint in Constraint::all() {
-                if ui
-                    .selectable_label(layout.constraint_x == constraint, constraint.name())
-                    .clicked()
-                {
-                    studio.set_constraints(constraint, layout.constraint_y);
-                }
-            }
-        });
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("Y").size(11.0).color(fg_weak()));
-            for constraint in Constraint::all() {
-                if ui
-                    .selectable_label(layout.constraint_y == constraint, constraint.name())
-                    .clicked()
-                {
-                    studio.set_constraints(layout.constraint_x, constraint);
-                }
-            }
-        });
-    }
-    ui.add_space(8.0);
-    heading(ui, "Comments");
-    ui.add_space(4.0);
-    ui.add(eframe::egui::TextEdit::singleline(&mut studio.comment_draft).hint_text("Write a note"));
-    if ui
-        .selectable_label(studio.pinning_comment, "Pin on canvas")
-        .clicked()
-    {
-        studio.pinning_comment = !studio.pinning_comment;
-    }
-    let pins: Vec<_> = studio
-        .doc
-        .comments
-        .iter()
-        .map(|p| {
-            (
-                p.id,
-                p.resolved,
-                p.thread.first().map(|m| m.body.clone()).unwrap_or_default(),
-            )
-        })
-        .collect();
-    for (id, resolved, body) in pins {
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(&body).size(11.0).color(fg()));
-            let label = if resolved { "Reopen" } else { "Resolve" };
-            if ui.small_button(label).clicked() {
-                studio.resolve_comment(id, !resolved);
-            }
-        });
-    }
 }
 
 fn section_gap(ui: &mut Ui) {
@@ -501,12 +361,19 @@ fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
     let source_fill = style.fill.clone();
     let source_stroke = style.stroke.clone();
     let original = if fill {
-        match source_fill {
-            Fill::Solid(c) | Fill::Linear { c0: c, .. } | Fill::Radial { c0: c, .. } => Some(c),
+        match &source_fill {
+            Fill::Solid(c) | Fill::Linear { c0: c, .. } | Fill::Radial { c0: c, .. } => Some(*c),
+            Fill::Gradient(g) => Some(g.sample(0.)),
             Fill::None => None,
         }
     } else {
-        source_stroke.as_ref().map(|stroke| stroke.color)
+        source_stroke.as_ref().map(|stroke| {
+            stroke
+                .gradient
+                .as_ref()
+                .map(|g| g.sample(0.))
+                .unwrap_or(stroke.color)
+        })
     };
     if original.is_none() {
         let label = if fill { "Add fill" } else { "Add stroke" };
@@ -531,6 +398,7 @@ fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
                     Fill::Solid(color)
                     | Fill::Linear { c0: color, .. }
                     | Fill::Radial { c0: color, .. } => *color,
+                    Fill::Gradient(g) => g.sample(0.),
                     Fill::None => studio.brush.color,
                 }
             };
@@ -580,10 +448,8 @@ fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
                     {
                         studio.fill_active = fill;
                     }
-                    let mut swatch = color.to_egui();
                     ui.spacing_mut().interact_size = vec2(20.0, 20.0);
-                    if ui.color_edit_button_srgba(&mut swatch).changed() {
-                        color = Rgba::from_egui(swatch);
+                    if crate::ui::color_picker::color_edit(ui, "appearance-color", &mut color) {
                         changed = true;
                         studio.fill_active = fill;
                     }
@@ -650,6 +516,12 @@ fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
                     c1,
                 },
                 Fill::Radial { c1, .. } => Fill::Radial { c0: color, c1 },
+                Fill::Gradient(mut g) => {
+                    if let Some(stop) = g.stops.first_mut() {
+                        stop.color = color;
+                    }
+                    Fill::Gradient(g)
+                }
                 _ => Fill::Solid(color),
             };
             studio.set_fill(fill);
@@ -657,6 +529,11 @@ fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
         } else {
             let mut stroke = source_stroke.unwrap_or_default();
             stroke.color = color;
+            if let Some(g) = &mut stroke.gradient
+                && let Some(stop) = g.stops.first_mut()
+            {
+                stop.color = color;
+            }
             studio.style.stroke = Some(stroke.clone());
             apply_stroke(studio, Some(stroke));
         }
@@ -673,24 +550,19 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
                     studio.swap_fill_stroke();
                     ui.close();
                 }
-                if ui.button("Linear gradient").clicked() {
-                    studio.set_fill(Fill::Linear {
-                        from: [0.0, 0.0],
-                        to: [1.0, 0.0],
-                        c0: studio.gradient.0,
-                        c1: studio.gradient.1,
-                    });
-                    ui.close();
+                for kind in crate::gradient::GradientKind::ALL {
+                    if ui.button(format!("{} gradient", kind.name())).clicked() {
+                        let gradient = crate::gradient::Gradient::new(
+                            kind,
+                            studio.gradient.0,
+                            studio.gradient.1,
+                        );
+                        apply_gradient(studio, Some(gradient));
+                        ui.close();
+                    }
                 }
-                if ui.button("Radial gradient").clicked() {
-                    studio.set_fill(Fill::Radial {
-                        c0: studio.gradient.0,
-                        c1: studio.gradient.1,
-                    });
-                    ui.close();
-                }
-                if ui.button("Solid fill").clicked() {
-                    studio.set_fill(Fill::Solid(studio.brush.color));
+                if ui.button("Solid color").clicked() {
+                    apply_gradient(studio, None);
                     ui.close();
                 }
             });
@@ -698,24 +570,87 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
     });
     color_row(ui, studio, true);
     color_row(ui, studio, false);
-    let fill = inspected_style(studio).fill.clone();
-    if let Fill::Linear { c0, c1, .. } | Fill::Radial { c0, c1 } = fill {
-        ui.horizontal(|ui| {
-            ui.label(RichText::new("Gradient").small().color(fg_weak()));
-            let mut a = c0.to_egui();
-            let mut b = c1.to_egui();
-            let changed = ui.color_edit_button_srgba(&mut a).changed()
-                | ui.color_edit_button_srgba(&mut b).changed();
-            if changed {
-                let c0 = Rgba::from_egui(a);
-                let c1 = Rgba::from_egui(b);
-                studio.gradient = (c0, c1);
-                studio.set_fill(match fill {
-                    Fill::Linear { from, to, .. } => Fill::Linear { from, to, c0, c1 },
-                    _ => Fill::Radial { c0, c1 },
+    let style = inspected_style(studio).clone();
+    let mut gradient = if studio.fill_active {
+        style.fill.gradient()
+    } else {
+        style.stroke.as_ref().and_then(|s| s.gradient.clone())
+    };
+    ui.horizontal(|ui| {
+        ui.label(
+            RichText::new(if studio.fill_active {
+                "Fill type"
+            } else {
+                "Stroke type"
+            })
+            .small()
+            .color(fg_weak()),
+        );
+        let current = gradient.as_ref().map(|g| g.kind);
+        let mut chosen = current;
+        ComboBox::from_id_salt("paint-type")
+            .selected_text(current.map(|k| k.name()).unwrap_or("Solid"))
+            .width(108.)
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut chosen, None, "Solid");
+                for kind in crate::gradient::GradientKind::ALL {
+                    ui.selectable_value(&mut chosen, Some(kind), kind.name());
+                }
+            });
+        if chosen != current {
+            gradient = chosen.map(|kind| {
+                let mut g = gradient.clone().unwrap_or_else(|| {
+                    crate::gradient::Gradient::new(
+                        kind,
+                        if studio.fill_active {
+                            style.fill.clone().solid_or(studio.gradient.0)
+                        } else {
+                            style
+                                .stroke
+                                .as_ref()
+                                .map(|s| s.color)
+                                .unwrap_or(studio.gradient.0)
+                        },
+                        studio.gradient.1,
+                    )
                 });
-            }
-        });
+                if g.kind != kind {
+                    g.kind = kind;
+                    g.from = if kind == crate::gradient::GradientKind::Linear {
+                        [0., 0.5]
+                    } else {
+                        [0.5, 0.5]
+                    };
+                    g.to = [1., 0.5];
+                }
+                g
+            });
+            apply_gradient(studio, gradient.clone());
+        }
+    });
+    if let Some(mut gradient) = gradient {
+        let bounds = studio
+            .primary()
+            .and_then(|(li, id)| studio.doc.find_shape(li, id))
+            .map(|s| s.geom.bbox())
+            .unwrap_or_else(|| {
+                crate::geom::Bounds::from_min_size(
+                    crate::geom::Pt::ZERO,
+                    crate::geom::Pt::new(100., 100.),
+                )
+            });
+        ui.push_id(
+            if studio.fill_active {
+                "fill-gradient"
+            } else {
+                "stroke-gradient"
+            },
+            |ui| {
+                if gradient_editor::editor(ui, &mut gradient, bounds) {
+                    apply_gradient(studio, Some(gradient));
+                }
+            },
+        );
     }
     ui.horizontal_wrapped(|ui| {
         ui.menu_button("Color library", |ui| {
@@ -739,6 +674,28 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
             });
         }
     });
+}
+
+fn apply_gradient(studio: &mut Studio, gradient: Option<crate::gradient::Gradient>) {
+    let style = inspected_style(studio).clone();
+    if let Some(g) = &gradient {
+        studio.gradient = (g.sample(0.), g.sample(1.));
+    }
+    if studio.fill_active {
+        studio.set_fill(
+            gradient
+                .map(Fill::Gradient)
+                .unwrap_or_else(|| Fill::Solid(style.fill.solid_or(studio.brush.color))),
+        );
+    } else {
+        let mut stroke = style.stroke.unwrap_or_default();
+        if let Some(g) = &stroke.gradient {
+            stroke.color = g.sample(0.);
+        }
+        stroke.gradient = gradient;
+        studio.style.stroke = Some(stroke.clone());
+        apply_stroke(studio, Some(stroke));
+    }
 }
 
 fn color_grid(ui: &mut Ui, studio: &mut Studio, recent: bool) {
@@ -820,17 +777,23 @@ fn stroke_studio(ui: &mut Ui, studio: &mut Studio) {
 }
 
 fn apply_stroke(studio: &mut Studio, stroke: Option<DocStroke>) {
-    for (li, id) in studio.selection.clone() {
-        if let Some(s) = studio.doc.find_shape(li, id) {
+    let commands = studio
+        .selection
+        .iter()
+        .filter_map(|&(li, id)| {
+            let s = studio.doc.find_shape(li, id)?;
             let mut after = s.style.clone();
             after.stroke = stroke.clone();
-            studio.commit(crate::document::Cmd::SetStyle {
+            (after != s.style).then(|| crate::document::Cmd::SetStyle {
                 layer: li,
                 id,
                 before: s.style.clone(),
                 after,
-            });
-        }
+            })
+        })
+        .collect::<Vec<_>>();
+    if !commands.is_empty() {
+        studio.commit(crate::document::Cmd::Batch(commands));
     }
 }
 
@@ -1397,8 +1360,10 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
         return;
     };
     let bounds = shape.world_bbox();
+    let layout_frame = shape.layout.frame;
     let rotation = shape.rotation;
     let opacity = shape.opacity;
+    let original_blend = shape.blend;
     let polygon = if let Geom::Polygon { sides, .. } = shape.geom {
         Some(sides)
     } else {
@@ -1425,9 +1390,13 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
             min: crate::geom::Pt::new(x, y),
             max: crate::geom::Pt::new(x + width, y + height),
         };
-        edit_shape_geometry(studio, layer, id, |geometry| {
-            geometry.map_into(bounds, destination)
-        });
+        if layout_frame {
+            studio.set_layout_frame_bounds(layer, id, destination);
+        } else {
+            edit_shape_geometry(studio, layer, id, |geometry| {
+                geometry.map_into(bounds, destination)
+            });
+        }
     }
     let mut degrees = rotation.to_degrees();
     let mut opacity_percent = opacity * 100.0;
@@ -1461,6 +1430,37 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
             before: opacity,
             after: opacity_percent / 100.0,
         });
+    }
+    let mut blend = original_blend;
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Blend").small().color(fg_weak()));
+        ComboBox::from_id_salt(("object-blend", layer, id))
+            .selected_text(blend.name())
+            .show_ui(ui, |ui| {
+                for mode in Blend::ALL {
+                    ui.selectable_value(&mut blend, mode, mode.name());
+                }
+            });
+    });
+    if blend != original_blend {
+        let commands = studio
+            .selection
+            .iter()
+            .filter_map(|&(li, object)| {
+                let shape = studio.doc.find_shape(li, object)?;
+                (studio.doc.layer_editable(li) && !shape.locked && shape.blend != blend).then_some(
+                    crate::document::Cmd::SetBlend {
+                        layer: li,
+                        id: object,
+                        before: shape.blend,
+                        after: blend,
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        if !commands.is_empty() {
+            studio.commit(crate::document::Cmd::Batch(commands));
+        }
     }
     ui.horizontal(|ui| {
         ui.label(RichText::new("Flip").small().color(fg_weak()));
@@ -1548,13 +1548,24 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
                 }
             }
         });
+        if ui
+            .small_button("Group")
+            .on_hover_text("Ctrl+G · create an editable layer group")
+            .clicked()
+        {
+            studio.group_selected();
+        }
         ui.horizontal_wrapped(|ui| {
             for operation in crate::boolean::BoolOp::all() {
                 if ui.small_button(operation.name()).clicked() {
                     studio.apply_boolean_multi(operation);
                 }
             }
-            if ui.small_button("Combine").on_hover_text("Ctrl+G").clicked() {
+            if ui
+                .small_button("Compound")
+                .on_hover_text("Ctrl+8")
+                .clicked()
+            {
                 studio.combine_selected();
             }
         });
@@ -1562,7 +1573,7 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
     if compound
         && ui
             .small_button("Release compound")
-            .on_hover_text("Ctrl+Shift+G")
+            .on_hover_text("Ctrl+Shift+8")
             .clicked()
     {
         studio.release_compound();
@@ -1622,12 +1633,7 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
                     inspector_slider(ui, "Offset Y", dy, -80.0..=80.0, "");
                     inspector_slider(ui, "Blur", blur, 0.0..=80.0, "");
                     ui.horizontal(|ui| {
-                        let mut rgb = [color.r, color.g, color.b];
-                        if ui.color_edit_button_srgb(&mut rgb).changed() {
-                            color.r = rgb[0];
-                            color.g = rgb[1];
-                            color.b = rgb[2];
-                        }
+                        super::color_picker::color_edit(ui, ("effect-color", salt, i), color);
                     });
                 }
                 crate::filter::Fx::Offset { dx, dy } => {
@@ -1813,19 +1819,15 @@ fn brush_studio(ui: &mut Ui, studio: &mut Studio) {
 fn paint_color_studio(ui: &mut Ui, studio: &mut Studio) {
     heading(ui, "Color");
     let mut color = match studio.style.fill {
-        Fill::Solid(color) if studio.tool == Tool::Fill => color.to_egui(),
-        _ => studio.brush.color.to_egui(),
+        Fill::Solid(color) if studio.tool == Tool::Fill => color,
+        _ => studio.brush.color,
     };
     ui.horizontal(|ui| {
-        if ui.color_edit_button_srgba(&mut color).changed() {
-            studio.brush.color = Rgba::from_egui(color);
+        if super::color_picker::color_edit(ui, "paint", &mut color) {
+            studio.brush.color = color;
             studio.style.fill = Fill::Solid(studio.brush.color);
         }
-        ui.label(
-            RichText::new(Rgba::from_egui(color).hex())
-                .small()
-                .color(fg_weak()),
-        );
+        ui.label(RichText::new(color.hex()).small().color(fg_weak()));
     });
 }
 
@@ -1880,7 +1882,7 @@ fn object_icon(ui: &mut Ui, icon: &str, color: Color32) {
     );
 }
 
-fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
+pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
     // Reveal a newly selected object once; a manual collapse stays collapsed.
     let primary = studio.primary();
     let reveal_id = ui.make_persistent_id("reveal-selection");
@@ -1917,6 +1919,14 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                 }
                 if ui.button("New group").clicked() {
                     studio.add_layer_group();
+                    ui.close();
+                }
+                if ui.button("Group selection     Ctrl+G").clicked() {
+                    studio.group_selected();
+                    ui.close();
+                }
+                if ui.button("Ungroup     Ctrl+Shift+G").clicked() {
+                    studio.ungroup_selected();
                     ui.close();
                 }
                 ui.separator();
@@ -2107,7 +2117,7 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                             }
                             response
                                 .on_hover_text(format!(
-                                    "{} · {} · drag to reorder within this group",
+                                    "{} · {} · drag between rows to reorder, or onto a group to nest",
                                     layer.name,
                                     if layer.is_group {
                                         "Group"
@@ -2220,7 +2230,7 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                 }
                 let objects_unlocked = studio.layer_unlocked(i);
                 let objects_editable = studio.doc.layer_editable(i);
-                if let Some(shapes) = studio.doc.layers[i].kind.shapes() {
+                if let Some(shapes) = studio.doc.layers[i].kind.shapes().map(|s| s.to_vec()) {
                     for (index, shape) in shapes.iter().enumerate().rev() {
                         ui.push_id(shape.id, |ui| {
                             Frame::new()
@@ -2280,8 +2290,14 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                                 name_width,
                                                 studio.selection.contains(&(i, shape.id))
                                                     && shape.visible,
-                                                false,
+                                                true,
                                             );
+                                            rows.push((layer_drag::TreeRow::Object(i, shape.id), response.rect));
+                                            if layer_drag::object_source(&response, studio, i, shape.id)
+                                                && !studio.selection.contains(&(i, shape.id))
+                                            {
+                                                pick_shape = Some((i, shape.id));
+                                            }
                                             if response.clicked()
                                                 && objects_editable
                                                 && shape.visible
@@ -2373,13 +2389,7 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                     }
                 }
             }
-            rows.push((
-                i,
-                eframe::egui::Rect::from_min_max(
-                    header.min,
-                    eframe::egui::pos2(header.right(), ui.cursor().top()),
-                ),
-            ));
+            rows.push((layer_drag::TreeRow::Layer(i), header));
         });
     }
     let drop = layer_drag::drop_target(ui, studio, &rows);
@@ -2454,7 +2464,15 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
             studio.paint_mask = false;
         }
         studio.selected_layer = None;
-        studio.selection = vec![(li, id)];
+        if ui.input(|i| i.modifiers.shift) {
+            if studio.selection.contains(&(li, id)) {
+                studio.selection.retain(|s| *s != (li, id));
+            } else {
+                studio.selection.push((li, id));
+            }
+        } else {
+            studio.selection = vec![(li, id)];
+        }
         studio.active_layer = Some(li);
         studio.artboard_sel.clear();
     }
@@ -2540,14 +2558,22 @@ fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
     if let Some((index, action)) = mask_action {
         action.run(studio, index);
     }
-    if let Some((source, target, above)) = drop {
-        studio.reorder_layer_tree(source, target, above);
+    if let Some(drop) = drop {
+        drop.apply(studio);
     }
 }
 
 #[test]
 fn inspector_keeps_its_width_across_frames_and_personas() {
-    for scene in ["design", "type", "pixel", "motion", "masking", "healing"] {
+    for scene in [
+        "design",
+        "design-tools",
+        "type",
+        "pixel",
+        "motion",
+        "masking",
+        "healing",
+    ] {
         let ctx = eframe::egui::Context::default();
         crate::ui::theme::apply(&ctx);
         let mut studio = Studio::new();

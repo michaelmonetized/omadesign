@@ -1,5 +1,7 @@
 //! Feature scenes for product shots. Real chrome, real documents.
+mod graphics;
 pub mod logo_wordmark;
+mod raster;
 
 use crate::app::Studio;
 use crate::color::Rgba;
@@ -14,6 +16,26 @@ pub struct Scene {
 }
 
 pub const SCENES: &[Scene] = &[
+    Scene {
+        id: "pixel-effects",
+        caption: "Chroma key, color filters and raster effects with live preview.",
+    },
+    Scene {
+        id: "design-tools",
+        caption: "Multi-stop gradients, gradient strokes and object blending.",
+    },
+    Scene {
+        id: "layout",
+        caption: "Responsive design, reusable components, and interactive preview.",
+    },
+    Scene {
+        id: "layout-preview",
+        caption: "Interactive responsive preview.",
+    },
+    Scene {
+        id: "layout-phone",
+        caption: "One design, responsive phone layout.",
+    },
     Scene {
         id: "brand-library",
         caption: "Good taste travels. A portable home for your brand.",
@@ -139,6 +161,23 @@ pub fn apply(studio: &mut Studio, id: &str) -> Result<(), String> {
             studio.show_welcome = false;
             studio.load_cloud_preview();
         }
+        "layout" | "layout-preview" | "layout-phone" => {
+            studio.doc = crate::layout_demo::build();
+            studio.persona = Persona::Layout;
+            studio.tool = Tool::Select;
+            studio.show_welcome = false;
+            studio.active_layer = Some(0);
+            studio.selection = studio.doc.layers[0]
+                .kind
+                .shapes()
+                .and_then(|s| s.first())
+                .map(|s| vec![(0, s.id)])
+                .unwrap_or_default();
+            studio.need_fit = true;
+            if id == "layout-phone" {
+                studio.resize_layout_frame(390.0, 900.0);
+            }
+        }
         "brand-library" => project_library(studio, false)?,
         "palette-library" => project_library(studio, true)?,
         "hud-pen" => key_hud(studio),
@@ -154,9 +193,11 @@ pub fn apply(studio: &mut Studio, id: &str) -> Result<(), String> {
         "object-guides" => object_guides(studio),
         "welcome" => welcome(studio),
         "design" => design(studio),
+        "design-tools" => graphics::design_tools(studio),
         "reshape" => reshape(studio),
         "type" => type_scene(studio),
         "pixel" => pixel(studio),
+        "pixel-effects" => raster::pixel_effects(studio),
         "masking" => masking(studio),
         "healing" => healing(studio),
         "photo" => photo(studio),
@@ -678,7 +719,7 @@ fn boolean(s: &mut Studio) {
     s.commit(Cmd::AddShape { layer: 1, shape: b });
     s.selection = vec![(1, ia), (1, ib)];
     s.need_fit = true;
-    s.status = "Two shapes. Union, subtract, intersect, XOR. Combine Ctrl+G.".into();
+    s.status = "Two shapes. Union, subtract, intersect, XOR. Compound Ctrl+8.".into();
 }
 
 fn shapes(s: &mut Studio) {

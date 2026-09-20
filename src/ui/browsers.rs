@@ -1,6 +1,6 @@
 use super::jobs;
 use crate::app::Studio;
-use crate::document::{Cmd, Layer, Shape};
+use crate::document::{Cmd, Layer};
 use crate::geom::{Geom, Pt};
 use crate::ui::theme;
 use eframe::egui::{self, RichText, ScrollArea};
@@ -8,31 +8,17 @@ use eframe::egui::{self, RichText, ScrollArea};
 const SHAPE: &str = "shape-download";
 const SEARCH: &str = "photo-search";
 const PHOTO: &str = "photo-download";
-type ShapeResult = (String, String, Geom);
-type PhotoResult = (String, Layer);
+type FrameTarget = Option<(usize, u64)>;
+type ShapeResult = (String, String, Geom, FrameTarget);
+type PhotoResult = (String, Layer, FrameTarget);
 
 pub fn show_shape_browser(ui: &mut egui::Ui, studio: &mut Studio) {
     if let Some(result) = jobs::poll::<ShapeResult>(ui.ctx(), SHAPE) {
         match result {
-            Ok((document, name, mut geom)) if document == studio.swap_id => {
-                let center = Pt::new(studio.doc.width * 0.5, studio.doc.height * 0.5);
-                geom.translate(center - geom.bbox().center());
-                let mut style = studio.style.clone();
-                style.stroke = None;
-                if style.fill.is_none() {
-                    style.fill = crate::document::Fill::Solid(studio.brush.color);
-                }
-                let shape = Shape::new(geom, style);
-                let id = shape.id;
-                if let Some(layer) = studio.vector_target() {
-                    studio.commit(Cmd::AddShape { layer, shape });
-                    studio.selection = vec![(layer, id)];
-                    studio.show_shape_browser = false;
-                    studio.status = format!("Added {name}");
-                    studio.shape_status.clear();
-                } else {
-                    studio.shape_status = "Add a vector layer to place this shape.".into();
-                }
+            Ok((document, name, geom, target)) if document == studio.swap_id => {
+                studio.place_palette_shape(geom, name, target);
+                studio.show_shape_browser = false;
+                studio.shape_status.clear();
             }
             Ok(_) => {
                 studio.shape_status = "Document changed. Select the shape again to place it.".into()
@@ -94,10 +80,11 @@ pub fn show_shape_browser(ui: &mut egui::Ui, studio: &mut Studio) {
                                     studio.shape_status = format!("Loading {}…", icon.name);
                                     let icon = icon.clone();
                                     let document = studio.swap_id.clone();
+                                    let target = studio.asset_frame_target();
                                     jobs::start(ui.ctx(), SHAPE, move || {
                                         let geom =
                                             crate::shape_browser::icon_to_geom(&icon, 256.0)?;
-                                        Ok((document, icon.name.to_string(), geom))
+                                        Ok((document, icon.name.to_string(), geom, target))
                                     });
                                 }
                                 ui.label(RichText::new(icon.lib).small().color(theme::fg_weak()));
@@ -139,12 +126,32 @@ pub fn show_asset_browser(ui: &mut egui::Ui, studio: &mut Studio) {
     }
     if let Some(result) = jobs::poll::<PhotoResult>(ui.ctx(), PHOTO) {
         match result {
-            Ok((document, layer)) if document == studio.swap_id => {
-                let index = studio.doc.layers.len();
+            Ok((document, layer, target)) if document == studio.swap_id => {
                 let name = layer.name.clone();
-                studio.commit(Cmd::AddLayer { index, layer });
-                studio.active_layer = Some(index);
-                studio.status = format!("Added {name}");
+                if let Some((li, id)) = target {
+                    let at = studio.asset_frame_center((li, id)).unwrap_or(Pt::ZERO);
+                    if let crate::document::LayerKind::Raster { pixels, .. } = layer.kind {
+                        let imported = crate::import::Imported::Raster {
+                            name,
+                            image: crate::photo::RgbaImage {
+                                w: pixels.w,
+                                h: pixels.h,
+                                data: pixels.data,
+                            },
+                        };
+                        if let Err(error) =
+                            studio.place_brand_imported_in_frame(imported, at, target)
+                        {
+                            studio.asset_status = error;
+                            return;
+                        }
+                    }
+                } else {
+                    let index = studio.doc.layers.len();
+                    studio.commit(Cmd::AddLayer { index, layer });
+                    studio.active_layer = Some(index);
+                    studio.status = format!("Added {name}");
+                }
                 studio.asset_status.clear();
                 studio.show_asset_browser = false;
             }
@@ -224,6 +231,7 @@ pub fn show_asset_browser(ui: &mut egui::Ui, studio: &mut Studio) {
             if let Some(hit) = chosen {
                 studio.asset_status = "Downloading photo…".into();
                 let document = studio.swap_id.clone();
+                let target = studio.asset_frame_target();
                 jobs::start(ui.ctx(), PHOTO, move || {
                     let bytes = crate::asset_browser::download(&hit)?;
                     let full = crate::photo::decode_bytes(&bytes).ok_or("Could not decode this photo.")?;
@@ -233,7 +241,7 @@ pub fn show_asset_browser(ui: &mut egui::Ui, studio: &mut Studio) {
                         *pixels = crate::document::Pixels::from_rgba(full.w, full.h, full.data)
                             .ok_or("Invalid photo dimensions.")?;
                     }
-                    Ok((document, layer))
+                    Ok((document, layer, target))
                 });
             }
         });
@@ -242,5 +250,94 @@ pub fn show_asset_browser(ui: &mut egui::Ui, studio: &mut Studio) {
         jobs::cancel::<Vec<crate::asset_browser::AssetHit>>(ui.ctx(), SEARCH);
         jobs::cancel::<PhotoResult>(ui.ctx(), PHOTO);
         studio.asset_status.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::document::{Document, Shape, Style};
+    use crate::tools::Persona;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn palette_completions_keep_the_frame_selected_when_the_asset_was_chosen() {
+        let ctx = egui::Context::default();
+        theme::apply(&ctx);
+        let mut studio = Studio::new();
+        studio.doc = Document::new("Palette destination", 1.0, 1.0, 96.0);
+        studio.doc.width = 640.0;
+        studio.doc.height = 480.0;
+        studio.doc.layers = vec![Layer::vector("First"), Layer::vector("Second")];
+        studio.persona = Persona::Layout;
+        studio.show_welcome = false;
+        let first = crate::layout::make_frame(Pt::new(20.0, 20.0), Pt::new(200.0, 200.0));
+        let second = crate::layout::make_frame(Pt::new(280.0, 20.0), Pt::new(200.0, 200.0));
+        let target_id = first.id;
+        let second_id = second.id;
+        let mut child = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(40.0, 40.0),
+                size: Pt::new(20.0, 20.0),
+                radius: 0.0,
+            },
+            Style::default(),
+        );
+        child.layout.parent = Some(target_id);
+        studio.selection = vec![(0, child.id)];
+        studio.active_layer = Some(0);
+        studio.doc.layers[0]
+            .kind
+            .shapes_mut()
+            .unwrap()
+            .extend([first, child]);
+        studio.doc.layers[1].kind.shapes_mut().unwrap().push(second);
+        let target = studio.asset_frame_target();
+        assert_eq!(target, Some((0, target_id)));
+        let owner = studio.swap_id.clone();
+        jobs::start(&ctx, SHAPE, move || {
+            Ok((
+                owner,
+                "Loaded icon".to_owned(),
+                Geom::Rect {
+                    origin: Pt::ZERO,
+                    size: Pt::new(32.0, 32.0),
+                    radius: 0.0,
+                },
+                target,
+            ))
+        });
+        let owner = studio.swap_id.clone();
+        jobs::start(&ctx, PHOTO, move || {
+            let mut layer = Layer::raster("Loaded photo", 2, 2);
+            if let crate::document::LayerKind::Raster { pixels, .. } = &mut layer.kind {
+                pixels.data = [240, 90, 20, 255].repeat(4);
+            }
+            Ok((owner, layer, target))
+        });
+        // A user's next selection cannot redirect an asset that is already loading.
+        studio.selection = vec![(1, second_id)];
+        studio.active_layer = Some(1);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while studio.history.len() < 2 {
+            assert!(Instant::now() < deadline, "Palette completion timed out");
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                show_shape_browser(ui, &mut studio);
+                show_asset_browser(ui, &mut studio);
+            });
+            output.textures_delta.clear();
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert_eq!(studio.doc.layers.len(), 2);
+        let shapes = studio.doc.layers[0].kind.shapes().unwrap();
+        for name in ["Loaded icon", "Loaded photo"] {
+            let placed = shapes.iter().find(|shape| shape.name == name).unwrap();
+            assert_eq!(placed.layout.parent, Some(target_id));
+        }
+        assert_eq!(studio.doc.layers[1].kind.shapes().unwrap().len(), 1);
+        studio.doc.validate_hierarchy().unwrap();
+        studio.undo();
+        studio.undo();
+        assert_eq!(studio.doc.layers[0].kind.shapes().unwrap().len(), 2);
     }
 }

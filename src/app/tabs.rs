@@ -25,6 +25,7 @@ pub(super) struct TabState {
     pose_drag: HashMap<u64, Pose>,
     selected_key: Option<(u64, Prop, usize)>,
     pending_place: Option<PendingPlace>,
+    pending_place_frame: Option<(usize, u64)>,
     show_welcome: bool,
     artboard_sel: Vec<u64>,
     layer_expanded: HashSet<u64>,
@@ -60,6 +61,7 @@ impl TabState {
             pose_drag: HashMap::new(),
             selected_key: None,
             pending_place: None,
+            pending_place_frame: None,
             show_welcome: false,
             artboard_sel: vec![],
             layer_expanded: HashSet::new(),
@@ -100,6 +102,7 @@ impl Studio {
         swap(&mut self.pose_drag, &mut t.pose_drag);
         swap(&mut self.selected_key, &mut t.selected_key);
         swap(&mut self.pending_place, &mut t.pending_place);
+        swap(&mut self.pending_place_frame, &mut t.pending_place_frame);
         swap(&mut self.show_welcome, &mut t.show_welcome);
         swap(&mut self.artboard_sel, &mut t.artboard_sel);
         swap(&mut self.layer_expanded, &mut t.layer_expanded);

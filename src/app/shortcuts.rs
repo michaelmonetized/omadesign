@@ -20,6 +20,8 @@ pub(super) enum Shortcut {
     PasteAdjustments,
     Duplicate,
     SelectAll,
+    Group,
+    Ungroup,
     Combine,
     Release,
     Forward,
@@ -117,8 +119,10 @@ pub(super) fn key_shortcut(key: Key, mods: Modifiers) -> Option<Shortcut> {
         (Key::D, false) => Duplicate,
         (Key::T, false) => FreeTransform,
         (Key::A, false) => SelectAll,
-        (Key::G, false) => Combine,
-        (Key::G, true) => Release,
+        (Key::G, false) => Group,
+        (Key::G, true) => Ungroup,
+        (Key::Num8, false) => Combine,
+        (Key::Num8, true) => Release,
         (Key::CloseBracket, false) => Forward,
         (Key::CloseBracket | Key::CloseCurlyBracket, true) => Front,
         (Key::OpenBracket, false) => Backward,
@@ -211,6 +215,7 @@ impl Studio {
                 }
                 Event::Key {
                     key,
+                    physical_key,
                     modifiers: pressed_modifiers,
                     pressed: true,
                     ..
@@ -218,7 +223,15 @@ impl Studio {
                     // The retained native press is also the reliable modifier
                     // snapshot for its following Copy/Cut/Paste event.
                     modifiers = *pressed_modifiers;
-                    key_shortcut(*key, *pressed_modifiers)
+                    let key = if pressed_modifiers.shift
+                        && (pressed_modifiers.ctrl || pressed_modifiers.command)
+                        && *physical_key == Some(Key::Num8)
+                    {
+                        Key::Num8
+                    } else {
+                        *key
+                    };
+                    key_shortcut(key, *pressed_modifiers)
                 }
                 Event::Copy => Some(if modifiers.alt {
                     Shortcut::CopyStyle
@@ -366,6 +379,8 @@ impl Studio {
                     self.select_all();
                 }
             }
+            Shortcut::Group => self.group_selected(),
+            Shortcut::Ungroup => self.ungroup_selected(),
             Shortcut::Combine => self.combine_selected(),
             Shortcut::Release => self.release_compound(),
             Shortcut::Forward => self.bring_forward(),
@@ -627,6 +642,10 @@ impl Studio {
             }
             _ => {
                 let tool = match (key, shift, self.persona) {
+                    (Key::A, true, Persona::Layout) => {
+                        self.auto_layout_selection();
+                        return true;
+                    }
                     (Key::M, true, Persona::Pixel) => Tool::Marquee,
                     (Key::J, true, Persona::Pixel) => Tool::Heal,
                     (Key::O, true, Persona::Pixel) => Tool::EllipseMarquee,
@@ -639,7 +658,7 @@ impl Studio {
                     (Key::R, false, _) => Tool::Rect,
                     (Key::O, false, _) => Tool::Ellipse,
                     (Key::Y, false, _) => Tool::Polygon,
-                    (Key::S, false, Persona::Design) => Tool::Star,
+                    (Key::S, false, Persona::Design | Persona::Layout) => Tool::Star,
                     (Key::L, false, _) => Tool::Line,
                     (Key::T, false, _) => Tool::Text,
                     (Key::G, false, _) => Tool::Gradient,
@@ -851,8 +870,10 @@ mod tests {
             (Key::D, ctrl, Duplicate),
             (Key::T, ctrl, FreeTransform),
             (Key::A, ctrl, SelectAll),
-            (Key::G, ctrl, Combine),
-            (Key::G, shift, Release),
+            (Key::G, ctrl, Group),
+            (Key::G, shift, Ungroup),
+            (Key::Num8, ctrl, Combine),
+            (Key::Num8, shift, Release),
             (Key::CloseBracket, ctrl, Forward),
             (Key::CloseBracket, shift, Front),
             (Key::CloseCurlyBracket, shift, Front),
@@ -1217,6 +1238,7 @@ mod tests {
             Key::V,
             Key::D,
             Key::G,
+            Key::Num8,
             Key::T,
             Key::OpenBracket,
             Key::CloseBracket,
@@ -1264,7 +1286,13 @@ mod tests {
         let hints = studio.key_hints(&ctx);
         assert!(!hints.keys.iter().any(|hint| matches!(
             hint.label,
-            "Copy" | "Cut" | "Paste" | "Duplicate" | "Free transform" | "Combine paths"
+            "Copy"
+                | "Cut"
+                | "Paste"
+                | "Duplicate"
+                | "Free transform"
+                | "Group objects"
+                | "Compound shape"
         )));
     }
 
@@ -1420,12 +1448,46 @@ mod tests {
         studio.doc.find_shape_mut(1, c).unwrap().locked = true;
         frame(&ctx, &mut studio, vec![key(Key::A, Modifiers::CTRL)]);
         assert_eq!(studio.selection, vec![(1, a), (1, b)]);
+        let source_a = studio.doc.find_shape(1, a).unwrap().clone();
         frame(&ctx, &mut studio, vec![key(Key::G, Modifiers::CTRL)]);
-        assert_eq!(count(&studio), 2);
+        let group = studio.selected_layer.unwrap();
+        assert!(
+            studio
+                .doc
+                .layers
+                .iter()
+                .any(|l| l.id == group && l.is_group)
+        );
+        assert_eq!(
+            studio.doc.layers.iter().filter_map(|l| l.find(a)).next(),
+            Some(&source_a)
+        );
+        assert_eq!(
+            studio
+                .doc
+                .layers
+                .iter()
+                .filter_map(|l| l.kind.shapes())
+                .map(|s| s.len())
+                .sum::<usize>(),
+            3
+        );
         frame(
             &ctx,
             &mut studio,
             vec![key(Key::G, Modifiers::CTRL | Modifiers::SHIFT)],
+        );
+        assert!(!studio.doc.layers.iter().any(|l| l.id == group));
+        studio.undo();
+        studio.undo();
+        assert_eq!(count(&studio), 3);
+        studio.selection = vec![(1, a), (1, b)];
+        frame(&ctx, &mut studio, vec![key(Key::Num8, Modifiers::CTRL)]);
+        assert_eq!(count(&studio), 2);
+        frame(
+            &ctx,
+            &mut studio,
+            vec![key(Key::Num8, Modifiers::CTRL | Modifiers::SHIFT)],
         );
         assert_eq!(count(&studio), 3);
         studio.doc.layers[1].visible = false;

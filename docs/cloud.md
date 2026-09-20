@@ -1,6 +1,6 @@
 # Cloud collaboration
 
-The workspace is at **https://omadesign.app/cloud**. Cloud collaboration in the 0.5.2 nightly shares project files, assets and immutable flat exports. Clients review snapshots; designers continue authoring in the native Linux app.
+The workspace is at **https://omadesign.app/cloud**. Cloud collaboration, included in 0.5.4, shares project files, assets and immutable flat exports. Clients review snapshots; designers continue authoring in the native Linux app.
 
 ## Sign in and connect a desktop
 
@@ -46,29 +46,22 @@ From `site/`, use `bunx convex dev --once` for development and `bunx convex depl
 
 Operators create or update competition briefs through the internal `showcase:configureCompetition` function, with `title`, `description`, millisecond `opens`/`closes` timestamps, and `active`. No public administrator endpoint exists. `mail:deliveryProbe` sends only to Resend's delivery test sink; `mail:deliveryStatus` inspects the returned queue id. Expired upload intents, device requests and rate counters are cleaned automatically. Invitations are capped at 20 per account per hour.
 
-The desktop transport is `/api/cloud`. `/project/:id` redirects to its authenticated workspace. The accepted 0.5.0 binary remains separate from nightly builds; see [rollout tracking](cloud-rollout.md).
+The desktop transport is `/api/cloud`. `/project/:id` redirects to its authenticated workspace. Historical cloud rollout evidence remains in [rollout tracking](cloud-rollout.md). The accepted 0.5.0 binary and its human QA record remain preserved separately from newer builds.
 
-## Cloud collaboration waitlist
+## Website entry and historical waitlist
 
-The fullscreen homepage takeover at `/#cloud` lists planned 0.5.2 collaboration features and accepts
-cloud access signups through `POST /api/waitlist`. This is a waitlist, not a
-claim that collaborative editing is already released.
+Open `/cloud` to sign in and use project sharing and snapshot review. The optional
+homepage film at `/#cloud` introduces these features and links to the workspace
+and this guide. It does not open automatically on every visit, and it no longer
+asks people to wait for functionality already included in the release.
 
-Signups are persisted in Convex `waitlistSignups`, indexed by list and normalized
-email. Cloud and competition audiences are separate; duplicate submissions do
-not create duplicate records or disclose whether an address has signed up.
-No emails are sent by signup. Invitations are separate, explicit actions sent through Resend.
+The earlier cloud waitlist records remain in Convex `waitlistSignups`, indexed
+by list and normalized email. Cloud and competition audiences stay separate.
+There is no public signup-list or lookup endpoint. Signup never sent emails;
+member invitations remain separate, explicit actions through Resend.
 
-The server requires `CONVEX_URL` and `WAITLIST_SECRET`; the same secret must be
-set on the Convex deployment. These are server-only variables. An unavailable
-backend returns an error and never claims to have saved a signup. Requests are
-validated, origin-checked, and limited to five attempts per minute per hashed
-visitor address. Raw addresses are not stored; expired counters are cleaned up.
-
-For operations, use the authenticated Convex dashboard to review or export
-`waitlistSignups`. There is no public signup-list or lookup endpoint.
-
-To remove an address on request, an authenticated operator can run from `site/`:
+An authenticated operator can review or export retained records in the Convex
+dashboard, or remove an address on request from `site/`:
 
 ```sh
 bunx convex run waitlist:removeSignup '{"email":"address@example.com","list":"cloud"}' --prod
@@ -76,17 +69,10 @@ bunx convex run waitlist:removeSignup '{"email":"address@example.com","list":"cl
 
 The removal function is internal and cannot be invoked through the public API.
 
-### 0.5.2 scope
+## Scope
 
-Cloud collaboration means project file and asset sharing with team member access
+Cloud collaboration means project file and asset sharing with member access
 control; client review, comments and annotations on flat snapshots; publishing
-finished public work to the Omadesign user showcase; and entering showcased work
-into competitions. The browser is for sharing and review, not a live online
-Omadesign editor. Live multi-user editing, presence and browser authoring are
-outside this scope.
-
-The homepage takeover plays the supplied film muted when interactive, introduces
-the five features from the bottom of the left stack upward, and reveals the
-email-only waitlist in the right column when the film ends. Visitors can skip to
-the signup or leave for the native app site. Reduced motion and playback failure
-reveal signup immediately.
+finished public work to the Omadesign showcase; and entering that work into open
+competitions. The browser is for sharing and review. Live multi-user canvas
+editing, presence and browser authoring are outside this scope.

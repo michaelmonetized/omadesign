@@ -2,6 +2,7 @@ mod browsers;
 mod canvas;
 mod chrome;
 mod cloud;
+mod color_picker;
 mod deform;
 mod guides;
 mod icons;
@@ -9,11 +10,15 @@ mod jobs;
 mod key_hud;
 #[cfg(test)]
 mod key_hud_tests;
+mod layer_drag;
+mod layout;
+mod layout_preview;
 mod library;
 mod masking;
 mod motion_presets;
 pub(crate) mod photo;
 mod photo_detail;
+mod raster;
 mod retouch;
 mod selection;
 mod studios;
@@ -26,6 +31,23 @@ use crate::app::Studio;
 use crate::tools::Persona;
 use eframe::egui::Ui;
 
+/// Open a raster preview with supplied settings; edits still require Apply.
+pub fn preview_raster_filter(
+    ctx: &eframe::egui::Context,
+    studio: &mut Studio,
+    settings: crate::raster::Settings,
+) {
+    raster::open_with_settings(ctx, studio, settings);
+}
+
+pub fn preview_raster_chroma(ctx: &eframe::egui::Context, studio: &mut Studio) {
+    raster::open(ctx, studio, crate::raster::Kind::ChromaKey);
+}
+
+pub fn present_layout(ctx: &eframe::egui::Context, studio: &mut Studio) {
+    layout_preview::start(ctx, studio);
+}
+
 pub fn run(ui: &mut Ui, studio: &mut Studio) {
     let ctx = ui.ctx().clone();
     ctx.options_mut(|o| o.zoom_with_keyboard = false);
@@ -35,8 +57,11 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     // Give cancellable library loads Escape before canvas shortcuts consume it.
     library::tick(&ctx, studio);
     guides::handle_shortcuts(&ctx, studio);
-    studio.handle_shortcuts(&ctx);
+    if !layout_preview::is_open(&ctx) && !raster::is_open(&ctx) {
+        studio.handle_shortcuts(&ctx);
+    }
     studio.tick_motion(&ctx);
+    layout::poll_image(&ctx, studio);
 
     chrome::top_bar(ui, studio);
     key_hud::show(ui, studio);
@@ -56,6 +81,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     } else {
         chrome::doc_tabs(ui, studio);
         chrome::left_toolbar(ui, studio);
+        layout::hierarchy(ui, studio);
         studios::right_panel(ui, studio);
         chrome::status_bar(ui, studio);
         timeline::show(ui, studio);
@@ -66,6 +92,8 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     browsers::show_asset_browser(ui, studio);
     templates::window(ui, studio);
     cloud::modal(ui, studio);
+    layout_preview::show(ui, studio);
+    raster::show(ui, studio);
 
     if studio.show_shortcuts {
         egui_shortcuts(ui, studio);
@@ -78,6 +106,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
 pub fn scene_ready(ctx: &eframe::egui::Context, studio: &Studio) -> bool {
     !studio.cloud_busy()
         && library::ready(ctx, studio)
+        && raster::ready(ctx)
         && (studio.persona != Persona::Photo || photo_detail::ready(ctx))
         && (!(studio.show_templates
             || (studio.show_welcome && studio.welcome_page == crate::app::WelcomePage::Templates))

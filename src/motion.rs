@@ -569,6 +569,21 @@ pub fn export_lottie(doc: &Document) -> Result<String, String> {
                         .into(),
                 );
             }
+            if shape
+                .style
+                .fill
+                .gradient()
+                .into_iter()
+                .chain(shape.style.stroke.as_ref().and_then(|s| s.gradient.clone()))
+                .any(|g| {
+                    matches!(
+                        g.kind,
+                        crate::gradient::GradientKind::Shape | crate::gradient::GradientKind::Conic
+                    )
+                })
+            {
+                return Err("Lottie does not support shape or conic gradients. Export animated SVG to preserve them.".into());
+            }
             // Stroke sits above fill. Separate layers let a fill mask leave the outline intact.
             for stroke in [true, false] {
                 if let Some(part) = shape_layer(shape, &doc.motion, fps, op, ind, stroke) {
@@ -614,12 +629,26 @@ fn shape_layer(
         return None;
     }
     if stroke {
-        let outline = shape
-            .style
-            .stroke
-            .as_ref()
-            .filter(|outline| outline.width > 0.0 && outline.color.a > 0)?;
-        items.push(lottie_stroke(outline, 1.0));
+        let outline = shape.style.stroke.as_ref().filter(|outline| {
+            outline.width > 0.0
+                && (outline.color.a > 0
+                    || outline
+                        .gradient
+                        .as_ref()
+                        .is_some_and(|g| g.stops.iter().any(|s| s.color.a > 0)))
+        })?;
+        let mut paint = lottie_stroke(outline, 1.0);
+        if let Some(gradient) = &outline.gradient {
+            let mut g = lottie_gradient(gradient, shape, center, 1);
+            g["ty"] = json!("gs");
+            for field in ["w", "lc", "lj", "ml", "d"] {
+                if let Some(value) = paint.get(field) {
+                    g[field] = value.clone();
+                }
+            }
+            paint = g;
+        }
+        items.push(paint);
         if motion.value(shape.id, Prop::StrokeReveal, 0.0).is_some() {
             let times = motion.sample_times(shape.id);
             items.push(json!({"ty":"tm","nm":"Draw stroke","s":{"a":0,"k":0},
@@ -713,6 +742,7 @@ fn lottie_fill_style(shape: &Shape, center: Pt) -> Option<Value> {
         2
     };
     match &shape.style.fill {
+        Fill::Gradient(g) => Some(lottie_gradient(g, shape, center, rule)),
         Fill::None => None,
         Fill::Solid(color) => {
             let mut fill = lottie_fill(*color, 1.0);
@@ -753,6 +783,33 @@ fn lottie_fill_style(shape: &Shape, center: Pt) -> Option<Value> {
             )
         }
     }
+}
+
+fn lottie_gradient(
+    gradient: &crate::gradient::Gradient,
+    shape: &Shape,
+    center: Pt,
+    rule: u8,
+) -> Value {
+    let mut gradient = gradient.clone();
+    gradient.normalize();
+    let bounds = shape.geom.bbox();
+    let (a, b) = gradient.endpoints(bounds);
+    let a = a.rotate_about(bounds.center(), shape.rotation) - center;
+    let b = b.rotate_about(bounds.center(), shape.rotation) - center;
+    let mut stops = Vec::new();
+    for stop in &gradient.stops {
+        stops.extend([
+            stop.offset,
+            stop.color.r as f32 / 255.,
+            stop.color.g as f32 / 255.,
+            stop.color.b as f32 / 255.,
+        ]);
+    }
+    for stop in &gradient.stops {
+        stops.extend([stop.offset, stop.color.a as f32 / 255.]);
+    }
+    json!({"ty":"gf","nm":"Gradient fill","t":if gradient.kind==crate::gradient::GradientKind::Linear {1} else {2},"r":rule,"o":{"a":0,"k":100},"s":{"a":0,"k":[a.x,a.y]},"e":{"a":0,"k":[b.x,b.y]},"h":{"a":0,"k":0},"a":{"a":0,"k":0},"g":{"p":gradient.stops.len(),"k":{"a":0,"k":stops}}})
 }
 
 fn lottie_fill(c: Rgba, opacity: f32) -> Value {
@@ -1030,6 +1087,7 @@ fn layer_geom(layer: &Value) -> Option<(Geom, Fill, Option<Stroke>)> {
                             .unwrap_or(2.0);
                         let a = js_f32(&it["o"]["k"]).unwrap_or(100.0) / 100.0;
                         *stroke = Some(Stroke {
+                            gradient: None,
                             color: Rgba::new(c.r, c.g, c.b, (a * 255.0).round() as u8),
                             width: w,
                             cap: Cap::Round,

@@ -23,3 +23,6 @@ site/.env*
 !.env.example
 !site/.env.example
 .clerk/
+
+# Root-linked Vercel CLI state for the site/ project.
+/.vercel

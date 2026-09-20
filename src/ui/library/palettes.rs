@@ -421,6 +421,7 @@ fn selection_colours(studio: &Studio) -> Vec<Rgba> {
             match shape.style.fill {
                 Fill::Solid(color) => colors.push(color),
                 Fill::Linear { c0, c1, .. } | Fill::Radial { c0, c1 } => colors.extend([c0, c1]),
+                Fill::Gradient(ref g) => colors.extend(g.stops.iter().map(|s| s.color)),
                 Fill::None => {}
             }
             if let Some(stroke) = &shape.style.stroke {
@@ -443,6 +444,7 @@ fn current_colour(studio: &Studio) -> Rgba {
     match style.fill {
         Fill::Solid(c) => c,
         Fill::Linear { c0, .. } | Fill::Radial { c0, .. } => c0,
+        Fill::Gradient(ref g) => g.sample(0.),
         Fill::None => studio.brush.color,
     }
 }

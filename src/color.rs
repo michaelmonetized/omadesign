@@ -174,8 +174,9 @@ impl Rgba {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Blend {
+    #[default]
     Normal,
     Multiply,
     Screen,
