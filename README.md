@@ -1,6 +1,6 @@
 # omadesign
 
-[Download v0.5.3](https://github.com/michaelmonetized/omadesign/releases/tag/v0.5.3) · [Explore the studio](https://omadesign.app/) · [Updates](https://omadesign.app/updates) · [User manual](https://omadesign.app/docs/manual/) · [Showcase](https://omadesign.app/showcase) · [Build from source](docs/CONTRIBUTING.md)
+[Download v0.5.4](https://github.com/michaelmonetized/omadesign/releases/tag/v0.5.4) · [Explore the studio](https://omadesign.app/) · [Updates](https://omadesign.app/updates) · [User manual](https://omadesign.app/docs/manual/) · [Showcase](https://omadesign.app/showcase) · [Build from source](docs/CONTRIBUTING.md)
 
 A native Linux studio for **design, layout, paint, photograph, and motion**. One
 document, one layer stack. Built so a designer coming from macOS can sit down
@@ -60,16 +60,33 @@ when idle, command keys with Ctrl/Shift/Alt, and contextual drawing gestures.
 - Pen: click a corner, click-drag a smooth point, Enter finishes, click the first point to close. A twitch under 3px stays a corner.
 - Type: click, type on the canvas, Character studio (font, size, tracking, leading, OpenType)
 - Zoom: drag a box to that area; click zooms in, Alt-click out
-- Fill / stroke, Pathfinder and Divide, stroke outlines, Select Same, align, layers, copy/paste
+- Multi-stop linear, radial, shape and conic gradients for fills and strokes, with angle and alpha controls
+- Current/Previous color chips and alpha in every picker, including Design effects
+- Object opacity and blend modes, Pathfinder and Divide, stroke outlines, Select Same, align, layers, copy/paste
+- Drag sidebar rows to sort/nest; Ctrl+G groups, Ctrl+Shift+G ungroups, Ctrl+8 compounds, Ctrl+Shift+8 releases
 - Drag-out guides, ruler origins and units, smart alignment and equal-spacing snaps
 - Convert artwork to editable object guides; release it back with its original style
 - Vector distort, skew, perspective, and a nine-handle warp mesh
 - File → Place, drop files on the canvas, Trace (`U`) turns a pixel layer into paths
 - Paste screenshots, copied image files, browser images, text, and SVG with `Ctrl+V`. External content appears in the visible canvas center; copied Omadesign objects keep their original positions.
 
+## Layout
+
+Stack, Wrap and Grid frames, Fixed/Hug/Fill sizing, constraints and breakpoint
+overrides. Reuse document-local components, instances and variants; bind color
+and spacing variables. Place embedded image fills, then link screens, overlays
+and variant changes in Present. Export a frame subtree to PNG, SVG or standalone
+responsive HTML. Open the Fieldwork starter to explore. See the
+[Layout guide](docs/layout.md) for controls and limits.
+
 ## Pixel / Photo
 
-Brush, eraser, clone, healing, fill, marquees, wand, and editable layer masks. Photo: develop sliders, histogram, crop, Place in Design.
+Brush, eraser, clone, healing, fill, marquees, wand and editable pixel layer
+masks. Raster studio has **17 filters and 13 effects**, including chroma key with
+sampling, similarity, falloff, hardness, spill cleanup and Flow. Compare the
+preview, Apply at full resolution and Undo as one edit. Raster treatments are
+applied pixel edits; live raster stacks and vector-object masks are not included.
+Photo: develop sliders, histogram, crop, Place in Design.
 
 Open camera RAW files including DNG, CR2/CR3, NEF, ARW and RAF with the built-in
 LibRaw decoder. Photo keeps the 16-bit linear source for exposure and color edits;

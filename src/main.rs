@@ -151,6 +151,12 @@ fn main() -> eframe::Result {
                     eprintln!("{e}");
                     std::process::exit(2);
                 }
+                if name == "layout-preview" {
+                    omadesign::ui::present_layout(&cc.egui_ctx, &mut studio);
+                }
+                if name == "pixel-effects" {
+                    omadesign::ui::preview_raster_chroma(&cc.egui_ctx, &mut studio);
+                }
                 Ok(Box::new(ShotRunner {
                     studio,
                     out,

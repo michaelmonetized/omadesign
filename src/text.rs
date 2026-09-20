@@ -262,6 +262,7 @@ pub fn fonts() -> &'static [FontFace] {
 
 static DYNAMIC_FONTS: OnceLock<Mutex<Vec<FontFace>>> = OnceLock::new();
 static FONT_LIST: OnceLock<Mutex<Option<Arc<[FontFace]>>>> = OnceLock::new();
+static FONT_REVISION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 pub fn register_font(face: FontFace) {
     let path = face.path.clone();
@@ -282,6 +283,7 @@ pub fn register_font(face: FontFace) {
     {
         m.remove(&path);
     }
+    FONT_REVISION.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 }
 
 pub fn all_fonts_cached() -> Arc<[FontFace]> {
@@ -519,16 +521,18 @@ fn buzz_shape(bytes: &[u8], run: &TypeRun) -> Option<Vec<Vec<Pt>>> {
     let features = ot_features(run);
     let mut subpaths = Vec::new();
     let mut y = run.origin.y;
-    for line in run.content.split('\n') {
+    for line in visual_lines(run) {
+        let line = line.text;
         if !line.is_empty() {
             let mut buffer = rustybuzz::UnicodeBuffer::new();
             buffer.push_str(line);
             buffer.set_direction(rustybuzz::Direction::LeftToRight);
             let glyphs = rustybuzz::shape(&face, &features, buffer);
             let mut pen = 0.0f32;
+            let offset = line_offset(run, line);
             for (info, pos) in glyphs.glyph_infos().iter().zip(glyphs.glyph_positions()) {
                 let gid = GlyphId(info.glyph_id as u16);
-                let ox = run.origin.x + (pen + pos.x_offset as f32) * scale;
+                let ox = run.origin.x + offset + (pen + pos.x_offset as f32) * scale;
                 let oy = y - pos.y_offset as f32 * scale;
                 if let Some(outline) = font.outline(gid) {
                     let mapped = map_curves(&outline.curves, ox, oy, scale);
@@ -558,14 +562,160 @@ pub fn fill_contours(geom: &mut crate::geom::Geom) {
 pub fn measure(run: &TypeRun) -> (f32, f32) {
     let mut max_w = 0.0f32;
     let mut lines = 0;
-    for line in run.content.split('\n') {
-        max_w = max_w.max(line_width(run, line));
+    for line in visual_lines(run) {
+        max_w = max_w.max(line_width(run, line.text));
         lines += 1;
     }
-    (max_w, run.line_height() * lines as f32)
+    (
+        run.wrap_width.unwrap_or(max_w),
+        run.line_height() * lines as f32,
+    )
+}
+
+struct VisualLine<'a> {
+    text: &'a str,
+    start: usize,
+}
+
+/// Keep source character positions intact across soft wraps, including Unicode.
+fn visual_lines(run: &TypeRun) -> Vec<VisualLine<'_>> {
+    #[derive(Hash, PartialEq, Eq, Clone)]
+    struct Key {
+        content: String,
+        font: String,
+        revision: u64,
+        px: u32,
+        tracking: u32,
+        width: Option<u32>,
+        features: [bool; 4],
+    }
+    type Range = (usize, usize, usize);
+    static CACHE: OnceLock<Mutex<HashMap<Key, Vec<Range>>>> = OnceLock::new();
+    let key = Key {
+        content: run.content.clone(),
+        font: run.font.clone(),
+        revision: FONT_REVISION.load(std::sync::atomic::Ordering::Relaxed),
+        px: run.px.to_bits(),
+        tracking: run.tracking.to_bits(),
+        width: run.wrap_width.map(f32::to_bits),
+        features: [run.kern, run.liga, run.tnum, run.smcp],
+    };
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(ranges) = cache
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&key)
+        .cloned()
+    {
+        return ranges
+            .into_iter()
+            .map(|(a, b, start)| VisualLine {
+                text: &run.content[a..b],
+                start,
+            })
+            .collect();
+    }
+    let mut lines = Vec::new();
+    let mut base = 0;
+    for paragraph in run.content.split('\n') {
+        let Some(width) = run.wrap_width.filter(|w| w.is_finite() && *w > 0.0) else {
+            lines.push(VisualLine {
+                text: paragraph,
+                start: base,
+            });
+            base += paragraph.chars().count() + 1;
+            continue;
+        };
+        let mut start = 0;
+        let mut start_char = base;
+        if paragraph.is_empty() {
+            lines.push(VisualLine {
+                text: paragraph,
+                start: base,
+            });
+        }
+        while start < paragraph.len() {
+            let rest = &paragraph[start..];
+            let mut end = 0;
+            let mut space = None;
+            for (i, ch) in rest.char_indices() {
+                let next = i + ch.len_utf8();
+                if end > 0 && line_width(run, &rest[..next]) > width {
+                    break;
+                }
+                end = next;
+                if ch.is_whitespace() {
+                    space = Some(next);
+                }
+            }
+            if end < rest.len() {
+                end = space.filter(|p| *p <= end).unwrap_or(end);
+            }
+            end = end.max(rest.chars().next().map_or(0, char::len_utf8));
+            let text = &rest[..end];
+            lines.push(VisualLine {
+                text,
+                start: start_char,
+            });
+            start_char += text.chars().count();
+            start += end;
+        }
+        base += paragraph.chars().count() + 1;
+    }
+    let ranges = lines
+        .iter()
+        .map(|line| {
+            let start = line.text.as_ptr() as usize - run.content.as_ptr() as usize;
+            (start, start + line.text.len(), line.start)
+        })
+        .collect();
+    let mut cache = cache.lock().unwrap_or_else(|e| e.into_inner());
+    if cache.len() >= 256 {
+        cache.clear();
+    }
+    cache.insert(key, ranges);
+    lines
+}
+
+fn line_offset(run: &TypeRun, text: &str) -> f32 {
+    let remaining = (run.wrap_width.unwrap_or(0.0) - line_width(run, text)).max(0.0);
+    match run.align {
+        crate::geom::TextAlign::Start => 0.0,
+        crate::geom::TextAlign::Center => remaining * 0.5,
+        crate::geom::TextAlign::End => remaining,
+    }
 }
 
 fn line_width(run: &TypeRun, line: &str) -> f32 {
+    type Key = (String, String, u64, u32, u32, [bool; 4]);
+    static CACHE: OnceLock<Mutex<HashMap<Key, f32>>> = OnceLock::new();
+    let key = (
+        run.font.clone(),
+        line.to_string(),
+        FONT_REVISION.load(std::sync::atomic::Ordering::Relaxed),
+        run.px.to_bits(),
+        run.tracking.to_bits(),
+        [run.kern, run.liga, run.tnum, run.smcp],
+    );
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(width) = cache
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&key)
+        .copied()
+    {
+        return width;
+    }
+    let width = line_width_uncached(run, line);
+    let mut cache = cache.lock().unwrap_or_else(|e| e.into_inner());
+    if cache.len() >= 4096 {
+        cache.clear();
+    }
+    cache.insert(key, width);
+    width
+}
+
+fn line_width_uncached(run: &TypeRun, line: &str) -> f32 {
     if line.is_empty() {
         return 0.0;
     }
@@ -596,18 +746,19 @@ fn line_width(run: &TypeRun, line: &str) -> f32 {
 
 pub fn caret_pt(run: &TypeRun, char_idx: usize) -> Pt {
     let idx = char_idx.min(run.content.chars().count());
-    let (line_i, col) = line_col(&run.content, idx);
-    let line = run.content.split('\n').nth(line_i).unwrap_or("");
-    let prefix: String = line.chars().take(col).collect();
+    let lines = visual_lines(run);
+    let line_i = lines.iter().rposition(|l| l.start <= idx).unwrap_or(0);
+    let line = &lines[line_i];
+    let prefix: String = line.text.chars().take(idx - line.start).collect();
     let w = line_width(run, &prefix);
     Pt::new(
-        run.origin.x + w,
+        run.origin.x + line_offset(run, line.text) + w,
         run.origin.y + line_i as f32 * run.line_height(),
     )
 }
 
 pub fn hit_char(run: &TypeRun, p: Pt) -> usize {
-    let lines: Vec<&str> = run.content.split('\n').collect();
+    let lines = visual_lines(run);
     if lines.is_empty() {
         return 0;
     }
@@ -615,24 +766,22 @@ pub fn hit_char(run: &TypeRun, p: Pt) -> usize {
     let mut line_i = ((p.y - (run.origin.y - run.px * 0.85)) / lh).floor() as i32;
     line_i = line_i.clamp(0, lines.len() as i32 - 1);
     let line_i = line_i as usize;
-    let mut char_base = 0usize;
     for (i, line) in lines.iter().enumerate() {
         if i == line_i {
-            let n = line.chars().count();
+            let n = line.text.chars().count();
             let mut best = 0usize;
             let mut best_d = f32::INFINITY;
             for col in 0..=n {
-                let prefix: String = line.chars().take(col).collect();
-                let x = run.origin.x + line_width(run, &prefix);
+                let prefix: String = line.text.chars().take(col).collect();
+                let x = run.origin.x + line_offset(run, line.text) + line_width(run, &prefix);
                 let d = (x - p.x).abs();
                 if d < best_d {
                     best_d = d;
                     best = col;
                 }
             }
-            return char_base + best;
+            return line.start + best;
         }
-        char_base += line.chars().count() + 1;
     }
     run.content.chars().count()
 }
@@ -644,40 +793,25 @@ pub fn selection_rects(run: &TypeRun, a: usize, b: usize) -> Vec<(Pt, Pt)> {
         return vec![];
     }
     let mut out = vec![];
-    let mut ci = 0usize;
-    for line in run.content.split('\n') {
-        let n = line.chars().count();
-        let start = ci;
-        let end = ci + n;
+    for (line_i, line) in visual_lines(run).iter().enumerate() {
+        let n = line.text.chars().count();
+        let start = line.start;
+        let end = start + n;
         let seg_lo = lo.max(start);
         let seg_hi = hi.min(end);
         if seg_lo < seg_hi {
-            let p0 = caret_pt(run, seg_lo);
-            let p1 = caret_pt(run, seg_hi);
+            let x = run.origin.x + line_offset(run, line.text);
+            let a: String = line.text.chars().take(seg_lo - start).collect();
+            let b: String = line.text.chars().take(seg_hi - start).collect();
+            let y = run.origin.y + line_i as f32 * run.line_height();
+            let p0 = Pt::new(x + line_width(run, &a), y);
+            let p1 = Pt::new(x + line_width(run, &b), y);
             let top = p0.y - run.px * 0.9;
             let bot = p0.y + run.px * 0.25;
             out.push((Pt::new(p0.x, top), Pt::new(p1.x.max(p0.x + 2.0), bot)));
         }
-        ci = end + 1;
     }
     out
-}
-
-fn line_col(s: &str, char_idx: usize) -> (usize, usize) {
-    let mut line = 0usize;
-    let mut col = 0usize;
-    for (i, ch) in s.chars().enumerate() {
-        if i == char_idx {
-            return (line, col);
-        }
-        if ch == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
-    }
-    (line, col)
 }
 
 pub fn char_to_byte(s: &str, char_idx: usize) -> usize {
@@ -962,6 +1096,29 @@ mod tests {
         let b = caret_pt(&r, 2);
         assert!(b.x > a.x);
         assert_eq!(hit_char(&r, a), 0);
+    }
+
+    #[test]
+    fn wrapped_paragraph_keeps_source_and_caret_positions() {
+        let mut r = run("A quiet place to make excellent work.\nCafé 東京");
+        r.px = 20.0;
+        r.wrap_width = Some(110.0);
+        let rows = visual_lines(&r);
+        assert!(rows.len() > 2);
+        assert_eq!(
+            rows.iter().map(|l| l.text).collect::<String>(),
+            r.content.replace('\n', "")
+        );
+        for line in rows {
+            let p = caret_pt(&r, line.start);
+            assert_eq!(hit_char(&r, p), line.start);
+        }
+        let before = r.content.clone();
+        let h = measure(&r).1;
+        r.wrap_width = Some(220.0);
+        assert!(measure(&r).1 < h);
+        assert_eq!(r.content, before);
+        assert_eq!(r.px, 20.0);
     }
 
     #[test]

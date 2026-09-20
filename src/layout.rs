@@ -75,6 +75,90 @@ impl Constraint {
     }
 }
 
+/// Sizing on either axis. Hug measures content; Fill shares available parent space.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Sizing {
+    #[default]
+    Fixed,
+    Hug,
+    Fill,
+}
+
+impl Sizing {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Fixed => "Fixed",
+            Self::Hug => "Hug",
+            Self::Fill => "Fill",
+        }
+    }
+    pub fn all() -> [Self; 3] {
+        [Self::Fixed, Self::Hug, Self::Fill]
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StackFlow {
+    #[default]
+    Stack,
+    Wrap,
+    Grid,
+}
+
+impl StackFlow {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Stack => "Stack",
+            Self::Wrap => "Wrap",
+            Self::Grid => "Grid",
+        }
+    }
+    pub fn all() -> [Self; 3] {
+        [Self::Stack, Self::Wrap, Self::Grid]
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StackJustify {
+    #[default]
+    Start,
+    Center,
+    End,
+    SpaceBetween,
+    SpaceAround,
+    SpaceEvenly,
+}
+
+impl StackJustify {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Start => "Start",
+            Self::Center => "Center",
+            Self::End => "End",
+            Self::SpaceBetween => "Space between",
+            Self::SpaceAround => "Space around",
+            Self::SpaceEvenly => "Space evenly",
+        }
+    }
+    pub fn all() -> [Self; 6] {
+        [
+            Self::Start,
+            Self::Center,
+            Self::End,
+            Self::SpaceBetween,
+            Self::SpaceAround,
+            Self::SpaceEvenly,
+        ]
+    }
+}
+
+fn default_cross_gap() -> f32 {
+    12.0
+}
+fn default_columns() -> u32 {
+    3
+}
+
 /// Auto-stack settings on a frame.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AutoStack {
@@ -82,6 +166,14 @@ pub struct AutoStack {
     pub gap: f32,
     pub padding: [f32; 4],
     pub align: StackAlign,
+    #[serde(default)]
+    pub flow: StackFlow,
+    #[serde(default)]
+    pub justify: StackJustify,
+    #[serde(default = "default_cross_gap")]
+    pub cross_gap: f32,
+    #[serde(default = "default_columns")]
+    pub columns: u32,
 }
 
 impl Default for AutoStack {
@@ -91,6 +183,99 @@ impl Default for AutoStack {
             gap: 12.0,
             padding: [16.0; 4],
             align: StackAlign::Start,
+            flow: StackFlow::Stack,
+            justify: StackJustify::Start,
+            cross_gap: default_cross_gap(),
+            columns: default_columns(),
+        }
+    }
+}
+
+/// Overrides activated by the top-level frame viewport. Larger thresholds
+/// apply first, so a phone rule can inherit tablet spacing and change its flow.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LayoutBreakpoint {
+    pub max_width: f32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_size: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direction: Option<StackAxis>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flow: Option<StackFlow>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub columns: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gap: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cross_gap: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub padding: Option<[f32; 4]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub align: Option<StackAlign>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub justify: Option<StackJustify>,
+}
+impl Default for LayoutBreakpoint {
+    fn default() -> Self {
+        Self {
+            max_width: 768.0,
+            text_size: None,
+            direction: None,
+            flow: None,
+            columns: None,
+            gap: None,
+            cross_gap: None,
+            padding: None,
+            align: None,
+            justify: None,
+        }
+    }
+}
+
+/// Resolve responsive settings without changing the authored desktop values.
+pub fn resolve_for_width(base: &FrameLayout, viewport_width: f32) -> FrameLayout {
+    let mut effective = base.clone();
+    apply_breakpoints(&mut effective, viewport_width);
+    effective
+}
+
+fn apply_breakpoints(layout: &mut FrameLayout, viewport_width: f32) {
+    let mut matches: Vec<_> = layout
+        .breakpoints
+        .iter()
+        .filter(|b| b.max_width.is_finite() && b.max_width > 0.0 && viewport_width <= b.max_width)
+        .collect();
+    matches.sort_by(|a, b| b.max_width.total_cmp(&a.max_width));
+    for point in matches {
+        if let Some(value) = point.text_size {
+            layout.text_size = Some(value);
+        }
+        let Some(stack) = &mut layout.stack else {
+            continue;
+        };
+        if let Some(value) = point.direction {
+            stack.direction = value;
+        }
+        if let Some(value) = point.flow {
+            stack.flow = value;
+        }
+        if let Some(value) = point.columns {
+            stack.columns = value.clamp(1, 1024);
+        }
+        if let Some(value) = point.gap {
+            stack.gap = value;
+        }
+        if let Some(value) = point.cross_gap {
+            stack.cross_gap = value;
+        }
+        if let Some(value) = point.padding {
+            stack.padding = value;
+        }
+        if let Some(value) = point.align {
+            stack.align = value;
+        }
+        if let Some(value) = point.justify {
+            stack.justify = value;
         }
     }
 }
@@ -110,6 +295,41 @@ pub struct FrameLayout {
     pub constraint_y: Constraint,
     #[serde(default)]
     pub placeholder: bool,
+    #[serde(default)]
+    pub width: Sizing,
+    #[serde(default)]
+    pub height: Sizing,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_width: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_width: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_height: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_height: Option<f32>,
+    /// Exclude this child from automatic flow while retaining resize constraints.
+    #[serde(default)]
+    pub absolute: bool,
+    #[serde(default)]
+    pub clip: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_size: Option<f32>,
+    /// Lock the height to resolved width / ratio while the width responds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aspect_ratio: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<crate::layout_images::ImageFill>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub breakpoints: Vec<LayoutBreakpoint>,
+    #[serde(
+        default,
+        skip_serializing_if = "crate::layout_tokens::TokenBindings::is_empty"
+    )]
+    pub tokens: crate::layout_tokens::TokenBindings,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub component: Option<crate::layout_components::ComponentBinding>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub interactions: Vec<crate::layout_prototype::Interaction>,
 }
 
 impl FrameLayout {
@@ -120,11 +340,27 @@ impl FrameLayout {
             && self.constraint_x == Constraint::Start
             && self.constraint_y == Constraint::Start
             && !self.placeholder
+            && self.width == Sizing::Fixed
+            && self.height == Sizing::Fixed
+            && self.min_width.is_none()
+            && self.max_width.is_none()
+            && self.min_height.is_none()
+            && self.max_height.is_none()
+            && !self.absolute
+            && !self.clip
+            && self.text_size.is_none()
+            && self.aspect_ratio.is_none()
+            && self.image.is_none()
+            && self.breakpoints.is_empty()
+            && self.tokens.is_empty()
+            && self.component.is_none()
+            && self.interactions.is_empty()
     }
 
     pub fn frame() -> Self {
         Self {
             frame: true,
+            clip: true,
             ..Self::default()
         }
     }
@@ -161,6 +397,13 @@ pub fn placeholder_style() -> Style {
 
 pub fn set_bounds(geom: &mut Geom, bounds: Bounds) {
     let src = geom.bbox();
+    // Layout changes the text box, never the font size or glyph proportions.
+    if let Geom::Text(run) = geom {
+        run.wrap_width = Some(bounds.width().max(1.0));
+        run.origin = Pt::new(bounds.min.x, bounds.min.y + run.px * 0.85);
+        run.contours = crate::text::shape(run);
+        return;
+    }
     if matches!(geom, Geom::Rect { .. }) {
         if let Geom::Rect { origin, size, .. } = geom {
             *origin = bounds.min;
@@ -183,153 +426,99 @@ pub fn children(doc: &Document, layer: usize, frame_id: u64) -> Vec<u64> {
 }
 
 pub fn descendants(doc: &Document, layer: usize, frame_id: u64) -> Vec<u64> {
+    let Some(shapes) = doc.layers.get(layer).and_then(|l| l.kind.shapes()) else {
+        return vec![];
+    };
+    let mut edges: std::collections::HashMap<u64, Vec<u64>> = std::collections::HashMap::new();
+    for shape in shapes {
+        if let Some(parent) = shape.layout.parent {
+            edges.entry(parent).or_default().push(shape.id);
+        }
+    }
+    let mut seen = std::collections::HashSet::from([frame_id]);
     let mut out = Vec::new();
-    let mut stack = children(doc, layer, frame_id);
+    let mut stack = edges.get(&frame_id).cloned().unwrap_or_default();
     while let Some(id) = stack.pop() {
+        if !seen.insert(id) {
+            continue;
+        }
         out.push(id);
-        stack.extend(children(doc, layer, id));
+        if let Some(kids) = edges.get(&id) {
+            stack.extend(kids.iter().copied());
+        }
     }
     out
 }
 
-pub fn containing_frame(doc: &Document, layer: usize, point: Pt) -> Option<u64> {
+/// Outermost ancestor, with malformed cycles terminating safely.
+pub fn top_frame(doc: &Document, layer: usize, id: u64) -> Option<u64> {
     let shapes = doc.layers.get(layer)?.kind.shapes()?;
-    shapes
-        .iter()
+    let by_id: std::collections::HashMap<_, _> = shapes.iter().map(|s| (s.id, s)).collect();
+    let mut current = *by_id.get(&id)?;
+    let mut frame = current.layout.frame.then_some(id);
+    let mut seen = std::collections::HashSet::from([id]);
+    while let Some(parent) = current.layout.parent.and_then(|p| by_id.get(&p).copied()) {
+        if !parent.layout.frame || !seen.insert(parent.id) {
+            break;
+        }
+        frame = Some(parent.id);
+        current = parent;
+    }
+    frame
+}
+
+/// Pick the deepest visible frame under the pointer. Hierarchy order matters
+/// when wrapping appends an outer frame after its children in the flat store.
+pub fn containing_frame(doc: &Document, layer: usize, point: Pt) -> Option<u64> {
+    if !doc.layer_editable(layer) {
+        return None;
+    }
+    let shapes = doc.layers.get(layer)?.kind.shapes()?;
+    let mut children: std::collections::HashMap<Option<u64>, Vec<usize>> =
+        std::collections::HashMap::new();
+    for (index, shape) in shapes.iter().enumerate() {
+        children.entry(shape.layout.parent).or_default().push(index);
+    }
+    let mut pending: Vec<_> = children
+        .get(&None)
+        .into_iter()
+        .flatten()
         .rev()
-        .find(|s| s.layout.frame && s.visible && !s.locked && s.world_bbox().contains(point))
-        .map(|s| s.id)
+        .map(|&index| (index, point, 0usize))
+        .collect();
+    let mut seen = std::collections::HashSet::new();
+    let mut best = None;
+    let mut best_depth = 0;
+    while let Some((index, local_point, depth)) = pending.pop() {
+        if !seen.insert(index) {
+            continue;
+        }
+        let shape = &shapes[index];
+        if !shape.visible || shape.locked {
+            continue;
+        }
+        let contains = shape.layout.frame && shape.contains_world(local_point);
+        if contains && (best.is_none() || depth >= best_depth) {
+            best = Some(shape.id);
+            best_depth = depth;
+        }
+        if !shape.layout.frame || (shape.layout.clip && !contains) {
+            continue;
+        }
+        let next_point = shape.local_point(local_point);
+        if let Some(kids) = children.get(&Some(shape.id)) {
+            pending.extend(
+                kids.iter()
+                    .rev()
+                    .map(|&index| (index, next_point, depth + 1)),
+            );
+        }
+    }
+    best
 }
 
-/// Pack auto-stack children inside `frame_id`. Nested frames are packed after
-/// their own children have been sized.
-pub fn reflow(doc: &mut Document, layer: usize, frame_id: u64) {
-    reflow_inner(doc, layer, frame_id, 0);
-}
-
-fn reflow_inner(doc: &mut Document, layer: usize, frame_id: u64, depth: u32) {
-    if depth > 32 {
-        return;
-    }
-    let kids = children(doc, layer, frame_id);
-    for id in &kids {
-        if doc
-            .find_shape(layer, *id)
-            .is_some_and(|s| s.layout.frame && s.layout.stack.is_some())
-        {
-            reflow_inner(doc, layer, *id, depth + 1);
-        }
-    }
-    let Some(frame) = doc.find_shape(layer, frame_id) else {
-        return;
-    };
-    let Some(stack) = frame.layout.stack.clone() else {
-        return;
-    };
-    let bounds = frame.world_bbox();
-    let pad = stack.padding;
-    let inner = Bounds {
-        min: Pt::new(bounds.min.x + pad[3], bounds.min.y + pad[0]),
-        max: Pt::new(
-            (bounds.max.x - pad[1]).max(bounds.min.x + pad[3] + 1.0),
-            (bounds.max.y - pad[2]).max(bounds.min.y + pad[0] + 1.0),
-        ),
-    };
-    let mut cursor = match stack.direction {
-        StackAxis::Vertical => inner.min.y,
-        StackAxis::Horizontal => inner.min.x,
-    };
-    let ids = kids;
-    for id in ids {
-        let Some(shape) = doc.find_shape(layer, id) else {
-            continue;
-        };
-        if !shape.visible {
-            continue;
-        }
-        let size = shape.geom.bbox().size();
-        let (w, h) = match (stack.direction, stack.align) {
-            (StackAxis::Vertical, StackAlign::Stretch) => (inner.width().max(1.0), size.y.max(1.0)),
-            (StackAxis::Horizontal, StackAlign::Stretch) => {
-                (size.x.max(1.0), inner.height().max(1.0))
-            }
-            _ => (size.x.max(1.0), size.y.max(1.0)),
-        };
-        let (x, y) = match stack.direction {
-            StackAxis::Vertical => {
-                let x = match stack.align {
-                    StackAlign::Start | StackAlign::Stretch => inner.min.x,
-                    StackAlign::Center => inner.min.x + (inner.width() - w) * 0.5,
-                    StackAlign::End => inner.max.x - w,
-                };
-                let y = cursor;
-                cursor += h + stack.gap;
-                (x, y)
-            }
-            StackAxis::Horizontal => {
-                let y = match stack.align {
-                    StackAlign::Start | StackAlign::Stretch => inner.min.y,
-                    StackAlign::Center => inner.min.y + (inner.height() - h) * 0.5,
-                    StackAlign::End => inner.max.y - h,
-                };
-                let x = cursor;
-                cursor += w + stack.gap;
-                (x, y)
-            }
-        };
-        let target = Bounds::from_min_size(Pt::new(x, y), Pt::new(w, h));
-        if let Some(shape) = doc.find_shape_mut(layer, id) {
-            set_bounds(&mut shape.geom, target);
-        }
-    }
-}
-
-/// Restore each child from `orig`, then apply constraints or auto-stack against
-/// the live parent frame. `orig` is the pre-gesture geometry.
-pub fn apply_resize(doc: &mut Document, orig: &[(usize, u64, Geom)], changed: &[(usize, u64)]) {
-    let mut frames = Vec::new();
-    for (layer, id) in changed {
-        if doc.find_shape(*layer, *id).is_some_and(|s| s.layout.frame) {
-            frames.push((*layer, *id));
-        }
-    }
-    for (layer, frame_id) in frames {
-        let Some((_, _, before)) = orig
-            .iter()
-            .find(|(l, id, _)| *l == layer && *id == frame_id)
-        else {
-            continue;
-        };
-        let old_bounds = before.bbox();
-        let Some(after) = doc.find_shape(layer, frame_id) else {
-            continue;
-        };
-        let new_bounds = after.geom.bbox();
-        if after.layout.stack.is_some() {
-            reflow(doc, layer, frame_id);
-            continue;
-        }
-        let kids = children(doc, layer, frame_id);
-        for child_id in kids {
-            let Some((_, _, child_orig)) = orig
-                .iter()
-                .find(|(l, id, _)| *l == layer && *id == child_id)
-            else {
-                continue;
-            };
-            let Some(child) = doc.find_shape(layer, child_id) else {
-                continue;
-            };
-            let cx = child.layout.constraint_x;
-            let cy = child.layout.constraint_y;
-            let src = child_orig.bbox();
-            let dst = constrain_bounds(src, old_bounds, new_bounds, cx, cy);
-            if let Some(shape) = doc.find_shape_mut(layer, child_id) {
-                set_bounds(&mut shape.geom, dst);
-            }
-        }
-    }
-}
+mod solver;
+pub use solver::{apply_resize, reflow, reflow_roots, repair_hierarchy, validate_hierarchy};
 
 fn constrain_axis(
     child_min: f32,
@@ -355,7 +544,7 @@ fn constrain_axis(
         Constraint::Stretch => {
             let start = child_min - old_min;
             let end = old_max - child_max;
-            (new_min + start, new_max - end)
+            (new_min + start, (new_max - end).max(new_min + start + 1.0))
         }
         Constraint::Center => {
             let center = (child_min + child_max) * 0.5;
@@ -402,79 +591,9 @@ fn constrain_bounds(
     }
 }
 
-/// HTML snapshot of a frame and its descendants. Stretch goal for 0.5.0.
+/// A responsive standalone HTML export of the frame subtree.
 pub fn export_html(doc: &Document, layer: usize, frame_id: u64) -> Result<String, String> {
-    let frame = doc
-        .find_shape(layer, frame_id)
-        .filter(|s| s.layout.frame)
-        .ok_or_else(|| "Select a frame to export".to_string())?;
-    let origin = frame.world_bbox();
-    let mut body = String::new();
-    write_html_shape(doc, layer, frame_id, origin, &mut body, true)?;
-    Ok(format!(
-        "<!doctype html><html><head><meta charset=\"utf-8\"><title>{}</title><style>body{{margin:0;background:#111}} .stage{{position:relative;width:{:.0}px;height:{:.0}px;margin:24px auto;background:#fff;overflow:hidden}} .node{{position:absolute;box-sizing:border-box}}</style></head><body><div class=\"stage\">{}</div></body></html>",
-        xml_escape(&frame.name),
-        origin.width().max(1.0),
-        origin.height().max(1.0),
-        body
-    ))
-}
-
-fn write_html_shape(
-    doc: &Document,
-    layer: usize,
-    id: u64,
-    origin: Bounds,
-    out: &mut String,
-    is_root: bool,
-) -> Result<(), String> {
-    let shape = doc
-        .find_shape(layer, id)
-        .ok_or_else(|| "Missing frame child".to_string())?;
-    let b = shape.world_bbox();
-    let left = if is_root { 0.0 } else { b.min.x - origin.min.x };
-    let top = if is_root { 0.0 } else { b.min.y - origin.min.y };
-    let bg = match shape.style.fill {
-        Fill::Solid(c) if c.a > 0 => format!(
-            "background:rgba({},{},{},{:.3});",
-            c.r,
-            c.g,
-            c.b,
-            c.a as f32 / 255.0
-        ),
-        _ => String::new(),
-    };
-    let radius = match shape.geom {
-        Geom::Rect { radius, .. } => radius,
-        _ => 0.0,
-    };
-    let text = if let Geom::Text(run) = &shape.geom {
-        xml_escape(&run.content).replace('\n', "<br>")
-    } else if shape.layout.placeholder {
-        "<span style=\"opacity:.55\">Image</span>".into()
-    } else {
-        String::new()
-    };
-    out.push_str(&format!(
-        "<div class=\"node\" style=\"left:{:.1}px;top:{:.1}px;width:{:.1}px;height:{:.1}px;border-radius:{:.1}px;{bg}overflow:hidden\">{}</div>",
-        left,
-        top,
-        b.width().max(1.0),
-        b.height().max(1.0),
-        radius,
-        text
-    ));
-    for child in children(doc, layer, id) {
-        write_html_shape(doc, layer, child, origin, out, false)?;
-    }
-    Ok(())
-}
-
-fn xml_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
+    crate::layout_export::export_html(doc, layer, frame_id)
 }
 
 pub fn make_frame(origin: Pt, size: Pt) -> Shape {
@@ -559,6 +678,7 @@ mod tests {
             gap: 10.0,
             padding: [8.0, 8.0, 8.0, 8.0],
             align: StackAlign::Start,
+            ..AutoStack::default()
         });
         reflow(&mut doc, layer, frame);
         let ga = doc.find_shape(layer, a).unwrap().geom.bbox();
@@ -613,6 +733,38 @@ mod tests {
         let mut expect = vec![inner, leaf];
         expect.sort();
         assert_eq!(desc, expect);
+    }
+
+    #[test]
+    fn parent_picker_prefers_deepest_frame_even_when_outer_is_appended_later() {
+        let (mut doc, layer) = rect_doc();
+        let inner = add_frame(&mut doc, layer, 20.0, 20.0, 100.0, 100.0);
+        let outer = add_frame(&mut doc, layer, 0.0, 0.0, 200.0, 200.0);
+        doc.find_shape_mut(layer, inner).unwrap().layout.parent = Some(outer);
+        assert_eq!(
+            containing_frame(&doc, layer, Pt::new(50.0, 50.0)),
+            Some(inner)
+        );
+        doc.find_shape_mut(layer, outer).unwrap().locked = true;
+        assert_eq!(containing_frame(&doc, layer, Pt::new(50.0, 50.0)), None);
+        doc.find_shape_mut(layer, outer).unwrap().locked = false;
+        doc.find_shape_mut(layer, outer).unwrap().visible = false;
+        assert_eq!(containing_frame(&doc, layer, Pt::new(50.0, 50.0)), None);
+    }
+
+    #[test]
+    fn parent_picker_respects_ancestor_clip_and_painter_order() {
+        let (mut doc, layer) = rect_doc();
+        let outer = add_frame(&mut doc, layer, 0.0, 0.0, 100.0, 100.0);
+        let a = add_frame(&mut doc, layer, 80.0, 20.0, 100.0, 100.0);
+        let b = add_frame(&mut doc, layer, 80.0, 20.0, 100.0, 100.0);
+        for id in [a, b] {
+            doc.find_shape_mut(layer, id).unwrap().layout.parent = Some(outer);
+        }
+        assert_eq!(containing_frame(&doc, layer, Pt::new(90.0, 50.0)), Some(b));
+        assert_eq!(containing_frame(&doc, layer, Pt::new(120.0, 50.0)), None);
+        doc.find_shape_mut(layer, outer).unwrap().layout.clip = false;
+        assert_eq!(containing_frame(&doc, layer, Pt::new(120.0, 50.0)), Some(b));
     }
 
     #[test]

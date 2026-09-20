@@ -1,5 +1,107 @@
 # Changelog
 
+## 2026-09-20 · 0.5.4 — More control on the canvas.
+
+This release integrates the Design Tools work and expanded native Layout
+workspace onto **0.5.3**, preserving its external clipboard paste and cloud
+collaboration. It replaces the separate preview with one release line.
+
+### Pixel: chroma key and raster banks
+
+- **17 filters:** Chroma key, Brightness / contrast, Exposure / gamma, Levels,
+  Hue / saturation, Vibrance, Color balance, Temperature / tint, Grayscale,
+  Sepia, Invert, Threshold, Posterize, Alpha threshold, Feather alpha, Grow
+  alpha and Shrink alpha.
+- **13 effects:** Gaussian blur, Motion blur, Sharpen, Unsharp mask, Find edges,
+  Emboss, Pixelate, Film grain, Vignette, Halftone, Solarize, Swirl and Ripple.
+- Chroma key samples the original image or uses a chosen color, with
+  Similarity, Falloff, Hardness, Spill cleanup and Flow controls. Existing
+  transparency is preserved. Flow controls the amount applied in this pass.
+- The checkerboard preview can compare Original and Preview. Apply processes
+  full-resolution pixels in the background as one undoable edit; Cancel
+  preserves the source. Active selections limit the edit, and layer masks
+  can be processed. These are applied pixel edits, not a live effect stack.
+
+### Design: gradients, color and compositing
+
+- Linear, radial, shape and conic gradients support multiple editable stops
+  with position, color and alpha. Add, remove, drag, reverse or evenly space
+  stops. Adjust angle and canvas endpoints, and target either fill or stroke.
+- The shared color picker shows Current and Previous chips, supports restoring
+  Previous, and exposes alpha in every context, including Design effects.
+- Per-object opacity and blend controls apply to vector shapes and Layout
+  frames; placed rasters keep layer opacity/blending. Object opacity affects
+  the combined fill, image and stroke once. Frame and layer opacity affect
+  their complete contents once, including at 100% opacity.
+- Regular layers and frames isolate child blending. Explicit layer groups
+  retain Pass through. Appearance survives project saves and SVG export.
+- Linear/radial SVG output retains editable stops, including stroke gradients.
+  Shape/conic output embeds image patterns capped at 4096 pixels per axis.
+  All types remain editable in `.oma`; Lottie reports shape/conic gradients
+  as unsupported rather than silently dropping them.
+
+### Hierarchy and shortcuts
+
+- Drag rows to sort objects and layers; drop onto groups or Layout frames to
+  nest. Multi-object moves and frame subtrees preserve hierarchy and placement,
+  with lock/cycle checks and atomic Undo/Redo.
+- **Ctrl+G** creates a layer group; **Ctrl+Shift+G** ungroups.
+  **Ctrl+8** creates a compound shape; **Ctrl+Shift+8** releases it.
+  Pathfinder Union and other boolean operations remain separate commands.
+- Placed raster images can move into Layout frames as embedded image objects,
+  retaining position, rotation, opacity, blend and effects. Existing layer
+  masks bake into image alpha; Undo restores the original layer and mask.
+
+### Layout: responsive screens and prototypes
+
+- Stack, Wrap and uniform-column Grid; Fixed/Hug/Fill sizing on each axis;
+  min/max bounds, per-side padding, absolute children, clipping and aspect
+  ratio controls. Phone/Tablet breakpoint rules adjust layout and type size.
+- Document-local components, linked instances, variants and local overrides,
+  with reset/detach commands. Color/number variables bind fills, strokes,
+  spacing and corners.
+- Embedded image fills support Fill/Fit/Stretch and focal-point controls.
+  File placement and resource insertion respect selected and nested frames;
+  multi-part SVG assets retain editable contents.
+- Present previews viewport sizes and Click/Hover/Press interactions for
+  navigation, back, overlays and variant changes, with instant/dissolve/slide
+  transitions. PNG/SVG frame exports and responsive HTML include the frame
+  subtree; HTML carries supported prototype interactions and embedded assets.
+- The editable Fieldwork starter demonstrates responsive layout, components
+  and linked screens. Hierarchy, component links and overrides persist in
+  project files.
+
+### Website and compatibility
+
+The website leads with 0.5.4, documents the new banks and controls, and replaces
+outdated basic-Layout and cloud-waitlist claims with the current workflows.
+Cloud remains explicit project/asset sharing and snapshot review, with private
+membership and separate public showcase publishing; it is not a live shared
+canvas. Native 0.5.3 clipboard behavior remains intact.
+
+Clipboard integration now remaps copied Layout definitions/instances, keeps
+valid local component and variable links, and detaches missing references while
+preserving editable appearance in another document. Copying a subtree out of
+rotated frames preserves canvas placement. Mixed raster/vector copies retain
+gradients, opacity and blending across windows. Pixel selection tint follows
+placed-image rotation and scale instead of stretching to a screen-aligned box.
+
+0.5.4 opens older `.oma` files. Documents saved with the new gradient data require
+0.5.4 or later; older 0.5.3 cannot read those gradients. The project wrapper
+remains version 5.
+
+Known limits: vector objects cannot yet serve as editable layer/image masks;
+existing layer masks are pixel masks. Raster effects use Apply/Undo. Layout
+components/variables stay document-local; Grid uses uniform columns; rich
+inline text, native Figma/Framer interchange and a hosted application/CMS
+workflow are outside this release. HTML exports require browser fidelity
+checks; reduced-size raster previews can differ in fine detail from final
+pixels.
+
+See the [full release notes](docs/blog/0.5.4-more-control-on-the-canvas.md) and
+[release validation](docs/releases/0.5.4.md) for final build and runtime evidence.
+The accepted 0.5.0 human QA record is preserved and is not transferred to 0.5.4.
+
 ## 2026-09-20 · 0.5.3 — Paste it onto the canvas.
 
 Fix pasting external clipboard content into a document. `Ctrl+V` accepts

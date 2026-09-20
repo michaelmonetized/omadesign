@@ -547,8 +547,9 @@ pub fn load_asset(path: &Path) -> Result<crate::import::Imported, String> {
         }
         AssetKind::Svg => {
             let svg = String::from_utf8(bytes).map_err(|e| e.to_string())?;
-            svg_document(&svg)?;
-            crate::import::Imported::Svg { name, svg }
+            let mut doc = svg_document(&svg)?;
+            doc.name = name;
+            crate::import::Imported::Document(doc)
         }
         AssetKind::Document => {
             crate::typography::load_for_document(path)?;
@@ -558,7 +559,7 @@ pub fn load_asset(path: &Path) -> Result<crate::import::Imported, String> {
 }
 
 /// Worker-safe native preview. Raster animations use their first frame. SVG
-/// previews use the same supported geometry/paint subset as native SVG placement.
+/// previews use the same standards-based codec as File > Place.
 /// Large or malformed assets return an error for a labelled fallback tile.
 pub fn load_thumbnail(folder: &Path, asset: &Asset, max_edge: u32) -> Result<RgbaImage, String> {
     let root = canonical_root(folder)?;
@@ -589,63 +590,29 @@ pub fn load_thumbnail(folder: &Path, asset: &Asset, max_edge: u32) -> Result<Rgb
 }
 
 fn svg_document(svg: &str) -> Result<crate::document::Document, String> {
-    use crate::document::{Cap, Document, Fill, Join, Layer, Shape, Stroke, Style};
-    use crate::shape_browser::{SvgPaint, svg_to_elements};
-    if !svg.contains("<svg")
-        || !svg.contains('>')
-        || (!svg.contains("</svg>") && !svg.trim_end().ends_with("/>"))
-    {
-        return Err("This is not a complete SVG document.".into());
+    let (mut doc, notes) = crate::formats::svg::read(svg, "SVG")?;
+    doc.import_notes.extend(notes);
+    let mut geometry = 0;
+    let mut pixels = 0;
+    let mut elements = 0;
+    for layer in &doc.layers {
+        for shape in layer.kind.shapes().unwrap_or_default() {
+            elements += 1;
+            if elements > 2048 {
+                return Err("SVG contains too many elements for a preview.".into());
+            }
+            check_geometry(&shape.geom, &mut geometry)?;
+        }
+        for px in [layer.kind.pixels(), layer.mask.as_ref()]
+            .into_iter()
+            .flatten()
+        {
+            pixels += check_pixels(px.w, px.h)?;
+            if pixels > MAX_PIXELS {
+                return Err("SVG raster layers exceed the 16 megapixel preview budget.".into());
+            }
+        }
     }
-    let elements = svg_to_elements(svg)?;
-    if elements.len() > 2048 {
-        return Err("SVG contains too many elements for a preview.".into());
-    }
-    let mut doc = Document::new("SVG", 1.0, 1.0, 72.0);
-    doc.layers = vec![Layer::vector("SVG")];
-    doc.artboards.clear();
-    let mut bounds: Option<crate::geom::Bounds> = None;
-    let mut budget = 0;
-    for element in elements {
-        check_geometry(&element.geom, &mut budget)?;
-        let fill = match element.fill {
-            SvgPaint::None => Fill::None,
-            SvgPaint::Solid(color) => Fill::Solid(color),
-            SvgPaint::Unspecified => Fill::Solid(crate::color::Rgba::BLACK),
-        };
-        let stroke = match element.stroke {
-            SvgPaint::Solid(color) => Some(Stroke {
-                color,
-                width: element.stroke_width.max(0.25),
-                cap: match element.stroke_cap.as_deref() {
-                    Some("round") => Cap::Round,
-                    Some("square") => Cap::Square,
-                    _ => Cap::Butt,
-                },
-                join: match element.stroke_join.as_deref() {
-                    Some("round") => Join::Round,
-                    Some("bevel") => Join::Bevel,
-                    _ => Join::Miter,
-                },
-                dash: None,
-            }),
-            _ => None,
-        };
-        let shape = Shape::new(element.geom, Style { fill, stroke });
-        let b = shape.world_bbox();
-        bounds = Some(bounds.map_or(b, |old| old.union(b)));
-        doc.layers[0].kind.shapes_mut().unwrap().push(shape);
-    }
-    let bounds = bounds.ok_or("SVG has no supported geometry")?;
-    let mut board = crate::document::Artboard::new(
-        0,
-        bounds.min,
-        crate::geom::Pt::new(bounds.width().max(1.0), bounds.height().max(1.0)),
-    );
-    board.name = "SVG".into();
-    doc.width = board.size.x;
-    doc.height = board.size.y;
-    doc.artboards.push(board);
     Ok(doc)
 }
 
@@ -1036,7 +1003,7 @@ mod tests {
         let temp = Temp::new();
         let bank = create(&temp.0, "Preview fixtures").unwrap();
         png(&bank.root.join("raster.png"), 80, 40);
-        fs::write(bank.root.join("vector.svg"), r##"<svg viewBox="0 0 60 40"><path d="M 0 0 L 60 0 L 60 40 L 0 40 Z" fill="#D72640"/></svg>"##).unwrap();
+        fs::write(bank.root.join("vector.svg"), r##"<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg viewBox="0 0 60 40"><style>.brand { fill: #D72640; }</style><g transform="translate(10 8)"><path class="brand" d="M 0 0 L 40 0 L 40 24 L 0 24 Z"/></g></svg>"##).unwrap();
         let mut doc = crate::document::Document::new("Packed pixels", 40.0, 20.0, 72.0);
         let pixels = doc.layers[0].kind.pixels_mut().unwrap();
         for pixel in pixels.data.as_chunks_mut::<4>().0 {

@@ -4,29 +4,386 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "frame": { "type": "boolean" },
-    "parent": { "type": ["integer", "null"] },
-    "placeholder": { "type": "boolean" },
+    "frame": {
+      "type": "boolean"
+    },
+    "parent": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "placeholder": {
+      "type": "boolean"
+    },
     "constraint_x": {
-      "enum": ["Start", "End", "Stretch", "Center", "Scale"]
+      "enum": [
+        "Start",
+        "End",
+        "Stretch",
+        "Center",
+        "Scale"
+      ]
     },
     "constraint_y": {
-      "enum": ["Start", "End", "Stretch", "Center", "Scale"]
+      "enum": [
+        "Start",
+        "End",
+        "Stretch",
+        "Center",
+        "Scale"
+      ]
     },
     "stack": {
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "properties": {
-        "direction": { "enum": ["Vertical", "Horizontal"] },
-        "gap": { "type": "number" },
+        "direction": {
+          "enum": [
+            "Vertical",
+            "Horizontal"
+          ]
+        },
+        "gap": {
+          "type": "number"
+        },
         "padding": {
           "type": "array",
-          "items": { "type": "number" },
+          "items": {
+            "type": "number"
+          },
           "minItems": 4,
           "maxItems": 4
         },
-        "align": { "enum": ["Start", "Center", "End", "Stretch"] }
+        "align": {
+          "enum": [
+            "Start",
+            "Center",
+            "End",
+            "Stretch"
+          ]
+        },
+        "flow": {
+          "enum": [
+            "Stack",
+            "Wrap",
+            "Grid"
+          ],
+          "default": "Stack"
+        },
+        "justify": {
+          "enum": [
+            "Start",
+            "Center",
+            "End",
+            "SpaceBetween",
+            "SpaceAround",
+            "SpaceEvenly"
+          ],
+          "default": "Start"
+        },
+        "cross_gap": {
+          "type": "number",
+          "minimum": 0,
+          "default": 12
+        },
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 3
+        }
       },
-      "required": ["direction", "gap", "padding", "align"]
+      "required": [
+        "direction",
+        "gap",
+        "padding",
+        "align"
+      ]
+    },
+    "width": {
+      "enum": [
+        "Fixed",
+        "Hug",
+        "Fill"
+      ],
+      "default": "Fixed"
+    },
+    "height": {
+      "enum": [
+        "Fixed",
+        "Hug",
+        "Fill"
+      ],
+      "default": "Fixed"
+    },
+    "min_width": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "exclusiveMinimum": 0
+    },
+    "max_width": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "exclusiveMinimum": 0
+    },
+    "min_height": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "exclusiveMinimum": 0
+    },
+    "max_height": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "exclusiveMinimum": 0
+    },
+    "absolute": {
+      "type": "boolean",
+      "default": false
+    },
+    "clip": {
+      "type": "boolean",
+      "default": false
+    },
+    "component": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "interactions": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "default": []
+    },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fill": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "stroke": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "gap": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "padding": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "radius": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "text_size": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 1,
+      "maximum": 100000
+    },
+    "aspect_ratio": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0.0001,
+      "maximum": 10000
+    },
+    "image": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "data": {
+          "type": "string"
+        },
+        "fit": {
+          "enum": [
+            "Cover",
+            "Contain",
+            "Stretch"
+          ]
+        },
+        "focal": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          }
+        }
+      },
+      "required": [
+        "data",
+        "fit",
+        "focal"
+      ]
+    },
+    "breakpoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "max_width": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "text_size": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "enum": [
+                  "Vertical",
+                  "Horizontal"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "flow": {
+            "anyOf": [
+              {
+                "enum": [
+                  "Stack",
+                  "Wrap",
+                  "Grid"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "columns": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gap": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cross_gap": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "padding": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 4,
+                "maxItems": 4
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "align": {
+            "anyOf": [
+              {
+                "enum": [
+                  "Start",
+                  "Center",
+                  "End",
+                  "Stretch"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "justify": {
+            "anyOf": [
+              {
+                "enum": [
+                  "Start",
+                  "Center",
+                  "End",
+                  "SpaceBetween",
+                  "SpaceAround",
+                  "SpaceEvenly"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "max_width"
+        ]
+      },
+      "default": []
     }
   }
 }

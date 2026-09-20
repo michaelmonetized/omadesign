@@ -218,6 +218,239 @@ mod tests {
         assert!(target.doc.find_shape(layer, id).is_none());
         assert_eq!(target.doc.layers.len(), layer_count);
     }
+
+    fn component_fixture() -> (Studio, u64, u64) {
+        let mut studio = Studio::new();
+        let frame = crate::layout::make_frame(Pt::new(20.0, 30.0), Pt::new(200.0, 80.0));
+        let main = frame.id;
+        let mut child = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(40.0, 50.0),
+                size: Pt::new(50.0, 25.0),
+                radius: 0.0,
+            },
+            Style::default(),
+        );
+        child.layout.parent = Some(main);
+        studio.doc.layers[1]
+            .kind
+            .shapes_mut()
+            .unwrap()
+            .extend([frame, child]);
+        crate::layout_components::make_component(&mut studio.doc, 1, main).unwrap();
+        let instance = crate::layout_components::insert_instance(
+            &mut studio.doc,
+            main,
+            1,
+            Pt::new(300.0, 30.0),
+            None,
+        )
+        .unwrap();
+        (studio, main, instance)
+    }
+
+    #[test]
+    fn copied_component_definition_and_instance_remap_and_still_synchronize() {
+        use crate::layout_components::ComponentBinding;
+        let (mut source, main, instance) = component_fixture();
+        source.selection = vec![(1, main), (1, instance)];
+        let payload = copy(&mut source);
+        let mut target = Studio::new();
+        let before = crate::project::encode(&target.doc).unwrap();
+        target.paste_clipboard(Some(&payload));
+        assert_eq!(target.history.len(), 1);
+        assert_eq!(target.selection.len(), 2);
+        let (layer, new_main) = target.selection[0];
+        let new_instance = target.selection[1].1;
+        assert_ne!(new_main, main);
+        assert_ne!(new_instance, instance);
+        let Some(ComponentBinding::Instance {
+            main: linked,
+            nodes,
+        }) = &target
+            .doc
+            .find_shape(layer, new_instance)
+            .unwrap()
+            .layout
+            .component
+        else {
+            panic!("Pasted instance must retain its copied definition")
+        };
+        assert_eq!(*linked, new_main);
+        assert!(nodes.iter().all(|node| {
+            target.doc.find_shape(layer, node.source).is_some()
+                && target.doc.find_shape(layer, node.instance).is_some()
+                && node.baseline.id == node.instance
+        }));
+        let pasted = crate::project::encode(&target.doc).unwrap();
+        crate::project::decode(&pasted).unwrap();
+        target.undo();
+        assert_eq!(crate::project::encode(&target.doc).unwrap(), before);
+        target.redo();
+        assert_eq!(crate::project::encode(&target.doc).unwrap(), pasted);
+
+        let main_child = crate::layout::children(&target.doc, layer, new_main)[0];
+        let instance_child = crate::layout::children(&target.doc, layer, new_instance)[0];
+        target
+            .doc
+            .find_shape_mut(layer, main_child)
+            .unwrap()
+            .opacity = 0.37;
+        crate::layout_components::synchronize_all(&mut target.doc).unwrap();
+        assert_eq!(
+            target
+                .doc
+                .find_shape(layer, instance_child)
+                .unwrap()
+                .opacity,
+            0.37
+        );
+    }
+
+    #[test]
+    fn copied_instance_keeps_local_definition_and_detaches_when_it_is_missing() {
+        use crate::layout_components::ComponentBinding;
+        let (mut source, main, instance) = component_fixture();
+        source.selection = vec![(1, instance)];
+        let original = source.doc.find_shape(1, instance).unwrap().world_bbox();
+        let payload = copy(&mut source);
+        source.paste_clipboard(Some(&payload));
+        let (layer, copy_id) = source.selection[0];
+        assert!(matches!(
+            source.doc.find_shape(layer, copy_id).unwrap().layout.component,
+            Some(ComponentBinding::Instance { main: linked, .. }) if linked == main
+        ));
+        assert_eq!(
+            source.doc.find_shape(layer, copy_id).unwrap().world_bbox(),
+            original
+        );
+
+        let mut target = Studio::new();
+        target.paste_clipboard(Some(&payload));
+        let (layer, copy_id) = target.selection[0];
+        let pasted = target.doc.find_shape(layer, copy_id).unwrap();
+        assert!(pasted.layout.component.is_none());
+        assert_eq!(pasted.world_bbox(), original);
+        assert_eq!(
+            crate::layout::descendants(&target.doc, layer, copy_id).len(),
+            1
+        );
+        crate::project::decode(&crate::project::encode(&target.doc).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn copied_subtree_retains_canvas_positions_outside_rotated_ancestors() {
+        fn corners(doc: &Document, layer: usize, id: u64) -> Vec<Pt> {
+            let shape = doc.find_shape(layer, id).unwrap();
+            let mut points: Vec<_> = shape.world_contours(16).into_iter().flatten().collect();
+            let mut parent = shape.layout.parent;
+            while let Some(id) = parent {
+                let frame = doc.find_shape(layer, id).unwrap();
+                for point in &mut points {
+                    *point = point.rotate_about(frame.geom.bbox().center(), frame.rotation);
+                }
+                parent = frame.layout.parent;
+            }
+            points
+        }
+        let (mut source, main, _) = component_fixture();
+        let mut outer = crate::layout::make_frame(Pt::ZERO, Pt::splat(500.0));
+        outer.rotation = 0.7;
+        let outer_id = outer.id;
+        source.doc.layers[1].kind.shapes_mut().unwrap().push(outer);
+        let root = source.doc.find_shape_mut(1, main).unwrap();
+        root.layout.parent = Some(outer_id);
+        root.rotation = -0.3;
+        source.selection = vec![(1, main)];
+        let child = crate::layout::children(&source.doc, 1, main)[0];
+        let before = [
+            corners(&source.doc, 1, main),
+            corners(&source.doc, 1, child),
+        ];
+        let payload = copy(&mut source);
+        let mut target = Studio::new();
+        target.paste_clipboard(Some(&payload));
+        let (layer, new_root) = target.selection[0];
+        let new_child = crate::layout::children(&target.doc, layer, new_root)[0];
+        for (id, expected) in [new_root, new_child].into_iter().zip(before) {
+            let actual = corners(&target.doc, layer, id);
+            assert_eq!(actual.len(), expected.len());
+            for (actual, expected) in actual.into_iter().zip(expected) {
+                assert!(
+                    (actual - expected).length() < 0.002,
+                    "{actual:?} != {expected:?}"
+                );
+            }
+        }
+        assert_eq!(target.history.len(), 1);
+        crate::project::decode(&crate::project::encode(&target.doc).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn mixed_raster_and_token_bound_gradient_artwork_survives_cross_window_paste() {
+        use crate::color::Blend;
+        use crate::gradient::{Gradient, GradientKind};
+        use crate::layout_tokens::{DesignToken, TokenProperty};
+        let mut source = Studio::new();
+        let color = Rgba::new(70, 130, 210, 155);
+        let token = DesignToken::color("Accent", color);
+        let mut shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(40.0, 50.0),
+                size: Pt::new(80.0, 60.0),
+                radius: 0.0,
+            },
+            Style {
+                fill: Fill::Solid(color),
+                stroke: Some(Stroke {
+                    gradient: Some(Gradient::new(GradientKind::Conic, color, Rgba::BLACK)),
+                    ..Default::default()
+                }),
+            },
+        );
+        shape.layout.tokens.set(TokenProperty::Fill, Some(token.id));
+        shape.opacity = 0.65;
+        shape.blend = Blend::Multiply;
+        let original = shape.clone();
+        source.doc.layout_tokens.push(token.clone());
+        source.doc.layers[1].kind.shapes_mut().unwrap().push(shape);
+        let index = source.doc.layers.len();
+        source.doc.layers.push(Layer::placed_raster(
+            "Photo",
+            crate::document::Pixels::new(2, 2),
+            Pt::new(140.0, 50.0),
+            Pt::new(40.0, 40.0),
+        ));
+        source.selection = vec![(1, original.id), (index, RASTER_ID)];
+        let payload = copy(&mut source);
+        assert!(payload.starts_with(Studio::OBJECT_CLIP_PREFIX));
+
+        let mut target = Studio::new();
+        target.paste_clipboard(Some(&payload));
+        assert_eq!(target.history.len(), 1, "{}", target.status);
+        assert_eq!(target.selection.len(), 2);
+        let (layer, id) = target.selection[0];
+        let pasted = target.doc.find_shape(layer, id).unwrap();
+        assert_eq!(pasted.style, original.style);
+        assert_eq!(pasted.world_bbox(), original.world_bbox());
+        assert_eq!(pasted.opacity, original.opacity);
+        assert_eq!(pasted.blend, original.blend);
+        assert!(pasted.layout.tokens.is_empty());
+        crate::project::decode(&crate::project::encode(&target.doc).unwrap()).unwrap();
+
+        source.paste_clipboard(Some(&payload));
+        let (layer, id) = source.selection[0];
+        assert_eq!(
+            source
+                .doc
+                .find_shape(layer, id)
+                .unwrap()
+                .layout
+                .tokens
+                .get(TokenProperty::Fill),
+            Some(token.id)
+        );
+    }
 }
 
 enum PasteContents {
@@ -255,7 +488,58 @@ impl Studio {
             })
             .collect();
         let copied: HashSet<_> = shapes.iter().map(|s| s.id).collect();
+        // A copied subtree no longer inherits frames that were not copied.
+        // Bake their rotation into the root and translate its whole subtree,
+        // preserving the same canvas position as ordinary position-preserving paste.
+        let locations: HashMap<_, _> = self
+            .doc
+            .layers
+            .iter()
+            .enumerate()
+            .flat_map(|(layer, value)| {
+                value
+                    .kind
+                    .shapes()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(move |shape| (shape.id, layer))
+            })
+            .collect();
+        let mut extracted = HashMap::new();
+        for root in shapes.iter().filter(|shape| {
+            shape
+                .layout
+                .parent
+                .is_some_and(|parent| !copied.contains(&parent))
+        }) {
+            let layer = locations[&root.id];
+            let center = root.geom.bbox().center();
+            let mut world = center;
+            let mut rotation = 0.0;
+            let mut parent = root.layout.parent;
+            let mut seen = HashSet::new();
+            while let Some(id) = parent {
+                if !seen.insert(id) {
+                    break;
+                }
+                let Some(frame) = self.doc.find_shape(layer, id) else {
+                    break;
+                };
+                world = world.rotate_about(frame.geom.bbox().center(), frame.rotation);
+                rotation += frame.rotation;
+                parent = frame.layout.parent;
+            }
+            let delta = world - center;
+            extracted.insert(root.id, (delta, rotation));
+            for id in crate::layout::descendants(&self.doc, layer, root.id) {
+                extracted.insert(id, (delta, 0.0));
+            }
+        }
         for shape in &mut shapes {
+            if let Some((delta, rotation)) = extracted.get(&shape.id) {
+                shape.geom.translate(*delta);
+                shape.rotation += rotation;
+            }
             shape.layout.parent = shape.layout.parent.filter(|id| copied.contains(id));
         }
         let rasters: Vec<_> = self
@@ -277,6 +561,10 @@ impl Studio {
                 .map_err(|e| e.to_string())
         } else {
             let mut doc = Document::new("Clipboard", self.doc.width, self.doc.height, self.doc.dpi);
+            // The transport document must remain valid when selected artwork
+            // references variables. Paste resolves those bindings against its
+            // destination, retaining materialized colors and geometry otherwise.
+            doc.layout_tokens = self.doc.layout_tokens.clone();
             doc.layers.clear();
             if !shapes.is_empty() {
                 let mut layer = Layer::vector("Copied objects");
@@ -468,7 +756,38 @@ impl Studio {
                 .collect();
             for mut shape in shapes {
                 shape.id = remap[&shape.id];
+                crate::layout_components::remap_duplicate(&mut shape, &remap);
                 shape.layout.parent = shape.layout.parent.and_then(|id| remap.get(&id).copied());
+                if let Some(crate::layout_components::ComponentBinding::Instance { main, .. }) =
+                    &shape.layout.component
+                    && !remap.values().any(|id| id == main)
+                    && !self.doc.layers.iter().any(|layer| {
+                        layer.kind.shapes().is_some_and(|shapes| {
+                            shapes.iter().any(|candidate| {
+                                candidate.id == *main
+                                    && matches!(
+                                        candidate.layout.component,
+                                        Some(
+                                            crate::layout_components::ComponentBinding::Main { .. }
+                                        )
+                                    )
+                            })
+                        })
+                    })
+                {
+                    // An instance copied without its definition remains
+                    // editable artwork in a different document.
+                    shape.layout.component = None;
+                }
+                for property in crate::layout_tokens::TokenProperty::all() {
+                    if let Some(token) = shape.layout.tokens.get(property)
+                        && !self.doc.layout_tokens.iter().any(|candidate| {
+                            candidate.id == token && property.accepts(candidate.value)
+                        })
+                    {
+                        shape.layout.tokens.set(property, None);
+                    }
+                }
                 crate::text::fill_contours(&mut shape.geom);
                 if shape.layout.parent.is_none() {
                     selection.push((li, shape.id));
@@ -492,6 +811,7 @@ impl Studio {
         self.selected_layer = None;
         self.selection = selection;
         self.pending_place = None;
+        self.pending_place_frame = None;
         self.op = None;
         self.key_drag = None;
         self.tool = Tool::Select;

@@ -152,7 +152,9 @@ impl Tool {
             Tool::Text => {
                 "Click to place type and type into it. Character studio: font, size, OpenType. Esc finishes."
             }
-            Tool::Gradient => "Drag across a selected shape to set a linear fill.",
+            Tool::Gradient => {
+                "Drag across a selected shape to place its active fill or stroke gradient."
+            }
             Tool::Eyedropper => "Click anywhere on the canvas to sample fill color.",
             Tool::Trace => {
                 "Click to trace the active pixel layer into vectors. Colors and smoothness live in Trace."
@@ -229,7 +231,21 @@ impl Tool {
             Persona::Motion => matches!(self, Tool::Select | Tool::Hand | Tool::Zoom),
             Persona::Layout => matches!(
                 self,
-                Tool::Select | Tool::Frame | Tool::Rect | Tool::Text | Tool::Hand | Tool::Zoom
+                Tool::Select
+                    | Tool::Node
+                    | Tool::Pen
+                    | Tool::Pencil
+                    | Tool::Frame
+                    | Tool::Rect
+                    | Tool::Ellipse
+                    | Tool::Polygon
+                    | Tool::Star
+                    | Tool::Line
+                    | Tool::Text
+                    | Tool::Gradient
+                    | Tool::Eyedropper
+                    | Tool::Hand
+                    | Tool::Zoom
             ),
         }
     }
@@ -286,9 +302,18 @@ impl Tool {
     pub fn layout_well() -> &'static [Tool] {
         &[
             Tool::Select,
+            Tool::Node,
+            Tool::Pen,
+            Tool::Pencil,
             Tool::Frame,
             Tool::Rect,
+            Tool::Ellipse,
+            Tool::Polygon,
+            Tool::Star,
+            Tool::Line,
             Tool::Text,
+            Tool::Gradient,
+            Tool::Eyedropper,
             Tool::Hand,
             Tool::Zoom,
         ]
@@ -425,12 +450,20 @@ pub fn shortcut_groups() -> &'static [(&'static str, &'static [ShortcutRow])] {
                     keys: "Ctrl+Shift+[",
                 },
                 ShortcutRow {
-                    action: "Combine",
+                    action: "Group",
                     keys: "Ctrl+G",
                 },
                 ShortcutRow {
-                    action: "Release",
+                    action: "Ungroup",
                     keys: "Ctrl+Shift+G",
+                },
+                ShortcutRow {
+                    action: "Compound shape",
+                    keys: "Ctrl+8",
+                },
+                ShortcutRow {
+                    action: "Release compound",
+                    keys: "Ctrl+Shift+8",
                 },
                 ShortcutRow {
                     action: "Nudge",

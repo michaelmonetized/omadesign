@@ -128,7 +128,15 @@ fn needs_pixels(layer: &Layer) -> bool {
             || layer.kind.shapes().is_some_and(|shapes| {
                 shapes.iter().any(|shape| {
                     shape.filters.active()
-                        || matches!(shape.style.fill, Fill::Linear { .. } | Fill::Radial { .. })
+                        || shape
+                            .style
+                            .stroke
+                            .as_ref()
+                            .is_some_and(|s| s.gradient.is_some())
+                        || matches!(
+                            shape.style.fill,
+                            Fill::Gradient(_) | Fill::Linear { .. } | Fill::Radial { .. }
+                        )
                 })
             })
     }

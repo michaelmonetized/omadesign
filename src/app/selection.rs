@@ -210,9 +210,15 @@ impl Studio {
             let Some(geom) = crate::outline::expand(&shape) else {
                 continue;
             };
-            let color = shape.style.stroke.as_ref().unwrap().color;
+            let stroke = shape.style.stroke.as_ref().unwrap();
+            let mut painted = shape.clone();
+            painted.style.fill = stroke
+                .gradient
+                .clone()
+                .map(Fill::Gradient)
+                .unwrap_or(Fill::Solid(stroke.color));
             let outlined_style = Style {
-                fill: Fill::Solid(color),
+                fill: Self::compound_fill(&painted, &geom, 0.0),
                 stroke: None,
             };
             if shape.style.fill.is_none() || !shape.geom.is_closed() {

@@ -44,6 +44,12 @@ export const featureGroups: FeatureGroup[] = [
           "Unite, subtract, intersect, exclude or divide shapes on one layer. Combine and release contours, with holes and Undo preserved.",
       },
       {
+        name: "Groups and compounds",
+        since: "0.5.4",
+        description:
+          "Ctrl+G creates an editable layer group; Ctrl+Shift+G ungroups. Ctrl+8 makes a compound shape; Ctrl+Shift+8 releases it. Drag sidebar rows to sort or nest artwork.",
+      },
+      {
         name: "Stroke outlines",
         description:
           "Turn a stroke into editable filled geometry, including caps, joins and dashes. Keep the original fill underneath.",
@@ -103,9 +109,16 @@ export const featureGroups: FeatureGroup[] = [
           "Choose local fonts and adjust size, tracking and leading. Control kerning, ligatures, tabular figures and small caps where the font supports them.",
       },
       {
-        name: "Fill, stroke and gradients",
+        name: "Multi-stop fill and stroke gradients",
+        since: "0.5.4",
         description:
-          "Pick color with HSV or hex, sample artwork, reuse recent colors and drag a gradient across a selected shape.",
+          "Choose linear, radial, shape or conic. Add, move and color stops, edit their alpha, adjust the angle, and drag gradient handles on the canvas. Apply to fills or strokes.",
+      },
+      {
+        name: "Current and previous colors",
+        since: "0.5.4",
+        description:
+          "Use the saturation × brightness box, hue, alpha or RGBA hex. Compare Current and Previous chips and click Previous to restore it. Alpha works in Design effects and gradient stops too.",
       },
       {
         name: "Select by appearance",
@@ -118,9 +131,10 @@ export const featureGroups: FeatureGroup[] = [
           "Add blur, shadows, outlines through dilation, color adjustments, turbulence and displacement. Effects remain adjustable and carry into SVG.",
       },
       {
-        name: "Layer blending",
+        name: "Object and layer blending",
+        since: "0.5.4",
         description:
-          "Combine layers with opacity and 16 blend modes, including Multiply, Screen, Overlay, Difference, Hue and Luminosity.",
+          "Set object, frame and layer opacity with 16 blend modes. Object opacity affects its combined fill and stroke once; frame opacity affects the subtree. Layer groups offer Pass through.",
       },
     ],
   },
@@ -151,9 +165,21 @@ export const featureGroups: FeatureGroup[] = [
           "Marquee, ellipse, lasso and wand leave a visible selection. Paint, fill, clone, heal and smudge stay inside it. Delete clears the pixels. Esc deselects.",
       },
       {
-        name: "Editable layer masks",
+        name: "Editable pixel layer masks",
         description:
-          "Reveal all, hide all or start from a selection. Paint black or white, invert or remove the mask, or apply it to pixels.",
+          "Reveal all, hide all or start from a selection. Paint black or white, invert or remove the mask, or apply it to pixels. Live masks made from vector objects are not supported.",
+      },
+      {
+        name: "Chroma key",
+        since: "0.5.4",
+        description:
+          "Sample a background color and control similarity, falloff, hardness, spill cleanup and Flow. Compare the original with a transparency preview, then apply as one undoable pixel edit.",
+      },
+      {
+        name: "17 raster filters and 13 effects",
+        since: "0.5.4",
+        description:
+          "Adjust color and tone, refine alpha, blur, sharpen, add grain or halftone, and distort with swirl or ripple. Preview first; Apply processes full-resolution pixels or masks and respects selections.",
       },
     ],
   },
@@ -224,74 +250,86 @@ export const featureGroups: FeatureGroup[] = [
   {
     id: "layout",
     title: "Layout",
-    intro: "UI and web mockups from nested frames, without leaving the native file.",
+    intro: "Responsive screens, reusable components and prototypes in your native document.",
     features: [
       {
-        name: "Layout persona",
-        since: "0.5.0",
+        name: "Nested frames and drag sorting",
+        since: "0.5.4",
         description:
-          "A fifth studio beside Design, Pixel, Photo and Motion. Frame tool, rectangles, type and image placeholders. F draws a frame.",
+          "Press F to draw a frame. Drag object and layer rows to sort or nest them, preserving their placement. Move complete frame subtrees and undo the move in one step.",
       },
       {
-        name: "Nested frames",
-        since: "0.5.0",
+        name: "Stack, Wrap and Grid",
+        since: "0.5.4",
         description:
-          "Frames contain frames. Children move with their parent. Save and reopen keeps the graph.",
+          "Arrange children with gaps, per-side padding, alignment and distribution. Use Fixed, Hug or Fill on each axis, min/max sizes, absolute children, clipping and aspect ratios.",
       },
       {
-        name: "Auto-layout stacks",
-        since: "0.5.0",
+        name: "Constraints and breakpoints",
+        since: "0.5.4",
         description:
-          "Vertical or horizontal packing with gap, padding and stretch. Imperfect on purpose. Good enough to mock a screen.",
+          "Pin, center, stretch or scale children. Override flow, spacing, column count and type size at Phone and Tablet widths, then return to the base desktop settings.",
       },
       {
-        name: "Constraints",
-        since: "0.5.0",
+        name: "Components and variants",
+        since: "0.5.4",
         description:
-          "Pin a child to min, max, both, center or scale when the frame resizes.",
+          "Create document-local components and linked instances. Add variants, keep local text and appearance overrides, reset them or detach an instance.",
       },
       {
-        name: "Layout starters",
-        since: "0.5.0",
+        name: "Image fills and design variables",
+        since: "0.5.4",
         description:
-          "Mobile screen, landing hero, dashboard and a card stack. Open them from the template library.",
+          "Embed images with Fill, Fit or Stretch and focal points. Bind document-local color and number variables to fills, strokes, gaps, padding and corners.",
       },
       {
-        name: "Frame export",
-        since: "0.5.0",
+        name: "Interactive prototypes",
+        since: "0.5.4",
         description:
-          "PNG, SVG or a simple HTML snapshot of the selected frame.",
+          "Present at different viewport widths. Click, hover or press to navigate, go back, open overlays or change variants, with instant, dissolve and slide transitions.",
+      },
+      {
+        name: "Frame and responsive HTML export",
+        since: "0.5.4",
+        description:
+          "Export a frame subtree to PNG or SVG, or a standalone responsive HTML prototype with embedded assets and supported interactions. Export does not host a website.",
+      },
+      {
+        name: "Editable Layout starters",
+        since: "0.5.4",
+        description:
+          "Explore Fieldwork’s responsive screens, components and links. Mobile screen, landing hero, dashboard and card-stack starters remain available.",
       },
     ],
   },
   {
     id: "cloud",
     title: "Cloud and showcase",
-    intro: "Opt-in sync, comments on frames, a public gallery. Private by default.",
+    intro: "Share project files and review flat snapshots. Private until you publish.",
     features: [
       {
-        name: "Opt-in cloud sync",
-        since: "0.5.0",
+        name: "Versioned project and asset sharing",
+        since: "0.5.2",
         description:
-          "Off until you enable it on a document. Identity lives in your account. Last write wins. Comments travel; CRDTs can wait.",
+          "Sign in, explicitly push your source and review export, or pull a project into a separate document. Local edits never silently overwrite another designer’s version.",
       },
       {
-        name: "Pins and threads",
-        since: "0.5.0",
+        name: "Team roles and snapshot review",
+        since: "0.5.2",
         description:
-          "Drop a pin on a frame, reply, resolve, reopen. The inspector shows how many are still open.",
+          "Invite editors and reviewers. Pin comments or draw rectangular annotations on a saved export, reply and resolve threads in the browser or desktop review window.",
       },
       {
         name: "Public showcase",
-        since: "0.5.0",
+        since: "0.5.2",
         description:
-          "Publish a title, tags and a still. Unpublished work never appears. Live at omadesign.app/showcase.",
+          "Publish a selected finished export with its title and description. Source files, assets and private review threads stay out of the public gallery.",
       },
       {
-        name: "Best design waitlist",
-        since: "0.5.0",
+        name: "Competition submissions",
+        since: "0.5.2",
         description:
-          "Rules and a waitlist for a later competition. No entries required on day one.",
+          "Enter your own public showcase work into an open competition. Availability follows published briefs and dates; entries and withdrawals persist with your account.",
       },
     ],
   },
@@ -489,6 +527,6 @@ export const faqs: { question: string; answer: string }[] = [
   {
     question: "What is outside the current scope?",
     answer:
-      "Advanced publishing and text layout, reusable symbols and collaboration are not available. There is no complete Affinity or Illustrator round trip, PDF/X or CMYK print workflow. RAW camera support varies, and proprietary camera looks and automatic lens corrections are not reproduced. Motion exports to animated SVG or supported Lottie, not MP4 or GIF; Lottie cannot preserve pixel layers, layer masks or effects.",
+      "Live vector-object masks, adjustable raster effect stacks, rich inline text, native Figma/Framer interchange and simultaneous multi-user editing are not available. Components and variables stay document-local. Cloud shares files and review snapshots. There is no complete Affinity/Illustrator round trip or PDF/X/CMYK print workflow. Lottie cannot preserve pixels, masks, effects, or shape/conic gradients; animated SVG supports their rendered appearance.",
   },
 ];

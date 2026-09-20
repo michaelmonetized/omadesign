@@ -94,13 +94,13 @@ function LayoutOverview() {
   return (
     <div className="layout-overview">
       <div className="layout-overview-copy">
-        <h3>Frames. Stacks. Screens.</h3>
-        <p>Build UI and web mockups in the same editable document as your artwork.</p>
+        <h3>Frames. Components. Prototypes.</h3>
+        <p>Build responsive screens and interactive prototypes in the same editable document as your artwork.</p>
         <dl>
-          <div><dt>Nested frames</dt><dd>Press F to draw a frame. Nest frames and add type, shapes, and image placeholders.</dd></div>
-          <div><dt>Auto-layout</dt><dd>Arrange children in horizontal or vertical stacks with gap, padding, and stretch.</dd></div>
-          <div><dt>Constraints</dt><dd>Pin, center, stretch, or scale children when their parent frame resizes.</dd></div>
-          <div><dt>Frame exports</dt><dd>Export a selected frame to PNG, SVG, or HTML.</dd></div>
+          <div><dt>Nested frames</dt><dd>Press F to draw a frame. Drag to nest frames, type, shapes and embedded images.</dd></div>
+          <div><dt>Auto-layout</dt><dd>Use Stack, Wrap or Grid with Fixed/Hug/Fill sizing and breakpoint overrides.</dd></div>
+          <div><dt>Components and variants</dt><dd>Reuse linked instances with local overrides, then wire navigation, overlays and variant changes.</dd></div>
+          <div><dt>Frame exports</dt><dd>Export a frame to PNG, SVG or responsive HTML with embedded assets and prototype interactions.</dd></div>
         </dl>
         <a className="text-link" href={`${sitePath("docs/manual")}#layout`}>Explore Layout ↗</a>
       </div>

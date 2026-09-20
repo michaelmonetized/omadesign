@@ -161,6 +161,8 @@ fn main() {
             tnum: false,
             smcp: false,
             contours: vec![],
+            wrap_width: None,
+            align: Default::default(),
         };
         omadesign::text::fill_contours(&mut Geom::Text(run.clone()));
         let mut g = Geom::Text(run);

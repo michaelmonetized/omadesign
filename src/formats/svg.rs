@@ -257,13 +257,15 @@ pub fn read(svg: &str, name: &str) -> Result<(Document, Vec<String>), String> {
     if svg.len() > 256 * 1024 * 1024 {
         return Err("SVG exceeds the 256 MiB import limit".into());
     }
-    // SVG editors commonly include the standard SVG 1.1 DOCTYPE. roxmltree
-    // never fetches external DTDs and bounds entity expansion itself.
+    // Desktop design tools commonly include the SVG 1.1 DOCTYPE. Accept that
+    // declaration, as usvg does, without fetching its DTD or external entities.
+    // Bound the initial XML parse as well as the editable-element count below.
     let xml = roxmltree::Document::parse_with_options(
         svg,
         roxmltree::ParsingOptions {
             allow_dtd: true,
-            ..Default::default()
+            nodes_limit: (MAX_ELEMENTS * 4) as u32,
+            entity_resolver: None,
         },
     )
     .map_err(|e| format!("Invalid SVG: {e}"))?;
@@ -497,7 +499,7 @@ impl Reader<'_> {
             Fill::None
         };
         let stroke = if let Some(s) = path.stroke() {
-            let usvg::Paint::Color(c) = s.paint() else {
+            let Some(stroke_paint) = paint(s.paint(), s.opacity().get(), transform, bounds) else {
                 return Ok(false);
             };
             let (sx, sy) = transform.get_scale();
@@ -513,7 +515,8 @@ impl Reader<'_> {
                 return Ok(false);
             }
             Some(Stroke {
-                color: color(*c, s.opacity().get()),
+                gradient: stroke_paint.gradient(),
+                color: stroke_paint.solid_or(Rgba::BLACK),
                 width: s.width().get() * sx,
                 cap: match s.linecap() {
                     usvg::LineCap::Butt => Cap::Butt,
@@ -842,12 +845,7 @@ fn color(c: usvg::Color, a: f32) -> Rgba {
 fn paint(p: &usvg::Paint, alpha: f32, t: Transform, b: crate::geom::Bounds) -> Option<Fill> {
     match p {
         usvg::Paint::Color(c) => Some(Fill::Solid(color(*c, alpha))),
-        usvg::Paint::LinearGradient(g)
-            if g.stops().len() == 2
-                && g.stops()[0].offset().get() == 0.
-                && g.stops()[1].offset().get() == 1.
-                && g.spread_method() == usvg::SpreadMethod::Pad =>
-        {
+        usvg::Paint::LinearGradient(g) if g.spread_method() == usvg::SpreadMethod::Pad => {
             let xf = t.pre_concat(g.transform());
             let mut from = tiny_skia::Point::from_xy(g.x1(), g.y1());
             xf.map_point(&mut from);
@@ -874,18 +872,37 @@ fn paint(p: &usvg::Paint, alpha: f32, t: Transform, b: crate::geom::Bounds) -> O
                 from.x + (nx / normal_squared) as f32,
                 from.y + (ny / normal_squared) as f32,
             );
-            Some(Fill::Linear {
-                from: [
-                    (from.x - b.min.x) / b.width().max(0.001),
-                    (from.y - b.min.y) / b.height().max(0.001),
-                ],
-                to: [
-                    (to.x - b.min.x) / b.width().max(0.001),
-                    (to.y - b.min.y) / b.height().max(0.001),
-                ],
-                c0: color(g.stops()[0].color(), alpha * g.stops()[0].opacity().get()),
-                c1: color(g.stops()[1].color(), alpha * g.stops()[1].opacity().get()),
-            })
+            let from = [
+                (from.x - b.min.x) / b.width().max(0.001),
+                (from.y - b.min.y) / b.height().max(0.001),
+            ];
+            let to = [
+                (to.x - b.min.x) / b.width().max(0.001),
+                (to.y - b.min.y) / b.height().max(0.001),
+            ];
+            let stops: Vec<_> = g
+                .stops()
+                .iter()
+                .map(|s| crate::gradient::GradientStop {
+                    offset: s.offset().get(),
+                    color: color(s.color(), alpha * s.opacity().get()),
+                })
+                .collect();
+            if stops.len() == 2 && stops[0].offset == 0. && stops[1].offset == 1. {
+                Some(Fill::Linear {
+                    from,
+                    to,
+                    c0: stops[0].color,
+                    c1: stops[1].color,
+                })
+            } else {
+                Some(Fill::Gradient(crate::gradient::Gradient {
+                    kind: crate::gradient::GradientKind::Linear,
+                    from,
+                    to,
+                    stops,
+                }))
+            }
         }
         _ => None,
     }
@@ -978,6 +995,48 @@ fn path_geom(path: &tiny_skia::Path, winding: bool) -> Option<Geom> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn svg_11_doctype_keeps_transformed_artwork_editable() {
+        // Affinity exports use this prolog and percentage dimensions, including
+        // the BestWNC logo/icon that exposed the File > Place rejection.
+        let source = r##"<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 120 60">
+  <g transform="translate(12 8)"><path id="brand-mark" d="M0 0H32V20H0Z" style="fill:#dd513b"/></g>
+</svg>"##;
+        let (doc, notes, maximum, mean) = compare_render(source);
+        assert!(notes.is_empty(), "{notes:?}");
+        assert_eq!((doc.width, doc.height), (120.0, 60.0));
+        let mark = doc
+            .layers
+            .iter()
+            .find(|layer| layer.name == "brand-mark")
+            .unwrap()
+            .kind
+            .shapes()
+            .unwrap();
+        assert_eq!(mark.len(), 1);
+        assert_eq!(mark[0].geom.bbox().min, Pt::new(12.0, 8.0));
+        assert_eq!(mark[0].geom.bbox().size(), Pt::new(32.0, 20.0));
+        assert_eq!(mark[0].style.fill, Fill::Solid(Rgba::rgb(221, 81, 59)));
+        assert!(maximum <= 1 && mean < 0.01, "max={maximum}, mean={mean}");
+        doc.validate_hierarchy().unwrap();
+    }
+
+    #[test]
+    fn svg_doctype_does_not_resolve_external_entities() {
+        for uri in ["file:///etc/hostname", "https://example.invalid/entity.txt"] {
+            let source = format!(
+                r#"<!DOCTYPE svg [<!ENTITY external SYSTEM "{uri}">]>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
+  <text x="0" y="16">&external;</text>
+</svg>"#,
+            );
+            let error = read(&source, "External entity").unwrap_err();
+            assert!(error.contains("unknown entity reference"), "{error}");
+        }
+    }
+
     fn compare_render(source: &str) -> (Document, Vec<String>, u8, f64) {
         let (doc, notes) = read(source, "SVG appearance").unwrap();
         let actual =
@@ -1017,6 +1076,35 @@ mod tests {
         );
         let (_, _, max, mean) = compare_render(&source);
         assert!(max <= 1 && mean < 0.01, "max={max}, mean={mean}");
+    }
+
+    #[test]
+    fn multi_stop_gradient_and_gradient_stroke_import_stay_editable() {
+        let source = r##"<svg xmlns="http://www.w3.org/2000/svg" width="96" height="64"><defs><linearGradient id="g"><stop offset="0" stop-color="red"/><stop offset=".4" stop-color="green" stop-opacity=".5"/><stop offset="1" stop-color="blue"/></linearGradient></defs><rect x="12" y="12" width="64" height="36" fill="url(#g)" stroke="url(#g)" stroke-width="6"/></svg>"##;
+        let (doc, notes, max, mean) = compare_render(source);
+        assert!(notes.is_empty(), "{notes:?}");
+        let shape = doc
+            .layers
+            .iter()
+            .filter_map(|l| l.kind.shapes())
+            .flatten()
+            .find(|s| s.style.fill.gradient().is_some())
+            .unwrap();
+        assert_eq!(shape.style.fill.gradient().unwrap().stops.len(), 3);
+        assert_eq!(
+            shape
+                .style
+                .stroke
+                .as_ref()
+                .unwrap()
+                .gradient
+                .as_ref()
+                .unwrap()
+                .stops
+                .len(),
+            3
+        );
+        assert!(max <= 2 && mean < 0.1, "max={max}, mean={mean}");
     }
 
     #[test]

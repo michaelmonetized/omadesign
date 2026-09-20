@@ -670,7 +670,7 @@ pub fn svg_filter(id: &str, stack: &FilterStack, region: [f32; 4]) -> Option<Str
                      <feComposite in2=\"{c}\" operator=\"in\" result=\"{out}\"/>\n\
                      <feComposite in=\"{out}\" in2=\"{last}\" operator=\"over\" result=\"{out}\"/>\n",
                     blur.max(0.0),
-                    color.css(),
+                    format!("#{:02X}{:02X}{:02X}", color.r, color.g, color.b),
                     color.a as f32 / 255.0
                 ));
             }

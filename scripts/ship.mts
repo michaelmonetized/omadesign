@@ -59,7 +59,7 @@ async function readProject() {
       // try the next path
     }
   }
-  throw new Error("Link the site first: vercel link --cwd site --yes --project omadesign --scope hustle-launch");
+  throw new Error("Link from the repository root: vercel link --yes --project omadesign --scope hustle-launch");
 }
 
 async function setupSecrets(repo: string) {

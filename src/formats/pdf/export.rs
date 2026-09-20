@@ -110,7 +110,7 @@ pub fn write(document: &Document) -> Result<(Vec<u8>, Vec<String>), String> {
                         let fill = match &shape.style.fill {
                             Fill::None => None,
                             Fill::Solid(color) => Some(*color),
-                            Fill::Linear { .. } | Fill::Radial { .. } => return Err(
+                            Fill::Gradient(_) | Fill::Linear { .. } | Fill::Radial { .. } => return Err(
                                 "PDF gradient was not prepared for appearance-preserving export"
                                     .into(),
                             ),

@@ -10,12 +10,25 @@ impl Studio {
     }
 
     pub fn wrap_selection_frame(&mut self) {
-        let ids = self.selection.clone();
+        self.wrap_selection_frame_with_stack(None);
+    }
+
+    pub(crate) fn wrap_selection_frame_with_stack(&mut self, stack: Option<AutoStack>) {
+        let mut ids = self.selection.clone();
         if ids.is_empty() {
             self.status = "Select objects to wrap in a frame".into();
             return;
         }
         let layer = ids[0].0;
+        // Selecting both a frame and a descendant must retain their relationship.
+        let selected: std::collections::HashSet<_> = ids.iter().copied().collect();
+        ids.retain(|(li, id)| {
+            !selected.iter().any(|(pli, parent)| {
+                pli == li
+                    && parent != id
+                    && layout::descendants(&self.doc, *pli, *parent).contains(id)
+            })
+        });
         let mut bounds: Option<crate::geom::Bounds> = None;
         for (li, id) in &ids {
             if *li != layer {
@@ -35,7 +48,14 @@ impl Studio {
         };
         let padded = bounds.inflate(16.0);
         let mut frame = layout::make_frame(padded.min, padded.size());
-        frame.layout.stack = None;
+        frame.layout.stack = stack;
+        let parents: Vec<_> = ids
+            .iter()
+            .filter_map(|(li, id)| self.doc.find_shape(*li, *id).map(|s| s.layout.parent))
+            .collect();
+        if parents.iter().all(|p| Some(p) == parents.first()) {
+            frame.layout.parent = parents.first().copied().flatten();
+        }
         let frame_id = frame.id;
         let mut commands = vec![Cmd::AddShape {
             layer,
@@ -88,7 +108,7 @@ impl Studio {
         let Some(frame_id) = parent else {
             return vec![Cmd::AddShape { layer, shape }];
         };
-        let mut preview = self.doc.clone();
+        let mut preview = self.doc.layout_snapshot();
         crate::document::apply(
             &mut preview,
             &Cmd::AddShape {
@@ -145,7 +165,7 @@ impl Studio {
             before: shape.layout.clone(),
             after: after.clone(),
         }];
-        let mut preview = self.doc.clone();
+        let mut preview = self.doc.layout_snapshot();
         if let Some(shape) = preview.find_shape_mut(li, id) {
             shape.layout = after;
         }
@@ -194,32 +214,7 @@ impl Studio {
     }
 
     pub fn parent_selection_to_frame(&mut self, frame_id: u64) {
-        let mut commands = Vec::new();
-        let mut layer = None;
-        for (li, id) in self.selection.clone() {
-            if id == frame_id {
-                continue;
-            }
-            if let Some(shape) = self.doc.find_shape(li, id) {
-                let mut after = shape.layout.clone();
-                after.parent = Some(frame_id);
-                commands.push(Cmd::SetLayout {
-                    layer: li,
-                    id,
-                    before: shape.layout.clone(),
-                    after,
-                });
-                layer = Some(li);
-            }
-        }
-        if commands.is_empty() {
-            return;
-        }
-        self.commit(Cmd::Batch(commands));
-        if let Some(li) = layer {
-            layout::reflow(&mut self.doc, li, frame_id);
-        }
-        self.status = "Nested in the frame".into();
+        self.reparent_layout_selection(Some(frame_id));
     }
 
     pub fn export_selected_frame_png(&mut self) {
@@ -227,11 +222,8 @@ impl Studio {
             self.status = "Select a frame to export".into();
             return;
         };
-        let Some(shape) = self.doc.find_shape(li, id).cloned() else {
-            return;
-        };
         if let Some(path) = crate::project::dialog_export("PNG", "png") {
-            match compositor::export_png_bounds(&self.doc, self.export_scale, shape.world_bbox()) {
+            match compositor::export_frame_png(&self.doc, li, id, self.export_scale) {
                 Ok(bytes) => {
                     if let Err(e) = std::fs::write(&path, bytes) {
                         self.status = format!("write failed: {e}");
@@ -252,8 +244,10 @@ impl Studio {
         if let Some(path) = crate::project::dialog_export("SVG", "svg") {
             match crate::svg::export_frame(&self.doc, li, id) {
                 Ok(s) => {
-                    let _ = std::fs::write(&path, s);
-                    self.status = format!("exported {}", path.display());
+                    self.status = match std::fs::write(&path, s) {
+                        Ok(()) => format!("exported {}", path.display()),
+                        Err(e) => format!("export failed: {e}"),
+                    };
                 }
                 Err(e) => self.status = format!("export failed: {e}"),
             }
@@ -266,10 +260,12 @@ impl Studio {
             return;
         };
         if let Some(path) = crate::project::dialog_export("HTML", "html") {
-            match layout::export_html(&self.doc, li, id) {
+            match crate::layout_export::export_html(&self.doc, li, id) {
                 Ok(s) => {
-                    let _ = std::fs::write(&path, s);
-                    self.status = format!("exported {}", path.display());
+                    self.status = match std::fs::write(&path, s) {
+                        Ok(()) => format!("exported {}", path.display()),
+                        Err(e) => format!("export failed: {e}"),
+                    };
                 }
                 Err(e) => self.status = format!("export failed: {e}"),
             }

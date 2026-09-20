@@ -48,10 +48,10 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Pull Vercel environment
-        run: bunx --bun vercel pull --yes --environment="${{ github.event.inputs.environment || 'production' }}" --token="$VERCEL_TOKEN"
+        run: bunx --bun vercel pull --cwd .. --yes --environment="${{ github.event.inputs.environment || 'production' }}" --token="$VERCEL_TOKEN"
 
       - name: Build Vercel output
-        run: bunx --bun vercel build --prod --token="$VERCEL_TOKEN"
+        run: bunx --bun vercel build --cwd .. --prod --token="$VERCEL_TOKEN"
 
       # The Vite build generates TanStack's routeTree before the typecheck.
       - name: Typecheck
@@ -59,23 +59,23 @@ jobs:
 
       - name: Validate Vercel build output
         run: |
-          test -f .vercel/output/config.json
-          test -d .vercel/output/static
-          test -f .vercel/output/static/install
-          head -1 .vercel/output/static/install | grep -qx '#!/bin/sh'
-          bun --eval 'const fs=require("node:fs"); const config=JSON.parse(fs.readFileSync(".vercel/output/config.json","utf8")); if (config.version !== 3) throw new Error(`unexpected build output version: ${config.version}`); const install=fs.readFileSync(".vercel/output/static/install","utf8"); if (!install.includes("omadesign.app/install")) throw new Error("static /install is not the remote installer"); console.log(JSON.stringify({ version: config.version, routes: config.routes?.length ?? 0, installBytes: install.length }));'
+          test -f ../.vercel/output/config.json
+          test -d ../.vercel/output/static
+          test -f ../.vercel/output/static/install
+          head -1 ../.vercel/output/static/install | grep -qx '#!/bin/sh'
+          bun --eval 'const fs=require("node:fs"); const config=JSON.parse(fs.readFileSync("../.vercel/output/config.json","utf8")); if (config.version !== 3) throw new Error(`unexpected build output version: ${config.version}`); const install=fs.readFileSync("../.vercel/output/static/install","utf8"); if (!install.includes("omadesign.app/install")) throw new Error("static /install is not the remote installer"); console.log(JSON.stringify({ version: config.version, routes: config.routes?.length ?? 0, installBytes: install.length }));'
 
       - name: Deploy prebuilt output
         if: ${{ github.event.inputs.deploy_prod }}
         timeout-minutes: 10
         run: |
-          bunx --bun vercel deploy --prebuilt --prod --archive=tgz --yes --token="$VERCEL_TOKEN" | tee deployment.log
+          bunx --bun vercel deploy --cwd .. --prebuilt --prod --archive=tgz --yes --token="$VERCEL_TOKEN" | tee deployment.log
           tail -n 1 deployment.log > deployment-url.txt
           {
             echo "### omadesign.app"
             echo ""
             echo "- Deployment URL: $(cat deployment-url.txt)"
-            echo "- Build output: site/.vercel/output"
+            echo "- Build output: .vercel/output"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify Vercel deployment
@@ -83,7 +83,7 @@ jobs:
         timeout-minutes: 5
         run: |
           deployment_url="$(cat deployment-url.txt)"
-          bunx --bun vercel inspect "$deployment_url" --wait --timeout 3m --token="$VERCEL_TOKEN" --format=json > deployment.json
+          bunx --bun vercel inspect "$deployment_url" --cwd .. --wait --timeout 3m --token="$VERCEL_TOKEN" --format=json > deployment.json
           page_status="ok"
           if ! curl --fail --show-error --silent --location --max-time 20 "$deployment_url" > /dev/null; then
             page_status="blocked-or-unavailable"

@@ -16,6 +16,8 @@ const DOC_ROUTES: Record<string, string> = {
   "/docs/roadmap": "docs/roadmap/",
   "/docs/roadmap.md": "docs/roadmap/",
   "/updates": "updates/",
+  "/docs/cloud": "docs/cloud/",
+  "/updates/0.5.4": "updates/0.5.4/",
   "/updates/0.5.3": "updates/0.5.3/",
   "/updates/0.5.1": "updates/0.5.1/",
   "/updates/0.5.0": "updates/0.5.0/",
@@ -41,6 +43,8 @@ export function documentationUrl(
   const suffix = resolved.search + resolved.hash;
   if (route) return prefix + route + suffix;
   if (pathname === "/") return prefix + suffix;
+  if (pathname.startsWith("/site/public/"))
+    return prefix + pathname.slice("/site/public/".length) + suffix;
 
   // Examples and planning documents live in the repository, not on site routes.
   const kind = /\.[^/]+$/.test(pathname) ? "blob" : "tree";

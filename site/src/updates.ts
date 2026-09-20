@@ -8,6 +8,13 @@ export type UpdatePost = {
 
 export const updates: UpdatePost[] = [
   {
+    slug: "0.5.4",
+    version: "0.5.4",
+    date: "2026-09-20",
+    title: "More control on the canvas",
+    dek: "Chroma key, 30 raster treatments, four gradient types for fills and strokes, a clearer color picker, and responsive Layout components and prototypes. Built on the 0.5.3 clipboard and cloud work.",
+  },
+  {
     slug: "0.5.3",
     version: "0.5.3",
     date: "2026-09-20",

@@ -204,6 +204,7 @@ fn escape_cancels_loading_placement_even_when_the_worker_finishes_later() {
         Placed {
             document: studio.swap_id.clone(),
             at: Pt::new(90.0, 80.0),
+            target: None,
             imported: crate::import::Imported::Raster {
                 name: "Late image".into(),
                 image: crate::photo::RgbaImage::new(1, 1, vec![255, 80, 40, 255]).unwrap(),

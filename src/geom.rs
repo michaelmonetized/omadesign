@@ -665,6 +665,11 @@ pub struct TypeRun {
     /// Line height in px. `0` means auto (`px * 1.2`).
     #[serde(default)]
     pub leading: f32,
+    /// Paragraph width in document pixels; None preserves point text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wrap_width: Option<f32>,
+    #[serde(default)]
+    pub align: TextAlign,
     /// Installed font path or portable `omatype:` content ID. Empty picks system sans.
     #[serde(default)]
     pub font: String,
@@ -688,6 +693,8 @@ impl Default for TypeRun {
             px: 72.0,
             tracking: 0.0,
             leading: 0.0,
+            wrap_width: None,
+            align: TextAlign::Start,
             font: String::new(),
             kern: true,
             liga: true,
@@ -706,6 +713,14 @@ impl TypeRun {
             self.px.max(1.0) * 1.2
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TextAlign {
+    #[default]
+    Start,
+    Center,
+    End,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -787,6 +802,13 @@ impl Geom {
 
     pub fn bbox(&self) -> Bounds {
         match self {
+            Geom::Text(run) if run.wrap_width.is_some() => {
+                let (width, height) = crate::text::measure(run);
+                return Bounds::from_min_size(
+                    Pt::new(run.origin.x, run.origin.y - run.px * 0.85),
+                    Pt::new(width.max(1.0), height.max(1.0)),
+                );
+            }
             Geom::Rect { origin, size, .. } => {
                 return Bounds {
                     min: origin.min(*origin + *size),

@@ -73,6 +73,7 @@ struct BrandResult {
 struct Placed {
     document: String,
     at: Pt,
+    target: Option<(usize, u64)>,
     imported: crate::import::Imported,
 }
 #[derive(Clone)]
@@ -279,7 +280,9 @@ pub fn tick(ctx: &egui::Context, studio: &mut Studio) {
     if let Some(result) = jobs::poll::<Placed>(ctx, PLACE) {
         match result {
             Ok(place) if place.document == studio.swap_id && studio.pending_nav.is_none() => {
-                if let Err(e) = studio.place_brand_imported(place.imported, place.at) {
+                if let Err(e) =
+                    studio.place_brand_imported_in_frame(place.imported, place.at, place.target)
+                {
                     studio.status = e;
                 }
             }
@@ -408,7 +411,13 @@ fn checker(ui: &Ui, rect: egui::Rect) {
         }
     }
 }
-pub(super) fn queue_place(ctx: &egui::Context, studio: &mut Studio, path: PathBuf, at: Pt) {
+pub(super) fn queue_place(
+    ctx: &egui::Context,
+    studio: &mut Studio,
+    path: PathBuf,
+    at: Pt,
+    target: Option<(usize, u64)>,
+) {
     if jobs::is_running::<Placed>(ctx, PLACE) {
         studio.status = "An asset is still loading. Place the next one when it is ready.".into();
         return;
@@ -419,6 +428,7 @@ pub(super) fn queue_place(ctx: &egui::Context, studio: &mut Studio, path: PathBu
         Ok(Placed {
             document,
             at,
+            target,
             imported: crate::brand::load_asset(&path)?,
         })
     });
@@ -432,7 +442,10 @@ pub(super) fn canvas_drop(ui: &Ui, studio: &mut Studio, response: &egui::Respons
             Pt::new(response.rect.min.x, response.rect.min.y),
             Pt::new(pos.x, pos.y),
         );
-        queue_place(ui.ctx(), studio, asset.path.clone(), at);
+        let target = studio
+            .asset_frame_at(at)
+            .or_else(|| studio.asset_frame_target());
+        queue_place(ui.ctx(), studio, asset.path.clone(), at, target);
         return true;
     }
     if dragging && response.contains_pointer() {
