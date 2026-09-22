@@ -8,6 +8,11 @@ export type UpdatePost = {
 
 export const updates: UpdatePost[] = [
   {
+    slug: "0.5.8", version: "0.5.8", date: "2026-09-22",
+    title: "Make it your studio",
+    dek: "Lua plugins with working examples, editable compound paths, shared corner-radius controls, guide locking and a steadier welcome screen with the transparent mark.",
+  },
+  {
     slug: "0.5.7",
     version: "0.5.7",
     date: "2026-09-21",

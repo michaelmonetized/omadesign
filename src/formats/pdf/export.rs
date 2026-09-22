@@ -186,7 +186,10 @@ pub fn write(document: &Document) -> Result<(Vec<u8>, Vec<String>), String> {
                                 .push(Operation::new("d", vec![Object::Array(dashes), 0.into()]));
                         }
                         path(&mut operations, shape);
-                        let winding = !matches!(shape.geom, Geom::Poly { winding: false, .. });
+                        let winding = !matches!(
+                            shape.geom,
+                            Geom::Poly { winding: false, .. } | Geom::Paths { winding: false, .. }
+                        );
                         let paint = match (fill.is_some(), shape.style.stroke.is_some(), winding) {
                             (true, true, true) => "B",
                             (true, true, false) => "B*",

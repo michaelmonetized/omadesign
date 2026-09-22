@@ -93,7 +93,7 @@ package() {
   install -Dm644 LICENSE "$stage/LICENSE"
   install -Dm644 skills/omadesign-create/SKILL.md "$stage/skills/omadesign-create/SKILL.md"
   mkdir -p "$stage/docs"
-  for document in MANUAL.md layout.md format-support.md cloud.md CONTRIBUTING.md; do
+  for document in MANUAL.md layout.md format-support.md cloud.md plugins.md CONTRIBUTING.md; do
     install -Dm644 "docs/$document" "$stage/docs/$document"
   done
   install -Dm644 site/public/llms.txt "$stage/docs/llms.txt"
@@ -101,6 +101,9 @@ package() {
   mkdir -p "$stage/licenses/libraw" "$stage/licenses/native-notices"
   cp vendor/libraw/* "$stage/licenses/libraw/"
   cp vendor/native-notices/* "$stage/licenses/native-notices/"
+  mkdir -p "$stage/licenses/lua" "$stage/plugins"
+  cp vendor/lua-notices/* "$stage/licenses/lua/"
+  cp -R plugins/studio-starter "$stage/plugins/"
   install -Dm755 scripts/install.sh "$stage/install.sh"
   tar -C "$DIST" -czf "${DIST}/${name}.tar.gz" "$name"
   (cd "$DIST" && sha256sum "${name}.tar.gz" > "${name}.tar.gz.sha256")

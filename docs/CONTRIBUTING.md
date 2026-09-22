@@ -104,3 +104,9 @@ Refuse to ship if `objdump -T` shows GLIBC newer than 2.35.
 ### License
 
 MIT. Phosphor Light is MIT (see `assets/phosphor/LICENSE-MIT`).
+
+## Contributing Lua plugins
+
+Plugins are versioned Lua bundles in `plugins/`. Start with `plugins/studio-starter`
+and follow the [API and contribution guide](plugins.md). Include licensed assets,
+a README and reproducible save/reopen/Undo checks with your pull request.

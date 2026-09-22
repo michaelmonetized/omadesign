@@ -1,37 +1,50 @@
 {
-  "version": "0.5.7",
-  "source": "media/logo.svg",
-  "sourceSha256": "e85725a651cb2d3efe986c21c4d1b6fbb898e5165b2fa1a441892f5e0ea03a2f",
-  "sourceSize": [
-    2000,
-    2000
-  ],
-  "artwork": "Official mark supplied by Michael; original SVG copied without changes.",
-  "socialRender": {
-    "size": [
-      1200,
-      630
-    ],
-    "renderSize": [
-      1200,
-      1200
-    ],
-    "offset": [
-      0,
-      -285
-    ],
-    "method": "SVG rasterization with a viewport crop; no geometry or color modifications."
-  },
-  "files": [
+  "version": "0.5.8",
+  "sources": [
     {
-      "file": "logo-0.5.7-social.png",
-      "bytes": 74792,
-      "sha256": "671b040d91ee5c0bca32b1832e36e9d5b69630979fb214e85a1994a33b83470e"
+      "source": "assets/omadesign.svg",
+      "sourceSha256": "3cdff0cd48cbe4ac15081314e4e6a57a7b704f7d31a788b438ac693068822a09",
+      "webFile": "logo-0.5.8.svg",
+      "viewport": [
+        72,
+        488,
+        1872,
+        1024
+      ]
     },
     {
-      "file": "logo-0.5.7.svg",
-      "bytes": 1105618,
-      "sha256": "e85725a651cb2d3efe986c21c4d1b6fbb898e5165b2fa1a441892f5e0ea03a2f"
+      "source": "assets/omadesign-wordmark.svg",
+      "sourceSha256": "defb3dc7a73c75940334ada5d0a81b6355f36dfe14e3f9ba592c8cdc434685ac",
+      "webFile": "wordmark-0.5.8.svg",
+      "viewport": [
+        64,
+        894,
+        1872,
+        180
+      ]
+    }
+  ],
+  "method": "Alpha-bounds viewport crop only; source SVG artwork preserved. Social render uses a dark background.",
+  "files": [
+    {
+      "file": "icon-0.5.8.svg",
+      "bytes": 517559,
+      "sha256": "3cdff0cd48cbe4ac15081314e4e6a57a7b704f7d31a788b438ac693068822a09"
+    },
+    {
+      "file": "logo-0.5.8-social.png",
+      "bytes": 88225,
+      "sha256": "ead1ecf4d6a12a0b817353de20a30c7a62ff7504dbe06d2b7d0a26107762e638"
+    },
+    {
+      "file": "logo-0.5.8.svg",
+      "bytes": 517562,
+      "sha256": "389aa6a2e71f73f6d31609e4357b147a43fa272ab7b0e572f54bf358a9e85254"
+    },
+    {
+      "file": "wordmark-0.5.8.svg",
+      "bytes": 203466,
+      "sha256": "6f6a3296147c20cd3f6c67b8ff24ffdb46ce0786a020c0d9ec5623a6a08054d2"
     }
   ]
 }

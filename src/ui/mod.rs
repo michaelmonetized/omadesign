@@ -19,6 +19,7 @@ mod masking;
 mod motion_presets;
 pub(crate) mod photo;
 mod photo_detail;
+mod plugins;
 mod preferences;
 mod raster;
 mod retouch;
@@ -52,6 +53,10 @@ pub fn present_layout(ctx: &eframe::egui::Context, studio: &mut Studio) {
 
 /// Point an isolated native capture at its real fixture files without changing
 /// HOME or the application's normal settings, typography, and recovery roots.
+pub fn show_plugin_manager(ctx: &eframe::egui::Context) {
+    plugins::open(ctx);
+}
+
 pub fn set_capture_catalog_root(ctx: &eframe::egui::Context, root: &std::path::Path) {
     welcome::set_capture_catalog_root(ctx, root);
 }
@@ -73,9 +78,11 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     }
     // Give cancellable library loads Escape before canvas shortcuts consume it.
     library::tick(&ctx, studio);
+    plugins::tick(&ctx, studio);
     if !studio.file_dialog_pending()
         && !studio.show_preferences
         && !studio.updates.freezing
+        && !plugins::is_open(&ctx)
         && !agent::is_open(&ctx)
         && !welcome::modal_open(&ctx)
         && !studio.show_templates
@@ -87,6 +94,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         && !studio.updates.freezing
         && !layout_preview::is_open(&ctx)
         && !raster::is_open(&ctx)
+        && !plugins::is_open(&ctx)
         && !agent::is_open(&ctx)
         && !welcome::modal_open(&ctx)
         && !studio.show_templates
@@ -96,8 +104,8 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     studio.tick_motion(&ctx);
     layout::poll_image(&ctx, studio);
 
+    chrome::top_bar(ui, studio);
     if !studio.show_welcome {
-        chrome::top_bar(ui, studio);
         welcome::cancel(&ctx);
     }
     key_hud::show(ui, studio);
@@ -129,6 +137,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     if !studio.file_dialog_pending() {
         preferences::show(&ctx, studio);
         agent::show(&ctx, studio);
+        plugins::show(&ctx, studio);
         browsers::show_shape_browser(ui, studio);
         browsers::show_asset_browser(ui, studio);
         templates::window(ui, studio);

@@ -30,6 +30,7 @@ pub mod paint;
 pub mod palette;
 mod phosphor_map;
 pub mod photo;
+pub mod plugins;
 pub mod presets;
 pub mod project;
 pub mod raster;

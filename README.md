@@ -1,6 +1,6 @@
 # omadesign
 
-[Download v0.5.7](https://github.com/michaelmonetized/omadesign/releases/tag/v0.5.7) · [Explore the studio](https://omadesign.app/) · [Updates](https://omadesign.app/updates) · [User manual](https://omadesign.app/docs/manual/) · [Showcase](https://omadesign.app/showcase) · [Discord](https://discord.gg/ejkZS2RBx) · [Build from source](docs/CONTRIBUTING.md)
+[Download v0.5.8](https://github.com/michaelmonetized/omadesign/releases/tag/v0.5.8) · [Explore the studio](https://omadesign.app/) · [Updates](https://omadesign.app/updates) · [User manual](https://omadesign.app/docs/manual/) · [Showcase](https://omadesign.app/showcase) · [Discord](https://discord.gg/ejkZS2RBx) · [Build from source](docs/CONTRIBUTING.md)
 
 A native Linux studio for **design, layout, paint, photograph, and motion**. One
 document, one layer stack. Built so a designer coming from macOS can sit down
@@ -195,3 +195,10 @@ cargo test
 
 Geometry is defined once and drawn twice — live canvas and PNG/SVG export share
 the same contours. Mutations go through `Cmd` + `History`.
+
+## Lua plugins
+
+Open **Plugins → Manage plugins** for the bundled filters, effects, icons, brushes,
+tools, patterns, gradients and automation examples. Install `.lua`, folders or
+`.omaplug` bundles. See the [Lua API and contribution guide](docs/plugins.md) for
+editable output, one-step Undo, canvas gestures and document batch processing.

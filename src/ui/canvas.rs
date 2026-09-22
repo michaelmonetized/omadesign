@@ -70,15 +70,25 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     let shift = ctx.input(|i| i.modifiers.shift);
     studio.snap_override = ctrl;
 
-    let guide_input = !brand_input
+    let plugin_input = !brand_input
+        && super::plugins::canvas_input(
+            ui,
+            studio,
+            &resp,
+            rect,
+            space_pan || studio.tool == Tool::Hand,
+        );
+    let guide_input = !plugin_input
+        && !brand_input
         && studio.deformation.is_none()
         && super::guides::handle_input(ui, studio, rect);
-    let deform_input = if guide_input || brand_input {
+    let deform_input = if plugin_input || guide_input || brand_input {
         false
     } else {
         super::deform::input(studio, &resp, rect, space_pan || studio.tool == Tool::Hand)
     };
-    if !brand_input
+    if !plugin_input
+        && !brand_input
         && !guide_input
         && !deform_input
         && studio.tool != Tool::Select
@@ -105,7 +115,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     }
 
     let panning = (space_pan && studio.type_edit.is_none()) || studio.tool == Tool::Hand;
-    if guide_input || deform_input || brand_input {
+    if plugin_input || guide_input || deform_input || brand_input {
         // Ruler and guide drags own this gesture.
     } else if panning && resp.dragged_by(PointerButton::Primary)
         || resp.dragged_by(PointerButton::Middle)
@@ -116,7 +126,8 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     } else {
         handle_pointer(studio, &resp, space_pan);
     }
-    if !brand_input
+    if !plugin_input
+        && !brand_input
         && !guide_input
         && !deform_input
         && studio.tool == Tool::Select
@@ -255,7 +266,8 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     draw_bleed_safe(&painter, rect, studio);
     draw_overlays(&painter, rect, studio, pen_preview);
     super::deform::paint(&painter, rect, studio);
-    if !brand_input && !guide_input && !deform_input {
+    super::plugins::paint(ui, studio, rect);
+    if !plugin_input && !brand_input && !guide_input && !deform_input {
         set_cursor(ui, studio, &resp);
         context_menu(&resp, studio);
     }
@@ -684,6 +696,12 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
             } else if is_text_hit(studio, hit) {
                 studio.op = None;
                 studio.begin_type_edit(hit, pick);
+            } else if hit.1 != RASTER_ID && matches!(studio.tool, Tool::Select | Tool::Node) {
+                studio.op = None;
+                studio.selection = vec![hit];
+                studio.node_sel.clear();
+                studio.ensure_path(hit.0, hit.1);
+                studio.tool = Tool::Node;
             }
         }
     }
@@ -820,10 +838,10 @@ fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
                     studio.ensure_path(li, id);
                 }
                 if let Some(shape) = studio.doc.find_shape(li, id)
-                    && let Geom::Path { anchors, closed } = &shape.geom
+                    && matches!(shape.geom, Geom::Path { .. } | Geom::Paths { .. })
                 {
                     let slack = 8.0 / studio.view.scale.max(0.01);
-                    if let Some(hit) = hit_node(anchors, shape.local_point(pick), slack, *closed) {
+                    if let Some(hit) = hit_edit_node(&shape.geom, shape.local_point(pick), slack) {
                         match hit {
                             NodeHit::Point(i) => {
                                 if shift {
@@ -863,9 +881,8 @@ fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
                             NodeHit::Segment(seg) => {
                                 let mut moving = BTreeSet::new();
                                 moving.insert(seg);
-                                moving.insert((seg + 1) % anchors.len().max(1));
-                                if !closed && seg + 1 >= anchors.len() {
-                                    moving.remove(&(seg + 1));
+                                if let Some(end) = shape.geom.segment_end(seg) {
+                                    moving.insert(end);
                                 }
                                 studio.node_sel = moving.clone();
                                 studio.op = Some(Op::Node {
@@ -879,7 +896,6 @@ fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
                             }
                         }
                     }
-                    let _ = closed;
                 }
             }
             studio.op = Some(Op::NodeMarquee {
@@ -1285,6 +1301,25 @@ fn hit_node(anchors: &[Anchor], world: Pt, slack: f32, closed: bool) -> Option<N
     None
 }
 
+fn hit_edit_node(geom: &Geom, point: Pt, slack: f32) -> Option<NodeHit> {
+    let mut offset = 0;
+    let mut segment = None;
+    for (anchors, closed) in geom.path_contours() {
+        if let Some(hit) = hit_node(anchors, point, slack, closed) {
+            match hit {
+                NodeHit::Point(i) => return Some(NodeHit::Point(offset + i)),
+                NodeHit::HandleIn(i) => return Some(NodeHit::HandleIn(offset + i)),
+                NodeHit::HandleOut(i) => return Some(NodeHit::HandleOut(offset + i)),
+                NodeHit::Segment(i) => {
+                    segment = Some(NodeHit::Segment(offset + i));
+                }
+            }
+        }
+        offset += anchors.len();
+    }
+    segment
+}
+
 /// Grab a point or Bézier handle on pointer down, before egui decides it's a drag.
 fn node_press(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
     let _ = (snap, alt);
@@ -1295,19 +1330,19 @@ fn node_press(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
         return;
     }
     studio.ensure_path(li, id);
-    grab_corner(studio, pick);
+    grab_corner(studio, pick, alt);
     if studio.op.is_some() {
         return;
     }
     let Some(shape) = studio.doc.find_shape(li, id) else {
         return;
     };
-    let Geom::Path { anchors, closed } = &shape.geom else {
+    if !matches!(shape.geom, Geom::Path { .. } | Geom::Paths { .. }) {
         return;
-    };
+    }
     let slack = 8.0 / studio.view.scale.max(0.01);
-    let Some(hit) = hit_node(anchors, shape.local_point(pick), slack, *closed) else {
-        grab_corner(studio, pick);
+    let Some(hit) = hit_edit_node(&shape.geom, shape.local_point(pick), slack) else {
+        grab_corner(studio, pick, alt);
         return;
     };
     match hit {
@@ -1344,11 +1379,11 @@ fn node_press(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
                 moving: BTreeSet::new(),
             });
         }
-        NodeHit::Segment(_) => grab_corner(studio, pick),
+        NodeHit::Segment(_) => grab_corner(studio, pick, alt),
     }
 }
 
-fn grab_corner(studio: &mut Studio, pick: Pt) {
+fn grab_corner(studio: &mut Studio, pick: Pt, alt: bool) {
     let Some((li, id, which)) = hit_corner(studio, pick) else {
         return;
     };
@@ -1357,13 +1392,23 @@ fn grab_corner(studio: &mut Studio, pick: Pt) {
     };
     let radius = match &s.geom {
         Geom::Rect { radius, .. } => *radius,
-        Geom::Path { anchors, .. } => which.and_then(|i| anchors.get(i)).map_or(0.0, |a| a.radius),
+        Geom::Path { .. } | Geom::Paths { .. } => which
+            .and_then(|i| s.geom.anchors().nth(i))
+            .map_or(0.0, |a| a.radius),
         _ => 0.0,
+    };
+    let moving = if alt {
+        (0..s.geom.anchors().count()).collect()
+    } else if which.is_some_and(|i| studio.node_sel.contains(&i)) {
+        studio.node_sel.clone()
+    } else {
+        which.into_iter().collect()
     };
     studio.op = Some(Op::Corner {
         layer: li,
         id,
         which,
+        moving,
         orig_corners: s.corners,
         orig_radius: radius,
         orig_geom: s.geom.clone(),
@@ -1474,8 +1519,8 @@ fn hit_corner(studio: &Studio, world: Pt) -> Option<(usize, u64, Option<usize>)>
             }
             None
         }
-        Geom::Path { anchors, .. } if studio.tool == Tool::Node => {
-            for (i, a) in anchors.iter().enumerate() {
+        Geom::Path { .. } | Geom::Paths { .. } if studio.tool == Tool::Node => {
+            for (i, a) in s.geom.anchors().enumerate() {
                 {
                     let dir = Pt::new(14.0, 14.0) / studio.view.scale.max(0.01);
                     if (s.world_point(a.pt) + dir - world).length()
@@ -1816,32 +1861,32 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                 let rotation = s.rotation;
                 let local = world.rotate_about(center, -rotation);
                 s.geom = orig;
-                if let Geom::Path { anchors, .. } = &mut s.geom {
+                {
                     match which {
                         NodeHit::Point(i) => {
-                            let Some(start) = anchors.get(i).map(|a| a.pt) else {
+                            let Some(start) = s.geom.anchors().nth(i).map(|a| a.pt) else {
                                 return;
                             };
                             let d = local - start;
                             for idx in moving {
-                                if let Some(a) = anchors.get_mut(idx) {
+                                if let Some(a) = s.geom.anchor_mut(idx) {
                                     a.pt += d;
                                 }
                             }
                         }
                         NodeHit::Segment(seg) => {
-                            let Some(start) = anchors.get(seg).map(|a| a.pt) else {
+                            let Some(start) = s.geom.anchors().nth(seg).map(|a| a.pt) else {
                                 return;
                             };
                             let d = local - start;
                             for idx in moving {
-                                if let Some(a) = anchors.get_mut(idx) {
+                                if let Some(a) = s.geom.anchor_mut(idx) {
                                     a.pt += d;
                                 }
                             }
                         }
                         NodeHit::HandleIn(i) => {
-                            if let Some(a) = anchors.get_mut(i) {
+                            if let Some(a) = s.geom.anchor_mut(i) {
                                 let mut h = world - a.pt.rotate_about(center, rotation);
                                 if shift {
                                     h = crate::geom::constrain_45(h);
@@ -1854,7 +1899,7 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                             }
                         }
                         NodeHit::HandleOut(i) => {
-                            if let Some(a) = anchors.get_mut(i) {
+                            if let Some(a) = s.geom.anchor_mut(i) {
                                 let mut h = world - a.pt.rotate_about(center, rotation);
                                 if shift {
                                     h = crate::geom::constrain_45(h);
@@ -1895,6 +1940,7 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
             layer,
             id,
             which,
+            moving,
             orig_corners,
             orig_radius,
             orig_geom,
@@ -1903,6 +1949,7 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
             let layer = *layer;
             let id = *id;
             let which = *which;
+            let moving = moving.clone();
             let orig_corners = *orig_corners;
             let orig_radius = *orig_radius;
             let orig_geom = orig_geom.clone();
@@ -1924,9 +1971,16 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                         }
                     }
                     Some(i) => {
-                        if let Geom::Path { anchors, .. } = &mut s.geom {
-                            if let Some(a) = anchors.get_mut(i) {
-                                a.radius = r;
+                        if matches!(s.geom, Geom::Path { .. } | Geom::Paths { .. }) {
+                            let targets = if alt {
+                                (0..s.geom.anchors().count()).collect()
+                            } else {
+                                moving
+                            };
+                            for index in targets {
+                                if let Some(a) = s.geom.anchor_mut(index) {
+                                    a.radius = r;
+                                }
                             }
                         } else {
                             let mut c = orig_corners;
@@ -2357,92 +2411,53 @@ fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) 
 }
 
 fn node_click(studio: &mut Studio, world: Pt, alt: bool) {
+    let slack = 8. / studio.view.scale.max(0.01);
     if let Some((li, id)) = studio.primary() {
         if id != RASTER_ID {
             studio.ensure_path(li, id);
         }
-        let slack = 8.0 / studio.view.scale.max(0.01);
-        let Some(shape) = studio.doc.find_shape(li, id) else {
-            return;
-        };
-        let Geom::Path { anchors, closed } = &shape.geom else {
-            if let Some(hit) = hit_shape(studio, world, slack) {
-                studio.selection = vec![hit];
-                studio.node_sel.clear();
-            }
-            return;
-        };
-        let anchors = anchors.clone();
-        let closed = *closed;
-        let orig = shape.geom.clone();
-        let rot = shape.rotation;
-        let pick = world;
-        let world = shape.local_point(world);
-        if let Some(hit) = hit_node(&anchors, world, slack, closed) {
-            match hit {
-                NodeHit::Point(i) => {
-                    if alt {
-                        let mut after = orig.clone();
-                        if let Geom::Path { anchors, .. } = &mut after
-                            && let Some(a) = anchors.get_mut(i)
-                        {
+        if let Some(shape) = studio.doc.find_shape(li, id) {
+            let orig = shape.geom.clone();
+            let rot = shape.rotation;
+            let point = shape.local_point(world);
+            if let Some(hit) = hit_edit_node(&orig, point, slack) {
+                let mut after = orig.clone();
+                match hit {
+                    NodeHit::Point(i) if alt => {
+                        if let Some(a) = after.anchor_mut(i) {
                             if a.is_corner() {
                                 a.make_smooth();
                             } else {
                                 a.make_corner();
                             }
                         }
-                        after.preserve_rotation_pivot(orig.bbox().center(), rot);
-                        studio.commit(crate::document::Cmd::SetGeom {
-                            layer: li,
-                            id,
-                            before: orig,
-                            after,
-                            rot_before: rot,
-                            rot_after: rot,
-                        });
                     }
-                }
-                NodeHit::HandleIn(_) | NodeHit::HandleOut(_) => {}
-                NodeHit::Segment(_) => {
-                    let mut anchors = anchors;
-                    if let Some(idx) = insert_anchor(&mut anchors, closed, world, slack * 2.0) {
-                        studio.node_sel.clear();
-                        studio.node_sel.insert(idx);
-                        let mut after = Geom::Path { anchors, closed };
-                        after.preserve_rotation_pivot(orig.bbox().center(), rot);
-                        studio.commit(crate::document::Cmd::SetGeom {
-                            layer: li,
-                            id,
-                            before: orig,
-                            after,
-                            rot_before: rot,
-                            rot_after: rot,
-                        });
+                    NodeHit::Segment(i) => {
+                        if let Some((anchors, closed, offset)) = after.path_at_mut(i) {
+                            if let Some(index) = insert_anchor(anchors, *closed, point, slack * 2.)
+                            {
+                                studio.node_sel = BTreeSet::from([offset + index]);
+                            }
+                        }
                     }
+                    _ => return,
                 }
-            }
-        } else {
-            let mut anchors = anchors;
-            if let Some(idx) = insert_anchor(&mut anchors, closed, world, slack * 2.0) {
-                studio.node_sel.clear();
-                studio.node_sel.insert(idx);
-                let mut after = Geom::Path { anchors, closed };
-                after.preserve_rotation_pivot(orig.bbox().center(), rot);
-                studio.commit(crate::document::Cmd::SetGeom {
-                    layer: li,
-                    id,
-                    before: orig,
-                    after,
-                    rot_before: rot,
-                    rot_after: rot,
-                });
-            } else if let Some(hit) = hit_shape(studio, pick, slack) {
-                studio.selection = vec![hit];
-                studio.node_sel.clear();
+                if after != orig {
+                    after.preserve_rotation_pivot(orig.bbox().center(), rot);
+                    studio.commit(crate::document::Cmd::SetGeom {
+                        layer: li,
+                        id,
+                        before: orig,
+                        after,
+                        rot_before: rot,
+                        rot_after: rot,
+                    });
+                }
+                return;
             }
         }
-    } else if let Some(hit) = hit_shape(studio, world, 6.0 / studio.view.scale.max(0.01)) {
+    }
+    if let Some(hit) = hit_shape(studio, world, slack) {
         studio.selection = vec![hit];
         studio.node_sel.clear();
         if hit.1 != RASTER_ID {

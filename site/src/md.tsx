@@ -16,6 +16,9 @@ const DOC_ROUTES: Record<string, string> = {
   "/docs/roadmap": "docs/roadmap/",
   "/docs/roadmap.md": "docs/roadmap/",
   "/updates": "updates/",
+  "/docs/plugins": "docs/plugins/",
+  "/docs/plugins.md": "docs/plugins/",
+  "/updates/0.5.8": "updates/0.5.8/",
   "/docs/cloud": "docs/cloud/",
   "/updates/0.5.7": "updates/0.5.7/",
   "/updates/0.5.6": "updates/0.5.6/",
@@ -45,6 +48,8 @@ export function documentationUrl(
   const suffix = resolved.search + resolved.hash;
   if (route) return prefix + route + suffix;
   if (pathname === "/") return prefix + suffix;
+  if (pathname.startsWith("/plugins/") && pathname.endsWith(".omaplug"))
+    return prefix + pathname.slice(1) + suffix;
   if (pathname.startsWith("/site/public/"))
     return prefix + pathname.slice("/site/public/".length) + suffix;
 

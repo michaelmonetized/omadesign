@@ -201,7 +201,10 @@ impl Reader<'_> {
         if let Some(clip) = &state.clip {
             let shape = Shape::new((**clip).clone(), Style::default());
             if let Some(path) = shape.get_cached_path(96) {
-                let rule = if matches!(**clip, Geom::Poly { winding: false, .. }) {
+                let rule = if matches!(
+                    **clip,
+                    Geom::Poly { winding: false, .. } | Geom::Paths { winding: false, .. }
+                ) {
                     tiny_skia::FillRule::EvenOdd
                 } else {
                     tiny_skia::FillRule::Winding

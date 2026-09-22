@@ -426,3 +426,121 @@ fn canvas_context_flip_targets_the_clicked_object_and_preserves_multi_selection(
         assert_eq!(studio.doc.find_shape(0, first).unwrap(), &first_shape);
     }
 }
+
+#[test]
+fn corner_drag_updates_selected_or_all_anchors_and_undo_restores_every_radius() {
+    for all in [false, true] {
+        let (ctx, mut studio, id) = fixture(0.37);
+        let before = studio.doc.find_shape(0, id).unwrap().clone();
+        let anchors = before.world_anchors().unwrap();
+        let handle = anchors[0].pt + Pt::splat(14. / studio.view.scale);
+        let mods = if all { Modifiers::ALT } else { Modifiers::NONE };
+        pointer_drag(&ctx, &mut studio, handle, handle + Pt::new(22., 20.), mods);
+        let after = studio.doc.find_shape(0, id).unwrap();
+        let radii: Vec<_> = after.geom.anchors().map(|a| a.radius).collect();
+        assert!(radii[0] > 7.);
+        assert_eq!(radii[1], radii[0]);
+        if all {
+            assert!(radii.iter().all(|r| *r == radii[0]));
+        } else {
+            assert_eq!(&radii[2..], &[0., 0.]);
+        }
+        studio.undo();
+        assert_eq!(studio.doc.find_shape(0, id).unwrap().geom, before.geom);
+        studio.redo();
+        assert_eq!(
+            studio
+                .doc
+                .find_shape(0, id)
+                .unwrap()
+                .geom
+                .anchors()
+                .map(|a| a.radius)
+                .collect::<Vec<_>>(),
+            radii
+        );
+    }
+}
+
+#[test]
+fn repeated_booleans_keep_all_contours_editable_and_holes_intact() {
+    use crate::boolean::{self, BoolOp};
+    let (ctx, mut studio) = pen_input_studio();
+    let rect = |x, y, w, h| Geom::Rect {
+        origin: Pt::new(x, y),
+        size: Pt::new(w, h),
+        radius: 0.,
+    };
+    let mut geom = boolean::apply_many(
+        BoolOp::Subtract,
+        &[rect(30., 30., 250., 220.), rect(90., 90., 60., 70.)],
+    )
+    .unwrap();
+    for n in 0..24 {
+        geom = boolean::apply_many(BoolOp::Union, &[geom, rect(240. + n as f32, 40., 30., 30.)])
+            .unwrap();
+    }
+    let shape = Shape::new(geom.clone(), Style::default());
+    let id = shape.id;
+    studio.commit(Cmd::AddShape { layer: 0, shape });
+    studio.selection = vec![(0, id)];
+    studio.tool = Tool::Node;
+    studio.ensure_path(0, id);
+    let path = studio.doc.find_shape(0, id).unwrap().geom.clone();
+    assert!(matches!(path, Geom::Paths { .. }));
+    let normalize = |contours: Vec<Vec<Pt>>| {
+        contours
+            .into_iter()
+            .map(|mut c| {
+                if c.first() == c.last() {
+                    c.pop();
+                }
+                c
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(normalize(path.contours(64)), normalize(geom.contours(64)));
+    let mut before = studio.doc.clone();
+    before.find_shape_mut(0, id).unwrap().geom = geom;
+    assert_eq!(
+        crate::compositor::export_png(&before, 1).unwrap(),
+        crate::compositor::export_png(&studio.doc, 1).unwrap(),
+        "conversion must render identical pixels"
+    );
+    assert!(
+        !path.contains(Pt::new(110., 110.)),
+        "the hole must remain empty"
+    );
+    assert!(path.contains(Pt::new(45., 45.)));
+    let point = studio
+        .doc
+        .find_shape(0, id)
+        .unwrap()
+        .world_anchors()
+        .unwrap()
+        .last()
+        .unwrap()
+        .pt;
+    canvas_frame(&ctx, &mut studio, vec![]);
+    pointer_drag(
+        &ctx,
+        &mut studio,
+        point,
+        point + Pt::new(9., 5.),
+        Modifiers::NONE,
+    );
+    let edited = studio.doc.find_shape(0, id).unwrap().geom.clone();
+    assert_ne!(edited, path);
+    studio.undo();
+    assert_eq!(studio.doc.find_shape(0, id).unwrap().geom, path);
+    studio.redo();
+    assert_eq!(studio.doc.find_shape(0, id).unwrap().geom, edited);
+    let encoded = serde_json::to_string(&studio.doc).unwrap();
+    let reopened: crate::document::Document = serde_json::from_str(&encoded).unwrap();
+    assert_eq!(reopened.find_shape(0, id).unwrap().geom, edited);
+    let svg = crate::svg::export(&reopened).unwrap();
+    assert!(
+        svg.matches('M').count() >= 2,
+        "export keeps separate contours"
+    );
+}

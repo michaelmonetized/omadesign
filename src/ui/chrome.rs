@@ -28,15 +28,22 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
             );
             ui.scope_builder(eframe::egui::UiBuilder::new().max_rect(left), |ui| {
                 ui.horizontal_centered(|ui| {
-                    if ui
-                        .add(
-                            Button::new(RichText::new("omadesign").strong().size(14.0).color(fg()))
-                                .frame(false),
-                        )
-                        .on_hover_text("Config · Update · About · Docs")
-                        .clicked()
-                    {
-                        studio.show_preferences = true;
+                    if let Some(mark) = icons::svg_texture(
+                        ui,
+                        "title-wordmark",
+                        include_bytes!("../../assets/omadesign-wordmark.svg"),
+                    ) {
+                        let size = mark.size_vec2() * (120. / mark.size_vec2().x);
+                        if ui
+                            .add(
+                                Button::image(eframe::egui::Image::new((mark.id(), size)))
+                                    .frame(false),
+                            )
+                            .on_hover_text("Config · Update · About · Docs")
+                            .clicked()
+                        {
+                            studio.show_preferences = true;
+                        }
                     }
                     ui.add_space(10.0);
                     ui.visuals_mut().widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
@@ -145,6 +152,7 @@ fn main_menus(ui: &mut Ui, studio: &mut Studio) {
         arrange_menu(ui, studio);
     });
     view_menu(ui, studio);
+    super::plugins::menu(ui, studio);
 }
 
 fn mode_tabs_rect(row: eframe::egui::Rect) -> eframe::egui::Rect {
@@ -795,6 +803,19 @@ fn view_menu(ui: &mut Ui, studio: &mut Studio) {
             studio.toggle_guides();
             ui.close();
         }
+        ui.menu_button("Guides", |ui| {
+            if ui.add_enabled(!studio.doc.ruler.guides_locked, Button::new("Lock all guides")).clicked() {
+                studio.set_guides_locked(true);
+                ui.close();
+            }
+            if ui.add_enabled(studio.doc.ruler.guides_locked, Button::new("Unlock all guides")).clicked() {
+                studio.set_guides_locked(false);
+                ui.close();
+            }
+            if ui.button(if studio.doc.ruler.guides_visible { "Hide guides" } else { "Show guides" }).clicked() {
+                studio.toggle_guides(); ui.close();
+            }
+        });
         ui.menu_button("Ruler units", |ui| {
             for unit in crate::document::RulerUnit::ALL {
                 if ui

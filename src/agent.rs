@@ -26,6 +26,10 @@ pub fn cli(args: &[String]) -> Option<Result<(), String>> {
                 print!("{}", include_str!("../docs/layout.md"));
                 Ok(())
             }
+            "plugins" => {
+                print!("{}", include_str!("../docs/plugins.md"));
+                Ok(())
+            }
             "formats" => {
                 print!("{}", include_str!("../docs/format-support.md"));
                 Ok(())
@@ -34,7 +38,7 @@ pub fn cli(args: &[String]) -> Option<Result<(), String>> {
                 print!("{}", include_str!("../site/public/llms.txt"));
                 Ok(())
             }
-            _ => Err("Choose --agent-docs index, manual, layout, or formats".into()),
+            _ => Err("Choose --agent-docs index, manual, layout, formats, or plugins".into()),
         },
     )
 }

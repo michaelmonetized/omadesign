@@ -212,12 +212,17 @@ pub fn window(ui: &mut Ui, studio: &mut Studio) {
         .id(Id::new("template-library-window"))
         .open(&mut open)
         .collapsible(false)
-        .resizable(true)
-        .default_size(vec2(
-            (screen.x - 100.0).clamp(400.0, 1040.0),
-            (screen.y - 120.0).max(300.0),
+        .resizable(false)
+        .fixed_size(vec2(
+            (screen.x - 80.0).clamp(280.0, 1040.0),
+            (screen.y - 100.0).max(220.0),
         ))
-        .show(&ctx, |ui| library(ui, studio));
+        .show(&ctx, |ui| {
+            // A fixed content width breaks the resize feedback loop between the
+            // window's measured width, the responsive grid and the scroll area.
+            ui.set_width((screen.x - 80.0).clamp(280.0, 1040.0));
+            library(ui, studio);
+        });
     studio.show_templates &= open;
     if !studio.show_templates {
         reset_scope(&ctx);
@@ -820,6 +825,56 @@ mod tests {
             assert!(!studio.show_templates);
             assert!(studio.dirty);
             assert!(!studio.doc.layers.is_empty());
+        }
+    }
+    #[test]
+    fn chooser_width_is_stable_before_and_after_pointer_entry() {
+        for mode in [Persona::Design, Persona::Layout] {
+            let ctx = egui::Context::default();
+            crate::ui::theme::apply(&ctx);
+            let mut studio = Studio::new();
+            open(&ctx, &mut studio, mode);
+            let state = ctx
+                .data(|d| d.get_temp::<Browser>(Id::new("template-browser-state")))
+                .unwrap();
+            ctx.data_mut(|d| {
+                d.insert_temp(
+                    Id::new(if mode == Persona::Layout {
+                        "layout-template-preview-cache"
+                    } else {
+                        "template-preview-cache"
+                    }),
+                    PreviewCache {
+                        size: Some(state.size()),
+                        ..Default::default()
+                    },
+                )
+            });
+            let mut widths = vec![];
+            for n in 0..16 {
+                let input = egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(1600., 900.))),
+                    events: vec![egui::Event::PointerMoved(egui::pos2(
+                        if n < 5 { 2. } else { 800. },
+                        450.,
+                    ))],
+                    ..Default::default()
+                };
+                let mut output = ctx.run_ui(input, |ui| window(ui, &mut studio));
+                output.textures_delta.clear();
+                if n > 0 {
+                    widths.push(
+                        ctx.memory(|m| m.area_rect(Id::new("template-library-window")))
+                            .unwrap()
+                            .width(),
+                    );
+                }
+            }
+            assert!(widths[0] >= 1040., "must open at final width: {widths:?}");
+            assert!(
+                widths.iter().all(|w| (w - widths[0]).abs() < 1.),
+                "pointer entry must not resize window: {widths:?}"
+            );
         }
     }
 }

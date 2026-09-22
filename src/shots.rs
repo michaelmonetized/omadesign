@@ -89,6 +89,10 @@ pub const SCENES: &[Scene] = &[
         caption: "Make artwork into a guide, then bring it back.",
     },
     Scene {
+        id: "plugins",
+        caption: "Lua plugins, editable tools and personal presets.",
+    },
+    Scene {
         id: "welcome",
         caption: "New document. Your sizes. Your theme. Sit down and work.",
     },
@@ -254,6 +258,7 @@ pub fn apply(studio: &mut Studio, id: &str) -> Result<(), String> {
         "motion-presets" => motion_presets(studio),
         "object-guides" => object_guides(studio),
         "welcome" => welcome(studio),
+        "plugins" => design(studio),
         "design" => design(studio),
         "design-tools" => graphics::design_tools(studio),
         "reshape" => reshape(studio),

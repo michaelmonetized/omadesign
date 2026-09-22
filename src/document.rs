@@ -295,13 +295,13 @@ impl Shape {
 
     /// Editable anchors in the same coordinate space as the rendered outline.
     pub fn world_anchors(&self) -> Option<Vec<crate::geom::Anchor>> {
-        let Geom::Path { anchors, .. } = &self.geom else {
+        if !matches!(self.geom, Geom::Path { .. } | Geom::Paths { .. }) {
             return None;
-        };
+        }
         let center = self.geom.bbox().center();
         Some(
-            anchors
-                .iter()
+            self.geom
+                .anchors()
                 .map(|anchor| {
                     let mut anchor = *anchor;
                     anchor.pt = anchor.pt.rotate_about(center, self.rotation);
@@ -335,7 +335,9 @@ impl Shape {
     }
 
     pub fn world_bbox(&self) -> Bounds {
-        if self.rotation.abs() <= 1e-5 && !matches!(self.geom, Geom::Path { .. }) {
+        if self.rotation.abs() <= 1e-5
+            && !matches!(self.geom, Geom::Path { .. } | Geom::Paths { .. })
+        {
             return self.geom.bbox();
         }
         let mut b = None;
@@ -389,21 +391,23 @@ impl Shape {
                 }
             }
         }
-        if let Geom::Path { anchors, closed } = &geometry {
-            let segments = crate::geom::path_cubics(anchors, *closed);
-            if let Some(first) = segments.first() {
-                let p = self.world_point(first[0]);
-                pb.move_to(p.x, p.y);
-                for [a, c1, c2, b] in segments {
-                    let [a, c1, c2, b] = [a, c1, c2, b].map(|p| self.world_point(p));
-                    if (c1 - a).length_sq() < 1e-10 && (c2 - b).length_sq() < 1e-10 {
-                        pb.line_to(b.x, b.y);
-                    } else {
-                        pb.cubic_to(c1.x, c1.y, c2.x, c2.y, b.x, b.y);
+        if matches!(geometry, Geom::Path { .. } | Geom::Paths { .. }) {
+            for (anchors, closed) in geometry.path_contours() {
+                let segments = crate::geom::path_cubics(anchors, closed);
+                if let Some(first) = segments.first() {
+                    let p = self.world_point(first[0]);
+                    pb.move_to(p.x, p.y);
+                    for [a, c1, c2, b] in segments {
+                        let [a, c1, c2, b] = [a, c1, c2, b].map(|p| self.world_point(p));
+                        if (c1 - a).length_sq() < 1e-10 && (c2 - b).length_sq() < 1e-10 {
+                            pb.line_to(b.x, b.y);
+                        } else {
+                            pb.cubic_to(c1.x, c1.y, c2.x, c2.y, b.x, b.y);
+                        }
                     }
-                }
-                if *closed {
-                    pb.close();
+                    if closed {
+                        pb.close();
+                    }
                 }
             }
         } else {

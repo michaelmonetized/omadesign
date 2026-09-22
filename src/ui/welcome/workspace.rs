@@ -90,7 +90,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
     }
     let mut previews = catalog::Previews::begin(&ctx);
     ui.painter()
-        .rect_filled(ui.available_rect_before_wrap(), 0., bg_window());
+        .rect_filled(ui.available_rect_before_wrap(), 0., welcome_dark());
     ui.add_space(22.);
     let mut full = ui.available_rect_before_wrap();
     let narrow = full.width() < 820.;
@@ -150,33 +150,39 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                         }
                     }
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        ui.menu_button(
-                            RichText::new("\u{E266}").font(icons::font(21.)).color(
-                                if state.filter.is_some() {
-                                    accent()
-                                } else {
-                                    fg_weak()
-                                },
-                            ),
-                            |ui| {
+                        let (rect, response) =
+                            ui.allocate_exact_size(vec2(30., 28.), Sense::click());
+                        let color = if state.filter.is_some() {
+                            p().error
+                        } else if response.hovered() || response.has_focus() {
+                            p().blue
+                        } else {
+                            fg_weak()
+                        };
+                        ui.painter().text(
+                            rect.center(),
+                            Align2::CENTER_CENTER,
+                            "\u{E266}",
+                            icons::font(21.),
+                            color,
+                        );
+                        egui::Popup::menu(&response).show(|ui| {
+                            if ui
+                                .selectable_value(&mut state.filter, None, "All modes")
+                                .clicked()
+                            {
+                                ui.close();
+                            }
+                            for (mode, label) in modes() {
                                 if ui
-                                    .selectable_value(&mut state.filter, None, "All modes")
+                                    .selectable_value(&mut state.filter, Some(mode), label)
                                     .clicked()
                                 {
                                     ui.close();
                                 }
-                                for (mode, label) in modes() {
-                                    if ui
-                                        .selectable_value(&mut state.filter, Some(mode), label)
-                                        .clicked()
-                                    {
-                                        ui.close();
-                                    }
-                                }
-                            },
-                        )
-                        .response
-                        .on_hover_text("Filter by mode");
+                            }
+                        });
+                        response.on_hover_text("Filter by mode");
                     });
                 });
                 ui.add_space(12.);
@@ -382,8 +388,10 @@ fn quiet(ui: &mut Ui, text: &str) {
 
 fn browser_panel(ui: &mut Ui, id: &'static str, body: impl FnOnce(&mut Ui)) {
     let height = ui.available_height();
+    let rect = ui.available_rect_before_wrap();
+    gradient_rect(ui, rect, 20., welcome_light(), welcome_dark(), false);
     Frame::new()
-        .fill(bg_panel())
+        .fill(egui::Color32::TRANSPARENT)
         .corner_radius(20.)
         .inner_margin(Margin::same(14))
         .show(ui, |ui| {
@@ -406,7 +414,7 @@ fn center(ui: &mut Ui, studio: &mut Studio, state: &mut State) {
                 .color(fg_weak()),
         );
     });
-    ui.add_space(32.);
+    ui.add_space(16.);
     for (persona, label) in [
         (Persona::Design, "Vector"),
         (Persona::Pixel, "Raster"),
@@ -415,7 +423,7 @@ fn center(ui: &mut Ui, studio: &mut Studio, state: &mut State) {
     ] {
         let height = 74.;
         let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::hover());
-        ui.painter().rect_filled(rect, 14., bg_panel());
+        gradient_rect(ui, rect, 14., welcome_light(), welcome_dark(), false);
         ui.painter().rect_stroke(
             rect,
             14.,
@@ -433,8 +441,14 @@ fn center(ui: &mut Ui, studio: &mut Studio, state: &mut State) {
         );
         let response = ui.interact(main, Id::new(("welcome-new", persona)), Sense::click());
         if response.hovered() {
-            ui.painter()
-                .rect_filled(main.shrink(1.), 13., bg_widget_hover());
+            gradient_rect(
+                ui,
+                main.shrink(1.),
+                13.,
+                bg_widget_hover(),
+                welcome_dark(),
+                false,
+            );
         }
         ui.painter().text(
             main.left_center() + vec2(21., 0.),
@@ -478,17 +492,12 @@ fn center(ui: &mut Ui, studio: &mut Studio, state: &mut State) {
             } else {
                 "Blank document size"
             };
-            if response.hovered() {
-                ui.painter()
-                    .rect_filled(target.shrink(1.), 10., bg_widget_hover());
-            }
-            ui.painter().line_segment(
-                [
-                    target.left_top() + vec2(0., 15.),
-                    target.left_bottom() - vec2(0., 15.),
-                ],
-                Stroke::new(1., border()),
-            );
+            let tint = if response.hovered() {
+                bg_widget_hover()
+            } else {
+                welcome_dark()
+            };
+            gradient_rect(ui, target.shrink(1.), 12., welcome_light(), tint, true);
             ui.painter().text(
                 target.center(),
                 Align2::CENTER_CENTER,
@@ -519,17 +528,20 @@ fn center(ui: &mut Ui, studio: &mut Studio, state: &mut State) {
                 }
             }
         }
-        ui.add_space(17.);
+        ui.add_space(9.);
     }
     let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 74.), Sense::click());
-    ui.painter().rect_filled(
+    gradient_rect(
+        ui,
         rect,
         14.,
         if response.hovered() {
             bg_widget_hover()
         } else {
-            bg_panel()
+            welcome_light()
         },
+        welcome_dark(),
+        false,
     );
     ui.painter().rect_stroke(
         rect,
@@ -556,10 +568,10 @@ fn center(ui: &mut Ui, studio: &mut Studio, state: &mut State) {
     if response.clicked() {
         state.brand = true;
     }
-    ui.add_space(22.);
+    ui.add_space(16.);
     let links = [
         (
-            "\u{E344}",
+            "newspaper-clipping",
             format!("What's new in {}", env!("CARGO_PKG_VERSION")),
             format!(
                 "https://omadesign.app/updates/{}",
@@ -567,12 +579,12 @@ fn center(ui: &mut Ui, studio: &mut Studio, state: &mut State) {
             ),
         ),
         (
-            "\u{E0E6}",
+            "book",
             "Read the docs".into(),
             "https://omadesign.app/docs/".into(),
         ),
         (
-            "\u{E5F4}",
+            "bug-beetle",
             "File a bug report".into(),
             "https://github.com/michaelmonetized/omadesign/issues/new".into(),
         ),
@@ -581,12 +593,8 @@ fn center(ui: &mut Ui, studio: &mut Studio, state: &mut State) {
         link(ui, glyph, &label, &url);
     }
     for (glyph, label, purpose) in [
-        ("\u{E6A2}", "Learn with AI", crate::agent::Purpose::Learn),
-        (
-            "\u{E762}",
-            "Create with agent",
-            crate::agent::Purpose::Create,
-        ),
+        ("sparkle", "Learn with AI", crate::agent::Purpose::Learn),
+        ("robot", "Create with agent", crate::agent::Purpose::Create),
     ] {
         if action(ui, glyph, label) {
             agent::open(ui.ctx(), purpose, state.project.clone());
@@ -594,51 +602,54 @@ fn center(ui: &mut Ui, studio: &mut Studio, state: &mut State) {
     }
     link(
         ui,
-        "\u{E278}",
+        "git-branch",
         "Contribute",
         "https://omadesign.app/docs/contributing",
     );
     link(
         ui,
-        "\u{E61A}",
+        "discord-logo",
         "Join the conversation",
         "https://discord.gg/ejkZS2RBx",
     );
     if crate::cloud::signed_in(&studio.cloud_identity) {
-        link(ui, "\u{E1AA}", "Open cloud", "https://omadesign.app/cloud");
-    } else if action(ui, "\u{E1AA}", "Sign up for cloud") {
+        link(ui, "cloud", "Open cloud", "https://omadesign.app/cloud");
+    } else if action(ui, "cloud", "Sign up for cloud") {
         studio.cloud_modal = crate::app::CloudModal::SignIn;
         studio.connect_cloud();
     }
-    ui.add_space(14.);
-    ui.horizontal(|ui| {
-        if ui
-            .small_button("Open file…")
-            .on_hover_text("Ctrl+O")
-            .clicked()
-        {
-            studio.open();
-        }
-        if ui.small_button("Preferences…").clicked() {
-            studio.show_preferences = true;
-        }
-    });
     ui.add_space(16.);
 }
 
-fn action(ui: &mut Ui, glyph: &str, label: &str) -> bool {
-    let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 34.), Sense::click());
+fn action(ui: &mut Ui, glyph: &'static str, label: &str) -> bool {
+    let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 32.), Sense::click());
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label));
     if response.hovered() || response.has_focus() {
         ui.painter().rect_filled(rect, 6., bg_widget_hover());
     }
-    ui.painter().text(
-        rect.left_center() + vec2(20., 0.),
-        Align2::CENTER_CENTER,
-        glyph,
-        icons::font(18.),
-        fg_weak(),
-    );
+    let source: &[u8] = match glyph {
+        "newspaper-clipping" => {
+            include_bytes!("../../../assets/phosphor/welcome/newspaper-clipping.svg")
+        }
+        "book" => include_bytes!("../../../assets/phosphor/welcome/book.svg"),
+        "bug-beetle" => include_bytes!("../../../assets/phosphor/welcome/bug-beetle.svg"),
+        "sparkle" => include_bytes!("../../../assets/phosphor/welcome/sparkle.svg"),
+        "robot" => include_bytes!("../../../assets/phosphor/welcome/robot.svg"),
+        "git-branch" => include_bytes!("../../../assets/phosphor/welcome/git-branch.svg"),
+        "discord-logo" => include_bytes!("../../../assets/phosphor/welcome/discord-logo.svg"),
+        _ => include_bytes!("../../../assets/phosphor/welcome/cloud.svg"),
+    };
+    let white = String::from_utf8_lossy(source).replace("currentColor", "#ffffff");
+    if let Some(texture) = icons::svg_texture(ui, glyph, white.as_bytes()) {
+        let size = texture.size_vec2();
+        let size = size * (17. / size.x.max(size.y));
+        ui.painter().image(
+            texture.id(),
+            Rect::from_center_size(rect.left_center() + vec2(20., 0.), size),
+            Rect::from_min_max(pos2(0., 0.), pos2(1., 1.)),
+            fg_weak(),
+        );
+    }
     ui.painter().text(
         rect.left_center() + vec2(43., 0.),
         Align2::LEFT_CENTER,
@@ -650,52 +661,87 @@ fn action(ui: &mut Ui, glyph: &str, label: &str) -> bool {
         .on_hover_cursor(egui::CursorIcon::PointingHand)
         .clicked()
 }
-fn link(ui: &mut Ui, glyph: &str, label: &str, url: &str) {
+fn link(ui: &mut Ui, glyph: &'static str, label: &str, url: &str) {
     if action(ui, glyph, label) {
         ui.ctx().open_url(egui::OpenUrl::new_tab(url));
     }
 }
 
 fn logo(ui: &mut Ui) {
-    let id = Id::new("welcome-logo");
-    let texture = ui
-        .ctx()
-        .data(|d| d.get_temp::<egui::TextureHandle>(id))
-        .or_else(|| {
-            let tree = usvg::Tree::from_data(
-                include_bytes!("../../../assets/omadesign-wordmark.svg"),
-                &usvg::Options::default(),
-            )
-            .ok()?;
-            let scale = 480. / tree.size().width().max(tree.size().height());
-            let mut pixels = tiny_skia::Pixmap::new(
-                (tree.size().width() * scale).ceil() as u32,
-                (tree.size().height() * scale).ceil() as u32,
-            )?;
-            resvg::render(
-                &tree,
-                tiny_skia::Transform::from_scale(scale, scale),
-                &mut pixels.as_mut(),
-            );
-            let image = egui::ColorImage::from_rgba_premultiplied(
-                [pixels.width() as usize, pixels.height() as usize],
-                pixels.data(),
-            );
-            let texture =
-                ui.ctx()
-                    .load_texture("welcome-wordmark", image, egui::TextureOptions::LINEAR);
-            ui.ctx().data_mut(|d| d.insert_temp(id, texture.clone()));
-            Some(texture)
-        });
     ui.vertical_centered(|ui| {
-        if let Some(texture) = texture {
+        if let Some(texture) = icons::svg_texture(
+            ui,
+            "welcome-logo-058",
+            include_bytes!("../../../assets/omadesign.svg"),
+        ) {
             let size = texture.size_vec2();
-            let scale = (180. / size.x).min(102. / size.y);
+            let scale = (225. / size.x).min(127.5 / size.y);
             ui.image((texture.id(), size * scale));
-        } else {
-            ui.heading("omadesign");
         }
     });
+}
+
+fn welcome_dark() -> egui::Color32 {
+    [bg_window(), bg_panel(), p().bg_extreme]
+        .into_iter()
+        .min_by(|a, b| a.intensity().total_cmp(&b.intensity()))
+        .unwrap()
+}
+fn welcome_light() -> egui::Color32 {
+    if bg_window().intensity() > bg_panel().intensity() {
+        bg_window()
+    } else {
+        bg_panel()
+    }
+}
+
+/// A rounded mesh interpolates theme colors without divider lines or hard bands.
+fn gradient_rect(
+    ui: &Ui,
+    rect: Rect,
+    radius: f32,
+    light: egui::Color32,
+    dark: egui::Color32,
+    horizontal: bool,
+) {
+    if !ui.is_rect_visible(rect) {
+        return;
+    }
+    let r = radius.min(rect.width() * 0.5).min(rect.height() * 0.5);
+    let color = |p: egui::Pos2| {
+        let t = if horizontal {
+            (p.x - rect.left()) / rect.width()
+        } else {
+            (p.y - rect.top()) / rect.height()
+        };
+        egui::Color32::from(egui::Rgba::from(light) * (1. - t) + egui::Rgba::from(dark) * t)
+    };
+    let mut mesh = egui::Mesh::default();
+    mesh.colored_vertex(rect.center(), color(rect.center()));
+    for (c, start) in [
+        (rect.right_top() + vec2(-r, r), -90_f32),
+        (rect.right_bottom() + vec2(-r, -r), 0.),
+        (rect.left_bottom() + vec2(r, -r), 90.),
+        (rect.left_top() + vec2(r, r), 180.),
+    ] {
+        for step in 0..=8 {
+            let a = (start + step as f32 * 90. / 8.).to_radians();
+            let p = c + vec2(a.cos(), a.sin()) * r;
+            mesh.colored_vertex(p, color(p));
+        }
+    }
+    for i in 1..mesh.vertices.len() {
+        mesh.add_triangle(
+            0,
+            i as u32,
+            if i + 1 == mesh.vertices.len() {
+                1
+            } else {
+                (i + 1) as u32
+            },
+        );
+    }
+    ui.painter().add(egui::Shape::mesh(mesh));
 }
 
 fn selection_bar(ui: &mut Ui, studio: &mut Studio, selection: &mut Selection, recovered: bool) {
@@ -851,8 +897,7 @@ fn project_grid(
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 10.;
             for project in row {
-                let (rect, response) =
-                    ui.allocate_exact_size(vec2(width, width * 0.78), Sense::click());
+                let (rect, response) = ui.allocate_exact_size(vec2(width, width), Sense::click());
                 if !ui.is_rect_visible(rect) {
                     continue;
                 }
@@ -888,26 +933,21 @@ fn project_grid(
                     mesh.indices = vec![0, 1, 2, 0, 2, 3];
                     ui.painter().add(egui::Shape::mesh(mesh));
                 }
-                let points = vec![
-                    outline.left_bottom(),
-                    outline.left_top() + vec2(0., 10.),
-                    outline.left_top() + vec2(outline.width() * 0.34, 10.),
-                    outline.left_top() + vec2(outline.width() * 0.43, 20.),
-                    outline.right_top() + vec2(0., 20.),
-                    outline.right_bottom(),
-                    outline.left_bottom(),
-                ];
-                ui.painter().add(egui::Shape::line(
-                    points,
-                    Stroke::new(
-                        if response.hovered() { 2. } else { 1. },
+                let source = include_str!("../../../assets/project-folder.svg")
+                    .replace("#BAC2DE", "#ffffff")
+                    .replace("stroke-width=\"4.00\"", "stroke-width=\"10.00\"");
+                if let Some(texture) = icons::svg_texture(ui, "project-folder", source.as_bytes()) {
+                    ui.painter().image(
+                        texture.id(),
+                        outline,
+                        Rect::from_min_max(pos2(0., 0.), pos2(1., 1.)),
                         if response.hovered() {
                             accent()
                         } else {
                             fg_weak()
                         },
-                    ),
-                ));
+                    );
+                }
                 if images.is_empty() {
                     ui.painter().text(
                         outline.center(),

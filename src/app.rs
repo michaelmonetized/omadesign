@@ -171,6 +171,7 @@ pub enum Op {
         layer: usize,
         id: u64,
         which: Option<usize>,
+        moving: BTreeSet<usize>,
         orig_corners: [f32; 4],
         orig_radius: f32,
         orig_geom: Geom,
@@ -2523,12 +2524,10 @@ impl Studio {
         let Some(s) = self.doc.find_shape(li, id) else {
             return;
         };
-        if matches!(s.geom, Geom::Path { .. } | Geom::Text(_)) {
-            return;
-        }
-        if matches!(&s.geom, Geom::Poly { contours, .. } if contours.len() > 1) {
-            self.status =
-                "Compound path preserved · use Reshape to edit its contours together".into();
+        if matches!(
+            s.geom,
+            Geom::Path { .. } | Geom::Paths { .. } | Geom::Text(_)
+        ) {
             return;
         }
         let mut after = s.geom.to_path();
@@ -2561,32 +2560,24 @@ impl Studio {
         let Some(s) = self.doc.find_shape(li, id) else {
             return;
         };
-        let Geom::Path { anchors, closed } = &s.geom else {
-            return;
-        };
-        let mut anchors = anchors.clone();
-        let mut closed = *closed;
-        let mut idxs: Vec<usize> = self.node_sel.iter().copied().collect();
-        idxs.sort_unstable();
-        idxs.dedup();
-        for i in idxs.into_iter().rev() {
-            if i < anchors.len() {
-                anchors.remove(i);
+        let mut after = s.geom.clone();
+        for &i in self.node_sel.iter().rev() {
+            if let Some((anchors, closed, offset)) = after.path_at_mut(i) {
+                anchors.remove(i - offset);
+                if anchors.len() < 3 {
+                    *closed = false;
+                }
             }
         }
-        if closed && anchors.len() < 3 {
-            closed = false;
+        if let Geom::Paths { paths, .. } = &mut after {
+            paths.retain(|p| p.anchors.len() >= 2);
         }
-        if anchors.len() < 2 {
+        if after.anchors().count() < 2 {
             self.node_sel.clear();
             self.delete_selection();
             return;
         }
         self.node_sel.clear();
-        if !anchors.is_empty() {
-            self.node_sel.insert(anchors.len() - 1);
-        }
-        let mut after = Geom::Path { anchors, closed };
         after.preserve_rotation_pivot(s.geom.bbox().center(), s.rotation);
         self.commit(Cmd::SetGeom {
             layer: li,
@@ -2610,6 +2601,39 @@ impl Studio {
         let Some(s) = self.doc.find_shape(li, id).cloned() else {
             return;
         };
+        if let Geom::Paths { .. } = &s.geom {
+            let mut after = s.geom.clone();
+            let Some((anchors, closed, offset)) = after.path_at_mut(i) else {
+                return;
+            };
+            let Some((left, right)) = crate::geom::break_path(anchors, *closed, i - offset) else {
+                self.status = "can't break at an endpoint".into();
+                return;
+            };
+            *anchors = left;
+            *closed = false;
+            if let Some(anchors) = right {
+                if let Geom::Paths { paths, .. } = &mut after {
+                    paths.push(crate::geom::PathContour {
+                        anchors,
+                        closed: false,
+                    });
+                }
+            }
+            after.preserve_rotation_pivot(s.geom.bbox().center(), s.rotation);
+            self.commit(Cmd::SetGeom {
+                layer: li,
+                id,
+                before: s.geom,
+                after,
+                rot_before: s.rotation,
+                rot_after: s.rotation,
+            });
+            self.node_sel.clear();
+            self.node_sel.insert(offset);
+            self.status = "contour broken".into();
+            return;
+        }
         let Geom::Path { anchors, closed } = &s.geom else {
             return;
         };
