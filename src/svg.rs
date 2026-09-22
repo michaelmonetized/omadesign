@@ -7,6 +7,11 @@ use crate::geom::{Bounds, Geom, Pt};
 fn path_data(shape: &Shape) -> String {
     match &shape.geom {
         Geom::Path { anchors, closed } => crate::geom::path_svg_d(anchors, *closed),
+        Geom::Paths { paths, .. } => paths
+            .iter()
+            .map(|p| crate::geom::path_svg_d(&p.anchors, p.closed))
+            .collect::<Vec<_>>()
+            .join(" "),
         Geom::Ellipse { .. } => {
             let Geom::Path { anchors, closed } = shape.geom.to_path() else {
                 unreachable!()
@@ -250,7 +255,10 @@ fn write_shape(
             } else {
                 ("white", "black")
             };
-        let rule = if matches!(shape.geom, Geom::Poly { winding: true, .. }) {
+        let rule = if matches!(
+            shape.geom,
+            Geom::Poly { winding: true, .. } | Geom::Paths { winding: true, .. }
+        ) {
             "nonzero"
         } else {
             "evenodd"
@@ -451,7 +459,7 @@ fn write_shape(
         return;
     }
     let rule = match &shape.geom {
-        Geom::Poly { winding: true, .. } => "",
+        Geom::Poly { winding: true, .. } | Geom::Paths { winding: true, .. } => "",
         _ => " fill-rule=\"evenodd\"",
     };
     body.push_str(&format!(

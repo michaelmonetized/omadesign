@@ -152,7 +152,7 @@ fn geometry_icon(geometry: &Geom) -> &'static str {
         Geom::Star { .. } => ph::STAR,
         Geom::Line { .. } => ph::LINE_SEGMENT,
         Geom::Text(_) => ph::TEXT_T,
-        Geom::Path { .. } | Geom::Poly { .. } => ph::PATH,
+        Geom::Path { .. } | Geom::Paths { .. } | Geom::Poly { .. } => ph::PATH,
     }
 }
 

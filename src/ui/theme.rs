@@ -12,6 +12,7 @@ use std::sync::OnceLock;
 #[derive(Clone, Debug)]
 pub struct Palette {
     pub accent: Color32,
+    pub blue: Color32,
     pub accent_dim: Color32,
     pub accent_soft: Color32,
     pub bg_window: Color32,
@@ -237,6 +238,7 @@ impl Palette {
         let border = mix(panel, fg, 0.10);
         Self {
             accent,
+            blue: get(m, &["blue", "color4"]).unwrap_or(Color32::from_rgb(0x89, 0xB4, 0xFA)),
             accent_dim: dim(accent, 0.28),
             accent_soft: alpha(accent, 25),
             bg_window: bg,

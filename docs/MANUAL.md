@@ -501,3 +501,17 @@ Groups select, move, duplicate and align as units. Double-click an item to edit 
 In Pixel mode, Ctrl-click an item on the canvas or in the layer list to select its rendered outline. The selection stays in document coordinates when you switch targets. Layer and object context menus include **Mask from item…**: choose it on the source, then click the target in the layer list. **Delete layer/object** removes the chosen item directly in every layer tree.
 
 Documents using object masks or inside/outside strokes save as `.oma` format 6, which prevents older versions from silently removing those features. Other documents keep format 5 compatibility; this build reads formats 1–6.
+
+
+## Lua plugins and path editing in 0.5.8
+
+Open **Plugins → Manage plugins** to install, enable and run extensions. Studio
+starter ships with the app. It includes a custom pixel filter, editable effects,
+SVG icons, brushes, a drawing tool, patterns, gradients, palettes and automation.
+See [Lua plugin guide](plugins.md) for the full API and batch commands.
+
+With the Node tool, Alt-drag a corner-radius handle to change every corner.
+Shift-select corners, then drag a selected corner’s radius handle to update the
+selected set. Compound Boolean paths retain their contours and holes when you
+convert to paths or double-click with Select/Node. Nodes, handles, and radii stay
+editable after repeated operations. **View → Guides** has Lock all and Unlock all.

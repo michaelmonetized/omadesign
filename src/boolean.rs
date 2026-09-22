@@ -47,7 +47,10 @@ fn to_geo(geom: &Geom) -> geo::MultiPolygon<f64> {
     let raw = geo::MultiPolygon(polygons);
     // Normalize using the artwork's fill rule. Geo counts all ring crossings and
     // returns properly nested exterior/interior rings, including winding imports.
-    let rule = if matches!(geom, Geom::Poly { winding: true, .. }) {
+    let rule = if matches!(
+        geom,
+        Geom::Poly { winding: true, .. } | Geom::Paths { winding: true, .. }
+    ) {
         geo::algorithm::bool_ops::FillRule::NonZero
     } else {
         geo::algorithm::bool_ops::FillRule::EvenOdd

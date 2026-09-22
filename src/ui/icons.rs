@@ -228,3 +228,60 @@ mod tests {
         }
     }
 }
+
+/// Cache a transparent SVG at native UI resolution. The same source artwork is
+/// used in chrome and welcome so resizing never changes its aspect or padding.
+pub fn svg_texture(
+    ui: &Ui,
+    key: &'static str,
+    source: &[u8],
+) -> Option<eframe::egui::TextureHandle> {
+    let id = eframe::egui::Id::new(("ui-svg", key));
+    if let Some(texture) = ui
+        .ctx()
+        .data(|d| d.get_temp::<eframe::egui::TextureHandle>(id))
+    {
+        return Some(texture);
+    }
+    let tree = usvg::Tree::from_data(source, &usvg::Options::default()).ok()?;
+    let scale = 768. / tree.size().width().max(tree.size().height());
+    let mut pixels = tiny_skia::Pixmap::new(
+        (tree.size().width() * scale).ceil().max(1.) as u32,
+        (tree.size().height() * scale).ceil().max(1.) as u32,
+    )?;
+    resvg::render(
+        &tree,
+        tiny_skia::Transform::from_scale(scale, scale),
+        &mut pixels.as_mut(),
+    );
+    let (w, h) = (pixels.width() as usize, pixels.height() as usize);
+    let mut bounds = (w, h, 0, 0);
+    for y in 0..h {
+        for x in 0..w {
+            if pixels.data()[(y * w + x) * 4 + 3] != 0 {
+                bounds = (
+                    bounds.0.min(x),
+                    bounds.1.min(y),
+                    bounds.2.max(x + 1),
+                    bounds.3.max(y + 1),
+                );
+            }
+        }
+    }
+    if bounds.0 >= bounds.2 {
+        return None;
+    }
+    let mut cropped = Vec::new();
+    for y in bounds.1..bounds.3 {
+        cropped.extend_from_slice(&pixels.data()[(y * w + bounds.0) * 4..(y * w + bounds.2) * 4]);
+    }
+    let image = eframe::egui::ColorImage::from_rgba_premultiplied(
+        [bounds.2 - bounds.0, bounds.3 - bounds.1],
+        &cropped,
+    );
+    let texture = ui
+        .ctx()
+        .load_texture(key, image, eframe::egui::TextureOptions::LINEAR);
+    ui.ctx().data_mut(|d| d.insert_temp(id, texture.clone()));
+    Some(texture)
+}

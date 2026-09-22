@@ -21,6 +21,8 @@ if [ -f "$SCRIPT_DIR/../Cargo.toml" ]; then
   MIME_FILE="$ROOT_DIR/omadesign-mime.xml"
   ICON_FILE="$ROOT_DIR/assets/omadesign.svg"
   LICENSE_DIR="$ROOT_DIR/vendor"
+  PLUGIN_DIR="$ROOT_DIR/plugins"
+  LUA_LICENSE_DIR="$ROOT_DIR/vendor/lua-notices"
   SKILL_DIR="$ROOT_DIR/skills"
   DOCS_DIR="$ROOT_DIR/docs"
   DOCS_INDEX="$ROOT_DIR/site/public/llms.txt"
@@ -30,6 +32,8 @@ else
   MIME_FILE="$SCRIPT_DIR/omadesign-mime.xml"
   ICON_FILE="$SCRIPT_DIR/omadesign.svg"
   LICENSE_DIR="$SCRIPT_DIR/licenses"
+  PLUGIN_DIR="$SCRIPT_DIR/plugins"
+  LUA_LICENSE_DIR="$SCRIPT_DIR/licenses/lua"
   SKILL_DIR="$SCRIPT_DIR/skills"
   DOCS_DIR="$SCRIPT_DIR/docs"
   DOCS_INDEX="$SCRIPT_DIR/docs/llms.txt"
@@ -52,6 +56,10 @@ if [ ! -f "$SKILL_DIR/omadesign-create/SKILL.md" ] || [ ! -f "$DOCS_DIR/MANUAL.m
   echo "omadesign: installation is missing its creation skill or offline documentation" >&2
   exit 1
 fi
+if [ ! -f "$PLUGIN_DIR/studio-starter/main.lua" ] || [ ! -d "$LUA_LICENSE_DIR" ] || [ ! -f "$DOCS_DIR/plugins.md" ]; then
+  echo "omadesign: installation is missing Lua plugins, documentation or licenses" >&2
+  exit 1
+fi
 if [ -n "$INSTALL_PREFIX" ]; then
   mkdir -p "$INSTALL_PREFIX"
   INSTALL_PREFIX="$(CDPATH='' cd -- "$INSTALL_PREFIX" && pwd)"
@@ -69,10 +77,17 @@ mkdir -p "$DATA/omadesign/licenses/libraw" "$DATA/omadesign/licenses/native-noti
 cp "$LICENSE_DIR/libraw/"* "$DATA/omadesign/licenses/libraw/"
 cp "$LICENSE_DIR/native-notices/"* "$DATA/omadesign/licenses/native-notices/"
 install -Dm644 "$SKILL_DIR/omadesign-create/SKILL.md" "$DATA/omadesign/skills/omadesign-create/SKILL.md"
-for document in MANUAL.md layout.md format-support.md cloud.md CONTRIBUTING.md; do
+for document in MANUAL.md layout.md format-support.md cloud.md plugins.md CONTRIBUTING.md; do
   install -Dm644 "$DOCS_DIR/$document" "$DATA/omadesign/docs/$document"
 done
 install -Dm644 "$DOCS_INDEX" "$DATA/omadesign/docs/llms.txt"
+mkdir -p "$DATA/omadesign/licenses/lua" "$DATA/omadesign/plugin-examples" "$DATA/omadesign/plugins"
+cp "$LUA_LICENSE_DIR/"* "$DATA/omadesign/licenses/lua/"
+cp -R "$PLUGIN_DIR/studio-starter" "$DATA/omadesign/plugin-examples/"
+# Preserve installed plugins, including locally edited starter actions.
+if [ ! -e "$DATA/omadesign/plugins/org.omadesign.studio-starter" ]; then
+  cp -R "$PLUGIN_DIR/studio-starter" "$DATA/omadesign/plugins/org.omadesign.studio-starter"
+fi
 # Rename into place so an existing session can keep running until QA relaunches.
 STAGED_BIN="$(mktemp "$BIN/.omadesign.XXXXXX")"
 STAGED_APP="$(mktemp "$APP/.omadesign.XXXXXX")"

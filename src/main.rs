@@ -6,6 +6,13 @@ use std::path::PathBuf;
 
 fn main() -> eframe::Result {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(result) = omadesign::plugins::cli(&args) {
+        if let Err(error) = result {
+            eprintln!("{error}");
+            std::process::exit(2);
+        }
+        return Ok(());
+    }
     if let Some(result) = omadesign::agent::cli(&args) {
         if let Err(error) = result {
             eprintln!("{error}");
@@ -166,6 +173,9 @@ fn main() -> eframe::Result {
                 } else if let Err(e) = shots::apply(&mut studio, &name) {
                     eprintln!("{e}");
                     std::process::exit(2);
+                }
+                if name == "plugins" {
+                    omadesign::ui::show_plugin_manager(&cc.egui_ctx);
                 }
                 if name == "layout-preview" {
                     omadesign::ui::present_layout(&cc.egui_ctx, &mut studio);

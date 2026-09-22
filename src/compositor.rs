@@ -767,7 +767,8 @@ fn draw_shape_inner(
         }
         paint.shader.apply_opacity(op);
         let rule = match &shape.geom {
-            crate::geom::Geom::Poly { winding: true, .. } => FillRule::Winding,
+            crate::geom::Geom::Poly { winding: true, .. }
+            | crate::geom::Geom::Paths { winding: true, .. } => FillRule::Winding,
             _ => FillRule::EvenOdd,
         };
         if fill_reveal < 1.0 {
@@ -856,7 +857,10 @@ fn draw_shape_inner(
             if let Some(mut region) = tiny_skia::Mask::new(pm.width(), pm.height()) {
                 region.fill_path(
                     &path,
-                    if matches!(shape.geom, Geom::Poly { winding: true, .. }) {
+                    if matches!(
+                        shape.geom,
+                        Geom::Poly { winding: true, .. } | Geom::Paths { winding: true, .. }
+                    ) {
                         FillRule::Winding
                     } else {
                         FillRule::EvenOdd

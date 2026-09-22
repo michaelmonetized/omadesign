@@ -19,6 +19,9 @@ function Docs() {
               <Link to="/docs/manual">User manual</Link>
             </li>
             <li>
+              <Link to="/docs/plugins">Lua plugins</Link>
+            </li>
+            <li>
               <Link to="/docs/formats">File formats</Link>
             </li>
             <li>
@@ -66,7 +69,7 @@ function Docs() {
         <aside className="docs-note docs-availability" aria-label="Documentation version">
           <p>
             These guides cover {RELEASE_TAG}, including the welcome screen,
-            local project browsers, agent handoffs, raster treatments,
+            Lua plugins, editable compound paths, local project browsers, raster treatments,
             responsive Layout and cloud snapshot review. The public site is{" "}
             <a href="https://omadesign.app">omadesign.app</a>. Get the{" "}
             <Link to="/docs" hash="get-the-app">Linux release</Link>.

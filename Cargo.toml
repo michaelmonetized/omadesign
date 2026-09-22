@@ -1,6 +1,6 @@
 [package]
 name = "omadesign"
-version = "0.5.7"
+version = "0.5.8"
 edition = "2024"
 description = "Native Linux studio for design, layout, painting, photography, and motion"
 license = "MIT"
@@ -19,6 +19,7 @@ name = "gen_media"
 path = "src/bin/gen_media.rs"
 
 [dependencies]
+mlua = { version = "0.12", features = ["lua54", "vendored", "serde"] }
 ab_glyph = "0.2.32"
 base64 = "0.22"
 eframe = "0.36.1"

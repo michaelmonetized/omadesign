@@ -711,6 +711,12 @@ pub enum TextAlign {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PathContour {
+    pub anchors: Vec<Anchor>,
+    pub closed: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Geom {
     Rect {
         origin: Pt,
@@ -741,6 +747,11 @@ pub enum Geom {
         closed: bool,
     },
     Text(TypeRun),
+    /// Editable compound contours retain independent closure and fill winding.
+    Paths {
+        paths: Vec<PathContour>,
+        winding: bool,
+    },
     Poly {
         contours: Vec<Vec<Pt>>,
         /// True = nonzero winding (fonts, SVG default). False = even-odd.
@@ -774,6 +785,11 @@ impl Geom {
                 let pts = path_pts(anchors, *closed);
                 if pts.len() < 2 { vec![] } else { vec![pts] }
             }
+            Geom::Paths { paths, .. } => paths
+                .iter()
+                .map(|p| path_pts(&p.anchors, p.closed))
+                .filter(|p| p.len() >= 2)
+                .collect(),
             Geom::Text(t) => t.contours.clone(),
             Geom::Poly { contours, .. } => contours.clone(),
         }
@@ -783,6 +799,7 @@ impl Geom {
         match self {
             Geom::Line { .. } => false,
             Geom::Path { closed, .. } => *closed,
+            Geom::Paths { paths, .. } => paths.iter().any(|p| p.closed),
             _ => true,
         }
     }
@@ -834,8 +851,8 @@ impl Geom {
                 }
             }
         }
-        if let Geom::Path { anchors, .. } = self {
-            for a in anchors {
+        if matches!(self, Geom::Path { .. } | Geom::Paths { .. }) {
+            for a in self.anchors() {
                 match &mut b {
                     None => b = Some(Bounds::from_pt(a.pt)),
                     Some(bb) => {
@@ -881,6 +898,11 @@ impl Geom {
             }
             Geom::Path { anchors, .. } => {
                 for a in anchors {
+                    a.pt += d;
+                }
+            }
+            Geom::Paths { paths, .. } => {
+                for a in paths.iter_mut().flat_map(|p| p.anchors.iter_mut()) {
                     a.pt += d;
                 }
             }
@@ -940,6 +962,13 @@ impl Geom {
             }
             Geom::Path { anchors, .. } => {
                 for a in anchors {
+                    a.pt = src.map_pt(a.pt, dst);
+                    a.h_in = Pt::new(a.h_in.x * sx, a.h_in.y * sy);
+                    a.h_out = Pt::new(a.h_out.x * sx, a.h_out.y * sy);
+                }
+            }
+            Geom::Paths { paths, .. } => {
+                for a in paths.iter_mut().flat_map(|p| p.anchors.iter_mut()) {
                     a.pt = src.map_pt(a.pt, dst);
                     a.h_in = Pt::new(a.h_in.x * sx, a.h_in.y * sy);
                     a.h_out = Pt::new(a.h_out.x * sx, a.h_out.y * sy);
@@ -1013,6 +1042,13 @@ impl Geom {
                     a.h_out = fv(a.h_out);
                 }
             }
+            Geom::Paths { paths, .. } => {
+                for a in paths.iter_mut().flat_map(|p| p.anchors.iter_mut()) {
+                    a.pt = fp(a.pt);
+                    a.h_in = fv(a.h_in);
+                    a.h_out = fv(a.h_out);
+                }
+            }
             Geom::Text(t) => {
                 t.origin = fp(t.origin);
                 for contour in &mut t.contours {
@@ -1049,6 +1085,13 @@ impl Geom {
             }
             Geom::Path { anchors, .. } => {
                 for a in anchors {
+                    a.pt = a.pt.rotate_about(origin, angle);
+                    a.h_in = a.h_in.rotate(angle);
+                    a.h_out = a.h_out.rotate(angle);
+                }
+            }
+            Geom::Paths { paths, .. } => {
+                for a in paths.iter_mut().flat_map(|p| p.anchors.iter_mut()) {
                     a.pt = a.pt.rotate_about(origin, angle);
                     a.h_in = a.h_in.rotate(angle);
                     a.h_out = a.h_out.rotate(angle);
@@ -1091,7 +1134,15 @@ impl Geom {
     pub fn dist_to_outline(&self, p: Pt) -> f32 {
         let mut best = f32::INFINITY;
         let closed = self.is_closed();
-        for pts in self.contours(64) {
+        let contours: Vec<_> = if matches!(self, Self::Paths { .. }) {
+            self.path_contours()
+                .into_iter()
+                .map(|(anchors, closed)| (path_pts(anchors, closed), closed))
+                .collect()
+        } else {
+            self.contours(64).into_iter().map(|p| (p, closed)).collect()
+        };
+        for (pts, closed) in contours {
             let n = pts.len();
             if n < 2 {
                 continue;
@@ -1107,7 +1158,23 @@ impl Geom {
     /// Exact-ish conversion so the node tool can edit any vector.
     pub fn to_path(&self) -> Geom {
         match self {
-            Geom::Path { .. } => self.clone(),
+            Geom::Path { .. } | Geom::Paths { .. } => self.clone(),
+            Geom::Poly { contours, winding } if contours.len() > 1 => Geom::Paths {
+                winding: *winding,
+                paths: contours
+                    .iter()
+                    .map(|points| {
+                        let mut points = points.clone();
+                        if points.len() > 1 && points.first() == points.last() {
+                            points.pop();
+                        }
+                        PathContour {
+                            anchors: points.into_iter().map(Anchor::corner).collect(),
+                            closed: true,
+                        }
+                    })
+                    .collect(),
+            },
             Geom::Line { a, b } => Geom::Path {
                 anchors: vec![Anchor::corner(*a), Anchor::corner(*b)],
                 closed: false,
@@ -1188,6 +1255,64 @@ impl Geom {
         }
     }
 
+    pub fn path_contours(&self) -> Vec<(&[Anchor], bool)> {
+        match self {
+            Self::Path { anchors, closed } => vec![(anchors, *closed)],
+            Self::Paths { paths, .. } => paths
+                .iter()
+                .map(|p| (p.anchors.as_slice(), p.closed))
+                .collect(),
+            _ => vec![],
+        }
+    }
+    pub fn anchors(&self) -> impl Iterator<Item = &Anchor> {
+        self.path_contours()
+            .into_iter()
+            .flat_map(|(anchors, _)| anchors)
+    }
+    pub fn anchor_mut(&mut self, index: usize) -> Option<&mut Anchor> {
+        let (anchors, _, offset) = self.path_at_mut(index)?;
+        anchors.get_mut(index - offset)
+    }
+    pub fn path_at_mut(&mut self, index: usize) -> Option<(&mut Vec<Anchor>, &mut bool, usize)> {
+        match self {
+            Self::Path { anchors, closed } if index < anchors.len() => Some((anchors, closed, 0)),
+            Self::Paths { paths, .. } => {
+                let mut offset = 0;
+                for path in paths {
+                    if index < offset + path.anchors.len() {
+                        return Some((&mut path.anchors, &mut path.closed, offset));
+                    }
+                    offset += path.anchors.len();
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+    pub fn segment_end(&self, index: usize) -> Option<usize> {
+        let mut offset = 0;
+        for (anchors, closed) in self.path_contours() {
+            if index < offset + anchors.len() {
+                return if index + 1 < offset + anchors.len() {
+                    Some(index + 1)
+                } else if closed {
+                    Some(offset)
+                } else {
+                    None
+                };
+            }
+            offset += anchors.len();
+        }
+        None
+    }
+    pub fn nonzero_winding(&self) -> bool {
+        matches!(
+            self,
+            Self::Poly { winding: true, .. } | Self::Paths { winding: true, .. }
+        )
+    }
+
     pub fn kind_name(&self) -> &'static str {
         match self {
             Geom::Rect { .. } => "Rectangle",
@@ -1199,6 +1324,7 @@ impl Geom {
             Geom::Path { .. } => "Curve",
             Geom::Text(_) => "Text",
             Geom::Poly { .. } => "Shape",
+            Geom::Paths { .. } => "Compound path",
         }
     }
 }

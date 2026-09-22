@@ -10,6 +10,7 @@ export function syncAgentDocs() {
     ["docs/MANUAL.md", "docs/markdown/manual.md"],
     ["docs/layout.md", "docs/markdown/layout.md"],
     ["docs/format-support.md", "docs/markdown/formats.md"],
+    ["docs/plugins.md", "docs/markdown/plugins.md"],
     ["docs/cloud.md", "docs/markdown/cloud.md"],
     ["docs/CONTRIBUTING.md", "docs/markdown/contributing.md"],
     ["skills/omadesign-create/SKILL.md", "skills/omadesign-create/SKILL.md"],
