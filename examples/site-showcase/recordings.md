@@ -1,5 +1,11 @@
 # Native studio recordings
 
+The homepage was refreshed on 2026-09-20 with six new clips (131 seconds),
+including Layout, gradient editing and chroma key. Current scenes, provenance,
+encodings and validation are in
+[the landing refresh record](../../docs/site/2026-09-20-landing-refresh.md).
+The five-clip description below documents the earlier recording set.
+
 The website's five clips contain 156 seconds and 24 chapters of the actual native
 application. They are continuous WGPU viewport recordings at 1600 × 900, 30 fps,
 with no audio. They do not contain HTML panel replicas or still-image slideshows.

@@ -1,6 +1,6 @@
 # omadesign
 
-[Download v0.5.4](https://github.com/michaelmonetized/omadesign/releases/tag/v0.5.4) · [Explore the studio](https://omadesign.app/) · [Updates](https://omadesign.app/updates) · [User manual](https://omadesign.app/docs/manual/) · [Showcase](https://omadesign.app/showcase) · [Build from source](docs/CONTRIBUTING.md)
+[Download v0.5.6](https://github.com/michaelmonetized/omadesign/releases/tag/v0.5.6) · [Explore the studio](https://omadesign.app/) · [Updates](https://omadesign.app/updates) · [User manual](https://omadesign.app/docs/manual/) · [Showcase](https://omadesign.app/showcase) · [Discord](https://discord.gg/ejkZS2RBx) · [Build from source](docs/CONTRIBUTING.md)
 
 A native Linux studio for **design, layout, paint, photograph, and motion**. One
 document, one layer stack. Built so a designer coming from macOS can sit down
@@ -36,6 +36,29 @@ Tarball by hand:
 |---|---|
 | Apple Silicon Asahi, aarch64 Linux | `omadesign-*-aarch64-unknown-linux-gnu.tar.gz` |
 | x86_64 Linux | `omadesign-*-x86_64-unknown-linux-gnu.tar.gz` |
+
+## Your work and projects
+
+The welcome screen finds `.oma` documents anywhere under your home directory,
+newest modified first, and shows natural-aspect thumbnails. Hidden directories,
+Trash and symlinks are excluded. Projects are directories containing `.omabrand`;
+open one to browse its subprojects and all descendant documents. Shift-click
+starts a multi-selection. Local projects need no cloud account.
+
+Choose **Vector** or **Layout** for templates, or their file icons for a blank
+size chooser. **Raster** opens the size chooser. **Photo** enters the workspace,
+opens a folder, or opens one image. **Project** opens the brand editor. Motion
+is available once there are elements to animate.
+
+**Learn with AI** sends your question and documentation guidance to Omarchy's
+default agent. **Create with agent** adds the bundled creation skill and uses
+the selected project's directory. Choose an agent in Omarchy's default settings
+if none is configured. Version-matched docs and the skill are available offline:
+
+```sh
+omadesign --agent-docs manual
+omadesign --agent-skill
+```
 
 ## Personas
 
@@ -108,7 +131,7 @@ reports unsupported pixels, masks and effects instead of dropping them.
 
 ## Templates
 
-**Templates · 52** on the welcome screen, or **File → Template library**. Original
+**Vector** / **Layout** on the welcome screen, or **File → Template library**. Original
 editable vector designs fit all 20 document presets and custom dimensions. Search,
 filter, preview, and make one yours. All 52 ship locally; the
 [weekly drop plan](docs/template-drops.md) gives each one a suggested adoption idea.

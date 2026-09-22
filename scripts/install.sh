@@ -21,12 +21,18 @@ if [ -f "$SCRIPT_DIR/../Cargo.toml" ]; then
   MIME_FILE="$ROOT_DIR/omadesign-mime.xml"
   ICON_FILE="$ROOT_DIR/assets/omadesign.svg"
   LICENSE_DIR="$ROOT_DIR/vendor"
+  SKILL_DIR="$ROOT_DIR/skills"
+  DOCS_DIR="$ROOT_DIR/docs"
+  DOCS_INDEX="$ROOT_DIR/site/public/llms.txt"
 else
   SOURCE_BIN="$SCRIPT_DIR/omadesign"
   DESKTOP_FILE="$SCRIPT_DIR/omadesign.desktop"
   MIME_FILE="$SCRIPT_DIR/omadesign-mime.xml"
   ICON_FILE="$SCRIPT_DIR/omadesign.svg"
   LICENSE_DIR="$SCRIPT_DIR/licenses"
+  SKILL_DIR="$SCRIPT_DIR/skills"
+  DOCS_DIR="$SCRIPT_DIR/docs"
+  DOCS_INDEX="$SCRIPT_DIR/docs/llms.txt"
 fi
 if [ ! -x "$SOURCE_BIN" ]; then
   echo "omadesign: build first with cargo build --release --bin omadesign" >&2
@@ -40,6 +46,10 @@ if [ ! -f "$LICENSE_DIR/libraw/LibRaw-0.22.2.tar.gz" ] || \
    [ ! -f "$LICENSE_DIR/libraw/LICENSE.CDDL" ] || \
    [ ! -d "$LICENSE_DIR/native-notices" ]; then
   echo "omadesign: installation is missing the bundled RAW source and licenses" >&2
+  exit 1
+fi
+if [ ! -f "$SKILL_DIR/omadesign-create/SKILL.md" ] || [ ! -f "$DOCS_DIR/MANUAL.md" ] || [ ! -f "$DOCS_INDEX" ]; then
+  echo "omadesign: installation is missing its creation skill or offline documentation" >&2
   exit 1
 fi
 if [ -n "$INSTALL_PREFIX" ]; then
@@ -58,6 +68,11 @@ install -Dm644 "$ICON_FILE" "$DATA/icons/hicolor/scalable/apps/omadesign.svg"
 mkdir -p "$DATA/omadesign/licenses/libraw" "$DATA/omadesign/licenses/native-notices"
 cp "$LICENSE_DIR/libraw/"* "$DATA/omadesign/licenses/libraw/"
 cp "$LICENSE_DIR/native-notices/"* "$DATA/omadesign/licenses/native-notices/"
+install -Dm644 "$SKILL_DIR/omadesign-create/SKILL.md" "$DATA/omadesign/skills/omadesign-create/SKILL.md"
+for document in MANUAL.md layout.md format-support.md cloud.md CONTRIBUTING.md; do
+  install -Dm644 "$DOCS_DIR/$document" "$DATA/omadesign/docs/$document"
+done
+install -Dm644 "$DOCS_INDEX" "$DATA/omadesign/docs/llms.txt"
 # Rename into place so an existing session can keep running until QA relaunches.
 STAGED_BIN="$(mktemp "$BIN/.omadesign.XXXXXX")"
 STAGED_APP="$(mktemp "$APP/.omadesign.XXXXXX")"

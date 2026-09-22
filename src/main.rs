@@ -6,6 +6,13 @@ use std::path::PathBuf;
 
 fn main() -> eframe::Result {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(result) = omadesign::agent::cli(&args) {
+        if let Err(error) = result {
+            eprintln!("{error}");
+            std::process::exit(2);
+        }
+        return Ok(());
+    }
     if let Some(result) = omadesign::formats::cli::run(&args) {
         if let Err(error) = result {
             eprintln!("{error}");
@@ -26,6 +33,10 @@ fn main() -> eframe::Result {
         }
         return Ok(());
     }
+    let restore = args
+        .windows(2)
+        .find(|w| w[0] == "--restore-session")
+        .map(|w| PathBuf::from(&w[1]));
     let shot_file = args
         .windows(2)
         .find(|w| w[0] == "--shot-file")
@@ -116,7 +127,12 @@ fn main() -> eframe::Result {
                 theme::apply(&cc.egui_ctx);
                 cc.egui_ctx.set_pixels_per_point(1.0);
                 let mut studio = Studio::new();
-                if let Some(path) = &shot_file {
+                if let Some(path) = &restore {
+                    if let Err(error) = studio.restore_restart(path) {
+                        eprintln!("{error}");
+                        std::process::exit(2);
+                    }
+                } else if let Some(path) = &shot_file {
                     if matches!(omadesign::import::classify(path), "raw" | "photo-settings") {
                         match omadesign::photo::PhotoImage::load(path) {
                             Ok(photo) => studio.photo.import_photo(photo),
@@ -161,6 +177,7 @@ fn main() -> eframe::Result {
                     studio,
                     out,
                     frame: 0,
+                    started: std::time::Instant::now(),
                     requested: false,
                     size: shot_size,
                     modifiers: shot_modifiers,
@@ -170,14 +187,20 @@ fn main() -> eframe::Result {
         );
     }
 
+    #[cfg(unix)]
+    if let Some(code) = omadesign::telemetry::supervise(&args) {
+        std::process::exit(code);
+    }
+
+    omadesign::telemetry::install_panic_hook();
     let open: Vec<PathBuf> = args
         .into_iter()
         .filter(|a| !a.starts_with('-'))
         .map(PathBuf::from)
-        .filter(|p| p.exists())
+        .filter(|p| p.exists() && restore.as_ref() != Some(p))
         .collect();
 
-    eframe::run_native(
+    let result = eframe::run_native(
         "omadesign",
         options,
         Box::new(move |cc| {
@@ -185,12 +208,22 @@ fn main() -> eframe::Result {
             cc.egui_ctx.set_pixels_per_point(1.0);
             let mut studio = Studio::new();
             studio.load_startup_preferences();
+            theme::apply_preferences(&cc.egui_ctx, &studio.startup_preferences.ui_font);
+            if let Some(path) = &restore {
+                if let Err(error) = studio.restore_restart(path) {
+                    studio.status = format!(
+                        "Could not restore update workspace: {error}. Recovery files are preserved."
+                    );
+                }
+            }
             for p in &open {
                 studio.open_path(p.clone());
             }
             Ok(Box::new(studio))
         }),
-    )
+    );
+    omadesign::telemetry::flush(true);
+    result
 }
 
 fn run_headless() -> eframe::Result {
@@ -212,6 +245,7 @@ struct ShotRunner {
     studio: Studio,
     out: PathBuf,
     frame: u32,
+    started: std::time::Instant,
     requested: bool,
     size: egui::Vec2,
     modifiers: egui::Modifiers,
@@ -275,7 +309,7 @@ impl eframe::App for ShotRunner {
             println!("wrote {}", self.out.display());
             std::process::exit(0);
         }
-        if self.frame > 240 {
+        if self.started.elapsed() > std::time::Duration::from_secs(90) {
             eprintln!(
                 "screenshot timed out after {} frames ({}x{})",
                 self.frame, size.x, size.y

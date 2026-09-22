@@ -29,12 +29,81 @@ That installs `~/.local/bin/omadesign` and a desktop entry under your home direc
 ## First five minutes
 
 1. Launch **omadesign**.
-2. Pick a document size, try **Templates · 52**, or open the demo.
+2. Choose **Vector** or **Layout** for templates, their file icons for blank size setup, or click an existing document thumbnail.
 3. **Design** is the default persona. `R` a rectangle, `P` the pen, `T` type.
 4. **Pixel** (`B`) paints on a raster layer.
 5. **Photo** opens a folder of pictures and grades them.
 
 Chrome follows your desktop: Omarchy theme colors and the font from `omarchy font current` / fontconfig. Icons are Phosphor Light.
+
+## Welcome: your work and projects
+
+The welcome screen is a local file browser with creation actions in the center.
+**Your Work → recent** discovers every `.oma` beneath your home directory at any
+depth, sorted by last modification, newest first. **Recovered** lists recovery
+snapshots separately. Discovery skips hidden directories, Trash and symlinks.
+Use **Refresh** after moving or adding work outside the app.
+
+Both file browsers show masonry thumbnails at their natural aspect ratio, with
+at most three columns each. Names appear on hover. Click a document to open it.
+**Shift-click** the first item to begin selecting several; subsequent clicks
+add or remove selections. Choose **Open selected** (or **Recover selected**) to
+open them, and **Clear** or Escape to leave selection. The funnel filters by
+Vector, Raster, Layout, Photo or Motion; **All modes** clears the filter.
+
+**Projects → recent** finds directories containing `.omabrand` anywhere beneath
+home. A project needs no account. Click a folder card to browse its subprojects
+first, followed by every descendant `.oma` sorted by modification time. Folder
+cards contain stacked asset previews. Enter a subproject to browse deeper;
+**← Projects** returns to the project list. **Edit brand…** opens the current
+project's brand editor. **Team** appears only while signed into cloud and shared
+team projects are available.
+
+| Center action | What opens |
+| --- | --- |
+| **+ Vector** | 52 editable vector templates |
+| Vector file icon | Blank document size chooser |
+| **+ Raster** | Blank raster size chooser |
+| **+ Layout** | Layout starters with editable frames and prototypes |
+| Layout file icon | Blank Layout size chooser |
+| **+ Photo** | Photo workspace |
+| Photo folder icon | Folder chooser |
+| Photo image icon | Image chooser |
+| **+ Project** | Project brand editor |
+
+Vector and Raster on this screen lead to the Design and Pixel editing personas.
+Motion starts from the editor after there are canvas elements to animate, so it
+has no empty-workspace creation button. Startup and remembered-mode preferences
+remain in **omadesign → Config**.
+
+### Learn and create with your agent
+
+**Learn with AI** opens a free-form question box. **Create with agent** opens a
+brief box and uses the project you are browsing as the working directory when
+one is selected. Both hand the prompt to Omarchy's configured default agent.
+If none is installed and selected, follow the instructions shown to choose one
+in **Omarchy → Setup → Default → Agent**. Omadesign does not choose one for you.
+
+Learning prompts include the [Markdown documentation index](https://omadesign.app/llms.txt)
+and instructions to fetch relevant pages. Creation prompts point to the bundled
+[Omadesign creation skill](https://omadesign.app/skills/omadesign-create/SKILL.md),
+which describes editable documents, project brand assets and native preview
+verification. Version-matched help is also available offline:
+
+```sh
+omadesign --agent-docs manual
+omadesign --agent-docs layout
+omadesign --agent-docs formats
+omadesign --agent-skill
+```
+
+The welcome screen uses the current Omarchy palette and desktop font; it has no
+separate app light/dark switch. **Join the conversation** opens the
+[Omadesign Discord](https://discord.gg/ejkZS2RBx). **Sign up for cloud** opens
+[cloud registration](https://omadesign.app/cloud); local editing and project
+browsing remain available without an account. Release notes, docs, contribution
+guidance and bug reports are linked from the same column. An available update
+opens the existing update details before the explicit install-and-restart action.
 
 ## Personas
 
@@ -54,7 +123,7 @@ Frames for UI mockups, in the same document as the drawing.
 - **Auto-layout** — select a frame, turn on **Stack children**. Vertical or horizontal, with gap, padding and stretch. Children pack in layer order.
 - **Constraints** — a child of a frame can pin to min, max, both edges, center, or scale when you resize the parent.
 - **Export** — File → Export frame PNG / SVG / HTML for the selected frame.
-- **Templates** — Template library → Layout starters: mobile screen, landing hero, dashboard, card stack.
+- **Templates** — choose **+ Layout** on the welcome screen: Fieldwork responsive prototype, mobile screen, landing hero, dashboard and card stack. These also remain under **File → Template library → Layout starters**.
 - **Comments** — write a note, pin it on the canvas, resolve it. The inspector shows open counts on the frame.
 
 Cloud is opt-in. File → Sign in opens a secure browser approval. Push project + review export uploads a versioned design and flat snapshot; Cloud projects pulls shared designs into a new document. Review annotations loads cloud feedback. Publishing and competition entry are separate owner actions. See [cloud](cloud.md).
@@ -227,7 +296,7 @@ basic shape subset; use `.oma` to retain the complete editable animation.
 
 ## Templates
 
-Open **Templates · 52** on the welcome screen or **File → Template library** while drawing. Search by name or idea, filter the nine categories, choose any built-in document size or enter custom width, height and DPI. Previews adapt to the chosen proportions. Click a card and **Use this template**, or double-click the card.
+Open **+ Vector** on the welcome screen or **File → Template library** while drawing. **+ Layout** opens its separate frame-based starters; Raster opens a size chooser. Search by name or idea, filter the nine categories, choose any built-in document size or enter custom width, height and DPI. Previews adapt to the chosen proportions. Click a card and **Use this template**, or double-click the card.
 
 Templates open as unsaved documents with editable paper, artwork and copy layers. Existing work stays in its tab. They use locally available fonts and need no network connection. The 52 designs include distinct artwork and layouts for portrait, square and landscape pages; very tiny sizes omit unreadable secondary copy.
 
@@ -396,7 +465,7 @@ Move V · Node A · Pen P · Pencil N
 Rectangle R · Ellipse O · Polygon Y · Star S · Line L
 Type T · Gradient G · Eyedropper I · Trace U · Brush B · Eraser E
 Fill K · Clone J · Heal Shift+J · Smudge M · Crop C · Wand W · Hand H · Zoom Z
-Undo Ctrl+Z · Redo Ctrl+Shift+Z · Duplicate Ctrl+D
+Undo Ctrl+Z · Redo Ctrl+Shift+Z · Duplicate Super+D · Pixel selection: deselect Ctrl+D
 Copy Ctrl+C · Paste Ctrl+V · Cut Ctrl+X · Select all Ctrl+A
 Save Ctrl+S · Save as Ctrl+Shift+S · Open Ctrl+O · New Ctrl+N · Place Ctrl+Shift+P · Export Ctrl+E
 Group Ctrl+G · Ungroup Ctrl+Shift+G · Compound Ctrl+8 · Release Ctrl+Shift+8 · Front Ctrl+Shift+] · Back Ctrl+Shift+[
@@ -415,3 +484,20 @@ The app chrome follows your desktop theme. On launch it reads:
 3. stock Omarchy Catppuccin if nothing else is there
 
 UI type is `omarchy font current`, then fontconfig `sans-serif`. Override with `OMADESIGN_FONT=/path/to/font.ttf`.
+
+
+## App settings, updates and privacy
+
+Click **omadesign** in the title bar to open **Config | Update | About | Docs**. Config controls the UI font and size, startup mode and welcome tab, rulers, shortcut hints, guide locking, photo provider keys and optional anonymous usage. Preferences are saved under `~/.config/omadesign` (or `XDG_CONFIG_HOME`). Docs opens [omadesign.app/docs](https://omadesign.app/docs/).
+
+About displays the refined logo, branded version and full semantic version. Update checks the current release channel and offers installation when a newer compatible package exists. It runs the official installer, waits for ongoing work, writes a complete local recovery snapshot, and restarts with the same open documents and photo adjustments. Anonymous usage is off by default and has its own toggle; [privacy details](privacy.md) describe the exact data and limits.
+
+Guides start locked. The ruler context menu and **Object → Guides** provide lock, unlock and clear-all actions. Hold **Alt** to draw shapes from their center and **Shift** for equal proportions. Ellipses convert to four smooth anchors. Node corner-radius handles appear with the Node tool, including on paths.
+
+Stroke controls remain expanded in the inspector. Enter widths above 64 px and choose inside, center or outside placement on closed paths. Open paths use centered strokes.
+
+Groups select, move, duplicate and align as units. Double-click an item to edit it individually until another selection or deselection. Duplication stays in place. In Pixel mode, **Ctrl+D** clears an existing pixel selection; **Super+D** duplicates.
+
+In Pixel mode, Ctrl-click an item on the canvas or in the layer list to select its rendered outline. The selection stays in document coordinates when you switch targets. Layer and object context menus include **Mask from item…**: choose it on the source, then click the target in the layer list. **Delete layer/object** removes the chosen item directly in every layer tree.
+
+Documents using object masks or inside/outside strokes save as `.oma` format 6, which prevents older versions from silently removing those features. Other documents keep format 5 compatibility; this build reads formats 1–6.

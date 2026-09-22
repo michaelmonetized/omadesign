@@ -8,6 +8,13 @@ export type UpdatePost = {
 
 export const updates: UpdatePost[] = [
   {
+    slug: "0.5.6",
+    version: "0.5.6",
+    date: "2026-09-21",
+    title: "Your work, ready when you are",
+    dek: "A new welcome screen finds your documents and brand projects, previews them at their natural proportions, and connects your brief or question to your Omarchy agent. Discord, offline docs, and one stable Linux release.",
+  },
+  {
     slug: "0.5.4",
     version: "0.5.4",
     date: "2026-09-20",

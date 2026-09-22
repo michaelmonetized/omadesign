@@ -10,10 +10,12 @@ pub(super) struct TabState {
     view: View,
     selection: Vec<(usize, u64)>,
     selected_layer: Option<u64>,
+    individual_object: Option<(usize, u64)>,
     active_layer: Option<usize>,
     history: History,
     clone_source: Option<Pt>,
     pixel_sel: Option<Vec<u8>>,
+    pixel_sel_space: Option<masking::SelectionSpace>,
     type_edit: Option<TypeEdit>,
     need_fit: bool,
     layer_rename: Option<(usize, String)>,
@@ -29,7 +31,7 @@ pub(super) struct TabState {
     show_welcome: bool,
     artboard_sel: Vec<u64>,
     layer_expanded: HashSet<u64>,
-    swap_id: String,
+    pub(super) swap_id: String,
     last_input: Instant,
     last_swap: Option<Instant>,
     shape_rename: Option<(usize, u64, String)>,
@@ -46,10 +48,12 @@ impl TabState {
             view: View::default(),
             selection: vec![],
             selected_layer: None,
+            individual_object: None,
             active_layer,
             history: History::default(),
             clone_source: None,
             pixel_sel: None,
+            pixel_sel_space: None,
             type_edit: None,
             need_fit: true,
             layer_rename: None,
@@ -87,10 +91,13 @@ impl Studio {
         swap(&mut self.view, &mut t.view);
         swap(&mut self.selection, &mut t.selection);
         swap(&mut self.selected_layer, &mut t.selected_layer);
+        swap(&mut self.individual_object, &mut t.individual_object);
         swap(&mut self.active_layer, &mut t.active_layer);
         swap(&mut self.history, &mut t.history);
         swap(&mut self.clone_source, &mut t.clone_source);
         swap(&mut self.pixel_sel, &mut t.pixel_sel);
+        swap(&mut self.pixel_sel_space, &mut t.pixel_sel_space);
+        self.pending_item_mask = None;
         swap(&mut self.type_edit, &mut t.type_edit);
         swap(&mut self.need_fit, &mut t.need_fit);
         swap(&mut self.layer_rename, &mut t.layer_rename);
@@ -114,6 +121,16 @@ impl Studio {
     }
 
     fn activate_tab(&mut self) {
+        if !self.show_welcome
+            && let Some(persona) = self.doc.workspace
+        {
+            self.persona = persona;
+            self.tool = match persona {
+                Persona::Pixel => Tool::Brush,
+                Persona::Photo => Tool::Hand,
+                _ => Tool::Select,
+            };
+        }
         self.op = None;
         self.key_drag = None;
         self.cursor = None;
@@ -209,7 +226,7 @@ impl Studio {
             self.status = "new document".into();
             return;
         }
-        self.push_tab(Self::blank_tab_state());
+        self.push_tab(self.blank_tab_state());
         self.status = "new tab".into();
     }
 
@@ -219,9 +236,10 @@ impl Studio {
         self.welcome_page = self.startup_preferences.welcome_page();
     }
 
-    fn blank_tab_state() -> TabState {
+    fn blank_tab_state(&self) -> TabState {
         let mut doc = Document::new("Untitled", 1280.0, 800.0, 72.0);
         doc.grid.visible = false;
+        doc.ruler.guides_locked = self.startup_preferences.guides_locked_by_default;
         TabState::new(doc, None)
     }
 
@@ -248,7 +266,7 @@ impl Studio {
         if i == self.active_tab {
             crate::project::delete_swap(&self.swap_id);
             if self.tabs.len() == 1 {
-                self.replace_active_tab(Self::blank_tab_state());
+                self.replace_active_tab(self.blank_tab_state());
                 self.show_welcome = true;
                 self.welcome_page = self.startup_preferences.welcome_page();
                 return;
@@ -268,16 +286,7 @@ impl Studio {
     }
 
     pub fn recover_swap(&mut self, path: PathBuf) {
-        match crate::project::load_swap(&path) {
-            Ok(meta) => {
-                let mut tab = TabState::new(meta.doc, meta.original);
-                tab.dirty = true;
-                tab.swap_id = meta.id;
-                self.push_tab(tab);
-                self.status = format!("recovered {}", meta.name);
-            }
-            Err(e) => self.status = format!("recover failed: {e}"),
-        }
+        self.recover_paths(vec![path]);
     }
 
     pub fn delete_swap_file(&mut self, path: &std::path::Path) {
@@ -589,5 +598,92 @@ impl Studio {
             tab.doc.cloud = Some(link);
             tab.dirty = true;
         }
+    }
+}
+
+impl Studio {
+    pub(super) fn restart_tabs(
+        &mut self,
+    ) -> (
+        Vec<super::restart::RestartTab>,
+        Vec<crate::project::SwapMeta>,
+    ) {
+        self.ensure_tabs();
+        let active = self.active_tab;
+        let mut states = Vec::new();
+        let mut docs = Vec::new();
+        for i in 0..self.tabs.len() {
+            self.switch_tab(i);
+            let id = crate::project::new_swap_id();
+            docs.push(crate::project::SwapMeta {
+                id: id.clone(),
+                original: self.path.clone(),
+                name: self.doc.name.clone(),
+                saved_at: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+                doc: self.doc.clone(),
+            });
+            states.push(super::restart::RestartTab {
+                swap_id: id,
+                old_swap_id: self.swap_id.clone(),
+                dirty: self.dirty,
+                view: self.view,
+                selection: self.selection.clone(),
+                active_layer: self.active_layer,
+                selected_layer: self.selected_layer,
+                individual_object: self.individual_object,
+                expanded: self.layer_expanded.clone(),
+                pixel_selection: self.pixel_sel.clone(),
+                selection_space: self.pixel_sel_space.map(|v| {
+                    let t = v.transform;
+                    (v.w, v.h, [t.sx, t.ky, t.kx, t.sy, t.tx, t.ty])
+                }),
+                welcome: self.show_welcome,
+                playhead: self.playhead,
+            });
+        }
+        self.switch_tab(active);
+        (states, docs)
+    }
+    pub(super) fn restore_restart_tabs(
+        &mut self,
+        states: Vec<super::restart::RestartTab>,
+        docs: Vec<crate::project::SwapMeta>,
+        active: usize,
+    ) {
+        self.tabs = states
+            .into_iter()
+            .zip(docs)
+            .map(|(s, meta)| {
+                let mut tab = TabState::new(meta.doc, meta.original);
+                tab.swap_id = s.swap_id;
+                tab.dirty = s.dirty;
+                tab.view = s.view;
+                tab.selection = s.selection;
+                tab.active_layer = s.active_layer;
+                tab.selected_layer = s.selected_layer;
+                tab.individual_object = s.individual_object;
+                tab.layer_expanded = s.expanded;
+                tab.pixel_sel = s.pixel_selection;
+                tab.pixel_sel_space =
+                    s.selection_space
+                        .map(|(w, h, t)| super::masking::SelectionSpace {
+                            w,
+                            h,
+                            transform: tiny_skia::Transform::from_row(
+                                t[0], t[1], t[2], t[3], t[4], t[5],
+                            ),
+                        });
+                tab.show_welcome = s.welcome;
+                tab.playhead = s.playhead;
+                tab.need_fit = false;
+                tab
+            })
+            .collect();
+        self.active_tab = active;
+        self.exchange_tab(active);
+        self.activate_tab();
     }
 }

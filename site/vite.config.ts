@@ -3,8 +3,10 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
 import { defineConfig, loadEnv } from "vite";
+import { syncAgentDocs } from "./scripts/sync-agent-docs";
 
 export default defineConfig(({ mode }) => {
+  syncAgentDocs();
   const pages = loadEnv(mode, ".", "GITHUB_PAGES").GITHUB_PAGES === "1";
   return {
     base: pages ? "/omadesign/" : "/",

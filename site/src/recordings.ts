@@ -9,29 +9,33 @@ export type Recording = {
 // Chapter offsets are checked against the native capture manifest before release.
 export const recordings: Recording[] = [
   {
-    id: "design",
-    name: "Design",
-    duration: 42,
+    id: "layout",
+    name: "Layout",
+    duration: 15,
     chapters: [
-      { name: "Layout", at: 0 },
-      { name: "Appearance", at: 6 },
-      { name: "Typography", at: 12 },
-      { name: "Reshape", at: 18 },
-      { name: "Effects", at: 24 },
-      { name: "Trace", at: 30 },
-      { name: "Layers", at: 36 },
+      { name: "Present", at: 0 },
+      { name: "Draw a frame", at: 7 },
+      { name: "Undo", at: 12 },
     ],
   },
   {
-    id: "pixel",
-    name: "Pixel",
-    duration: 30,
+    id: "graphics",
+    name: "Design",
+    duration: 17,
     chapters: [
-      { name: "Brush", at: 0 },
-      { name: "Retouch", at: 6 },
-      { name: "Mask", at: 12 },
-      { name: "Color", at: 18 },
-      { name: "Layers", at: 24 },
+      { name: "Gradient placement", at: 0 },
+      { name: "Gradient direction", at: 7 },
+      { name: "Group and undo", at: 11 },
+    ],
+  },
+  {
+    id: "chroma",
+    name: "Pixel",
+    duration: 15,
+    chapters: [
+      { name: "Compare and sample", at: 0 },
+      { name: "Apply and undo", at: 6 },
+      { name: "Reopen preview", at: 11 },
     ],
   },
   {
@@ -42,7 +46,7 @@ export const recordings: Recording[] = [
       { name: "Light", at: 0 },
       { name: "Color", at: 6 },
       { name: "Detail", at: 12 },
-      { name: "Library", at: 18 },
+      { name: "Compare", at: 18 },
     ],
   },
   {
@@ -52,8 +56,8 @@ export const recordings: Recording[] = [
     chapters: [
       { name: "Presets", at: 0 },
       { name: "Keyframes", at: 6 },
-      { name: "Appearance", at: 12 },
-      { name: "Reshape in Design", at: 18 },
+      { name: "Pop in", at: 12 },
+      { name: "Slide up", at: 18 },
       { name: "Layers", at: 24 },
     ],
   },

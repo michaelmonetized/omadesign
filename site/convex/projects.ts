@@ -4,9 +4,22 @@ import { actor, access, clean, fail, deviceArg } from "./cloudAuth";
 import { Resend } from "@convex-dev/resend";
 import { components } from "./_generated/api";
 import { limit } from "./cloudMaintenance";
+import { role } from "./cloudSchema";
 const mail = new Resend(components.resend, { testMode: false });
 export const list = query({
   args: deviceArg,
+  returns: v.array(v.object({
+    _id: v.id("cloudProjects"),
+    _creationTime: v.number(),
+    title: v.string(), owner: v.string(), created: v.number(),
+    updated: v.number(), archived: v.boolean(), role,
+    shared: v.boolean(),
+    previews: v.array(v.object({
+      _id: v.id("cloudFiles"), name: v.string(), kind: v.literal("snapshot"),
+      version: v.number(), created: v.number(),
+      width: v.optional(v.number()), height: v.optional(v.number()),
+    })),
+  })),
   handler: async (ctx, a) => {
     const u = await actor(ctx, a.deviceToken);
     const members = await ctx.db
@@ -16,7 +29,19 @@ export const list = query({
     const projects = await Promise.all(
       members.map(async (m) => {
         const p = await ctx.db.get(m.projectId);
-        return p && !p.archived ? { ...p, role: m.role } : null;
+        if (!p || p.archived) return null;
+        // An owner's private cloud backup is not a team project. Only accepted
+        // memberships count; pending invitations do not expose the Team tab.
+        const team = await ctx.db.query("cloudMembers")
+          .withIndex("by_project", (q) => q.eq("projectId", p._id)).take(2);
+        const shared = team.length > 1;
+        const previews = shared ? await ctx.db.query("cloudFiles")
+          .withIndex("by_project_kind", (q) => q.eq("projectId", p._id).eq("kind", "snapshot"))
+          .order("desc").take(3) : [];
+        return { ...p, role: m.role, shared, previews: previews.map((f) => ({
+          _id: f._id, name: f.name, kind: "snapshot" as const,
+          version: f.version, created: f.created, width: f.width, height: f.height,
+        })) };
       }),
     );
     return projects

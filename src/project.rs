@@ -5,7 +5,7 @@ use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub(crate) const VERSION: u32 = 5;
+pub(crate) const VERSION: u32 = 6;
 
 #[derive(Serialize, Deserialize)]
 struct File {
@@ -17,7 +17,23 @@ pub fn encode(doc: &Document) -> Result<String, String> {
     let mut packed = doc.clone();
     pack_rasters(&mut packed)?;
     serde_json::to_string(&File {
-        version: VERSION,
+        // Older readers must not silently strip a mask or change stroke placement.
+        // Keep plain documents compatible with v5; v1-v6 remain readable here.
+        version: if doc
+            .layers
+            .iter()
+            .filter_map(|l| l.kind.shapes())
+            .flatten()
+            .any(|s| {
+                s.mask.is_some()
+                    || s.style.stroke.as_ref().is_some_and(|stroke| {
+                        stroke.alignment != crate::document::StrokeAlignment::Center
+                    })
+            }) {
+            6
+        } else {
+            5
+        },
         doc: packed,
     })
     .map_err(|e| e.to_string())
@@ -39,6 +55,9 @@ pub fn decode(s: &str) -> Result<Document, String> {
         if let Some(shapes) = layer.kind.shapes_mut() {
             for s in shapes {
                 crate::text::fill_contours(&mut s.geom);
+                if let Some(mask) = s.mask.as_mut() {
+                    *mask = decompress_pixels(mask)?;
+                }
             }
         }
     }
@@ -359,6 +378,13 @@ fn pack_rasters(doc: &mut Document) -> Result<(), String> {
         if let Some(mask) = layer.mask.as_mut() {
             *mask = compress_pixels(mask)?;
         }
+        if let Some(shapes) = layer.kind.shapes_mut() {
+            for shape in shapes {
+                if let Some(mask) = shape.mask.as_mut() {
+                    *mask = compress_pixels(mask)?;
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -465,6 +491,9 @@ pub fn load_swap(path: &Path) -> Result<SwapMeta, String> {
         if let Some(shapes) = layer.kind.shapes_mut() {
             for sh in shapes {
                 crate::text::fill_contours(&mut sh.geom);
+                if let Some(mask) = sh.mask.as_mut() {
+                    *mask = decompress_pixels(mask)?;
+                }
             }
         }
     }

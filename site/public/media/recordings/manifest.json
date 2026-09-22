@@ -3,92 +3,100 @@
   "provenance": "Native omadesign WGPU viewport recordings. Seeded example documents; actual egui pointer and keyboard input during replay. The only overlay is a pointer indicator. No audio.",
   "recordings": [
     {
-      "id": "design",
-      "duration": 42,
+      "id": "graphics",
+      "duration": 17,
       "width": 1600,
       "height": 900,
       "fps": 30,
-      "src": "media/recordings/design.mp4",
-      "poster": "media/recordings/design.webp",
-      "captions": "media/recordings/design.vtt",
-      "bytes": 807222,
-      "sha256": "0403bdc0eac14e02e82a33a0a3101fa0f504adb8e2c176096d9fef9666c2e430",
+      "src": "media/recordings/graphics.mp4",
+      "webm": "media/recordings/graphics.webm",
+      "poster": "media/recordings/graphics.webp",
+      "captions": "media/recordings/graphics.vtt",
+      "bytes": 299868,
+      "sha256": "0fd15e305ad952d3e1e40b15bf6573a56f9c279e0fd26eef5cf0ccb701d40d47",
       "chapters": [
         {
           "start": 0,
-          "label": "Layout",
-          "description": "Rotate the selected shape and round its corners with the Layout controls."
+          "label": "Gradient placement",
+          "description": "Drag the native canvas handles to place and reshape the fill gradient."
         },
         {
-          "start": 6,
-          "label": "Appearance",
-          "description": "Add a stroke, inspect stroke options, and change the fill to a gradient."
+          "start": 7,
+          "label": "Gradient direction",
+          "description": "Drag a new direction for the selected gradient."
         },
         {
-          "start": 12,
-          "label": "Typography",
-          "description": "Adjust the headline spacing and explore OpenType features."
-        },
-        {
-          "start": 18,
-          "label": "Reshape",
-          "description": "Enter Warp mesh and drag a real cage handle to reshape the artwork."
-        },
-        {
-          "start": 24,
-          "label": "Effects",
-          "description": "Add a drop shadow in the native Effects panel."
-        },
-        {
-          "start": 30,
-          "label": "Trace",
-          "description": "Inspect tracing options and the Ignore white setting."
-        },
-        {
-          "start": 36,
-          "label": "Layers",
-          "description": "Compare Multiply and Normal blend modes on the artwork layer."
+          "start": 11,
+          "label": "Group and undo",
+          "description": "Group artwork, ungroup, undo and redo."
         }
-      ]
+      ],
+      "webm_sha256": "e6f2b1e17b8da832b97dee24993e2ceb291345672b40a0f513df1e8135ba93c2",
+      "webm_bytes": 450727
     },
     {
-      "id": "pixel",
-      "duration": 30,
+      "id": "chroma",
+      "duration": 15,
       "width": 1600,
       "height": 900,
       "fps": 30,
-      "src": "media/recordings/pixel.mp4",
-      "poster": "media/recordings/pixel.webp",
-      "captions": "media/recordings/pixel.vtt",
-      "bytes": 1224093,
-      "sha256": "dffb2a22b784d1344f256256edfa9e62935cefe9e2461b5358e5e9e2e5042754",
+      "src": "media/recordings/chroma.mp4",
+      "webm": "media/recordings/chroma.webm",
+      "poster": "media/recordings/chroma.webp",
+      "captions": "media/recordings/chroma.vtt",
+      "bytes": 522953,
+      "sha256": "d108a5e6ae7a201b7b743ce775043b5e1c80f1bf7870b1f5163f88a9fb95b1aa",
       "chapters": [
         {
           "start": 0,
-          "label": "Brush",
-          "description": "Adjust the brush size and paint a highlight on a separate layer."
+          "label": "Compare and sample",
+          "description": "Compare original and preview, then sample the key color."
         },
         {
           "start": 6,
-          "label": "Retouch",
-          "description": "Choose the Healing brush, Alt-click a source, and blend a short stroke into the painting."
+          "label": "Apply and undo",
+          "description": "Apply the key, undo and redo."
+        },
+        {
+          "start": 11,
+          "label": "Reopen preview",
+          "description": "Reopen the chroma key preview and cancel."
+        }
+      ],
+      "webm_sha256": "38fa4a3a0156109233f47cad047dbf914f26cba82d136a66a67e177e4b0c43ed",
+      "webm_bytes": 768912
+    },
+    {
+      "id": "layout",
+      "duration": 15,
+      "width": 1600,
+      "height": 900,
+      "fps": 30,
+      "src": "media/recordings/layout.mp4",
+      "webm": "media/recordings/layout.webm",
+      "poster": "media/recordings/layout.webp",
+      "captions": "media/recordings/layout.vtt",
+      "bytes": 398982,
+      "sha256": "cdc578d51059a5e47fe0ca15e9e273839328676f777abf88ef6a3c103737d655",
+      "chapters": [
+        {
+          "start": 0,
+          "label": "Present",
+          "description": "Open the native interactive Layout presentation."
+        },
+        {
+          "start": 7,
+          "label": "Draw a frame",
+          "description": "Use the Frame tool to draw a new frame."
         },
         {
           "start": 12,
-          "label": "Mask",
-          "description": "Add a layer mask and brush away part of the new highlight."
-        },
-        {
-          "start": 18,
-          "label": "Color",
-          "description": "Inspect the color picker and choose a project palette color for the brush."
-        },
-        {
-          "start": 24,
-          "label": "Layers",
-          "description": "Compare layer blending and use Undo on the actual document."
+          "label": "Undo",
+          "description": "Undo the new frame in the native workspace."
         }
-      ]
+      ],
+      "webm_sha256": "4357251823645215689516b2ca30082891359bdde9f9dcbd803fb693cff8b7c1",
+      "webm_bytes": 645634
     },
     {
       "id": "photo",
@@ -97,10 +105,11 @@
       "height": 900,
       "fps": 30,
       "src": "media/recordings/photo.mp4",
+      "webm": "media/recordings/photo.webm",
       "poster": "media/recordings/photo.webp",
       "captions": "media/recordings/photo.vtt",
-      "bytes": 1423486,
-      "sha256": "02c867b8d9106255aa074ed07413572c8a618d2a5508b28e4313c41f96b352e4",
+      "bytes": 1045763,
+      "sha256": "ca4260e1d6a1827685f6f639ce1aa098efee84cff058a81f09899fb1b40bc935",
       "chapters": [
         {
           "start": 0,
@@ -119,10 +128,12 @@
         },
         {
           "start": 18,
-          "label": "Library",
-          "description": "Switch between library images, return to the coast, and compare Before."
+          "label": "Compare",
+          "description": "Return to Light controls and compare the developed image with Before."
         }
-      ]
+      ],
+      "webm_sha256": "25308508ba876d05ab9c4eb22394d243a2eab515699dc0d554e4d50d0e8bd684",
+      "webm_bytes": 1652632
     },
     {
       "id": "motion",
@@ -131,10 +142,11 @@
       "height": 900,
       "fps": 30,
       "src": "media/recordings/motion.mp4",
+      "webm": "media/recordings/motion.webm",
       "poster": "media/recordings/motion.webp",
       "captions": "media/recordings/motion.vtt",
-      "bytes": 753163,
-      "sha256": "5de4e6a63e80788c0e79a36e3969f75dd0a1cc2e1e30c52bea610c56edaa0eba",
+      "bytes": 757303,
+      "sha256": "3198718d0bfcbdf5bba784dd00d7553a096efc6a723e07dbc71ded53d41de6ff",
       "chapters": [
         {
           "start": 0,
@@ -144,24 +156,26 @@
         {
           "start": 6,
           "label": "Keyframes",
-          "description": "Open Keyframe controls and work with keys in the native timeline."
+          "description": "Add a key with the native keyboard shortcut and undo it."
         },
         {
           "start": 12,
-          "label": "Appearance",
-          "description": "Inspect stroke appearance on the animated artwork."
+          "label": "Pop in",
+          "description": "Apply Pop in and play the resulting animation."
         },
         {
           "start": 18,
-          "label": "Reshape in Design",
-          "description": "Switch the same document to Design, adjust a Perspective handle, then return to Motion."
+          "label": "Slide up",
+          "description": "Apply Slide up and play the resulting animation."
         },
         {
           "start": 24,
           "label": "Layers",
           "description": "Compare blend modes and play the edited animation."
         }
-      ]
+      ],
+      "webm_sha256": "71989c5a9dcbbcdd5ed758c2f9717b713848a13dc20ed74fcfa7da1fffacd906",
+      "webm_bytes": 1424788
     },
     {
       "id": "brand-kit",
@@ -170,10 +184,11 @@
       "height": 900,
       "fps": 30,
       "src": "media/recordings/brand-kit.mp4",
+      "webm": "media/recordings/brand-kit.webm",
       "poster": "media/recordings/brand-kit.webp",
       "captions": "media/recordings/brand-kit.vtt",
-      "bytes": 460265,
-      "sha256": "436811923b4cdde732908a701965ccb654fdc1373df1c655b0c5babe60436d9b",
+      "bytes": 461026,
+      "sha256": "da25a5241b5b71aaa4e37129a77effe955e2b6a9af23f113309501f35fa5036a",
       "chapters": [
         {
           "start": 0,
@@ -190,7 +205,12 @@
           "label": "Typography",
           "description": "Apply project Heading and Body font roles to the selected headline."
         }
-      ]
+      ],
+      "webm_sha256": "e88453d4489a246ee99e8524836d88abc75cf9fd207e16ad08b3c074a20d7616",
+      "webm_bytes": 840410
     }
-  ]
+  ],
+  "captured": "2026-09-20",
+  "capture_version": "0.5.5-nightly.1",
+  "capture_binary_sha256": "042d45f8e7c67bbd23b8d544a86f04e596365d06a50f4861c3137d01c878d221"
 }

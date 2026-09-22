@@ -1,6 +1,23 @@
 //! Expand the renderer's stroke geometry into editable filled contours.
 use crate::document::Shape;
-use crate::geom::{Geom, Pt, flatten_cubic};
+use crate::geom::{Geom, Pt};
+
+fn flatten_cubic(a: Pt, b: Pt, c: Pt, d: Pt, out: &mut Vec<Pt>) {
+    fn walk(p: [Pt; 4], depth: u8, out: &mut Vec<Pt>) {
+        if depth >= 16
+            || (crate::geom::seg_dist(p[1], p[0], p[3])
+                .max(crate::geom::seg_dist(p[2], p[0], p[3]))
+                < 0.002)
+        {
+            out.push(p[3]);
+            return;
+        }
+        let (a, b) = crate::geom::split_cubic(p[0], p[1], p[2], p[3], 0.5);
+        walk(a, depth + 1, out);
+        walk(b, depth + 1, out);
+    }
+    walk([a, b, c, d], 0, out);
+}
 use tiny_skia::{PathSegment, StrokeDash};
 
 pub fn expand(shape: &Shape) -> Option<Geom> {
@@ -17,9 +34,11 @@ pub fn expand(shape: &Shape) -> Option<Geom> {
         Some(dash) => Some(path.dash(&dash, 1.0)?),
         None => None,
     };
+    let aligned =
+        shape.geom.is_closed() && stroke.alignment != crate::document::StrokeAlignment::Center;
     let expanded = dashed.as_ref().unwrap_or(&path).stroke(
         &tiny_skia::Stroke {
-            width: stroke.width,
+            width: stroke.width * if aligned { 2. } else { 1. },
             line_cap: stroke.cap.to_skia(),
             line_join: stroke.join.to_skia(),
             ..Default::default()
@@ -71,10 +90,30 @@ pub fn expand(shape: &Shape) -> Option<Geom> {
     if contour.len() >= 3 {
         contours.push(contour);
     }
-    (!contours.is_empty()).then_some(Geom::Poly {
+    if contours.is_empty() {
+        return None;
+    }
+    let outline = Geom::Poly {
         contours,
         winding: true,
-    })
+    };
+    if aligned {
+        let fill = Geom::Poly {
+            contours: shape.world_contours(2048),
+            winding: matches!(shape.geom, Geom::Poly { winding: true, .. }),
+        };
+        crate::boolean::apply(
+            if stroke.alignment == crate::document::StrokeAlignment::Inside {
+                crate::boolean::BoolOp::Intersect
+            } else {
+                crate::boolean::BoolOp::Subtract
+            },
+            &outline,
+            &fill,
+        )
+    } else {
+        Some(outline)
+    }
 }
 
 #[cfg(test)]

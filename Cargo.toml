@@ -1,6 +1,6 @@
 [package]
 name = "omadesign"
-version = "0.5.5-nightly.1"
+version = "0.5.6"
 edition = "2024"
 description = "Native Linux studio for design, layout, painting, photography, and motion"
 license = "MIT"
@@ -38,6 +38,7 @@ rustybuzz = "0.20"
 rfd = "0.15"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+semver = "1"
 tiny-skia = "0.12.0"
 flate2 = "1"
 roxmltree = "0.21"

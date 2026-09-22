@@ -42,7 +42,7 @@ export function StudioRecordings({
   return (
     <section className="section shell recordings-section" id="recordings">
       <div className="section-heading">
-        <RevealText text="The studio." />
+        <RevealText text="See the tools in motion." />
         <a href={sitePath("docs/manual")} className="text-link">
           Manual ↗
         </a>
@@ -191,6 +191,7 @@ export function RecordingPlayer({ recording }: { recording: Recording }) {
             }
           }}
         >
+          <source src={file(recording.id, "webm")} type="video/webm" />
           <source src={file(recording.id, "mp4")} type="video/mp4" />
           <track
             kind="captions"

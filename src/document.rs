@@ -124,8 +124,18 @@ impl Fill {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StrokeAlignment {
+    #[default]
+    Center,
+    Inside,
+    Outside,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Stroke {
+    #[serde(default)]
+    pub alignment: StrokeAlignment,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gradient: Option<crate::gradient::Gradient>,
     pub color: Rgba,
@@ -138,6 +148,7 @@ pub struct Stroke {
 impl Default for Stroke {
     fn default() -> Self {
         Self {
+            alignment: StrokeAlignment::Center,
             gradient: None,
             color: Rgba::rgb(0x1B, 0x24, 0x33),
             width: 2.0,
@@ -202,6 +213,9 @@ pub struct Shape {
     /// Per-corner radii (TL, TR, BR, BL). All zero → use `Geom::Rect.radius`.
     #[serde(default)]
     pub corners: [f32; 4],
+    /// Mask pixels mapped to the object's local geometry bounds, following transforms.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mask: Option<Pixels>,
     #[serde(default, skip_serializing_if = "FrameLayout::is_empty")]
     pub layout: FrameLayout,
     #[serde(skip)]
@@ -232,6 +246,8 @@ impl PartialEq for Shape {
             && self.guide == other.guide
             && self.filters == other.filters
             && self.corners == other.corners
+            && self.mask.as_ref().map(|p| (p.w, p.h, &p.data))
+                == other.mask.as_ref().map(|p| (p.w, p.h, &p.data))
             && self.layout == other.layout
     }
 }
@@ -252,6 +268,7 @@ impl Shape {
             guide: false,
             filters: crate::filter::FilterStack::default(),
             corners: [0.0; 4],
+            mask: None,
             layout: FrameLayout::default(),
             cached_path: RefCell::new(None),
         }
@@ -361,16 +378,46 @@ impl Shape {
             return cached.path.clone();
         }
         let mut pb = tiny_skia::PathBuilder::new();
-        for contour in self.world_contours(segs) {
-            if contour.len() < 2 {
-                continue;
+        let mut geometry = self.geom.clone();
+        if matches!(geometry, Geom::Ellipse { .. } | Geom::Rect { .. }) {
+            geometry = geometry.to_path();
+            if matches!(self.geom, Geom::Rect { .. }) {
+                if let Geom::Path { anchors, .. } = &mut geometry {
+                    for (a, radius) in anchors.iter_mut().zip(self.effective_corners()) {
+                        a.radius = radius;
+                    }
+                }
             }
-            pb.move_to(contour[0].x, contour[0].y);
-            for p in &contour[1..] {
-                pb.line_to(p.x, p.y);
+        }
+        if let Geom::Path { anchors, closed } = &geometry {
+            let segments = crate::geom::path_cubics(anchors, *closed);
+            if let Some(first) = segments.first() {
+                let p = self.world_point(first[0]);
+                pb.move_to(p.x, p.y);
+                for [a, c1, c2, b] in segments {
+                    let [a, c1, c2, b] = [a, c1, c2, b].map(|p| self.world_point(p));
+                    if (c1 - a).length_sq() < 1e-10 && (c2 - b).length_sq() < 1e-10 {
+                        pb.line_to(b.x, b.y);
+                    } else {
+                        pb.cubic_to(c1.x, c1.y, c2.x, c2.y, b.x, b.y);
+                    }
+                }
+                if *closed {
+                    pb.close();
+                }
             }
-            if self.geom.is_closed() {
-                pb.close();
+        } else {
+            for contour in self.world_contours(segs) {
+                if contour.len() < 2 {
+                    continue;
+                }
+                pb.move_to(contour[0].x, contour[0].y);
+                for p in &contour[1..] {
+                    pb.line_to(p.x, p.y);
+                }
+                if self.geom.is_closed() {
+                    pb.close();
+                }
             }
         }
         let path = pb.finish().map(Arc::new);
@@ -837,6 +884,7 @@ pub struct RulerSettings {
     pub origin: Pt,
     pub unit: RulerUnit,
     pub guides_visible: bool,
+    pub guides_locked: bool,
 }
 
 impl Default for RulerSettings {
@@ -845,6 +893,7 @@ impl Default for RulerSettings {
             origin: Pt::ZERO,
             unit: RulerUnit::Pixels,
             guides_visible: true,
+            guides_locked: true,
         }
     }
 }
@@ -1045,6 +1094,9 @@ fn deserialize_artboards<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<Artboard
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Document {
     pub name: String,
+    /// Last editing workspace, used by the file browser and when reopening.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<crate::tools::Persona>,
     pub width: f32,
     pub height: f32,
     pub dpi: f32,
@@ -1089,6 +1141,7 @@ impl Document {
         copy.height = self.height;
         copy.artboards = self.artboards.clone();
         copy.artboardless = self.artboardless;
+        copy.workspace = self.workspace;
         copy.layout_tokens = self.layout_tokens.clone();
         copy.layers = self
             .layers
@@ -1202,6 +1255,7 @@ impl Document {
         let h = page_h.round().max(1.0) as u32;
         let mut doc = Self {
             name: name.into(),
+            workspace: None,
             width: total_w,
             height: page_h,
             dpi,
@@ -1398,7 +1452,9 @@ impl Document {
             if let Some(shapes) = layer.kind.shapes() {
                 for index in self.layout_paint_order(li).into_iter().rev() {
                     let shape = &shapes[index];
-                    if !shape.visible || shape.locked || (shape.guide && !self.ruler.guides_visible)
+                    if !shape.visible
+                        || shape.locked
+                        || (shape.guide && (!self.ruler.guides_visible || self.ruler.guides_locked))
                     {
                         continue;
                     }
@@ -1427,7 +1483,9 @@ impl Document {
             }
             if let Some(shapes) = layer.kind.shapes() {
                 for shape in shapes {
-                    if !shape.visible || shape.locked || (shape.guide && !self.ruler.guides_visible)
+                    if !shape.visible
+                        || shape.locked
+                        || (shape.guide && (!self.ruler.guides_visible || self.ruler.guides_locked))
                     {
                         continue;
                     }
@@ -1499,6 +1557,12 @@ pub enum Cmd {
         after: bool,
     },
     Batch(Vec<Cmd>),
+    SetShapeMask {
+        layer: usize,
+        id: u64,
+        before: Option<Pixels>,
+        after: Option<Pixels>,
+    },
     SetLayerMask {
         index: usize,
         before: Option<Pixels>,
@@ -1924,6 +1988,17 @@ fn invert_cmd(cmd: Cmd) -> Cmd {
             before: after,
             after: before,
         },
+        Cmd::SetShapeMask {
+            layer,
+            id,
+            before,
+            after,
+        } => Cmd::SetShapeMask {
+            layer,
+            id,
+            before: after,
+            after: before,
+        },
         Cmd::SetLayerMask {
             index,
             before,
@@ -2160,6 +2235,13 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
         } => {
             if let Some(shape) = doc.find_shape_mut(*layer, *id) {
                 shape.guide = *after;
+            }
+        }
+        Cmd::SetShapeMask {
+            layer, id, after, ..
+        } => {
+            if let Some(shape) = doc.find_shape_mut(*layer, *id) {
+                shape.mask = after.clone();
             }
         }
         Cmd::SetLayerMask { index, after, .. } => {
@@ -2502,9 +2584,18 @@ mod tests {
             },
             Style::default(),
         );
-        assert!(
-            ellipse.get_cached_path(64).unwrap().points().len()
-                > ellipse.get_cached_path(8).unwrap().points().len()
+        assert_eq!(
+            ellipse.get_cached_path(64).unwrap().points(),
+            ellipse.get_cached_path(8).unwrap().points()
+        );
+        assert_eq!(
+            ellipse
+                .get_cached_path(64)
+                .unwrap()
+                .segments()
+                .filter(|s| matches!(s, tiny_skia::PathSegment::CubicTo(..)))
+                .count(),
+            4
         );
     }
 

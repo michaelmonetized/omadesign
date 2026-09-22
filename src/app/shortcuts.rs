@@ -287,7 +287,16 @@ impl Studio {
                 if focus == ShortcutFocus::Text && !shortcut.global() {
                     self.type_shortcut(ctx, shortcut, payload);
                 } else {
-                    self.run_shortcut(ctx, shortcut, payload);
+                    if shortcut == Shortcut::Duplicate
+                        && self.persona == Persona::Pixel
+                        && modifiers.ctrl
+                        && !modifiers.mac_cmd
+                        && self.pixel_sel.is_some()
+                    {
+                        self.set_pixel_sel(None);
+                    } else {
+                        self.run_shortcut(ctx, shortcut, payload);
+                    }
                 }
                 consumed.push(index);
             } else if focus == ShortcutFocus::Text {
@@ -577,6 +586,10 @@ impl Studio {
                 }
             }
             Key::Escape => {
+                if self.pending_item_mask.take().is_some() {
+                    self.status = "Mask cancelled".into();
+                    return true;
+                }
                 self.end_pixel_stroke(true);
                 if self.pending_place.is_some() {
                     self.cancel_place();
@@ -1873,5 +1886,26 @@ mod tests {
         frame(&ctx, &mut studio, vec![key(Key::Delete, Modifiers::NONE)]);
         assert_eq!(count(&studio), 1);
         assert!(!studio.doc.motion.has_shape(id));
+    }
+    #[test]
+    fn pixel_control_d_deselects_and_super_d_duplicates_in_place() {
+        let ctx = context();
+        let mut s = Studio::new();
+        s.persona = Persona::Pixel;
+        let id = add_rectangle(&mut s, 20.);
+        let before = s.doc.find_shape(1, id).unwrap().geom.clone();
+        s.set_pixel_sel(Some(vec![255; (s.doc.width * s.doc.height) as usize]));
+        frame(&ctx, &mut s, vec![key(Key::D, Modifiers::CTRL)]);
+        assert!(s.pixel_sel.is_none());
+        assert_eq!(count(&s), 1);
+        let super_key = Modifiers {
+            mac_cmd: true,
+            command: true,
+            ..Default::default()
+        };
+        frame(&ctx, &mut s, vec![key(Key::D, super_key)]);
+        assert_eq!(count(&s), 2);
+        let (li, id) = s.primary().unwrap();
+        assert_eq!(s.doc.find_shape(li, id).unwrap().geom, before);
     }
 }

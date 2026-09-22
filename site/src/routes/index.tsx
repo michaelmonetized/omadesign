@@ -1,8 +1,9 @@
+import { StudioRefresh, AiWorkflow } from "../components/studio-refresh";
 import { CloudIntro } from "../components/cloud-waitlist";
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { faqs } from "../features";
-import { media, sitePath } from "../site";
+import { sitePath } from "../site";
 import { BrandKit } from "../components/brand-kit";
 import { StudioCarousel, type StudioName } from "../components/studio-carousel";
 import { StudioRecordings } from "../components/native-recordings";
@@ -27,10 +28,10 @@ function Home() {
           <RevealText
             as="h1"
             hero
-            lines={["Professional Grade", "Graphic Design Tool Suite"]}
+            lines={["Every idea.", "One native creative studio."]}
           />
           <p className="hero-intro">
-            <span>Developed for Omarchy BTW.</span>
+            <span>Design, layout, paint, develop and animate. Built for Linux.</span>
             <span className="hero-modes">
               <span>Illustrate</span>
               <span>Layout</span>
@@ -40,12 +41,15 @@ function Home() {
             </span>
           </p>
         </div>
+        <a className="text-link" href="#cloud">Watch the Omadesign Cloud announcement ↗</a>
         <Install />
       </section>
       <section className="hero-stage">
         <StudioCarousel selected={studio} onSelect={setStudio} />
       </section>
+      <StudioRefresh />
       <StudioRecordings studio={studio} onSelect={setStudio} />
+      <AiWorkflow />
       <div className="btw-strip">
         <div className="shell">
           <span>
@@ -122,34 +126,6 @@ function Home() {
             alt="The native template library with editable designs, category filters, and size controls."
           />
         </figure>
-      </section>
-      <section className="section shell film-section" id="film">
-        <div className="section-heading">
-          <RevealText text="The studio in 97 seconds." />
-          <a className="text-link" href={media("film.mp4")} download>
-            Download video ↓
-          </a>
-        </div>
-        <video
-          controls
-          playsInline
-          preload="none"
-          poster={media("omadesign-logo.webp")}
-          width="1920"
-          height="1080"
-          aria-label="omadesign feature demo, 97 seconds"
-        >
-          <source src={media("film.mp4")} type="video/mp4" />
-          <track
-            kind="captions"
-            src={media("film.vtt")}
-            srcLang="en"
-            label="English scene descriptions"
-          />
-          <p>
-            <a href={media("film.mp4")}>Download the demo video</a>.
-          </p>
-        </video>
       </section>
       <FeatureExplorer />
       <section className="section shell faq-section" id="questions">

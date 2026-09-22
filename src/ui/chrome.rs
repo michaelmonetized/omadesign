@@ -28,7 +28,16 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
             );
             ui.scope_builder(eframe::egui::UiBuilder::new().max_rect(left), |ui| {
                 ui.horizontal_centered(|ui| {
-                    ui.label(RichText::new("omadesign").strong().size(14.0).color(fg()));
+                    if ui
+                        .add(
+                            Button::new(RichText::new("omadesign").strong().size(14.0).color(fg()))
+                                .frame(false),
+                        )
+                        .on_hover_text("Config · Update · About · Docs")
+                        .clicked()
+                    {
+                        studio.show_preferences = true;
+                    }
                     ui.add_space(10.0);
                     ui.visuals_mut().widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
                     if compact {
@@ -427,7 +436,7 @@ fn edit_menu(ui: &mut Ui, studio: &mut Studio) {
             ui.close();
         }
         if ui
-            .add(Button::new("Duplicate").shortcut_text("Ctrl+D"))
+            .add(Button::new("Duplicate").shortcut_text("Super+D"))
             .clicked()
         {
             studio.duplicate_selection();
@@ -471,6 +480,22 @@ fn object_menu(ui: &mut Ui, studio: &mut Studio) {
             ui.close();
         }
         ui.menu_button("Guides", |ui| {
+            if ui
+                .button(if studio.doc.ruler.guides_locked {
+                    "Unlock all guides"
+                } else {
+                    "Lock all guides"
+                })
+                .clicked()
+            {
+                studio.set_guides_locked(!studio.doc.ruler.guides_locked);
+                ui.close();
+            }
+            if ui.button("Clear all guides").clicked() {
+                studio.clear_guides();
+                ui.close();
+            }
+            ui.separator();
             if ui
                 .add_enabled(
                     studio.can_convert_to_guides(),
@@ -1067,11 +1092,22 @@ pub fn status_bar(ui: &mut Ui, studio: &mut Studio) {
         )
         .show(ui, |ui| {
             if studio.show_welcome {
-                ui.label(
-                    RichText::new("F1  Keyboard shortcuts")
-                        .small()
-                        .color(fg_weak()),
-                );
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.label(
+                        RichText::new("F1  Keyboard shortcuts")
+                            .small()
+                            .color(fg_weak()),
+                    );
+                    ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                        ui.add(
+                            eframe::egui::Label::new(
+                                RichText::new(&studio.status).small().color(fg_weak()),
+                            )
+                            .truncate(),
+                        )
+                        .on_hover_text(&studio.status);
+                    });
+                });
                 return;
             }
             let width = ui.available_width();

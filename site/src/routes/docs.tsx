@@ -31,6 +31,9 @@ function Docs() {
               <Link to="/docs/roadmap">Project status</Link>
             </li>
             <li>
+              <Link to="/docs/privacy">Privacy and usage data</Link>
+            </li>
+            <li>
               <Link to="/docs/cloud">Cloud and domain</Link>
             </li>
           </ul>
@@ -62,9 +65,9 @@ function Docs() {
       >
         <aside className="docs-note docs-availability" aria-label="Documentation version">
           <p>
-            These guides cover {RELEASE_TAG}, including chroma key, raster
-            treatments, fill/stroke gradients, responsive Layout components,
-            prototypes and cloud snapshot review. The public site is{" "}
+            These guides cover {RELEASE_TAG}, including the welcome screen,
+            local project browsers, agent handoffs, raster treatments,
+            responsive Layout and cloud snapshot review. The public site is{" "}
             <a href="https://omadesign.app">omadesign.app</a>. Get the{" "}
             <Link to="/docs" hash="get-the-app">Linux release</Link>.
             {" "}Affinity import needs the optional{" "}

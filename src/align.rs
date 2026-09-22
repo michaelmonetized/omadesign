@@ -19,43 +19,85 @@ pub enum Distribute {
     Vertical,
 }
 
-fn bbox_of(doc: &Document, ids: &[(usize, u64)]) -> Option<Bounds> {
-    let mut b: Option<Bounds> = None;
-    for (li, id) in ids {
-        if let Some(s) = doc.find_shape(*li, *id) {
-            let sb = s.world_bbox();
-            b = Some(match b {
-                None => sb,
-                Some(bb) => bb.union(sb),
-            });
+type Item = (Vec<(usize, u64)>, Bounds);
+
+fn items(doc: &Document, ids: &[(usize, u64)], individual: Option<(usize, u64)>) -> Vec<Item> {
+    let mut items: Vec<(Option<usize>, Item)> = vec![];
+    let mut seen = std::collections::HashSet::new();
+    for &(li, id) in ids {
+        if !seen.insert((li, id)) {
+            continue;
+        }
+        // A selected layout frame carries its descendants; avoid aligning those twice.
+        if ids.iter().any(|&(layer, parent)| {
+            layer == li && parent != id && crate::layout::descendants(doc, li, parent).contains(&id)
+        }) {
+            continue;
+        }
+        let bounds = if id == crate::document::RASTER_ID {
+            doc.layers.get(li).and_then(|l| l.kind.raster_bounds())
+        } else {
+            doc.find_shape(li, id).map(|s| s.world_bbox())
+        };
+        let Some(bounds) = bounds else {
+            continue;
+        };
+        let group = (individual != Some((li, id)))
+            .then(|| doc.layer_ancestors(li).last().copied())
+            .flatten();
+        if let Some((_, (members, all))) = items
+            .iter_mut()
+            .find(|(key, _)| group.is_some() && *key == group)
+        {
+            members.push((li, id));
+            *all = all.union(bounds);
+        } else {
+            items.push((group, (vec![(li, id)], bounds)));
         }
     }
-    b
+    items.into_iter().map(|(_, v)| v).collect()
 }
 
 pub fn align_deltas(doc: &Document, ids: &[(usize, u64)], how: Align) -> Vec<(usize, u64, Pt)> {
-    let Some(all) = bbox_of(doc, ids) else {
+    align_items(doc, ids, how, None)
+}
+
+pub fn align_items(
+    doc: &Document,
+    ids: &[(usize, u64)],
+    how: Align,
+    individual: Option<(usize, u64)>,
+) -> Vec<(usize, u64, Pt)> {
+    let items = items(doc, ids, individual);
+    let Some(mut all) = items.iter().map(|(_, b)| *b).reduce(|a, b| a.union(b)) else {
         return vec![];
     };
-    let mut out = Vec::new();
-    for (li, id) in ids {
-        let Some(shape) = doc.find_shape(*li, *id) else {
-            continue;
-        };
-        let b = shape.world_bbox();
+    if items.len() == 1 {
+        all = doc
+            .artboards
+            .iter()
+            .find(|a| a.bounds().contains(all.center()))
+            .map(|a| a.bounds())
+            .unwrap_or(Bounds::from_min_size(
+                Pt::ZERO,
+                Pt::new(doc.width, doc.height),
+            ));
+    }
+    let mut result = vec![];
+    for (members, b) in items {
         let delta = match how {
-            Align::Left => Pt::new(all.min.x - b.min.x, 0.0),
-            Align::CenterX => Pt::new(all.center().x - b.center().x, 0.0),
-            Align::Right => Pt::new(all.max.x - b.max.x, 0.0),
-            Align::Top => Pt::new(0.0, all.min.y - b.min.y),
-            Align::CenterY => Pt::new(0.0, all.center().y - b.center().y),
-            Align::Bottom => Pt::new(0.0, all.max.y - b.max.y),
+            Align::Left => Pt::new(all.min.x - b.min.x, 0.),
+            Align::CenterX => Pt::new(all.center().x - b.center().x, 0.),
+            Align::Right => Pt::new(all.max.x - b.max.x, 0.),
+            Align::Top => Pt::new(0., all.min.y - b.min.y),
+            Align::CenterY => Pt::new(0., all.center().y - b.center().y),
+            Align::Bottom => Pt::new(0., all.max.y - b.max.y),
         };
         if delta.length_sq() > 1e-8 {
-            out.push((*li, *id, delta));
+            result.extend(members.into_iter().map(|(li, id)| (li, id, delta)));
         }
     }
-    out
+    result
 }
 
 pub fn distribute_deltas(
@@ -63,34 +105,38 @@ pub fn distribute_deltas(
     ids: &[(usize, u64)],
     how: Distribute,
 ) -> Vec<(usize, u64, Pt)> {
-    if ids.len() < 3 {
-        return vec![];
-    }
-    let mut items: Vec<(usize, u64, Bounds)> = ids
-        .iter()
-        .filter_map(|(li, id)| doc.find_shape(*li, *id).map(|s| (*li, *id, s.world_bbox())))
-        .collect();
+    distribute_items(doc, ids, how, None)
+}
+pub fn distribute_items(
+    doc: &Document,
+    ids: &[(usize, u64)],
+    how: Distribute,
+    individual: Option<(usize, u64)>,
+) -> Vec<(usize, u64, Pt)> {
+    let mut items = items(doc, ids, individual);
     if items.len() < 3 {
         return vec![];
     }
-    let coordinate = |bounds: Bounds| match how {
-        Distribute::Horizontal => bounds.center().x,
-        Distribute::Vertical => bounds.center().y,
+    let coordinate = |b: Bounds| match how {
+        Distribute::Horizontal => b.center().x,
+        Distribute::Vertical => b.center().y,
     };
-    items.sort_by(|a, b| coordinate(a.2).total_cmp(&coordinate(b.2)));
-    let start = coordinate(items[0].2);
-    let end = coordinate(items[items.len() - 1].2);
+    items.sort_by(|a, b| coordinate(a.1).total_cmp(&coordinate(b.1)));
+    let start = coordinate(items[0].1);
+    let end = coordinate(items[items.len() - 1].1);
     let step = (end - start) / (items.len() - 1) as f32;
     items
-        .iter()
+        .into_iter()
         .enumerate()
-        .filter_map(|(i, (li, id, bounds))| {
-            let offset = start + step * i as f32 - coordinate(*bounds);
+        .flat_map(|(i, (members, b))| {
+            let offset = start + step * i as f32 - coordinate(b);
             let delta = match how {
-                Distribute::Horizontal => Pt::new(offset, 0.0),
-                Distribute::Vertical => Pt::new(0.0, offset),
+                Distribute::Horizontal => Pt::new(offset, 0.),
+                Distribute::Vertical => Pt::new(0., offset),
             };
-            (delta.length_sq() > 1e-8).then_some((*li, *id, delta))
+            members
+                .into_iter()
+                .filter_map(move |(li, id)| (delta.length_sq() > 1e-8).then_some((li, id, delta)))
         })
         .collect()
 }

@@ -484,20 +484,7 @@ impl State {
             WindowEvent::ModifiersChanged(state) => {
                 let state = state.state();
 
-                let alt = state.alt_key();
-                let ctrl = state.control_key();
-                let shift = state.shift_key();
-                let super_ = state.super_key();
-
-                self.modifiers.alt = alt;
-                self.modifiers.ctrl = ctrl;
-                self.modifiers.shift = shift;
-                self.modifiers.mac_cmd = cfg!(target_os = "macos") && super_;
-                self.modifiers.command = if cfg!(target_os = "macos") {
-                    super_
-                } else {
-                    ctrl
-                };
+                self.modifiers = native_modifiers(state);
 
                 self.egui_input
                     .events
@@ -1413,6 +1400,23 @@ fn is_printable_char(chr: char) -> bool {
 // before them so applications can resolve modifier-specific chords, including
 // paste chords when the system clipboard is empty. Text widgets still receive
 // the same Copy/Cut/Paste event and normalized payload as upstream.
+/// Preserve the physical Super key on Linux as well as Command on macOS.
+/// `command` keeps egui's platform shortcut alias (Ctrl on Linux); `mac_cmd`
+/// carries Super independently so application chords such as Super+D work.
+fn native_modifiers(state: winit::keyboard::ModifiersState) -> egui::Modifiers {
+    egui::Modifiers {
+        alt: state.alt_key(),
+        ctrl: state.control_key(),
+        shift: state.shift_key(),
+        mac_cmd: state.super_key(),
+        command: if cfg!(target_os = "macos") {
+            state.super_key()
+        } else {
+            state.control_key()
+        },
+    }
+}
+
 fn push_clipboard_command(
     events: &mut Vec<egui::Event>,
     key: egui::Key,
@@ -2454,5 +2458,15 @@ mod clipboard_chord_tests {
                 }
             }
         }
+    }
+    #[test]
+    fn native_super_survives_without_becoming_control() {
+        let m = super::native_modifiers(winit::keyboard::ModifiersState::SUPER);
+        assert!(m.mac_cmd);
+        assert!(!m.ctrl);
+        assert_eq!(m.command, cfg!(target_os = "macos"));
+        let control = super::native_modifiers(winit::keyboard::ModifiersState::CONTROL);
+        assert!(control.ctrl);
+        assert!(!control.mac_cmd);
     }
 }

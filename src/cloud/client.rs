@@ -15,6 +15,12 @@ pub struct Project {
     pub id: String,
     pub title: String,
     pub role: String,
+    #[serde(default)]
+    pub updated: f64,
+    #[serde(default)]
+    pub shared: bool,
+    #[serde(default)]
+    pub previews: Vec<File>,
 }
 #[derive(Clone, Debug, Deserialize)]
 pub struct File {
@@ -23,6 +29,8 @@ pub struct File {
     pub name: String,
     pub kind: String,
     pub version: u64,
+    #[serde(default)]
+    pub created: f64,
     #[serde(default)]
     pub width: Option<f32>,
     #[serde(default)]
@@ -51,6 +59,11 @@ pub enum Event {
     Projects(Vec<Project>),
     Uploaded(CloudLink, String),
     Pulled(Document),
+    PulledBatch {
+        doc: Document,
+        completed: usize,
+        total: usize,
+    },
     Refreshed {
         project_id: String,
         files: Vec<File>,
@@ -120,6 +133,10 @@ impl Client {
     }
     pub fn projects(&self) -> Result<Vec<Project>, String> {
         serde_json::from_value(self.call("projects:list", json!({}))?).map_err(|e| e.to_string())
+    }
+    pub fn project_files(&self, project_id: &str) -> Result<Vec<File>, String> {
+        let project = self.call("projects:get", json!({"projectId":project_id}))?;
+        serde_json::from_value(project["files"].clone()).map_err(|e| e.to_string())
     }
     pub fn upload(
         &self,
@@ -263,6 +280,14 @@ impl Client {
         Ok(data)
     }
     pub fn pull(&self, project_id: &str) -> Result<Document, String> {
+        self.pull_source(project_id, None)
+    }
+    /// Pull the chosen source instead of silently opening the project's newest
+    /// upload. Membership and reviewer permissions are rechecked by the server.
+    pub fn pull_file(&self, project_id: &str, file_id: &str) -> Result<Document, String> {
+        self.pull_source(project_id, Some(file_id))
+    }
+    fn pull_source(&self, project_id: &str, file_id: Option<&str>) -> Result<Document, String> {
         if project_id.is_empty() || !project_id.bytes().all(|c| c.is_ascii_alphanumeric()) {
             return Err("Invalid project id".into());
         }
@@ -271,7 +296,7 @@ impl Client {
             serde_json::from_value(p["files"].clone()).map_err(|e| e.to_string())?;
         let source = files
             .iter()
-            .find(|f| f.kind == "source")
+            .find(|f| f.kind == "source" && file_id.is_none_or(|id| f.id == id))
             .ok_or("This project has no design file")?;
         let destination = crate::project::data_dir()
             .join("cloud-downloads")

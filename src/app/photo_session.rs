@@ -1571,3 +1571,95 @@ mod tests {
         assert_eq!(std::fs::read(&source).unwrap(), original);
     }
 }
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub(super) struct RestartPhoto {
+    name: String,
+    raw: bool,
+    develop: DevelopParams,
+    saved: DevelopParams,
+    source: Option<PathBuf>,
+    identity: Option<photo::edits::SourceIdentity>,
+    settings: Option<PathBuf>,
+    notes: Vec<String>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+pub(super) struct RestartPhotos {
+    images: Vec<RestartPhoto>,
+    selected: Option<usize>,
+    selection: BTreeSet<usize>,
+    folder: String,
+    files: Vec<(String, String)>,
+    view_scale: f32,
+    view_offset: [f32; 2],
+}
+impl PhotoSession {
+    pub(super) fn restart_state(&mut self) -> RestartPhotos {
+        self.ensure_saved();
+        RestartPhotos {
+            images: self
+                .images
+                .iter()
+                .enumerate()
+                .map(|(i, p)| RestartPhoto {
+                    name: p.name.clone(),
+                    raw: p.raw.is_some(),
+                    develop: p.develop.clone(),
+                    saved: self.saved[i].clone(),
+                    source: p.source.clone(),
+                    identity: p.source_identity.clone(),
+                    settings: p.settings_path.clone(),
+                    notes: p.notes.clone(),
+                })
+                .collect(),
+            selected: self.selected,
+            selection: self.selection.clone(),
+            folder: self.folder.clone(),
+            files: self.folder_files.clone(),
+            view_scale: self.view_scale,
+            view_offset: [self.view_offset.x, self.view_offset.y],
+        }
+    }
+    pub(super) fn restore_restart(state: RestartPhotos, root: &Path) -> Result<Self, String> {
+        let mut s = Self::new();
+        for (i, p) in state.images.into_iter().enumerate() {
+            let path = root.join(format!("photo-{i}"));
+            let mut photo = if p.raw {
+                let raw: crate::formats::raw::RawImage = super::restart::read_gzip(&path)?;
+                if raw.width == 0
+                    || raw.height == 0
+                    || raw.pixels.len() != raw.width as usize * raw.height as usize * 3
+                {
+                    return Err("Invalid original camera pixels in restart snapshot".into());
+                }
+                PhotoImage::from_raw(p.name, raw)
+            } else {
+                PhotoImage::from_full(
+                    p.name,
+                    photo::load_file(&path).ok_or("Could not restore original photo pixels")?,
+                )
+            };
+            photo.develop = p.develop;
+            photo.source = p.source;
+            photo.source_identity = p.identity;
+            photo.settings_path = p.settings;
+            photo.notes = p.notes;
+            s.images.push(photo);
+            s.saved.push(p.saved);
+        }
+        s.selected = state.selected.filter(|i| *i < s.images.len());
+        s.selection = state
+            .selection
+            .into_iter()
+            .filter(|i| *i < s.images.len())
+            .collect();
+        s.folder = state.folder;
+        s.folder_files = state.files;
+        s.gallery.load(&s.folder_files);
+        s.view_scale = state.view_scale;
+        s.view_offset = egui::vec2(state.view_offset[0], state.view_offset[1]);
+        s.dirty = true;
+        s.sel_version = 1;
+        Ok(s)
+    }
+}

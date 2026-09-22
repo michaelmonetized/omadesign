@@ -37,8 +37,7 @@ fn api_key(env: &str, config_key: &str) -> Option<String> {
 }
 
 fn asset_config_path() -> std::path::PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-    std::path::PathBuf::from(format!("{home}/.config/omadesign/assets.toml"))
+    crate::app::startup::preferences_path().with_file_name("assets.toml")
 }
 
 /// Search configured providers. Picsum samples are available only when requested.
@@ -269,4 +268,64 @@ mod tests {
         assert_eq!(hits[0].tags, "Sample photo");
         assert!(search("cats", "Vexels", 6).is_err());
     }
+}
+
+pub fn configured_keys() -> (String, String) {
+    let config = std::fs::read_to_string(asset_config_path()).unwrap_or_default();
+    let get = |name: &str| {
+        config
+            .lines()
+            .find_map(|line| {
+                let (key, value) = line.split_once('=')?;
+                (key.trim() == name).then(|| value.trim().trim_matches(['"', '\'']).to_owned())
+            })
+            .unwrap_or_default()
+    };
+    (get("pixabay_key"), get("pexels_key"))
+}
+pub fn save_configured_keys(pixabay: &str, pexels: &str) -> Result<(), String> {
+    if [pixabay, pexels]
+        .iter()
+        .any(|s| s.chars().any(|c| c.is_control() || c == '"' || c == '\\'))
+    {
+        return Err("API keys cannot contain quotes, backslashes or control characters.".into());
+    }
+    let path = asset_config_path();
+    let old = std::fs::read_to_string(&path).unwrap_or_default();
+    let mut lines: Vec<String> = old
+        .lines()
+        .filter(|line| {
+            line.split_once('=')
+                .is_none_or(|(key, _)| !matches!(key.trim(), "pixabay_key" | "pexels_key"))
+        })
+        .map(str::to_owned)
+        .collect();
+    lines.push(format!("pixabay_key = \"{}\"", pixabay.trim()));
+    lines.push(format!("pexels_key = \"{}\"", pexels.trim()));
+    std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
+    use std::io::Write;
+    let temporary = path.with_file_name(format!(".assets-{}.tmp", crate::document::next_id()));
+    let mut options = std::fs::OpenOptions::new();
+    options.create_new(true).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(&temporary).map_err(|e| e.to_string())?;
+    let result = file
+        .write_all(lines.join("\n").as_bytes())
+        .and_then(|_| file.sync_all())
+        .and_then(|_| std::fs::rename(&temporary, &path));
+    if let Err(error) = result {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(error.to_string());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }

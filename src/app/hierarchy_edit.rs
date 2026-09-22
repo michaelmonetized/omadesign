@@ -498,6 +498,7 @@ impl Studio {
     }
 
     pub fn group_selected(&mut self) {
+        crate::telemetry::count("feature.group");
         if self.op.is_some() {
             return;
         }

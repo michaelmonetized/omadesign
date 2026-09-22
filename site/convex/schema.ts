@@ -4,6 +4,10 @@ import { v } from "convex/values";
 
 export default defineSchema({
   ...cloudTables,
+  telemetryCounts: defineTable({
+    period: v.string(), metric: v.string(), release: v.string(), platform: v.string(), count: v.number(), forwardedHour: v.optional(v.number()),
+  }).index("by_bucket", ["period", "metric", "release", "platform"]),
+  telemetryBudget: defineTable({ hour: v.number(), requests: v.number() }),
   waitlistSignups: defineTable({
     email: v.string(),
     name: v.string(),

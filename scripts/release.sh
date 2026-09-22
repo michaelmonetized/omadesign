@@ -91,6 +91,12 @@ package() {
     README.md > "$stage/README.md"
   chmod 644 "$stage/README.md"
   install -Dm644 LICENSE "$stage/LICENSE"
+  install -Dm644 skills/omadesign-create/SKILL.md "$stage/skills/omadesign-create/SKILL.md"
+  mkdir -p "$stage/docs"
+  for document in MANUAL.md layout.md format-support.md cloud.md CONTRIBUTING.md; do
+    install -Dm644 "docs/$document" "$stage/docs/$document"
+  done
+  install -Dm644 site/public/llms.txt "$stage/docs/llms.txt"
   install -Dm644 assets/phosphor/LICENSE-MIT "$stage/LICENSE-Phosphor"
   mkdir -p "$stage/licenses/libraw" "$stage/licenses/native-notices"
   cp vendor/libraw/* "$stage/licenses/libraw/"

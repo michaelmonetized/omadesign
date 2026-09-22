@@ -20,7 +20,7 @@ pub struct Source {
     pub path: Option<PathBuf>,
     pub folder: Option<PathBuf>,
 }
-#[derive(Clone, Default)]
+#[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct PaletteDraft {
     pub palettes: Vec<Palette>,
     pub selected: usize,

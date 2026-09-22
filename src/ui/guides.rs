@@ -47,6 +47,7 @@ fn state(ctx: &egui::Context, studio: &Studio) -> Interaction {
     }
     if state.selected.is_some_and(|i| i >= studio.doc.guides.len())
         || !studio.doc.ruler.guides_visible
+        || studio.doc.ruler.guides_locked
     {
         state.selected = None;
     }
@@ -83,7 +84,9 @@ fn world(rect: Rect, studio: &Studio, point: Pos2) -> Pt {
 }
 
 fn guide_hit(studio: &Studio, rect: Rect, pointer: Pos2) -> Option<usize> {
-    if !studio.doc.ruler.guides_visible || !content_rect(rect, studio.show_rulers).contains(pointer)
+    if studio.doc.ruler.guides_locked
+        || !studio.doc.ruler.guides_visible
+        || !content_rect(rect, studio.show_rulers).contains(pointer)
     {
         return None;
     }
@@ -282,7 +285,7 @@ pub fn handle_input(ui: &mut Ui, studio: &mut Studio, rect: Rect) -> bool {
             response.context_menu(|ui| ruler_menu(ui, studio));
         }
     }
-    if studio.doc.ruler.guides_visible {
+    if studio.doc.ruler.guides_visible && !studio.doc.ruler.guides_locked {
         let content = content_rect(rect, studio.show_rulers);
         for index in 0..studio.doc.guides.len() {
             let guide = studio.doc.guides[index];
@@ -370,9 +373,25 @@ pub fn ruler_menu(ui: &mut Ui, studio: &mut Studio) {
         ui.close();
     }
     if ui
+        .button(if studio.doc.ruler.guides_locked {
+            "Unlock all guides"
+        } else {
+            "Lock all guides"
+        })
+        .clicked()
+    {
+        studio.set_guides_locked(!studio.doc.ruler.guides_locked);
+        ui.close();
+    }
+    if ui
         .add_enabled(
-            !studio.doc.guides.is_empty(),
-            egui::Button::new("Clear ruler guides"),
+            !studio.doc.guides.is_empty()
+                || studio
+                    .doc
+                    .layers
+                    .iter()
+                    .any(|l| l.kind.shapes().is_some_and(|s| s.iter().any(|s| s.guide))),
+            egui::Button::new("Clear all guides"),
         )
         .clicked()
     {
@@ -705,6 +724,7 @@ mod tests {
         studio.view.scale = 1.0;
         studio.view.offset = Pt::ZERO;
         studio.doc.guides.clear();
+        studio.doc.ruler.guides_locked = false;
         frame(&ctx, &mut studio, vec![]);
         (ctx, studio)
     }

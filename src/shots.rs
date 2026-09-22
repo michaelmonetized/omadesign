@@ -17,6 +17,18 @@ pub struct Scene {
 
 pub const SCENES: &[Scene] = &[
     Scene {
+        id: "settings",
+        caption: "Config, Update, About and Docs in one native dialog.",
+    },
+    Scene {
+        id: "about",
+        caption: "Refined logo and current semantic version.",
+    },
+    Scene {
+        id: "updates",
+        caption: "Release checks and workspace-preserving updates.",
+    },
+    Scene {
         id: "pixel-effects",
         caption: "Chroma key, color filters and raster effects with live preview.",
     },
@@ -136,6 +148,17 @@ pub const SCENES: &[Scene] = &[
 
 pub fn apply(studio: &mut Studio, id: &str) -> Result<(), String> {
     match id {
+        "settings" | "about" | "updates" => {
+            design(studio);
+            studio.show_preferences = true;
+            studio.settings_page = if id == "about" {
+                2
+            } else if id == "updates" {
+                1
+            } else {
+                0
+            };
+        }
         "layout-empty" => {
             *studio = Studio::new();
             studio.switch_persona(Persona::Layout);

@@ -7,6 +7,12 @@ use crate::geom::{Bounds, Geom, Pt};
 fn path_data(shape: &Shape) -> String {
     match &shape.geom {
         Geom::Path { anchors, closed } => crate::geom::path_svg_d(anchors, *closed),
+        Geom::Ellipse { .. } => {
+            let Geom::Path { anchors, closed } = shape.geom.to_path() else {
+                unreachable!()
+            };
+            crate::geom::path_svg_d(&anchors, closed)
+        }
         Geom::Line { a, b } => format!("M {:.3} {:.3} L {:.3} {:.3}", a.x, a.y, b.x, b.y),
         Geom::Rect { origin, size, .. } => {
             let pts = crate::geom::rounded_rect_corners(*origin, *size, shape.effective_corners());
@@ -201,6 +207,17 @@ fn gradient_reference(
     format!("url(#{id})")
 }
 
+fn object_mask_definition(defs: &mut String, shape: &Shape) -> Option<String> {
+    let mask = shape.mask.as_ref()?;
+    let mut local = shape.clone();
+    local.rotation = 0.;
+    let image = pixel_image(mask, crate::compositor::shape_mask_transform(&local)).ok()?;
+    let id = format!("oma-object-mask-{}", shape.id);
+    let b = shape.geom.bbox();
+    defs.push_str(&format!("<mask id=\"{id}\" maskUnits=\"userSpaceOnUse\" maskContentUnits=\"userSpaceOnUse\" mask-type=\"luminance\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\">{image}</mask>",b.min.x,b.min.y,b.width(),b.height()));
+    Some(id)
+}
+
 fn write_shape(
     body: &mut String,
     defs: &mut String,
@@ -209,6 +226,68 @@ fn write_shape(
     extra: &str,
     text_as_paths: bool,
 ) {
+    if shape.mask.is_some() {
+        let mut plain = shape.clone();
+        plain.mask = None;
+        let mut nested = String::new();
+        write_shape(&mut nested, defs, grad_id, &plain, "", text_as_paths);
+        if let Some(id) = object_mask_definition(defs, shape) {
+            body.push_str(&format!(
+                "<g{extra}><g mask=\"url(#{id})\">{nested}</g></g>"
+            ));
+        }
+        return;
+    }
+    if let Some(stroke) = &shape.style.stroke
+        && shape.geom.is_closed()
+        && stroke.alignment != crate::document::StrokeAlignment::Center
+    {
+        let id = format!("oma-stroke-position-{}", shape.id);
+        let b = shape.geom.bbox().inflate(stroke.width * 6. + 2.);
+        let (background, foreground) =
+            if stroke.alignment == crate::document::StrokeAlignment::Inside {
+                ("black", "white")
+            } else {
+                ("white", "black")
+            };
+        let rule = if matches!(shape.geom, Geom::Poly { winding: true, .. }) {
+            "nonzero"
+        } else {
+            "evenodd"
+        };
+        defs.push_str(&format!("<mask id=\"{id}\" maskUnits=\"userSpaceOnUse\" maskContentUnits=\"userSpaceOnUse\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\"><rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{background}\"/><path d=\"{}\" fill=\"{foreground}\" fill-rule=\"{rule}\"/></mask>", b.min.x,b.min.y,b.width(),b.height(), b.min.x,b.min.y,b.width(),b.height(),path_data(shape)));
+        let mut plain = shape.clone();
+        plain.style.stroke = None;
+        plain.opacity = 1.;
+        plain.blend = crate::color::Blend::Normal;
+        let mut fill = String::new();
+        write_shape(&mut fill, defs, grad_id, &plain, "", text_as_paths);
+        plain.style.fill = Fill::None;
+        plain.layout.image = None;
+        let mut centered = stroke.clone();
+        centered.alignment = crate::document::StrokeAlignment::Center;
+        centered.width *= 2.;
+        plain.style.stroke = Some(centered);
+        let mut edge = String::new();
+        write_shape(
+            &mut edge,
+            defs,
+            grad_id,
+            &plain,
+            &format!(" mask=\"url(#{id})\""),
+            text_as_paths,
+        );
+        edge = edge.replace(
+            &format!("id=\"oma-{}\"", shape.id),
+            &format!("id=\"oma-stroke-{}\"", shape.id),
+        );
+        body.push_str(&format!(
+            "<g{extra} opacity=\"{}\" style=\"mix-blend-mode:{}\">{fill}{edge}</g>",
+            shape.opacity,
+            shape.blend.css()
+        ));
+        return;
+    }
     if let Some(image) = &shape.layout.image {
         if let Ok(pixels) = crate::layout_images::pixmap(image) {
             let b = shape.geom.bbox();
@@ -712,6 +791,11 @@ fn write_shape_tree(
                 background.rotation = 0.0;
                 background.opacity = 1.0;
                 background.blend = crate::color::Blend::Normal;
+                background.mask = None;
+                let object_mask = object_mask_definition(defs, shape);
+                if let Some(id) = &object_mask {
+                    body.push_str(&format!("<g mask=\"url(#{id})\">"));
+                }
                 write_shape(body, defs, grad_id, &background, "", false);
                 if shape.layout.clip {
                     let clip_id = format!("oma-frame-clip-{}", shape.id);
@@ -731,6 +815,9 @@ fn write_shape_tree(
                     depth + 1,
                 );
                 if shape.layout.clip {
+                    body.push_str("</g>\n");
+                }
+                if object_mask.is_some() {
                     body.push_str("</g>\n");
                 }
                 body.push_str("</g>\n");

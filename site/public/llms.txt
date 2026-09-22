@@ -1,0 +1,20 @@
+# Omadesign
+
+> Native Linux creative suite. Local editable documents, project brand libraries,
+> Vector, Raster, Layout, Photo, and Motion workspaces.
+
+## Markdown documentation
+
+- [User manual](https://omadesign.app/docs/markdown/manual.md): tools, shortcuts, files, photos, libraries, motion.
+- [Layout guide](https://omadesign.app/docs/markdown/layout.md): frames, nesting, constraints, layout workflows.
+- [Format support](https://omadesign.app/docs/markdown/formats.md): editable imports, exports, and limitations.
+- [Cloud](https://omadesign.app/docs/markdown/cloud.md): accounts, projects, review, and desktop connections.
+- [Contributing](https://omadesign.app/docs/markdown/contributing.md): building and contributing to the application.
+- [Creation skill](https://omadesign.app/skills/omadesign-create/SKILL.md): author editable designs and verify native renders.
+- [Release and checksums](https://omadesign.app/docs/markdown/manifest.json): documentation version and SHA-256 hashes.
+
+The website documentation is at https://omadesign.app/docs/.
+Check the installed version before applying documentation for a newer release.
+Omadesign 0.5.6 provides version-matched Markdown through `omadesign --agent-docs manual`,
+`omadesign --agent-docs layout`, and `omadesign --agent-docs formats`.
+`omadesign --agent-skill` prints the bundled creation skill.

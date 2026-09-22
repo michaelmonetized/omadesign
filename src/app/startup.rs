@@ -28,6 +28,15 @@ pub struct Preferences {
     pub start_page: StartPage,
     pub last_mode: Persona,
     pub last_page: WelcomePage,
+    pub ui_font: String,
+    pub ui_font_size: u16,
+    pub anonymous_usage: bool,
+    pub check_updates: bool,
+    pub guides_locked_by_default: bool,
+    pub show_rulers: bool,
+    pub show_key_hud: bool,
+    #[serde(flatten)]
+    pub extra: std::collections::BTreeMap<String, serde_json::Value>,
 }
 
 impl Default for Preferences {
@@ -37,6 +46,14 @@ impl Default for Preferences {
             start_page: StartPage::RememberLast,
             last_mode: Persona::Design,
             last_page: WelcomePage::New,
+            ui_font: String::new(),
+            ui_font_size: 13,
+            anonymous_usage: false,
+            check_updates: true,
+            guides_locked_by_default: true,
+            show_rulers: true,
+            show_key_hud: true,
+            extra: Default::default(),
         }
     }
 }
@@ -49,7 +66,7 @@ impl Preferences {
         }
     }
 
-    fn read(path: &Path) -> Result<Self, String> {
+    pub(crate) fn read(path: &Path) -> Result<Self, String> {
         match std::fs::read(path) {
             Ok(bytes) => serde_json::from_slice(&bytes).map_err(|e| e.to_string()),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
@@ -66,7 +83,7 @@ impl Preferences {
     }
 }
 
-fn preferences_path() -> PathBuf {
+pub(crate) fn preferences_path() -> PathBuf {
     std::env::var_os("XDG_CONFIG_HOME")
         .filter(|p| !p.is_empty())
         .map(PathBuf::from)
@@ -87,6 +104,12 @@ impl Studio {
         match Preferences::read(&path) {
             Ok(preferences) => {
                 self.startup_preferences = preferences;
+                crate::telemetry::set_consent(self.startup_preferences.anonymous_usage);
+                self.startup_preferences.ui_font_size =
+                    self.startup_preferences.ui_font_size.clamp(10, 24);
+                self.show_rulers = self.startup_preferences.show_rulers;
+                self.show_key_hud = self.startup_preferences.show_key_hud;
+                self.doc.ruler.guides_locked = self.startup_preferences.guides_locked_by_default;
                 self.welcome_page = self.startup_preferences.welcome_page();
                 let mode = match self.startup_preferences.start_tab {
                     StartTab::Welcome => None,
@@ -202,6 +225,41 @@ mod tests {
         studio.insert_layout_frame("Tablet", 768.0, 1024.0);
         assert_eq!(studio.doc.layers[0].kind.shapes().unwrap().len(), 2);
         assert!(studio.doc.artboards.is_empty());
+    }
+
+    #[test]
+    fn saved_workspace_reopens_with_its_mode_and_survives_tab_switches() {
+        let mut studio = Studio::new();
+        for persona in [
+            Persona::Design,
+            Persona::Pixel,
+            Persona::Layout,
+            Persona::Photo,
+            Persona::Motion,
+        ] {
+            let mut document = crate::document::Document::new("Workspace", 48., 32., 72.);
+            document.workspace = Some(persona);
+            let saved = crate::project::encode(&document).unwrap();
+            let reopened = crate::project::decode(&saved).unwrap();
+            assert_eq!(reopened.workspace, Some(persona));
+            studio.open_document(reopened, None);
+            assert_eq!(studio.persona, persona);
+            assert_eq!(
+                studio.tool,
+                match persona {
+                    Persona::Pixel => Tool::Brush,
+                    Persona::Photo => Tool::Hand,
+                    _ => Tool::Select,
+                }
+            );
+            studio.dirty = true;
+        }
+        studio.switch_tab(1);
+        assert_eq!(studio.persona, Persona::Pixel);
+        studio.remember_current_mode();
+        assert_eq!(studio.doc.workspace, Some(Persona::Pixel));
+        studio.switch_tab(2);
+        assert_eq!(studio.persona, Persona::Layout);
     }
 
     #[test]

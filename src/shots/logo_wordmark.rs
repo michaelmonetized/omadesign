@@ -76,6 +76,7 @@ fn white_stroke() -> Style {
     Style {
         fill: Fill::None,
         stroke: Some(Stroke {
+            alignment: crate::document::StrokeAlignment::Center,
             gradient: None,
             color: WHITE,
             width: WEIGHT,
@@ -213,6 +214,7 @@ fn guide_shape() -> Shape {
         Style {
             fill: Fill::None,
             stroke: Some(Stroke {
+                alignment: crate::document::StrokeAlignment::Center,
                 gradient: None,
                 color: GREEN,
                 width: 1.,

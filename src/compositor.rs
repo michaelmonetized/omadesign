@@ -18,7 +18,7 @@ use tiny_skia::{
 /// Canvas camera. `offset` is in **canvas-widget pixels** (0,0 = top-left of
 /// the canvas, not the window). Mixing window coordinates here is what made
 /// selection handles sit off the filled shape.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 pub struct View {
     pub scale: f32,
     pub offset: Pt,
@@ -500,6 +500,110 @@ fn draw_shape(
     draw_shape_masked(pm, shape, t, opacity, blend, pose, None);
 }
 
+pub(crate) fn shape_mask_transform(shape: &Shape) -> Transform {
+    let b = shape.geom.bbox();
+    let mask = shape.mask.as_ref();
+    let w = mask.map_or(b.width().ceil().max(1.0), |p| p.w as f32);
+    let h = mask.map_or(b.height().ceil().max(1.0), |p| p.h as f32);
+    Transform::from_rotate_at(shape.rotation.to_degrees(), b.center().x, b.center().y)
+        .pre_translate(b.min.x, b.min.y)
+        .pre_scale(b.width().max(1e-6) / w, b.height().max(1e-6) / h)
+}
+
+fn object_mask(
+    pm: &Pixmap,
+    shape: &Shape,
+    t: Transform,
+    pose: Pose,
+    parent: Option<&tiny_skia::Mask>,
+) -> Option<tiny_skia::Mask> {
+    let pixels = shape.mask.as_ref()?;
+    let source = pixels.to_pixmap()?;
+    let mut placed = Pixmap::new(pm.width(), pm.height())?;
+    let transform = t
+        .pre_concat(pose.to_skia(shape.world_bbox().center()))
+        .pre_concat(shape_mask_transform(shape));
+    placed.draw_pixmap(
+        0,
+        0,
+        source.as_ref(),
+        &PixmapPaint {
+            quality: tiny_skia::FilterQuality::Bilinear,
+            ..Default::default()
+        },
+        transform,
+        None,
+    );
+    let mut mask = tiny_skia::Mask::from_pixmap(placed.as_ref(), tiny_skia::MaskType::Luminance);
+    if let Some(parent) = parent {
+        for (a, b) in mask.data_mut().iter_mut().zip(parent.data()) {
+            *a = ((u16::from(*a) * u16::from(*b) + 127) / 255) as u8;
+        }
+    }
+    Some(mask)
+}
+
+/// Transform a shape's coordinates through its outer frame rotations.
+pub(crate) fn shape_parent_transform(doc: &Document, layer: usize, id: u64) -> Transform {
+    let mut transform = Transform::identity();
+    let mut parent = doc.find_shape(layer, id).and_then(|s| s.layout.parent);
+    for _ in 0..64 {
+        let Some(frame) = parent.and_then(|id| doc.find_shape(layer, id)) else {
+            break;
+        };
+        let c = frame.geom.bbox().center();
+        transform =
+            Transform::from_rotate_at(frame.rotation.to_degrees(), c.x, c.y).pre_concat(transform);
+        parent = frame.layout.parent;
+    }
+    transform
+}
+
+/// Transparent item silhouette, without canvas or artboard backgrounds.
+pub(crate) fn item_alpha(
+    doc: &Document,
+    index: usize,
+    id: Option<u64>,
+    transform: Transform,
+    w: u32,
+    h: u32,
+) -> Option<Vec<u8>> {
+    let mut source = doc.clone();
+    let selected_layer = source.layers.get(index)?.id;
+    let descendants = id
+        .map(|id| crate::layout::descendants(doc, index, id))
+        .unwrap_or_default();
+    let root_transform = id.map_or(transform, |id| {
+        transform.pre_concat(shape_parent_transform(doc, index, id))
+    });
+    let indices: std::collections::HashSet<_> = (0..source.layers.len())
+        .filter(|&i| i == index || source.layer_ancestors(i).contains(&index))
+        .collect();
+    source.layers = source
+        .layers
+        .into_iter()
+        .enumerate()
+        .filter(|(i, _)| indices.contains(i))
+        .map(|(_, mut layer)| {
+            if layer.id == selected_layer {
+                layer.parent = None;
+                layer.visible = true;
+                if let (Some(id), Some(shapes)) = (id, layer.kind.shapes_mut()) {
+                    shapes.retain(|s| s.id == id || descendants.contains(&s.id));
+                    if let Some(s) = shapes.iter_mut().find(|s| s.id == id) {
+                        s.layout.parent = None;
+                        s.visible = true;
+                    }
+                }
+            }
+            layer
+        })
+        .collect();
+    let mut pm = Pixmap::new(w, h)?;
+    groups::draw(&mut pm, &source, root_transform, &Draft::none(), None, None);
+    Some(pm.pixels().iter().map(|p| p.alpha()).collect())
+}
+
 fn draw_shape_masked(
     pm: &mut Pixmap,
     shape: &Shape,
@@ -509,6 +613,8 @@ fn draw_shape_masked(
     pose: Pose,
     mask: Option<&tiny_skia::Mask>,
 ) {
+    let own_mask = object_mask(pm, shape, t, pose, mask);
+    let mask = own_mask.as_ref().or(mask);
     let alpha = pose.opacity.unwrap_or(shape.opacity).clamp(0.0, 1.0);
     if alpha <= 0.0 {
         return;
@@ -708,7 +814,7 @@ fn draw_shape_inner(
             crate::gradient::texture(
                 g,
                 shape,
-                stroke.width * 0.5 + 1.,
+                stroke.width + 1.,
                 xf.get_scale().0.max(xf.get_scale().1),
             )
         });
@@ -742,7 +848,36 @@ fn draw_shape_inner(
         if let Some((on, off)) = stroke.dash {
             sk.dash = StrokeDash::new(vec![on, off], 0.0);
         }
-        pm.stroke_path(stroke_path, &paint, &sk, xf, mask);
+        let aligned =
+            shape.geom.is_closed() && stroke.alignment != crate::document::StrokeAlignment::Center;
+        let mut clip = None;
+        if aligned {
+            sk.width *= 2.0;
+            if let Some(mut region) = tiny_skia::Mask::new(pm.width(), pm.height()) {
+                region.fill_path(
+                    &path,
+                    if matches!(shape.geom, Geom::Poly { winding: true, .. }) {
+                        FillRule::Winding
+                    } else {
+                        FillRule::EvenOdd
+                    },
+                    true,
+                    xf,
+                );
+                if stroke.alignment == crate::document::StrokeAlignment::Outside {
+                    for value in region.data_mut() {
+                        *value = 255 - *value;
+                    }
+                }
+                if let Some(parent) = mask {
+                    for (value, parent) in region.data_mut().iter_mut().zip(parent.data()) {
+                        *value = ((u16::from(*value) * u16::from(*parent) + 127) / 255) as u8;
+                    }
+                }
+                clip = Some(region);
+            }
+        }
+        pm.stroke_path(stroke_path, &paint, &sk, xf, clip.as_ref().or(mask));
     }
 }
 

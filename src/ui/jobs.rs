@@ -16,6 +16,13 @@ pub(super) fn start<T: Send + 'static>(
     id: &'static str,
     work: impl FnOnce() -> Result<T, String> + Send + 'static,
 ) {
+    ctx.data_mut(|d| {
+        let mut ids = d
+            .get_temp::<std::collections::HashSet<String>>(egui::Id::new("background-jobs"))
+            .unwrap_or_default();
+        ids.insert(id.into());
+        d.insert_temp(egui::Id::new("background-jobs"), ids);
+    });
     let (tx, rx) = mpsc::channel();
     ctx.data_mut(|d| d.insert_temp(egui::Id::new(id), Job(Arc::new(Mutex::new(rx)))));
     let ctx = ctx.clone();
@@ -42,9 +49,23 @@ pub(super) fn poll<T: Send + 'static>(
 }
 
 pub(super) fn cancel<T: Send + 'static>(ctx: &egui::Context, id: &'static str) {
-    ctx.data_mut(|d| d.remove::<Job<T>>(egui::Id::new(id)));
+    ctx.data_mut(|d| {
+        d.remove::<Job<T>>(egui::Id::new(id));
+        let mut ids = d
+            .get_temp::<std::collections::HashSet<String>>(egui::Id::new("background-jobs"))
+            .unwrap_or_default();
+        ids.remove(id);
+        d.insert_temp(egui::Id::new("background-jobs"), ids);
+    });
 }
 
 pub(super) fn is_running<T: Send + 'static>(ctx: &egui::Context, id: &'static str) -> bool {
     ctx.data(|d| d.get_temp::<Job<T>>(egui::Id::new(id)).is_some())
+}
+
+pub(super) fn any_running(ctx: &egui::Context) -> bool {
+    ctx.data(|d| {
+        d.get_temp::<std::collections::HashSet<String>>(egui::Id::new("background-jobs"))
+            .is_some_and(|ids| !ids.is_empty())
+    })
 }

@@ -9,6 +9,7 @@ pub(super) enum ImportMode {
     Drop(Option<Pt>),
     PhotoToDesign,
     Export,
+    Recover,
 }
 
 pub(super) struct ImportJob {
@@ -21,9 +22,39 @@ pub(super) struct ImportJob {
 enum Completed {
     Imported(crate::import::Imported),
     Exported(Vec<String>),
+    Recovered(crate::project::SwapMeta),
 }
 
 impl Studio {
+    /// Queue the entire selection without dropping files beyond the four-worker
+    /// limit. Ordered, one-at-a-time decoding also bounds peak raster memory.
+    pub fn open_paths(&mut self, paths: Vec<PathBuf>) {
+        self.pending_open_files
+            .extend(paths.into_iter().map(|path| (path, false)));
+        self.start_next_open();
+    }
+
+    pub fn recover_paths(&mut self, paths: Vec<PathBuf>) {
+        self.pending_open_files
+            .extend(paths.into_iter().map(|path| (path, true)));
+        self.start_next_open();
+    }
+
+    fn start_next_open(&mut self) {
+        if self.file_jobs.is_empty()
+            && let Some((path, recover)) = self.pending_open_files.pop_front()
+        {
+            self.queue_import(
+                path,
+                if recover {
+                    ImportMode::Recover
+                } else {
+                    ImportMode::Open
+                },
+            );
+        }
+    }
+
     pub(super) fn queue_import(&mut self, path: PathBuf, mode: ImportMode) {
         let kind = crate::import::classify(&path);
         if (matches!(kind, "raw" | "photo-settings")
@@ -59,6 +90,10 @@ impl Studio {
         let (tx, receiver) = mpsc::channel();
         let input = path.clone();
         std::thread::spawn(move || {
+            if matches!(mode, ImportMode::Recover) {
+                let _ = tx.send(crate::project::load_swap(&input).map(Completed::Recovered));
+                return;
+            }
             let result = crate::import::open_any(&input).and_then(|imported| {
                 if let crate::import::Imported::Photo(photo) = imported {
                     crate::formats::cli::photo_document(&photo)
@@ -130,9 +165,15 @@ impl Studio {
             let job = self.file_jobs.remove(i);
             match result {
                 Err(error) => {
+                    crate::telemetry::count(if matches!(job.mode, ImportMode::Export) {
+                        "error.export"
+                    } else {
+                        "error.import"
+                    });
                     let action = match job.mode {
                         ImportMode::Place | ImportMode::Drop(_) => "place",
                         ImportMode::Export => "export",
+                        ImportMode::Recover => "recover",
                         _ => "open",
                     };
                     self.status = format!(
@@ -141,6 +182,7 @@ impl Studio {
                     );
                 }
                 Ok(Completed::Exported(notes)) => {
+                    crate::telemetry::count("feature.export");
                     self.status = format!(
                         "Exported {}{}",
                         job.path.display(),
@@ -153,7 +195,15 @@ impl Studio {
                     self.transfer_notes = notes;
                     self.show_import_notes = !self.transfer_notes.is_empty();
                 }
+                Ok(Completed::Recovered(meta)) => {
+                    let mut tab = TabState::new(meta.doc, meta.original);
+                    tab.dirty = true;
+                    tab.swap_id = meta.id;
+                    self.push_tab(tab);
+                    self.status = format!("recovered {}", meta.name);
+                }
                 Ok(Completed::Imported(imported)) => {
+                    crate::telemetry::count("feature.import");
                     // Opening a document always creates a tab. Placement belongs to its original tab.
                     if matches!(job.mode, ImportMode::Place | ImportMode::Drop(_))
                         && job.owner != self.swap_id
@@ -224,7 +274,8 @@ impl Studio {
                 }
             }
         }
-        if !self.file_jobs.is_empty() {
+        self.start_next_open();
+        if !self.file_jobs.is_empty() || !self.pending_open_files.is_empty() {
             ctx.request_repaint_after(std::time::Duration::from_millis(40));
         }
     }
@@ -357,7 +408,10 @@ mod tests {
     fn finish_jobs(studio: &mut Studio) {
         let ctx = egui::Context::default();
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        while !studio.file_jobs.is_empty() || studio.photo.is_loading() {
+        while !studio.file_jobs.is_empty()
+            || !studio.pending_open_files.is_empty()
+            || studio.photo.is_loading()
+        {
             studio.poll_file_jobs(&ctx);
             studio.photo.poll(&ctx);
             assert!(
@@ -365,6 +419,65 @@ mod tests {
                 "File import worker did not finish"
             );
             std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+    }
+
+    #[test]
+    fn welcome_open_selection_keeps_every_file_in_order_and_preserves_unsaved_work() {
+        let folder = TestFolder::new();
+        let mut studio = Studio::new();
+        studio.doc = Document::new("Unsaved work", 8.0, 8.0, 72.0);
+        studio.dirty = true;
+        let mut paths = Vec::new();
+        for index in 0..7 {
+            let name = format!("Selected {index}");
+            let path = folder.0.join(format!("{index}.oma"));
+            crate::project::save_to(&Document::new(&name, 8.0, 8.0, 72.0), &path).unwrap();
+            paths.push(path);
+        }
+        paths.insert(3, folder.0.join("missing.oma"));
+        studio.open_paths(paths);
+        assert_eq!(studio.file_jobs.len(), 1);
+        assert_eq!(studio.pending_open_files.len(), 7);
+        finish_jobs(&mut studio);
+        assert_eq!(studio.tab_count(), 8);
+        assert_eq!(studio.tab_title(0), ("Unsaved work", true));
+        for index in 0..7 {
+            assert_eq!(studio.tab_title(index + 1).0, format!("Selected {index}"));
+        }
+        assert!(studio.pending_open_files.is_empty());
+    }
+
+    #[test]
+    fn welcome_recovery_selection_runs_off_thread_and_keeps_all_snapshots() {
+        let folder = TestFolder::new();
+        let mut studio = Studio::new();
+        let mut paths = Vec::new();
+        for index in 0..6 {
+            let name = format!("Recovered {index}");
+            let path = folder.0.join(format!("{index}.oma.swp"));
+            let meta = crate::project::SwapMeta {
+                id: crate::project::new_swap_id(),
+                original: None,
+                name: name.clone(),
+                saved_at: 0,
+                doc: Document::new(&name, 8.0, 8.0, 72.0),
+            };
+            crate::project::prepare_swap(meta, path.clone())
+                .unwrap()
+                .commit()
+                .unwrap();
+            paths.push(path);
+        }
+        studio.recover_paths(paths);
+        assert_eq!(studio.tab_count(), 1, "decoding must happen on a worker");
+        assert_eq!(studio.file_jobs.len(), 1);
+        finish_jobs(&mut studio);
+        assert_eq!(studio.tab_count(), 7);
+        for index in 0..6 {
+            let (name, dirty) = studio.tab_title(index + 1);
+            assert_eq!(name, format!("Recovered {index}"));
+            assert!(dirty);
         }
     }
 
