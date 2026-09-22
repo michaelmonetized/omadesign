@@ -89,9 +89,10 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
         state.team = false;
     }
     let mut previews = catalog::Previews::begin(&ctx);
+    ui.painter()
+        .rect_filled(ui.available_rect_before_wrap(), 0., bg_window());
     ui.add_space(22.);
     let mut full = ui.available_rect_before_wrap();
-    ui.painter().rect_filled(full, 0., bg_window());
     let narrow = full.width() < 820.;
     if narrow {
         ui.horizontal(|ui| {
