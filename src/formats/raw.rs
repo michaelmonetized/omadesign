@@ -49,7 +49,7 @@ pub struct RawMetadata {
     pub timestamp: i64,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RawImage {
     pub width: u32,
     pub height: u32,

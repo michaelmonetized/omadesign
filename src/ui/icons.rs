@@ -1,6 +1,6 @@
 //! Phosphor Light glyphs in the tool well and chrome.
 
-use crate::tools::Tool;
+use crate::tools::{Persona, Tool};
 use crate::ui::theme::{accent, accent_soft, bg_widget_hover, border, fg, fg_weak};
 use eframe::egui::{
     FontFamily, FontId, Response, Sense, Stroke, Ui, Vec2, WidgetInfo, WidgetType, vec2,
@@ -9,6 +9,10 @@ use eframe::egui::{
 pub mod ph {
     pub const CURSOR: &str = "\u{E1DC}";
     pub const PATH: &str = "\u{E39C}";
+    // Official Phosphor Light code points; the bundled font includes these glyphs.
+    pub const BEZIER_CURVE: &str = "\u{EB00}";
+    pub const LAYOUT: &str = "\u{E6D6}";
+    pub const PERSON_SIMPLE_RUN: &str = "\u{E730}";
     pub const PEN: &str = "\u{E3AA}";
     pub const PENCIL: &str = "\u{E3AE}";
     pub const RECTANGLE: &str = "\u{E3F0}";
@@ -117,6 +121,27 @@ pub fn icon_button(ui: &mut Ui, icon: &str, tip: &str, selected: bool) -> bool {
     glyph_button(ui, icon, tip, selected, vec2(30.0, 28.0), 18.0).clicked()
 }
 
+pub fn persona_glyph(persona: Persona) -> &'static str {
+    match persona {
+        Persona::Design => ph::BEZIER_CURVE,
+        Persona::Pixel => ph::PAINT_BRUSH,
+        Persona::Layout => ph::LAYOUT,
+        Persona::Photo => ph::IMAGES,
+        Persona::Motion => ph::PERSON_SIMPLE_RUN,
+    }
+}
+
+pub fn persona_button(ui: &mut Ui, persona: Persona, selected: bool) -> Response {
+    glyph_button(
+        ui,
+        persona_glyph(persona),
+        &format!("{} — {}", persona.name(), persona.hint()),
+        selected,
+        vec2(36.0, 30.0),
+        22.0,
+    )
+}
+
 pub fn tiny_icon(ui: &mut Ui, icon: &str, tip: &str, selected: bool) -> bool {
     glyph_button(ui, icon, tip, selected, vec2(22.0, 22.0), 15.0).clicked()
 }
@@ -173,4 +198,33 @@ pub fn well_separator(ui: &mut Ui) {
         rect.center().y,
         Stroke::new(1.0, border()),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ab_glyph::Font;
+
+    #[test]
+    fn every_mode_icon_is_present_in_the_bundled_phosphor_font() {
+        let font = ab_glyph::FontRef::try_from_slice(include_bytes!(
+            "../../assets/phosphor/Phosphor-Light.ttf"
+        ))
+        .unwrap();
+        for persona in [
+            Persona::Design,
+            Persona::Pixel,
+            Persona::Layout,
+            Persona::Photo,
+            Persona::Motion,
+        ] {
+            let character = persona_glyph(persona).chars().next().unwrap();
+            assert_ne!(
+                font.glyph_id(character).0,
+                0,
+                "{} must not render a missing glyph",
+                persona.name()
+            );
+        }
+    }
 }

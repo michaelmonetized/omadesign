@@ -55,6 +55,8 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                 .max_height(properties_height)
                 .auto_shrink([false, true])
                 .show(ui, |ui| {
+                    super::selection::arrange_panel(ui, studio);
+                    section_gap(ui);
                     if motion {
                         motion_studio(ui, studio);
                         section_gap(ui);
@@ -667,13 +669,17 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
                 ui.close();
             }
         });
-        if inspected_style(studio).stroke.is_some() {
-            ui.menu_button("Stroke details", |ui| {
-                ui.set_width(236.0);
-                stroke_studio(ui, studio);
-            });
-        }
     });
+    if studio.selection.is_empty()
+        || studio
+            .selection
+            .iter()
+            .any(|&(li, id)| studio.doc.find_shape(li, id).is_some())
+    {
+        ui.add_space(8.0);
+        heading(ui, "Stroke");
+        stroke_studio(ui, studio);
+    }
 }
 
 fn apply_gradient(studio: &mut Studio, gradient: Option<crate::gradient::Gradient>) {
@@ -740,8 +746,26 @@ fn color_grid(ui: &mut Ui, studio: &mut Studio, recent: bool) {
 
 fn stroke_studio(ui: &mut Ui, studio: &mut Studio) {
     let mut stroke = inspected_style(studio).stroke.clone().unwrap_or_default();
-    let mut changed = number_field(ui, "Width", &mut stroke.width, 0.0..=64.0, " px");
-    ui.horizontal(|ui| {
+    let mut enabled = inspected_style(studio).stroke.is_some();
+    if ui.checkbox(&mut enabled, "Enable stroke").changed() {
+        studio.style.stroke = enabled.then(|| stroke.clone());
+        apply_stroke(studio, studio.style.stroke.clone());
+    }
+    let mut changed = number_field(ui, "Width", &mut stroke.width, 0.0..=100_000.0, " px");
+    ui.horizontal_wrapped(|ui| {
+        use crate::document::StrokeAlignment;
+        ui.label(RichText::new("Position").small().color(fg_weak()));
+        for (value, label) in [
+            (StrokeAlignment::Inside, "Inside"),
+            (StrokeAlignment::Center, "Center"),
+            (StrokeAlignment::Outside, "Outside"),
+        ] {
+            changed |= ui
+                .selectable_value(&mut stroke.alignment, value, label)
+                .changed();
+        }
+    });
+    ui.horizontal_wrapped(|ui| {
         ui.label(RichText::new("Ends").small().color(fg_weak()));
         for (cap, label) in [
             (Cap::Butt, "Flat"),
@@ -751,7 +775,7 @@ fn stroke_studio(ui: &mut Ui, studio: &mut Studio) {
             changed |= ui.selectable_value(&mut stroke.cap, cap, label).changed();
         }
     });
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.label(RichText::new("Joins").small().color(fg_weak()));
         for (join, label) in [
             (Join::Miter, "Sharp"),
@@ -1941,6 +1965,21 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
         });
     });
 
+    if studio.pending_item_mask.is_some() {
+        ui.label(
+            RichText::new("Click the target for this mask")
+                .small()
+                .color(accent()),
+        );
+        if ui.small_button("Cancel mask").clicked() {
+            studio.pending_item_mask = None;
+        }
+    }
+    let mut delete_item = None;
+    let mut mask_item = None;
+    let mut selection_mask_item = None;
+    let mut remove_mask_item = None;
+    let mut enter_shape = None;
     let mut rows = Vec::new();
     let mut activate = None;
     let mut mask_action = None;
@@ -2126,6 +2165,11 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                     }
                                 ))
                                 .context_menu(|ui| {
+                                    if ui.add_enabled(studio.layer_unlocked(i), eframe::egui::Button::new("Delete layer")).clicked() {
+                                        delete_item=Some((i,None)); ui.close();
+                                    }
+                                    if ui.button("Mask from item…").clicked() { mask_item=Some((i,None)); ui.close(); }
+                                    ui.separator();
                                     if ui
                                         .add_enabled(
                                             studio.layer_unlocked(i),
@@ -2306,10 +2350,19 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                                 pick_shape = Some((i, shape.id));
                                             }
                                             if response.double_clicked() && !shape.locked {
-                                                start_shape_rename = Some((i, shape.id));
+                                                enter_shape = Some((i, shape.id));
                                             }
                                             response.on_hover_text(&shape.name).context_menu(
                                                 |ui| {
+                                                    if ui.add_enabled(objects_editable && !shape.locked, eframe::egui::Button::new("Delete object")).clicked() {
+                                                        delete_item=Some((i,Some(shape.id))); ui.close();
+                                                    }
+                                                    if ui.button("Mask from item…").clicked() { mask_item=Some((i,Some(shape.id))); ui.close(); }
+                                                    if ui.add_enabled(objects_editable && !shape.locked && studio.pixel_sel.is_some(), eframe::egui::Button::new("Mask from selection")).clicked() {
+                                                        selection_mask_item=Some((i,shape.id)); ui.close();
+                                                    }
+                                                    if shape.mask.is_some() && ui.button("Remove object mask").clicked() { remove_mask_item=Some((i,shape.id)); ui.close(); }
+                                                    ui.separator();
                                                     if ui.button("Rename").clicked() {
                                                         start_shape_rename = Some((i, shape.id));
                                                         ui.close();
@@ -2416,7 +2469,24 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
         }
     }
     if let Some(i) = activate {
-        studio.activate_layer_tree(i);
+        if studio.apply_pending_item_mask(i, None) {
+        } else if studio.persona == Persona::Pixel && ui.input(|i| i.modifiers.ctrl) {
+            studio.select_item_outline(i, None);
+        } else {
+            let previous = studio.selection.clone();
+            studio.activate_layer_tree(i);
+            if ui.input(|i| i.modifiers.shift) {
+                if studio.selection.is_empty() && studio.doc.layers[i].kind.pixels().is_some() {
+                    studio.selection.push((i, crate::document::RASTER_ID));
+                }
+                for hit in previous {
+                    if !studio.selection.contains(&hit) {
+                        studio.selection.push(hit);
+                    }
+                }
+                studio.selected_layer = None;
+            }
+        }
     }
     if let Some(i) = vis {
         let l = &studio.doc.layers[i];
@@ -2460,21 +2530,36 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
         studio.layer_expanded.insert(id);
     }
     if let Some((li, id)) = pick_shape {
-        if studio.active_layer != Some(li) {
-            studio.paint_mask = false;
-        }
-        studio.selected_layer = None;
-        if ui.input(|i| i.modifiers.shift) {
-            if studio.selection.contains(&(li, id)) {
-                studio.selection.retain(|s| *s != (li, id));
-            } else {
-                studio.selection.push((li, id));
-            }
+        if studio.apply_pending_item_mask(li, Some(id)) {
+        } else if studio.persona == Persona::Pixel && ui.input(|i| i.modifiers.ctrl) {
+            studio.select_item_outline(li, Some(id));
+        } else if enter_shape == Some((li, id)) {
+            studio.enter_group_item((li, id));
         } else {
-            studio.selection = vec![(li, id)];
+            if studio.active_layer != Some(li) {
+                studio.paint_mask = false;
+            }
+            let hits = studio.selection_for_hit((li, id));
+            if studio.individual_object != Some((li, id)) {
+                studio.individual_object = None;
+            }
+            studio.selected_layer = None;
+            if ui.input(|i| i.modifiers.shift) {
+                if hits.iter().all(|hit| studio.selection.contains(hit)) {
+                    studio.selection.retain(|hit| !hits.contains(hit));
+                } else {
+                    for hit in hits {
+                        if !studio.selection.contains(&hit) {
+                            studio.selection.push(hit);
+                        }
+                    }
+                }
+            } else {
+                studio.selection = hits;
+            }
+            studio.active_layer = Some(li);
+            studio.artboard_sel.clear();
         }
-        studio.active_layer = Some(li);
-        studio.artboard_sel.clear();
     }
     if let Some((li, id, horizontal)) = flip_shape {
         if !studio.selection.contains(&(li, id)) {
@@ -2558,7 +2643,22 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
     if let Some((index, action)) = mask_action {
         action.run(studio, index);
     }
-    if let Some(drop) = drop {
+    if let Some((li, id)) = mask_item {
+        studio.begin_item_mask(li, id);
+    }
+    if let Some((li, id)) = selection_mask_item {
+        studio.mask_object_from_selection(li, id);
+    }
+    if let Some((li, id)) = remove_mask_item {
+        studio.remove_object_mask(li, id);
+    }
+    if let Some((li, id)) = delete_item {
+        if let Some(id) = id {
+            studio.delete_object_item(li, id);
+        } else {
+            studio.delete_layer_tree(li);
+        }
+    } else if let Some(drop) = drop {
         drop.apply(studio);
     }
 }

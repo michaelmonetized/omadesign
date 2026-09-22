@@ -1,0 +1,62 @@
+{
+  "captured": "2026-09-20",
+  "app_version": "0.5.4",
+  "binary_sha256": "cae78c13eecdf1702cb1f1d39979ce66a4dfce95aacebc9cde4b12130a5abccd",
+  "source": "Native WGPU viewport screenshots using --shot SCENE --size 1600x900. WebP encoding only; no UI compositing.",
+  "screenshots": [
+    {
+      "file": "brand-library.webp",
+      "width": 1600,
+      "height": 900,
+      "sha256": "4083522ffef325d83c2b350ad4c73fc0869e3b7508085cf07a2e5e63aaa1669e"
+    },
+    {
+      "file": "design-tools.webp",
+      "width": 1600,
+      "height": 900,
+      "sha256": "a5a8ec8260cd2c32fc1e58041f05f6517848cd20fc5010ad3191e17b2e83f637"
+    },
+    {
+      "file": "hud-pen.webp",
+      "width": 1600,
+      "height": 900,
+      "sha256": "31f735e50d20f398452f02060e360fda3d6eee898c5ea711d2abf3986e25832b"
+    },
+    {
+      "file": "layout-phone.webp",
+      "width": 1600,
+      "height": 900,
+      "sha256": "5ead1923b9af4992c7d6ac3118c7c8b3a6e844624d8670fd78e1aef16820567e"
+    },
+    {
+      "file": "layout.webp",
+      "width": 1600,
+      "height": 900,
+      "sha256": "69e864d9eaa7ed2c45127513f63723d30097183ff25524b356f405bf6df00e07"
+    },
+    {
+      "file": "motion-presets.webp",
+      "width": 1600,
+      "height": 900,
+      "sha256": "395c164aa2fefcebf9d76d8f3230f1dd868a66db6e8420e59e0098f44f1b22eb"
+    },
+    {
+      "file": "photo.webp",
+      "width": 1600,
+      "height": 900,
+      "sha256": "bd3b8aa22273ce4202cdfdb03a0030b8c84f51a0825a47e0704e67b668661b38"
+    },
+    {
+      "file": "pixel-effects.webp",
+      "width": 1600,
+      "height": 900,
+      "sha256": "3dea145e4b3b1a39612bde52592ceb1bf0f606e0914342979bd6524e8f3fff0c"
+    },
+    {
+      "file": "templates.webp",
+      "width": 1600,
+      "height": 900,
+      "sha256": "6ccd96168e0650d608ea6a08a9ec2ae85058c13b6064cf2bbfb65f8c1c867391"
+    }
+  ]
+}

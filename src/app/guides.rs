@@ -112,19 +112,21 @@ impl Studio {
             });
         }
         self.commit(Cmd::Batch(commands));
-        self.selection = selected;
+        let count = selected.len();
+        self.selection = if self.doc.ruler.guides_locked {
+            vec![]
+        } else {
+            selected
+        };
         if let Some(&(layer, _)) = self.selection.first() {
             self.active_layer = Some(layer);
         }
         self.node_sel.clear();
         self.artboard_sel.clear();
         self.status = if raster_count > 0 {
-            format!("{} guides · image artwork kept", self.selection.len())
+            format!("{count} guides · image artwork kept")
         } else {
-            format!(
-                "{} editable guides · original artwork preserved",
-                self.selection.len()
-            )
+            format!("{} editable guides · original artwork preserved", count)
         };
     }
 
@@ -179,14 +181,47 @@ impl Studio {
         }
     }
 
+    pub fn set_guides_locked(&mut self, locked: bool) {
+        self.set_ruler(RulerSettings {
+            guides_locked: locked,
+            ..self.doc.ruler
+        });
+        if locked {
+            self.selection
+                .retain(|&(li, id)| self.doc.find_shape(li, id).is_none_or(|s| !s.guide));
+            self.node_sel.clear();
+        }
+        self.status = if locked {
+            "All guides locked"
+        } else {
+            "All guides unlocked"
+        }
+        .into();
+    }
+
     pub fn clear_guides(&mut self) {
+        let mut commands = vec![];
         if !self.doc.guides.is_empty() {
-            self.commit(Cmd::SetGuides {
+            commands.push(Cmd::SetGuides {
                 before: self.doc.guides.clone(),
                 after: vec![],
             });
-            self.status = "Ruler guides cleared · undo to bring them back".into();
         }
+        for (layer, item) in self.doc.layers.iter().enumerate() {
+            if let Some(shapes) = item.kind.shapes()
+                && shapes.iter().any(|s| s.guide)
+            {
+                commands.push(Cmd::SetVectorShapes {
+                    layer,
+                    before: shapes.to_vec(),
+                    after: shapes.iter().filter(|s| !s.guide).cloned().collect(),
+                });
+            }
+        }
+        if !commands.is_empty() {
+            self.commit(Cmd::Batch(commands));
+        }
+        self.status = "All guides cleared · Undo restores them".into();
     }
 
     fn set_ruler(&mut self, after: RulerSettings) {
@@ -300,6 +335,7 @@ mod tests {
             origin: Pt::new(15.0, -20.0),
             unit: RulerUnit::Inches,
             guides_visible: false,
+            guides_locked: true,
         };
         let roundtrip: Document =
             serde_json::from_str(&serde_json::to_string(&doc).unwrap()).unwrap();
@@ -324,6 +360,7 @@ mod object_guide_tests {
     #[test]
     fn curves_text_and_parametric_guides_preserve_artwork_through_save_release_and_undo() {
         let mut studio = Studio::new();
+        studio.doc.ruler.guides_locked = false;
         studio.doc.transparent = true;
         studio.doc.layers = vec![Layer::vector("Artwork")];
         let mut start = Anchor::corner(Pt::new(10.0, 10.0));
@@ -352,6 +389,7 @@ mod object_guide_tests {
         *studio.doc.layers[0].kind.shapes_mut().unwrap() = original.clone();
         studio.selection = original.iter().map(|shape| (0, shape.id)).collect();
         assert!(studio.can_convert_to_guides());
+        studio.doc.ruler.guides_locked = false;
         studio.convert_selection_to_guides();
         assert_eq!(studio.history.len(), 1);
         assert!(studio.can_release_guides());
@@ -416,6 +454,7 @@ mod object_guide_tests {
     #[test]
     fn image_bounds_guides_keep_pixels_and_hidden_guides_do_not_capture_artwork() {
         let mut studio = Studio::new();
+        studio.doc.ruler.guides_locked = false;
         studio.doc.layers = vec![Layer::raster("Image", 8, 8)];
         studio.doc.layers[0].kind.pixels_mut().unwrap().data = [24, 96, 180, 255].repeat(64);
         studio.doc.layers[0]
@@ -423,6 +462,7 @@ mod object_guide_tests {
             .set_raster_xform(Pt::new(20.0, 20.0), Pt::new(80.0, 80.0), 0.0);
         let pixels = studio.doc.layers[0].kind.pixels().unwrap().data.clone();
         studio.selection = vec![(0, RASTER_ID)];
+        studio.doc.ruler.guides_locked = false;
         studio.convert_selection_to_guides();
         assert_eq!(studio.doc.layers.len(), 2);
         assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data, pixels);
@@ -456,6 +496,7 @@ mod compound_guide_tests {
     #[test]
     fn releasing_rotated_compound_guides_preserves_contours_style_export_and_one_undo() {
         let mut studio = Studio::new();
+        studio.doc.ruler.guides_locked = false;
         studio.doc = Document::new("Compound guide", 128.0, 128.0, 72.0);
         studio.doc.transparent = true;
         studio.doc.layers = vec![Layer::vector("Guides")];
@@ -583,6 +624,7 @@ mod compound_guide_tests {
     fn mixed_guide_geometry_operations_cannot_print_guides_or_hide_artwork() {
         for guide_first in [false, true] {
             let mut studio = Studio::new();
+            studio.doc.ruler.guides_locked = false;
             studio.doc.layers = vec![Layer::vector("Mixed")];
             let mut artwork = Shape::new(
                 Geom::Rect {
@@ -623,6 +665,7 @@ mod compound_guide_tests {
     #[test]
     fn combining_rotated_guides_preserves_world_geometry_gradient_and_atomic_undo() {
         let mut studio = Studio::new();
+        studio.doc.ruler.guides_locked = false;
         studio.doc = Document::new("Combine guides", 128.0, 128.0, 72.0);
         studio.doc.transparent = true;
         studio.doc.layers = vec![Layer::vector("Guides")];

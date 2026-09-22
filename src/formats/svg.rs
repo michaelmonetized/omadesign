@@ -515,6 +515,7 @@ impl Reader<'_> {
                 return Ok(false);
             }
             Some(Stroke {
+                alignment: crate::document::StrokeAlignment::Center,
                 gradient: stroke_paint.gradient(),
                 color: stroke_paint.solid_or(Rgba::BLACK),
                 width: s.width().get() * sx,

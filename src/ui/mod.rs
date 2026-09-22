@@ -1,3 +1,4 @@
+mod agent;
 mod browsers;
 mod canvas;
 mod chrome;
@@ -18,6 +19,7 @@ mod masking;
 mod motion_presets;
 pub(crate) mod photo;
 mod photo_detail;
+mod preferences;
 mod raster;
 mod retouch;
 mod selection;
@@ -50,61 +52,115 @@ pub fn present_layout(ctx: &eframe::egui::Context, studio: &mut Studio) {
 
 pub fn run(ui: &mut Ui, studio: &mut Studio) {
     let ctx = ui.ctx().clone();
+    if studio.updates.freezing {
+        studio.poll_updates(&ctx, false);
+        preferences::show(&ctx, studio);
+        return;
+    }
+    if studio.file_dialog_pending() || studio.updates.freezing {
+        ui.disable();
+    }
     ctx.options_mut(|o| o.zoom_with_keyboard = false);
-    if (ctx.zoom_factor() - 1.0).abs() > 1e-3 {
-        ctx.set_zoom_factor(1.0);
+    let zoom = studio.startup_preferences.ui_font_size.clamp(10, 24) as f32 / 13.0;
+    if (ctx.zoom_factor() - zoom).abs() > 1e-3 {
+        ctx.set_zoom_factor(zoom);
     }
     // Give cancellable library loads Escape before canvas shortcuts consume it.
     library::tick(&ctx, studio);
-    guides::handle_shortcuts(&ctx, studio);
-    if !layout_preview::is_open(&ctx) && !raster::is_open(&ctx) {
+    if !studio.file_dialog_pending()
+        && !studio.show_preferences
+        && !studio.updates.freezing
+        && !agent::is_open(&ctx)
+        && !welcome::modal_open(&ctx)
+        && !studio.show_templates
+    {
+        guides::handle_shortcuts(&ctx, studio);
+    }
+    if !studio.file_dialog_pending()
+        && !studio.show_preferences
+        && !studio.updates.freezing
+        && !layout_preview::is_open(&ctx)
+        && !raster::is_open(&ctx)
+        && !agent::is_open(&ctx)
+        && !welcome::modal_open(&ctx)
+        && !studio.show_templates
+    {
         studio.handle_shortcuts(&ctx);
     }
     studio.tick_motion(&ctx);
     layout::poll_image(&ctx, studio);
 
-    chrome::top_bar(ui, studio);
+    if !studio.show_welcome {
+        chrome::top_bar(ui, studio);
+        welcome::cancel(&ctx);
+    }
     key_hud::show(ui, studio);
 
     if studio.show_welcome {
-        welcome::show(ui, studio);
+        if studio.tab_count() > 1 {
+            chrome::doc_tabs(ui, studio);
+        }
         chrome::status_bar(ui, studio);
+        welcome::show(ui, studio);
         let files: Vec<_> = ctx.input(|i| i.raw.dropped_files.clone());
         for f in files {
             studio.ingest_dropped(f.path(), None);
         }
     } else if studio.persona == Persona::Photo {
         chrome::doc_tabs(ui, studio);
-        chrome::left_toolbar(ui, studio);
         chrome::status_bar(ui, studio);
         photo::show(ui, studio);
     } else {
         chrome::doc_tabs(ui, studio);
-        chrome::left_toolbar(ui, studio);
         layout::hierarchy(ui, studio);
+        chrome::left_toolbar(ui, studio);
         studios::right_panel(ui, studio);
         chrome::status_bar(ui, studio);
         timeline::show(ui, studio);
         canvas::show(ui, studio);
     }
 
-    browsers::show_shape_browser(ui, studio);
-    browsers::show_asset_browser(ui, studio);
-    templates::window(ui, studio);
-    cloud::modal(ui, studio);
-    layout_preview::show(ui, studio);
-    raster::show(ui, studio);
+    if !studio.file_dialog_pending() {
+        preferences::show(&ctx, studio);
+        agent::show(&ctx, studio);
+        browsers::show_shape_browser(ui, studio);
+        browsers::show_asset_browser(ui, studio);
+        templates::window(ui, studio);
+        cloud::modal(ui, studio);
+        layout_preview::show(ui, studio);
+        raster::show(ui, studio);
 
-    if studio.show_shortcuts {
-        egui_shortcuts(ui, studio);
+        if studio.show_shortcuts {
+            egui_shortcuts(ui, studio);
+        }
+        unsaved_dialog(ui, studio);
     }
-    unsaved_dialog(ui, studio);
-    studio.tick_swap(&ctx);
+    if !studio.updates.freezing {
+        studio.tick_swap(&ctx);
+    }
+    studio.poll_updates(&ctx, jobs::any_running(&ctx) || raster::is_open(&ctx));
+    studio.remember_current_mode();
+    crate::telemetry::activity(
+        studio.persona,
+        studio.tool,
+        ctx.input(|i| {
+            i.events.iter().any(|e| {
+                matches!(
+                    e,
+                    eframe::egui::Event::PointerButton { pressed: true, .. }
+                        | eframe::egui::Event::Key { pressed: true, .. }
+                )
+            })
+        }),
+    );
 }
 
 /// Screenshot scenes wait for their actual template previews, not a fixed sleep.
 pub fn scene_ready(ctx: &eframe::egui::Context, studio: &Studio) -> bool {
     !studio.cloud_busy()
+        && (!studio.show_welcome || welcome::ready(ctx))
+        && (studio.show_welcome || chrome::document_previews_ready(ctx))
+        && !studio.photo.is_loading_previews()
         && library::ready(ctx, studio)
         && raster::ready(ctx)
         && (studio.persona != Persona::Photo || photo_detail::ready(ctx))

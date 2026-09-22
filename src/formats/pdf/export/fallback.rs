@@ -128,11 +128,11 @@ fn needs_pixels(layer: &Layer) -> bool {
             || layer.kind.shapes().is_some_and(|shapes| {
                 shapes.iter().any(|shape| {
                     shape.filters.active()
-                        || shape
-                            .style
-                            .stroke
-                            .as_ref()
-                            .is_some_and(|s| s.gradient.is_some())
+                        || shape.mask.is_some()
+                        || shape.style.stroke.as_ref().is_some_and(|s| {
+                            s.gradient.is_some()
+                                || s.alignment != crate::document::StrokeAlignment::Center
+                        })
                         || matches!(
                             shape.style.fill,
                             Fill::Gradient(_) | Fill::Linear { .. } | Fill::Radial { .. }

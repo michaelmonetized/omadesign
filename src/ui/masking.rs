@@ -33,18 +33,7 @@ pub fn menu(ui: &mut Ui, studio: &Studio, index: usize) -> Option<Action> {
     let layer = studio.doc.layers.get(index)?;
     let editable = !layer.locked && layer.visible;
     let masked = layer.mask.is_some();
-    let dimensions = layer.kind.pixels().map_or(
-        (
-            studio.doc.width.ceil().max(1.0) as usize,
-            studio.doc.height.ceil().max(1.0) as usize,
-        ),
-        |pixels| (pixels.w as usize, pixels.h as usize),
-    );
-    let selected = studio.active_layer == Some(index)
-        && studio
-            .pixel_sel
-            .as_ref()
-            .is_some_and(|mask| mask.len() == dimensions.0 * dimensions.1);
+    let selected = studio.pixel_sel.is_some();
     let mut action = None;
     let mut item = |ui: &mut Ui, enabled, label, value| {
         if ui.add_enabled(enabled, Button::new(label)).clicked() {

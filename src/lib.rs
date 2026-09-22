@@ -1,3 +1,4 @@
+pub mod agent;
 pub mod align;
 pub mod app;
 pub mod asset_browser;
@@ -46,3 +47,5 @@ pub mod ui;
 pub mod deform;
 
 pub mod outline;
+
+pub mod telemetry;

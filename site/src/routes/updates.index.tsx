@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import welcome from "../../../docs/blog/0.5.6-your-work-ready.md?raw";
 import graphics from "../../../docs/blog/0.5.4-more-control-on-the-canvas.md?raw";
 import clipboard from "../../../docs/blog/0.5.3-paste-onto-the-canvas.md?raw";
 import pixel from "../../../docs/blog/0.5.1-pixel-is-real.md?raw";
@@ -8,6 +9,7 @@ import { CURL } from "../site";
 import { latestUpdate, updates } from "../updates";
 
 const bodies: Record<string, { markdown: string; path: string }> = {
+  "0.5.6": { markdown: welcome, path: "docs/blog/0.5.6-your-work-ready.md" },
   "0.5.4": { markdown: graphics, path: "docs/blog/0.5.4-more-control-on-the-canvas.md" },
   "0.5.3": { markdown: clipboard, path: "docs/blog/0.5.3-paste-onto-the-canvas.md" },
   "0.5.1": { markdown: pixel, path: "docs/blog/0.5.1-pixel-is-real.md" },
@@ -21,7 +23,7 @@ export const Route = createFileRoute("/updates/")({
       {
         name: "description",
         content:
-          "Studio notes from omadesign. 0.5.4 adds chroma key, raster banks, fill and stroke gradients, and responsive Layout components and prototypes.",
+          "Studio notes from omadesign. 0.5.6 brings a new welcome screen, local document and brand-project browsers, natural-aspect thumbnails, and Omarchy agent handoffs.",
       },
     ],
   }),

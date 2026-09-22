@@ -1,6 +1,44 @@
 use super::*;
 use crate::document::Pixels;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SelectionSpace {
+    pub w: u32,
+    pub h: u32,
+    pub transform: tiny_skia::Transform,
+}
+
+#[derive(Clone)]
+pub struct ItemMask {
+    pub values: Vec<u8>,
+    pub space: SelectionSpace,
+}
+
+fn resample(values: &[u8], source: SelectionSpace, target: SelectionSpace) -> Option<Vec<u8>> {
+    if values.len() != source.w as usize * source.h as usize {
+        return None;
+    }
+    if source == target {
+        return Some(values.to_vec());
+    }
+    let data = values.iter().flat_map(|v| [255, 255, 255, *v]).collect();
+    let src = Pixels::from_rgba(source.w, source.h, data)?.to_pixmap()?;
+    let mut dest = tiny_skia::Pixmap::new(target.w, target.h)?;
+    let transform = target.transform.invert()?.pre_concat(source.transform);
+    dest.draw_pixmap(
+        0,
+        0,
+        src.as_ref(),
+        &tiny_skia::PixmapPaint {
+            quality: tiny_skia::FilterQuality::Bilinear,
+            ..Default::default()
+        },
+        transform,
+        None,
+    );
+    Some(dest.pixels().iter().map(|p| p.alpha()).collect())
+}
+
 impl Studio {
     /// Finish or restore an in-flight pixel edit before changing document context.
     /// Returning true lets Undo cancel the current gesture before touching history.
@@ -58,31 +96,212 @@ impl Studio {
         true
     }
 
-    pub fn pixel_sel_mask(&self, layer: usize) -> Option<&[u8]> {
-        let pixels = self.doc.layers.get(layer)?.kind.pixels()?;
+    fn layer_selection_space(&self, layer: usize) -> Option<SelectionSpace> {
+        let item = self.doc.layers.get(layer)?;
+        let (w, h) = self.mask_dimensions(layer)?;
+        Some(SelectionSpace {
+            w,
+            h,
+            transform: compositor::layer_pixel_transform(item),
+        })
+    }
+
+    pub fn pixel_sel_mask(&self, layer: usize) -> Option<std::borrow::Cow<'_, [u8]>> {
+        let target = self.layer_selection_space(layer)?;
         let mask = self.pixel_sel.as_ref()?;
-        (mask.len() == pixels.w as usize * pixels.h as usize).then_some(mask.as_slice())
+        let source = self.pixel_sel_space.unwrap_or(target);
+        if source == target && mask.len() == target.w as usize * target.h as usize {
+            Some(std::borrow::Cow::Borrowed(mask))
+        } else {
+            resample(mask, source, target).map(std::borrow::Cow::Owned)
+        }
     }
 
     pub fn set_pixel_sel(&mut self, mask: Option<Vec<u8>>) {
+        self.pixel_sel_space = if mask.is_some() {
+            self.raster_target()
+                .and_then(|i| self.layer_selection_space(i))
+                .or(Some(SelectionSpace {
+                    w: self.doc.width.ceil().max(1.) as u32,
+                    h: self.doc.height.ceil().max(1.) as u32,
+                    transform: tiny_skia::Transform::identity(),
+                }))
+        } else {
+            None
+        };
         self.pixel_sel = mask;
         self.pixel_sel_gen = self.pixel_sel_gen.wrapping_add(1);
-        self.status = match self.pixel_sel.as_ref() {
-            None => "Pixel selection cleared".into(),
-            Some(mask) => {
-                let n = paint::selected_count(mask);
-                if n == 0 {
-                    "Empty pixel selection".into()
-                } else {
-                    format!("{n} pixels selected")
-                }
-            }
-        };
+        self.status = self.pixel_sel.as_ref().map_or_else(
+            || "Pixel selection cleared".into(),
+            |mask| format!("{} pixels selected", paint::selected_count(mask)),
+        );
     }
 
     pub fn merge_pixel_sel(&mut self, next: Vec<u8>, add: bool) {
-        let combined = paint::combine_masks(self.pixel_sel.as_deref(), next, add);
+        let existing = self.raster_target().and_then(|li| self.pixel_sel_mask(li));
+        let combined = paint::combine_masks(existing.as_deref(), next, add);
         self.set_pixel_sel(Some(combined));
+    }
+
+    fn item_mask(&self, layer: usize, id: Option<u64>) -> Option<ItemMask> {
+        use tiny_skia::Transform;
+        let mut bounds = Bounds::from_min_size(Pt::ZERO, Pt::new(self.doc.width, self.doc.height));
+        // Include off-artboard artwork, retaining a bounded sampling allocation.
+        for i in self.layer_tree_indices(layer) {
+            if let Some(shapes) = self.doc.layers[i].kind.shapes() {
+                for s in shapes {
+                    let b = s
+                        .world_bbox()
+                        .inflate(s.style.stroke.as_ref().map_or(2., |s| s.width * 5. + 2.));
+                    let t = compositor::shape_parent_transform(&self.doc, i, s.id);
+                    for p in [
+                        b.min,
+                        Pt::new(b.max.x, b.min.y),
+                        b.max,
+                        Pt::new(b.min.x, b.max.y),
+                    ] {
+                        let mut p = tiny_skia::Point::from_xy(p.x, p.y);
+                        t.map_point(&mut p);
+                        bounds = bounds.union(Bounds::from_min_size(Pt::new(p.x, p.y), Pt::ZERO));
+                    }
+                }
+            } else if let Some(b) = self.doc.layers[i].kind.raster_bounds() {
+                bounds = bounds.union(b);
+            }
+        }
+        let scale = (16_777_216. / (bounds.width().max(1.) * bounds.height().max(1.)))
+            .sqrt()
+            .min(1.);
+        let w = (bounds.width() * scale).ceil().max(1.) as u32;
+        let h = (bounds.height() * scale).ceil().max(1.) as u32;
+        let transform =
+            Transform::from_translate(bounds.min.x, bounds.min.y).pre_scale(1. / scale, 1. / scale);
+        let values = compositor::item_alpha(&self.doc, layer, id, transform.invert()?, w, h)?;
+        Some(ItemMask {
+            values,
+            space: SelectionSpace { w, h, transform },
+        })
+    }
+
+    pub fn select_item_outline(&mut self, layer: usize, id: Option<u64>) {
+        self.end_pixel_stroke(false);
+        if let Some(mask) = self.item_mask(layer, id) {
+            self.pixel_sel = Some(mask.values);
+            self.pixel_sel_space = Some(mask.space);
+            self.pixel_sel_gen = self.pixel_sel_gen.wrapping_add(1);
+            self.status = "Item outline selected · choose any layer or object to mask".into();
+        }
+    }
+
+    pub fn begin_item_mask(&mut self, layer: usize, id: Option<u64>) {
+        self.end_pixel_stroke(false);
+        self.pending_item_mask = self.item_mask(layer, id);
+        self.status = "Mask from item · click the target layer or object · Esc cancels".into();
+    }
+
+    pub fn apply_pending_item_mask(&mut self, layer: usize, id: Option<u64>) -> bool {
+        let Some(mask) = self.pending_item_mask.clone() else {
+            return false;
+        };
+        if self.apply_item_mask(layer, id, &mask) {
+            self.pending_item_mask = None;
+        }
+        true
+    }
+
+    pub fn mask_object_from_selection(&mut self, layer: usize, id: u64) {
+        let Some(values) = self.pixel_sel.clone() else {
+            return;
+        };
+        let Some(space) = self.pixel_sel_space else {
+            return;
+        };
+        self.apply_item_mask(layer, Some(id), &ItemMask { values, space });
+    }
+
+    fn apply_item_mask(&mut self, layer: usize, id: Option<u64>, mask: &ItemMask) -> bool {
+        if !self.layer_unlocked(layer) {
+            self.status = "Unlock the target to apply its mask".into();
+            return false;
+        }
+        let target = if let Some(id) = id {
+            let Some(shape) = self.doc.find_shape(layer, id).filter(|s| !s.locked) else {
+                return false;
+            };
+            let b = shape.geom.bbox();
+            let mut transform = compositor::shape_mask_transform(shape);
+            let mut parent = shape.layout.parent;
+            for _ in 0..64 {
+                let Some(frame) = parent.and_then(|id| self.doc.find_shape(layer, id)) else {
+                    break;
+                };
+                let c = frame.geom.bbox().center();
+                transform =
+                    tiny_skia::Transform::from_rotate_at(frame.rotation.to_degrees(), c.x, c.y)
+                        .pre_concat(transform);
+                parent = frame.layout.parent;
+            }
+            SelectionSpace {
+                w: shape
+                    .mask
+                    .as_ref()
+                    .map_or(b.width().ceil().max(1.) as u32, |m| m.w),
+                h: shape
+                    .mask
+                    .as_ref()
+                    .map_or(b.height().ceil().max(1.) as u32, |m| m.h),
+                transform,
+            }
+        } else {
+            let Some(target) = self.layer_selection_space(layer) else {
+                return false;
+            };
+            target
+        };
+        if u64::from(target.w) * u64::from(target.h) > 67_108_864 {
+            self.status = "Mask target exceeds the 64 megapixel limit".into();
+            return false;
+        }
+        let Some(values) = resample(&mask.values, mask.space, target) else {
+            return false;
+        };
+        let pixels = Pixels::from_rgba(
+            target.w,
+            target.h,
+            values.iter().flat_map(|v| [*v, *v, *v, 255]).collect(),
+        );
+        if let Some(id) = id {
+            let before = self.doc.find_shape(layer, id).unwrap().mask.clone();
+            self.commit(Cmd::SetShapeMask {
+                layer,
+                id,
+                before,
+                after: pixels,
+            });
+        } else {
+            self.replace_layer_mask(layer, pixels);
+        }
+        crate::telemetry::count("feature.mask");
+        self.status = "Mask applied · original artwork remains editable".into();
+        true
+    }
+
+    pub fn remove_object_mask(&mut self, layer: usize, id: u64) {
+        if !self.layer_unlocked(layer) {
+            return;
+        }
+        if let Some(shape) = self
+            .doc
+            .find_shape(layer, id)
+            .filter(|s| !s.locked && s.mask.is_some())
+        {
+            self.commit(Cmd::SetShapeMask {
+                layer,
+                id,
+                before: shape.mask.clone(),
+                after: None,
+            });
+        }
     }
 
     pub fn clear_selected_pixels(&mut self) -> bool {
@@ -202,23 +421,19 @@ impl Studio {
     }
 
     pub fn mask_from_selection(&mut self, index: usize) {
-        let Some((w, h)) = self.mask_dimensions(index) else {
+        let Some(values) = self.pixel_sel.clone() else {
+            self.status = "Make a pixel selection first".into();
             return;
         };
-        let Some(selection) = self
-            .pixel_sel
-            .as_ref()
-            .filter(|mask| mask.len() == w as usize * h as usize)
+        let Some(space) = self
+            .pixel_sel_space
+            .or_else(|| self.layer_selection_space(index))
         else {
-            self.status = "Make a pixel selection on this layer first".into();
             return;
         };
-        let data = selection
-            .iter()
-            .flat_map(|value| [*value, *value, *value, 255])
-            .collect();
-        self.replace_layer_mask(index, Pixels::from_rgba(w, h, data));
-        self.set_mask_edit(index, true);
+        if self.apply_item_mask(index, None, &ItemMask { values, space }) {
+            self.set_mask_edit(index, true);
+        }
     }
 
     pub fn invert_layer_mask(&mut self, index: usize) {

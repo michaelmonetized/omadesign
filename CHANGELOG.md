@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-09-20 · 0.5.5-nightly.1 — A clearer workspace.
+
+- Native Open, Save and other file choosers run outside the application event
+  loop. Omadesign keeps responding to the compositor while the chooser has
+  focus, addressing Hyprland's false terminate/wait prompt. Cancelled or stale
+  chooser results cannot modify another document.
+- Choosing a Photo folder starts loading its supported images as full-width
+  thumbnail cards. Filenames move to tooltips. Previews reflect saved
+  adjustments, crop and rotation; opened photos update as they are edited.
+  Background loading bounds preview memory and releases offscreen textures.
+- Photo and Layout can open directly from the start screen without creating an
+  artboard. Artboardless Layout workspaces retain that state when saved and
+  reopened.
+- Startup preferences select the start screen, a fixed mode, or **Remember last
+  mode**. A separate setting chooses the start screen's New, Templates, Recent
+  or Recovered page, including **Remember last tab**.
+- Mode tabs are centered in the title bar and use Phosphor icons: bezier curve,
+  paint brush, layout, images and running person. Hover text retains mode names
+  and hints.
+- Document tabs are live **64 × 64 px** thumbnails in a vertical rail against
+  the far-left window edge. The tool strip sits beside the canvas; Photo's
+  library and Layout's hierarchy sit between the document rail and tools.
+  Unsaved indicators, tooltips and document close controls remain available.
+- Arrange, Align, Flip H and Flip V are available in the right inspector.
+
+This is a nightly prerelease; **0.5.4 remains the stable release**. See the
+[release validation](docs/releases/0.5.5-nightly.1.md) for build, artifact and
+runtime evidence. The accepted 0.5.0 human QA record remains unchanged.
+
 ## 2026-09-20 · 0.5.4 — More control on the canvas.
 
 This release integrates the Design Tools work and expanded native Layout

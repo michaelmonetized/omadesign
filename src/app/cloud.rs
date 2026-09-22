@@ -70,6 +70,39 @@ impl Studio {
     }
 }
 
+#[cfg(test)]
+mod welcome_tests {
+    use super::*;
+
+    #[test]
+    fn multiple_cloud_sources_open_distinct_tabs_and_leave_welcome() {
+        let mut studio = Studio::new();
+        studio.show_welcome = true;
+        let (tx, rx) = std::sync::mpsc::channel();
+        studio.cloud_job = Some(rx);
+        tx.send(Ok(Event::PulledBatch {
+            doc: Document::new("First", 100.0, 100.0, 72.0),
+            completed: 1,
+            total: 2,
+        }))
+        .unwrap();
+        tx.send(Ok(Event::PulledBatch {
+            doc: Document::new("Second", 100.0, 100.0, 72.0),
+            completed: 2,
+            total: 2,
+        }))
+        .unwrap();
+        studio.poll_cloud(&egui::Context::default());
+        assert!(studio.cloud_busy());
+        studio.poll_cloud(&egui::Context::default());
+        assert!(!studio.cloud_busy());
+        assert_eq!(studio.tab_count(), 2);
+        assert_eq!(studio.doc.name, "Second");
+        assert!(!studio.show_welcome);
+        assert!(studio.dirty);
+    }
+}
+
 impl Studio {
     pub fn cloud_busy(&self) -> bool {
         self.cloud_job.is_some()
@@ -168,38 +201,69 @@ impl Studio {
     pub fn pull_cloud_project(&mut self, id: String) {
         self.cloud_task(move |client| client.pull(&id).map(Event::Pulled));
     }
+    /// Stream large selected sources through a bounded channel. A selection may
+    /// contain many 100 MB files; never accumulate all decoded documents first.
+    pub fn pull_cloud_files(&mut self, project: String, files: Vec<String>) {
+        if self.cloud_busy() || files.is_empty() {
+            return;
+        }
+        let client = Client::new(self.cloud_identity.clone());
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        self.cloud_job = Some(rx);
+        self.status = format!("Opening {} cloud documents…", files.len());
+        std::thread::spawn(move || {
+            let total = files.len();
+            for (index, file) in files.into_iter().enumerate() {
+                let event = client
+                    .pull_file(&project, &file)
+                    .map(|doc| Event::PulledBatch {
+                        doc,
+                        completed: index + 1,
+                        total,
+                    });
+                let failed = event.is_err();
+                if tx.send(event).is_err() || failed {
+                    break;
+                }
+            }
+        });
+    }
     pub fn upload_cloud_asset(&mut self) {
         let Some(link) = self.doc.cloud.as_ref().filter(|l| l.enabled) else {
             self.status = "Push this project to cloud first".into();
             return;
         };
         let id = link.project_id.clone();
-        if let Some(path) = rfd::FileDialog::new()
-            .set_title("Share project asset")
-            .pick_file()
-        {
-            self.cloud_task(move |client| {
-                let name = path
-                    .file_name()
-                    .ok_or("Invalid asset path")?
-                    .to_string_lossy()
-                    .into_owned();
-                let size = std::fs::metadata(&path).map_err(|e| e.to_string())?.len();
-                if size > 100 * 1024 * 1024 {
-                    return Err("Asset exceeds 100 MB".into());
-                }
-                let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
-                client.upload(
-                    &id,
-                    &name,
-                    "asset",
-                    "application/octet-stream",
-                    &bytes,
-                    None,
-                )?;
-                Ok(Event::Notice("Asset saved to the project".into()))
-            });
-        }
+        self.request_file_dialog(
+            || {
+                rfd::FileDialog::new()
+                    .set_title("Share project asset")
+                    .pick_file()
+            },
+            move |_, studio, path| {
+                studio.cloud_task(move |client| {
+                    let name = path
+                        .file_name()
+                        .ok_or("Invalid asset path")?
+                        .to_string_lossy()
+                        .into_owned();
+                    let size = std::fs::metadata(&path).map_err(|e| e.to_string())?.len();
+                    if size > 100 * 1024 * 1024 {
+                        return Err("Asset exceeds 100 MB".into());
+                    }
+                    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+                    client.upload(
+                        &id,
+                        &name,
+                        "asset",
+                        "application/octet-stream",
+                        &bytes,
+                        None,
+                    )?;
+                    Ok(Event::Notice("Asset saved to the project".into()))
+                });
+            },
+        );
     }
     pub fn invite_collaborator(&mut self) {
         let Some(link) = self.doc.cloud.as_ref().filter(|l| l.enabled) else {
@@ -259,6 +323,9 @@ impl Studio {
         });
     }
     pub fn poll_cloud(&mut self, ctx: &egui::Context) {
+        if self.file_dialog_pending() {
+            return;
+        }
         let result = self.cloud_job.as_ref().map(|rx| rx.try_recv());
         match result {
             Some(Ok(Ok(Event::DeviceCode(code, url)))) => {
@@ -266,7 +333,10 @@ impl Studio {
                 self.status = format!("Approve this device in your browser: {url}");
             }
             Some(Ok(result)) => {
-                self.cloud_job = None;
+                if !matches!(&result, Ok(Event::PulledBatch { completed, total, .. }) if completed < total)
+                {
+                    self.cloud_job = None;
+                }
                 match result {
                     Err(error) => self.status = error,
                     Ok(Event::Preview(color, id)) => {
@@ -300,8 +370,21 @@ impl Studio {
                     }
                     Ok(Event::Pulled(doc)) => {
                         self.open_document(doc, None);
+                        // A downloaded document has no local save path. Keep it
+                        // from being treated as a disposable blank on next open.
+                        self.dirty = true;
                         self.cloud_modal = CloudModal::None;
                         self.status = "Cloud project opened in a new document".into();
+                    }
+                    Ok(Event::PulledBatch {
+                        doc,
+                        completed,
+                        total,
+                    }) => {
+                        self.open_document(doc, None);
+                        self.dirty = true;
+                        self.cloud_modal = CloudModal::None;
+                        self.status = format!("Opened {completed} of {total} cloud documents");
                     }
                     Ok(Event::Refreshed {
                         project_id,

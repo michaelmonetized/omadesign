@@ -677,11 +677,40 @@ fn oma_document(bytes: &[u8]) -> Result<crate::document::Document, String> {
         version: u32,
         doc: crate::document::Document,
     }
-    let Project { version, mut doc } = serde_json::from_slice(bytes)
+    let Project { version, doc } = serde_json::from_slice(bytes)
         .map_err(|e| format!("Could not read project preview: {e}"))?;
     if !(1..=crate::project::VERSION).contains(&version) {
         return Err("Unsupported omadesign project version.".into());
     }
+    checked_preview_document(doc)
+}
+
+/// Shared guarded decoder for file-browser previews. Recovery snapshots retain
+/// their private font archive and use the same resource budgets as saved files.
+pub(crate) fn load_preview_document(
+    path: &Path,
+    recovery: bool,
+) -> Result<crate::document::Document, String> {
+    let bytes = read_bounded(path, 64 * 1024 * 1024)?;
+    if recovery {
+        let meta: crate::project::SwapMeta =
+            serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        let archive = path.with_extension("swp-fonts");
+        if archive.is_dir() {
+            crate::typography::register_archive(&archive)?;
+        } else if let Some(original) = &meta.original {
+            crate::typography::load_for_document(original)?;
+        }
+        checked_preview_document(meta.doc)
+    } else {
+        crate::typography::load_for_document(path)?;
+        oma_document(&bytes)
+    }
+}
+
+fn checked_preview_document(
+    mut doc: crate::document::Document,
+) -> Result<crate::document::Document, String> {
     if doc.layers.len() > 256 || doc.artboards.len() > 128 {
         return Err("Project has too many layers or artboards for a preview.".into());
     }
@@ -695,27 +724,16 @@ fn oma_document(bytes: &[u8]) -> Result<crate::document::Document, String> {
             .into_iter()
             .flatten()
         {
-            pixels += check_pixels(px.w, px.h)?;
-            if pixels > MAX_PIXELS {
-                return Err("Project raster layers exceed the 16 megapixel preview budget.".into());
-            }
-            if px.data.len() as u64 != u64::from(px.w) * u64::from(px.h) * 4 {
-                use base64::Engine;
-                let packed = base64::engine::general_purpose::STANDARD
-                    .decode(&px.data)
-                    .map_err(|e| e.to_string())?;
-                let image = decode_image(&packed)?.to_rgba8();
-                if image.dimensions() != (px.w, px.h) {
-                    return Err("Project raster dimensions do not match its image.".into());
-                }
-                px.data = image.into_raw();
-            }
+            prepare_preview_pixels(px, &mut pixels)?;
         }
         if let Some(shapes) = layer.kind.shapes_mut() {
             if shapes.len() > 2048 {
                 return Err("Project has too many objects for a preview.".into());
             }
             for shape in shapes {
+                if let Some(mask) = &mut shape.mask {
+                    prepare_preview_pixels(mask, &mut pixels)?;
+                }
                 check_filters(&shape.filters, &mut effects)?;
                 check_geometry(&shape.geom, &mut geometry)?;
                 crate::text::fill_contours(&mut shape.geom);
@@ -723,6 +741,28 @@ fn oma_document(bytes: &[u8]) -> Result<crate::document::Document, String> {
         }
     }
     Ok(doc)
+}
+
+fn prepare_preview_pixels(
+    px: &mut crate::document::Pixels,
+    budget: &mut u64,
+) -> Result<(), String> {
+    *budget += check_pixels(px.w, px.h)?;
+    if *budget > MAX_PIXELS {
+        return Err("Project raster layers exceed the 16 megapixel preview budget.".into());
+    }
+    if px.data.len() as u64 != u64::from(px.w) * u64::from(px.h) * 4 {
+        use base64::Engine;
+        let packed = base64::engine::general_purpose::STANDARD
+            .decode(&px.data)
+            .map_err(|e| e.to_string())?;
+        let image = decode_image(&packed)?.to_rgba8();
+        if image.dimensions() != (px.w, px.h) {
+            return Err("Project raster dimensions do not match its image.".into());
+        }
+        px.data = image.into_raw();
+    }
+    Ok(())
 }
 
 fn render_document(doc: &crate::document::Document, edge: u32) -> Result<RgbaImage, String> {

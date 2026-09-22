@@ -8,7 +8,7 @@ import {
 import { CloudProvider } from "../cloud/provider";
 import { useEffect } from "react";
 import { ThemeProvider, useTheme } from "../theme";
-import { REPO, SITE_ORIGIN, sitePath } from "../site";
+import { DISCORD, REPO, SITE_ORIGIN, sitePath } from "../site";
 import appCss from "../styles.css?url";
 
 export { CURL } from "../site";
@@ -22,7 +22,7 @@ export const Route = createRootRoute({
       {
         name: "description",
         content:
-          "An Omarchy-first creative suite for Linux. Native Rust. Design, paint, retouch and animate, with portable palettes, brand assets and fonts. Free and open source.",
+          "Design, layout, paint, develop and animate in one native Linux studio. Editable gradients, responsive prototypes, photo batches and file workflows for AI agents. Free and open source.",
       },
       { name: "theme-color", content: "#1e1e2e" },
       {
@@ -112,10 +112,12 @@ function Document() {
               <a className="nav-features" href={sitePath("#features")}>
                 Features
               </a>
+              <a href={sitePath("#ai")}>AI workflows</a>
               <a href={sitePath("showcase")}>Showcase</a>
               <a href={sitePath("updates")}>Updates</a>
               <a href={sitePath("compete")}>Compete</a>
               <a href={sitePath("docs")}>Docs</a>
+              <a href={DISCORD}>Discord</a>
               <a href={REPO}>
                 GitHub <span aria-hidden="true">↗</span>
               </a>
@@ -167,6 +169,7 @@ function Document() {
               <a href={sitePath("updates")}>Updates</a>
               <a href={sitePath("docs/roadmap")}>Roadmap</a>
               <a href={sitePath("docs/contributing")}>Contribute</a>
+              <a href={DISCORD}>Join the conversation</a>
               <a href={`${REPO}/issues`}>Report a bug</a>
               <a href={`${REPO}/blob/master/LICENSE`}>License</a>
             </div>

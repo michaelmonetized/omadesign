@@ -13,28 +13,28 @@ type StudioCarouselProps = {
 const works: { name: StudioName; image: string; alt: string }[] = [
   {
     name: "Design",
-    image: "design.webp",
-    alt: "Block Party: an original coral and citron poster made with editable vectors in omadesign.",
+    image: "design-tools.webp",
+    alt: "Native Design workspace with editable gradient fills and strokes.",
   },
   {
     name: "Layout",
     image: "layout.webp",
-    alt: "Form: an editable studio dashboard made with nested Layout frames in Omadesign.",
+    alt: "Native Layout workspace with responsive frames and components.",
   },
   {
     name: "Pixel",
-    image: "pixel.webp",
-    alt: "Iris study: textured purple iris illustration prepared in Pixel studio.",
+    image: "pixel-effects.webp",
+    alt: "Native Pixel workspace showing chroma key and raster treatments.",
   },
   {
     name: "Photo",
     image: "photo.webp",
-    alt: "Coast road: original landscape artwork color-graded in Photo studio.",
+    alt: "Native Photo workspace with development controls.",
   },
   {
     name: "Motion",
-    image: "motion.webp",
-    alt: "After Hours: cream typography and concentric rings made as editable animated artwork in omadesign.",
+    image: "motion-presets.webp",
+    alt: "Native Motion workspace with editable animation presets.",
   },
 ];
 export const studioNames = works.map((work) => work.name);
@@ -402,7 +402,7 @@ export function StudioCarousel({
         tabIndex={0}
         role="region"
         aria-roledescription="carousel"
-        aria-label="Three-dimensional artwork gallery"
+        aria-label="Three-dimensional native workspace gallery"
         aria-describedby={`${id}-hint`}
         onKeyDown={(event) => keydown(event)}
       >
@@ -422,10 +422,10 @@ export function StudioCarousel({
               onClick={() => choose(index)}
             >
               <img
-                src={sitePath(`media/showcase/${work.image}`)}
+                src={sitePath(`media/refresh/${work.image}`)}
                 alt={work.alt}
                 width="1600"
-                height="1000"
+                height="900"
                 decoding="async"
                 loading={index === 0 ? "eager" : "lazy"}
                 draggable={false}

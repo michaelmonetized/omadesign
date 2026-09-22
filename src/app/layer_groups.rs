@@ -3,6 +3,52 @@
 use super::*;
 
 impl Studio {
+    /// A canvas hit belongs to its outermost layer group until explicitly entered.
+    pub fn selection_for_hit(&self, hit: (usize, u64)) -> Vec<(usize, u64)> {
+        if self.individual_object == Some(hit) && self.selection.contains(&hit) {
+            return vec![hit];
+        }
+        let Some(group) = self.doc.layer_ancestors(hit.0).last().copied() else {
+            return vec![hit];
+        };
+        self.group_members(group)
+    }
+
+    fn group_members(&self, group: usize) -> Vec<(usize, u64)> {
+        if !self.layer_unlocked(group) || !self.doc.layer_visible(group) {
+            return vec![];
+        }
+        self.layer_tree_indices(group)
+            .into_iter()
+            .flat_map(|i| {
+                let layer = &self.doc.layers[i];
+                if let Some(shapes) = layer.kind.shapes() {
+                    shapes
+                        .iter()
+                        .filter(|s| {
+                            !s.guide
+                                || (self.doc.ruler.guides_visible && !self.doc.ruler.guides_locked)
+                        })
+                        .map(|s| (i, s.id))
+                        .collect::<Vec<_>>()
+                } else if layer.kind.pixels().is_some() {
+                    vec![(i, RASTER_ID)]
+                } else {
+                    vec![]
+                }
+            })
+            .collect()
+    }
+
+    pub fn enter_group_item(&mut self, hit: (usize, u64)) {
+        self.individual_object = Some(hit);
+        self.selected_layer = None;
+        self.selection = vec![hit];
+        self.active_layer = Some(hit.0);
+        self.node_sel.clear();
+        self.op = None;
+    }
+
     pub fn layer_ancestors_unlocked(&self, index: usize) -> bool {
         self.doc
             .layer_ancestors(index)
@@ -267,29 +313,7 @@ impl Studio {
         self.active_layer = Some(index);
         self.selected_layer = Some(id);
         if group {
-            self.selection = self
-                .layer_tree_indices(index)
-                .into_iter()
-                .filter(|&i| self.doc.layer_editable(i))
-                .flat_map(|i| {
-                    let layer = &self.doc.layers[i];
-                    if let Some(shapes) = layer.kind.shapes() {
-                        shapes
-                            .iter()
-                            .filter(|s| {
-                                s.visible
-                                    && !s.locked
-                                    && (!s.guide || self.doc.ruler.guides_visible)
-                            })
-                            .map(|s| (i, s.id))
-                            .collect()
-                    } else if layer.kind.is_placed_raster() {
-                        vec![(i, RASTER_ID)]
-                    } else {
-                        vec![]
-                    }
-                })
-                .collect();
+            self.selection = self.group_members(index);
             self.status = format!("{name}: {} editable objects", self.selection.len());
         } else {
             self.status = name;
@@ -324,7 +348,11 @@ impl Studio {
     }
 
     fn clear_layer_interaction(&mut self) {
+        let pixel_sel = self.pixel_sel.take();
+        let pixel_sel_space = self.pixel_sel_space.take();
         self.deselect_all();
+        self.pixel_sel = pixel_sel;
+        self.pixel_sel_space = pixel_sel_space;
         self.paint_mask = false;
         self.type_edit = None;
         self.layer_rename = None;

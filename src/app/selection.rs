@@ -17,6 +17,14 @@ pub enum With {
 }
 
 impl Studio {
+    pub fn delete_object_item(&mut self, layer: usize, id: u64) {
+        if !self.layer_unlocked(layer) || self.doc.find_shape(layer, id).is_none_or(|s| s.locked) {
+            return;
+        }
+        self.enter_group_item((layer, id));
+        self.delete_objects();
+    }
+
     /// Explicit outlining may discard live text; entering the Node tool must not.
     pub fn convert_object_to_path(&mut self, layer: usize, id: u64) {
         if !self.doc.layer_editable(layer)
@@ -68,7 +76,11 @@ impl Studio {
                     shapes
                         .iter()
                         .filter(|s| {
-                            s.visible && !s.locked && (!s.guide || self.doc.ruler.guides_visible)
+                            s.visible
+                                && !s.locked
+                                && (!s.guide
+                                    || (self.doc.ruler.guides_visible
+                                        && !self.doc.ruler.guides_locked))
                         })
                         .map(|s| (li, s.id))
                         .collect()
@@ -83,6 +95,7 @@ impl Studio {
 
     fn selected_objects(&mut self, objects: Vec<(usize, u64)>) {
         self.selected_layer = None;
+        self.individual_object = None;
         self.end_deform(true);
         self.reset_snap_gesture();
         self.selection = objects;

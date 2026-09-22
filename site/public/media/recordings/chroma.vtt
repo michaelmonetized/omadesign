@@ -1,0 +1,10 @@
+WEBVTT
+
+00:00:00.000 --> 00:00:06.000
+Compare and sample: Compare original and preview, then sample the key color.
+
+00:00:06.000 --> 00:00:11.000
+Apply and undo: Apply the key, undo and redo.
+
+00:00:11.000 --> 00:00:15.000
+Reopen preview: Reopen the chroma key preview and cancel.

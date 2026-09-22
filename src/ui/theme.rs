@@ -356,10 +356,28 @@ fn load_ui_font_bytes() -> Option<(String, Vec<u8>)> {
 }
 
 pub fn apply(ctx: &Context) {
+    apply_preferences(ctx, "");
+}
+
+pub fn apply_preferences(ctx: &Context, preferred: &str) {
     let pal = p();
 
     let mut fonts = FontDefinitions::default();
-    if let Some((name, bytes)) = load_ui_font_bytes() {
+    let selected = if preferred.is_empty() {
+        None
+    } else {
+        let path = Path::new(preferred);
+        let path = if path.is_file() {
+            Some(path.to_path_buf())
+        } else {
+            fc_file_for(preferred)
+        };
+        path.filter(|p| std::fs::metadata(p).is_ok_and(|m| m.len() <= 64 * 1024 * 1024))
+            .and_then(|p| std::fs::read(p).ok())
+            .filter(|bytes| ab_glyph::FontArc::try_from_vec(bytes.clone()).is_ok())
+            .map(|bytes| ("preferred-ui".to_string(), bytes))
+    };
+    if let Some((name, bytes)) = selected.or_else(load_ui_font_bytes) {
         fonts.font_data.insert(
             name.clone(),
             std::sync::Arc::new(FontData::from_owned(bytes)),

@@ -5,6 +5,7 @@ mod clipboard;
 mod clipboard_insert;
 mod cloud;
 pub mod deform;
+mod file_dialogs;
 mod file_io;
 mod guides;
 mod hierarchy_edit;
@@ -15,16 +16,19 @@ mod layout;
 mod layout_components;
 mod layout_edit;
 pub mod libraries;
-mod masking;
+pub(crate) mod masking;
 mod motion_presets;
 mod photo_session;
 mod placement;
 mod recovery;
+mod restart;
 pub(crate) mod selection;
 mod shortcuts;
 mod snapping;
+pub mod startup;
 mod tabs;
 mod typography;
+pub mod updates;
 
 pub use key_hints::{KeyHint, KeyHints};
 pub use photo_session::PhotoSession;
@@ -104,7 +108,8 @@ pub struct ObjSnap {
     pub rot: f32,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum WelcomePage {
     New,
     Templates,
@@ -119,6 +124,7 @@ pub enum PendingNav {
 
 pub enum Op {
     Create {
+        from_center: bool,
         kind: CreateKind,
         start: Pt,
         cur: Pt,
@@ -262,6 +268,9 @@ pub struct TypeEdit {
 }
 
 pub struct Studio {
+    pub show_preferences: bool,
+    pub updates: updates::Updates,
+    pub settings_page: u8,
     pub doc: Document,
     pub path: Option<PathBuf>,
     pub dirty: bool,
@@ -274,6 +283,7 @@ pub struct Studio {
     pub selection: Vec<(usize, u64)>,
     /// Explicit sidebar layer target, independent of its selected descendants.
     pub selected_layer: Option<u64>,
+    pub individual_object: Option<(usize, u64)>,
     pub active_layer: Option<usize>,
     pub history: History,
     pub style: Style,
@@ -282,8 +292,10 @@ pub struct Studio {
     pub fill_tolerance: f32,
     pub clone_source: Option<Pt>,
     pub pixel_sel: Option<Vec<u8>>,
+    pub pixel_sel_space: Option<masking::SelectionSpace>,
     pub pixel_sel_gen: u64,
     pub paint_mask: bool,
+    pub pending_item_mask: Option<masking::ItemMask>,
     pub snap: SnapSettings,
     pub snap_scene: Option<snap::Scene>,
     pub(crate) snap_points: Option<snapping::PointCache>,
@@ -377,6 +389,8 @@ pub struct Studio {
     pub pending_nav: Option<PendingNav>,
     pub allow_close: bool,
     pub welcome_page: WelcomePage,
+    pub startup_preferences: startup::Preferences,
+    startup_preferences_path: Option<PathBuf>,
     pub font_query: String,
     pub font_recents: Vec<String>,
     pub font_scroll_once: bool,
@@ -384,6 +398,8 @@ pub struct Studio {
     pub shape_rename: Option<(usize, u64, String)>,
     pub clipboard_rasters: Vec<Layer>,
     file_jobs: Vec<file_io::ImportJob>,
+    pending_open_files: std::collections::VecDeque<(PathBuf, bool)>,
+    file_dialog: Option<file_dialogs::FileDialogJob>,
     clipboard_jobs: Vec<clipboard::PasteJob>,
     pub show_import_notes: bool,
     pub transfer_notes: Vec<String>,
@@ -455,7 +471,11 @@ impl Studio {
             op: None,
             deformation: None,
             selection: vec![],
+            show_preferences: false,
+            updates: Default::default(),
+            settings_page: 0,
             selected_layer: None,
+            individual_object: None,
             active_layer: Some(1),
             history: History::default(),
             style: Style::default(),
@@ -464,8 +484,10 @@ impl Studio {
             fill_tolerance: 32.0,
             clone_source: None,
             pixel_sel: None,
+            pixel_sel_space: None,
             pixel_sel_gen: 0,
             paint_mask: false,
+            pending_item_mask: None,
             snap: SnapSettings::default(),
             snap_scene: None,
             snap_points: None,
@@ -559,6 +581,8 @@ impl Studio {
             pending_nav: None,
             allow_close: false,
             welcome_page: WelcomePage::New,
+            startup_preferences: startup::Preferences::default(),
+            startup_preferences_path: None,
             font_query: String::new(),
             font_recents: crate::project::load_font_recents(),
             font_scroll_once: true,
@@ -566,6 +590,8 @@ impl Studio {
             shape_rename: None,
             clipboard_rasters: vec![],
             file_jobs: vec![],
+            pending_open_files: Default::default(),
+            file_dialog: None,
             clipboard_jobs: vec![],
             show_import_notes: false,
             transfer_notes: vec![],
@@ -599,7 +625,7 @@ impl Studio {
 
     pub fn new_from_preset(&mut self, p: Preset) {
         let art = self.new_doc_artboards.max(1);
-        let doc = Document::new_with_options(
+        let mut doc = Document::new_with_options(
             p.name,
             p.w,
             p.h,
@@ -609,6 +635,7 @@ impl Studio {
             self.new_doc_bleed,
             self.new_doc_safe,
         );
+        doc.ruler.guides_locked = self.startup_preferences.guides_locked_by_default;
         crate::project::delete_swap(&self.swap_id);
         self.replace_active_tab(TabState::new(doc, None));
         let transp = if self.new_doc_transparent {
@@ -846,18 +873,17 @@ impl Studio {
             // A symmetric primitive keeps its canonical contour start/direction.
             // Preserve the compositor's actual contour when dashes need mirroring.
             let mut after = match &shape.geom {
-                Geom::Rect { origin, size, .. } if dashed => Geom::Poly {
-                    contours: vec![crate::geom::rounded_rect_corners(
-                        *origin,
-                        *size,
-                        shape.effective_corners(),
-                    )],
-                    winding: false,
-                },
-                Geom::Ellipse { .. } if dashed => Geom::Poly {
-                    contours: shape.geom.contours(96),
-                    winding: false,
-                },
+                Geom::Rect { .. } | Geom::Ellipse { .. } if dashed => {
+                    let mut path = shape.geom.to_path();
+                    if matches!(shape.geom, Geom::Rect { .. })
+                        && let Geom::Path { anchors, .. } = &mut path
+                    {
+                        for (a, r) in anchors.iter_mut().zip(shape.effective_corners()) {
+                            a.radius = r;
+                        }
+                    }
+                    path
+                }
                 // These primitives have no reflection parameter.
                 Geom::Polygon { .. } | Geom::Star { .. } => shape.geom.to_path(),
                 other => other.clone(),
@@ -1257,6 +1283,7 @@ impl Studio {
     }
 
     pub fn commit(&mut self, cmd: Cmd) {
+        crate::telemetry::count("feature.edit");
         self.end_pixel_stroke(false);
         self.end_deform(false);
         self.apply_with_layer_selection(&cmd);
@@ -1273,6 +1300,7 @@ impl Studio {
     }
 
     pub fn undo(&mut self) {
+        crate::telemetry::count("feature.undo");
         if self.persona == Persona::Photo {
             self.photo.undo();
             return;
@@ -1299,6 +1327,7 @@ impl Studio {
     }
 
     pub fn redo(&mut self) {
+        crate::telemetry::count("feature.redo");
         if self.persona == Persona::Photo {
             self.photo.redo();
             return;
@@ -1331,7 +1360,7 @@ impl Studio {
                 self.doc
                     .layers
                     .get(*li)
-                    .is_some_and(|l| l.kind.is_placed_raster())
+                    .is_some_and(|l| l.kind.pixels().is_some())
             } else {
                 self.doc.layers.get(*li).and_then(|l| l.find(*id)).is_some()
             }
@@ -1551,7 +1580,8 @@ impl Studio {
     }
 
     pub fn duplicate_selection(&mut self) {
-        self.duplicate_selection_by(Pt::new(16.0, 16.0));
+        crate::telemetry::count("feature.duplicate");
+        self.duplicate_selection_by(Pt::ZERO);
     }
 
     pub fn duplicate_selection_by(&mut self, delta: Pt) {
@@ -1559,7 +1589,88 @@ impl Studio {
         let mut commands = Vec::new();
         let mut new_layers = 0;
         let mut ids = self.selection.clone();
-        for (li, id) in self.selection.clone() {
+        let mut groups = Vec::new();
+        for &hit in &self.selection {
+            if self.individual_object == Some(hit) {
+                continue;
+            }
+            if let Some(root) = self.doc.layer_ancestors(hit.0).last().copied()
+                && !groups.contains(&root)
+                && self
+                    .selection_for_hit(hit)
+                    .iter()
+                    .all(|p| self.selection.contains(p))
+            {
+                groups.push(root);
+            }
+        }
+        let mut copied_group = None;
+        let mut duplicated_motion = self.doc.motion.clone();
+        for group in groups {
+            let tree = self.layer_tree_indices(group);
+            let layer_ids: HashMap<_, _> = tree
+                .iter()
+                .map(|&i| (self.doc.layers[i].id, crate::document::next_id()))
+                .collect();
+            let shape_ids: HashMap<_, _> = tree
+                .iter()
+                .flat_map(|&i| {
+                    self.doc.layers[i]
+                        .kind
+                        .shapes()
+                        .unwrap_or(&[])
+                        .iter()
+                        .map(|s| (s.id, crate::document::next_id()))
+                })
+                .collect();
+            for track in &self.doc.motion.tracks {
+                if let Some(&id) = shape_ids.get(&track.shape) {
+                    let mut copied = track.clone();
+                    copied.shape = id;
+                    duplicated_motion.tracks.push(copied);
+                }
+            }
+            for &i in &tree {
+                let mut layer = self.doc.layers[i].clone();
+                let index = self.doc.layers.len() + new_layers;
+                layer.id = layer_ids[&layer.id];
+                layer.parent = layer.parent.and_then(|p| layer_ids.get(&p).copied());
+                if i == group {
+                    layer.name = format!("{} copy", layer.name);
+                    copied_group = Some(layer.id);
+                }
+                if let Some(shapes) = layer.kind.shapes_mut() {
+                    for shape in shapes {
+                        let old = shape.id;
+                        shape.id = shape_ids[&old];
+                        crate::layout_components::remap_duplicate(shape, &shape_ids);
+                        shape.layout.parent =
+                            shape.layout.parent.and_then(|p| shape_ids.get(&p).copied());
+                        shape.geom.translate(delta);
+                        if self.selection.contains(&(i, old)) {
+                            selected.push((index, shape.id));
+                        }
+                    }
+                } else if let Some((origin, size, rotation)) = layer.kind.raster_xform() {
+                    layer.kind.set_raster_xform(origin + delta, size, rotation);
+                    if self.selection.contains(&(i, RASTER_ID)) {
+                        selected.push((index, RASTER_ID));
+                    }
+                }
+                if layer.kind.pixels().is_none() && layer.mask.is_some() {
+                    if layer.mask_size.x <= 0. || layer.mask_size.y <= 0. {
+                        let m = layer.mask.as_ref().unwrap();
+                        layer.mask_size = Pt::new(m.w as f32, m.h as f32);
+                    }
+                    layer.mask_origin += delta;
+                }
+                commands.push(Cmd::AddLayer { index, layer });
+                new_layers += 1;
+            }
+            ids.retain(|(li, _)| !tree.contains(li));
+        }
+        let standalone = ids.clone();
+        for (li, id) in standalone.clone() {
             for child in crate::layout::descendants(&self.doc, li, id) {
                 if !ids.contains(&(li, child)) {
                     ids.push((li, child));
@@ -1583,6 +1694,13 @@ impl Studio {
             .filter(|(_, id)| *id != RASTER_ID)
             .map(|(_, id)| (*id, crate::document::next_id()))
             .collect();
+        for track in &self.doc.motion.tracks {
+            if let Some(&id) = remap.get(&track.shape) {
+                let mut copied = track.clone();
+                copied.shape = id;
+                duplicated_motion.tracks.push(copied);
+            }
+        }
         for (li, id) in ids {
             if id == RASTER_ID {
                 if let Some(mut layer) = self.doc.layers.get(li).cloned() {
@@ -1611,8 +1729,19 @@ impl Studio {
             }
         }
         if !commands.is_empty() {
+            if duplicated_motion != self.doc.motion {
+                commands.push(Cmd::SetMotion {
+                    before: self.doc.motion.clone(),
+                    after: duplicated_motion,
+                });
+            }
             self.commit(Cmd::Batch(commands));
-            self.selected_layer = None;
+            self.selected_layer = if standalone.is_empty() {
+                copied_group
+            } else {
+                None
+            };
+            self.individual_object = None;
             self.selection = selected;
             self.status = format!("Duplicated {} objects", self.selection.len());
         }
@@ -2111,6 +2240,7 @@ impl Studio {
     }
 
     pub fn finish_create(&mut self, kind: CreateKind, start: Pt, cur: Pt) {
+        crate::telemetry::count("feature.create");
         let Some(li) = self.vector_target() else {
             return;
         };
@@ -2402,6 +2532,13 @@ impl Studio {
             return;
         }
         let mut after = s.geom.to_path();
+        if matches!(s.geom, Geom::Rect { .. })
+            && let Geom::Path { anchors, .. } = &mut after
+        {
+            for (a, radius) in anchors.iter_mut().zip(s.effective_corners()) {
+                a.radius = radius;
+            }
+        }
         let rot = s.rotation;
         after.preserve_rotation_pivot(s.geom.bbox().center(), rot);
         self.commit(Cmd::SetGeom {
@@ -2753,15 +2890,16 @@ impl Studio {
     }
 
     pub fn align_sel(&mut self, how: Align) {
+        crate::telemetry::count("feature.align");
         let ids = self.selection.clone();
-        let deltas = align::align_deltas(&self.doc, &ids, how);
+        let deltas = align::align_items(&self.doc, &ids, how, self.individual_object);
         self.apply_deltas(&deltas);
         self.status = "aligned".into();
     }
 
     pub fn distribute_sel(&mut self, how: Distribute) {
         let ids = self.selection.clone();
-        let deltas = align::distribute_deltas(&self.doc, &ids, how);
+        let deltas = align::distribute_items(&self.doc, &ids, how, self.individual_object);
         self.apply_deltas(&deltas);
         self.status = "distributed".into();
     }
@@ -2771,6 +2909,7 @@ impl Studio {
             return;
         }
         let mut items = Vec::new();
+        let mut commands = Vec::new();
         let mut deltas = deltas.to_vec();
         let mut included: HashSet<_> = deltas.iter().map(|(li, id, _)| (*li, *id)).collect();
         for (li, id, d) in deltas.clone() {
@@ -2781,7 +2920,17 @@ impl Studio {
             }
         }
         for (li, id, d) in &deltas {
-            if let Some(s) = self.doc.find_shape(*li, *id) {
+            if *id == RASTER_ID {
+                if let Some((origin, size, rotation)) =
+                    self.doc.layers.get(*li).and_then(|l| l.kind.raster_xform())
+                {
+                    commands.push(Cmd::SetRasterXform {
+                        layer: *li,
+                        before: (origin, size, rotation),
+                        after: (origin + *d, size, rotation),
+                    });
+                }
+            } else if let Some(s) = self.doc.find_shape(*li, *id) {
                 let before = s.geom.clone();
                 let mut after = before.clone();
                 after.translate(*d);
@@ -2790,7 +2939,10 @@ impl Studio {
             }
         }
         if !items.is_empty() {
-            self.commit(Cmd::SetGeoms { items });
+            commands.push(Cmd::SetGeoms { items });
+        }
+        if !commands.is_empty() {
+            self.commit(Cmd::Batch(commands));
         }
     }
 
@@ -2985,10 +3137,7 @@ impl Studio {
         self.end_deform(false);
         self.end_pixel_stroke(false);
         self.commit_type_edit();
-        if let Some(path) = crate::project::dialog_save(&self.doc.name) {
-            self.path = Some(path);
-            self.save();
-        }
+        self.choose_artwork_save_path();
     }
 
     pub fn current_is_blank(&self) -> bool {
@@ -3013,16 +3162,22 @@ impl Studio {
         } else {
             self.push_tab(tab);
         }
-        self.persona = if self.doc.layers.iter().any(|l| {
-            l.kind
-                .shapes()
-                .is_some_and(|s| s.iter().any(|s| s.layout.frame))
-        }) {
-            Persona::Layout
-        } else {
-            Persona::Design
+        self.persona = self.doc.workspace.unwrap_or_else(|| {
+            if self.doc.layers.iter().any(|l| {
+                l.kind
+                    .shapes()
+                    .is_some_and(|s| s.iter().any(|s| s.layout.frame))
+            }) {
+                Persona::Layout
+            } else {
+                Persona::Design
+            }
+        });
+        self.tool = match self.persona {
+            Persona::Pixel => Tool::Brush,
+            Persona::Photo => Tool::Hand,
+            _ => Tool::Select,
         };
-        self.tool = Tool::Select;
         if let Some(p) = path {
             self.remember_path(&p);
             self.status = format!("opened {}", p.display());
@@ -3047,7 +3202,7 @@ impl Studio {
     }
 
     pub fn eyedrop(&mut self, p: Pt) {
-        if self.persona == Persona::Pixel && self.sample_raster(p) {
+        if self.sample_raster(p) {
             return;
         }
         if let Some((_, id)) = self.doc.hit_test(p, 4.0 / self.view.scale.max(0.01)) {
@@ -3110,12 +3265,7 @@ impl Studio {
         self.end_deform(false);
         self.end_pixel_stroke(false);
         self.commit_type_edit();
-        let path = if let Some(p) = &self.path {
-            Some(p.clone())
-        } else {
-            crate::project::dialog_save(&self.doc.name)
-        };
-        if let Some(path) = path {
+        if let Some(path) = self.path.clone() {
             match self.save_document(&path) {
                 Ok(()) => {
                     self.remember_path(&path);
@@ -3123,11 +3273,16 @@ impl Studio {
                 }
                 Err(e) => self.status = format!("save failed: {e}"),
             }
+        } else {
+            self.choose_artwork_save_path();
         }
     }
 
     fn save_document(&mut self, path: &std::path::Path) -> Result<(), String> {
-        crate::project::save_to(&self.doc, path)?;
+        self.doc.workspace = Some(self.persona);
+        crate::project::save_to(&self.doc, path)
+            .inspect_err(|_| crate::telemetry::count("error.save"))?;
+        crate::telemetry::count("feature.save");
         self.path = Some(path.to_owned());
         self.dirty = false;
         // Manual saves supersede every recovery snapshot already in flight.
@@ -3137,95 +3292,91 @@ impl Studio {
     }
 
     pub fn open(&mut self) {
-        if let Some(path) = crate::project::dialog_open() {
-            self.open_path(path);
-        }
+        self.request_file_dialog(crate::project::dialog_open, |_, studio, path| {
+            studio.open_path(path);
+        });
     }
 
+    fn complete_export(&mut self, path: &std::path::Path, result: Result<Vec<u8>, String>) {
+        match result.and_then(|bytes| crate::formats::write_atomic(path, &bytes)) {
+            Ok(()) => {
+                crate::telemetry::count("feature.export");
+                self.status = format!("exported {}", path.display());
+            }
+            Err(error) => {
+                crate::telemetry::count("error.export");
+                self.status = format!("export failed: {error}");
+            }
+        }
+    }
     pub fn export_png(&mut self) {
         self.end_deform(false);
         self.end_pixel_stroke(false);
-        if let Some(path) = crate::project::dialog_export("PNG", "png") {
-            match compositor::export_png(&self.doc, self.export_scale) {
-                Ok(bytes) => {
-                    if let Err(e) = std::fs::write(&path, bytes) {
-                        self.status = format!("write failed: {e}");
-                    } else {
-                        self.status = format!("exported {}", path.display());
-                    }
-                }
-                Err(e) => self.status = format!("export failed: {e}"),
-            }
-        }
+        self.request_file_dialog(
+            || crate::project::dialog_export("PNG", "png"),
+            |_, studio, path| {
+                let result = compositor::export_png(&studio.doc, studio.export_scale);
+                studio.complete_export(&path, result);
+            },
+        );
     }
-
     pub fn export_jpeg(&mut self) {
         self.end_deform(false);
         self.end_pixel_stroke(false);
-        if let Some(path) = crate::project::dialog_export("JPEG", "jpg") {
-            match compositor::export_jpeg(&self.doc, self.export_scale, 90) {
-                Ok(bytes) => {
-                    let _ = std::fs::write(&path, bytes);
-                    self.status = format!("exported {}", path.display());
-                }
-                Err(e) => self.status = format!("export failed: {e}"),
-            }
-        }
+        self.request_file_dialog(
+            || crate::project::dialog_export("JPEG", "jpg"),
+            |_, studio, path| {
+                let result = compositor::export_jpeg(&studio.doc, studio.export_scale, 90);
+                studio.complete_export(&path, result);
+            },
+        );
     }
-
     pub fn export_svg(&mut self) {
         self.end_deform(false);
         self.end_pixel_stroke(false);
-        if let Some(path) = crate::project::dialog_export("SVG", "svg") {
-            match crate::svg::export(&self.doc) {
-                Ok(s) => {
-                    let _ = std::fs::write(&path, s);
-                    self.status = format!("exported {}", path.display());
-                }
-                Err(e) => self.status = format!("export failed: {e}"),
-            }
-        }
+        self.request_file_dialog(
+            || crate::project::dialog_export("SVG", "svg"),
+            |_, studio, path| {
+                let result = crate::svg::export(&studio.doc).map(String::into_bytes);
+                studio.complete_export(&path, result);
+            },
+        );
     }
-
     pub fn export_animated_svg(&mut self) {
         self.end_deform(false);
         self.end_pixel_stroke(false);
-        if let Some(path) = crate::project::dialog_export("Animated SVG", "svg") {
-            match crate::svg::export_animated(&self.doc) {
-                Ok(s) => {
-                    let _ = std::fs::write(&path, s);
-                    self.status = format!("exported {}", path.display());
-                }
-                Err(e) => self.status = format!("export failed: {e}"),
-            }
-        }
+        self.request_file_dialog(
+            || crate::project::dialog_export("Animated SVG", "svg"),
+            |_, studio, path| {
+                let result = crate::svg::export_animated(&studio.doc).map(String::into_bytes);
+                studio.complete_export(&path, result);
+            },
+        );
     }
-
     pub fn export_lottie(&mut self) {
         self.end_deform(false);
         self.end_pixel_stroke(false);
-        if let Some(path) = crate::project::dialog_export("Lottie JSON", "json") {
-            match motion::export_lottie(&self.doc) {
-                Ok(s) => {
-                    let _ = std::fs::write(&path, s);
-                    self.status = format!("exported {}", path.display());
-                }
-                Err(e) => self.status = format!("export failed: {e}"),
-            }
-        }
+        self.request_file_dialog(
+            || crate::project::dialog_export("Lottie JSON", "json"),
+            |_, studio, path| {
+                let result = motion::export_lottie(&studio.doc).map(String::into_bytes);
+                studio.complete_export(&path, result);
+            },
+        );
     }
 
     pub fn import_lottie(&mut self) {
-        let Some(path) = rfd::FileDialog::new()
-            .add_filter("Lottie", &["json", "lottie"])
-            .pick_file()
-        else {
-            return;
-        };
-        match std::fs::read_to_string(&path) {
-            Ok(s) => self.import_lottie_str(&s),
-            Err(e) => self.status = format!("read failed: {e}"),
-        }
+        self.request_file_dialog(
+            || {
+                rfd::FileDialog::new()
+                    .add_filter("Lottie", &["json", "lottie"])
+                    .pick_file()
+            },
+            |_, studio, path| match std::fs::read_to_string(&path) {
+                Ok(s) => studio.import_lottie_str(&s),
+                Err(e) => studio.status = format!("read failed: {e}"),
+            },
+        );
     }
 
     pub fn import_lottie_str(&mut self, json: &str) {
@@ -3272,10 +3423,9 @@ impl Studio {
     }
 
     pub fn begin_place(&mut self) {
-        let Some(path) = crate::project::dialog_place() else {
-            return;
-        };
-        self.load_place_path(&path);
+        self.request_file_dialog(crate::project::dialog_place, |_, studio, path| {
+            studio.load_place_path(&path);
+        });
     }
 
     pub fn load_place_path(&mut self, path: &std::path::Path) {
@@ -3283,7 +3433,7 @@ impl Studio {
     }
 
     pub fn ingest_dropped(&mut self, path: &std::path::Path, at: Option<Pt>) {
-        if self.pending_nav.is_some() {
+        if self.pending_nav.is_some() || self.file_dialog_pending() {
             return;
         }
         let ext = path
@@ -3485,6 +3635,7 @@ impl Studio {
             let stroke = match el.stroke {
                 crate::shape_browser::SvgPaint::None => None,
                 crate::shape_browser::SvgPaint::Solid(c) => Some(Stroke {
+                    alignment: crate::document::StrokeAlignment::Center,
                     gradient: None,
                     color: c,
                     width: el.stroke_width.max(0.25),
@@ -3494,6 +3645,7 @@ impl Studio {
                 }),
                 crate::shape_browser::SvgPaint::Unspecified if el.stroke_width > 0.05 => {
                     Some(Stroke {
+                        alignment: crate::document::StrokeAlignment::Center,
                         gradient: None,
                         color: Rgba::rgb(0, 0, 0),
                         width: el.stroke_width,
@@ -3662,7 +3814,11 @@ impl Studio {
 impl eframe::App for Studio {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
-        if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
+        if ctx.input(|i| i.viewport().close_requested())
+            && (self.file_dialog_pending() || self.updates.freezing)
+        {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        } else if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
             self.commit_type_edit();
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             if !self.libraries.close_requested {
@@ -3672,13 +3828,25 @@ impl eframe::App for Studio {
             self.libraries.close_requested = true;
             self.pending_nav = None;
         }
+        if self.updates.freezing {
+            crate::ui::run(ui, self);
+            return;
+        }
+        self.poll_file_dialog(&ctx);
+        if self.allow_close {
+            // A successful Save and Quit must not apply queued imports after
+            // the last document has been saved and the window has been closed.
+            return;
+        }
         self.poll_cloud(&ctx);
         self.poll_file_jobs(&ctx);
         self.poll_clipboard_jobs(&ctx);
         self.photo.poll(&ctx);
         crate::ui::photo::poll_jobs(&ctx, self);
         crate::ui::run(ui, self);
-        self.import_notes_window(&ctx);
+        if !self.file_dialog_pending() {
+            self.import_notes_window(&ctx);
+        }
     }
 }
 
@@ -4791,3 +4959,6 @@ mod layout_persona_tests {
         }));
     }
 }
+
+#[cfg(test)]
+mod qa_edges_tests;

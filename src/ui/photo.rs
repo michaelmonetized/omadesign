@@ -2,7 +2,7 @@ use crate::app::Studio;
 #[path = "photo_workflow.rs"]
 mod workflow;
 use crate::photo::{self, DevelopParams, HSL_NAMES, Histogram};
-use crate::ui::theme::{accent, accent_soft, bg_canvas, bg_extreme, bg_panel, fg_weak};
+use crate::ui::theme::{accent, bg_canvas, bg_extreme, bg_panel, fg_weak};
 use eframe::egui::{
     Align, Button, Color32, ColorImage, DragValue, Frame, Layout, Margin, PointerButton, Pos2,
     Rect, RichText, ScrollArea, Sense, Slider, Stroke, TextureOptions, Ui, pos2, vec2,
@@ -40,6 +40,7 @@ pub(crate) fn preset_library(ctx: &eframe::egui::Context, studio: &mut Studio) {
 }
 
 pub fn show(ui: &mut Ui, studio: &mut Studio) {
+    studio.photo.poll(ui.ctx());
     poll_jobs(ui.ctx(), studio);
     let before = studio.photo.selected().map(|image| {
         (
@@ -61,6 +62,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         .show(ui, |ui| {
             filmstrip(ui, studio);
         });
+    super::chrome::left_toolbar(ui, studio);
     eframe::egui::Panel::right("develop")
         .resizable(true)
         .default_size(288.0)
@@ -90,21 +92,6 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
 }
 
 fn upload_textures(ui: &mut Ui, studio: &mut Studio) {
-    // Thumbnails: only upload new ones when images are added
-    if studio.photo.thumbs.len() != studio.photo.images.len() {
-        studio.photo.thumbs.clear();
-        for (i, img) in studio.photo.images.iter().enumerate() {
-            let tex = ui.ctx().load_texture(
-                format!("thumb-{i}-{}", img.name),
-                ColorImage::from_rgba_unmultiplied(
-                    [img.thumb.w as usize, img.thumb.h as usize],
-                    &img.thumb.data,
-                ),
-                TextureOptions::LINEAR,
-            );
-            studio.photo.thumbs.push(tex);
-        }
-    }
     // Adjusted image: only re-upload when sel_version changes
     if studio.photo.built_version != studio.photo.sel_version {
         if let Some(adj) = &studio.photo.adjusted {
@@ -156,15 +143,15 @@ fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
             ui.menu_button("···", |ui| {
                 if ui.button("Open photo or settings…").clicked() {
                     ui.close();
-                    if let Some(path) = crate::project::dialog_photo() {
+                    studio.request_file_dialog(crate::project::dialog_photo, |_, studio, path| {
                         studio.photo.import_file(&path);
-                    }
+                    });
                 }
                 if ui.button("Browse folder…").clicked() {
                     ui.close();
-                    if let Some(path) = crate::project::dialog_folder() {
+                    studio.request_file_dialog(crate::project::dialog_folder, |_, studio, path| {
                         studio.photo.set_folder(&path.to_string_lossy());
-                    }
+                    });
                 }
                 if ui.button("Load samples").clicked() {
                     ui.close();
@@ -201,31 +188,12 @@ fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
             }
         });
     }
-    if !studio.photo.folder_files.is_empty() {
-        ui.add_space(8.0);
-        ui.add(
-            eframe::egui::Label::new(RichText::new(&studio.photo.folder).small().color(fg_weak()))
-                .truncate(),
-        );
-        ScrollArea::vertical()
-            .id_salt("photo-folder")
-            .max_height(140.0)
-            .show(ui, |ui| {
-                for index in 0..studio.photo.folder_files.len() {
-                    let (name, _) = &studio.photo.folder_files[index];
-                    if ui
-                        .add(
-                            eframe::egui::Label::new(name)
-                                .truncate()
-                                .sense(Sense::click()),
-                        )
-                        .clicked()
-                    {
-                        let path = studio.photo.folder_files[index].1.clone();
-                        studio.photo.import_file(std::path::Path::new(&path));
-                    }
-                }
-            });
+    if studio.photo.gallery.is_loading() {
+        let (done, total) = studio.photo.gallery.progress();
+        ui.horizontal(|ui| {
+            ui.spinner();
+            ui.label(RichText::new(format!("{done} / {total} previews")).small());
+        });
     }
     ui.add_space(12.0);
     ui.add_enabled_ui(!studio.photo.is_batching(), |ui| {
@@ -255,68 +223,161 @@ fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
         });
     });
     ui.add_space(4.0);
+    library_cards(ui, studio);
+}
+
+#[derive(Clone, Copy)]
+enum LibraryCard {
+    Open(usize),
+    Folder(usize, Option<usize>),
+}
+
+fn library_cards(ui: &mut Ui, studio: &mut Studio) {
+    use std::collections::{BTreeMap, BTreeSet};
+    let loaded = studio
+        .photo
+        .images
+        .iter()
+        .enumerate()
+        .filter_map(|(index, image)| {
+            Some((image.source.as_ref()?.to_string_lossy().into_owned(), index))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let folder_paths = studio
+        .photo
+        .folder_files
+        .iter()
+        .map(|(_, path)| path.as_str())
+        .collect::<BTreeSet<_>>();
+    let mut cards = studio
+        .photo
+        .images
+        .iter()
+        .enumerate()
+        .filter_map(|(index, image)| {
+            let in_folder = image.source.as_ref().is_some_and(|source| {
+                let path = source.to_string_lossy();
+                folder_paths.contains(path.as_ref()) && loaded.get(path.as_ref()) == Some(&index)
+            });
+            (!in_folder).then_some(LibraryCard::Open(index))
+        })
+        .collect::<Vec<_>>();
+    cards.extend(
+        studio
+            .photo
+            .folder_files
+            .iter()
+            .enumerate()
+            .map(|(index, (_, path))| LibraryCard::Folder(index, loaded.get(path).copied())),
+    );
+    let mut visible_open = BTreeSet::new();
+    let mut visible_folder = BTreeSet::new();
+    let row_height = (ui.available_width() * 0.75).max(64.0);
     ScrollArea::vertical()
         .id_salt("photo-library")
-        .show(ui, |ui| {
-            for i in 0..studio.photo.images.len() {
-                let selected = studio.photo.selection.contains(&i);
-                let active = studio.photo.selected == Some(i);
-                let width = ui.available_width();
-                let row = Frame::new()
-                    .fill(if selected {
-                        accent_soft()
-                    } else {
-                        Color32::TRANSPARENT
-                    })
-                    .stroke(Stroke::new(
-                        1.0,
-                        if active {
-                            accent()
+        .auto_shrink([false, false])
+        .show_rows(ui, row_height, cards.len(), |ui, range| {
+            for row_index in range {
+                let card = cards[row_index];
+                let opened = match card {
+                    LibraryCard::Open(index) => Some(index),
+                    LibraryCard::Folder(_, opened) => opened,
+                };
+                let texture = if let Some(index) = opened {
+                    visible_open.insert(index);
+                    let image = &studio.photo.images[index];
+                    if studio
+                        .photo
+                        .thumbs
+                        .get(&index)
+                        .is_none_or(|(_, params)| *params != image.develop)
+                    {
+                        let pixels = image.render_thumbnail(256);
+                        let color = ColorImage::from_rgba_unmultiplied(
+                            [pixels.w as usize, pixels.h as usize],
+                            &pixels.data,
+                        );
+                        if let Some((texture, params)) = studio.photo.thumbs.get_mut(&index) {
+                            texture.set(color, TextureOptions::LINEAR);
+                            *params = image.develop.clone();
                         } else {
-                            Color32::TRANSPARENT
-                        },
-                    ))
-                    .corner_radius(7.0)
-                    .inner_margin(Margin::same(6))
-                    .show(ui, |ui| {
-                        ui.set_width((width - 12.0).max(40.0));
-                        ui.horizontal(|ui| {
-                            if let Some(tex) = studio.photo.thumbs.get(i) {
-                                let source = tex.size_vec2();
-                                let scale = (52.0 / source.x).min(40.0 / source.y);
-                                ui.allocate_ui(vec2(52.0, 40.0), |ui| {
-                                    ui.centered_and_justified(|ui| {
-                                        ui.image((tex.id(), source * scale))
-                                    });
-                                });
-                            }
-                            let img = &studio.photo.images[i];
-                            ui.vertical(|ui| {
-                                ui.spacing_mut().item_spacing.y = 3.0;
-                                ui.add(
-                                    eframe::egui::Label::new(RichText::new(&img.name).size(11.0))
-                                        .truncate(),
-                                );
-                                ui.label(
-                                    RichText::new(format!(
-                                        "{} × {}{}",
-                                        img.dimensions().0,
-                                        img.dimensions().1,
-                                        if active { " · Active" } else { "" }
-                                    ))
-                                    .size(10.0)
-                                    .color(fg_weak()),
-                                );
-                            });
-                        });
-                    })
-                    .response
-                    .interact(Sense::click())
-                    .on_hover_text(format!(
-                        "{}\nCtrl-click to toggle · Shift-click for a range",
-                        studio.photo.images[i].name
-                    ));
-                let press_id = ui.id().with(("photo-selection-press", i));
+                            let texture = ui.ctx().load_texture(
+                                format!("live-photo-{index}"),
+                                color,
+                                TextureOptions::LINEAR,
+                            );
+                            studio
+                                .photo
+                                .thumbs
+                                .insert(index, (texture, image.develop.clone()));
+                        }
+                    }
+                    studio
+                        .photo
+                        .thumbs
+                        .get(&index)
+                        .map(|(texture, _)| (texture.id(), texture.size_vec2()))
+                } else if let LibraryCard::Folder(index, _) = card {
+                    visible_folder.insert(index);
+                    studio
+                        .photo
+                        .gallery
+                        .texture(ui.ctx(), index)
+                        .map(|texture| (texture.id(), texture.size_vec2()))
+                } else {
+                    None
+                };
+                let (name, error) = match card {
+                    LibraryCard::Open(index) => (studio.photo.images[index].name.clone(), None),
+                    LibraryCard::Folder(index, _) => (
+                        studio.photo.folder_files[index].0.clone(),
+                        studio
+                            .photo
+                            .gallery
+                            .previews
+                            .get(index)
+                            .and_then(|preview| preview.error.clone()),
+                    ),
+                };
+                let (rect, response) =
+                    ui.allocate_exact_size(vec2(ui.available_width(), row_height), Sense::click());
+                let active = opened.is_some_and(|index| studio.photo.selected == Some(index));
+                let selected = opened.is_some_and(|index| studio.photo.selection.contains(&index));
+                ui.painter().rect_filled(rect, 4.0, bg_extreme());
+                if let Some((texture, size)) = texture {
+                    // Fill the sidebar's full width; crop only this small card,
+                    // keeping the image's own framing and crop untouched.
+                    let scale = (rect.width() / size.x).max(rect.height() / size.y);
+                    let uv_size = rect.size() / (size * scale);
+                    let uv = Rect::from_center_size(pos2(0.5, 0.5), uv_size);
+                    ui.painter().image(texture, rect, uv, Color32::WHITE);
+                } else if error.is_some() {
+                    ui.painter().text(
+                        rect.center(),
+                        eframe::egui::Align2::CENTER_CENTER,
+                        "Preview unavailable",
+                        eframe::egui::FontId::proportional(11.0),
+                        fg_weak(),
+                    );
+                } else {
+                    ui.put(
+                        Rect::from_center_size(rect.center(), vec2(20.0, 20.0)),
+                        eframe::egui::Spinner::new(),
+                    );
+                }
+                if selected || active {
+                    ui.painter().rect_stroke(
+                        rect.shrink(1.0),
+                        4.0,
+                        Stroke::new(if active { 3.0 } else { 2.0 }, accent()),
+                        eframe::egui::StrokeKind::Inside,
+                    );
+                }
+                let response = response.on_hover_text(match error {
+                    Some(error) => format!("{name}\n{error}\nClick to try opening the photo"),
+                    None => format!("{name}\nCtrl-click to toggle · Shift-click for a range"),
+                });
+                let press_id = ui.id().with(("photo-selection-press", row_index));
                 if let Some(modifiers) = ui.input(|input| {
                     input.events.iter().find_map(|event| match event {
                         eframe::egui::Event::PointerButton {
@@ -324,24 +385,40 @@ fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
                             button: PointerButton::Primary,
                             pressed: true,
                             modifiers,
-                        } if row.rect.contains(*pos) => Some(*modifiers),
+                        } if rect.contains(*pos) => Some(*modifiers),
                         _ => None,
                     })
                 }) {
                     ui.data_mut(|data| data.insert_temp(press_id, modifiers));
                 }
-                if row.clicked() {
+                if response.clicked() && !studio.photo.is_batching() {
                     let modifiers = ui
                         .data_mut(|data| data.remove_temp::<eframe::egui::Modifiers>(press_id))
                         .unwrap_or_else(|| ui.input(|input| input.modifiers));
-                    studio.photo.select_with(
-                        i,
-                        modifiers.command || modifiers.ctrl,
-                        modifiers.shift,
-                    );
+                    if let Some(index) = opened {
+                        studio.photo.select_with(
+                            index,
+                            modifiers.command || modifiers.ctrl,
+                            modifiers.shift,
+                        );
+                    } else if let LibraryCard::Folder(index, _) = card {
+                        let path = studio.photo.folder_files[index].1.clone();
+                        studio.photo.import_file(std::path::Path::new(&path));
+                    }
                 }
             }
         });
+    // Only visible cards own GPU textures; the folder's small CPU previews stay
+    // available as the user scrolls, without retaining decoded full sources.
+    studio
+        .photo
+        .thumbs
+        .retain(|index, _| visible_open.contains(index));
+    studio
+        .photo
+        .gallery
+        .textures
+        .retain(|index, _| visible_folder.contains(index));
 }
 
 fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
@@ -812,16 +889,18 @@ pub(crate) fn export_developed(ctx: &eframe::egui::Context, studio: &mut Studio,
     let Some(img) = studio.photo.selected().cloned() else {
         return;
     };
-    let Some(path) = crate::project::dialog_export(&extension.to_ascii_uppercase(), extension)
-    else {
-        return;
-    };
-    studio.photo.status = "Exporting full-resolution photo…".into();
-    studio.photo.clear_save_error();
-    super::jobs::start(ctx, "photo-export", move || {
-        img.export_to(&path)?;
-        Ok(path)
-    });
+    let extension = extension.to_owned();
+    studio.request_file_dialog(
+        move || crate::project::dialog_export(&extension.to_ascii_uppercase(), &extension),
+        move |ctx, studio, path| {
+            studio.photo.status = "Exporting full-resolution photo…".into();
+            studio.photo.clear_save_error();
+            super::jobs::start(ctx, "photo-export", move || {
+                img.export_to(&path)?;
+                Ok(path)
+            });
+        },
+    );
 }
 
 #[cfg(test)]
@@ -857,6 +936,63 @@ mod tests {
     }
 
     #[test]
+    fn library_cards_are_full_width_live_images_without_filename_labels() {
+        let ctx = Context::default();
+        let mut studio = Studio::new();
+        for index in 0..100 {
+            studio.photo.import_image(
+                format!("filename-{index}.png"),
+                photo::RgbaImage::new(8, 6, [64, 96, 128, 255].repeat(48)).unwrap(),
+            );
+        }
+        let draw = |studio: &mut Studio| {
+            ctx.run_ui(
+                RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(280.0, 600.0))),
+                    ..Default::default()
+                },
+                |ui| library_cards(ui, studio),
+            )
+        };
+        let mut first = draw(&mut studio);
+        first.textures_delta.clear();
+        assert!(
+            studio.photo.thumbs.len() < 8,
+            "only visible cards need textures"
+        );
+        let texture = studio.photo.thumbs[&0].0.id();
+        let bounds = first
+            .shapes
+            .iter()
+            .find_map(|shape| match &shape.shape {
+                eframe::egui::Shape::Mesh(mesh) if mesh.texture_id == texture => {
+                    Some(mesh.calc_bounds())
+                }
+                _ => None,
+            })
+            .unwrap();
+        assert!(bounds.width() > 250.0);
+        assert!(bounds.height() > 180.0);
+        assert!(!first.shapes.iter().any(|shape| matches!(
+            &shape.shape,
+            eframe::egui::Shape::Text(text) if text.galley.job.text.contains("filename-")
+        )));
+        studio.photo.images[0].develop.exposure = 1.0;
+        studio.photo.images[0].develop.rotate = 90;
+        let mut changed = draw(&mut studio);
+        let texture_updated = changed
+            .textures_delta
+            .set
+            .iter()
+            .any(|(id, _)| *id == texture);
+        changed.textures_delta.clear();
+        assert_eq!(studio.photo.thumbs[&0].0.id(), texture);
+        assert_eq!(studio.photo.thumbs[&0].1.exposure, 1.0);
+        assert_eq!(studio.photo.thumbs[&0].0.size(), [6, 8]);
+        assert!(texture_updated);
+    }
+
+    #[test]
     fn library_selection_and_paste_dialog_apply_once_and_keep_framing() {
         use std::collections::HashMap;
         fn show_frame(
@@ -888,8 +1024,20 @@ mod tests {
                 }
             }
             let mut result = HashMap::new();
-            for shape in output.shapes {
+            for shape in &output.shapes {
                 collect(&shape.shape, &mut result);
+                if let eframe::egui::Shape::Mesh(mesh) = &shape.shape {
+                    for (index, (texture, _)) in &studio.photo.thumbs {
+                        if mesh.texture_id == texture.id() {
+                            // Filenames belong in tooltips; use each visible live
+                            // thumbnail to locate its selection target instead.
+                            result.insert(
+                                studio.photo.images[*index].name.clone(),
+                                mesh.calc_bounds(),
+                            );
+                        }
+                    }
+                }
             }
             output.textures_delta.clear();
             result

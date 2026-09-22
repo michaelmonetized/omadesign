@@ -107,20 +107,20 @@ fn clip_working(
         return;
     };
     if let Some(original) = original {
-        paint::restrict_pixmap(buf, original, sel);
+        paint::restrict_pixmap(buf, original, &sel);
         return;
     }
     if let Some(original) =
         crate::document::Pixels::from_rgba(buf.width(), buf.height(), before.to_vec())
             .and_then(|pixels| pixels.to_pixmap())
     {
-        paint::restrict_pixmap(buf, &original, sel);
+        paint::restrict_pixmap(buf, &original, &sel);
     }
 }
 
 fn clip_overlay(studio: &Studio, layer: usize, buf: &mut tiny_skia::Pixmap) {
     if let Some(sel) = studio.pixel_sel_mask(layer) {
-        paint::clip_overlay(buf, sel);
+        paint::clip_overlay(buf, &sel);
     }
 }
 
@@ -198,7 +198,7 @@ pub(super) fn start_clone(studio: &mut Studio, world: Pt) {
     if let Some(original) = &original
         && let Some(sel) = studio.pixel_sel_mask(layer)
     {
-        paint::restrict_pixmap(&mut buf, original, sel);
+        paint::restrict_pixmap(&mut buf, original, &sel);
     }
     publish(studio, layer, false, &buf);
     studio.op = Some(Op::Clone {
@@ -445,7 +445,7 @@ pub(super) fn smudge_drag(studio: &mut Studio, world: Pt) {
         if let Some(original) = &original
             && let Some(sel) = studio.pixel_sel_mask(layer)
         {
-            paint::restrict_pixmap(&mut buf, original, sel);
+            paint::restrict_pixmap(&mut buf, original, &sel);
         }
         publish(studio, layer, false, &buf);
     }
@@ -482,7 +482,7 @@ pub(super) fn clone_drag(studio: &mut Studio, world: Pt) {
         if let Some(original) = &original
             && let Some(sel) = studio.pixel_sel_mask(layer)
         {
-            paint::restrict_pixmap(&mut buf, original, sel);
+            paint::restrict_pixmap(&mut buf, original, &sel);
         }
         publish(studio, layer, false, &buf);
     }

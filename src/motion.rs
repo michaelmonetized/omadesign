@@ -563,9 +563,16 @@ pub fn export_lottie(doc: &Document) -> Result<String, String> {
             .rev()
             .filter(|shape| shape.visible && !shape.guide)
         {
-            if shape.filters.active() {
+            if shape.filters.active()
+                || shape.mask.is_some()
+                || shape
+                    .style
+                    .stroke
+                    .as_ref()
+                    .is_some_and(|s| s.alignment != crate::document::StrokeAlignment::Center)
+            {
                 return Err(
-                    "Lottie cannot preserve object effects here. Export animated SVG to keep them."
+                    "Lottie cannot preserve object masks, aligned strokes or effects here. Export animated SVG to keep them."
                         .into(),
                 );
             }
@@ -1087,6 +1094,7 @@ fn layer_geom(layer: &Value) -> Option<(Geom, Fill, Option<Stroke>)> {
                             .unwrap_or(2.0);
                         let a = js_f32(&it["o"]["k"]).unwrap_or(100.0) / 100.0;
                         *stroke = Some(Stroke {
+                            alignment: crate::document::StrokeAlignment::Center,
                             gradient: None,
                             color: Rgba::new(c.r, c.g, c.b, (a * 255.0).round() as u8),
                             width: w,

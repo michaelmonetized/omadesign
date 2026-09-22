@@ -88,6 +88,7 @@ impl State {
             matrix,
             fill: Rgba::BLACK,
             stroke: Stroke {
+                alignment: crate::document::StrokeAlignment::Center,
                 gradient: None,
                 color: Rgba::BLACK,
                 width: 1.,

@@ -53,6 +53,10 @@ if [ ! -f "$DIR/install.sh" ] || [ -L "$DIR/install.sh" ]; then
   exit 1
 fi
 cd "$DIR"
-./install.sh
+if [ -n "${OMADESIGN_INSTALL_PREFIX:-}" ]; then
+  ./install.sh --prefix "$OMADESIGN_INSTALL_PREFIX"
+else
+  ./install.sh
+fi
 echo
-echo "omadesign ${VER} is at ~/.local/bin/omadesign"
+echo "omadesign ${VER} is installed"

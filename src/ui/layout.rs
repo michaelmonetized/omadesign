@@ -2,7 +2,7 @@
 use super::theme::{accent, bg_panel, fg_weak};
 use crate::app::Studio;
 use crate::document::Cmd;
-use crate::geom::{Geom, Pt, TextAlign};
+use crate::geom::{Geom, TextAlign};
 use crate::layout::{
     AutoStack, Constraint, Sizing, StackAlign, StackAxis, StackFlow, StackJustify,
 };
@@ -83,20 +83,26 @@ pub fn inspector(ui: &mut Ui, studio: &mut Studio) {
                     "Choose image…"
                 })
                 .clicked()
-                && let Some(path) = rfd::FileDialog::new()
-                    .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "tiff"])
-                    .pick_file()
             {
                 let document = studio.swap_id.clone();
-                super::jobs::start(ui.ctx(), "layout-image-load", move || {
-                    let image = crate::layout_images::load(&path)?;
-                    Ok(LoadedImage {
-                        document,
-                        layer,
-                        id,
-                        image,
-                    })
-                });
+                studio.request_file_dialog(
+                    || {
+                        rfd::FileDialog::new()
+                            .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "tiff"])
+                            .pick_file()
+                    },
+                    move |ctx, _, path| {
+                        super::jobs::start(ctx, "layout-image-load", move || {
+                            let image = crate::layout_images::load(&path)?;
+                            Ok(LoadedImage {
+                                document,
+                                layer,
+                                id,
+                                image,
+                            })
+                        });
+                    },
+                );
             }
             if let Some(image) = &mut props.image {
                 ui.horizontal(|ui| {
@@ -483,6 +489,9 @@ struct LoadedImage {
     image: crate::layout_images::ImageFill,
 }
 pub fn poll_image(ctx: &egui::Context, studio: &mut Studio) {
+    if studio.file_dialog_pending() {
+        return;
+    }
     if let Some(result) = super::jobs::poll::<LoadedImage>(ctx, "layout-image-load") {
         match result {
             Ok(image) if image.document == studio.swap_id => {
@@ -684,8 +693,36 @@ fn layer_row(
         .inner;
     rows.push((super::layer_drag::TreeRow::Layer(li), row.rect));
     if row.clicked() || super::layer_drag::source(&row, studio, li) {
-        studio.activate_layer_tree(li);
-        studio.tool = Tool::Select;
+        if !studio.apply_pending_item_mask(li, None) {
+            let previous = ui
+                .input(|i| i.modifiers.shift)
+                .then(|| studio.selection.clone());
+            studio.activate_layer_tree(li);
+            if let Some(previous) = previous {
+                for item in previous {
+                    if !studio.selection.contains(&item) {
+                        studio.selection.push(item);
+                    }
+                }
+            }
+            studio.tool = Tool::Select;
+        }
+    }
+    row.context_menu(|ui| {
+        if ui.button("Mask from item…").clicked() {
+            studio.begin_item_mask(li, None);
+            ui.close();
+        }
+        if ui
+            .add_enabled(studio.layer_unlocked(li), egui::Button::new("Delete layer"))
+            .clicked()
+        {
+            studio.delete_layer_tree(li);
+            ui.close();
+        }
+    });
+    if li >= studio.doc.layers.len() {
+        return;
     }
     if open {
         if is_group {
@@ -775,16 +812,27 @@ fn tree_row(
         })
         .inner;
     rows.push((super::layer_drag::TreeRow::Object(li, id), row.rect));
-    if row.clicked() || (super::layer_drag::object_source(&row, studio, li, id) && !selected) {
-        if !ui.input(|i| i.modifiers.shift) {
-            studio.selection.clear();
+    if row.double_clicked() {
+        studio.enter_group_item((li, id));
+    } else if row.clicked() || (super::layer_drag::object_source(&row, studio, li, id) && !selected)
+    {
+        if !studio.apply_pending_item_mask(li, Some(id)) {
+            let hits = studio.selection_for_hit((li, id));
+            if studio.individual_object != Some((li, id)) {
+                studio.individual_object = None;
+            }
+            if !ui.input(|i| i.modifiers.shift) {
+                studio.selection.clear();
+            }
+            for hit in hits {
+                if !studio.selection.contains(&hit) {
+                    studio.selection.push(hit);
+                }
+            }
+            studio.active_layer = Some(li);
+            studio.selected_layer = None;
+            studio.tool = Tool::Select;
         }
-        if !selected || studio.selection.is_empty() {
-            studio.selection.push((li, id));
-        }
-        studio.active_layer = Some(li);
-        studio.selected_layer = None;
-        studio.tool = Tool::Select;
     }
     row.context_menu(|ui| {
         if ui.button("Select").clicked() {
@@ -806,12 +854,25 @@ fn tree_row(
         }
         if ui.button("Duplicate").clicked() {
             studio.selection = vec![(li, id)];
-            studio.duplicate_selection_by(Pt::new(32.0, 32.0));
+            studio.duplicate_selection();
             ui.close();
         }
-        if ui.button("Delete").clicked() {
-            studio.selection = vec![(li, id)];
-            studio.delete_selection();
+        if ui.button("Mask from item…").clicked() {
+            studio.begin_item_mask(li, Some(id));
+            ui.close();
+        }
+        if ui
+            .add_enabled(
+                studio.pixel_sel.is_some(),
+                egui::Button::new("Mask from selection"),
+            )
+            .clicked()
+        {
+            studio.mask_object_from_selection(li, id);
+            ui.close();
+        }
+        if ui.button("Delete object").clicked() {
+            studio.delete_object_item(li, id);
             ui.close();
         }
     });

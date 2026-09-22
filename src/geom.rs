@@ -534,114 +534,101 @@ fn star_pts(center: Pt, outer: Pt, inner: f32, points: u32) -> Vec<Pt> {
     pts
 }
 
-fn path_pts(anchors: &[Anchor], closed: bool) -> Vec<Pt> {
-    if anchors.is_empty() {
+/// Cubic segments shared by rendering, hit testing and SVG export. Rounded
+/// nodes add their own tangent arc between the incoming and outgoing edges.
+pub fn path_cubics(anchors: &[Anchor], closed: bool) -> Vec<[Pt; 4]> {
+    let n = anchors.len();
+    if n < 2 {
         return vec![];
     }
-    if anchors.len() == 1 {
-        return vec![anchors[0].pt];
-    }
-    let n = anchors.len();
-    let mut pts = Vec::new();
-    let segs = if closed { n } else { n - 1 };
-    for i in 0..segs {
-        let (a_pt, a_out) = filleted_out(anchors, closed, i);
-        let (b_pt, b_in) = filleted_in(anchors, closed, (i + 1) % n);
-        if i == 0 {
-            pts.push(a_pt);
+    let rounded = |i: usize| -> Option<(Pt, Pt, f32)> {
+        let a = anchors[i];
+        if a.radius <= 0.0 || (!closed && (i == 0 || i + 1 == n)) {
+            return None;
         }
-        if a_out.length_sq() < 0.01 && b_in.length_sq() < 0.01 {
-            if (b_pt - *pts.last().unwrap_or(&a_pt)).length_sq() > 0.01 {
-                pts.push(b_pt);
-            }
+        let prev = anchors[(i + n - 1) % n].pt;
+        let next = anchors[(i + 1) % n].pt;
+        let incoming = if a.h_in.length_sq() > 0.01 {
+            a.h_in.normalized()
         } else {
-            flatten_cubic(a_pt, a_pt + a_out, b_pt + b_in, b_pt, &mut pts);
-        }
-    }
-    pts
-}
-
-fn filleted_out(anchors: &[Anchor], closed: bool, i: usize) -> (Pt, Pt) {
-    let a = &anchors[i];
-    if a.radius < 0.5 || !a.is_corner() {
-        return (a.pt, a.h_out);
-    }
-    let n = anchors.len();
-    let prev = if i == 0 {
-        if closed {
-            anchors[n - 1].pt
+            (prev - a.pt).normalized()
+        };
+        let outgoing = if a.h_out.length_sq() > 0.01 {
+            a.h_out.normalized()
         } else {
-            return (a.pt, a.h_out);
+            (next - a.pt).normalized()
+        };
+        let angle = incoming.dot(outgoing).clamp(-1.0, 1.0).acos();
+        if angle < 0.001 || angle > std::f32::consts::PI - 0.001 {
+            return None;
         }
-    } else {
-        anchors[i - 1].pt
+        let tangent = (angle * 0.5).tan();
+        let distance = (a.radius / tangent)
+            .min((prev - a.pt).length() * 0.45)
+            .min((next - a.pt).length() * 0.45);
+        let radius = distance * tangent;
+        let handle = 4.0 / 3.0 * ((std::f32::consts::PI - angle) / 4.0).tan() * radius;
+        Some((
+            a.pt + incoming * distance,
+            a.pt + outgoing * distance,
+            handle,
+        ))
     };
-    let next = anchors[(i + 1) % n].pt;
-    let (p1, p2) = fillet_pts(prev, a.pt, next, a.radius);
-    (p1, p2 - p1)
-}
-
-fn filleted_in(anchors: &[Anchor], closed: bool, i: usize) -> (Pt, Pt) {
-    let a = &anchors[i];
-    if a.radius < 0.5 || !a.is_corner() {
-        return (a.pt, a.h_in);
+    let mut segments = Vec::new();
+    for i in 0..if closed { n } else { n - 1 } {
+        let j = (i + 1) % n;
+        let a = anchors[i];
+        let b = anchors[j];
+        let ra = rounded(i);
+        let rb = rounded(j);
+        let start = ra.map_or(a.pt, |v| v.1);
+        let end = rb.map_or(b.pt, |v| v.0);
+        let out = if ra.is_some() { Pt::ZERO } else { a.h_out };
+        let hin = if rb.is_some() { Pt::ZERO } else { b.h_in };
+        segments.push([start, start + out, end + hin, end]);
+        if let Some((entry, exit, handle)) = rb {
+            segments.push([
+                entry,
+                entry + (b.pt - entry).normalized() * handle,
+                exit + (b.pt - exit).normalized() * handle,
+                exit,
+            ]);
+        }
     }
-    let n = anchors.len();
-    let prev = if i == 0 {
-        if closed {
-            anchors[n - 1].pt
-        } else {
-            return (a.pt, a.h_in);
-        }
-    } else {
-        anchors[i - 1].pt
-    };
-    let next = if i + 1 >= n {
-        if closed {
-            anchors[0].pt
-        } else {
-            return (a.pt, a.h_in);
-        }
-    } else {
-        anchors[i + 1].pt
-    };
-    let (p1, p2) = fillet_pts(prev, a.pt, next, a.radius);
-    (p2, p1 - p2)
+    segments
 }
 
-fn fillet_pts(prev: Pt, corner: Pt, next: Pt, radius: f32) -> (Pt, Pt) {
-    let vin = corner - prev;
-    let vout = next - corner;
-    let lin = vin.length().max(1e-6);
-    let lout = vout.length().max(1e-6);
-    let r = radius.min(lin * 0.45).min(lout * 0.45);
-    (corner - vin * (r / lin), corner + vout * (r / lout))
+fn path_pts(anchors: &[Anchor], closed: bool) -> Vec<Pt> {
+    let segments = path_cubics(anchors, closed);
+    let Some(first) = segments.first() else {
+        return anchors.iter().map(|a| a.pt).collect();
+    };
+    let mut points = vec![first[0]];
+    for [a, c1, c2, b] in segments {
+        if (c1 - a).length_sq() < 0.01 && (c2 - b).length_sq() < 0.01 {
+            points.push(b);
+        } else {
+            flatten_cubic(a, c1, c2, b, &mut points);
+        }
+    }
+    points
 }
 
-/// SVG `d` that keeps cubics (`C`) instead of flattening to lines.
+/// SVG `d` retains the same cubic geometry used by the native renderer.
 pub fn path_svg_d(anchors: &[Anchor], closed: bool) -> String {
-    if anchors.is_empty() {
+    let segments = path_cubics(anchors, closed);
+    let Some(first) = segments.first() else {
         return String::new();
-    }
-    let mut d = format!("M {:.3} {:.3}", anchors[0].pt.x, anchors[0].pt.y);
-    let n = anchors.len();
-    let segs = if closed { n } else { n.saturating_sub(1) };
-    for i in 0..segs {
-        let (a_pt, a_out) = filleted_out(anchors, closed, i % n);
-        let (b_pt, b_in) = filleted_in(anchors, closed, (i + 1) % n);
-        if i == 0 && (a_pt - anchors[0].pt).length_sq() > 0.01 {
-            d = format!("M {:.3} {:.3}", a_pt.x, a_pt.y);
-        }
-        let seg = (b_pt - a_pt).length().max(1.0);
-        let eps = 1.0_f32.max(seg * 0.02);
-        if a_out.length() < eps && b_in.length() < eps {
-            d.push_str(&format!(" L {:.3} {:.3}", b_pt.x, b_pt.y));
+    };
+    let mut d = format!("M {:.3} {:.3}", first[0].x, first[0].y);
+    for [a, c1, c2, b] in segments {
+        let eps = 1.0_f32.max((b - a).length() * 0.02);
+        if (c1 - a).length() < eps && (c2 - b).length() < eps {
+            d.push_str(&format!(" L {:.3} {:.3}", b.x, b.y));
         } else {
-            let c1 = a_pt + a_out;
-            let c2 = b_pt + b_in;
             d.push_str(&format!(
                 " C {:.3} {:.3} {:.3} {:.3} {:.3} {:.3}",
-                c1.x, c1.y, c2.x, c2.y, b_pt.x, b_pt.y
+                c1.x, c1.y, c2.x, c2.y, b.x, b.y
             ));
         }
     }

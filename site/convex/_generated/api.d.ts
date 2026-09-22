@@ -19,6 +19,7 @@ import type * as mail from "../mail.js";
 import type * as projects from "../projects.js";
 import type * as review from "../review.js";
 import type * as showcase from "../showcase.js";
+import type * as telemetry from "../telemetry.js";
 import type * as waitlist from "../waitlist.js";
 
 import type {
@@ -39,6 +40,7 @@ declare const fullApi: ApiFromModules<{
   projects: typeof projects;
   review: typeof review;
   showcase: typeof showcase;
+  telemetry: typeof telemetry;
   waitlist: typeof waitlist;
 }>;
 

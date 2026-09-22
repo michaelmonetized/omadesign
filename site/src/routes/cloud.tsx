@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { SignInButton, UserButton } from "@clerk/tanstack-react-start";
+import { SignInButton, SignUpButton, UserButton } from "@clerk/tanstack-react-start";
 import {
   Authenticated,
   Unauthenticated,
@@ -41,9 +41,14 @@ function Cloud() {
             Share project files with your team. Review flat exports with
             clients. Publish finished work when you’re ready.
           </p>
-          <SignInButton mode="modal">
-            <button className="button">Sign in to cloud ↗</button>
-          </SignInButton>
+          <div className="cloud-app-toolbar">
+            <SignUpButton mode="modal">
+              <button className="button">Sign up for cloud ↗</button>
+            </SignUpButton>
+            <SignInButton mode="modal">
+              <button className="button">Sign in ↗</button>
+            </SignInButton>
+          </div>
         </div>
       </Unauthenticated>
       <Authenticated>

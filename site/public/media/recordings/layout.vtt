@@ -1,0 +1,10 @@
+WEBVTT
+
+00:00:00.000 --> 00:00:07.000
+Present: Open the native interactive Layout presentation.
+
+00:00:07.000 --> 00:00:12.000
+Draw a frame: Use the Frame tool to draw a new frame.
+
+00:00:12.000 --> 00:00:15.000
+Undo: Undo the new frame in the native workspace.

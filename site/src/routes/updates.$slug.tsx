@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import welcome from "../../../docs/blog/0.5.6-your-work-ready.md?raw";
 import graphics from "../../../docs/blog/0.5.4-more-control-on-the-canvas.md?raw";
 import clipboard from "../../../docs/blog/0.5.3-paste-onto-the-canvas.md?raw";
 import pixel from "../../../docs/blog/0.5.1-pixel-is-real.md?raw";
@@ -7,6 +8,7 @@ import { Markdown } from "../md";
 import { updateBySlug } from "../updates";
 
 const bodies: Record<string, { markdown: string; path: string }> = {
+  "0.5.6": { markdown: welcome, path: "docs/blog/0.5.6-your-work-ready.md" },
   "0.5.4": { markdown: graphics, path: "docs/blog/0.5.4-more-control-on-the-canvas.md" },
   "0.5.3": { markdown: clipboard, path: "docs/blog/0.5.3-paste-onto-the-canvas.md" },
   "0.5.1": { markdown: pixel, path: "docs/blog/0.5.1-pixel-is-real.md" },

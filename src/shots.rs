@@ -17,6 +17,18 @@ pub struct Scene {
 
 pub const SCENES: &[Scene] = &[
     Scene {
+        id: "settings",
+        caption: "Config, Update, About and Docs in one native dialog.",
+    },
+    Scene {
+        id: "about",
+        caption: "Refined logo and current semantic version.",
+    },
+    Scene {
+        id: "updates",
+        caption: "Release checks and workspace-preserving updates.",
+    },
+    Scene {
         id: "pixel-effects",
         caption: "Chroma key, color filters and raster effects with live preview.",
     },
@@ -27,6 +39,18 @@ pub const SCENES: &[Scene] = &[
     Scene {
         id: "layout",
         caption: "Responsive design, reusable components, and interactive preview.",
+    },
+    Scene {
+        id: "layout-empty",
+        caption: "Open Layout directly. Start with frames, without creating an artboard.",
+    },
+    Scene {
+        id: "photo-folder",
+        caption: "Choose a photo folder. Browse full-width live thumbnails immediately.",
+    },
+    Scene {
+        id: "document-tabs",
+        caption: "Three documents, live thumbnail tabs, and arrangement at your fingertips.",
     },
     Scene {
         id: "layout-preview",
@@ -124,6 +148,44 @@ pub const SCENES: &[Scene] = &[
 
 pub fn apply(studio: &mut Studio, id: &str) -> Result<(), String> {
     match id {
+        "settings" | "about" | "updates" => {
+            design(studio);
+            studio.show_preferences = true;
+            studio.settings_page = if id == "about" {
+                2
+            } else if id == "updates" {
+                1
+            } else {
+                0
+            };
+        }
+        "layout-empty" => {
+            *studio = Studio::new();
+            studio.switch_persona(Persona::Layout);
+        }
+        "photo-folder" => {
+            *studio = Studio::new();
+            studio.switch_persona(Persona::Photo);
+            studio
+                .photo
+                .set_folder(concat!(env!("CARGO_MANIFEST_DIR"), "/media"));
+        }
+        "document-tabs" => {
+            *studio = Studio::new();
+            design(studio);
+            studio.doc.name = "Shapes and gradients".into();
+            studio.new_tab();
+            poster(studio);
+            studio.doc.name = "Studio poster".into();
+            studio.new_tab();
+            pixel(studio);
+            studio.doc.name = "Paint study".into();
+            studio.switch_tab(0);
+            studio.persona = Persona::Design;
+            studio.tool = Tool::Select;
+            studio.show_welcome = false;
+            studio.status = "Three documents · click a thumbnail to switch".into();
+        }
         "cloud-review" => {
             let path = std::env::var("OMADESIGN_QA_IDENTITY")
                 .map_err(|_| "Cloud shot requires a QA identity")?;

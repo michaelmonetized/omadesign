@@ -29,6 +29,7 @@ impl Studio {
             let result =
                 result.and_then(|saved| self.finish_recovery(&job.id, job.revision, saved));
             if let Err(e) = result {
+                crate::telemetry::count("error.recovery");
                 self.status = format!("Recovery could not be saved: {e}");
                 self.recovery_retry = Some(Instant::now() + RETRY_DELAY);
             }

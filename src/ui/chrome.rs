@@ -1,8 +1,11 @@
+#[path = "document_previews.rs"]
+mod document_previews;
+
 use crate::app::Studio;
 use crate::geom::Pt;
 use crate::tools::{Persona, Tool};
 use crate::ui::icons::{self, ph};
-use crate::ui::theme::{accent_soft, bg_panel, bg_window, fg, fg_weak};
+use crate::ui::theme::{accent, bg_panel, bg_window, border, fg, fg_weak};
 use eframe::egui::{
     Align, Button, Color32, Frame, Layout, Margin, Panel, RichText, ScrollArea, Ui, vec2,
 };
@@ -16,24 +19,44 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
                 .inner_margin(Margin::symmetric(12, 6)),
         )
         .show(ui, |ui| {
-            let compact = ui.available_width() < 1100.0;
-            ui.horizontal_centered(|ui| {
-                ui.label(RichText::new("omadesign").strong().size(14.0).color(fg()));
-                ui.add_space(10.0);
-                ui.scope(|ui| {
+            let row = ui.max_rect();
+            let modes = mode_tabs_rect(row);
+            let compact = row.width() < 1120.0;
+            let left = eframe::egui::Rect::from_min_max(
+                row.min,
+                eframe::egui::pos2(modes.left() - 12.0, row.bottom()),
+            );
+            ui.scope_builder(eframe::egui::UiBuilder::new().max_rect(left), |ui| {
+                ui.horizontal_centered(|ui| {
+                    if ui
+                        .add(
+                            Button::new(RichText::new("omadesign").strong().size(14.0).color(fg()))
+                                .frame(false),
+                        )
+                        .on_hover_text("Config · Update · About · Docs")
+                        .clicked()
+                    {
+                        studio.show_preferences = true;
+                    }
+                    ui.add_space(10.0);
                     ui.visuals_mut().widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
-                    file_menu(ui, studio);
-                    edit_menu(ui, studio);
-                    ui.menu_button("Select", |ui| super::selection::menu(ui, studio));
-                    ui.add_enabled_ui(studio.persona != Persona::Photo, |ui| {
-                        object_menu(ui, studio);
-                        arrange_menu(ui, studio);
-                    });
-                    view_menu(ui, studio);
+                    if compact {
+                        ui.menu_button("Menu", |ui| main_menus(ui, studio));
+                    } else {
+                        main_menus(ui, studio);
+                    }
                 });
-                if !studio.show_welcome {
-                    ui.add_space(14.0);
-                    persona_picker(ui, studio, compact);
+            });
+            // Center against the entire title bar, independently of menu widths.
+            ui.scope_builder(eframe::egui::UiBuilder::new().max_rect(modes), |ui| {
+                persona_picker(ui, studio);
+            });
+            if !studio.show_welcome {
+                let right = eframe::egui::Rect::from_min_max(
+                    eframe::egui::pos2(modes.right() + 12.0, row.top()),
+                    row.max,
+                );
+                ui.scope_builder(eframe::egui::UiBuilder::new().max_rect(right), |ui| {
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         let photo = studio.persona == Persona::Photo;
                         if icons::icon_button(
@@ -104,16 +127,28 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
                         ) {
                             studio.show_shape_browser = !studio.show_shape_browser;
                         }
-                        if !compact
-                            && studio.persona == Persona::Photo
-                            && ui.button("Place in Design").clicked()
-                        {
+                        if !compact && photo && ui.button("Place in Design").clicked() {
                             studio.send_photo_to_design();
                         }
                     });
-                }
-            });
+                });
+            }
         });
+}
+
+fn main_menus(ui: &mut Ui, studio: &mut Studio) {
+    file_menu(ui, studio);
+    edit_menu(ui, studio);
+    ui.menu_button("Select", |ui| super::selection::menu(ui, studio));
+    ui.add_enabled_ui(studio.persona != Persona::Photo, |ui| {
+        object_menu(ui, studio);
+        arrange_menu(ui, studio);
+    });
+    view_menu(ui, studio);
+}
+
+fn mode_tabs_rect(row: eframe::egui::Rect) -> eframe::egui::Rect {
+    eframe::egui::Rect::from_center_size(row.center(), vec2(5.0 * 36.0 + 4.0 * 6.0, 30.0))
 }
 
 fn file_menu(ui: &mut Ui, studio: &mut Studio) {
@@ -401,7 +436,7 @@ fn edit_menu(ui: &mut Ui, studio: &mut Studio) {
             ui.close();
         }
         if ui
-            .add(Button::new("Duplicate").shortcut_text("Ctrl+D"))
+            .add(Button::new("Duplicate").shortcut_text("Super+D"))
             .clicked()
         {
             studio.duplicate_selection();
@@ -445,6 +480,22 @@ fn object_menu(ui: &mut Ui, studio: &mut Studio) {
             ui.close();
         }
         ui.menu_button("Guides", |ui| {
+            if ui
+                .button(if studio.doc.ruler.guides_locked {
+                    "Unlock all guides"
+                } else {
+                    "Lock all guides"
+                })
+                .clicked()
+            {
+                studio.set_guides_locked(!studio.doc.ruler.guides_locked);
+                ui.close();
+            }
+            if ui.button("Clear all guides").clicked() {
+                studio.clear_guides();
+                ui.close();
+            }
+            ui.separator();
             if ui
                 .add_enabled(
                     studio.can_convert_to_guides(),
@@ -670,6 +721,8 @@ fn arrange_menu(ui: &mut Ui, studio: &mut Studio) {
 
 fn view_menu(ui: &mut Ui, studio: &mut Studio) {
     ui.menu_button("View", |ui| {
+        ui.menu_button("Start tab", |ui| super::welcome::startup_preferences(ui, studio));
+        ui.separator();
         if ui.button("Document conversion notes…").clicked() {
             studio.transfer_notes = studio.doc.import_notes.clone();
             studio.show_import_notes = true;
@@ -801,144 +854,157 @@ fn view_menu(ui: &mut Ui, studio: &mut Studio) {
 }
 
 fn switch_persona(studio: &mut Studio, persona: Persona) {
-    if studio.persona == persona {
-        return;
-    }
-    studio.end_deform(true);
-    studio.end_pixel_stroke(true);
-    studio.commit_type_edit();
-    studio.reset_snap_gesture();
-    studio.persona = persona;
-    studio.op = None;
-    studio.playing = false;
-    studio.tool = match persona {
-        Persona::Design | Persona::Motion | Persona::Layout => Tool::Select,
-        Persona::Pixel => Tool::Brush,
-        Persona::Photo => Tool::Hand,
-    };
-    studio.show_welcome = false;
+    studio.switch_persona(persona);
 }
 
-fn persona_picker(ui: &mut Ui, studio: &mut Studio, compact: bool) {
-    let personas = [
-        Persona::Design,
-        Persona::Layout,
-        Persona::Pixel,
-        Persona::Photo,
-        Persona::Motion,
-    ];
-    if compact {
-        eframe::egui::ComboBox::from_id_salt("studio-persona")
-            .selected_text(studio.persona.name())
-            .width(88.0)
-            .show_ui(ui, |ui| {
-                for persona in personas {
-                    if ui
-                        .selectable_label(studio.persona == persona, persona.name())
-                        .on_hover_text(persona.hint())
-                        .clicked()
-                    {
-                        switch_persona(studio, persona);
-                    }
-                }
-                if studio.persona == Persona::Photo {
-                    ui.separator();
-                    if ui.button("Place in Design").clicked() {
-                        studio.send_photo_to_design();
-                        ui.close();
-                    }
-                }
-            });
-    } else {
-        for persona in personas {
-            let active = studio.persona == persona;
-            let button = Button::new(RichText::new(persona.name()).color(if active {
-                fg()
-            } else {
-                fg_weak()
-            }))
-            .fill(if active {
-                accent_soft()
-            } else {
-                Color32::TRANSPARENT
-            });
-            if ui
-                .add_sized(vec2(62.0, 28.0), button)
-                .on_hover_text(persona.hint())
-                .clicked()
+fn persona_picker(ui: &mut Ui, studio: &mut Studio) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        for persona in [
+            Persona::Design,
+            Persona::Pixel,
+            Persona::Layout,
+            Persona::Photo,
+            Persona::Motion,
+        ] {
+            if icons::persona_button(
+                ui,
+                persona,
+                !studio.show_welcome && studio.persona == persona,
+            )
+            .clicked()
             {
                 switch_persona(studio, persona);
             }
         }
-    }
+    });
 }
 
 pub fn doc_tabs(ui: &mut Ui, studio: &mut Studio) {
     studio.ensure_tabs();
-    Panel::top("doc-tabs")
-        .exact_size(38.0)
+    let mut previews = document_previews::begin(ui.ctx(), studio);
+    Panel::left("doc-tabs")
+        .resizable(false)
+        .exact_size(80.0)
         .frame(
             Frame::new()
                 .fill(bg_window())
-                .inner_margin(Margin::symmetric(8, 4)),
+                .inner_margin(Margin::symmetric(8, 8)),
         )
         .show(ui, |ui| {
             let mut switch = None;
             let mut close = None;
-            ScrollArea::horizontal()
+            ScrollArea::vertical()
                 .id_salt("document-tabs-scroll")
+                .scroll_bar_visibility(eframe::egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
                 .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 4.0;
-                        for i in 0..studio.tab_count() {
-                            let (title, dirty) = studio.tab_title(i);
-                            let active = i == studio.active_tab;
-                            ui.push_id(i, |ui| {
-                                let label = if dirty {
-                                    format!("{title} •")
+                    ui.spacing_mut().item_spacing.y = 8.0;
+                    for i in 0..studio.tab_count() {
+                        let (title, dirty) = studio.tab_title(i);
+                        let active = i == studio.active_tab;
+                        ui.push_id(i, |ui| {
+                            let (rect, response) = ui.allocate_exact_size(
+                                vec2(64.0, 64.0),
+                                eframe::egui::Sense::click(),
+                            );
+                            response.widget_info(|| {
+                                eframe::egui::WidgetInfo::selected(
+                                    eframe::egui::WidgetType::Button,
+                                    ui.is_enabled(),
+                                    active,
+                                    title,
+                                )
+                            });
+                            let mut close_hovered = false;
+                            if ui.is_rect_visible(rect) {
+                                if let Some(texture) = previews.image(ui.ctx(), studio, i) {
+                                    ui.painter().image(
+                                        texture.id(),
+                                        rect,
+                                        eframe::egui::Rect::from_min_max(
+                                            eframe::egui::Pos2::ZERO,
+                                            eframe::egui::pos2(1.0, 1.0),
+                                        ),
+                                        Color32::WHITE,
+                                    );
+                                } else {
+                                    ui.painter().rect_filled(rect, 4.0, bg_panel());
+                                    ui.painter().text(
+                                        rect.center(),
+                                        eframe::egui::Align2::CENTER_CENTER,
+                                        ph::FRAME_CORNERS,
+                                        icons::font(24.0),
+                                        fg_weak(),
+                                    );
+                                }
+                                ui.painter().rect_stroke(
+                                    rect,
+                                    4.0,
+                                    eframe::egui::Stroke::new(
+                                        if active { 2.0 } else { 1.0 },
+                                        if active || response.has_focus() {
+                                            accent()
+                                        } else {
+                                            border()
+                                        },
+                                    ),
+                                    eframe::egui::StrokeKind::Inside,
+                                );
+                                if dirty {
+                                    ui.painter().circle_filled(
+                                        rect.left_bottom() + vec2(7.0, -7.0),
+                                        4.0,
+                                        accent(),
+                                    );
+                                }
+                                if ui.rect_contains_pointer(rect) || response.has_focus() {
+                                    let close_rect = eframe::egui::Rect::from_min_size(
+                                        rect.right_top() + vec2(-22.0, 2.0),
+                                        vec2(20.0, 20.0),
+                                    );
+                                    let close_response = ui.interact(
+                                        close_rect,
+                                        response.id.with("close"),
+                                        eframe::egui::Sense::click(),
+                                    );
+                                    close_hovered = close_response.hovered();
+                                    ui.painter().rect_filled(close_rect, 4.0, bg_panel());
+                                    ui.painter().text(
+                                        close_rect.center(),
+                                        eframe::egui::Align2::CENTER_CENTER,
+                                        ph::X,
+                                        icons::font(14.0),
+                                        fg(),
+                                    );
+                                    if close_response.clicked() {
+                                        close = Some(i);
+                                    }
+                                    close_response.on_hover_text("Close document");
+                                }
+                            }
+                            if response.clicked() && !close_hovered {
+                                switch = Some(i);
+                            }
+                            if response.middle_clicked() {
+                                close = Some(i);
+                            }
+                            response
+                                .on_hover_text(if dirty {
+                                    format!("{title} • Unsaved changes")
                                 } else {
                                     title.to_owned()
-                                };
-                                Frame::new()
-                                    .fill(if active {
-                                        bg_panel()
-                                    } else {
-                                        Color32::TRANSPARENT
-                                    })
-                                    .corner_radius(6.0)
-                                    .inner_margin(Margin::symmetric(3, 0))
-                                    .show(ui, |ui| {
-                                        ui.horizontal(|ui| {
-                                            let response = ui.add_sized(
-                                                vec2(136.0, 28.0),
-                                                Button::new(
-                                                    RichText::new(label).size(12.0).color(
-                                                        if active { fg() } else { fg_weak() },
-                                                    ),
-                                                )
-                                                .frame(false)
-                                                .truncate(),
-                                            );
-                                            if response.clicked() {
-                                                switch = Some(i);
-                                            }
-                                            if response.middle_clicked() {
-                                                close = Some(i);
-                                            }
-                                            response.on_hover_text(title).context_menu(|ui| {
-                                                if ui.button("Close document").clicked() {
-                                                    close = Some(i);
-                                                    ui.close();
-                                                }
-                                            });
-                                            if icons::tiny_icon(ui, ph::X, "Close document", false)
-                                            {
-                                                close = Some(i);
-                                            }
-                                        });
-                                    });
-                            });
-                        }
+                                })
+                                .context_menu(|ui| {
+                                    if ui.button("Close document").clicked() {
+                                        close = Some(i);
+                                        ui.close();
+                                    }
+                                });
+                        });
+                    }
+                    ui.add_space(2.0);
+                    ui.horizontal(|ui| {
+                        ui.add_space(17.0);
                         if icons::icon_button(ui, ph::PLUS, "New document  Ctrl+N", false) {
                             studio.new_tab_welcome();
                         }
@@ -951,6 +1017,11 @@ pub fn doc_tabs(ui: &mut Ui, studio: &mut Studio) {
                 studio.request_close_tab(i);
             }
         });
+    previews.store(ui.ctx());
+}
+
+pub fn document_previews_ready(ctx: &eframe::egui::Context) -> bool {
+    document_previews::ready(ctx)
 }
 
 pub fn left_toolbar(ui: &mut Ui, studio: &mut Studio) {
@@ -1021,11 +1092,22 @@ pub fn status_bar(ui: &mut Ui, studio: &mut Studio) {
         )
         .show(ui, |ui| {
             if studio.show_welcome {
-                ui.label(
-                    RichText::new("F1  Keyboard shortcuts")
-                        .small()
-                        .color(fg_weak()),
-                );
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.label(
+                        RichText::new("F1  Keyboard shortcuts")
+                            .small()
+                            .color(fg_weak()),
+                    );
+                    ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                        ui.add(
+                            eframe::egui::Label::new(
+                                RichText::new(&studio.status).small().color(fg_weak()),
+                            )
+                            .truncate(),
+                        )
+                        .on_hover_text(&studio.status);
+                    });
+                });
                 return;
             }
             let width = ui.available_width();
@@ -1100,6 +1182,161 @@ pub fn status_bar(ui: &mut Ui, studio: &mut Studio) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn chrome_frame(
+        ctx: &eframe::egui::Context,
+        studio: &mut Studio,
+        size: eframe::egui::Vec2,
+        events: Vec<eframe::egui::Event>,
+    ) -> Vec<eframe::egui::epaint::ClippedShape> {
+        let mut output = ctx.run_ui(
+            eframe::egui::RawInput {
+                screen_rect: Some(eframe::egui::Rect::from_min_size(
+                    eframe::egui::Pos2::ZERO,
+                    size,
+                )),
+                events,
+                ..Default::default()
+            },
+            |ui| {
+                top_bar(ui, studio);
+                doc_tabs(ui, studio);
+                left_toolbar(ui, studio);
+            },
+        );
+        output.textures_delta.clear();
+        output.shapes
+    }
+
+    #[test]
+    fn mode_icons_stay_centered_and_document_previews_form_a_64px_left_column() {
+        for size in [vec2(960.0, 640.0), vec2(1600.0, 1000.0)] {
+            let ctx = eframe::egui::Context::default();
+            super::super::theme::apply(&ctx);
+            let mut studio = Studio::new();
+            studio.show_welcome = false;
+            studio.persona = Persona::Design;
+            studio.new_tab();
+            let mut shapes = vec![];
+            for _ in 0..3 {
+                shapes = chrome_frame(&ctx, &mut studio, size, vec![]);
+            }
+            let modes: Vec<_> = shapes
+                .iter()
+                .filter_map(|shape| {
+                    if let eframe::egui::Shape::Text(text) = &shape.shape {
+                        let center = text.galley.rect.translate(text.pos.to_vec2()).center();
+                        if center.y < 44.0
+                            && (center.x - size.x * 0.5).abs() < 102.0
+                            && [
+                                Persona::Design,
+                                Persona::Pixel,
+                                Persona::Layout,
+                                Persona::Photo,
+                                Persona::Motion,
+                            ]
+                            .iter()
+                            .any(|&persona| text.galley.text() == icons::persona_glyph(persona))
+                        {
+                            return Some(center);
+                        }
+                    }
+                    None
+                })
+                .collect();
+            assert_eq!(modes.len(), 5, "all modes must remain directly available");
+            let center = (modes[0].x + modes[4].x) * 0.5;
+            assert!(
+                (center - size.x * 0.5).abs() < 1.0,
+                "mode group at {center} on {size:?}"
+            );
+            let mut previews: Vec<_> = shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    eframe::egui::Shape::Rect(rect) if rect.rect.size() == vec2(64.0, 64.0) => {
+                        Some(rect.rect)
+                    }
+                    _ => None,
+                })
+                .collect();
+            previews.dedup();
+            assert_eq!(previews.len(), 2);
+            assert_eq!(
+                previews[0].left(),
+                8.0,
+                "thumbnail column sits at the window's left edge"
+            );
+            assert_eq!(previews[0].left(), previews[1].left());
+            assert_eq!(previews[1].top() - previews[0].bottom(), 8.0);
+            let pos = previews[0].center();
+            for pressed in [true, false] {
+                chrome_frame(
+                    &ctx,
+                    &mut studio,
+                    size,
+                    vec![
+                        eframe::egui::Event::PointerMoved(pos),
+                        eframe::egui::Event::PointerButton {
+                            pos,
+                            button: eframe::egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: eframe::egui::Modifiers::NONE,
+                        },
+                    ],
+                );
+            }
+            assert_eq!(
+                studio.active_tab, 0,
+                "clicking a preview switches documents"
+            );
+            let pos = previews[1].center();
+            for pressed in [true, false] {
+                chrome_frame(
+                    &ctx,
+                    &mut studio,
+                    size,
+                    vec![
+                        eframe::egui::Event::PointerMoved(pos),
+                        eframe::egui::Event::PointerButton {
+                            pos,
+                            button: eframe::egui::PointerButton::Middle,
+                            pressed,
+                            modifiers: eframe::egui::Modifiers::NONE,
+                        },
+                    ],
+                );
+            }
+            assert_eq!(
+                studio.tab_count(),
+                1,
+                "middle-click still closes a document"
+            );
+            let pos = previews[0].right_top() + vec2(-12.0, 12.0);
+            chrome_frame(
+                &ctx,
+                &mut studio,
+                size,
+                vec![eframe::egui::Event::PointerMoved(pos)],
+            );
+            for pressed in [true, false] {
+                chrome_frame(
+                    &ctx,
+                    &mut studio,
+                    size,
+                    vec![eframe::egui::Event::PointerButton {
+                        pos,
+                        button: eframe::egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: eframe::egui::Modifiers::NONE,
+                    }],
+                );
+            }
+            assert!(
+                studio.show_welcome,
+                "the hover close button closes the final document"
+            );
+        }
+    }
 
     #[test]
     fn switching_personas_cancels_a_live_deformation_before_hiding_the_canvas() {

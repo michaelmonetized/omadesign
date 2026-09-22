@@ -37,7 +37,7 @@ impl Shortcut {
             PasteStyle => ("Ctrl+Alt+V", "Paste style"),
             CopyAdjustments => ("Ctrl+Shift+C", "Copy adjustments"),
             PasteAdjustments => ("Ctrl+Shift+V", "Paste adjustments"),
-            Duplicate => ("Ctrl+D", "Duplicate"),
+            Duplicate => ("Super+D", "Duplicate"),
             SelectAll => ("Ctrl+A", "Select all"),
             Group => ("Ctrl+G", "Group objects"),
             Ungroup => ("Ctrl+Shift+G", "Ungroup"),
@@ -88,7 +88,7 @@ impl Studio {
             return hints;
         }
         let mods = held_modifiers(ctx);
-        let command = mods.ctrl || mods.command;
+        let command = mods.ctrl || mods.command || mods.mac_cmd;
         if focus == ShortcutFocus::Field {
             hints.context = "Control focused";
         } else if focus == ShortcutFocus::Text {
@@ -149,7 +149,16 @@ impl Studio {
                 continue;
             }
             seen.push(shortcut);
-            let (keys, mut label) = shortcut.hint(mods.shift);
+            let (mut keys, mut label) = shortcut.hint(mods.shift);
+            if shortcut == Shortcut::Duplicate
+                && self.persona == Persona::Pixel
+                && self.pixel_sel.is_some()
+                && mods.ctrl
+                && !mods.mac_cmd
+            {
+                keys = "Ctrl+D";
+                label = "Deselect pixels";
+            }
             if self.persona == Persona::Photo {
                 label = match shortcut {
                     Shortcut::Fit => "Fit photo",
@@ -195,7 +204,7 @@ impl Studio {
 
     fn gesture_hints(&self, ctx: &egui::Context, mods: Modifiers) -> (&'static str, Vec<KeyHint>) {
         let mut hints = Vec::new();
-        let command = mods.ctrl || mods.command;
+        let command = mods.ctrl || mods.command || mods.mac_cmd;
         let plain_keys = !command && !mods.alt && !mods.mac_cmd;
         let mut add = |keys, label, active| {
             hints.push(KeyHint {

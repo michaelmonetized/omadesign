@@ -1,4 +1,5 @@
 export const REPO = "https://github.com/michaelmonetized/omadesign";
+export const DISCORD = "https://discord.gg/ejkZS2RBx";
 export const SITE_ORIGIN = "https://omadesign.app";
 export const PAGES_ORIGIN = "https://michaelmonetized.github.io/omadesign";
 export const sitePath = (path = "") =>

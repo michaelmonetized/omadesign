@@ -14,7 +14,7 @@ export function CloudIntro() {
   const dialog = useRef<HTMLDialogElement>(null);
   const video = useRef<HTMLVideoElement>(null);
   const autoStart = useRef(true);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [playing, setPlaying] = useState(false);
   const [playBlocked, setPlayBlocked] = useState(false);
   const [muted, setMuted] = useState(true);
@@ -99,6 +99,7 @@ export function CloudIntro() {
           onPlaying={() => { setPlaying(true); setPlayBlocked(false); }} onPause={() => setPlaying(false)}
           onEnded={() => { setPlaying(false); revealActions(); }} onError={revealActions}
           onTimeUpdate={event => setVisibleCount(Math.min(features.length, Math.max(0, Math.floor((event.currentTarget.currentTime - 3) / 2.7) + 1)))}>
+          <source src={sitePath("media/cloud/reveal.webm")} type="video/webm" />
           <source src={sitePath("media/cloud/reveal.mp4")} type="video/mp4" />
         </video>
         <div className="cloud-shade" />

@@ -2,13 +2,15 @@
 use crate::app::Studio;
 use crate::compositor::{Draft, View};
 use crate::geom::Pt;
-use crate::templates::{self, Template};
+use crate::templates;
+use crate::tools::Persona;
 use crate::ui::theme::{accent, accent_soft, bg_panel, border, fg, fg_weak};
 use eframe::egui::{self, Align2, Color32, FontId, Id, Rect, RichText, Sense, Stroke, Ui, vec2};
 use std::collections::HashMap;
 use std::sync::Arc;
 
 const JOB: &str = "template-preview-batch";
+const LAYOUT_JOB: &str = "layout-template-preview-batch";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Size {
@@ -19,6 +21,7 @@ struct Size {
 
 #[derive(Clone)]
 struct Browser {
+    mode: Option<Persona>,
     query: String,
     category: &'static str,
     selected: &'static str,
@@ -30,6 +33,7 @@ struct Browser {
 impl Default for Browser {
     fn default() -> Self {
         Self {
+            mode: None,
             query: String::new(),
             category: "All",
             selected: templates::CATALOG[0].id,
@@ -59,19 +63,33 @@ struct PreviewCache {
 
 type PreviewBatch = (Size, Vec<(&'static str, egui::ColorImage)>);
 
-fn render_previews(size: Size) -> Result<PreviewBatch, String> {
-    let scale = (320.0 / size.width as f32).min(240.0 / size.height as f32);
-    let width = (size.width as f32 * scale).round().max(1.0) as u32;
-    let height = (size.height as f32 * scale).round().max(1.0) as u32;
-    let images = templates::CATALOG
-        .iter()
-        .map(|template| {
-            let document = templates::build(
-                template.id,
-                size.width as f32,
-                size.height as f32,
-                size.dpi as f32,
-            )?;
+fn render_previews(size: Size, layout: bool) -> Result<PreviewBatch, String> {
+    let ids: Vec<_> = if layout {
+        crate::layout_templates::CATALOG
+            .iter()
+            .map(|t| t.id)
+            .collect()
+    } else {
+        templates::CATALOG.iter().map(|t| t.id).collect()
+    };
+    let images = ids
+        .into_iter()
+        .map(|id| {
+            let document = if layout {
+                crate::layout_templates::build(
+                    id,
+                    size.width as f32,
+                    size.height as f32,
+                    size.dpi as f32,
+                )?
+            } else {
+                templates::build(id, size.width as f32, size.height as f32, size.dpi as f32)?
+            };
+            // Some Layout starters have their own minimum dimensions or several pages.
+            // Fit their actual first canvas instead of cropping to the requested size.
+            let scale = (320.0 / document.width).min(240.0 / document.height);
+            let width = (document.width * scale).round().max(1.0) as u32;
+            let height = (document.height * scale).round().max(1.0) as u32;
             let pixels = crate::compositor::render_view(
                 &document,
                 View {
@@ -84,7 +102,7 @@ fn render_previews(size: Size) -> Result<PreviewBatch, String> {
             )
             .ok_or("Could not create a template preview")?;
             Ok((
-                template.id,
+                id,
                 egui::ColorImage::from_rgba_premultiplied(
                     [width as usize, height as usize],
                     pixels.data(),
@@ -95,12 +113,17 @@ fn render_previews(size: Size) -> Result<PreviewBatch, String> {
     Ok((size, images))
 }
 
-fn previews(ctx: &egui::Context, size: Size) -> PreviewCache {
-    let cache_id = Id::new("template-preview-cache");
+fn previews(ctx: &egui::Context, size: Size, layout: bool) -> PreviewCache {
+    let cache_id = Id::new(if layout {
+        "layout-template-preview-cache"
+    } else {
+        "template-preview-cache"
+    });
+    let job = if layout { LAYOUT_JOB } else { JOB };
     let mut cache = ctx
         .data(|data| data.get_temp::<PreviewCache>(cache_id))
         .unwrap_or_default();
-    if let Some(result) = super::jobs::poll::<PreviewBatch>(ctx, JOB) {
+    if let Some(result) = super::jobs::poll::<PreviewBatch>(ctx, job) {
         match result {
             Ok((loaded, images)) if loaded == size => {
                 let textures = images
@@ -132,8 +155,8 @@ fn previews(ctx: &egui::Context, size: Size) -> PreviewCache {
     }
     // Finish an old size's work before starting another. Scrubbing size controls
     // cannot create an unbounded queue of rendering threads.
-    if cache.size != Some(size) && !super::jobs::is_running::<PreviewBatch>(ctx, JOB) {
-        super::jobs::start(ctx, JOB, move || render_previews(size));
+    if cache.size != Some(size) && !super::jobs::is_running::<PreviewBatch>(ctx, job) {
+        super::jobs::start(ctx, job, move || render_previews(size, layout));
     }
     cache
 }
@@ -142,12 +165,44 @@ pub(super) fn previews_ready(ctx: &egui::Context) -> bool {
     let state = ctx
         .data(|data| data.get_temp::<Browser>(Id::new("template-browser-state")))
         .unwrap_or_default();
-    ctx.data(|data| data.get_temp::<PreviewCache>(Id::new("template-preview-cache")))
+    let cache = if state.mode == Some(Persona::Layout) {
+        "layout-template-preview-cache"
+    } else {
+        "template-preview-cache"
+    };
+    ctx.data(|data| data.get_temp::<PreviewCache>(Id::new(cache)))
         .is_some_and(|cache| cache.size == Some(state.size()))
+}
+
+/// Open only the templates meaningful for this creation action. Other entrypoints
+/// may still set show_templates directly to use the general library.
+pub fn open(ctx: &egui::Context, studio: &mut Studio, persona: Persona) {
+    if !matches!(persona, Persona::Design | Persona::Layout) {
+        return;
+    }
+    let id = Id::new("template-browser-state");
+    let mut state = ctx
+        .data(|data| data.get_temp::<Browser>(id))
+        .unwrap_or_default();
+    if state.mode != Some(persona) {
+        state = Browser {
+            mode: Some(persona),
+            ..Browser::default()
+        };
+        if persona == Persona::Layout {
+            state.selected = crate::layout_templates::CATALOG[0].id;
+            state.width = 1280.0;
+            state.height = 900.0;
+            state.dpi = 96.0;
+        }
+    }
+    ctx.data_mut(|data| data.insert_temp(id, state));
+    studio.show_templates = true;
 }
 
 pub fn window(ui: &mut Ui, studio: &mut Studio) {
     if !studio.show_templates {
+        reset_scope(ui.ctx());
         return;
     }
     let ctx = ui.ctx().clone();
@@ -164,6 +219,21 @@ pub fn window(ui: &mut Ui, studio: &mut Studio) {
         ))
         .show(&ctx, |ui| library(ui, studio));
     studio.show_templates &= open;
+    if !studio.show_templates {
+        reset_scope(&ctx);
+    }
+}
+
+fn reset_scope(ctx: &egui::Context) {
+    ctx.data_mut(|data| {
+        let id = Id::new("template-browser-state");
+        if data
+            .get_temp::<Browser>(id)
+            .is_some_and(|state| state.mode.is_some())
+        {
+            data.insert_temp(id, Browser::default());
+        }
+    });
 }
 
 pub fn library(ui: &mut Ui, studio: &mut Studio) {
@@ -172,11 +242,20 @@ pub fn library(ui: &mut Ui, studio: &mut Studio) {
         .ctx()
         .data(|data| data.get_temp::<Browser>(state_id))
         .unwrap_or_default();
+    if state.mode == Some(Persona::Layout) {
+        layout_library(ui, studio, &mut state);
+        ui.ctx().data_mut(|data| data.insert_temp(state_id, state));
+        return;
+    }
     ui.label(
-        RichText::new("52 good starts.")
-            .size(24.0)
-            .strong()
-            .color(fg()),
+        RichText::new(if state.mode == Some(Persona::Design) {
+            "Vector templates"
+        } else {
+            "52 good starts."
+        })
+        .size(24.0)
+        .strong()
+        .color(fg()),
     );
     ui.label(
         RichText::new("Original designs for every size. Every word and shape is yours to change.")
@@ -184,72 +263,22 @@ pub fn library(ui: &mut Ui, studio: &mut Studio) {
             .size(12.0),
     );
     ui.add_space(10.0);
-    ui.label(RichText::new("Layout starters").strong().size(12.0));
-    ui.horizontal_wrapped(|ui| {
-        for template in crate::layout_templates::CATALOG {
-            if ui
-                .button(template.name)
-                .on_hover_text(template.description)
-                .clicked()
-            {
-                studio.use_layout_template(template.id, state.width, state.height, state.dpi);
-            }
-        }
-    });
-    ui.add_space(14.0);
-    ui.horizontal_wrapped(|ui| {
-        ui.label(RichText::new("Make it fit").strong().size(12.0));
-        let size = state.size();
-        let preset_name = crate::presets::all()
-            .iter()
-            .find(|preset| {
-                preset.w.round() as u32 == size.width
-                    && preset.h.round() as u32 == size.height
-                    && preset.dpi.round() as u32 == size.dpi
-            })
-            .map_or("Custom size", |preset| preset.name);
-        egui::ComboBox::from_id_salt("template-size")
-            .selected_text(preset_name)
-            .width(190.0)
-            .show_ui(ui, |ui| {
-                for preset in crate::presets::all() {
-                    if ui
-                        .selectable_label(
-                            preset.name == preset_name,
-                            format!("{} · {}", preset.group, preset.name),
-                        )
-                        .clicked()
-                    {
-                        state.width = preset.w;
-                        state.height = preset.h;
-                        state.dpi = preset.dpi;
-                    }
+    if state.mode.is_none() {
+        ui.label(RichText::new("Layout starters").strong().size(12.0));
+        ui.horizontal_wrapped(|ui| {
+            for template in crate::layout_templates::CATALOG {
+                if ui
+                    .button(template.name)
+                    .on_hover_text(template.description)
+                    .clicked()
+                {
+                    studio.use_layout_template(template.id, state.width, state.height, state.dpi);
                 }
-            });
-        if ui.small_button("Current canvas").clicked() {
-            state.width = studio.doc.width;
-            state.height = studio.doc.height;
-            state.dpi = studio.doc.dpi;
-        }
-        ui.add(
-            egui::DragValue::new(&mut state.width)
-                .prefix("W ")
-                .range(32.0..=16000.0)
-                .speed(5.0),
-        );
-        ui.add(
-            egui::DragValue::new(&mut state.height)
-                .prefix("H ")
-                .range(32.0..=16000.0)
-                .speed(5.0),
-        );
-        ui.add(
-            egui::DragValue::new(&mut state.dpi)
-                .suffix(" dpi")
-                .range(36.0..=600.0)
-                .speed(1.0),
-        );
-    });
+            }
+        });
+    }
+    ui.add_space(14.0);
+    size_controls(ui, studio, &mut state);
     ui.add_space(10.0);
     ui.horizontal_wrapped(|ui| {
         ui.add(
@@ -273,7 +302,7 @@ pub fn library(ui: &mut Ui, studio: &mut Studio) {
     });
     ui.add_space(12.0);
     let size = state.size();
-    let cache = previews(ui.ctx(), size);
+    let cache = previews(ui.ctx(), size, false);
     let query = state.query.trim().to_lowercase();
     let visible: Vec<_> = templates::CATALOG
         .iter()
@@ -353,8 +382,16 @@ pub fn library(ui: &mut Ui, studio: &mut Studio) {
                             let texture = (cache.size == Some(size))
                                 .then(|| cache.textures.get(template.id))
                                 .flatten();
-                            let response =
-                                card(ui, template, width, state.selected == template.id, texture);
+                            let response = card(
+                                ui,
+                                width,
+                                state.selected == template.id,
+                                texture,
+                                template.name,
+                                &format!("{:02} / 52  ·  {}", template.week, template.category),
+                                template.description,
+                                template.palette,
+                            );
                             if response.clicked() || response.double_clicked() {
                                 state.selected = template.id;
                             }
@@ -378,12 +415,191 @@ pub fn library(ui: &mut Ui, studio: &mut Studio) {
     }
 }
 
+fn layout_library(ui: &mut Ui, studio: &mut Studio, state: &mut Browser) {
+    ui.heading("Layout templates");
+    ui.label(
+        RichText::new("Editable frames, responsive stacks and working prototypes.")
+            .color(fg_weak()),
+    );
+    ui.add_space(14.0);
+    ui.add_enabled_ui(state.selected != "layout-fieldwork", |ui| {
+        size_controls(ui, studio, state)
+    });
+    if state.selected == "layout-fieldwork" {
+        ui.label(
+            RichText::new("Fieldwork includes its own responsive pages and sizes.")
+                .small()
+                .color(fg_weak()),
+        );
+    }
+    ui.add_space(10.0);
+    ui.add(
+        egui::TextEdit::singleline(&mut state.query)
+            .hint_text("Find a Layout starter…")
+            .desired_width(240.0),
+    );
+    let query = state.query.trim().to_lowercase();
+    let visible: Vec<_> = crate::layout_templates::CATALOG
+        .iter()
+        .filter(|template| {
+            query.is_empty()
+                || format!("{} {}", template.name, template.description)
+                    .to_lowercase()
+                    .contains(&query)
+        })
+        .collect();
+    if !visible.iter().any(|template| template.id == state.selected)
+        && let Some(first) = visible.first()
+    {
+        state.selected = first.id;
+    }
+    let size = state.size();
+    let cache = previews(ui.ctx(), size, true);
+    let mut use_selected = false;
+    ui.add_space(12.0);
+    if let Some(template) = crate::layout_templates::find(state.selected) {
+        ui.horizontal_wrapped(|ui| {
+            use_selected = ui
+                .add_enabled(
+                    !visible.is_empty(),
+                    egui::Button::new("Use this template")
+                        .fill(accent_soft())
+                        .min_size(vec2(160.0, 32.0)),
+                )
+                .clicked();
+            ui.label(RichText::new(template.name).strong());
+        });
+        ui.label(RichText::new(template.description).small().color(fg_weak()));
+    }
+    ui.add_space(12.0);
+    if let Some(error) = &cache.error {
+        ui.label(RichText::new(error).color(accent()));
+    }
+    if visible.is_empty() {
+        ui.weak("No matching Layout starters. Try another word.");
+    }
+    let columns = if ui.available_width() >= 720.0 {
+        3
+    } else if ui.available_width() >= 450.0 {
+        2
+    } else {
+        1
+    };
+    let gap = 12.0;
+    let width = (ui.available_width() - gap * (columns - 1) as f32).max(160.0) / columns as f32;
+    let max_height = (ui.ctx().viewport_rect().height() - 330.0).clamp(225.0, 560.0);
+    ui.scope(|ui| {
+        ui.spacing_mut().item_spacing = vec2(gap, gap);
+        egui::ScrollArea::vertical()
+            .id_salt("layout-template-cards")
+            .max_height(max_height)
+            .auto_shrink([false, false])
+            .show_rows(ui, 225.0, visible.len().div_ceil(columns), |ui, rows| {
+                for row in rows {
+                    ui.horizontal(|ui| {
+                        for &template in
+                            &visible[row * columns..((row + 1) * columns).min(visible.len())]
+                        {
+                            let texture = (cache.size == Some(size))
+                                .then(|| cache.textures.get(template.id))
+                                .flatten();
+                            let response = card(
+                                ui,
+                                width,
+                                state.selected == template.id,
+                                texture,
+                                template.name,
+                                "Layout · editable frames",
+                                template.description,
+                                [0xf4eee4, 0x121822, 0x2f6bff, 0xffffff],
+                            );
+                            if response.clicked() {
+                                state.selected = template.id;
+                            }
+                            if response.double_clicked() {
+                                state.selected = template.id;
+                                use_selected = true;
+                            }
+                        }
+                    });
+                }
+            });
+    });
+    if use_selected {
+        studio.use_layout_template(
+            state.selected,
+            size.width as f32,
+            size.height as f32,
+            size.dpi as f32,
+        );
+    }
+}
+
+fn size_controls(ui: &mut Ui, studio: &Studio, state: &mut Browser) {
+    ui.horizontal_wrapped(|ui| {
+        ui.label(RichText::new("Make it fit").strong().size(12.0));
+        let size = state.size();
+        let preset_name = crate::presets::all()
+            .iter()
+            .find(|preset| {
+                preset.w.round() as u32 == size.width
+                    && preset.h.round() as u32 == size.height
+                    && preset.dpi.round() as u32 == size.dpi
+            })
+            .map_or("Custom size", |preset| preset.name);
+        egui::ComboBox::from_id_salt("template-size")
+            .selected_text(preset_name)
+            .width(190.0)
+            .show_ui(ui, |ui| {
+                for preset in crate::presets::all() {
+                    if ui
+                        .selectable_label(
+                            preset.name == preset_name,
+                            format!("{} · {}", preset.group, preset.name),
+                        )
+                        .clicked()
+                    {
+                        state.width = preset.w;
+                        state.height = preset.h;
+                        state.dpi = preset.dpi;
+                    }
+                }
+            });
+        if ui.small_button("Current canvas").clicked() {
+            state.width = studio.doc.width;
+            state.height = studio.doc.height;
+            state.dpi = studio.doc.dpi;
+        }
+        ui.add(
+            egui::DragValue::new(&mut state.width)
+                .prefix("W ")
+                .range(32.0..=16000.0)
+                .speed(5.0),
+        );
+        ui.add(
+            egui::DragValue::new(&mut state.height)
+                .prefix("H ")
+                .range(32.0..=16000.0)
+                .speed(5.0),
+        );
+        ui.add(
+            egui::DragValue::new(&mut state.dpi)
+                .suffix(" dpi")
+                .range(36.0..=600.0)
+                .speed(1.0),
+        );
+    });
+}
+
 fn card(
     ui: &mut Ui,
-    template: &Template,
     width: f32,
     selected: bool,
     texture: Option<&egui::TextureHandle>,
+    title: &str,
+    subtitle: &str,
+    description: &str,
+    palette: [u32; 4],
 ) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(vec2(width, 225.0), Sense::click());
     let painter = ui.painter_at(rect);
@@ -413,13 +629,13 @@ fn card(
             Color32::WHITE,
         );
     } else {
-        let paper = template.palette[0];
+        let paper = palette[0];
         painter.rect_filled(
             preview,
             4.0,
             Color32::from_rgb((paper >> 16) as u8, (paper >> 8) as u8, paper as u8),
         );
-        let ink = template.palette[1];
+        let ink = palette[1];
         painter.text(
             preview.center(),
             Align2::CENTER_CENTER,
@@ -428,7 +644,7 @@ fn card(
             Color32::from_rgb((ink >> 16) as u8, (ink >> 8) as u8, ink as u8),
         );
     }
-    let name = egui::WidgetText::from(RichText::new(template.name).strong().size(12.0).color(fg()))
+    let name = egui::WidgetText::from(RichText::new(title).strong().size(12.0).color(fg()))
         .into_galley(
             ui,
             Some(egui::TextWrapMode::Truncate),
@@ -443,11 +659,11 @@ fn card(
     painter.text(
         egui::pos2(rect.left() + 10.0, rect.bottom() - 18.0),
         Align2::LEFT_CENTER,
-        format!("{:02} / 52  ·  {}", template.week, template.category),
+        subtitle,
         FontId::proportional(10.0),
         fg_weak(),
     );
-    response.on_hover_text(template.description)
+    response.on_hover_text(description)
 }
 
 #[cfg(test)]
@@ -455,25 +671,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn template_cards_keep_a_full_visible_row_in_welcome_and_compact_windows() {
+    fn template_cards_keep_a_full_visible_row_in_all_modes_and_compact_windows() {
         for screen in [vec2(1600.0, 1000.0), vec2(960.0, 640.0)] {
-            for floating in [false, true] {
+            for mode in [None, Some(Persona::Design), Some(Persona::Layout)] {
                 let ctx = egui::Context::default();
                 crate::ui::theme::apply(&ctx);
-                // Preview pixels do not affect layout. Avoid spawning a render job
-                // while inspecting the real nested welcome and window layouts.
+                let mut studio = Studio::new();
+                if let Some(mode) = mode {
+                    open(&ctx, &mut studio, mode);
+                }
+                let state = ctx
+                    .data(|data| data.get_temp::<Browser>(Id::new("template-browser-state")))
+                    .unwrap_or_default();
+                // Preview pixels do not affect layout. Avoid spawning a render job.
                 ctx.data_mut(|data| {
                     data.insert_temp(
-                        Id::new("template-preview-cache"),
+                        Id::new(if mode == Some(Persona::Layout) {
+                            "layout-template-preview-cache"
+                        } else {
+                            "template-preview-cache"
+                        }),
                         PreviewCache {
-                            size: Some(Browser::default().size()),
+                            size: Some(state.size()),
                             ..Default::default()
                         },
                     );
                 });
-                let mut studio = Studio::new();
-                studio.welcome_page = crate::app::WelcomePage::Templates;
-                studio.show_templates = floating;
+                studio.show_templates = true;
                 let mut output = egui::FullOutput::default();
                 for _ in 0..3 {
                     output = ctx.run_ui(
@@ -482,11 +706,7 @@ mod tests {
                             ..Default::default()
                         },
                         |ui| {
-                            if floating {
-                                window(ui, &mut studio);
-                            } else {
-                                super::super::welcome::show(ui, &mut studio);
-                            }
+                            window(ui, &mut studio);
                         },
                     );
                     output.textures_delta.clear();
@@ -506,21 +726,100 @@ mod tests {
                     .count();
                 assert!(
                     full_cards >= 2,
-                    "a full first row must remain visible at {screen:?}, floating={floating}; got {full_cards} cards"
+                    "a full first row must remain visible at {screen:?}, mode={mode:?}; got {full_cards} cards"
                 );
-                for label in if floating {
-                    &["Use this template", "Template library"][..]
-                } else {
-                    &["Use this template"][..]
-                } {
+                for label in &["Use this template", "Template library"] {
                     assert!(output.shapes.iter().any(|clipped| {
                         matches!(&clipped.shape, egui::Shape::Text(text)
                             if text.galley.job.text == *label
                                 && viewport.contains_rect(text.visual_bounding_rect())
                                 && clipped.clip_rect.expand(pixel_tolerance).contains_rect(text.visual_bounding_rect()))
-                    }), "{label} must remain visible at {screen:?}, floating={floating}");
+                    }), "{label} must remain visible at {screen:?}, mode={mode:?}");
                 }
             }
+        }
+    }
+
+    #[test]
+    fn scoped_chooser_creates_the_requested_editing_mode() {
+        for mode in [Persona::Design, Persona::Layout] {
+            let ctx = egui::Context::default();
+            crate::ui::theme::apply(&ctx);
+            let mut studio = Studio::new();
+            open(&ctx, &mut studio, mode);
+            let state = ctx
+                .data(|data| data.get_temp::<Browser>(Id::new("template-browser-state")))
+                .unwrap();
+            assert_eq!(
+                crate::layout_templates::is_layout_template(state.selected),
+                mode == Persona::Layout
+            );
+            ctx.data_mut(|data| {
+                data.insert_temp(
+                    Id::new(if mode == Persona::Layout {
+                        "layout-template-preview-cache"
+                    } else {
+                        "template-preview-cache"
+                    }),
+                    PreviewCache {
+                        size: Some(state.size()),
+                        ..Default::default()
+                    },
+                )
+            });
+            let input = egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(960., 640.))),
+                ..Default::default()
+            };
+            let mut output = ctx.run_ui(input.clone(), |ui| library(ui, &mut studio));
+            output.textures_delta.clear();
+            output = ctx.run_ui(input.clone(), |ui| library(ui, &mut studio));
+            output.textures_delta.clear();
+            let labels: Vec<_> = output
+                .shapes
+                .iter()
+                .filter_map(|clipped| match &clipped.shape {
+                    egui::Shape::Text(text) => Some(text.galley.job.text.as_str()),
+                    _ => None,
+                })
+                .collect();
+            assert!(labels.contains(&if mode == Persona::Layout {
+                "Layout templates"
+            } else {
+                "Vector templates"
+            }));
+            assert!(
+                !labels.contains(&"Layout starters"),
+                "scoped Vector chooser must not offer Layout starters"
+            );
+            let target = output
+                .shapes
+                .iter()
+                .find_map(|clipped| match &clipped.shape {
+                    egui::Shape::Text(text) if text.galley.job.text == "Use this template" => {
+                        Some(text.visual_bounding_rect().center())
+                    }
+                    _ => None,
+                })
+                .unwrap();
+            for pressed in [true, false] {
+                let mut click = input.clone();
+                click.events = vec![
+                    egui::Event::PointerMoved(target),
+                    egui::Event::PointerButton {
+                        pos: target,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ];
+                let mut clicked = ctx.run_ui(click, |ui| library(ui, &mut studio));
+                clicked.textures_delta.clear();
+            }
+            assert_eq!(studio.persona, mode);
+            assert!(!studio.show_templates);
+            assert!(studio.dirty);
+            assert!(!studio.doc.layers.is_empty());
         }
     }
 }

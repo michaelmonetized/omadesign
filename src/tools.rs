@@ -1,6 +1,7 @@
 //! Tool identity, personas, and the shortcut table designers already have in their fingers.
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Persona {
     Design,
     Pixel,
@@ -31,7 +32,7 @@ impl Persona {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Tool {
     Select,
     Node,
@@ -155,7 +156,7 @@ impl Tool {
             Tool::Gradient => {
                 "Drag across a selected shape to place its active fill or stroke gradient."
             }
-            Tool::Eyedropper => "Click anywhere on the canvas to sample fill color.",
+            Tool::Eyedropper => "Click to sample the active raster layer or a vector fill.",
             Tool::Trace => {
                 "Click to trace the active pixel layer into vectors. Colors and smoothness live in Trace."
             }
@@ -381,7 +382,7 @@ pub fn shortcut_groups() -> &'static [(&'static str, &'static [ShortcutRow])] {
                 },
                 ShortcutRow {
                     action: "Duplicate",
-                    keys: "Ctrl+D",
+                    keys: "Super+D",
                 },
                 ShortcutRow {
                     action: "Delete",

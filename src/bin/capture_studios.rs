@@ -73,6 +73,13 @@ fn schedule(scene: &str) -> Vec<Action> {
     use ActionKind::*;
     use Target::*;
     match scene {
+        "layout" => vec![
+            event(2., Click(Text("Present"))),
+            event(5., Key(egui::Key::Escape, Modifiers::NONE)),
+            event(7., Key(egui::Key::F, Modifiers::NONE)),
+            drag(8., 2., Drag(At(650., 350.), At(1000., 650.))),
+            event(12., Key(egui::Key::Z, ctrl())),
+        ],
         "chroma" => vec![
             event(1., Click(Text("Chroma key…"))),
             event(2., Click(Any("Original"))),
@@ -95,14 +102,10 @@ fn schedule(scene: &str) -> Vec<Action> {
             event(13., Click(Any("Cancel"))),
         ],
         "graphics" => vec![
-            event(1., Click(Text("+"))),
-            drag(2., 0.6, Delta(Field("Angle"), 30.)),
-            event(4., Click(Offset("Stop 2", 68., 0.))),
-            event(6., Key(egui::Key::Escape, Modifiers::NONE)),
-            event(7., Click(Text("Stroke"))),
-            event(8., Click(Text("Linear"))),
-            event(9., Click(Any("Conic"))),
-            event(10., Key(egui::Key::Escape, Modifiers::NONE)),
+            drag(1., 2., Drag(World(100., 90.), World(350., 230.))),
+            drag(4., 1.5, Drag(World(350., 230.), World(200., 270.))),
+            drag(7., 2., Drag(World(110., 250.), World(340., 100.))),
+            event(10., Key(egui::Key::V, Modifiers::NONE)),
             event(11., Key(egui::Key::A, ctrl())),
             event(12., Key(egui::Key::G, ctrl())),
             event(
@@ -230,7 +233,7 @@ fn schedule(scene: &str) -> Vec<Action> {
                 1.2,
                 Drag(Slider("Vibrance", 0.5), Slider("Vibrance", 0.52)),
             ),
-            event(10.4, Click(Text("Color mixer"))),
+            event(10.4, Hover(Text("Color"))),
             event(12., Click(Text("Detail"))),
             drag(
                 13.,
@@ -242,7 +245,7 @@ fn schedule(scene: &str) -> Vec<Action> {
                 1.3,
                 Drag(Slider("Vignette", 0.5), Slider("Vignette", 0.53)),
             ),
-            event(18.2, Click(Any("Iris study.png"))),
+            event(18.2, Click(Text("Light"))),
             event(20.0, Click(Any("Coast at golden hour.png"))),
             event(21.2, Click(Text("Before"))),
             event(22.2, Click(Text("Before"))),
@@ -251,28 +254,17 @@ fn schedule(scene: &str) -> Vec<Action> {
             event(0.7, Click(Text("Draw stroke"))),
             event(1.5, Key(egui::Key::Space, Modifiers::NONE)),
             event(4.5, Key(egui::Key::Space, Modifiers::NONE)),
-            event(5.6, Click(Text("Keyframe controls"))),
-            event(6.2, Scroll(-280.)),
-            event(8.0, Key(egui::Key::Home, Modifiers::NONE)),
-            event(8.4, Key(egui::Key::K, Modifiers::NONE)),
-            event(9.8, Click(At(740., 790.))),
-            event(10.8, Click(Text("Keyframe controls"))),
-            event(11.4, Scroll(650.)),
-            event(12., Click(Text("Appearance"))),
-            event(12.3, Scroll(-300.)),
-            event(13.0, Click(Text("Stroke details"))),
-            event(14.5, Key(egui::Key::Escape, Modifiers::NONE)),
-            event(16., Key(egui::Key::Home, Modifiers::NONE)),
-            event(16.3, Key(egui::Key::Space, Modifiers::NONE)),
-            event(17.5, Key(egui::Key::Space, Modifiers::NONE)),
-            event(17.8, Click(Any("Design"))),
-            event(18., Click(Any("Object"))),
-            event(18.5, Hover(Any("Reshape"))),
-            event(19.2, Click(Any("Perspective"))),
-            event(19.7, Scroll(650.)),
-            drag(20.5, 1.5, Delta(Handle(0), 55.)),
-            event(22.5, Key(egui::Key::Enter, Modifiers::NONE)),
-            event(23.3, Click(Any("Motion"))),
+            event(6., Key(egui::Key::Home, Modifiers::NONE)),
+            event(7., Key(egui::Key::K, Modifiers::NONE)),
+            event(9., Key(egui::Key::Z, ctrl())),
+            event(12., Click(Text("Pop in"))),
+            event(13., Key(egui::Key::Home, Modifiers::NONE)),
+            event(13.5, Key(egui::Key::Space, Modifiers::NONE)),
+            event(16., Key(egui::Key::Space, Modifiers::NONE)),
+            event(18., Click(Text("Slide up"))),
+            event(19., Key(egui::Key::Home, Modifiers::NONE)),
+            event(19.5, Key(egui::Key::Space, Modifiers::NONE)),
+            event(22., Key(egui::Key::Space, Modifiers::NONE)),
             event(24., Click(Text("Normal"))),
             event(25., Click(Any("Screen"))),
             event(26.3, Click(Text("Screen"))),
@@ -424,6 +416,9 @@ fn seed(scene: &str) -> Studio {
     s.recents.clear();
     s.path = None;
     match scene {
+        "layout" => {
+            omadesign::shots::apply(&mut s, "layout").unwrap();
+        }
         "chroma" => {
             omadesign::shots::apply(&mut s, "pixel-effects").unwrap();
         }
@@ -550,7 +545,7 @@ impl Capture {
     fn new(scene: String, directory: PathBuf, probe: bool) -> Self {
         let studio = seed(&scene);
         let seconds = match scene.as_str() {
-            "chroma" => 15,
+            "chroma" | "layout" => 15,
             "graphics" => 17,
             "design" => 42,
             "photo" => 24,
@@ -800,7 +795,6 @@ impl eframe::App for Capture {
     }
     fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
-        self.studio.last_input = std::time::Instant::now();
         omadesign::ui::run(ui, &mut self.studio);
         self.read_labels(&ctx);
         // Only a pointer indicator is overlaid. Every panel and artwork pixel

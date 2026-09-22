@@ -4,13 +4,13 @@ WEBVTT
 Presets: Apply Draw stroke to the selected rings and play the actual animation.
 
 00:00:06.000 --> 00:00:12.000
-Keyframes: Open Keyframe controls and work with keys in the native timeline.
+Keyframes: Add a key with the native keyboard shortcut and undo it.
 
 00:00:12.000 --> 00:00:18.000
-Appearance: Inspect stroke appearance on the animated artwork.
+Pop in: Apply Pop in and play the resulting animation.
 
 00:00:18.000 --> 00:00:24.000
-Reshape in Design: Switch the same document to Design, adjust a Perspective handle, then return to Motion.
+Slide up: Apply Slide up and play the resulting animation.
 
 00:00:24.000 --> 00:00:30.000
 Layers: Compare blend modes and play the edited animation.
