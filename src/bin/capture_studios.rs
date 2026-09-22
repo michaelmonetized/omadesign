@@ -1,5 +1,5 @@
 //! Isolated native WGPU recordings driven by real egui pointer/key events.
-//! Run from the repository root: capture_studios SCENE OUTPUT_DIR [--probe].
+//! Run from the repository root: capture_studios SCENE OUTPUT_DIR [--probe] [--fps 30|60].
 //! Only the initial document is seeded; recorded edits go through the actual UI.
 use eframe::egui::{self, Event, Key, Modifiers, PointerButton, Pos2, Rect, ViewportBuilder};
 use omadesign::{
@@ -14,6 +14,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
+    time::{Duration, Instant, UNIX_EPOCH},
 };
 
 const FPS: u32 = 30;
@@ -22,6 +23,7 @@ const SIZE: [u32; 2] = [1600, 900];
 enum Target {
     Text(&'static str),
     Any(&'static str),
+    Left(&'static str),
     Field(&'static str),
     Menu(&'static str),
     Slider(&'static str, f32),
@@ -42,6 +44,10 @@ enum ActionKind {
     Key(Key, Modifiers),
     Scroll(f32),
     Hover(Target),
+    Move(Target),
+    ScrollAt(Target, f32),
+    Type(&'static str),
+    Expect(&'static str),
 }
 struct Action {
     start: u32,
@@ -73,6 +79,102 @@ fn schedule(scene: &str) -> Vec<Action> {
     use ActionKind::*;
     use Target::*;
     match scene {
+        "welcome-browse" => vec![
+            event(0.5, Expect("Your Work")),
+            drag(0.8, 0.7, Move(At(105., 180.))),
+            event(1.7, Expect("After Hours")),
+            drag(2.2, 0.7, Move(Left("\u{E266}"))),
+            event(3., Click(Left("\u{E266}"))),
+            event(3.4, Expect("All modes")),
+            drag(3.6, 0.5, Move(Left("Raster"))),
+            event(4.2, Click(Left("Raster"))),
+            drag(4.8, 0.6, Move(At(105., 150.))),
+            event(5.6, Expect("Iris study")),
+            drag(6.1, 0.5, Move(Left("\u{E266}"))),
+            event(6.7, Click(Left("\u{E266}"))),
+            event(7.1, Click(Left("All modes"))),
+            drag(7.6, 0.6, Move(At(105., 180.))),
+            event(
+                8.3,
+                ModifiedClick(
+                    At(105., 180.),
+                    Modifiers {
+                        shift: true,
+                        ..Modifiers::NONE
+                    },
+                ),
+            ),
+            drag(8.8, 0.6, Move(At(300., 150.))),
+            event(9.5, Click(At(300., 150.))),
+            event(10., Expect("2 selected")),
+            drag(10.5, 0.5, Move(Left("Clear"))),
+            event(11.1, Click(Left("Clear"))),
+            drag(11.6, 0.8, Move(At(1080., 130.))),
+            event(12.5, Expect("Fieldwork")),
+            event(13., Click(At(1080., 130.))),
+            event(13.5, Expect("← Projects")),
+            drag(14., 0.6, Move(At(1080., 180.))),
+            event(14.8, Expect("Spring launch")),
+            event(15.4, Click(At(1080., 180.))),
+            event(16., Expect("↑ Fieldwork")),
+            drag(16.5, 0.6, Move(At(1080., 250.))),
+            drag(18., 0.6, Move(Any("↑ Fieldwork"))),
+            event(18.7, Click(Any("↑ Fieldwork"))),
+            drag(19.6, 0.6, Move(Any("← Projects"))),
+            event(20.3, Click(Any("← Projects"))),
+            drag(21., 0.8, Move(At(850., 80.))),
+        ],
+        "welcome-vector" => vec![
+            drag(1., 0.8, Move(Any("Vector"))),
+            event(2., Click(Any("Vector"))),
+            event(2.6, Expect("Vector templates")),
+            drag(3.2, 1.2, Move(At(730., 500.))),
+            drag(5., 1., Move(At(1080., 500.))),
+            drag(6.5, 0.8, Move(Any("Use this template"))),
+        ],
+        "welcome-layout" => vec![
+            drag(1., 0.8, Move(Any("Layout"))),
+            event(2., Click(Any("Layout"))),
+            event(2.6, Expect("Layout templates")),
+            drag(3.2, 1.2, Move(At(730., 500.))),
+            drag(5., 1., Move(At(1080., 500.))),
+            drag(6.5, 0.8, Move(Any("Use this template"))),
+        ],
+        "welcome-raster" => vec![
+            drag(1., 0.8, Move(Any("Raster"))),
+            event(2., Click(Any("Raster"))),
+            event(2.6, Expect("New Raster document")),
+            drag(3.2, 1., Move(Any("Custom size"))),
+            drag(4.6, 0.7, Move(Any("Transparent"))),
+            event(5.5, Click(Any("Transparent"))),
+            drag(6., 0.7, Move(Any("Create document"))),
+        ],
+        "welcome-agents" => vec![
+            event(0.3, Click(At(1080., 130.))),
+            drag(0.8, 0.6, Move(At(810., 720.))),
+            event(1.6, ScrollAt(At(810., 720.), -380.)),
+            drag(2.4, 0.8, Move(Any("Learn with AI"))),
+            event(3.3, Click(Any("Learn with AI"))),
+            event(3.8, Expect("Ask anything…")),
+            drag(4.2, 3., Type("How do I make a responsive landing page?")),
+            event(7.6, Expect("How do I make a responsive landing page?")),
+            drag(8.1, 0.7, Move(Any("Cancel"))),
+            event(9., Click(Any("Cancel"))),
+            drag(9.6, 0.7, Move(Any("Create with agent"))),
+            event(10.5, Click(Any("Create with agent"))),
+            drag(
+                11.3,
+                4.5,
+                Type("Create an editable poster for a late-night listening party."),
+            ),
+            event(
+                16.2,
+                Expect("Create an editable poster for a late-night listening party."),
+            ),
+            drag(17., 0.8, Move(Any("Cancel"))),
+            event(18., Click(Any("Cancel"))),
+            drag(18.8, 0.8, Move(At(850., 80.))),
+        ],
         "layout" => vec![
             event(2., Click(Text("Present"))),
             event(5., Key(egui::Key::Escape, Modifiers::NONE)),
@@ -134,7 +236,6 @@ fn schedule(scene: &str) -> Vec<Action> {
             drag(1., 1.4, Delta(Field("Rotate"), 44.)),
             drag(3.4, 1.3, Delta(Field("Corner radius"), 56.)),
             event(6.1, Click(Text("Add stroke"))),
-            event(7.3, Click(Text("Stroke details"))),
             event(8.8, Key(egui::Key::Escape, Modifiers::NONE)),
             event(9.2, Click(Menu("Appearance"))),
             event(9.7, Click(Any("Linear gradient"))),
@@ -246,7 +347,6 @@ fn schedule(scene: &str) -> Vec<Action> {
                 Drag(Slider("Vignette", 0.5), Slider("Vignette", 0.53)),
             ),
             event(18.2, Click(Text("Light"))),
-            event(20.0, Click(Any("Coast at golden hour.png"))),
             event(21.2, Click(Text("Before"))),
             event(22.2, Click(Text("Before"))),
         ],
@@ -302,7 +402,7 @@ struct Encoder {
     pipe: ChildStdin,
 }
 impl Encoder {
-    fn new(path: &Path) -> Self {
+    fn new(path: &Path, fps: u32) -> Self {
         let mut child = Command::new("ffmpeg")
             .args([
                 "-y",
@@ -315,7 +415,7 @@ impl Encoder {
                 "-video_size",
                 "1600x900",
                 "-framerate",
-                "30",
+                &fps.to_string(),
                 "-i",
                 "pipe:0",
                 "-an",
@@ -359,6 +459,8 @@ struct Capture {
     events: Vec<Event>,
     total: u32,
     errors: Vec<String>,
+    fps: u32,
+    ready_since: Instant,
 }
 
 fn prepare_kit() -> PathBuf {
@@ -368,7 +470,7 @@ fn prepare_kit() -> PathBuf {
     fs::create_dir_all(&root).unwrap();
     omadesign::brand::create(&root, "Studio kit").unwrap();
     for (from, to) in [
-        ("media/logo-4-refined.oma", "wordmark.oma"),
+        ("media/logo.svg", "wordmark.svg"),
         ("examples/site-showcase/motion.oma", "rings.oma"),
         ("examples/site-showcase/design.oma", "poster.oma"),
         (
@@ -409,6 +511,108 @@ fn prepare_kit() -> PathBuf {
     omadesign::typography::save(&root, &kit, Some(loaded.stamp)).unwrap();
     root
 }
+/// Disposable native documents and real brand assets. The production scanner
+/// indexes this directory; no catalog entries or rendered UI are substituted.
+fn prepare_welcome_catalog(profile: &Path) -> PathBuf {
+    let root = profile.join("catalog");
+    let project = root.join("Fieldwork");
+    let nested = project.join("Campaigns/Spring launch");
+    let kit = root.join("Studio kit");
+    for (path, name) in [
+        (&project, "Fieldwork"),
+        (&nested, "Spring launch"),
+        (&kit, "Studio kit"),
+    ] {
+        fs::create_dir_all(path).unwrap();
+        omadesign::brand::create(path, name).unwrap();
+        for (from, to) in [
+            ("media/logo.svg", "wordmark.svg"),
+            (
+                "examples/fieldwork/.omabrand/illustrations/rolling-hills.svg",
+                "landscape.svg",
+            ),
+            ("site/public/media/ai/poster.svg", "poster.svg"),
+        ] {
+            fs::copy(from, path.join(".omabrand").join(to)).unwrap();
+        }
+    }
+    let mut documents = vec![
+        (
+            project.join("After Hours.oma"),
+            omadesign::templates::build("after-hours", 900., 1200., 72.).unwrap(),
+            Persona::Design,
+        ),
+        (
+            nested.join("Wide violet.oma"),
+            omadesign::project::load_from(Path::new("site/public/media/ai/wide-violet.oma"))
+                .unwrap(),
+            Persona::Design,
+        ),
+        (
+            nested.join("Solar Social.oma"),
+            omadesign::templates::build("solar-social", 1000., 1000., 72.).unwrap(),
+            Persona::Design,
+        ),
+        (
+            project.join("Landing page.oma"),
+            omadesign::layout_templates::build("layout-hero", 1280., 800., 96.).unwrap(),
+            Persona::Layout,
+        ),
+        (
+            kit.join("Motion rings.oma"),
+            omadesign::project::load_from(Path::new("examples/site-showcase/motion.oma")).unwrap(),
+            Persona::Motion,
+        ),
+        (
+            root.join("Poster study.oma"),
+            omadesign::project::load_from(Path::new("site/public/media/ai/poster.oma")).unwrap(),
+            Persona::Design,
+        ),
+        (
+            kit.join("Square violet.oma"),
+            omadesign::project::load_from(Path::new("site/public/media/ai/square-violet.oma"))
+                .unwrap(),
+            Persona::Design,
+        ),
+    ];
+    let image = omadesign::photo::load_file(Path::new("examples/site-showcase/pixel-original.png"))
+        .unwrap();
+    let pixels = Pixels::from_rgba(image.w, image.h, image.data).unwrap();
+    let mut raster = Document::new("Iris study", pixels.w as f32, pixels.h as f32, 72.);
+    raster.layers = vec![Layer::placed_raster(
+        "Iris original",
+        pixels,
+        Pt::ZERO,
+        Pt::new(raster.width, raster.height),
+    )];
+    documents.insert(3, (project.join("Iris study.oma"), raster, Persona::Pixel));
+    // Stable ordering, independent of asynchronous scan order and wall clock.
+    for (index, (path, mut document, mode)) in documents.into_iter().enumerate() {
+        document.workspace = Some(mode);
+        document.name = path.file_stem().unwrap().to_string_lossy().into_owned();
+        omadesign::project::save_to(&document, &path).unwrap();
+        fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_times(
+                fs::FileTimes::new()
+                    .set_modified(UNIX_EPOCH + Duration::from_secs(1_780_000_000 - index as u64)),
+            )
+            .unwrap();
+    }
+    for (index, path) in [&project, &nested, &kit].into_iter().enumerate() {
+        fs::File::open(path)
+            .unwrap()
+            .set_times(
+                fs::FileTimes::new()
+                    .set_modified(UNIX_EPOCH + Duration::from_secs(1_780_000_010 - index as u64)),
+            )
+            .unwrap();
+    }
+    root
+}
+
 fn seed(scene: &str) -> Studio {
     let mut s = Studio::new();
     s.show_welcome = false;
@@ -416,6 +620,10 @@ fn seed(scene: &str) -> Studio {
     s.recents.clear();
     s.path = None;
     match scene {
+        scene if scene.starts_with("welcome-") => {
+            s.show_welcome = true;
+            s.welcome_page = omadesign::app::WelcomePage::Recents;
+        }
         "layout" => {
             omadesign::shots::apply(&mut s, "layout").unwrap();
         }
@@ -542,9 +750,13 @@ fn seed(scene: &str) -> Studio {
     s
 }
 impl Capture {
-    fn new(scene: String, directory: PathBuf, probe: bool) -> Self {
+    fn new(scene: String, directory: PathBuf, probe: bool, fps: u32) -> Self {
         let studio = seed(&scene);
         let seconds = match scene.as_str() {
+            "welcome-browse" => 23,
+            "welcome-vector" | "welcome-layout" => 9,
+            "welcome-raster" => 8,
+            "welcome-agents" => 21,
             "chroma" | "layout" => 15,
             "graphics" => 17,
             "design" => 42,
@@ -552,9 +764,14 @@ impl Capture {
             "pixel" | "motion" | "brand-kit" => 30,
             _ => panic!("unknown scene"),
         };
+        let mut actions = schedule(&scene);
+        for action in &mut actions {
+            action.start = action.start * fps / FPS;
+            action.end = action.end * fps / FPS;
+        }
         Self {
             studio,
-            actions: schedule(&scene),
+            actions,
             scene,
             directory,
             labels: vec![],
@@ -567,8 +784,10 @@ impl Capture {
             encoder: None,
             probe,
             events: vec![],
-            total: if probe { 1 } else { seconds * FPS },
+            total: if probe { 1 } else { seconds * fps },
             errors: vec![],
+            fps,
+            ready_since: Instant::now(),
         }
     }
     fn world(&self, x: f32, y: f32) -> Pos2 {
@@ -589,6 +808,11 @@ impl Capture {
         match t {
             Target::Text(s) => label(s, true).map(|r| r.center()),
             Target::Any(s) => label(s, false).map(|r| r.center()),
+            Target::Left(s) => self
+                .labels
+                .iter()
+                .find(|(text, rect)| text == s && rect.center().x < 640.)
+                .map(|(_, rect)| rect.center()),
             Target::At(x, y) => Some(egui::pos2(*x, *y)),
             Target::World(x, y) => Some(self.world(*x, *y)),
             Target::Menu(s) => label(s, true).map(|r| egui::pos2(1565., r.center().y)),
@@ -703,6 +927,39 @@ impl Capture {
                             },
                         ]);
                     }
+                    ActionKind::Move(target) => {
+                        a.points = self.target(target).map(|p| (self.cursor, p));
+                        if a.points.is_none() {
+                            self.errors
+                                .push(format!("frame {}: {:?} target missing", self.frame, a.kind));
+                        }
+                    }
+                    ActionKind::ScrollAt(target, delta) => {
+                        if let Some(p) = self.target(target) {
+                            self.cursor = p;
+                            self.events.extend([
+                                Event::PointerMoved(p),
+                                Event::MouseWheel {
+                                    unit: egui::MouseWheelUnit::Point,
+                                    delta: egui::vec2(0., *delta),
+                                    modifiers: Modifiers::NONE,
+                                    phase: egui::TouchPhase::Move,
+                                },
+                            ]);
+                        } else {
+                            self.errors
+                                .push(format!("frame {}: {:?} target missing", self.frame, a.kind));
+                        }
+                    }
+                    ActionKind::Expect(text) => {
+                        if !self.labels.iter().any(|(label, _)| label.contains(text)) {
+                            self.errors.push(format!(
+                                "frame {}: expected visible text {text:?}",
+                                self.frame
+                            ));
+                        }
+                    }
+                    ActionKind::Type(_) => {}
                     ActionKind::Drag(from, to) => a.points = self.target(from).zip(self.target(to)),
                     ActionKind::Delta(t, dx) => {
                         a.points = self.target(t).map(|p| (p, p + egui::vec2(*dx, 0.)))
@@ -727,12 +984,23 @@ impl Capture {
                     }
                 }
             }
+            if let ActionKind::Type(text) = &a.kind {
+                let chars: Vec<_> = text.chars().collect();
+                let span = (a.end - a.start + 1) as usize;
+                let elapsed = (self.frame - a.start) as usize;
+                let from = elapsed * chars.len() / span;
+                let to = (elapsed + 1) * chars.len() / span;
+                if to > from {
+                    self.events
+                        .push(Event::Text(chars[from..to].iter().collect()));
+                }
+            }
             if let Some((from, to)) = a.points {
                 let t = (self.frame - a.start) as f32 / (a.end - a.start).max(1) as f32;
                 let eased = t * t * (3. - 2. * t);
                 self.cursor = from + (to - from) * eased;
                 self.events.push(Event::PointerMoved(self.cursor));
-                if self.frame == a.end {
+                if self.frame == a.end && !matches!(a.kind, ActionKind::Move(_)) {
                     self.pressed = false;
                     self.events.push(Event::PointerButton {
                         pos: self.cursor,
@@ -783,7 +1051,7 @@ impl eframe::App for Capture {
         input.hovered_files.clear();
         input.dropped_files.clear();
         input.focused = true;
-        input.time = Some(self.frame as f64 / FPS as f64);
+        input.time = Some(self.frame as f64 / self.fps as f64);
         input.events.push(Event::ModifiersChanged(Modifiers::NONE));
         if self.warm >= 28 && !self.pending && !self.stepped {
             if !self.probe {
@@ -793,9 +1061,9 @@ impl eframe::App for Capture {
         }
         input.events.append(&mut self.events);
     }
-    fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
-        omadesign::ui::run(ui, &mut self.studio);
+        eframe::App::ui(&mut self.studio, ui, frame);
         self.read_labels(&ctx);
         // Only a pointer indicator is overlaid. Every panel and artwork pixel
         // below it is the real native application viewport.
@@ -838,10 +1106,13 @@ impl eframe::App for Capture {
             assert_eq!(image.size, [1600, 900]);
             let bytes: Vec<_> = image.pixels.iter().flat_map(|p| p.to_array()).collect();
             let encoder = self.encoder.get_or_insert_with(|| {
-                Encoder::new(&self.directory.join(format!("{}.mp4", self.scene)))
+                Encoder::new(
+                    &self.directory.join(format!("{}.mp4", self.scene)),
+                    self.fps,
+                )
             });
             encoder.pipe.write_all(&bytes).unwrap();
-            if self.frame % (FPS * 2) == 0 {
+            if self.frame % (self.fps * 2) == 0 {
                 image::save_buffer(
                     self.directory
                         .join(format!("{}-{:04}.png", self.scene, self.frame)),
@@ -862,6 +1133,7 @@ impl eframe::App for Capture {
                 .unwrap();
             }
             self.frame += 1;
+            self.ready_since = Instant::now();
             self.pending = false;
             self.stepped = false;
             if self.frame >= self.total {
@@ -887,23 +1159,86 @@ impl eframe::App for Capture {
                 for e in &self.errors {
                     eprintln!("{e}");
                 }
+                self.studio.allow_close = true;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 return;
             }
         }
-        if self.stepped && !self.pending && omadesign::ui::scene_ready(&ctx, &self.studio) {
+        // An active stroke or animation deliberately keeps live thumbnails
+        // dirty. Waiting for those thumbnails would freeze the replay before
+        // the next pointer movement/release (or pause) can ever arrive. Capture
+        // each real native frame while interacting, then wait for settled
+        // previews again after the interaction ends.
+        let live_interaction = self.pressed || self.studio.playing;
+        if self.stepped
+            && !self.pending
+            && (live_interaction || omadesign::ui::scene_ready(&ctx, &self.studio))
+        {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
             self.pending = true;
+        }
+        if self.ready_since.elapsed() > Duration::from_secs(180) {
+            self.errors.push(format!(
+                "frame {}: native readiness or screenshot timed out",
+                self.frame
+            ));
+            fs::write(
+                self.directory.join(format!("{}-errors.json", self.scene)),
+                serde_json::to_vec_pretty(&self.errors).unwrap(),
+            )
+            .unwrap();
+            panic!("{}: native readiness timeout", self.scene);
         }
         ctx.request_repaint();
     }
 }
 fn main() -> eframe::Result {
     let args: Vec<_> = std::env::args().skip(1).collect();
-    let scene = args.first().expect("SCENE OUTPUT_DIR [--probe]").clone();
+    let scene = args
+        .first()
+        .expect("SCENE OUTPUT_DIR [--probe] [--fps 30|60]")
+        .clone();
     let directory = PathBuf::from(args.get(1).expect("output directory"));
     fs::create_dir_all(&directory).unwrap();
     let probe = args.iter().any(|s| s == "--probe");
+    let fps = args
+        .iter()
+        .position(|s| s == "--fps")
+        .map(|i| {
+            args.get(i + 1)
+                .expect("--fps needs 30 or 60")
+                .parse::<u32>()
+                .expect("invalid FPS")
+        })
+        .unwrap_or(FPS);
+    assert!(matches!(fps, 30 | 60), "FPS must be 30 or 60");
+    // Keep the real desktop HOME/theme, isolate every app write and credential.
+    let profile = std::env::temp_dir().join(format!("omadesign-recording-{}", std::process::id()));
+    for (variable, name) in [
+        ("XDG_CONFIG_HOME", "config"),
+        ("XDG_DATA_HOME", "data"),
+        ("XDG_CACHE_HOME", "cache"),
+        ("XDG_STATE_HOME", "state"),
+    ] {
+        let path = profile.join(name);
+        fs::create_dir_all(&path).unwrap();
+        // No threads exist yet: this capture process owns its environment.
+        unsafe {
+            std::env::set_var(variable, path);
+        }
+    }
+    let catalog = scene
+        .starts_with("welcome-")
+        .then(|| prepare_welcome_catalog(&profile));
+    fs::write(
+        directory.join(format!("{scene}-capture.json")),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "scene": scene, "fps": fps, "size": SIZE, "profile": profile, "catalog": catalog,
+            "renderer": "native WGPU", "interaction": "real egui pointer and keyboard events",
+        }))
+        .unwrap(),
+    )
+    .unwrap();
     let options = eframe::NativeOptions {
         viewport: ViewportBuilder::default()
             .with_inner_size([1600., 900.])
@@ -920,7 +1255,10 @@ fn main() -> eframe::Result {
         Box::new(move |cc| {
             omadesign::ui::theme::apply(&cc.egui_ctx);
             cc.egui_ctx.set_pixels_per_point(1.);
-            Ok(Box::new(Capture::new(scene, directory, probe)))
+            if let Some(root) = &catalog {
+                omadesign::ui::set_capture_catalog_root(&cc.egui_ctx, root);
+            }
+            Ok(Box::new(Capture::new(scene, directory, probe, fps)))
         }),
     )
 }

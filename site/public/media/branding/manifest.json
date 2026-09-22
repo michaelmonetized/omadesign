@@ -1,0 +1,37 @@
+{
+  "version": "0.5.7",
+  "source": "media/logo.svg",
+  "sourceSha256": "e85725a651cb2d3efe986c21c4d1b6fbb898e5165b2fa1a441892f5e0ea03a2f",
+  "sourceSize": [
+    2000,
+    2000
+  ],
+  "artwork": "Official mark supplied by Michael; original SVG copied without changes.",
+  "socialRender": {
+    "size": [
+      1200,
+      630
+    ],
+    "renderSize": [
+      1200,
+      1200
+    ],
+    "offset": [
+      0,
+      -285
+    ],
+    "method": "SVG rasterization with a viewport crop; no geometry or color modifications."
+  },
+  "files": [
+    {
+      "file": "logo-0.5.7-social.png",
+      "bytes": 74792,
+      "sha256": "671b040d91ee5c0bca32b1832e36e9d5b69630979fb214e85a1994a33b83470e"
+    },
+    {
+      "file": "logo-0.5.7.svg",
+      "bytes": 1105618,
+      "sha256": "e85725a651cb2d3efe986c21c4d1b6fbb898e5165b2fa1a441892f5e0ea03a2f"
+    }
+  ]
+}

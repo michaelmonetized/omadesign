@@ -8,6 +8,13 @@ export type UpdatePost = {
 
 export const updates: UpdatePost[] = [
   {
+    slug: "0.5.7",
+    version: "0.5.7",
+    date: "2026-09-21",
+    title: "A new mark. A quicker look.",
+    dek: "The new official Omadesign mark across the app and website, plus a fresh 32-second silent product film. The Cloud announcement stays in place.",
+  },
+  {
     slug: "0.5.6",
     version: "0.5.6",
     date: "2026-09-21",

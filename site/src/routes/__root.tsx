@@ -38,7 +38,7 @@ export const Route = createRootRoute({
       { property: "og:url", content: SITE_ORIGIN },
       {
         property: "og:image",
-        content: `${SITE_ORIGIN}/media/studio/omadesign-logo.webp`,
+        content: `${SITE_ORIGIN}/media/branding/logo-0.5.7-social.png`,
       },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -47,7 +47,7 @@ export const Route = createRootRoute({
       {
         rel: "icon",
         type: "image/svg+xml",
-        href: sitePath("media/showcase/favicon.svg"),
+        href: sitePath("media/branding/logo-0.5.7.svg"),
       },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       {
@@ -99,9 +99,7 @@ function Document() {
               aria-label="omadesign home"
             >
               <img
-                src={sitePath(
-                  `media/showcase/wordmark-on-${theme === "mocha" ? "dark" : "light"}.svg?v=full-logo`,
-                )}
+                src={sitePath("media/branding/logo-0.5.7.svg")}
                 alt="omadesign"
                 width="160"
                 height="90"
@@ -151,9 +149,7 @@ function Document() {
           <div className="shell footer-top">
             <a className="wordmark" href={sitePath()}>
               <img
-                src={sitePath(
-                  `media/showcase/wordmark-on-${theme === "mocha" ? "dark" : "light"}.svg?v=full-logo`,
-                )}
+                src={sitePath("media/branding/logo-0.5.7.svg")}
                 alt="omadesign"
                 width="160"
                 height="90"

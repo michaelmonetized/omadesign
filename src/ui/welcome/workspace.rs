@@ -663,7 +663,7 @@ fn logo(ui: &mut Ui) {
         .data(|d| d.get_temp::<egui::TextureHandle>(id))
         .or_else(|| {
             let tree = usvg::Tree::from_data(
-                include_bytes!("../../../media/logo-4-refined.svg"),
+                include_bytes!("../../../assets/omadesign-wordmark.svg"),
                 &usvg::Options::default(),
             )
             .ok()?;
