@@ -1,4 +1,5 @@
 import { StudioRefresh, AiWorkflow } from "../components/studio-refresh";
+import { ProductFilm } from "../components/product-film";
 import { CloudIntro } from "../components/cloud-waitlist";
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
@@ -127,6 +128,7 @@ function Home() {
           />
         </figure>
       </section>
+      <ProductFilm />
       <FeatureExplorer />
       <section className="section shell faq-section" id="questions">
         <RevealText text="Details." />

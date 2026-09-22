@@ -256,8 +256,11 @@ p {
   align-items: center;
 }
 .wordmark img {
-  max-height: 90px;
-  width: auto;
+  width: 160px;
+  height: 90px;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 6px;
 }
 .header-inner nav {
   display: flex;
@@ -621,10 +624,36 @@ kbd {
   border-top: 1px solid var(--line);
 }
 .film-section video {
+  display: block;
   width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
   border-radius: 12px;
   background: #000;
   border: 1px solid var(--line);
+}
+.film-caption {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.film-caption nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+.film-caption a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.film-error {
+  margin-top: 16px;
+  color: var(--ink);
 }
 .features-section {
   border-top: 1px solid var(--line);
@@ -1175,8 +1204,8 @@ details[open] > summary .disclosure-plus {
     height: 88px;
   }
   .wordmark img {
-    max-width: 128px;
-    max-height: 72px;
+    width: 128px;
+    height: 72px;
   }
   .header-inner nav {
     font-size: 11px;

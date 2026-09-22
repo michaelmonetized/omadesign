@@ -1,0 +1,777 @@
+{
+  "title": "Omadesign \u2014 Your work in motion",
+  "version": "0.5.7",
+  "bpm": 120,
+  "cut_beats": [
+    1,
+    3
+  ],
+  "poster_at": 0.35,
+  "shots": [
+    {
+      "source": "welcome-browse.mp4",
+      "in": 0.4,
+      "out": 1.8,
+      "copy": "YOUR WORK. ALL HERE.",
+      "description": "The new welcome screen shows actual documents and brand projects.",
+      "zoom": [
+        1,
+        1.06
+      ],
+      "x": [
+        0.5,
+        0.5
+      ],
+      "y": [
+        0.45,
+        0.45
+      ]
+    },
+    {
+      "source": "welcome-browse.mp4",
+      "in": 0.8,
+      "out": 2.1,
+      "copy": "YOUR WORK. ALL HERE.",
+      "description": "Natural-aspect document thumbnails reveal names on hover.",
+      "zoom": [
+        1.15,
+        1.6
+      ],
+      "x": [
+        0.03,
+        0.04
+      ],
+      "y": [
+        0.12,
+        0.15
+      ]
+    },
+    {
+      "source": "welcome-browse.mp4",
+      "in": 2.9,
+      "out": 4.6,
+      "copy": "FIND YOUR FLOW.",
+      "description": "Filter local artwork by editing mode.",
+      "zoom": [
+        1.55,
+        1.7
+      ],
+      "x": [
+        0.05,
+        0.04
+      ],
+      "y": [
+        0,
+        0
+      ]
+    },
+    {
+      "source": "welcome-browse.mp4",
+      "in": 8.0,
+      "out": 10.4,
+      "copy": "FIND YOUR FLOW.",
+      "description": "Shift-click begins selection; another click selects a second document.",
+      "zoom": [
+        1.5,
+        1.35
+      ],
+      "x": [
+        0,
+        0
+      ],
+      "y": [
+        0.1,
+        0.1
+      ]
+    },
+    {
+      "source": "welcome-browse.mp4",
+      "in": 12.6,
+      "out": 14.9,
+      "copy": "PROJECTS THAT GO DEEP.",
+      "description": "Open a brand project and reveal its subprojects above the documents.",
+      "zoom": [
+        1.25,
+        1.65
+      ],
+      "x": [
+        1,
+        1
+      ],
+      "y": [
+        0.04,
+        0.08
+      ]
+    },
+    {
+      "source": "welcome-browse.mp4",
+      "in": 15.1,
+      "out": 17.2,
+      "copy": "PROJECTS THAT GO DEEP.",
+      "description": "Navigate into the nested Spring launch project.",
+      "zoom": [
+        1.65,
+        1.3
+      ],
+      "x": [
+        1,
+        1
+      ],
+      "y": [
+        0.05,
+        0.18
+      ]
+    },
+    {
+      "source": "welcome-vector.mp4",
+      "in": 1.7,
+      "out": 3.3,
+      "copy": "START WITH SOMETHING.",
+      "description": "Vector opens its actual editable template chooser.",
+      "zoom": [
+        1.0,
+        1.12
+      ],
+      "x": [
+        0,
+        0
+      ],
+      "y": [
+        0,
+        0
+      ]
+    },
+    {
+      "source": "welcome-vector.mp4",
+      "in": 3.2,
+      "out": 5.6,
+      "copy": "START WITH SOMETHING.",
+      "description": "Browse colorful editable vector starting points.",
+      "zoom": [
+        1.1,
+        1.28
+      ],
+      "x": [
+        0.6,
+        0.45
+      ],
+      "y": [
+        0.5,
+        0.45
+      ]
+    },
+    {
+      "source": "welcome-layout.mp4",
+      "in": 1.7,
+      "out": 3.5,
+      "copy": "CHOOSE YOUR CANVAS.",
+      "description": "Layout has its own native template chooser.",
+      "zoom": [
+        1.0,
+        1.18
+      ],
+      "x": [
+        0,
+        0
+      ],
+      "y": [
+        0,
+        0
+      ]
+    },
+    {
+      "source": "welcome-raster.mp4",
+      "in": 1.8,
+      "out": 3.7,
+      "copy": "CHOOSE YOUR CANVAS.",
+      "description": "Raster starts with a real size and background picker.",
+      "zoom": [
+        1.1,
+        1.36
+      ],
+      "x": [
+        0.5,
+        0.5
+      ],
+      "y": [
+        0.45,
+        0.45
+      ]
+    },
+    {
+      "source": "welcome-agents.mp4",
+      "in": 4.1,
+      "out": 7.7,
+      "copy": "ASK YOUR AGENT.",
+      "description": "Type a question in Learn with AI. The app supplies its documentation context.",
+      "zoom": [
+        1.3,
+        1.52
+      ],
+      "x": [
+        0.5,
+        0.5
+      ],
+      "y": [
+        0.45,
+        0.45
+      ]
+    },
+    {
+      "source": "welcome-agents.mp4",
+      "in": 11.1,
+      "out": 16.3,
+      "copy": "BRIEF YOUR AGENT.",
+      "description": "Type an editable poster brief in Create with agent. No generation is simulated.",
+      "zoom": [
+        1.52,
+        1.3
+      ],
+      "x": [
+        0.5,
+        0.5
+      ],
+      "y": [
+        0.45,
+        0.45
+      ]
+    },
+    {
+      "source": "graphics.mp4",
+      "in": 1.0,
+      "out": 3.2,
+      "copy": "MOVE THE COLOR.",
+      "description": "Drag a native gradient handle across a shape.",
+      "zoom": [
+        1.02,
+        1.3
+      ],
+      "x": [
+        0.42,
+        0.35
+      ],
+      "y": [
+        0.2,
+        0.3
+      ]
+    },
+    {
+      "source": "graphics.mp4",
+      "in": 7.0,
+      "out": 9.1,
+      "copy": "MOVE THE COLOR.",
+      "description": "Change the gradient direction with another canvas drag.",
+      "zoom": [
+        1.34,
+        1.12
+      ],
+      "x": [
+        0.32,
+        0.45
+      ],
+      "y": [
+        0.2,
+        0.25
+      ]
+    },
+    {
+      "source": "design.mp4",
+      "in": 3.3,
+      "out": 4.9,
+      "copy": "BEND THE RULES.",
+      "description": "Round a shape\u2019s corners using the real inspector.",
+      "zoom": [
+        1.25,
+        1.9
+      ],
+      "x": [
+        0.5,
+        0.55
+      ],
+      "y": [
+        0.24,
+        0.23
+      ]
+    },
+    {
+      "source": "design.mp4",
+      "in": 20.0,
+      "out": 22.1,
+      "copy": "BEND THE RULES.",
+      "description": "Drag an actual warp-mesh handle to reshape the artwork.",
+      "zoom": [
+        1.9,
+        2.15
+      ],
+      "x": [
+        0.55,
+        0.6
+      ],
+      "y": [
+        0.24,
+        0.23
+      ]
+    },
+    {
+      "source": "pixel.mp4",
+      "in": 3.0,
+      "out": 5.5,
+      "copy": "PAINT. MASK. REFINE.",
+      "description": "Paint a highlight onto a separate raster layer.",
+      "zoom": [
+        1.08,
+        1.32
+      ],
+      "x": [
+        0.45,
+        0.5
+      ],
+      "y": [
+        0.55,
+        0.6
+      ]
+    },
+    {
+      "source": "pixel.mp4",
+      "in": 14.0,
+      "out": 16.5,
+      "copy": "PAINT. MASK. REFINE.",
+      "description": "Brush a layer mask to hide part of the painted highlight.",
+      "zoom": [
+        1.35,
+        1.12
+      ],
+      "x": [
+        0.5,
+        0.45
+      ],
+      "y": [
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "source": "chroma.mp4",
+      "in": 5.65,
+      "out": 6.75,
+      "copy": "KEEP WHAT MATTERS.",
+      "description": "Apply the sampled chroma key to remove the green background.",
+      "zoom": [
+        1.04,
+        1.15
+      ],
+      "x": [
+        0.4,
+        0.4
+      ],
+      "y": [
+        0.45,
+        0.45
+      ]
+    },
+    {
+      "source": "photo.mp4",
+      "in": 20.7,
+      "out": 22.6,
+      "copy": "LIGHT. YOUR WAY.",
+      "description": "Compare the developed photo against its original.",
+      "zoom": [
+        1.1,
+        1.28
+      ],
+      "x": [
+        0.4,
+        0.4
+      ],
+      "y": [
+        0.4,
+        0.4
+      ]
+    },
+    {
+      "source": "photo.mp4",
+      "in": 6.8,
+      "out": 8.4,
+      "copy": "LIGHT. YOUR WAY.",
+      "description": "Warm the photo using the native temperature control.",
+      "zoom": [
+        1.28,
+        1.1
+      ],
+      "x": [
+        1,
+        1
+      ],
+      "y": [
+        0.35,
+        0.4
+      ]
+    },
+    {
+      "source": "brand-kit.mp4",
+      "in": 1.4,
+      "out": 3.6,
+      "copy": "BUILD YOUR BRAND.",
+      "description": "Apply colors from the project palette to the selected shape.",
+      "zoom": [
+        1.04,
+        1.2
+      ],
+      "x": [
+        0.6,
+        0.8
+      ],
+      "y": [
+        0.4,
+        0.25
+      ]
+    },
+    {
+      "source": "brand-kit.mp4",
+      "in": 13.0,
+      "out": 15.3,
+      "copy": "BUILD YOUR BRAND.",
+      "description": "Drag a real SVG brand asset onto the artboard.",
+      "zoom": [
+        1.2,
+        1.05
+      ],
+      "x": [
+        0.75,
+        0.4
+      ],
+      "y": [
+        0.35,
+        0.6
+      ]
+    },
+    {
+      "source": "brand-kit.mp4",
+      "in": 22.7,
+      "out": 23.9,
+      "copy": "MAKE IT YOURS.",
+      "description": "Apply the project\u2019s Body typeface role to the selected headline.",
+      "zoom": [
+        1.05,
+        1.25
+      ],
+      "x": [
+        0.25,
+        0.18
+      ],
+      "y": [
+        0.25,
+        0.22
+      ]
+    },
+    {
+      "source": "layout.mp4",
+      "in": 1.8,
+      "out": 3.1,
+      "copy": "LAY IT OUT.",
+      "description": "Open the actual Layout presentation from the editor.",
+      "zoom": [
+        1.04,
+        1.15
+      ],
+      "x": [
+        0.5,
+        0.5
+      ],
+      "y": [
+        0.45,
+        0.45
+      ]
+    },
+    {
+      "source": "layout.mp4",
+      "in": 8.0,
+      "out": 9.8,
+      "copy": "LAY IT OUT.",
+      "description": "Draw a new frame in the native Layout workspace.",
+      "zoom": [
+        1.17,
+        1.03
+      ],
+      "x": [
+        0.6,
+        0.5
+      ],
+      "y": [
+        0.48,
+        0.45
+      ]
+    },
+    {
+      "source": "motion.mp4",
+      "in": 1.4,
+      "out": 3.1,
+      "copy": "MAKE IT MOVE.",
+      "description": "Play the real Draw stroke animation on existing vector elements.",
+      "zoom": [
+        1.03,
+        1.22
+      ],
+      "x": [
+        0.45,
+        0.5
+      ],
+      "y": [
+        0.42,
+        0.45
+      ]
+    },
+    {
+      "source": "motion.mp4",
+      "in": 13.4,
+      "out": 14.4,
+      "copy": "MAKE IT MOVE.",
+      "description": "Play the actual Pop in preset.",
+      "zoom": [
+        1.24,
+        1.02
+      ],
+      "x": [
+        0.5,
+        0.5
+      ],
+      "y": [
+        0.45,
+        0.45
+      ]
+    },
+    {
+      "source": "motion.mp4",
+      "in": 14.4,
+      "out": 15.5,
+      "copy": "ONE NATIVE STUDIO.",
+      "description": "The colored rings finish the actual Pop in animation.",
+      "zoom": [
+        1.65,
+        1.32
+      ],
+      "x": [
+        0.5,
+        0.5
+      ],
+      "y": [
+        0.45,
+        0.45
+      ]
+    },
+    {
+      "source": "welcome-browse.mp4",
+      "in": 20.2,
+      "out": 22.2,
+      "copy": "ONE NATIVE STUDIO.",
+      "description": "Return to the new welcome screen with the official logo.",
+      "zoom": [
+        1.16,
+        1.0
+      ],
+      "x": [
+        0.5,
+        0.5
+      ],
+      "y": [
+        0.35,
+        0.45
+      ]
+    },
+    {
+      "source": "brand-ending.mp4",
+      "in": 0,
+      "out": 1,
+      "copy": "",
+      "description": "The new official Omadesign mark.",
+      "zoom": [
+        1.02,
+        1.22
+      ],
+      "x": [
+        0.5,
+        0.5
+      ],
+      "y": [
+        0.4,
+        0.4
+      ]
+    },
+    {
+      "source": "brand-ending.mp4",
+      "in": 1,
+      "out": 2,
+      "copy": "OMADESIGN.APP",
+      "description": "The official mark settles above the Omadesign website address.",
+      "zoom": [
+        1.05,
+        1.0
+      ],
+      "x": [
+        0.5,
+        0.5
+      ],
+      "y": [
+        0.45,
+        0.45
+      ]
+    }
+  ],
+  "captions": [
+    {
+      "start": 0,
+      "end": 4,
+      "text": "Find, filter and select local artwork."
+    },
+    {
+      "start": 4,
+      "end": 6,
+      "text": "Browse projects and subprojects."
+    },
+    {
+      "start": 6,
+      "end": 10,
+      "text": "Start with Vector or Layout templates, or a Raster canvas."
+    },
+    {
+      "start": 10,
+      "end": 12,
+      "text": "Ask and brief your Omarchy agent."
+    },
+    {
+      "start": 12,
+      "end": 16,
+      "text": "Edit gradients, corners and warp meshes."
+    },
+    {
+      "start": 16,
+      "end": 19,
+      "text": "Paint, mask and remove a background."
+    },
+    {
+      "start": 19,
+      "end": 21,
+      "text": "Develop photos and compare the original."
+    },
+    {
+      "start": 21,
+      "end": 24,
+      "text": "Apply project colors, assets and typefaces."
+    },
+    {
+      "start": 24,
+      "end": 26,
+      "text": "Preview a layout. Draw a frame."
+    },
+    {
+      "start": 26,
+      "end": 29,
+      "text": "Animate existing artwork with native presets."
+    },
+    {
+      "start": 29,
+      "end": 32,
+      "text": "One native studio. Omadesign.app"
+    }
+  ],
+  "fps": 60,
+  "width": 1920,
+  "height": 1080,
+  "seconds": 32,
+  "frames": 1920,
+  "audio": false,
+  "cut_frames": [
+    0,
+    60,
+    120,
+    180,
+    240,
+    300,
+    360,
+    420,
+    480,
+    540,
+    600,
+    660,
+    720,
+    780,
+    840,
+    900,
+    960,
+    1020,
+    1080,
+    1140,
+    1200,
+    1260,
+    1320,
+    1380,
+    1440,
+    1500,
+    1560,
+    1620,
+    1680,
+    1740,
+    1800,
+    1860
+  ],
+  "provenance": "Fresh native Omadesign WGPU recordings driven through the actual app UI; editorial speed ramps, camera crops and captions. The two-second brand ending uses the official SVG. No simulated UI frames.",
+  "raw_take_action_reports": {
+    "brand-kit.mp4": [],
+    "chroma.mp4": [],
+    "design.mp4": [
+      "frame 366: Click(Text(\"Add stroke\")) target missing",
+      "frame 1428: Click(Text(\"Effects\")) target missing",
+      "frame 1500: Click(Text(\"Add\")) target missing",
+      "frame 1530: Click(Any(\"Drop shadow\")) target missing",
+      "frame 1860: Click(Text(\"Ignore white\")) target missing",
+      "frame 1932: Hover(Text(\"Trace to vector\")) target missing"
+    ],
+    "graphics.mp4": [],
+    "layout.mp4": [],
+    "motion.mp4": [],
+    "photo.mp4": [],
+    "pixel.mp4": [
+      "frame 360: Click(Text(\"Iris original\")) target missing",
+      "frame 1080: Click(Offset(\"Color\", 12.0, 27.0)) target missing"
+    ],
+    "welcome-agents.mp4": [],
+    "welcome-browse.mp4": [],
+    "welcome-layout.mp4": [],
+    "welcome-raster.mp4": [],
+    "welcome-vector.mp4": []
+  },
+  "source_sha256": {
+    "brand-ending.mp4": "4530e1205c787db7e0e3724ef96a5ab40d4fd34f5e8275c15513275578a2cc08",
+    "brand-kit.mp4": "f76509c86deb7a54ea9a47b218d9b01c634cc455ad3ef077de046ed198c74d1d",
+    "chroma.mp4": "a8daed735779ffcf6b79ceebbdbf82ab31bd408f324fd81a6467ffcf62d81d0b",
+    "design.mp4": "591c8df1cbfb4b8bacd8630f10474b370ffb6fa95e21f5facdd81e62c58ce00c",
+    "graphics.mp4": "e4f67d1b3ebcc2bcfd535b9cbd494b2a28229d5ba3fa08b1391720e5d7e3e650",
+    "layout.mp4": "46e4b7188d1ae48953244dc5b6bbc934ac3c2b96b39c3c2dd772234de94d4587",
+    "motion.mp4": "4aa56c186487983a254c5a9f2e3112554d9feb1219a7a908b046d108379908c0",
+    "photo.mp4": "023b3354c4c986afefee476fe39f700b50a4b36accfa3ea1055bdab38ab560fe",
+    "pixel.mp4": "0ba271be3b5a1fb9f0d7d4dc688f4a4f72f7626ea6a0062f5c33fffa8ab952ec",
+    "welcome-agents.mp4": "eccc2d92f913aa3083082f06b84538d28e934b1e4d0b47965bfc05bc181e1c2c",
+    "welcome-browse.mp4": "1aae6f953946a2f163d0ceb879adfb527146a48a8faca474285985a3c76c1847",
+    "welcome-layout.mp4": "d5656721a15a2f584280efa7a56dbf42bddc78394b9bcea94fe32c8ab3e8e531",
+    "welcome-raster.mp4": "a5fb0187712a5cf8efbd6a8f0d445df38838aa000dcc11f5f99afd790481074b",
+    "welcome-vector.mp4": "ee366e639cb4d80e35c04e1bffa6731bb24862e7023835d4b2933b2c4b94ff69"
+  },
+  "outputs": {
+    "film-0.5.7.mp4": {
+      "bytes": 15617507,
+      "sha256": "130ebf816667dff09e65d7cfd337faebf6c94d4bf0a067a2c39ea28fec6ba794"
+    },
+    "film-0.5.7.webm": {
+      "bytes": 12821771,
+      "sha256": "a71ce31ef358bee172f8f9ec5fcf33103c81e798d7068372dd64356a99991aec"
+    },
+    "film-0.5.7.webp": {
+      "bytes": 82154,
+      "sha256": "a826d7fb3c98c97af7e43e4160c04621e06f50a9175c7d2af407fc4020b9ada4"
+    },
+    "film-0.5.7.vtt": {
+      "bytes": 787,
+      "sha256": "045d0b15b733fc587dbf71ab3760f44911b97366a8929ff72efdfe98dc4f3059"
+    }
+  }
+}

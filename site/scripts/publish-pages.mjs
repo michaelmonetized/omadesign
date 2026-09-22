@@ -30,6 +30,7 @@ const required = [
   "docs/cloud/index.html",
   "showcase/index.html",
   "updates/index.html",
+  "updates/0.5.7/index.html",
   "updates/0.5.6/index.html",
   "updates/0.5.4/index.html",
   "updates/0.5.3/index.html",

@@ -19,6 +19,7 @@ use std::time::{Duration, Instant, UNIX_EPOCH};
 
 const SCAN_ID: &str = "welcome-home-catalog-v3";
 const PREVIEW_ID: &str = "welcome-home-previews-v3";
+const CAPTURE_ROOT_ID: &str = "welcome-capture-catalog-root";
 const REFRESH: Duration = Duration::from_secs(30);
 const MAX_TEXTURES: usize = 96;
 const MAX_DISK_PREVIEWS: usize = 256;
@@ -158,6 +159,21 @@ fn home() -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/nonexistent"))
 }
+
+/// A capture uses the same real filesystem scanner, with a context-local root.
+/// Clear any previous account/home results before the first capture frame.
+pub(super) fn set_capture_catalog_root(ctx: &egui::Context, root: &Path) {
+    let root = root.to_path_buf();
+    if ctx.data(|d| d.get_temp::<PathBuf>(egui::Id::new(CAPTURE_ROOT_ID))) == Some(root.clone()) {
+        return;
+    }
+    cancel(ctx);
+    ctx.data_mut(|d| {
+        d.remove::<SharedScan>(egui::Id::new(SCAN_ID));
+        d.remove::<SharedPreviews>(egui::Id::new(PREVIEW_ID));
+        d.insert_temp(egui::Id::new(CAPTURE_ROOT_ID), root);
+    });
+}
 fn state(ctx: &egui::Context) -> SharedScan {
     ctx.data_mut(|d| {
         let id = egui::Id::new(SCAN_ID);
@@ -250,10 +266,13 @@ fn start_scan(state: &mut ScanState, ctx: &egui::Context) {
     state.rx = Some(rx);
     state.snapshot.scanning = true;
     let previous = state.snapshot.catalog.clone();
+    let capture_root = ctx.data(|d| d.get_temp::<PathBuf>(egui::Id::new(CAPTURE_ROOT_ID)));
+    let root = capture_root.clone().unwrap_or_else(home);
     let ctx = ctx.clone();
     std::thread::spawn(move || {
-        let root = home();
-        let disk = if previous.documents.is_empty() {
+        // The persistent index belongs to the user's real home. Never show or
+        // overwrite it when capturing a supplied fixture directory.
+        let disk = if capture_root.is_none() && previous.documents.is_empty() {
             fs::File::open(cache_root().join("index.json"))
                 .ok()
                 .and_then(|file| serde_json::from_reader::<_, Catalog>(BufReader::new(file)).ok())
@@ -308,14 +327,15 @@ fn start_scan(state: &mut ScanState, ctx: &egui::Context) {
             }
             ctx.request_repaint();
         };
+        let recovery_root = capture_root.is_none().then(crate::project::swap_dir);
         let result = scan(
             &root,
             previous,
             &stop,
             &mut publish,
-            Some(&crate::project::swap_dir()),
+            recovery_root.as_deref(),
         );
-        if !stop.load(Ordering::Relaxed) {
+        if capture_root.is_none() && !stop.load(Ordering::Relaxed) {
             if let Ok(bytes) = serde_json::to_vec(&result) {
                 let directory = cache_root();
                 let _ = fs::create_dir_all(&directory);
@@ -1090,6 +1110,64 @@ mod tests {
             &mut |_, _, _| {},
             None,
         )
+    }
+
+    #[test]
+    fn capture_catalog_root_is_context_local_and_discards_previous_files() {
+        let original_home = std::env::var_os("HOME");
+        let first = Temp::new();
+        let second = Temp::new();
+        let first_file = first.0.join("first.oma");
+        let second_file = second.0.join("Project/second.oma");
+        let doc = crate::document::Document::new("Capture", 20.0, 10.0, 72.0);
+        document(&first_file, &doc);
+        document(&second_file, &doc);
+        fs::create_dir(second.0.join("Project/.omabrand")).unwrap();
+        let ctx = egui::Context::default();
+        let completed = |ctx: &egui::Context| {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                let snapshot = snapshot(ctx);
+                if !snapshot.scanning {
+                    break snapshot;
+                }
+                assert!(Instant::now() < deadline, "Capture catalog did not finish");
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        };
+        crate::ui::set_capture_catalog_root(&ctx, &first.0);
+        let first_snapshot = completed(&ctx);
+        assert_eq!(first_snapshot.catalog.documents.len(), 1);
+        assert_eq!(first_snapshot.catalog.documents[0].path, first_file);
+        assert!(first_snapshot.catalog.recovered.is_empty());
+        crate::ui::set_capture_catalog_root(&ctx, &first.0);
+        assert!(
+            !snapshot(&ctx).scanning,
+            "Repeated setup must not restart discovery"
+        );
+
+        crate::ui::set_capture_catalog_root(&ctx, &second.0);
+        assert!(
+            state(&ctx)
+                .lock()
+                .unwrap()
+                .snapshot
+                .catalog
+                .documents
+                .is_empty()
+        );
+        let second_snapshot = completed(&ctx);
+        assert_eq!(second_snapshot.catalog.documents.len(), 1);
+        assert_eq!(second_snapshot.catalog.documents[0].path, second_file);
+        assert_eq!(second_snapshot.catalog.projects.len(), 1);
+        assert!(second_snapshot.catalog.recovered.is_empty());
+        assert_eq!(std::env::var_os("HOME"), original_home);
+        let normal = egui::Context::default();
+        assert!(
+            normal
+                .data(|d| d.get_temp::<PathBuf>(egui::Id::new(CAPTURE_ROOT_ID)))
+                .is_none()
+        );
     }
 
     #[test]

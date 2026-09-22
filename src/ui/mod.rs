@@ -50,6 +50,12 @@ pub fn present_layout(ctx: &eframe::egui::Context, studio: &mut Studio) {
     layout_preview::start(ctx, studio);
 }
 
+/// Point an isolated native capture at its real fixture files without changing
+/// HOME or the application's normal settings, typography, and recovery roots.
+pub fn set_capture_catalog_root(ctx: &eframe::egui::Context, root: &std::path::Path) {
+    welcome::set_capture_catalog_root(ctx, root);
+}
+
 pub fn run(ui: &mut Ui, studio: &mut Studio) {
     let ctx = ui.ctx().clone();
     if studio.updates.freezing {

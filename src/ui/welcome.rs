@@ -19,6 +19,9 @@ const GROUPS: &[(&str, Option<&str>)] = &[
 pub fn show(ui: &mut Ui, studio: &mut Studio) {
     workspace::show(ui, studio);
 }
+pub(super) fn set_capture_catalog_root(ctx: &eframe::egui::Context, root: &std::path::Path) {
+    catalog::set_capture_catalog_root(ctx, root);
+}
 pub(super) fn ready(ctx: &eframe::egui::Context) -> bool {
     workspace::ready(ctx)
 }

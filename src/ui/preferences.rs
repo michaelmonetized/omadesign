@@ -145,35 +145,39 @@ fn update(ui: &mut egui::Ui, studio: &mut Studio) {
     ui.small("Update checks contact GitHub and are separate from optional usage data.");
 }
 fn about(ui: &mut egui::Ui, studio: &mut Studio) {
-    let key = egui::Id::new("about-refined-logo");
+    let key = egui::Id::new("about-official-logo");
     let texture = ui
         .ctx()
         .data_mut(|d| d.get_temp::<egui::TextureHandle>(key))
         .or_else(|| {
             let tree = usvg::Tree::from_data(
-                include_bytes!("../../media/logo-4-refined.svg"),
+                include_bytes!("../../assets/omadesign-wordmark.svg"),
                 &usvg::Options::default(),
             )
             .ok()?;
-            let mut pixels = tiny_skia::Pixmap::new(880, 495)?;
+            let scale = 880. / tree.size().width().max(tree.size().height());
+            let mut pixels = tiny_skia::Pixmap::new(
+                (tree.size().width() * scale).ceil() as u32,
+                (tree.size().height() * scale).ceil() as u32,
+            )?;
             resvg::render(
                 &tree,
-                tiny_skia::Transform::from_scale(
-                    880. / tree.size().width(),
-                    495. / tree.size().height(),
-                ),
+                tiny_skia::Transform::from_scale(scale, scale),
                 &mut pixels.as_mut(),
             );
-            let image = egui::ColorImage::from_rgba_premultiplied([880, 495], pixels.data());
+            let image = egui::ColorImage::from_rgba_premultiplied(
+                [pixels.width() as usize, pixels.height() as usize],
+                pixels.data(),
+            );
             let texture =
                 ui.ctx()
-                    .load_texture("refined logo", image, egui::TextureOptions::LINEAR);
+                    .load_texture("official logo", image, egui::TextureOptions::LINEAR);
             ui.ctx().data_mut(|d| d.insert_temp(key, texture.clone()));
             Some(texture)
         });
     ui.vertical_centered(|ui| {
         if let Some(texture) = texture {
-            ui.image((texture.id(), egui::vec2(440., 247.5)));
+            ui.image((texture.id(), texture.size_vec2() * 0.5));
         }
         let version = env!("CARGO_PKG_VERSION");
         let base = version.split('-').next().unwrap_or(version);
