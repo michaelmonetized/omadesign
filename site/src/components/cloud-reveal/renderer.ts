@@ -10,6 +10,8 @@ export type DreamFrame = {
   pointerY: number;
   pointerActive: number;
   scroll: number;
+  /** Eight recent gestures: normalized x/y, birth time, strength. */
+  wakes: Float32Array;
   reducedMotion: boolean;
 };
 
@@ -27,6 +29,23 @@ float noise3(vec3 p){
   return mix(rg.x,rg.y,f.z);
 }
 float fbm(vec3 p){return noise3(p)*.54+noise3(p*2.03+19.7)*.28+noise3(p*4.11+31.3)*.12+noise3(p*8.23+47.1)*.06;}
+`;
+
+// Shared world-space vortices let smoke, cloud edges and dust respond to the
+// same gesture. Wakes expand and dissipate on the animation clock (not wall time).
+const wakeField = `uniform vec4 uWakes[8];
+vec3 wakeAt(vec2 p){
+  vec3 result=vec3(0.);
+  for(int i=0;i<8;i++){
+    vec4 wake=uWakes[i];float age=max(0.,uTime-wake.z);
+    vec2 delta=p-wake.xy*vec2(uResolution.x/uResolution.y*.5,.5);
+    float radius=.075+age*.055;
+    float strength=wake.w*exp(-age*1.35)*exp(-dot(delta,delta)/(radius*radius));
+    result.xy+=(delta+vec2(-delta.y,delta.x)*1.8)*strength;
+    result.z+=strength;
+  }
+  return result;
+}
 `;
 
 // A one-time volume integration gives each puff its internal shadows and
@@ -51,10 +70,11 @@ vec4 field(vec3 p,float seed){
   }
   return d;
 }
-float detail(vec3 p,float seed){return fbm(p*6.3+vec3(seed*3.7,seed,seed*1.3));}
+float detail(vec3 p,float seed){return fbm(p*9.2+vec3(seed*3.7,seed,seed*1.3));}
 float density(vec3 p,float seed){
-  float shape=sqrt(field(p,seed).x)*1.25;
-  return max(0.,shape-(1.-detail(p,seed))*1.65-.12)*2.3;
+  vec3 q=p+vec3(noise3(p*4.1+seed),noise3(p*4.1+seed+11.),noise3(p*4.1+seed+23.))*.16-.08;
+  float shape=sqrt(field(q,seed).x)*1.25;
+  return max(0.,shape-(1.-detail(p,seed))*2.65-.12)*2.3;
 }
 void main(){
   vec2 tile=floor(vUv*vec2(4.,2.));float seed=tile.x+tile.y*4.+2.14;
@@ -144,21 +164,27 @@ varying vec2 vUv;
 uniform vec2 uResolution,uPointer;
 uniform float uTime,uEntrance,uScroll,uLayer;
 ${volumeNoise}
+${wakeField}
 void main(){
   float aspect=uResolution.x/uResolution.y;
   vec2 p=(vUv-.5)*vec2(aspect,1.);
   float rise=smoothstep(0.,4.8,uEntrance);
   float height=mix(.08,-.14,rise)-uLayer*.18+uScroll*.72;
-  vec3 flow=vec3(p*vec2(2.8,11.5),uLayer*17.4+uTime*.035);
-  flow.x-=uTime*(.10+uLayer*.065);flow.y+=uTime*.025;
-  flow.xy+=uPointer*vec2(.10,.035);
-  float warp=noise3(flow*.48+3.1);
-  float n=fbm(flow+vec3(warp*1.4,warp*.9,0.));
-  float curl=fbm(flow*1.8+vec3(n*2.,0.,11.));
-  float ribbon=exp(-pow((p.y-height+(n-.5)*.24)*5.5,2.));
-  float wisps=smoothstep(.28,.70,n)*.72+smoothstep(.48,.75,curl)*.28;
-  float a=wisps*ribbon*(.38-uLayer*.10)*(1.-smoothstep(.62,1.,uScroll));
-  vec3 color=mix(vec3(.28,.25,.40),vec3(.64,.63,.78),n);
+  vec3 wake=wakeAt(p);
+  vec2 wind=p-wake.xy*.8;
+  vec3 flow=vec3(wind*vec2(3.4,8.5),uLayer*17.4+uTime*.09);
+  flow.x-=uTime*(.16+uLayer*.095);flow.y+=uTime*.055;
+  // Two moving noise fields fold wisps back into rolling smoke, rather than
+  // translating a fixed texture. Nearby gestures open holes and curl the rims.
+  vec2 warp=vec2(noise3(flow*.62+3.1),noise3(flow*.57+14.7));
+  float n=fbm(flow+vec3((warp-.5)*2.6,0.));
+  float curl=fbm(flow*2.1+vec3(n*2.4,-uTime*.08,11.));
+  float ribbon=exp(-pow((p.y-height+(n-.5)*.32)*5.0,2.));
+  float wisps=smoothstep(.25,.73,n)*.58+smoothstep(.40,.73,curl)*.42;
+  float density=wisps*ribbon*(.62-uLayer*.17)*exp(-wake.z*.55);
+  float a=(1.-exp(-density))*(1.-smoothstep(.62,1.,uScroll));
+  float shadow=noise3(flow+vec3(-.18,.32,.2));
+  vec3 color=mix(vec3(.22,.20,.33),vec3(.66,.65,.79),clamp(n*.8+shadow*.3,0.,1.));
   float light=exp(-dot(p-vec2(-.12,.15),p-vec2(-.12,.15))*2.1);
   color+=vec3(.10,.09,.15)*light;
   gl_FragColor=vec4(color*a,a);
@@ -166,6 +192,7 @@ void main(){
 
 const cloudVertex = `attribute vec2 aPosition;
 varying vec2 vUv;
+varying vec2 vWorld;
 uniform vec4 uQuad;
 uniform float uAspect;
 uniform float uAngle;
@@ -174,23 +201,35 @@ void main(){
   vec2 p=aPosition*uQuad.zw*.5;
   float c=cos(uAngle),s=sin(uAngle);
   p=mat2(c,-s,s,c)*p+uQuad.xy;
+  vWorld=p;
   gl_Position=vec4(p.x*2./uAspect,p.y*2.,0.,1.);
 }`;
 const cloudFragment = `precision highp float;
 varying vec2 vUv;
+varying vec2 vWorld;
 uniform sampler2D uAtlas;
-uniform vec2 uTile;
+uniform vec2 uTile,uResolution;
 uniform vec4 uTint;
 uniform float uTime,uPhase;
 ${volumeNoise}
+${wakeField}
 void main(){
-  vec3 flow=vec3(vUv*vec2(6.,5.),uPhase+uTime*.065);
-  float drift=noise3(flow);
-  vec2 warp=vec2(drift-.5,noise3(flow+8.4)-.5)*.018;
-  vec2 uv=(uTile+clamp(vUv+warp,vec2(.002),vec2(.998)))/vec2(4.,2.);
+  vec3 wake=wakeAt(vWorld);
+  vec3 flow=vec3(vUv*vec2(5.,4.),uPhase+uTime*.16);
+  flow.x-=uTime*.085;
+  vec2 roll=vec2(noise3(flow),noise3(flow+8.4))-.5;
+  float billow=fbm(flow+vec3(roll*2.,0.));
+  vec2 warp=roll*.065+vec2(billow-.5)*.028-wake.xy*.22;
+  // Fade deformation at the tile edge so atlas neighbours never bleed in.
+  float border=smoothstep(0.,.14,min(min(vUv.x,vUv.y),min(1.-vUv.x,1.-vUv.y)));
+  vec2 uv=(uTile+clamp(vUv+warp*border,vec2(.002),vec2(.998)))/vec2(4.,2.);
   vec4 cloud=texture2D(uAtlas,uv);
-  float texture=1.+(drift-.5)*.065;
-  gl_FragColor=vec4(cloud.rgb*uTint.rgb*texture,cloud.a)*uTint.a;
+  float fine=noise3(flow*3.2+vec3(0.,-uTime*.14,0.));
+  float erosion=mix(.70,1.,smoothstep(.20,.67,billow*.7+fine*.3));
+  erosion=mix(erosion,1.,smoothstep(.55,.96,cloud.a));
+  float transmission=exp(-wake.z*.24);
+  float lighting=.90+billow*.20;
+  gl_FragColor=vec4(cloud.rgb*uTint.rgb*lighting,cloud.a)*uTint.a*erosion*transmission;
 }`;
 const fireflyVertex = `attribute vec4 aParticle;
 varying float vOpacity;
@@ -205,6 +244,33 @@ void main(){
   gl_FragColor=vec4(color*vOpacity,0.);
 }`;
 
+const dustVertex = `attribute vec4 aParticle;
+uniform float uTime,uRatio,uScroll;
+uniform vec2 uResolution;
+${volumeNoise}
+${wakeField}
+varying float vOpacity;
+void main(){
+  float depth=aParticle.z,phase=aParticle.w;
+  vec2 p=aParticle.xy;
+  p.x=fract(p.x+.5+uTime*(.008+depth*.009))-.5;
+  p.y=fract(p.y+.5+uTime*(.009+depth*.006))-.5;
+  p.x*=uResolution.x/uResolution.y;
+  vec3 flow=vec3(p*4.,uTime*.12+phase);
+  p+=vec2(noise3(flow),noise3(flow+7.3))*.10-.05;
+  vec3 wake=wakeAt(p);p+=wake.xy*.8;
+  p.y+=uScroll*(.55+depth*.3);
+  gl_Position=vec4(p.x*2.*uResolution.y/uResolution.x,p.y*2.,0.,1.);
+  gl_PointSize=(2.+depth*5.)*uRatio;
+  vOpacity=(.08+depth*.16)*( .65+.35*sin(uTime*.7+phase))*(1.-smoothstep(.5,1.,uScroll));
+}`;
+const dustFragment = `precision mediump float;
+varying float vOpacity;
+void main(){
+  vec2 p=gl_PointCoord*2.-1.;float a=exp(-dot(p,p)*4.)*vOpacity;
+  gl_FragColor=vec4(vec3(.70,.66,.85)*a,0.);
+}`;
+
 type Program = { handle: WebGLProgram; position: number; uniforms: Record<string, WebGLUniformLocation | null> };
 type Puff = { x: number; y: number; size: number; depth: number; phase: number; tile: number; lift: number };
 type Fly = { x: number; y: number; depth: number; phase: number; speed: number };
@@ -216,6 +282,8 @@ export class CloudRenderer {
   private cloud: Program;
   private firefly: Program;
   private mist: Program;
+  private dust: Program;
+  private dustParticles: WebGLBuffer;
   private noise: WebGLTexture;
   private moon: WebGLTexture;
   private moonImage: HTMLImageElement | null = null;
@@ -247,9 +315,11 @@ export class CloudRenderer {
     this.noise = this.createNoise();
     this.moon = this.loadMoon();
     this.sky = this.program(screenVertex, skyFragment, ["uResolution", "uTime", "uEntrance", "uPointer", "uScroll", "uMoonRadius", "uNoise", "uMoon", "uMoonLoaded"]);
-    this.cloud = this.program(cloudVertex, cloudFragment, ["uQuad", "uAspect", "uAngle", "uAtlas", "uTile", "uTint", "uNoise", "uTime", "uPhase"]);
+    this.cloud = this.program(cloudVertex, cloudFragment, ["uQuad", "uAspect", "uAngle", "uAtlas", "uTile", "uTint", "uNoise", "uTime", "uPhase", "uResolution", "uWakes[0]"]);
     this.firefly = this.program(fireflyVertex, fireflyFragment, [], "aParticle");
-    this.mist = this.program(screenVertex, mistFragment, ["uResolution", "uTime", "uEntrance", "uScroll", "uPointer", "uLayer", "uNoise"]);
+    this.mist = this.program(screenVertex, mistFragment, ["uResolution", "uTime", "uEntrance", "uScroll", "uPointer", "uLayer", "uNoise", "uWakes[0]"]);
+    this.dust = this.program(dustVertex, dustFragment, ["uTime", "uRatio", "uScroll", "uResolution", "uNoise", "uWakes[0]"], "aParticle");
+    this.dustParticles = gl.createBuffer()!;
     this.atlas = this.bakeClouds();
     this.particles = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.particles);
@@ -265,6 +335,11 @@ export class CloudRenderer {
       }
     }
     for (let i = 0; i < 40; i++) this.flies.push({ x: random() - .5, y: -.37 + random() * .69, depth: .35 + random() * .65, phase: random() * Math.PI * 2, speed: .35 + random() * .45 });
+    const dustData = new Float32Array(160 * 4);
+    for (let i=0;i<160;i++) dustData.set([random()-.5,random()-.5,random(),random()*6.283],i*4);
+    gl.bindBuffer(gl.ARRAY_BUFFER,this.dustParticles);
+    gl.bufferData(gl.ARRAY_BUFFER,dustData,gl.STATIC_DRAW);
+
   }
 
   private program(vertex: string, fragment: string, names: string[], attribute = "aPosition"): Program {
@@ -384,13 +459,14 @@ export class CloudRenderer {
     this.drawMist(state,0);
     this.useQuad(this.cloud); u = this.cloud.uniforms;
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.atlas); gl.uniform1i(u.uAtlas, 0); gl.uniform1f(u.uAspect, aspect);gl.uniform1i(u.uNoise,1);gl.uniform1f(u.uTime,time);
+    gl.uniform2f(u.uResolution,this.width,this.height);gl.uniform4fv(u["uWakes[0]"],state.wakes);
     const rise = smooth(0, 4.8, entrance), exit = smooth(.55, 1., scroll);
     const portraitScale = Math.min(1, .72 + aspect * .25);
     for (const puff of this.puffs) {
       const depth = puff.depth;
-      const drift = Math.sin(time * (.032 + depth * .018) + puff.phase);
-      let x = puff.x * aspect + drift * (.023 + depth * .027);
-      let y = puff.y + puff.lift * (1 - rise) + Math.sin(time * .074 + puff.phase) * (.007 + depth * .004);
+      const drift = Math.sin(time * (.085 + depth * .040) + puff.phase);
+      let x = puff.x * aspect + drift * (.040 + depth * .045);
+      let y = puff.y + puff.lift * (1 - rise) + Math.sin(time * .14 + puff.phase) * (.012 + depth * .009);
       const dx = x - px, dy = y - py;
       const influence = Math.exp(-(dx * dx + dy * dy) / (.13 + depth * .08)) * active * rise;
       x += (dx / (Math.abs(dx) + .16)) * influence * (.045 + depth * .035);
@@ -401,7 +477,7 @@ export class CloudRenderer {
       // their volume until they naturally travel beyond the viewport.
       x += (puff.x + drift * .09) * scroll * (.46 + depth * .35);
       y += scroll * (.82 + depth * .29);
-      const size = puff.size * portraitScale * (1 + (1 - rise) * .15);
+      const size = puff.size * portraitScale * (1 + (1 - rise) * .15) * (1 + Math.sin(time*.18+puff.phase)*.025);
       const stretch = 1.565 + Math.max(0, aspect - 1.7) * .25;
       gl.uniform4f(u.uQuad, x, y, size * stretch, size);
       gl.uniform1f(u.uAngle, Math.sin(time * .034 + puff.phase) * .017 + scroll * puff.x * .12);
@@ -439,6 +515,12 @@ export class CloudRenderer {
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.particleData);
     gl.enableVertexAttribArray(this.firefly.position); gl.vertexAttribPointer(this.firefly.position, 4, gl.FLOAT, false, 0, 0);
     gl.drawArrays(gl.POINTS, 0, this.flies.length);
+    gl.useProgram(this.dust.handle);u=this.dust.uniforms;
+    gl.uniform1f(u.uTime,time);gl.uniform1f(u.uRatio,ratio);gl.uniform1f(u.uScroll,scroll);
+    gl.uniform2f(u.uResolution,this.width,this.height);gl.uniform1i(u.uNoise,1);gl.uniform4fv(u["uWakes[0]"],state.wakes);
+    gl.bindBuffer(gl.ARRAY_BUFFER,this.dustParticles);
+    gl.enableVertexAttribArray(this.dust.position);gl.vertexAttribPointer(this.dust.position,4,gl.FLOAT,false,0,0);
+    gl.drawArrays(gl.POINTS,0,160);
     gl.disable(gl.BLEND);
   }
 
@@ -448,6 +530,7 @@ export class CloudRenderer {
     gl.uniform2f(u.uResolution,this.width,this.height);gl.uniform1f(u.uTime,state.reducedMotion?0:state.time);
     gl.uniform1f(u.uEntrance,state.reducedMotion?10:state.entrance);gl.uniform1f(u.uScroll,state.scroll);gl.uniform1f(u.uLayer,layer);
     gl.uniform2f(u.uPointer,state.pointerX*state.pointerActive,state.pointerY*state.pointerActive);gl.uniform1i(u.uNoise,1);
+    gl.uniform4fv(u["uWakes[0]"],state.wakes);
     gl.drawArrays(gl.TRIANGLES,0,6);
   }
 
@@ -470,6 +553,7 @@ export class CloudRenderer {
     this.disposed = true;
     const gl = this.gl;
     if(this.moonImage){this.moonImage.onload=null;this.moonImage=null;}
+    gl.deleteProgram(this.dust.handle);gl.deleteBuffer(this.dustParticles);
     gl.deleteTexture(this.noise);gl.deleteTexture(this.moon);gl.deleteProgram(this.mist.handle);
     gl.deleteTexture(this.atlas); gl.deleteBuffer(this.quad); gl.deleteBuffer(this.particles);
     gl.deleteProgram(this.sky.handle); gl.deleteProgram(this.cloud.handle); gl.deleteProgram(this.firefly.handle);

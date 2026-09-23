@@ -86,7 +86,7 @@ export function CloudIntro({ siteBase }: { siteBase?: string } = {}) {
             <p className="cloud-kicker">project sharing and snapshot review</p>
             <ul className="cloud-feature-stack" aria-label="Cloud collaboration features">
               {features.map(([title, description], index) => (
-                <li key={title} data-visible={ready || visibleCount >= features.length - index}>
+                <li key={title} data-visible={visibleCount >= features.length - index}>
                   <span className="cloud-feature-mark" aria-hidden="true">↗</span>
                   <div><h2>{title}</h2><p>{description}</p></div>
                 </li>

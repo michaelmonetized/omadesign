@@ -138,3 +138,71 @@ TypeScript, full Vercel build and whitespace checks passed.
 Evidence: `artifacts/cloud-reveal-exports/texture-pass/fullsite-qa.json`,
 `fullsite-desktop.png`, `fullsite-phone.png`, and corresponding `-product.png`
 screenshots. Production remained `dpl_9YmM6ZrTpqFXdijNLUBXUUy45CQa`.
+
+## Smoke, dust and interactive turbulence revision
+
+Cloud volume baking now perturbs the density field and erodes it at a finer
+scale, breaking up the former smooth lobe outlines. Live cloud shading folds
+multiple noise scales into the lit atlas, with stronger drift, rolling edges
+and subtle expansion. Two mist depths use independently advected, warped smoke
+fields and exponential density-to-opacity shading. A separate GPU particle
+pass adds 160 faint drifting dust motes alongside the existing warm fireflies.
+
+Pointer movement and mouse/touch presses deposit up to eight expanding vortex
+wakes. The same world-space field parts mist, deforms cloud edges and displaces
+dust; each wake dissipates on the scene clock. Event listeners are passive,
+retain native scrolling/link behavior, and clear touch attraction on release
+or cancellation. Current element bounds are used after scrolling. Reduced
+motion clears all wakes; existing offscreen/hidden-tab suspension is retained.
+The original content layout, brand geometry and reveal timing remain intact.
+
+Validation: TypeScript, standalone and full site production builds pass.
+A deterministic GPU readback at the same scene time found 13,459 color channels
+changed by a gesture; the expired wake produced exactly the baseline pixels.
+No WebGL error was reported. Browser screenshots, performance and lifecycle
+results are saved in `artifacts/cloud-reveal-exports/shader-pass/`, including
+`qa.json` and `interaction.json`. Phone dimensions are desktop emulation,
+not physical-device GPU measurements. This revision has not been deployed.
+
+Final static production-bundle checks: 1440 × 900 desktop and emulated
+390 × 844 at DPR 3 both averaged 60.002 fps across 180 frames (p95 16.7 ms
+and 16.8 ms respectively). Neither showed horizontal overflow, JavaScript
+errors or WebGL errors. Offscreen suspension and reduced-motion stillness
+passed. A dispatched touch swipe scrolled the document 385 px; changing the
+reduced-motion preference while running stopped animation successfully.
+
+### Shader revision: full-site Vercel preview
+
+Deployed the tested local shader changes with the full website on 2026-09-23:
+<https://omadesign-mrono83xj-hustle-launch.vercel.app>
+(`dpl_21PyUP2SKJVK7dEWWCDKnsaUn4bz`, READY, preview). This is the successor
+review deployment to `omadesign-m9zfc7q76-hustle-launch.vercel.app`.
+Built using `VITE_PUBLIC_SITE_PREVIEW=1 vercel build` and deployed prebuilt.
+The public-preview authentication redirects remain as documented above.
+
+Remote verification at 1440 × 1000 and 390 × 844 confirmed WebGL rendering,
+settled artwork, persistent atmospheric motion, pointer response, native scroll
+departure, real homepage sections and no horizontal overflow. No JavaScript
+errors were reported; the phone WebGL error check returned zero. The cloud guide
+returned HTTP 200. The served shader bundle SHA-256 matches the local build:
+`40526e79a4b4a4150d2c0247d0020f4cbcd64b2ff98f5cb83d4a3b71fdcb9f91`.
+Screenshots and deployment evidence are in the `shader-pass` artifact directory.
+
+Production was checked before and after and remained
+`dpl_Gg88J74WUqaDAxo5Vk3Wki4pZT7h`. A temporary authenticated share link was
+created for review without a Vercel login; deployment protection remains enabled.
+
+### Earlier invitation and production preparation
+
+Michael authorized production publication after making “share the work” appear
+sooner. The invitation now starts at 5 seconds instead of 24.541667 seconds,
+with a 0.8-second transition. Feature-list staging remains independent and
+continues through 13.8 seconds; reduced motion reveals everything immediately.
+Browser checks confirmed the invitation hidden/inert at approximately 4 seconds,
+active at approximately 5 seconds with only the first feature revealed, and all
+five features visible by 14.65 seconds. Reduced motion showed all content with
+the animation paused. TypeScript and whitespace checks passed.
+
+The production robots.txt and sitemap.xml fix from `b087f34` is included to
+preserve the newer production site's crawlability. Production must use a fresh
+`vercel build --prod` with preview mode disabled, retaining real authentication.

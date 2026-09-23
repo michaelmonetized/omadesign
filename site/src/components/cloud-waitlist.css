@@ -17,7 +17,7 @@
 .cloud-feature-mark { font-size: 1.1rem; color: #d6ff80; padding-top: 1px; }
 .cloud-feature-stack h2 { font-size: clamp(1rem, 1.25vw, 1.25rem); font-weight: 550; line-height: 1.25; letter-spacing: -.02em; }
 .cloud-feature-stack p { font-size: .875rem; color: #d9d1e8; margin-top: 5px; line-height: 1.5; max-width: 330px; }
-.cloud-invitation { opacity: 0; transform: translateY(28px); transition: opacity 1.2s ease, transform 1.2s cubic-bezier(.2,.7,.2,1); pointer-events: none; padding-bottom: 35px; }
+.cloud-invitation { opacity: 0; transform: translateY(28px); transition: opacity .8s ease, transform .8s cubic-bezier(.2,.7,.2,1); pointer-events: none; padding-bottom: 35px; }
 .cloud-invitation[data-ready="true"] { opacity: 1; transform: none; pointer-events: auto; }
 .cloud-signup { position: relative; max-width: 520px; margin-left: auto; }
 .cloud-signup h2 { font-size: clamp(2rem, 3.4vw, 4rem); line-height: 1.05; letter-spacing: -.055em; margin-bottom: 28px; }

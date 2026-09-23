@@ -6,6 +6,8 @@ import "./reveal.css";
 
 /** Entrance is a one-time gesture; the atmosphere has an independent live clock. */
 export const CLOUD_ENTRANCE_DURATION = 9.2;
+const INVITATION_REVEAL_TIME = 5;
+const CONTENT_COMPLETE_TIME = 13.8;
 export interface CloudRevealHandle {
   setScroll(progress: number): void;
   setMotion(enabled: boolean): void;
@@ -65,17 +67,18 @@ export const CloudReveal=forwardRef<CloudRevealHandle,Props>(function CloudRevea
     const preference=matchMedia("(prefers-reduced-motion: reduce)");
     let renderer:CloudRenderer | null=null,disposed=false,frame=0,previous=0;
     let motion=!preference.matches,inView=false,notified=false,brandFinished=false;
-    let width=1,height=1,left=0,top=0,settledScale=.68,settledY=.30,settledOpacity=1;
+    let width=1,height=1,top=0,settledScale=.68,settledY=.30,settledOpacity=1;
     let targetX=0,targetY=0,targetActive=0,targetScroll=0;
+    let wakeIndex=0,lastWake=-1;
     let lastBrandEntrance=-1,lastBrandScroll=-1,diagnosticCounter=0;
     let contentTime=0,lastContentStage=-1;
     const drawContent=()=>{
       const count=Math.min(5,Math.max(0,Math.floor((contentTime-3)/2.7)+1));
-      const ready=contentTime>=24.541667;
-      const stage=ready?6:count;
+      const ready=contentTime>=INVITATION_REVEAL_TIME;
+      const stage=count+(ready?6:0);
       if(stage!==lastContentStage){lastContentStage=stage;callbacks.current.onContentProgress?.(count,ready);}
     };
-    const state:DreamFrame={time:0,entrance:0,pointerX:0,pointerY:0,pointerActive:0,scroll:0,reducedMotion:!motion};
+    const state:DreamFrame={time:0,entrance:0,pointerX:0,pointerY:0,pointerActive:0,scroll:0,wakes:new Float32Array(32),reducedMotion:!motion};
     const initialize=()=>{
       try { renderer=new CloudRenderer(surface); renderer.resize(width,height,devicePixelRatio||1); element.dataset.renderer="webgl"; }
       catch { renderer=null; element.dataset.renderer="fallback"; }
@@ -140,10 +143,10 @@ export const CloudReveal=forwardRef<CloudRevealHandle,Props>(function CloudRevea
       if(active && !frame) { previous=0; frame=requestAnimationFrame(tick); }
       if(!active) { cancelAnimationFrame(frame); frame=0; previous=0; }
     };
-    const finishEntrance=()=>{ contentTime=24.541667; state.entrance=CLOUD_ENTRANCE_DURATION; drawBrand(); draw(); announce(); };
+    const finishEntrance=()=>{ contentTime=CONTENT_COMPLETE_TIME; state.entrance=CLOUD_ENTRANCE_DURATION; drawBrand(); draw(); announce(); };
     const setMotion=(enabled:boolean)=>{
       motion=enabled; state.reducedMotion=!enabled;
-      if(!enabled) { state.pointerX=0;state.pointerY=0;state.pointerActive=0;state.scroll=targetScroll;finishEntrance(); }
+      if(!enabled) { state.pointerX=0;state.pointerY=0;state.pointerActive=0;state.wakes.fill(0);state.scroll=targetScroll;finishEntrance(); }
       callbacks.current.onMotionChange?.(motion); schedule();
     };
     api.current={
@@ -151,7 +154,7 @@ export const CloudReveal=forwardRef<CloudRevealHandle,Props>(function CloudRevea
       setMotion,finishEntrance,
     };
     const resize=()=>{
-      const rect=element.getBoundingClientRect(); width=rect.width; height=rect.height;left=rect.left;top=rect.top;
+      const rect=element.getBoundingClientRect(); width=rect.width; height=rect.height;top=rect.top;
       const markSize=Math.min(height*.32,width*.56,420);
       settledScale=.68;settledY=.30;settledOpacity=1;
       if(width<=800){
@@ -169,11 +172,20 @@ export const CloudReveal=forwardRef<CloudRevealHandle,Props>(function CloudRevea
       lastBrandEntrance=-1;draw();
     };
     const pointer=(event:PointerEvent)=>{
-      if(!motion || event.pointerType==="touch") return;
-      targetX=clamp((event.clientX-left)/Math.max(1,width))*2-1;
-      targetY=1-clamp((event.clientY-top)/Math.max(1,height))*2;
-      targetActive=1;
+      if(!motion || !inView) return;
+      // Read current bounds: sticky/scrolling ancestors can move after resize.
+      const rect=element.getBoundingClientRect();
+      const x=clamp((event.clientX-rect.left)/Math.max(1,width))*2-1;
+      const y=1-clamp((event.clientY-rect.top)/Math.max(1,height))*2;
+      const distance=Math.hypot(x-targetX,y-targetY);
+      targetX=x;targetY=y;targetActive=1;
+      const tap=event.type==="pointerdown";
+      if(tap || (distance>.008 && state.time-lastWake>.075)){
+        state.wakes.set([x,y,state.time,tap?1.6:Math.min(1.2,.35+distance*5)],wakeIndex*4);
+        wakeIndex=(wakeIndex+1)%8;lastWake=state.time;
+      }
     };
+    const release=(event:PointerEvent)=>{if(event.pointerType!=="mouse")leave();};
     const leave=()=>{targetActive=0;targetX=0;targetY=0;};
     const changePreference=()=>setMotion(!preference.matches);
     const lost=(event:Event)=>{event.preventDefault();renderer=null;element.dataset.renderer="fallback";};
@@ -183,6 +195,8 @@ export const CloudReveal=forwardRef<CloudRevealHandle,Props>(function CloudRevea
     observer.observe(element);
     const sizeObserver=new ResizeObserver(resize);sizeObserver.observe(element);
     const copy=host.querySelector(".cloud-copy");if(copy)sizeObserver.observe(copy);
+    host.addEventListener("pointerdown",pointer,{passive:true});
+    host.addEventListener("pointerup",release,{passive:true});host.addEventListener("pointercancel",release,{passive:true});
     host.addEventListener("pointermove",pointer,{passive:true}); host.addEventListener("pointerleave",leave);
     surface.addEventListener("webglcontextlost",lost);surface.addEventListener("webglcontextrestored",restored);
     document.addEventListener("visibilitychange",schedule);preference.addEventListener("change",changePreference);
@@ -190,6 +204,7 @@ export const CloudReveal=forwardRef<CloudRevealHandle,Props>(function CloudRevea
     if(!motion) finishEntrance();
     return ()=>{
       disposed=true;api.current=null;cancelAnimationFrame(frame);observer.disconnect();sizeObserver.disconnect();
+      host.removeEventListener("pointerdown",pointer);host.removeEventListener("pointerup",release);host.removeEventListener("pointercancel",release);
       host.removeEventListener("pointermove",pointer);host.removeEventListener("pointerleave",leave);
       document.removeEventListener("visibilitychange",schedule);preference.removeEventListener("change",changePreference);
       surface.removeEventListener("webglcontextlost",lost);surface.removeEventListener("webglcontextrestored",restored);
