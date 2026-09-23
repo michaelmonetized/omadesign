@@ -113,3 +113,28 @@ URL: <https://omadesign-fm5o1qtss-hustle-launch.vercel.app>. Production was not 
 A temporary share URL was issued for phone review without Vercel login.
 The deployment record and source asset hashes are in
 `artifacts/cloud-reveal-exports/texture-pass/deployment.json`.
+
+## Full production-site context preview
+
+Branch: `preview/cloud-dreamscape`; deployed website revision: `5482598`.
+Vercel preview: <https://omadesign-m9zfc7q76-hustle-launch.vercel.app>
+(`dpl_GJ5Feih9wpcHZxjbN963EVoAceff`). This contains the actual homepage and
+public documentation rather than the standalone follow-on review page.
+
+Removed the cloud section's plain brand label, Explore link, Motion toggle and
+Show cloud links control. Kept the existing feature and invitation choreography.
+Excluded the cloud experience from the general homepage surface reveal observer:
+its animation had been competing with the canvas's own entrance on the full page.
+
+Remote Chromium checks passed at 1440 × 1000 and emulated 390 × 844 (DPR 3):
+HTTP 200, WebGL active, settled logo and continuing ambient motion, full original
+product sections present, native scroll departure into the product content,
+no removed controls, no horizontal overflow, no JavaScript errors or HTTP failures.
+Cloud guide navigation returned the actual documentation. Cloud app routes return
+307 to production, intentionally, because this public review build has no preview
+authentication credentials. No authenticated backend workflow was tested.
+TypeScript, full Vercel build and whitespace checks passed.
+
+Evidence: `artifacts/cloud-reveal-exports/texture-pass/fullsite-qa.json`,
+`fullsite-desktop.png`, `fullsite-phone.png`, and corresponding `-product.png`
+screenshots. Production remained `dpl_9YmM6ZrTpqFXdijNLUBXUUy45CQa`.
