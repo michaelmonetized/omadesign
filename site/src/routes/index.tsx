@@ -24,7 +24,7 @@ function Home() {
   return (
     <main id="main" ref={motion}>
       <CloudIntro />
-      <section className="hero shell">
+      <section className="hero shell" id="omadesign-product">
         <div className="hero-heading">
           <RevealText
             as="h1"
@@ -42,7 +42,7 @@ function Home() {
             </span>
           </p>
         </div>
-        <a className="text-link" href="#cloud">Watch the Omadesign Cloud announcement ↗</a>
+        <a className="text-link" href="#cloud">Explore Omadesign Cloud ↗</a>
         <Install />
       </section>
       <section className="hero-stage">

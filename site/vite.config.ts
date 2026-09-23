@@ -8,6 +8,7 @@ import { syncAgentDocs } from "./scripts/sync-agent-docs";
 export default defineConfig(({ mode }) => {
   syncAgentDocs();
   const pages = loadEnv(mode, ".", "GITHUB_PAGES").GITHUB_PAGES === "1";
+  const publicPreview = process.env.VITE_PUBLIC_SITE_PREVIEW === "1";
   return {
     base: pages ? "/omadesign/" : "/",
     server: {
@@ -37,6 +38,12 @@ export default defineConfig(({ mode }) => {
             nitro({
               preset: "vercel",
               routeRules: {
+                ...(publicPreview ? Object.fromEntries(
+                  ["cloud", "account", "project", "showcase", "compete", "api"].flatMap((path) => [
+                    [`/${path}`, { redirect: { to: `https://omadesign.app/${path}`, statusCode: 307 } }],
+                    [`/${path}/**`, { redirect: { to: `https://omadesign.app/${path}/**`, statusCode: 307 } }],
+                  ]),
+                ) : {}),
                 "/install": {
                   headers: {
                     "content-type": "text/plain; charset=utf-8",

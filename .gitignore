@@ -26,3 +26,6 @@ site/.env*
 
 # Root-linked Vercel CLI state for the site/ project.
 /.vercel
+/.vite
+/artifacts/cloud-reveal/
+/artifacts/cloud-reveal-exports/

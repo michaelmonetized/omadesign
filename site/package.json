@@ -9,7 +9,11 @@
     "typecheck": "tsc --noEmit",
     "ship": "bun ../scripts/ship.mts",
     "build:pages": "node scripts/publish-pages.mjs",
-    "publish:pages": "node scripts/publish-pages.mjs --publish"
+    "publish:pages": "node scripts/publish-pages.mjs --publish",
+    "dev:cloud-film": "vite --config vite.cloud-film.config.ts",
+    "build:cloud-film": "vite build --config vite.cloud-film.config.ts",
+    "dev:cloud-dreamscape": "vite --config vite.cloud-film.config.ts",
+    "build:cloud-dreamscape": "vite build --config vite.cloud-film.config.ts"
   },
   "dependencies": {
     "@clerk/tanstack-react-start": "^1.5.15",
