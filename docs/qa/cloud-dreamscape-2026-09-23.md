@@ -206,3 +206,25 @@ the animation paused. TypeScript and whitespace checks passed.
 The production robots.txt and sitemap.xml fix from `b087f34` is included to
 preserve the newer production site's crawlability. Production must use a fresh
 `vercel build --prod` with preview mode disabled, retaining real authentication.
+
+### Production publication
+
+Published revision `a85d51d` to <https://omadesign.app> on 2026-09-23.
+Production deployment `dpl_6ShqaypPdbqiT7CKizbyph2ZWCgR` is READY:
+<https://omadesign-o7wmxsy7o-hustle-launch.vercel.app>.
+The rollback deployment is `dpl_Gg88J74WUqaDAxo5Vk3Wki4pZT7h`.
+
+The live browser confirmed the invitation becomes active at approximately
+5 seconds with the first feature visible. Desktop 1440 × 1000 and phone-sized
+390 × 844 checks showed WebGL rendering and no horizontal overflow or JavaScript
+errors. The real cloud page loads and its Sign in button opens the Clerk sign-in
+modal. No account credentials were submitted or authenticated project workflow
+tested. The production build has no preview-mode cloud redirects.
+
+The served shader bundle matches the production build SHA-256
+`04c57f12f94e9ecbf28b6927caf2e236ca5e835f625808907fe6d9ef2d4f4ee7`.
+Cloud, cloud guide, installer, robots.txt and sitemap.xml return HTTP 200; the
+installer and crawlability files match the local output. The deployment-scoped
+error-log query returned no entries immediately after verification.
+Production screenshots, endpoint hashes and deployment receipt are saved in
+`artifacts/cloud-reveal-exports/shader-pass/production-*`.
