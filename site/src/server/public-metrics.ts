@@ -20,6 +20,7 @@ export type Chip = {
   display: string | null;
   href: string;
   title: string;
+  color: string;
 };
 export type PublicMetrics = {
   downloads: number;
@@ -77,28 +78,28 @@ export function productHuntCounts(html: string) {
   return { upvotes, users };
 }
 
-function chip(key: Chip["key"], label: string, value: number | null, href: string, title: string): Chip {
-  return { key, label, value, display: value === null ? null : number.format(value), href, title };
+function chip(key: Chip["key"], label: string, value: number | null, href: string, title: string, color: string): Chip {
+  return { key, label, value, display: value === null ? null : number.format(value), href, title, color };
 }
 
 function body(downloads: number, users: number | null, upvotes: number | null, stars: number | null, liveHunt: boolean): PublicMetrics {
-  const hunt = liveHunt ? "Product Hunt" : `Product Hunt, captured ${PRODUCT_HUNT_CAPTURED.at}`;
+  const captured = liveHunt ? "" : `, captured ${PRODUCT_HUNT_CAPTURED.at}`;
   return {
     downloads,
     users,
     upvotes,
     stars,
     source: "GitHub release package downloads",
-    usersSource: `${hunt} followers`,
-    upvotesSource: `${hunt} launch points`,
+    usersSource: `Product Hunt followers${captured}`,
+    upvotesSource: `Product Hunt launch points${captured}`,
     starsSource: "GitHub stars",
     includesRepeatDownloads: true,
     updated: new Date().toISOString(),
     chips: [
-      chip("downloads", "downloads", downloads, `${REPO}/releases`, "GitHub release packages, including updates"),
-      chip("users", "Users", users, PRODUCT_HUNT, "Product Hunt followers"),
-      chip("upvotes", "upvotes", upvotes, PRODUCT_HUNT, "Product Hunt points across launches"),
-      chip("stars", "stars", stars, `${REPO}/stargazers`, "GitHub stars"),
+      chip("downloads", "downloads", downloads, `${REPO}/releases`, "GitHub release packages, including updates", "007ec6"),
+      chip("users", "Users", users, PRODUCT_HUNT, "Product Hunt followers", "2ea44f"),
+      chip("upvotes", "upvotes", upvotes, PRODUCT_HUNT, "Product Hunt points across launches", "e05d44"),
+      chip("stars", "stars", stars, `${REPO}/stargazers`, "GitHub stars", "dfb317"),
     ],
   };
 }
@@ -170,7 +171,7 @@ export async function metricsResponse(request?: Request) {
   const chip = badge ? metrics.chips.find(item => item.key === badge) : undefined;
   if (badge) {
     if (!chip?.display) return Response.json({ error: "Count unavailable" }, { status: 503, headers: { "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" } });
-    return Response.json({ schemaVersion: 1, label: `[ ${chip.display}`, message: `${chip.label} ]`, color: "1e1e2e", labelColor: "313244" }, { headers });
+    return Response.json({ schemaVersion: 1, label: chip.label, message: chip.display, color: chip.color, labelColor: "555555" }, { headers });
   }
   return Response.json(metrics, { headers });
 }

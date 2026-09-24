@@ -1,9 +1,9 @@
 # omadesign
 
-[![downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fomadesign.app%2Fapi%2Fstats%3Fbadge%3Ddownloads&style=flat-square)](https://github.com/michaelmonetized/omadesign/releases)
-[![Users](https://img.shields.io/endpoint?url=https%3A%2F%2Fomadesign.app%2Fapi%2Fstats%3Fbadge%3Dusers&style=flat-square)](https://www.producthunt.com/products/omadesign)
-[![upvotes](https://img.shields.io/endpoint?url=https%3A%2F%2Fomadesign.app%2Fapi%2Fstats%3Fbadge%3Dupvotes&style=flat-square)](https://www.producthunt.com/products/omadesign)
-[![stars](https://img.shields.io/endpoint?url=https%3A%2F%2Fomadesign.app%2Fapi%2Fstats%3Fbadge%3Dstars&style=flat-square)](https://github.com/michaelmonetized/omadesign/stargazers)
+[![downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fomadesign.app%2Fapi%2Fstats%3Fbadge%3Ddownloads&style=flat)](https://github.com/michaelmonetized/omadesign/releases)
+[![Users](https://img.shields.io/endpoint?url=https%3A%2F%2Fomadesign.app%2Fapi%2Fstats%3Fbadge%3Dusers&style=flat)](https://www.producthunt.com/products/omadesign)
+[![upvotes](https://img.shields.io/endpoint?url=https%3A%2F%2Fomadesign.app%2Fapi%2Fstats%3Fbadge%3Dupvotes&style=flat)](https://www.producthunt.com/products/omadesign)
+[![stars](https://img.shields.io/endpoint?url=https%3A%2F%2Fomadesign.app%2Fapi%2Fstats%3Fbadge%3Dstars&style=flat)](https://github.com/michaelmonetized/omadesign/stargazers)
 
 [Download v0.5.8](https://github.com/michaelmonetized/omadesign/releases/tag/v0.5.8) · [Explore the studio](https://omadesign.app/) · [Updates](https://omadesign.app/updates) · [User manual](https://omadesign.app/docs/manual/) · [Showcase](https://omadesign.app/showcase) · [Discord](https://discord.gg/ejkZS2RBx) · [Build from source](docs/CONTRIBUTING.md)
 
