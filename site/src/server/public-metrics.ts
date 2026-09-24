@@ -6,6 +6,7 @@
 
 const REPO = "https://github.com/michaelmonetized/omadesign";
 const PRODUCT_HUNT = "https://www.producthunt.com/products/omadesign";
+const PRODUCT_HUNT_CAPTURED = { upvotes: 63, users: 28, at: "2026-09-24" };
 const PRODUCT_ID = "1313169";
 const PACKAGE = /^omadesign-.+-(?:aarch64|x86_64)-unknown-linux-gnu\.tar\.gz$/;
 const GH = { Accept: "application/vnd.github+json", "User-Agent": "Omadesign release statistics" };
@@ -80,15 +81,16 @@ function chip(key: Chip["key"], label: string, value: number | null, href: strin
   return { key, label, value, display: value === null ? null : number.format(value), href, title };
 }
 
-function body(downloads: number, users: number | null, upvotes: number | null, stars: number | null): PublicMetrics {
+function body(downloads: number, users: number | null, upvotes: number | null, stars: number | null, liveHunt: boolean): PublicMetrics {
+  const hunt = liveHunt ? "Product Hunt" : `Product Hunt, captured ${PRODUCT_HUNT_CAPTURED.at}`;
   return {
     downloads,
     users,
     upvotes,
     stars,
     source: "GitHub release package downloads",
-    usersSource: "Product Hunt followers",
-    upvotesSource: "Product Hunt launch points",
+    usersSource: `${hunt} followers`,
+    upvotesSource: `${hunt} launch points`,
     starsSource: "GitHub stars",
     includesRepeatDownloads: true,
     updated: new Date().toISOString(),
@@ -122,7 +124,13 @@ async function load(): Promise<PublicMetrics> {
     fetch(PRODUCT_HUNT, { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(8000) }).then(async response => response.ok ? productHuntCounts(await response.text()) : null).catch(() => null),
   ]);
   const stars = typeof repo?.stargazers_count === "number" ? repo.stargazers_count : null;
-  return body(packageDownloads(releases), hunt?.users ?? null, hunt?.upvotes ?? null, stars);
+  return body(
+    packageDownloads(releases),
+    hunt?.users ?? PRODUCT_HUNT_CAPTURED.users,
+    hunt?.upvotes ?? PRODUCT_HUNT_CAPTURED.upvotes,
+    stars,
+    hunt !== null,
+  );
 }
 
 /**
