@@ -1,29 +1,73 @@
-/** Official Product Hunt product embed from https://www.producthunt.com/products/omadesign/embed */
-const PRODUCT_CARD =
-  "https://cards.producthunt.com/cards/products/omadesign";
-const PRODUCT_PAGE =
-  "https://www.producthunt.com/products/omadesign?utm_source=badge-product&utm_medium=badge&utm_source=badge-omadesign";
+const ALT =
+  "omadesign - Native Linux studio for design, paint, photo & motion | Product Hunt";
+
+type Badge = {
+  href: string;
+  darkSrc: string;
+  lightSrc: string;
+  width: number;
+  height: number;
+};
+
+const BADGES: Badge[] = [
+  {
+    href: "https://www.producthunt.com/products/omadesign/reviews?utm_source=badge-product_rating&utm_medium=badge&utm_source=badge-omadesign",
+    darkSrc:
+      "https://api.producthunt.com/widgets/embed-image/v1/product_rating.svg?product_id=1313169&theme=dark",
+    lightSrc:
+      "https://api.producthunt.com/widgets/embed-image/v1/product_rating.svg?product_id=1313169&theme=light",
+    width: 242,
+    height: 108,
+  },
+  {
+    href: "https://www.producthunt.com/products/omadesign/reviews/new?utm_source=badge-product_review&utm_medium=badge&utm_source=badge-omadesign",
+    darkSrc:
+      "https://api.producthunt.com/widgets/embed-image/v1/product_review.svg?product_id=1313169&theme=dark",
+    lightSrc:
+      "https://api.producthunt.com/widgets/embed-image/v1/product_review.svg?product_id=1313169&theme=light",
+    width: 250,
+    height: 54,
+  },
+  {
+    href: "https://www.producthunt.com/products/omadesign?utm_source=badge-follow&utm_medium=badge&utm_source=badge-omadesign",
+    darkSrc:
+      "https://api.producthunt.com/widgets/embed-image/v1/follow.svg?product_id=1313169&theme=dark",
+    lightSrc:
+      "https://api.producthunt.com/widgets/embed-image/v1/follow.svg?product_id=1313169&theme=light",
+    width: 250,
+    height: 54,
+  },
+];
 
 export function ProductHuntEmbed() {
   return (
-    <aside className="ph-embed" aria-label="Omadesign on Product Hunt">
-      <iframe
-        title="Omadesign on Product Hunt"
-        src={PRODUCT_CARD}
-        width={500}
-        height={405}
-        style={{ border: "none" }}
-        loading="lazy"
-        allowFullScreen
-      />
-      <a
-        className="ph-embed-fallback text-link"
-        href={PRODUCT_PAGE}
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        Find omadesign on Product Hunt ↗
-      </a>
+    <aside className="ph-embed" aria-label="On Product Hunt">
+      <p className="ph-embed-label">On Product Hunt</p>
+      <div className="ph-embed-badges">
+        {BADGES.map((badge) => (
+          <a
+            key={badge.href}
+            href={badge.href}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <img
+              className="ph-embed-img ph-embed-img-dark"
+              src={badge.darkSrc}
+              alt={ALT}
+              width={badge.width}
+              height={badge.height}
+            />
+            <img
+              className="ph-embed-img ph-embed-img-light"
+              src={badge.lightSrc}
+              alt={ALT}
+              width={badge.width}
+              height={badge.height}
+            />
+          </a>
+        ))}
+      </div>
     </aside>
   );
 }
