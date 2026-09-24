@@ -8,6 +8,11 @@ export type UpdatePost = {
 
 export const updates: UpdatePost[] = [
   {
+    slug: "0.5.9", version: "0.5.9", date: "2026-09-24",
+    title: "Click the pixel you mean",
+    dek: "The eyedropper samples any pixel on the screen. Alt subtracts from a selection. Dilate and erode hold a hard cutout. Welcome links come forward. Cloud sign-in tells you you're in. Midnight Duotone bakes a vector page. The pen drops its forward handle.",
+  },
+  {
     slug: "0.5.8", version: "0.5.8", date: "2026-09-22",
     title: "Make it your studio",
     dek: "Lua plugins with working examples, editable compound paths, shared corner-radius controls, guide locking and a steadier welcome screen with the transparent mark.",

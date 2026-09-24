@@ -55,8 +55,8 @@ export function Install() {
         </a>
       </div>
       <p className="install-version">
-        {RELEASE_TAG} installs into ~/.local. Lua plugins, editable compound paths,
-        and a refined welcome screen.{" "}
+        {RELEASE_TAG} installs into ~/.local. The eyedropper leaves the window,
+        and a vector page can take a pixel filter.{" "}
         <a href={sitePath("updates")}>What shipped</a>
         {" · "}
         <a href={RELEASE_URL}>Release notes</a>.
