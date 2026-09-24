@@ -10,7 +10,7 @@ The application backend stores only aggregate counters in Convex. It does not re
 
 As with any HTTPS service, the network and hosting providers receive connection metadata to deliver the request. Omadesign does not use that metadata to identify users. The hosting provider's own infrastructure/security logs are separate from these application counters; this is not a claim that network transport hides your address from the service provider.
 
-Download totals come from GitHub's existing public release-asset counters. They include repeat downloads and updates, not unique people. Reading `/api/stats` does not register a desktop installation or enable usage reporting.
+Download totals come from GitHub's existing public release-asset counters. They include repeat downloads and updates, not unique people. Reading `/api/stats` does not register a desktop installation or enable usage reporting. The same response also carries GitHub stars, Product Hunt followers, and the summed points of each Product Hunt launch. Those are public page counts, not installations, and the follower count is the Users chip.
 
 **Check for updates automatically** is a separate preference. Update checks contact GitHub even with usage reporting disabled. An update only installs when you click its button. Before restart, Omadesign saves open documents, original photo pixels, unsaved photo adjustments and palette drafts in the local recovery directory (`~/.local/share/omadesign`, or `XDG_DATA_HOME/omadesign`). No recovery contents are uploaded by this process.
 

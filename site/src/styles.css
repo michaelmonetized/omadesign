@@ -324,11 +324,30 @@ p {
   max-width: 950px;
   margin-bottom: 44px;
 }
+.metric-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 2px 0 20px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.metric-chips a {
+  color: var(--muted);
+}
+.metric-chips a:hover {
+  color: var(--accent);
+}
+.metric-chips strong {
+  color: var(--ink);
+  font-weight: 500;
+}
 
 /* Product Hunt official product embeds */
 .ph-embed {
   margin-top: 8px;
-  margin-bottom: 28px;
+  margin-bottom: 8px;
   max-width: 950px;
 }
 .ph-embed-label {

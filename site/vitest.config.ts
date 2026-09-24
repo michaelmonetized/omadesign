@@ -1,2 +1,2 @@
 import { defineConfig } from "vitest/config";
-export default defineConfig({test:{environment:"node",include:["convex/**/*.test.ts"],server:{deps:{inline:["convex-test"]}}}});
+export default defineConfig({test:{environment:"node",include:["convex/**/*.test.ts","src/**/*.test.ts"],server:{deps:{inline:["convex-test"]}}}});
