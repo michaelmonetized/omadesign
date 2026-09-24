@@ -324,6 +324,31 @@ p {
   max-width: 950px;
   margin-bottom: 44px;
 }
+
+.ph-embed {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 8px 0 36px;
+  max-width: 500px;
+}
+.ph-embed iframe {
+  width: 100%;
+  max-width: 500px;
+  height: 405px;
+  border-radius: 12px;
+  background: var(--panel-deep);
+  box-shadow: 0 12px 40px color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.ph-embed-fallback {
+  font-size: 13px;
+}
+@media (max-width: 560px) {
+  .ph-embed iframe {
+    height: 360px;
+  }
+}
 .download-buttons {
   display: flex;
   flex-wrap: wrap;

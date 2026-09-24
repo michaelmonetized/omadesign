@@ -12,6 +12,7 @@ import { RevealText } from "../components/reveal-text";
 import { ShortcutHud } from "../components/shortcut-hud";
 import { FeatureExplorer } from "../components/feature-explorer";
 import { Install } from "../components/install";
+import { ProductHuntEmbed } from "../components/product-hunt-embed";
 import { FilePreview } from "../components/file-preview";
 import { Arrow, Shot } from "../components/studio-ui";
 import { useScrollMotion } from "../components/scroll-motion";
@@ -44,6 +45,7 @@ function Home() {
         </div>
         <a className="text-link" href="#cloud">Watch the Omadesign Cloud announcement ↗</a>
         <Install />
+        <ProductHuntEmbed />
       </section>
       <section className="hero-stage">
         <StudioCarousel selected={studio} onSelect={setStudio} />
