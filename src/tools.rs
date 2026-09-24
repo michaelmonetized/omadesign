@@ -140,7 +140,7 @@ impl Tool {
                 "Drag a point or handle · click a segment to add · Alt-click corner/smooth · Delete removes the point · Object → Break path"
             }
             Tool::Pen => {
-                "Click a corner · click-drag a smooth · Enter finishes open · click the first point to close · click an open end to continue or join"
+                "Click a corner · click-drag a smooth · click the last point to drop its forward handle · Enter finishes open · click the first point to close · click an open end to continue or join"
             }
             Tool::Pencil => "Drag a freehand curve. Release to commit.",
             Tool::Rect => {
@@ -156,7 +156,9 @@ impl Tool {
             Tool::Gradient => {
                 "Drag across a selected shape to place its active fill or stroke gradient."
             }
-            Tool::Eyedropper => "Click to sample the active raster layer or a vector fill.",
+            Tool::Eyedropper => {
+                "Grabs the next pixel anywhere on the screen, including other windows. Later clicks sample the canvas. Press I to grab the screen again."
+            }
             Tool::Trace => {
                 "Click to trace the active pixel layer into vectors. Colors and smoothness live in Trace."
             }
@@ -169,10 +171,12 @@ impl Tool {
             }
             Tool::Smudge => "Drag to smear pixels along the stroke.",
             Tool::Crop => "Drag a crop · release or Enter applies · Esc cancels the current crop.",
-            Tool::Marquee => "Drag a rectangular selection on the pixel layer.",
-            Tool::EllipseMarquee => "Drag an elliptical selection.",
-            Tool::Lasso => "Draw a freehand selection.",
-            Tool::Wand => "Click to select similar color.",
+            Tool::Marquee => {
+                "Drag a rectangular selection on the pixel layer. Shift adds. Alt subtracts."
+            }
+            Tool::EllipseMarquee => "Drag an elliptical selection. Shift adds. Alt subtracts.",
+            Tool::Lasso => "Draw a freehand selection. Shift adds. Alt subtracts.",
+            Tool::Wand => "Click to select similar color. Shift adds. Alt subtracts.",
             Tool::Hand => "Drag to pan. Space does this from any tool.",
             Tool::Zoom => {
                 "Drag a box · click in · Alt-click out · Ctrl-click artboard · Ctrl+Shift-click selection or all · pinch or scroll to zoom"

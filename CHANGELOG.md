@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-09-24 · 0.5.9 — Click the pixel you mean.
+
+Michael passed QA on this build the same day.
+
+- The eyedropper grabs the next pixel anywhere on the screen, including other
+  windows. Escape returns to the canvas. Press I to grab the screen again.
+- Alt subtracts from a pixel selection. Shift still adds.
+- Dilate and erode stay on a hard pixel cutout.
+- Welcome links open in the browser and bring that window forward.
+- Cloud sign-in stays open and says you're in, with the account named. The
+  welcome row and the File menu keep that line.
+- Midnight Duotone on a page of vectors bakes what you see into a Filtered
+  image layer, then filters it. Alpha stays. Undo removes the layer.
+- Clicking the open end of a live pen path drops the forward handle and keeps
+  the incoming one, so the next segment can leave a sharp corner.
+
 ## 2026-09-20 · 0.5.5-nightly.1 — A clearer workspace.
 
 - Native Open, Save and other file choosers run outside the application event

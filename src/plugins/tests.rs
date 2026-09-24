@@ -157,6 +157,76 @@ fn cancellation_interrupts_infinite_lua_and_releases_worker() {
     std::fs::remove_dir_all(root).unwrap();
 }
 #[test]
+fn every_starter_action_runs_in_its_context() {
+    let plugin = starter();
+    let (vector_doc, selection) = fixture();
+    let mut photo = Document::new("Photo", 64., 48., 72.);
+    photo.layers = vec![
+        Layer::vector("Artwork"),
+        Layer::placed_raster(
+            "Photo",
+            Pixels::from_rgba(48, 36, [10u8, 20, 30, 255].repeat(48 * 36)).unwrap(),
+            Pt::ZERO,
+            Pt::new(64., 48.),
+        ),
+    ];
+    for action in &plugin.actions {
+        let (doc, active) = if action.id == "duotone" {
+            (photo.clone(), Some(0))
+        } else {
+            (vector_doc.clone(), Some(0))
+        };
+        let gesture = (action.id == "ribbon").then(|| Gesture {
+            points: vec![[10., 20.], [40., 50.], [80., 40.]],
+            ..Gesture::default()
+        });
+        let result = run(
+            &plugin,
+            &action.id,
+            doc,
+            selection.clone(),
+            active,
+            serde_json::json!({}),
+            gesture,
+            Arc::new(AtomicBool::new(false)),
+        );
+        assert!(result.is_ok(), "{}: {result:?}", action.id);
+    }
+}
+#[test]
+fn duotone_on_vectors_bakes_a_filtered_image() {
+    let (doc, selection) = fixture();
+    let before = crate::compositor::render_export(&doc, 1).unwrap();
+    let before = crate::document::Pixels::from_pixmap(&before).data;
+    let out = exec(&starter(), "duotone", doc.clone(), selection).unwrap();
+    let mut studio = crate::app::Studio::new();
+    studio.doc = doc;
+    studio.history.clear();
+    studio.commit(Cmd::Batch(out.commands));
+    let raster = studio
+        .doc
+        .layers
+        .iter()
+        .rev()
+        .find(|layer| layer.kind.pixels().is_some())
+        .expect("duotone adds a raster");
+    assert_eq!(raster.name, "Filtered image");
+    let data = raster.kind.pixels().unwrap().data.clone();
+    assert_eq!(data.len(), before.len());
+    assert_ne!(data, before);
+    assert_eq!(data[3], before[3]);
+    let layers = studio.doc.layers.len();
+    studio.undo();
+    assert_eq!(studio.doc.layers.len(), layers - 1);
+    assert!(
+        studio
+            .doc
+            .layers
+            .iter()
+            .all(|layer| layer.kind.pixels().is_none())
+    );
+}
+#[test]
 fn plugin_pixel_filter_preserves_alpha_and_is_undoable() {
     let mut doc = Document::new("Pixels", 2., 1., 72.);
     let before = vec![255, 0, 0, 128, 100, 200, 255, 0];

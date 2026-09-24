@@ -345,6 +345,7 @@ impl Studio {
                                 },
                                 plain_keys && ctx.input(|i| i.key_down(Key::Escape)),
                             );
+                            add("Last point", "Drop forward handle", false);
                             add("First point", "Close path", false);
                         } else {
                             add("Click", "Add corner", false);
@@ -454,7 +455,13 @@ impl Studio {
                         snapping = true;
                     }
                     Tool::Eyedropper => {
-                        add("Click", "Sample fill color", false);
+                        if crate::screen_pick::grabbing_screen() {
+                            add("Click", "Sample any pixel on the screen", false);
+                            add("Escape", "Back to the canvas", false);
+                        } else {
+                            add("Click", "Sample the canvas", false);
+                            add("I", "Sample any screen pixel", false);
+                        }
                     }
                     Tool::Fill => {
                         add("Click", "Flood fill", false);
@@ -465,10 +472,12 @@ impl Studio {
                     Tool::Marquee | Tool::EllipseMarquee | Tool::Lasso => {
                         add("Drag", "Select pixels", false);
                         add("Shift+drag", "Add to selection", mods.shift);
+                        add("Alt+drag", "Subtract from selection", mods.alt);
                     }
                     Tool::Wand => {
                         add("Click", "Select similar color", false);
                         add("Shift+click", "Add to selection", mods.shift);
+                        add("Alt+click", "Subtract from selection", mods.alt);
                     }
                     Tool::Hand => {
                         add("Drag", "Pan canvas", false);

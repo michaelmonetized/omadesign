@@ -1,6 +1,7 @@
 //! SVG filter effects on a layer. Rasterised for the canvas, emitted as `<filter>` on export.
 
 use crate::color::Rgba;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use tiny_skia::Pixmap;
 
@@ -370,42 +371,168 @@ fn blit_over(dst: &mut Pixmap, src: &Pixmap) {
 }
 
 fn morphology(pm: &mut Pixmap, erode: bool, radius: f32) {
-    let r = radius.round() as i32;
+    let r = radius.round().clamp(0.0, 64.0) as i32;
     if r <= 0 {
         return;
     }
-    let w = pm.width() as i32;
-    let h = pm.height() as i32;
+    let w = pm.width() as usize;
+    let h = pm.height() as usize;
+    if w == 0 || h == 0 {
+        return;
+    }
     let src = pm.data().to_vec();
-    let mut out = vec![0u8; src.len()];
-    for y in 0..h {
-        for x in 0..w {
-            let mut pick = if erode { 255u8 } else { 0u8 };
-            let mut col = [0u8; 4];
-            for oy in -r..=r {
-                for ox in -r..=r {
-                    let a = sample(&src, w, h, x + ox, y + oy, 3);
-                    let better = if erode { a < pick } else { a > pick };
-                    if better {
-                        pick = a;
-                        let i = if x + ox >= 0 && y + oy >= 0 && x + ox < w && y + oy < h {
-                            idx(w, x + ox, y + oy, 0)
-                        } else {
-                            continue;
-                        };
-                        col.copy_from_slice(&src[i..i + 4]);
-                    }
-                }
-            }
-            let di = idx(w, x, y, 0);
-            if pick == 0 && erode {
-                out[di..di + 4].fill(0);
+    let Some((bx0, by0, bx1, by1)) = opaque_bounds(&src, w, h) else {
+        return;
+    };
+    let x0 = bx0.saturating_sub(r as usize);
+    let y0 = by0.saturating_sub(r as usize);
+    let x1 = (bx1 + r as usize).min(w - 1);
+    let y1 = (by1 + r as usize).min(h - 1);
+    let hy0 = y0.saturating_sub(r as usize);
+    let hy1 = (y1 + r as usize).min(h - 1);
+    let horizontal = extremum_axis(&src, w, h, x0, x1, hy0, hy1, r, erode, true);
+    let winners = extremum_axis(&horizontal, w, h, x0, x1, y0, y1, r, erode, false);
+    let mut out = src.clone();
+    for y in y0..=y1 {
+        for x in x0..=x1 {
+            let i = (y * w + x) * 4;
+            if erode {
+                write_erode(&mut out[i..i + 4], &src[i..i + 4], winners[i + 3]);
             } else {
-                out[di..di + 4].copy_from_slice(&col);
+                out[i..i + 4].copy_from_slice(&winners[i..i + 4]);
             }
         }
     }
     pm.data_mut().copy_from_slice(&out);
+}
+
+fn opaque_bounds(src: &[u8], w: usize, h: usize) -> Option<(usize, usize, usize, usize)> {
+    let mut min_x = w;
+    let mut min_y = h;
+    let mut max_x = 0usize;
+    let mut max_y = 0usize;
+    let mut any = false;
+    for y in 0..h {
+        for x in 0..w {
+            if src[(y * w + x) * 4 + 3] > 0 {
+                any = true;
+                min_x = min_x.min(x);
+                min_y = min_y.min(y);
+                max_x = max_x.max(x);
+                max_y = max_y.max(y);
+            }
+        }
+    }
+    any.then_some((min_x, min_y, max_x, max_y))
+}
+
+fn extremum_axis(
+    src: &[u8],
+    w: usize,
+    h: usize,
+    x0: usize,
+    x1: usize,
+    y0: usize,
+    y1: usize,
+    r: i32,
+    erode: bool,
+    horizontal: bool,
+) -> Vec<u8> {
+    let mut out = src.to_vec();
+    if horizontal {
+        let rows: Vec<(usize, Vec<u8>)> = (y0..=y1)
+            .into_par_iter()
+            .map(|y| {
+                let mut row = vec![0u8; (x1 - x0 + 1) * 4];
+                for (n, x) in (x0..=x1).enumerate() {
+                    let px = nearest_extremum(src, w, h, x as i32, y as i32, r, erode, true);
+                    row[n * 4..n * 4 + 4].copy_from_slice(&px);
+                }
+                (y, row)
+            })
+            .collect();
+        for (y, row) in rows {
+            for (n, x) in (x0..=x1).enumerate() {
+                let i = (y * w + x) * 4;
+                out[i..i + 4].copy_from_slice(&row[n * 4..n * 4 + 4]);
+            }
+        }
+    } else {
+        let cols: Vec<(usize, Vec<u8>)> = (x0..=x1)
+            .into_par_iter()
+            .map(|x| {
+                let mut col = vec![0u8; (y1 - y0 + 1) * 4];
+                for (n, y) in (y0..=y1).enumerate() {
+                    let px = nearest_extremum(src, w, h, x as i32, y as i32, r, erode, false);
+                    col[n * 4..n * 4 + 4].copy_from_slice(&px);
+                }
+                (x, col)
+            })
+            .collect();
+        for (x, col) in cols {
+            for (n, y) in (y0..=y1).enumerate() {
+                let i = (y * w + x) * 4;
+                out[i..i + 4].copy_from_slice(&col[n * 4..n * 4 + 4]);
+            }
+        }
+    }
+    out
+}
+
+fn nearest_extremum(
+    src: &[u8],
+    w: usize,
+    h: usize,
+    x: i32,
+    y: i32,
+    r: i32,
+    erode: bool,
+    horizontal: bool,
+) -> [u8; 4] {
+    let mut best = pixel_at(src, w, h, x, y);
+    let mut best_a = best[3];
+    for d in 1..=r {
+        for sign in [-1, 1] {
+            let (sx, sy) = if horizontal {
+                (x + sign * d, y)
+            } else {
+                (x, y + sign * d)
+            };
+            let px = pixel_at(src, w, h, sx, sy);
+            let better = if erode {
+                px[3] < best_a
+            } else {
+                px[3] > best_a
+            };
+            if better {
+                best = px;
+                best_a = px[3];
+            }
+        }
+    }
+    best
+}
+
+fn pixel_at(src: &[u8], w: usize, h: usize, x: i32, y: i32) -> [u8; 4] {
+    if x < 0 || y < 0 || x >= w as i32 || y >= h as i32 {
+        return [0, 0, 0, 0];
+    }
+    let i = (y as usize * w + x as usize) * 4;
+    [src[i], src[i + 1], src[i + 2], src[i + 3]]
+}
+
+fn write_erode(dst: &mut [u8], src: &[u8], new_a: u8) {
+    let old_a = src[3];
+    if new_a >= old_a {
+        dst.copy_from_slice(&src[..4]);
+    } else if new_a == 0 || old_a == 0 {
+        dst.fill(0);
+    } else {
+        for c in 0..3 {
+            dst[c] = ((src[c] as u16 * new_a as u16) / old_a as u16) as u8;
+        }
+        dst[3] = new_a;
+    }
 }
 
 fn color_matrix(pm: &mut Pixmap, m: &[f32; 20]) {
@@ -809,5 +936,63 @@ mod tests {
         assert!(svg.contains("feComposite"));
         assert!(!svg.contains("feDropShadow"));
         assert!(svg.contains("userSpaceOnUse"));
+    }
+
+    fn cutout(w: u32, h: u32, x0: u32, y0: u32, x1: u32, y1: u32) -> Pixmap {
+        let mut pm = Pixmap::new(w, h).unwrap();
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let i = ((y * w + x) * 4) as usize;
+                pm.data_mut()[i..i + 4].copy_from_slice(&[200, 10, 20, 255]);
+            }
+        }
+        pm
+    }
+
+    fn px(pm: &Pixmap, x: u32, y: u32) -> [u8; 4] {
+        let i = ((y * pm.width() + x) * 4) as usize;
+        pm.data()[i..i + 4].try_into().unwrap()
+    }
+
+    #[test]
+    fn dilate_grows_a_hard_cutout_without_moving_its_interior() {
+        let mut pm = cutout(32, 32, 8, 8, 24, 24);
+        morphology(&mut pm, false, 2.0);
+        assert_eq!(px(&pm, 16, 16), [200, 10, 20, 255]);
+        assert_eq!(px(&pm, 6, 16), [200, 10, 20, 255]);
+        assert_eq!(px(&pm, 5, 16), [0, 0, 0, 0]);
+        assert_eq!(px(&pm, 0, 0), [0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn erode_shrinks_a_hard_cutout_and_leaves_the_middle_put() {
+        let mut pm = cutout(32, 32, 8, 8, 24, 24);
+        morphology(&mut pm, true, 2.0);
+        assert_eq!(px(&pm, 16, 16), [200, 10, 20, 255]);
+        assert_eq!(px(&pm, 8, 16), [0, 0, 0, 0]);
+        assert_eq!(px(&pm, 9, 16), [0, 0, 0, 0]);
+        assert_eq!(px(&pm, 11, 16), [200, 10, 20, 255]);
+    }
+
+    #[test]
+    fn erode_does_not_blank_a_solid_image() {
+        let mut pm = solid(0, 180, 40, 255);
+        morphology(&mut pm, true, 1.0);
+        assert_eq!(px(&pm, 8, 8), [0, 180, 40, 255]);
+        assert_eq!(px(&pm, 0, 0)[3], 0);
+    }
+
+    #[test]
+    fn morphology_on_a_large_cutout_stays_responsive() {
+        let mut pm = cutout(480, 320, 40, 30, 440, 290);
+        let started = std::time::Instant::now();
+        morphology(&mut pm, false, 12.0);
+        morphology(&mut pm, true, 12.0);
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(2),
+            "morphology took {:?}",
+            started.elapsed()
+        );
+        assert_eq!(px(&pm, 240, 160), [200, 10, 20, 255]);
     }
 }

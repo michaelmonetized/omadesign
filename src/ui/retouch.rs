@@ -211,7 +211,17 @@ pub(super) fn start_clone(studio: &mut Studio, world: Pt) {
     });
 }
 
-pub(super) fn apply_wand(studio: &mut Studio, world: Pt, add: bool) {
+pub(super) fn pixel_op(shift: bool, alt: bool) -> paint::PixelCombine {
+    if alt {
+        paint::PixelCombine::Subtract
+    } else if shift {
+        paint::PixelCombine::Add
+    } else {
+        paint::PixelCombine::Replace
+    }
+}
+
+pub(super) fn apply_wand(studio: &mut Studio, world: Pt, op: paint::PixelCombine) {
     let Some(layer) = studio.raster_target() else {
         studio.status = "Choose an unlocked pixel layer to select".into();
         return;
@@ -220,18 +230,24 @@ pub(super) fn apply_wand(studio: &mut Studio, world: Pt, add: bool) {
         return;
     };
     let seed = studio.mask_point(layer, world);
-    let clip = add
+    let clip = (op == paint::PixelCombine::Add)
         .then(|| studio.pixel_sel_mask(layer).map(|mask| mask.to_vec()))
         .flatten();
     let mask = paint::wand_mask_clipped(&pm, seed, studio.fill_tolerance, clip.as_deref());
-    if add {
-        studio.merge_pixel_sel(mask, true);
-    } else {
+    if op == paint::PixelCombine::Replace {
         studio.set_pixel_sel(Some(mask));
+    } else {
+        studio.merge_pixel_sel(mask, op);
     }
 }
 
-pub(super) fn commit_marquee(studio: &mut Studio, start: Pt, cur: Pt, ellipse: bool, add: bool) {
+pub(super) fn commit_marquee(
+    studio: &mut Studio,
+    start: Pt,
+    cur: Pt,
+    ellipse: bool,
+    op: paint::PixelCombine,
+) {
     let Some(layer) = studio.raster_target() else {
         studio.status = "Choose an unlocked pixel layer to select".into();
         return;
@@ -240,7 +256,7 @@ pub(super) fn commit_marquee(studio: &mut Studio, start: Pt, cur: Pt, ellipse: b
         return;
     };
     if (cur - start).length() < 2.0 {
-        if !add {
+        if op == paint::PixelCombine::Replace {
             studio.set_pixel_sel(None);
         }
         return;
@@ -252,10 +268,10 @@ pub(super) fn commit_marquee(studio: &mut Studio, start: Pt, cur: Pt, ellipse: b
     } else {
         paint::fill_rect_mask(w, h, a.x, a.y, b.x, b.y)
     };
-    studio.merge_pixel_sel(mask, add);
+    studio.merge_pixel_sel(mask, op);
 }
 
-pub(super) fn commit_lasso(studio: &mut Studio, pts: &[Pt], add: bool) {
+pub(super) fn commit_lasso(studio: &mut Studio, pts: &[Pt], op: paint::PixelCombine) {
     let Some(layer) = studio.raster_target() else {
         studio.status = "Choose an unlocked pixel layer to select".into();
         return;
@@ -264,7 +280,7 @@ pub(super) fn commit_lasso(studio: &mut Studio, pts: &[Pt], add: bool) {
         return;
     };
     if pts.len() < 3 {
-        if !add {
+        if op == paint::PixelCombine::Replace {
             studio.set_pixel_sel(None);
         }
         return;
@@ -274,7 +290,7 @@ pub(super) fn commit_lasso(studio: &mut Studio, pts: &[Pt], add: bool) {
         .map(|point| studio.mask_point(layer, *point))
         .collect();
     let mask = paint::fill_poly_mask(w, h, &mapped);
-    studio.merge_pixel_sel(mask, add);
+    studio.merge_pixel_sel(mask, op);
 }
 
 pub(super) fn drag(studio: &mut Studio, world: Pt) {
@@ -685,7 +701,7 @@ mod tests {
             Pt::new(2.0, 2.0),
             Pt::new(8.0, 8.0),
             false,
-            false,
+            paint::PixelCombine::Replace,
         );
         let mask = studio.pixel_sel.as_ref().expect("rect selection");
         assert_eq!(mask.len(), 16 * 16);
@@ -699,7 +715,7 @@ mod tests {
             Pt::new(0.0, 0.0),
             Pt::new(16.0, 16.0),
             true,
-            false,
+            paint::PixelCombine::Replace,
         );
         let ellipse = studio.pixel_sel.as_ref().unwrap();
         assert_eq!(ellipse[(8 * 16 + 8) as usize], 255);
@@ -714,12 +730,58 @@ mod tests {
                 Pt::new(10.0, 10.0),
                 Pt::new(1.0, 10.0),
             ],
-            false,
+            paint::PixelCombine::Replace,
         );
         assert!(paint::selected_count(studio.pixel_sel.as_ref().unwrap()) > 20);
 
-        apply_wand(&mut studio, Pt::new(4.0, 4.0), false);
+        apply_wand(&mut studio, Pt::new(4.0, 4.0), paint::PixelCombine::Replace);
         assert!(paint::selected_count(studio.pixel_sel.as_ref().unwrap()) > 1);
+    }
+
+    #[test]
+    fn alt_subtracts_and_shift_adds_a_pixel_selection() {
+        let mut studio = studio(16, 16);
+        commit_marquee(
+            &mut studio,
+            Pt::new(0.0, 0.0),
+            Pt::new(12.0, 12.0),
+            false,
+            paint::PixelCombine::Replace,
+        );
+        let before = paint::selected_count(studio.pixel_sel.as_ref().unwrap());
+        commit_marquee(
+            &mut studio,
+            Pt::new(2.0, 2.0),
+            Pt::new(8.0, 8.0),
+            false,
+            paint::PixelCombine::Subtract,
+        );
+        let mask = studio.pixel_sel.as_ref().unwrap();
+        assert!(paint::selected_count(mask) < before);
+        assert_eq!(mask[(1 * 16 + 1) as usize], 255);
+        assert_eq!(mask[(4 * 16 + 4) as usize], 0);
+        commit_marquee(
+            &mut studio,
+            Pt::new(12.0, 0.0),
+            Pt::new(16.0, 8.0),
+            false,
+            paint::PixelCombine::Add,
+        );
+        let mask = studio.pixel_sel.as_ref().unwrap();
+        assert_eq!(mask[(1 * 16 + 1) as usize], 255);
+        assert_eq!(mask[(4 * 16 + 4) as usize], 0);
+        assert_eq!(mask[(2 * 16 + 14) as usize], 255);
+        commit_lasso(
+            &mut studio,
+            &[
+                Pt::new(0.0, 0.0),
+                Pt::new(6.0, 0.0),
+                Pt::new(6.0, 6.0),
+                Pt::new(0.0, 6.0),
+            ],
+            paint::PixelCombine::Subtract,
+        );
+        assert_eq!(studio.pixel_sel.as_ref().unwrap()[(1 * 16 + 1) as usize], 0);
     }
 
     #[test]
@@ -735,7 +797,7 @@ mod tests {
             Pt::new(0.0, 0.0),
             Pt::new(6.0, 16.0),
             false,
-            false,
+            paint::PixelCombine::Replace,
         );
         start_brush(&mut studio, Pt::new(3.0, 8.0));
         brush_drag(&mut studio, Pt::new(12.0, 8.0));

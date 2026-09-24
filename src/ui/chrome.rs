@@ -328,7 +328,16 @@ fn file_menu(ui: &mut Ui, studio: &mut Studio) {
         }
         ui.separator();
         ui.label(RichText::new("Cloud").small().color(fg_weak()));
-        if ui.button("Sign in…").clicked() {
+        if crate::cloud::connected(&studio.cloud_identity) {
+            let label = format!(
+                "You're in · {}",
+                crate::cloud::account_label(&studio.cloud_identity)
+            );
+            if ui.button(label).clicked() {
+                studio.cloud_modal = crate::app::CloudModal::SignIn;
+                ui.close();
+            }
+        } else if ui.button("Sign in…").clicked() {
             studio.cloud_modal = crate::app::CloudModal::SignIn;
             ui.close();
         }

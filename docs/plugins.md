@@ -25,8 +25,8 @@ color library. Those settings are separate from document Undo.
 
 For **Ribbon path**, choose **Activate tool**, then drag on the canvas. Escape
 exits. The gesture previews as a line; the plugin generates editable output on
-release. Choose a Raster document and raster layer before using pixel filters or
-brush presets. Select vector objects before running a vector effect or gradient.
+release. A pixel filter uses the active raster. A page with none is baked first.
+Brush presets still need a raster layer. Select vector objects before a vector effect.
 
 Document/selection behaviors are off by default. The manager’s behavior checkbox
 opts in to events from enabled plugins and remembers your choice. A behavior’s
@@ -114,7 +114,7 @@ example with `omadesign --inspect document.oma`, or see the source types in
 | `oma.read_asset(relative_path)` | Reads a UTF-8 asset within this plugin’s folder |
 | `oma.svg(svg_text, x, y, width)` | Imports SVG paths as editable vector artwork, preserving aspect |
 | `oma.pixel(layer, x, y)` | Returns source `r,g,b,a`; out-of-bounds returns transparent black |
-| `oma.map_pixels(layer, callback)` | Replaces pixels using `callback(r,g,b,a,x,y) → r,g,b,a` |
+| `oma.map_pixels(layer, callback)` | Replaces pixels using `callback(r,g,b,a,x,y) → r,g,b,a`. A non-raster `layer` falls back to the topmost visible raster. No raster bakes the visible page onto a new layer and filters that |
 | `oma.message(text)` | Shows a completion message in the app status bar |
 
 `add_shape` supports `kind="rect"`, `"ellipse"`, `"line"`, `"path"`, or

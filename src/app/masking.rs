@@ -137,9 +137,9 @@ impl Studio {
         );
     }
 
-    pub fn merge_pixel_sel(&mut self, next: Vec<u8>, add: bool) {
+    pub fn merge_pixel_sel(&mut self, next: Vec<u8>, op: paint::PixelCombine) {
         let existing = self.raster_target().and_then(|li| self.pixel_sel_mask(li));
-        let combined = paint::combine_masks(existing.as_deref(), next, add);
+        let combined = paint::combine_masks(existing.as_deref(), &next, op);
         self.set_pixel_sel(Some(combined));
     }
 
@@ -184,13 +184,50 @@ impl Studio {
     }
 
     pub fn select_item_outline(&mut self, layer: usize, id: Option<u64>) {
+        self.apply_item_outline(layer, id, paint::PixelCombine::Replace);
+    }
+
+    pub fn apply_item_outline(&mut self, layer: usize, id: Option<u64>, op: paint::PixelCombine) {
         self.end_pixel_stroke(false);
-        if let Some(mask) = self.item_mask(layer, id) {
+        let Some(mask) = self.item_mask(layer, id) else {
+            self.status = "That object has no pixel edge to select".into();
+            return;
+        };
+        if op == paint::PixelCombine::Replace
+            || (self.pixel_sel.is_none() && op != paint::PixelCombine::Subtract)
+        {
             self.pixel_sel = Some(mask.values);
             self.pixel_sel_space = Some(mask.space);
             self.pixel_sel_gen = self.pixel_sel_gen.wrapping_add(1);
             self.status = "Item outline selected · choose any layer or object to mask".into();
+            return;
         }
+        if self.pixel_sel.is_none() {
+            self.status = "Nothing to subtract from".into();
+            return;
+        }
+        let target = self.pixel_sel_space.unwrap_or(mask.space);
+        let next = if target == mask.space {
+            mask.values
+        } else {
+            match resample(&mask.values, mask.space, target) {
+                Some(values) => values,
+                None => {
+                    self.status = "Could not line that outline up with the selection".into();
+                    return;
+                }
+            }
+        };
+        let existing = self
+            .pixel_sel
+            .as_deref()
+            .filter(|_| self.pixel_sel_space == Some(target));
+        let combined = paint::combine_masks(existing, &next, op);
+        let count = paint::selected_count(&combined);
+        self.pixel_sel = Some(combined);
+        self.pixel_sel_space = Some(target);
+        self.pixel_sel_gen = self.pixel_sel_gen.wrapping_add(1);
+        self.status = format!("{count} pixels selected");
     }
 
     pub fn begin_item_mask(&mut self, layer: usize, id: Option<u64>) {

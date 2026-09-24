@@ -97,7 +97,7 @@ pub struct Output {
     pub selection: Vec<(usize, u64)>,
 }
 
-fn vm(cancel: Arc<AtomicBool>) -> Result<Lua, String> {
+fn vm(cancel: Arc<AtomicBool>, long: Arc<AtomicBool>) -> Result<Lua, String> {
     let lua = Lua::new_with(
         StdLib::TABLE | StdLib::STRING | StdLib::MATH | StdLib::UTF8,
         LuaOptions::default(),
@@ -109,9 +109,10 @@ fn vm(cancel: Arc<AtomicBool>) -> Result<Lua, String> {
     lua.set_hook(
         HookTriggers::new().every_nth_instruction(10_000),
         move |_, _| {
-            if cancel.load(Ordering::Relaxed) || start.elapsed() > Duration::from_secs(15) {
+            let limit = if long.load(Ordering::Relaxed) { 60 } else { 15 };
+            if cancel.load(Ordering::Relaxed) || start.elapsed() > Duration::from_secs(limit) {
                 return Err(mlua::Error::runtime(
-                    "Plugin cancelled or exceeded the 15 second execution limit",
+                    "Plugin cancelled or exceeded the execution limit",
                 ));
             }
             Ok(VmState::Continue)
@@ -146,7 +147,10 @@ fn load(lua: &Lua, path: &std::path::Path) -> Result<Table, String> {
         .map_err(|e| e.to_string())
 }
 pub fn inspect(path: &std::path::Path) -> Result<Plugin, String> {
-    let lua = vm(Arc::new(AtomicBool::new(false)))?;
+    let lua = vm(
+        Arc::new(AtomicBool::new(false)),
+        Arc::new(AtomicBool::new(false)),
+    )?;
     let table = load(&lua, path)?;
     let mut plugin: Plugin = lua
         .from_value_with(
@@ -260,7 +264,8 @@ pub fn run(
     gesture: Option<Gesture>,
     cancel: Arc<AtomicBool>,
 ) -> Result<Output, String> {
-    let lua = vm(cancel.clone())?;
+    let long = Arc::new(AtomicBool::new(false));
+    let lua = vm(cancel.clone(), long.clone())?;
     let state = host::State::new(
         doc,
         selection,
@@ -271,6 +276,7 @@ pub fn run(
             .unwrap_or(std::path::Path::new("."))
             .to_owned(),
         cancel,
+        long,
     );
     host::register(&lua, state.clone()).map_err(|e| e.to_string())?;
     let plugin_table = load(&lua, &plugin.path)?;

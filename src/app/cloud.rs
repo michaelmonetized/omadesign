@@ -355,10 +355,11 @@ impl Studio {
                         self.status = "Desktop access revoked".into();
                     }
                     Ok(Event::Connected(identity)) => {
+                        let who = cloud::account_label(&identity);
                         self.cloud_identity = identity;
                         self.cloud_panel.code.clear();
-                        self.cloud_modal = CloudModal::None;
-                        self.status = "Connected to Omadesign cloud".into();
+                        self.cloud_modal = CloudModal::SignIn;
+                        self.status = format!("You're in. Connected as {who}.");
                     }
                     Ok(Event::Projects(projects)) => {
                         self.cloud_panel.projects = projects;

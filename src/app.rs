@@ -2194,6 +2194,9 @@ impl Studio {
     }
 
     pub fn set_tool(&mut self, t: Tool) {
+        if t == Tool::Eyedropper {
+            crate::screen_pick::rearm();
+        }
         self.end_deform(true);
         if self.tool != t {
             self.end_pixel_stroke(true);
@@ -2318,6 +2321,9 @@ impl Studio {
     /// `pick` is the raw pointer (close / join). `place` is the snapped point.
     pub fn pen_click_at(&mut self, pick: Pt, place: Pt) {
         let slack = 12.0 / self.view.scale.max(0.01);
+        if self.drop_pen_forward_handle(pick, place, slack) {
+            return;
+        }
         if let Some(Op::Pen {
             anchors, source, ..
         }) = &self.op
@@ -2400,6 +2406,35 @@ impl Studio {
                 })
             }
         }
+    }
+
+    /// Click the open end of the pen path: keep the curve that arrived, drop the handle that would curve the next segment.
+    fn drop_pen_forward_handle(&mut self, pick: Pt, place: Pt, slack: f32) -> bool {
+        let Some(Op::Pen { anchors, .. }) = &self.op else {
+            return false;
+        };
+        let Some(last) = anchors.last().copied() else {
+            return false;
+        };
+        let on_end = (last.pt - pick).length() < slack || (last.pt - place).length() < slack;
+        if !on_end || last.h_out.length_sq() <= 0.25 {
+            return false;
+        }
+        if anchors.len() >= 3 {
+            let first = anchors[0].pt;
+            if (first - pick).length() < slack || (first - place).length() < slack {
+                return false;
+            }
+        }
+        if let Some(Op::Pen { anchors, press, .. }) = &mut self.op
+            && let Some(anchor) = anchors.last_mut()
+        {
+            anchor.h_out = Pt::ZERO;
+            *press = pick;
+        }
+        self.sync_pen_source();
+        self.status = "Sharp corner · forward handle dropped".into();
+        true
     }
 
     pub(crate) fn sync_pen_source(&mut self) {
@@ -3226,48 +3261,22 @@ impl Studio {
     }
 
     pub fn eyedrop(&mut self, p: Pt) {
-        if self.sample_raster(p) {
-            return;
+        if let Some(color) = crate::compositor::sample_color(&self.doc, p) {
+            self.take_sampled(color, false);
+        } else {
+            self.status = "Nothing under the cursor. Press I to sample the screen.".into();
         }
-        if let Some((_, id)) = self.doc.hit_test(p, 4.0 / self.view.scale.max(0.01)) {
-            for layer in &self.doc.layers {
-                if let Some(s) = layer.find(id) {
-                    self.style.fill = s.style.fill.clone();
-                    if let Fill::Solid(c) = s.style.fill {
-                        self.brush.color = c;
-                        self.push_recent(c);
-                    }
-                    self.status = "sampled fill".into();
-                    return;
-                }
-            }
-        }
-        let _ = self.sample_raster(p);
     }
 
-    fn sample_raster(&mut self, p: Pt) -> bool {
-        let Some(li) = self.raster_target() else {
-            return false;
+    pub fn take_sampled(&mut self, color: Rgba, screen: bool) {
+        self.style.fill = Fill::Solid(color);
+        self.brush.color = color;
+        self.push_recent(color);
+        self.status = if screen {
+            format!("sampled screen {}", color.hex())
+        } else {
+            format!("sampled {}", color.hex())
         };
-        let local = self.mask_point(li, p);
-        let Some(px) = self.doc.layers[li].kind.pixels() else {
-            return false;
-        };
-        if local.x < 0.0 || local.y < 0.0 || local.x >= px.w as f32 || local.y >= px.h as f32 {
-            return false;
-        }
-        let x = local.x.floor() as u32;
-        let y = local.y.floor() as u32;
-        let i = ((y * px.w + x) * 4) as usize;
-        if i + 3 >= px.data.len() {
-            return false;
-        }
-        let c = Rgba::new(px.data[i], px.data[i + 1], px.data[i + 2], px.data[i + 3]);
-        self.style.fill = Fill::Solid(c);
-        self.brush.color = c;
-        self.push_recent(c);
-        self.status = format!("sampled {}", c.hex());
-        true
     }
 
     pub fn push_recent(&mut self, c: Rgba) {
@@ -3838,6 +3847,9 @@ impl Studio {
 impl eframe::App for Studio {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        if self.allow_close || ctx.input(|i| i.viewport().close_requested()) {
+            crate::screen_pick::stop();
+        }
         if ctx.input(|i| i.viewport().close_requested())
             && (self.file_dialog_pending() || self.updates.freezing)
         {
@@ -3996,6 +4008,51 @@ mod tests {
             panic!("path");
         };
         assert!(closed);
+    }
+
+    #[test]
+    fn pen_click_on_the_open_end_drops_only_the_forward_handle() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        s.tool = Tool::Pen;
+        s.pen_click(Pt::new(0.0, 0.0));
+        s.pen_click(Pt::new(40.0, 0.0));
+        let Op::Pen { anchors, press, .. } = s.op.as_mut().unwrap() else {
+            panic!("pen");
+        };
+        crate::geom::apply_pen_smooth(
+            anchors.last_mut().unwrap(),
+            Pt::new(16.0, -24.0),
+            1.0,
+            false,
+            false,
+        );
+        let leading = anchors.last().unwrap().h_in;
+        assert!(leading.length_sq() > 1.0);
+        assert!(anchors.last().unwrap().h_out.length_sq() > 1.0);
+        let press = *press;
+        assert!((press - Pt::new(40.0, 0.0)).length() < 0.01);
+        s.pen_click(Pt::new(40.0, 0.0));
+        let Op::Pen { anchors, .. } = s.op.as_ref().unwrap() else {
+            panic!("pen still open");
+        };
+        assert_eq!(anchors.len(), 2, "clicking the end must not add a point");
+        let end = anchors.last().unwrap();
+        assert!(
+            end.h_out.length_sq() < 0.01,
+            "forward handle should be gone"
+        );
+        assert!(
+            (end.h_in - leading).length() < 0.01,
+            "the curve into the point stays"
+        );
+        let Op::Pen { anchors, .. } = s.op.as_mut().unwrap() else {
+            panic!("pen");
+        };
+        crate::geom::apply_pen_smooth(anchors.last_mut().unwrap(), Pt::ZERO, 1.0, false, false);
+        let end = anchors.last().unwrap();
+        assert!(end.h_out.length_sq() < 0.01);
+        assert!((end.h_in - leading).length() < 0.01);
     }
 
     #[test]

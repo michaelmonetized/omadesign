@@ -8,11 +8,10 @@ return {
   version = "1.0.0", description = "Editable patterns, tools, filters, effects, icon and brush packs, gradients and automation examples.",
   actions = {
     { id = "duotone", name = "Midnight duotone", category = "Filters",
-      description = "A custom Lua pixel filter on the active raster layer. Alpha stays intact.",
+      description = "A custom Lua pixel filter. A page of vectors is baked first. Alpha stays intact.",
       parameters = {{id="strength",label="Strength",default=1,min=0,max=1}},
       run = function(ctx, p)
-        assert(ctx.active_layer, "Select a raster layer first")
-        oma.map_pixels(ctx.active_layer, function(r,g,b,a)
+        oma.map_pixels(ctx.active_layer or 0, function(r,g,b,a)
           local t = (r*.2126 + g*.7152 + b*.0722)/255
           local function mix(v,lo,hi) return v*(1-p.strength)+(lo+(hi-lo)*t)*p.strength end
           return mix(r,24,186), mix(g,28,194), mix(b,48,222), a

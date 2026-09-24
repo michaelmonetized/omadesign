@@ -256,23 +256,25 @@ fn guides_start_locked_and_clear_all_is_reversible() {
     assert!(s.doc.find_shape(0, id).unwrap().guide);
 }
 #[test]
-fn design_eyedropper_samples_only_the_active_raster() {
+fn design_eyedropper_samples_whatever_is_visible() {
     let mut s = studio();
     let red = Pixels::from_rgba(2, 2, [200, 10, 20, 255].repeat(4)).unwrap();
     s.doc.layers.push(Layer::placed_raster(
-        "Active",
+        "Photo",
         red,
         Pt::new(20., 20.),
         Pt::splat(20.),
     ));
-    s.active_layer = Some(1);
-    s.persona = Persona::Design;
-    s.eyedrop(Pt::new(25., 25.));
-    assert_eq!(s.brush.color, Rgba::rgb(200, 10, 20));
+    let mut blue = rect(70., 30., 24., 16.);
+    blue.style.fill = Fill::Solid(Rgba::rgb(10, 40, 200));
+    s.doc.layers[0].kind.shapes_mut().unwrap().push(blue);
     s.active_layer = Some(0);
+    s.persona = Persona::Design;
     s.brush.color = Rgba::BLACK;
     s.eyedrop(Pt::new(25., 25.));
-    assert_eq!(s.brush.color, Rgba::BLACK);
+    assert_eq!(s.brush.color, Rgba::rgb(200, 10, 20));
+    s.eyedrop(Pt::new(76., 36.));
+    assert_eq!(s.brush.color, Rgba::rgb(10, 40, 200));
 }
 
 #[test]

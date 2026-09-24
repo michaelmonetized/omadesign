@@ -18,6 +18,7 @@ const DOC_ROUTES: Record<string, string> = {
   "/updates": "updates/",
   "/docs/plugins": "docs/plugins/",
   "/docs/plugins.md": "docs/plugins/",
+  "/updates/0.5.9": "updates/0.5.9/",
   "/updates/0.5.8": "updates/0.5.8/",
   "/docs/cloud": "docs/cloud/",
   "/updates/0.5.7": "updates/0.5.7/",

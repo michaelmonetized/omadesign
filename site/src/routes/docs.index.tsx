@@ -78,10 +78,10 @@ function DocsOverview() {
         </pre>
         <aside className="docs-note" aria-label="Version information">
           <p>
-            {RELEASE_TAG} adds chroma key, raster filter and effect banks,
-            multi-stop fill/stroke gradients and responsive Layout components
-            and prototypes. Clipboard paste and cloud snapshot review remain
-            included. Affinity import also needs the optional{" "}
+            {RELEASE_TAG} samples any screen pixel, subtracts from a selection,
+            and runs a pixel filter on a page of vectors. Clipboard paste and
+            cloud snapshot review remain included. Affinity import also needs
+            the optional{" "}
             <Link to="/docs/affinity">bridge setup</Link>. Read the{" "}
             <Link to="/updates">studio log</Link> or the{" "}
             <a href={RELEASE_URL}>release notes</a>.

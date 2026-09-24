@@ -140,6 +140,24 @@ pub fn signed_in(identity: &Identity) -> bool {
     !identity.email.trim().is_empty() && identity.token.len() == 64
 }
 
+/// A finished device login. The email can arrive in the same payload or be blank.
+pub fn connected(identity: &Identity) -> bool {
+    identity.token.len() == 64
+}
+
+/// Who to show once the desktop is connected.
+pub fn account_label(identity: &Identity) -> String {
+    let email = identity.email.trim();
+    if !email.is_empty() {
+        return email.to_string();
+    }
+    let name = identity.name.trim();
+    if !name.is_empty() {
+        return name.to_string();
+    }
+    "this desktop".into()
+}
+
 pub fn unresolved_count(doc: &Document, frame_id: Option<u64>) -> usize {
     doc.comments
         .iter()
@@ -157,6 +175,26 @@ mod tests {
             ..Identity::default()
         };
         assert!(!signed_in(&identity));
+        assert!(!connected(&identity));
+    }
+    #[test]
+    fn a_device_token_is_connected_and_names_the_account() {
+        let token = "ab".repeat(32);
+        let named = Identity {
+            token: token.clone(),
+            name: "Michael".into(),
+            ..Identity::default()
+        };
+        assert!(connected(&named));
+        assert!(!signed_in(&named));
+        assert_eq!(account_label(&named), "Michael");
+        let emailed = Identity {
+            token,
+            email: "michael@example.com".into(),
+            name: "Michael".into(),
+            ..Identity::default()
+        };
+        assert_eq!(account_label(&emailed), "michael@example.com");
     }
     #[test]
     fn annotation_resolution_counts() {

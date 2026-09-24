@@ -125,6 +125,7 @@ pub struct State {
     allow_ime: bool,
     ime_rect_px: Option<egui::Rect>,
     old_ime_purpose: egui::IMEPurpose,
+    pending_url: Option<PendingUrl>,
 
     /// Used by [`State::try_on_ime_processed_keyboard_input`] to track key
     /// release events that should be filtered out. See comments in that method
@@ -176,6 +177,7 @@ impl State {
             allow_ime: false,
             ime_rect_px: None,
             old_ime_purpose: egui::IMEPurpose::Normal,
+            pending_url: None,
             #[cfg(target_os = "windows")]
             pressed_processed_physical_keys: HashSet::new(),
         };
@@ -509,13 +511,27 @@ impl State {
                 consumed: false,
             },
 
+            WindowEvent::ActivationTokenDone { serial, token } => {
+                if let Some(pending) = self.pending_url.take() {
+                    if pending.serial == *serial {
+                        open_url_focused(&pending.url, Some(&token.clone().into_raw()));
+                    } else {
+                        self.pending_url = Some(pending);
+                    }
+                }
+                EventResponse {
+                    repaint: true,
+                    consumed: false,
+                }
+            }
+
             // Things we completely ignore:
-            WindowEvent::ActivationTokenDone { .. }
-            | WindowEvent::AxisMotion { .. }
-            | WindowEvent::DoubleTapGesture { .. } => EventResponse {
-                repaint: false,
-                consumed: false,
-            },
+            WindowEvent::AxisMotion { .. } | WindowEvent::DoubleTapGesture { .. } => {
+                EventResponse {
+                    repaint: false,
+                    consumed: false,
+                }
+            }
 
             WindowEvent::PinchGesture { delta, .. } => {
                 // Positive delta values indicate magnification (zooming in).
@@ -1100,6 +1116,8 @@ impl State {
             request_discard_reasons: _, // `egui::Context::run` handles this
         } = platform_output;
 
+        self.expire_pending_url();
+
         for command in commands {
             match command {
                 egui::OutputCommand::CopyText(text) => {
@@ -1109,7 +1127,7 @@ impl State {
                     self.clipboard.set_image(&image);
                 }
                 egui::OutputCommand::OpenUrl(open_url) => {
-                    open_url_in_browser(&open_url.url);
+                    self.open_url(window, open_url.url);
                 }
             }
         }
@@ -1372,6 +1390,56 @@ pub fn update_viewport_info(
     viewport_info.focused = Some(window.has_focus());
 }
 
+struct PendingUrl {
+    url: String,
+    serial: winit::event_loop::AsyncRequestSerial,
+    started: web_time::Instant,
+}
+
+impl State {
+    fn open_url(&mut self, window: &Window, url: String) {
+        #[cfg(target_os = "linux")]
+        {
+            use winit::platform::startup_notify::WindowExtStartupNotify;
+            match window.request_activation_token() {
+                Ok(serial) => {
+                    self.pending_url = Some(PendingUrl {
+                        url,
+                        serial,
+                        started: web_time::Instant::now(),
+                    });
+                    return;
+                }
+                Err(error) => log::debug!("No activation token for {url}: {error}"),
+            }
+        }
+        let _ = window;
+        open_url_focused(&url, None);
+    }
+
+    fn expire_pending_url(&mut self) {
+        let expired = self
+            .pending_url
+            .as_ref()
+            .is_some_and(|pending| pending.started.elapsed() > web_time::Duration::from_millis(700));
+        if expired && let Some(pending) = self.pending_url.take() {
+            open_url_focused(&pending.url, None);
+        }
+    }
+}
+
+fn open_url_focused(url: &str, token: Option<&str>) {
+    #[cfg(target_os = "linux")]
+    {
+        if token.is_some_and(|token| portal_open(url, token)) || spawn_xdg_open(url, token) {
+            raise_browser_window();
+            return;
+        }
+    }
+    let _ = token;
+    open_url_in_browser(url);
+}
+
 fn open_url_in_browser(_url: &str) {
     #[cfg(feature = "webbrowser")]
     if let Err(err) = webbrowser::open(_url) {
@@ -1380,7 +1448,146 @@ fn open_url_in_browser(_url: &str) {
 
     #[cfg(not(feature = "webbrowser"))]
     {
+        let _ = _url;
         log::warn!("Cannot open url - feature \"links\" not enabled.");
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn portal_open(url: &str, token: &str) -> bool {
+    let options = format!("{{'activation_token': <'{token}'>}}");
+    Command::new("gdbus")
+        .args([
+            "call",
+            "--session",
+            "--dest",
+            "org.freedesktop.portal.Desktop",
+            "--object-path",
+            "/org/freedesktop/portal/desktop",
+            "--method",
+            "org.freedesktop.portal.OpenURI.OpenURI",
+            "",
+            url,
+            &options,
+        ])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+#[cfg(target_os = "linux")]
+fn spawn_xdg_open(url: &str, token: Option<&str>) -> bool {
+    let mut command = Command::new("xdg-open");
+    command
+        .arg(url)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    if let Some(token) = token {
+        command
+            .env("XDG_ACTIVATION_TOKEN", token)
+            .env("DESKTOP_STARTUP_ID", token);
+    } else {
+        command
+            .env_remove("XDG_ACTIVATION_TOKEN")
+            .env_remove("DESKTOP_STARTUP_ID");
+    }
+    command.spawn().is_ok()
+}
+
+#[cfg(target_os = "linux")]
+fn raise_browser_window() {
+    let Some(class) = default_browser_class() else {
+        return;
+    };
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(350));
+        let _ = Command::new("hyprctl")
+            .args([
+                "dispatch",
+                "focuswindow",
+                &format!("class:^({class})$"),
+            ])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    });
+}
+
+#[cfg(target_os = "linux")]
+fn default_browser_class() -> Option<String> {
+    let output = Command::new("xdg-mime")
+        .args(["query", "default", "x-scheme-handler/https"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let id = String::from_utf8(output.stdout).ok()?;
+    let id = id.trim();
+    if id.is_empty() {
+        return None;
+    }
+    let file = desktop_file(id).unwrap_or_default();
+    let class = browser_class(id, &file);
+    (!class.is_empty()).then_some(class)
+}
+
+#[cfg(target_os = "linux")]
+fn desktop_file(id: &str) -> Option<String> {
+    let mut dirs = Vec::new();
+    if let Some(home) = std::env::var_os("HOME") {
+        dirs.push(std::path::PathBuf::from(home).join(".local/share/applications"));
+    }
+    if let Ok(data) = std::env::var("XDG_DATA_DIRS") {
+        for dir in data.split(':') {
+            if !dir.is_empty() {
+                dirs.push(std::path::PathBuf::from(dir).join("applications"));
+            }
+        }
+    }
+    dirs.push(std::path::PathBuf::from("/usr/share/applications"));
+    for dir in dirs {
+        if let Ok(text) = std::fs::read_to_string(dir.join(id)) {
+            return Some(text);
+        }
+    }
+    None
+}
+
+fn browser_class(desktop_id: &str, file: &str) -> String {
+    for line in file.lines() {
+        let line = line.trim();
+        if let Some(value) = line.strip_prefix("StartupWMClass=") {
+            let value = value.trim();
+            if !value.is_empty() && !value.contains([' ', '\t']) {
+                return value.to_string();
+            }
+        }
+    }
+    let stem = desktop_id.trim().trim_end_matches(".desktop");
+    stem.rsplit('.').next().unwrap_or(stem).to_string()
+}
+
+#[cfg(target_os = "linux")]
+use std::process::Command;
+
+#[cfg(test)]
+mod open_url_tests {
+    use super::browser_class;
+
+    #[test]
+    fn browser_class_prefers_startup_wm_class() {
+        let file = "[Desktop Entry]\nStartupWMClass=firefox\n";
+        assert_eq!(browser_class("org.mozilla.firefox.desktop", file), "firefox");
+        assert_eq!(browser_class("brave-browser.desktop", ""), "brave-browser");
+        assert_eq!(
+            browser_class("org.mozilla.firefox.desktop", ""),
+            "firefox"
+        );
     }
 }
 

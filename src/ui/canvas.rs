@@ -359,10 +359,14 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
     let shift = resp.ctx.input(|i| i.modifiers.shift);
     let ctrl = resp.ctx.input(|i| i.modifiers.ctrl || i.modifiers.command);
     studio.snap_override = ctrl;
-    if studio.persona == Persona::Pixel && ctrl && !alt {
+    if studio.persona == Persona::Pixel && ctrl {
         if resp.ctx.input(|i| i.pointer.primary_pressed()) && crect.contains(screen) {
             if let Some((li, id)) = hit_shape(studio, pick, 4. / studio.view.scale.max(0.01)) {
-                studio.select_item_outline(li, (id != RASTER_ID).then_some(id));
+                studio.apply_item_outline(
+                    li,
+                    (id != RASTER_ID).then_some(id),
+                    super::retouch::pixel_op(false, alt),
+                );
             }
         }
         return;
@@ -391,8 +395,23 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
         return;
     }
 
-    if studio.tool == Tool::Eyedropper && resp.clicked() {
-        studio.eyedrop(pick);
+    if studio.tool == Tool::Eyedropper {
+        let pressed = resp.ctx.input(|i| i.pointer.primary_pressed());
+        let released = resp.ctx.input(|i| i.pointer.primary_released());
+        let armed = resp
+            .ctx
+            .data(|data| data.get_temp::<bool>(eyedrop_arm()).unwrap_or(false));
+        if pressed && crect.contains(screen) {
+            resp.ctx
+                .data_mut(|data| data.insert_temp(eyedrop_arm(), true));
+        }
+        if released && armed {
+            resp.ctx
+                .data_mut(|data| data.insert_temp(eyedrop_arm(), false));
+            if crect.contains(screen) {
+                studio.eyedrop(pick);
+            }
+        }
         return;
     }
 
@@ -478,7 +497,11 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
             && resp.ctx.layer_id_at(at) == Some(resp.layer_id)
         {
             let point = studio.view.pointer_to_world(origin, from_egui(at));
-            super::retouch::apply_wand(studio, point, modifiers.shift);
+            super::retouch::apply_wand(
+                studio,
+                point,
+                super::retouch::pixel_op(modifiers.shift, modifiers.alt),
+            );
         }
         return;
     }
@@ -705,6 +728,26 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
             }
         }
     }
+}
+
+pub(super) fn poll_screen_pick(ctx: &eframe::egui::Context, studio: &mut Studio) {
+    let tick = crate::screen_pick::sync(studio.tool == Tool::Eyedropper);
+    if tick.live {
+        ctx.request_repaint_after(std::time::Duration::from_millis(80));
+    }
+    if tick.just_started {
+        studio.status = "Click any pixel on the screen".into();
+    }
+    if let Some(result) = tick.finished {
+        match result {
+            Ok(color) => studio.take_sampled(color, true),
+            Err(error) => studio.status = error,
+        }
+    }
+}
+
+fn eyedrop_arm() -> eframe::egui::Id {
+    eframe::egui::Id::new("eyedropper-armed")
 }
 
 fn pointer_down_starts_op(tool: Tool, alt: bool) -> bool {
@@ -2350,11 +2393,17 @@ fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) 
                     }
                 }
             } else {
-                super::retouch::commit_marquee(studio, start, cur, ellipse, shift);
+                super::retouch::commit_marquee(
+                    studio,
+                    start,
+                    cur,
+                    ellipse,
+                    super::retouch::pixel_op(shift, alt),
+                );
             }
         }
         Some(Op::Lasso { pts }) => {
-            super::retouch::commit_lasso(studio, &pts, shift);
+            super::retouch::commit_lasso(studio, &pts, super::retouch::pixel_op(shift, alt));
         }
         Some(Op::Gradient { start, cur }) => {
             if (cur - start).length() < 2.0 {

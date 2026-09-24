@@ -314,18 +314,30 @@ pub fn clip_overlay(pm: &mut Pixmap, mask: &[u8]) {
     }
 }
 
-pub fn combine_masks(base: Option<&[u8]>, next: Vec<u8>, add: bool) -> Vec<u8> {
-    if add
-        && let Some(base) = base
-        && base.len() == next.len()
-    {
-        return base
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PixelCombine {
+    Replace,
+    Add,
+    Subtract,
+}
+
+pub fn combine_masks(base: Option<&[u8]>, next: &[u8], op: PixelCombine) -> Vec<u8> {
+    let Some(base) = base.filter(|base| base.len() == next.len() && op != PixelCombine::Replace)
+    else {
+        return match op {
+            PixelCombine::Subtract => vec![0; next.len()],
+            _ => next.to_vec(),
+        };
+    };
+    match op {
+        PixelCombine::Add => base.iter().zip(next).map(|(a, b)| (*a).max(*b)).collect(),
+        PixelCombine::Subtract => base
             .iter()
-            .zip(next.iter())
-            .map(|(a, b)| (*a).max(*b))
-            .collect();
+            .zip(next)
+            .map(|(a, b)| if *b > 0 { 0 } else { *a })
+            .collect(),
+        PixelCombine::Replace => next.to_vec(),
     }
-    next
 }
 
 pub fn selected_count(mask: &[u8]) -> usize {
@@ -896,8 +908,14 @@ mod tests {
         assert!(overlay.data()[7] > 0);
         assert!(overlay.data()[11] > 0);
         assert_eq!(overlay.data()[15], 0);
-        let added = combine_masks(Some(&[255, 0, 0, 0]), vec![0, 255, 0, 0], true);
+        let added = combine_masks(Some(&[255, 0, 0, 0]), &[0, 255, 0, 0], PixelCombine::Add);
         assert_eq!(added, vec![255, 255, 0, 0]);
+        let subtracted = combine_masks(
+            Some(&[255, 255, 255, 0]),
+            &[0, 255, 0, 0],
+            PixelCombine::Subtract,
+        );
+        assert_eq!(subtracted, vec![255, 0, 255, 0]);
         assert_eq!(selected_count(&added), 2);
         assert_eq!(selection_bounds(&added, 4, 1), Some((0, 0, 2, 1)));
         let original = Pixmap::new(2, 1).unwrap();

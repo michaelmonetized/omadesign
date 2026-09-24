@@ -149,6 +149,29 @@ impl Draft<'static> {
     }
 }
 
+/// The color a person sees at `at`, from every visible layer. Empty space outside
+/// the page is `None`. Artboard paper counts.
+pub fn sample_color(doc: &Document, at: Pt) -> Option<Rgba> {
+    let mut pm = Pixmap::new(1, 1)?;
+    let view = View {
+        scale: 1.0,
+        offset: Pt::new(0.5 - at.x, 0.5 - at.y),
+    };
+    draw_plates(&mut pm, doc, view);
+    groups::draw(&mut pm, doc, view.transform(), &Draft::none(), None, None);
+    let px = pm.pixel(0, 0)?;
+    if px.alpha() == 0 {
+        return None;
+    }
+    let color = px.demultiply();
+    Some(Rgba::new(
+        color.red(),
+        color.green(),
+        color.blue(),
+        color.alpha(),
+    ))
+}
+
 pub fn render_view(
     doc: &Document,
     view: View,

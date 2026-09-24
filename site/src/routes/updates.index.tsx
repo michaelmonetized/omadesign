@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import pixelYouMean from "../../../docs/blog/0.5.9-click-the-pixel.md?raw";
 import plugins from "../../../docs/blog/0.5.8-make-it-your-studio.md?raw";
 import identity from "../../../docs/blog/0.5.7-a-new-mark.md?raw";
 import welcome from "../../../docs/blog/0.5.6-your-work-ready.md?raw";
@@ -11,6 +12,7 @@ import { CURL } from "../site";
 import { latestUpdate, updates } from "../updates";
 
 const bodies: Record<string, { markdown: string; path: string }> = {
+  "0.5.9": { markdown: pixelYouMean, path: "docs/blog/0.5.9-click-the-pixel.md" },
   "0.5.8": { markdown: plugins, path: "docs/blog/0.5.8-make-it-your-studio.md" },
   "0.5.7": { markdown: identity, path: "docs/blog/0.5.7-a-new-mark.md" },
   "0.5.6": { markdown: welcome, path: "docs/blog/0.5.6-your-work-ready.md" },
@@ -27,7 +29,7 @@ export const Route = createFileRoute("/updates/")({
       {
         name: "description",
         content:
-          "Studio notes from omadesign. 0.5.8 adds Lua plugins, editable compound paths, shared corner-radius controls and a steadier welcome screen.",
+          "Studio notes from omadesign. 0.5.9 samples any screen pixel, subtracts from a selection, and filters a page of vectors.",
       },
     ],
   }),
