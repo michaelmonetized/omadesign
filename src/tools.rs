@@ -140,7 +140,7 @@ impl Tool {
                 "Drag a point or handle · click a segment to add · Alt-click corner/smooth · Delete removes the point · Object → Break path"
             }
             Tool::Pen => {
-                "Click a corner · click-drag a smooth · Enter finishes open · click the first point to close · click an open end to continue or join"
+                "Click a corner · click-drag a smooth · click the last point to drop its forward handle · Enter finishes open · click the first point to close · click an open end to continue or join"
             }
             Tool::Pencil => "Drag a freehand curve. Release to commit.",
             Tool::Rect => {

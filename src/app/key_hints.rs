@@ -345,6 +345,7 @@ impl Studio {
                                 },
                                 plain_keys && ctx.input(|i| i.key_down(Key::Escape)),
                             );
+                            add("Last point", "Drop forward handle", false);
                             add("First point", "Close path", false);
                         } else {
                             add("Click", "Add corner", false);

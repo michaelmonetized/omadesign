@@ -288,8 +288,11 @@ pub fn constrain_45(delta: Pt) -> Pt {
 pub fn apply_pen_smooth(anchor: &mut Anchor, drag: Pt, scale: f32, alt: bool, shift: bool) {
     let d = if shift { constrain_45(drag) } else { drag };
     if d.length() * scale.max(0.01) < PEN_DRAG_PX {
-        anchor.h_in = Pt::ZERO;
-        anchor.h_out = Pt::ZERO;
+        let arrived = anchor.h_in.length_sq() >= 0.25 && anchor.h_out.length_sq() < 0.25;
+        if !arrived {
+            anchor.h_in = Pt::ZERO;
+            anchor.h_out = Pt::ZERO;
+        }
         return;
     }
     if alt {

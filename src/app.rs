@@ -2318,6 +2318,9 @@ impl Studio {
     /// `pick` is the raw pointer (close / join). `place` is the snapped point.
     pub fn pen_click_at(&mut self, pick: Pt, place: Pt) {
         let slack = 12.0 / self.view.scale.max(0.01);
+        if self.drop_pen_forward_handle(pick, place, slack) {
+            return;
+        }
         if let Some(Op::Pen {
             anchors, source, ..
         }) = &self.op
@@ -2400,6 +2403,35 @@ impl Studio {
                 })
             }
         }
+    }
+
+    /// Click the open end of the pen path: keep the curve that arrived, drop the handle that would curve the next segment.
+    fn drop_pen_forward_handle(&mut self, pick: Pt, place: Pt, slack: f32) -> bool {
+        let Some(Op::Pen { anchors, .. }) = &self.op else {
+            return false;
+        };
+        let Some(last) = anchors.last().copied() else {
+            return false;
+        };
+        let on_end = (last.pt - pick).length() < slack || (last.pt - place).length() < slack;
+        if !on_end || last.h_out.length_sq() <= 0.25 {
+            return false;
+        }
+        if anchors.len() >= 3 {
+            let first = anchors[0].pt;
+            if (first - pick).length() < slack || (first - place).length() < slack {
+                return false;
+            }
+        }
+        if let Some(Op::Pen { anchors, press, .. }) = &mut self.op
+            && let Some(anchor) = anchors.last_mut()
+        {
+            anchor.h_out = Pt::ZERO;
+            *press = pick;
+        }
+        self.sync_pen_source();
+        self.status = "Sharp corner · forward handle dropped".into();
+        true
     }
 
     pub(crate) fn sync_pen_source(&mut self) {
@@ -3971,6 +4003,51 @@ mod tests {
             panic!("path");
         };
         assert!(closed);
+    }
+
+    #[test]
+    fn pen_click_on_the_open_end_drops_only_the_forward_handle() {
+        let mut s = Studio::new();
+        s.show_welcome = false;
+        s.tool = Tool::Pen;
+        s.pen_click(Pt::new(0.0, 0.0));
+        s.pen_click(Pt::new(40.0, 0.0));
+        let Op::Pen { anchors, press, .. } = s.op.as_mut().unwrap() else {
+            panic!("pen");
+        };
+        crate::geom::apply_pen_smooth(
+            anchors.last_mut().unwrap(),
+            Pt::new(16.0, -24.0),
+            1.0,
+            false,
+            false,
+        );
+        let leading = anchors.last().unwrap().h_in;
+        assert!(leading.length_sq() > 1.0);
+        assert!(anchors.last().unwrap().h_out.length_sq() > 1.0);
+        let press = *press;
+        assert!((press - Pt::new(40.0, 0.0)).length() < 0.01);
+        s.pen_click(Pt::new(40.0, 0.0));
+        let Op::Pen { anchors, .. } = s.op.as_ref().unwrap() else {
+            panic!("pen still open");
+        };
+        assert_eq!(anchors.len(), 2, "clicking the end must not add a point");
+        let end = anchors.last().unwrap();
+        assert!(
+            end.h_out.length_sq() < 0.01,
+            "forward handle should be gone"
+        );
+        assert!(
+            (end.h_in - leading).length() < 0.01,
+            "the curve into the point stays"
+        );
+        let Op::Pen { anchors, .. } = s.op.as_mut().unwrap() else {
+            panic!("pen");
+        };
+        crate::geom::apply_pen_smooth(anchors.last_mut().unwrap(), Pt::ZERO, 1.0, false, false);
+        let end = anchors.last().unwrap();
+        assert!(end.h_out.length_sq() < 0.01);
+        assert!((end.h_in - leading).length() < 0.01);
     }
 
     #[test]
