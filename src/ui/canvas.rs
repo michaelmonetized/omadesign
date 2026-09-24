@@ -359,10 +359,14 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
     let shift = resp.ctx.input(|i| i.modifiers.shift);
     let ctrl = resp.ctx.input(|i| i.modifiers.ctrl || i.modifiers.command);
     studio.snap_override = ctrl;
-    if studio.persona == Persona::Pixel && ctrl && !alt {
+    if studio.persona == Persona::Pixel && ctrl {
         if resp.ctx.input(|i| i.pointer.primary_pressed()) && crect.contains(screen) {
             if let Some((li, id)) = hit_shape(studio, pick, 4. / studio.view.scale.max(0.01)) {
-                studio.select_item_outline(li, (id != RASTER_ID).then_some(id));
+                studio.apply_item_outline(
+                    li,
+                    (id != RASTER_ID).then_some(id),
+                    super::retouch::pixel_op(false, alt),
+                );
             }
         }
         return;
@@ -478,7 +482,11 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
             && resp.ctx.layer_id_at(at) == Some(resp.layer_id)
         {
             let point = studio.view.pointer_to_world(origin, from_egui(at));
-            super::retouch::apply_wand(studio, point, modifiers.shift);
+            super::retouch::apply_wand(
+                studio,
+                point,
+                super::retouch::pixel_op(modifiers.shift, modifiers.alt),
+            );
         }
         return;
     }
@@ -2350,11 +2358,17 @@ fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) 
                     }
                 }
             } else {
-                super::retouch::commit_marquee(studio, start, cur, ellipse, shift);
+                super::retouch::commit_marquee(
+                    studio,
+                    start,
+                    cur,
+                    ellipse,
+                    super::retouch::pixel_op(shift, alt),
+                );
             }
         }
         Some(Op::Lasso { pts }) => {
-            super::retouch::commit_lasso(studio, &pts, shift);
+            super::retouch::commit_lasso(studio, &pts, super::retouch::pixel_op(shift, alt));
         }
         Some(Op::Gradient { start, cur }) => {
             if (cur - start).length() < 2.0 {

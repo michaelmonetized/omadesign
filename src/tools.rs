@@ -169,10 +169,12 @@ impl Tool {
             }
             Tool::Smudge => "Drag to smear pixels along the stroke.",
             Tool::Crop => "Drag a crop · release or Enter applies · Esc cancels the current crop.",
-            Tool::Marquee => "Drag a rectangular selection on the pixel layer.",
-            Tool::EllipseMarquee => "Drag an elliptical selection.",
-            Tool::Lasso => "Draw a freehand selection.",
-            Tool::Wand => "Click to select similar color.",
+            Tool::Marquee => {
+                "Drag a rectangular selection on the pixel layer. Shift adds. Alt subtracts."
+            }
+            Tool::EllipseMarquee => "Drag an elliptical selection. Shift adds. Alt subtracts.",
+            Tool::Lasso => "Draw a freehand selection. Shift adds. Alt subtracts.",
+            Tool::Wand => "Click to select similar color. Shift adds. Alt subtracts.",
             Tool::Hand => "Drag to pan. Space does this from any tool.",
             Tool::Zoom => {
                 "Drag a box · click in · Alt-click out · Ctrl-click artboard · Ctrl+Shift-click selection or all · pinch or scroll to zoom"
