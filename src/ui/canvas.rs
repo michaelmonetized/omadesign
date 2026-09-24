@@ -408,18 +408,7 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
         if released && armed {
             resp.ctx
                 .data_mut(|data| data.insert_temp(eyedrop_arm(), false));
-            if !crect.contains(screen) || alt {
-                match crate::screen_pick::sample_screen(screen_pixel(&resp.ctx, screen)) {
-                    Ok(color) => studio.take_sampled(color, true),
-                    Err(error) => {
-                        if crect.contains(screen) {
-                            studio.eyedrop(pick);
-                        } else {
-                            studio.status = error;
-                        }
-                    }
-                }
-            } else {
+            if crect.contains(screen) {
                 studio.eyedrop(pick);
             }
         }
@@ -741,17 +730,24 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
     }
 }
 
-fn eyedrop_arm() -> eframe::egui::Id {
-    eframe::egui::Id::new("eyedropper-armed")
+pub(super) fn poll_screen_pick(ctx: &eframe::egui::Context, studio: &mut Studio) {
+    let tick = crate::screen_pick::sync(studio.tool == Tool::Eyedropper);
+    if tick.live {
+        ctx.request_repaint_after(std::time::Duration::from_millis(80));
+    }
+    if tick.just_started {
+        studio.status = "Click any pixel on the screen".into();
+    }
+    if let Some(result) = tick.finished {
+        match result {
+            Ok(color) => studio.take_sampled(color, true),
+            Err(error) => studio.status = error,
+        }
+    }
 }
 
-fn screen_pixel(ctx: &eframe::egui::Context, pos: Pos2) -> Option<(i32, i32)> {
-    let rect = ctx.input(|input| input.viewport().inner_rect)?;
-    let scale = ctx.pixels_per_point();
-    Some((
-        ((rect.min.x + pos.x) * scale).round() as i32,
-        ((rect.min.y + pos.y) * scale).round() as i32,
-    ))
+fn eyedrop_arm() -> eframe::egui::Id {
+    eframe::egui::Id::new("eyedropper-armed")
 }
 
 fn pointer_down_starts_op(tool: Tool, alt: bool) -> bool {

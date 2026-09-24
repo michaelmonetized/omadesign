@@ -1,6 +1,9 @@
 //! One screen pixel, including windows outside this app.
 use crate::color::Rgba;
-use std::process::Command;
+use std::io::Read;
+use std::process::{Child, Command, Stdio};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub fn parse_cursor_pos(text: &str) -> Option<(i32, i32)> {
     let (x, y) = text.trim().split_once(',')?;
@@ -69,6 +72,133 @@ pub fn sample_at(x: i32, y: i32) -> Result<Rgba, String> {
     parse_ppm_pixel(&output.stdout).ok_or_else(|| "The screen pixel was unreadable".into())
 }
 
+struct Live(Child);
+
+static LIVE: Mutex<Option<Live>> = Mutex::new(None);
+/// Stay down until the eyedropper is chosen, and after a pick, a cancel, or a failed launch.
+static HOLD: AtomicBool = AtomicBool::new(true);
+
+pub struct Tick {
+    pub just_started: bool,
+    pub live: bool,
+    pub finished: Option<Result<Rgba, String>>,
+}
+
+/// The eyedropper was chosen. The next sync starts a screen grab.
+pub fn rearm() {
+    HOLD.store(false, Ordering::Relaxed);
+}
+
+/// True while the next click should land anywhere on the desktop.
+pub fn grabbing_screen() -> bool {
+    !HOLD.load(Ordering::Relaxed)
+}
+
+/// Drop the grab. A later eyedropper choice starts a new one.
+pub fn stop() {
+    HOLD.store(true, Ordering::Relaxed);
+    kill();
+}
+
+/// Keep a screen grab alive while the eyedropper is the tool.
+pub fn sync(active: bool) -> Tick {
+    if !active {
+        kill();
+        return Tick {
+            just_started: false,
+            live: false,
+            finished: None,
+        };
+    }
+    if HOLD.load(Ordering::Relaxed) {
+        return Tick {
+            just_started: false,
+            live: false,
+            finished: None,
+        };
+    }
+    let just_started = match ensure() {
+        Ok(started) => started,
+        Err(error) => {
+            HOLD.store(true, Ordering::Relaxed);
+            return Tick {
+                just_started: false,
+                live: false,
+                finished: Some(Err(error)),
+            };
+        }
+    };
+    let finished = take();
+    let live = lock().is_some();
+    Tick {
+        just_started,
+        live,
+        finished,
+    }
+}
+
+fn lock() -> std::sync::MutexGuard<'static, Option<Live>> {
+    LIVE.lock().unwrap_or_else(|poison| poison.into_inner())
+}
+
+fn ensure() -> Result<bool, String> {
+    let mut slot = lock();
+    if slot.is_some() {
+        return Ok(false);
+    }
+    match Command::new("hyprpicker")
+        .args(["-q", "-f", "hex", "-l"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+    {
+        Ok(child) => {
+            *slot = Some(Live(child));
+            Ok(true)
+        }
+        Err(error) => Err(format!("Could not start a screen picker ({error})")),
+    }
+}
+
+fn take() -> Option<Result<Rgba, String>> {
+    let mut slot = lock();
+    let live = slot.as_mut()?;
+    let status = match live.0.try_wait() {
+        Ok(None) => return None,
+        Ok(Some(status)) => status,
+        Err(_) => {
+            slot.take();
+            HOLD.store(true, Ordering::Relaxed);
+            return Some(Err(
+                "Screen pick cancelled. Press I to sample the screen.".into()
+            ));
+        }
+    };
+    let mut live = slot.take()?;
+    let mut out = String::new();
+    if let Some(mut stdout) = live.0.stdout.take() {
+        let _ = stdout.read_to_string(&mut out);
+    }
+    HOLD.store(true, Ordering::Relaxed);
+    if !status.success() {
+        return Some(Err(
+            "Screen pick cancelled. Press I to sample the screen.".into()
+        ));
+    }
+    Some(
+        parse_hex_color(&out)
+            .ok_or_else(|| "Screen pick cancelled. Press I to sample the screen.".into()),
+    )
+}
+
+fn kill() {
+    if let Some(Live(mut child)) = lock().take() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+}
+
 pub fn sample_screen(fallback: Option<(i32, i32)>) -> Result<Rgba, String> {
     if let Ok(output) = Command::new("hyprctl").arg("cursorpos").output()
         && output.status.success()
@@ -79,7 +209,7 @@ pub fn sample_screen(fallback: Option<(i32, i32)>) -> Result<Rgba, String> {
     if let Some((x, y)) = fallback {
         return sample_at(x, y);
     }
-    Err("Could not read a screen pixel. Click the artwork, or drag off the window.".into())
+    Err("Could not read a screen pixel. Press I and click the pixel.".into())
 }
 
 #[cfg(test)]

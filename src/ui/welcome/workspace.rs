@@ -612,8 +612,14 @@ fn center(ui: &mut Ui, studio: &mut Studio, state: &mut State) {
         "Join the conversation",
         "https://discord.gg/ejkZS2RBx",
     );
-    if crate::cloud::signed_in(&studio.cloud_identity) {
-        link(ui, "cloud", "Open cloud", "https://omadesign.app/cloud");
+    if crate::cloud::connected(&studio.cloud_identity) {
+        let label = format!(
+            "You're in · {}",
+            crate::cloud::account_label(&studio.cloud_identity)
+        );
+        if action(ui, "cloud", &label) {
+            studio.cloud_modal = crate::app::CloudModal::SignIn;
+        }
     } else if action(ui, "cloud", "Sign up for cloud") {
         studio.cloud_modal = crate::app::CloudModal::SignIn;
         studio.connect_cloud();

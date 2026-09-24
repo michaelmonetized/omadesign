@@ -79,6 +79,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     // Give cancellable library loads Escape before canvas shortcuts consume it.
     library::tick(&ctx, studio);
     plugins::tick(&ctx, studio);
+    canvas::poll_screen_pick(&ctx, studio);
     if !studio.file_dialog_pending()
         && !studio.show_preferences
         && !studio.updates.freezing

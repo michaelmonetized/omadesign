@@ -13,6 +13,7 @@ pub fn modal(ui: &mut Ui, studio: &mut Studio) {
     }
     let ctx = ui.ctx().clone();
     let title = match studio.cloud_modal {
+        CloudModal::SignIn if cloud::connected(&studio.cloud_identity) => "You're in.",
         CloudModal::SignIn => "Connect to cloud",
         CloudModal::Projects => "Cloud projects",
         CloudModal::Review => "Review & annotations",
@@ -25,7 +26,12 @@ pub fn modal(ui: &mut Ui, studio: &mut Studio) {
  let busy=studio.cloud_busy();
  match studio.cloud_modal {
   CloudModal::SignIn=>{
-   if cloud::signed_in(&studio.cloud_identity){ui.label(format!("Connected as {}",studio.cloud_identity.email));if ui.button("Disconnect this desktop").clicked(){studio.disconnect_cloud();}}
+   if cloud::connected(&studio.cloud_identity){
+    let who = cloud::account_label(&studio.cloud_identity);
+    ui.label(format!("This desktop is connected as {who}."));
+    ui.label("Projects stay on this machine until you push them.");
+    if ui.button("Disconnect this desktop").clicked(){studio.disconnect_cloud();}
+   }
    else{ui.label("Sign in securely in your browser, then approve this desktop. Your project files stay local until you push them.");if !studio.cloud_panel.code.is_empty(){ui.heading(&studio.cloud_panel.code);ui.label("Check that this code matches the code in your browser.");}if ui.add_enabled(!busy,egui::Button::new("Open browser to sign in")).clicked(){studio.connect_cloud();}}
   },
   CloudModal::Projects=>{

@@ -455,9 +455,13 @@ impl Studio {
                         snapping = true;
                     }
                     Tool::Eyedropper => {
-                        add("Click", "Sample any visible color", false);
-                        add("Alt+click", "Sample the screen", mods.alt);
-                        add("Drag off window", "Sample the screen", false);
+                        if crate::screen_pick::grabbing_screen() {
+                            add("Click", "Sample any pixel on the screen", false);
+                            add("Escape", "Back to the canvas", false);
+                        } else {
+                            add("Click", "Sample the canvas", false);
+                            add("I", "Sample any screen pixel", false);
+                        }
                     }
                     Tool::Fill => {
                         add("Click", "Flood fill", false);

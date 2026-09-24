@@ -115,6 +115,30 @@ impl State {
             })
     }
 }
+impl State {
+    fn bake_visible_raster(&mut self) -> LuaResult<usize> {
+        let pm = crate::compositor::render_export(&self.doc, 1).map_err(Error::runtime)?;
+        if pm.width() == 0 || pm.height() == 0 {
+            return Err(Error::runtime("Nothing visible to filter"));
+        }
+        let pixels = document::Pixels::from_pixmap(&pm);
+        if pixels.data.len() > 512 * 1024 * 1024 {
+            return Err(Error::runtime("Raster filter input exceeds 512 MiB"));
+        }
+        let index = self.doc.layers.len();
+        self.push(Cmd::AddLayer {
+            index,
+            layer: Layer::placed_raster(
+                "Filtered image",
+                pixels,
+                Pt::ZERO,
+                Pt::new(pm.width() as f32, pm.height() as f32),
+            ),
+        })?;
+        Ok(index)
+    }
+}
+
 fn raster_index(doc: &Document, requested: usize) -> LuaResult<usize> {
     let usable = |index: usize| {
         doc.layer_editable(index)
@@ -668,18 +692,35 @@ pub(super) fn register(lua: &Lua, state: Shared) -> LuaResult<()> {
     api.set(
         "map_pixels",
         lua.create_function(move |lua, (layer, function): (usize, Function)| {
-            let (layer, w, h, before, long) = {
+            let long = {
                 let s = s.borrow();
                 s.check()?;
-                let layer = raster_index(&s.doc, layer)?;
-                let p = s.doc.layers[layer].kind.pixels().unwrap();
-                if p.data.len() > 512 * 1024 * 1024 {
-                    return Err(Error::runtime("Raster filter input exceeds 512 MiB"));
-                }
-                (layer, p.w, p.h, p.data.clone(), s.long.clone())
+                s.long.clone()
             };
             long.store(true, Ordering::Relaxed);
             let _done = ResetLong(long);
+            let layer = {
+                let s = s.borrow();
+                raster_index(&s.doc, layer).ok()
+            };
+            let layer = match layer {
+                Some(layer) => layer,
+                None => s.borrow_mut().bake_visible_raster()?,
+            };
+            let (w, h, before) = {
+                let s = s.borrow();
+                s.check()?;
+                let p = s
+                    .doc
+                    .layers
+                    .get(layer)
+                    .and_then(|l| l.kind.pixels())
+                    .ok_or_else(|| Error::runtime("Select a raster layer first"))?;
+                if p.data.len() > 512 * 1024 * 1024 {
+                    return Err(Error::runtime("Raster filter input exceeds 512 MiB"));
+                }
+                (p.w, p.h, p.data.clone())
+            };
             let row_fn: Function = lua.load(PIXEL_ROW).eval()?;
             let mut after = before.clone();
             let row_bytes = w as usize * 4;

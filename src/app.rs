@@ -2194,6 +2194,9 @@ impl Studio {
     }
 
     pub fn set_tool(&mut self, t: Tool) {
+        if t == Tool::Eyedropper {
+            crate::screen_pick::rearm();
+        }
         self.end_deform(true);
         if self.tool != t {
             self.end_pixel_stroke(true);
@@ -3261,8 +3264,7 @@ impl Studio {
         if let Some(color) = crate::compositor::sample_color(&self.doc, p) {
             self.take_sampled(color, false);
         } else {
-            self.status =
-                "Nothing under the cursor. Drag off the window to sample the screen.".into();
+            self.status = "Nothing under the cursor. Press I to sample the screen.".into();
         }
     }
 
@@ -3845,6 +3847,9 @@ impl Studio {
 impl eframe::App for Studio {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        if self.allow_close || ctx.input(|i| i.viewport().close_requested()) {
+            crate::screen_pick::stop();
+        }
         if ctx.input(|i| i.viewport().close_requested())
             && (self.file_dialog_pending() || self.updates.freezing)
         {
