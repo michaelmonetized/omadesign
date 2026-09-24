@@ -324,6 +324,44 @@ p {
   max-width: 950px;
   margin-bottom: 44px;
 }
+
+/* Product Hunt official product embeds */
+.ph-embed {
+  margin-top: 8px;
+  margin-bottom: 28px;
+  max-width: 950px;
+}
+.ph-embed-label {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.ph-embed-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+}
+.ph-embed-badges a {
+  display: inline-flex;
+  line-height: 0;
+}
+.ph-embed-img {
+  display: block;
+  height: auto;
+  max-width: 100%;
+}
+.ph-embed-img-light {
+  display: none;
+}
+.latte .ph-embed-img-dark {
+  display: none;
+}
+.latte .ph-embed-img-light {
+  display: block;
+}
 .download-buttons {
   display: flex;
   flex-wrap: wrap;
