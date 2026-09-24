@@ -34,6 +34,7 @@ pub mod plugins;
 pub mod presets;
 pub mod project;
 pub mod raster;
+pub mod screen_pick;
 pub mod shape_browser;
 pub mod shots;
 pub mod snap;

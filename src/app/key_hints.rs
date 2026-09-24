@@ -454,7 +454,9 @@ impl Studio {
                         snapping = true;
                     }
                     Tool::Eyedropper => {
-                        add("Click", "Sample fill color", false);
+                        add("Click", "Sample any visible color", false);
+                        add("Alt+click", "Sample the screen", mods.alt);
+                        add("Drag off window", "Sample the screen", false);
                     }
                     Tool::Fill => {
                         add("Click", "Flood fill", false);

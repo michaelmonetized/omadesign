@@ -156,7 +156,9 @@ impl Tool {
             Tool::Gradient => {
                 "Drag across a selected shape to place its active fill or stroke gradient."
             }
-            Tool::Eyedropper => "Click to sample the active raster layer or a vector fill.",
+            Tool::Eyedropper => {
+                "Click any visible color, on any layer. Drag off the window to sample the screen."
+            }
             Tool::Trace => {
                 "Click to trace the active pixel layer into vectors. Colors and smoothness live in Trace."
             }

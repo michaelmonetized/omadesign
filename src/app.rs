@@ -3226,48 +3226,23 @@ impl Studio {
     }
 
     pub fn eyedrop(&mut self, p: Pt) {
-        if self.sample_raster(p) {
-            return;
+        if let Some(color) = crate::compositor::sample_color(&self.doc, p) {
+            self.take_sampled(color, false);
+        } else {
+            self.status =
+                "Nothing under the cursor. Drag off the window to sample the screen.".into();
         }
-        if let Some((_, id)) = self.doc.hit_test(p, 4.0 / self.view.scale.max(0.01)) {
-            for layer in &self.doc.layers {
-                if let Some(s) = layer.find(id) {
-                    self.style.fill = s.style.fill.clone();
-                    if let Fill::Solid(c) = s.style.fill {
-                        self.brush.color = c;
-                        self.push_recent(c);
-                    }
-                    self.status = "sampled fill".into();
-                    return;
-                }
-            }
-        }
-        let _ = self.sample_raster(p);
     }
 
-    fn sample_raster(&mut self, p: Pt) -> bool {
-        let Some(li) = self.raster_target() else {
-            return false;
+    pub fn take_sampled(&mut self, color: Rgba, screen: bool) {
+        self.style.fill = Fill::Solid(color);
+        self.brush.color = color;
+        self.push_recent(color);
+        self.status = if screen {
+            format!("sampled screen {}", color.hex())
+        } else {
+            format!("sampled {}", color.hex())
         };
-        let local = self.mask_point(li, p);
-        let Some(px) = self.doc.layers[li].kind.pixels() else {
-            return false;
-        };
-        if local.x < 0.0 || local.y < 0.0 || local.x >= px.w as f32 || local.y >= px.h as f32 {
-            return false;
-        }
-        let x = local.x.floor() as u32;
-        let y = local.y.floor() as u32;
-        let i = ((y * px.w + x) * 4) as usize;
-        if i + 3 >= px.data.len() {
-            return false;
-        }
-        let c = Rgba::new(px.data[i], px.data[i + 1], px.data[i + 2], px.data[i + 3]);
-        self.style.fill = Fill::Solid(c);
-        self.brush.color = c;
-        self.push_recent(c);
-        self.status = format!("sampled {}", c.hex());
-        true
     }
 
     pub fn push_recent(&mut self, c: Rgba) {

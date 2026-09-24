@@ -395,8 +395,34 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
         return;
     }
 
-    if studio.tool == Tool::Eyedropper && resp.clicked() {
-        studio.eyedrop(pick);
+    if studio.tool == Tool::Eyedropper {
+        let pressed = resp.ctx.input(|i| i.pointer.primary_pressed());
+        let released = resp.ctx.input(|i| i.pointer.primary_released());
+        let armed = resp
+            .ctx
+            .data(|data| data.get_temp::<bool>(eyedrop_arm()).unwrap_or(false));
+        if pressed && crect.contains(screen) {
+            resp.ctx
+                .data_mut(|data| data.insert_temp(eyedrop_arm(), true));
+        }
+        if released && armed {
+            resp.ctx
+                .data_mut(|data| data.insert_temp(eyedrop_arm(), false));
+            if !crect.contains(screen) || alt {
+                match crate::screen_pick::sample_screen(screen_pixel(&resp.ctx, screen)) {
+                    Ok(color) => studio.take_sampled(color, true),
+                    Err(error) => {
+                        if crect.contains(screen) {
+                            studio.eyedrop(pick);
+                        } else {
+                            studio.status = error;
+                        }
+                    }
+                }
+            } else {
+                studio.eyedrop(pick);
+            }
+        }
         return;
     }
 
@@ -713,6 +739,19 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
             }
         }
     }
+}
+
+fn eyedrop_arm() -> eframe::egui::Id {
+    eframe::egui::Id::new("eyedropper-armed")
+}
+
+fn screen_pixel(ctx: &eframe::egui::Context, pos: Pos2) -> Option<(i32, i32)> {
+    let rect = ctx.input(|input| input.viewport().inner_rect)?;
+    let scale = ctx.pixels_per_point();
+    Some((
+        ((rect.min.x + pos.x) * scale).round() as i32,
+        ((rect.min.y + pos.y) * scale).round() as i32,
+    ))
 }
 
 fn pointer_down_starts_op(tool: Tool, alt: bool) -> bool {
