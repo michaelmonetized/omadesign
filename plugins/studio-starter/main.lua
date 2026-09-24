@@ -11,8 +11,24 @@ return {
       description = "A custom Lua pixel filter on the active raster layer. Alpha stays intact.",
       parameters = {{id="strength",label="Strength",default=1,min=0,max=1}},
       run = function(ctx, p)
-        assert(ctx.active_layer, "Select a raster layer first")
-        oma.map_pixels(ctx.active_layer, function(r,g,b,a)
+        local function usable(index)
+          for _, layer in ipairs(ctx.layers) do
+            if layer.index == index and layer.raster and layer.visible and not layer.locked then
+              return true
+            end
+          end
+          return false
+        end
+        local layer = nil
+        if ctx.active_layer ~= nil and usable(ctx.active_layer) then layer = ctx.active_layer end
+        if layer == nil then
+          for i = #ctx.layers, 1, -1 do
+            local item = ctx.layers[i]
+            if item.raster and item.visible and not item.locked then layer = item.index break end
+          end
+        end
+        assert(layer ~= nil, "Select a raster layer first")
+        oma.map_pixels(layer, function(r,g,b,a)
           local t = (r*.2126 + g*.7152 + b*.0722)/255
           local function mix(v,lo,hi) return v*(1-p.strength)+(lo+(hi-lo)*t)*p.strength end
           return mix(r,24,186), mix(g,28,194), mix(b,48,222), a

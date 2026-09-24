@@ -114,7 +114,7 @@ example with `omadesign --inspect document.oma`, or see the source types in
 | `oma.read_asset(relative_path)` | Reads a UTF-8 asset within this plugin’s folder |
 | `oma.svg(svg_text, x, y, width)` | Imports SVG paths as editable vector artwork, preserving aspect |
 | `oma.pixel(layer, x, y)` | Returns source `r,g,b,a`; out-of-bounds returns transparent black |
-| `oma.map_pixels(layer, callback)` | Replaces pixels using `callback(r,g,b,a,x,y) → r,g,b,a` |
+| `oma.map_pixels(layer, callback)` | Replaces pixels using `callback(r,g,b,a,x,y) → r,g,b,a`. A non-raster `layer` falls back to the topmost visible raster layer |
 | `oma.message(text)` | Shows a completion message in the app status bar |
 
 `add_shape` supports `kind="rect"`, `"ellipse"`, `"line"`, `"path"`, or

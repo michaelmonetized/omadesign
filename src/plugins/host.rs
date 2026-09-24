@@ -18,6 +18,7 @@ pub(super) struct State {
     pub message: String,
     root: PathBuf,
     cancel: Arc<AtomicBool>,
+    long: Arc<AtomicBool>,
     started: Instant,
     edit_bytes: usize,
 }
@@ -28,6 +29,7 @@ impl State {
         active_layer: Option<usize>,
         root: PathBuf,
         cancel: Arc<AtomicBool>,
+        long: Arc<AtomicBool>,
     ) -> Shared {
         Rc::new(RefCell::new(Self {
             doc,
@@ -35,6 +37,7 @@ impl State {
             active_layer,
             root,
             cancel,
+            long,
             started: Instant::now(),
             edit_bytes: 0,
             commands: vec![],
@@ -44,7 +47,12 @@ impl State {
         }))
     }
     pub fn check(&self) -> LuaResult<()> {
-        if self.cancel.load(Ordering::Relaxed) || self.started.elapsed() > Duration::from_secs(15) {
+        let limit = if self.long.load(Ordering::Relaxed) {
+            Duration::from_secs(60)
+        } else {
+            Duration::from_secs(15)
+        };
+        if self.cancel.load(Ordering::Relaxed) || self.started.elapsed() > limit {
             return Err(Error::runtime("Plugin cancelled or timed out"));
         }
         if self.commands.len() >= MAX_OPERATIONS {
@@ -60,7 +68,7 @@ impl State {
                 .unwrap_or(usize::MAX)
         };
         let bytes = match &command {
-            Cmd::Pixels { before, after, .. } => before.len().saturating_add(after.len()),
+            Cmd::Pixels { before, after, .. } => before.len().max(after.len()),
             Cmd::AddShape { shape, .. } => json_size(serde_json::json!(shape)),
             Cmd::RemoveShapes { shapes, .. } => json_size(serde_json::json!(shapes)),
             Cmd::SetGeom { before, after, .. } => json_size(serde_json::json!([before, after])),
@@ -71,8 +79,8 @@ impl State {
             _ => 1024,
         };
         self.edit_bytes = self.edit_bytes.saturating_add(bytes);
-        if self.edit_bytes > 256 * 1024 * 1024 {
-            return Err(Error::runtime("Plugin edits exceed 256 MiB"));
+        if self.edit_bytes > 512 * 1024 * 1024 {
+            return Err(Error::runtime("Plugin edits exceed 512 MiB"));
         }
         document::apply(&mut self.doc, &command);
         self.commands.push(command);
@@ -107,6 +115,53 @@ impl State {
             })
     }
 }
+fn raster_index(doc: &Document, requested: usize) -> LuaResult<usize> {
+    let usable = |index: usize| {
+        doc.layer_editable(index)
+            && doc.layers.get(index).is_some_and(|layer| {
+                layer.visible && !layer.locked && layer.kind.pixels().is_some()
+            })
+    };
+    if usable(requested) {
+        return Ok(requested);
+    }
+    doc.layers
+        .iter()
+        .enumerate()
+        .rev()
+        .find(|(index, _)| usable(*index))
+        .map(|(index, _)| index)
+        .ok_or_else(|| Error::runtime("Select a raster layer first"))
+}
+
+struct ResetLong(Arc<AtomicBool>);
+impl Drop for ResetLong {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Relaxed);
+    }
+}
+
+const PIXEL_ROW: &str = r#"
+return function(cb, data, w, y)
+  local parts = {}
+  local function clamp(v)
+    if type(v) ~= "number" or v ~= v or v == math.huge or v == -math.huge then
+      error("Filter returned a nonfinite channel")
+    end
+    v = math.floor(v + 0.5)
+    if v < 0 then v = 0 elseif v > 255 then v = 255 end
+    return v
+  end
+  for x = 0, w - 1 do
+    local i = x * 4
+    local r, g, b, a = string.byte(data, i + 1, i + 4)
+    local nr, ng, nb, na = cb(r, g, b, a, x, y)
+    parts[x + 1] = string.char(clamp(nr), clamp(ng), clamp(nb), clamp(na))
+  end
+  return table.concat(parts)
+end
+"#;
+
 pub(super) fn shape_editable(doc: &Document, layer: usize, id: u64) -> bool {
     if !doc.layer_editable(layer) {
         return false;
@@ -612,51 +667,35 @@ pub(super) fn register(lua: &Lua, state: Shared) -> LuaResult<()> {
     let s = state.clone();
     api.set(
         "map_pixels",
-        lua.create_function(move |_, (layer, function): (usize, Function)| {
-            let (w, h, before) = {
+        lua.create_function(move |lua, (layer, function): (usize, Function)| {
+            let (layer, w, h, before, long) = {
                 let s = s.borrow();
                 s.check()?;
-                if !s.doc.layer_editable(layer) {
-                    return Err(Error::runtime(
-                        "Raster layer or its parent is hidden or locked",
-                    ));
+                let layer = raster_index(&s.doc, layer)?;
+                let p = s.doc.layers[layer].kind.pixels().unwrap();
+                if p.data.len() > 512 * 1024 * 1024 {
+                    return Err(Error::runtime("Raster filter input exceeds 512 MiB"));
                 }
-                let l = s
-                    .doc
-                    .layers
-                    .get(layer)
-                    .filter(|l| l.visible && !l.locked)
-                    .ok_or_else(|| Error::runtime("Raster layer missing, hidden or locked"))?;
-                let p = l
-                    .kind
-                    .pixels()
-                    .ok_or_else(|| Error::runtime("Choose a raster layer"))?;
-                if p.data.len() > 128 * 1024 * 1024 {
-                    return Err(Error::runtime("Raster filter input exceeds 128 MiB"));
-                }
-                (p.w, p.h, p.data.clone())
+                (layer, p.w, p.h, p.data.clone(), s.long.clone())
             };
+            long.store(true, Ordering::Relaxed);
+            let _done = ResetLong(long);
+            let row_fn: Function = lua.load(PIXEL_ROW).eval()?;
             let mut after = before.clone();
-            for (i, pixel) in after.chunks_exact_mut(4).enumerate() {
-                if i % 1024 == 0 {
+            let row_bytes = w as usize * 4;
+            for y in 0..h {
+                if y % 8 == 0 {
                     s.borrow().check()?;
                 }
-                let (r, g, b, a): (f64, f64, f64, f64) = function.call((
-                    pixel[0],
-                    pixel[1],
-                    pixel[2],
-                    pixel[3],
-                    i as u32 % w,
-                    i as u32 / w,
-                ))?;
-                for (target, value) in pixel.iter_mut().zip([r, g, b, a]) {
-                    if !value.is_finite() {
-                        return Err(Error::runtime("Filter returned a nonfinite channel"));
-                    }
-                    *target = value.round().clamp(0., 255.) as u8;
+                let start = y as usize * row_bytes;
+                let row = lua.create_string(&before[start..start + row_bytes])?;
+                let filtered: mlua::LuaString = row_fn.call((function.clone(), row, w, y))?;
+                let bytes = filtered.as_bytes();
+                if bytes.len() != row_bytes {
+                    return Err(Error::runtime("Filter row came back the wrong size"));
                 }
+                after[start..start + row_bytes].copy_from_slice(&bytes);
             }
-            let _ = h;
             s.borrow_mut().push(Cmd::Pixels {
                 layer,
                 mask: false,
