@@ -12,14 +12,21 @@ import { RevealText } from "../components/reveal-text";
 import { ShortcutHud } from "../components/shortcut-hud";
 import { FeatureExplorer } from "../components/feature-explorer";
 import { Install } from "../components/install";
+import { MetricChips } from "../components/metric-chips";
 import { ProductHuntEmbed } from "../components/product-hunt-embed";
 import { FilePreview } from "../components/file-preview";
 import { Arrow, Shot } from "../components/studio-ui";
 import { useScrollMotion } from "../components/scroll-motion";
+import { readMetrics } from "../server/public-metrics";
 
-export const Route = createFileRoute("/")({ component: Home });
+export const Route = createFileRoute("/")({
+  loader: () => readMetrics(),
+  staleTime: 3_600_000,
+  component: Home,
+});
 
 function Home() {
+  const metrics = Route.useLoaderData();
   const motion = useScrollMotion();
   const [studio, setStudio] = useState<StudioName>("Design");
   return (
@@ -46,6 +53,7 @@ function Home() {
         <a className="text-link" href="#cloud">Watch the Omadesign Cloud announcement ↗</a>
         <Install />
         <ProductHuntEmbed />
+        <MetricChips metrics={metrics} />
       </section>
       <section className="hero-stage">
         <StudioCarousel selected={studio} onSelect={setStudio} />
