@@ -179,6 +179,48 @@ pub fn inspector(ui: &mut Ui, studio: &mut Studio) {
     }
 }
 
+pub fn selection_tools(ui: &mut Ui, studio: &mut Studio) {
+    if studio.pixel_sel.is_none() {
+        return;
+    }
+    ui.label(RichText::new("Selection").small().strong().color(fg()));
+    ui.horizontal(|ui| {
+        if ui.small_button("←").clicked() {
+            studio.nudge_pixel_sel(-1, 0);
+        }
+        if ui.small_button("→").clicked() {
+            studio.nudge_pixel_sel(1, 0);
+        }
+        if ui.small_button("↑").clicked() {
+            studio.nudge_pixel_sel(0, -1);
+        }
+        if ui.small_button("↓").clicked() {
+            studio.nudge_pixel_sel(0, 1);
+        }
+    });
+    ui.horizontal(|ui| {
+        if ui.small_button("Smaller").clicked() {
+            studio.scale_pixel_sel(0.9, 0.9);
+        }
+        if ui.small_button("Larger").clicked() {
+            studio.scale_pixel_sel(1.1, 1.1);
+        }
+    });
+    ui.horizontal(|ui| {
+        if ui.small_button("Feather").clicked() {
+            studio.feather_pixel_sel(2);
+        }
+        if ui.small_button("Distort").clicked() {
+            studio.distort_pixel_sel(0.35);
+        }
+    });
+    ui.label(
+        RichText::new("Arrow keys move it while a selection tool is active.")
+            .small()
+            .color(fg_weak()),
+    );
+}
+
 pub fn retouch_hint(ui: &mut Ui, studio: &mut Studio) {
     if !matches!(studio.tool, Tool::Clone | Tool::Heal) {
         return;

@@ -633,6 +633,22 @@ impl Studio {
                     other => self.op = other,
                 }
             }
+            Key::ArrowLeft | Key::ArrowRight | Key::ArrowUp | Key::ArrowDown
+                if self.pixel_sel.is_some()
+                    && matches!(
+                        self.tool,
+                        Tool::Marquee | Tool::EllipseMarquee | Tool::Lasso | Tool::Wand
+                    ) =>
+            {
+                let px = if shift { 10 } else { 1 };
+                let (dx, dy) = match key {
+                    Key::ArrowLeft => (-px, 0),
+                    Key::ArrowRight => (px, 0),
+                    Key::ArrowUp => (0, -px),
+                    _ => (0, px),
+                };
+                self.nudge_pixel_sel(dx, dy);
+            }
             Key::ArrowLeft => self.nudge(-step, 0.0),
             Key::ArrowRight => self.nudge(step, 0.0),
             Key::ArrowUp => self.nudge(0.0, -step),

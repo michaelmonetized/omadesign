@@ -137,6 +137,40 @@ impl Studio {
         );
     }
 
+    pub fn nudge_pixel_sel(&mut self, dx: i32, dy: i32) {
+        self.retouch_pixel_sel(|mask, w, h| paint::shift_mask(mask, w, h, dx, dy));
+        self.status = "Selection moved".into();
+    }
+
+    pub fn scale_pixel_sel(&mut self, sx: f32, sy: f32) {
+        self.retouch_pixel_sel(|mask, w, h| paint::scale_mask(mask, w, h, sx, sy));
+        self.status = "Selection resized".into();
+    }
+
+    pub fn feather_pixel_sel(&mut self, radius: u32) {
+        self.retouch_pixel_sel(|mask, w, h| paint::feather_mask(mask, w, h, radius));
+        self.status = format!("Selection feathered {radius} px");
+    }
+
+    pub fn distort_pixel_sel(&mut self, kx: f32) {
+        self.retouch_pixel_sel(|mask, w, h| paint::shear_mask(mask, w, h, kx));
+        self.status = "Selection distorted".into();
+    }
+
+    fn retouch_pixel_sel(&mut self, edit: impl FnOnce(&[u8], u32, u32) -> Vec<u8>) {
+        let Some(space) = self.pixel_sel_space else {
+            return;
+        };
+        let Some(mask) = self.pixel_sel.clone() else {
+            return;
+        };
+        if mask.len() != space.w as usize * space.h as usize {
+            return;
+        }
+        self.pixel_sel = Some(edit(&mask, space.w, space.h));
+        self.pixel_sel_gen = self.pixel_sel_gen.wrapping_add(1);
+    }
+
     pub fn merge_pixel_sel(&mut self, next: Vec<u8>, op: paint::PixelCombine) {
         let existing = self.raster_target().and_then(|li| self.pixel_sel_mask(li));
         let combined = paint::combine_masks(existing.as_deref(), &next, op);

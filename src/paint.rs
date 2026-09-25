@@ -669,6 +669,99 @@ pub fn fill_poly_mask(w: u32, h: u32, pts: &[Pt]) -> Vec<u8> {
     m
 }
 
+pub fn shift_mask(src: &[u8], w: u32, h: u32, dx: i32, dy: i32) -> Vec<u8> {
+    let mut out = vec![0u8; src.len()];
+    if src.len() != w as usize * h as usize {
+        return out;
+    }
+    for y in 0..h as i32 {
+        for x in 0..w as i32 {
+            let sx = x - dx;
+            let sy = y - dy;
+            if sx >= 0 && sy >= 0 && (sx as u32) < w && (sy as u32) < h {
+                out[(y as u32 * w + x as u32) as usize] =
+                    src[(sy as u32 * w + sx as u32) as usize];
+            }
+        }
+    }
+    out
+}
+
+pub fn scale_mask(src: &[u8], w: u32, h: u32, sx: f32, sy: f32) -> Vec<u8> {
+    let mut out = vec![0u8; src.len()];
+    if src.len() != w as usize * h as usize || sx.abs() < 0.05 || sy.abs() < 0.05 {
+        return src.to_vec();
+    }
+    let cx = (w as f32 - 1.0) * 0.5;
+    let cy = (h as f32 - 1.0) * 0.5;
+    for y in 0..h {
+        for x in 0..w {
+            let ix = (cx + (x as f32 - cx) / sx).round() as i32;
+            let iy = (cy + (y as f32 - cy) / sy).round() as i32;
+            if ix >= 0 && iy >= 0 && (ix as u32) < w && (iy as u32) < h {
+                out[(y * w + x) as usize] = src[(iy as u32 * w + ix as u32) as usize];
+            }
+        }
+    }
+    out
+}
+
+pub fn feather_mask(src: &[u8], w: u32, h: u32, radius: u32) -> Vec<u8> {
+    if radius == 0 || src.len() != w as usize * h as usize {
+        return src.to_vec();
+    }
+    let mut cur = src.to_vec();
+    let mut next = vec![0u8; cur.len()];
+    let r = radius as i32;
+    for y in 0..h as i32 {
+        for x in 0..w as i32 {
+            let mut sum = 0u32;
+            let mut n = 0u32;
+            for k in -r..=r {
+                let xx = x + k;
+                if xx >= 0 && (xx as u32) < w {
+                    sum += cur[(y as u32 * w + xx as u32) as usize] as u32;
+                    n += 1;
+                }
+            }
+            next[(y as u32 * w + x as u32) as usize] = (sum / n.max(1)) as u8;
+        }
+    }
+    cur.copy_from_slice(&next);
+    for x in 0..w as i32 {
+        for y in 0..h as i32 {
+            let mut sum = 0u32;
+            let mut n = 0u32;
+            for k in -r..=r {
+                let yy = y + k;
+                if yy >= 0 && (yy as u32) < h {
+                    sum += cur[(yy as u32 * w + x as u32) as usize] as u32;
+                    n += 1;
+                }
+            }
+            next[(y as u32 * w + x as u32) as usize] = (sum / n.max(1)) as u8;
+        }
+    }
+    next
+}
+
+pub fn shear_mask(src: &[u8], w: u32, h: u32, kx: f32) -> Vec<u8> {
+    let mut out = vec![0u8; src.len()];
+    if src.len() != w as usize * h as usize {
+        return out;
+    }
+    let cy = (h as f32 - 1.0) * 0.5;
+    for y in 0..h {
+        for x in 0..w {
+            let sx = (x as f32 - kx * (y as f32 - cy)).round() as i32;
+            if sx >= 0 && (sx as u32) < w {
+                out[(y * w + x) as usize] = src[(y * w + sx as u32) as usize];
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -917,6 +1010,12 @@ mod tests {
         );
         assert_eq!(subtracted, vec![255, 0, 255, 0]);
         assert_eq!(selected_count(&added), 2);
+        let shifted = shift_mask(&[0, 255, 0, 0], 2, 2, 1, 0);
+        assert_eq!(shifted, vec![0, 0, 255, 0]);
+        let feathered = feather_mask(&[0, 255, 0, 0], 2, 2, 1);
+        assert!(feathered.iter().any(|p| *p > 0 && *p < 255));
+        let sheared = shear_mask(&[255, 0, 255, 0], 2, 2, 0.0);
+        assert_eq!(sheared, vec![255, 0, 255, 0]);
         assert_eq!(selection_bounds(&added, 4, 1), Some((0, 0, 2, 1)));
         let original = Pixmap::new(2, 1).unwrap();
         let mut dst = original.clone();

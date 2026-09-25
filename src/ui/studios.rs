@@ -101,6 +101,7 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                     if paint || studio.paint_mask {
                         super::masking::inspector(ui, studio);
                         section_gap(ui);
+                        super::masking::selection_tools(ui, studio);
                         brush_studio(ui, studio);
                         section_gap(ui);
                     }
