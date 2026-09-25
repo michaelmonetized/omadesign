@@ -494,7 +494,18 @@ pub(super) fn clone_drag(studio: &mut Studio, world: Pt) {
     {
         let from = studio.mask_point(layer, prev);
         let to = studio.mask_point(layer, world);
-        paint::clone_stroke(&mut buf, from, to, from + offset, &studio.brush);
+        if studio.clone_aligned {
+            paint::clone_stroke(&mut buf, from, to, from + offset, &studio.brush);
+        } else if let Some(source) = studio.clone_source {
+            paint::clone_stamp(
+                &mut buf,
+                to,
+                studio.mask_point(layer, source),
+                &studio.brush,
+            );
+        } else {
+            paint::clone_stroke(&mut buf, from, to, from + offset, &studio.brush);
+        }
         if let Some(original) = &original
             && let Some(sel) = studio.pixel_sel_mask(layer)
         {

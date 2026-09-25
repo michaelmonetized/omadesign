@@ -292,6 +292,8 @@ pub struct Studio {
     pub brush: Brush,
     pub fill_tolerance: f32,
     pub clone_source: Option<Pt>,
+    /// Keep the source offset while painting. Off samples the same source each dab.
+    pub clone_aligned: bool,
     pub pixel_sel: Option<Vec<u8>>,
     pub pixel_sel_space: Option<masking::SelectionSpace>,
     pub pixel_sel_gen: u64,
@@ -484,6 +486,7 @@ impl Studio {
             brush: Brush::default(),
             fill_tolerance: 32.0,
             clone_source: None,
+            clone_aligned: true,
             pixel_sel: None,
             pixel_sel_space: None,
             pixel_sel_gen: 0,

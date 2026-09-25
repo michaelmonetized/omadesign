@@ -1813,10 +1813,10 @@ fn brush_studio(ui: &mut Ui, studio: &mut Studio) {
     }
     heading(
         ui,
-        if studio.tool == Tool::Heal {
-            "Healing brush"
-        } else {
-            "Brush"
+        match studio.tool {
+            Tool::Heal => "Healing brush",
+            Tool::Clone => "Clone",
+            _ => "Brush",
         },
     );
     number_field(ui, "Size", &mut studio.brush.size, 1.0..=256.0, " px");
@@ -1837,6 +1837,10 @@ fn brush_studio(ui: &mut Ui, studio: &mut Studio) {
     studio.brush.opacity = opacity / 100.0;
     number_field(ui, "Flow", &mut flow, 5.0..=100.0, "%");
     studio.brush.flow = flow / 100.0;
+    if studio.tool == Tool::Clone {
+        ui.checkbox(&mut studio.clone_aligned, "Aligned")
+            .on_hover_text("Keep the source offset. Off repeats the same source point.");
+    }
     super::masking::retouch_hint(ui, studio);
 }
 
