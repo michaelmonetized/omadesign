@@ -239,56 +239,96 @@ p {
   position: sticky;
   top: 0;
   z-index: 50;
+  overflow: visible;
+}
+.site-header::before {
+  content: "";
+  position: absolute;
+  inset: 14px 0;
+  z-index: -1;
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--panel-deep) 91%, transparent);
   backdrop-filter: blur(20px);
+  pointer-events: none;
 }
 .header-inner {
-  height: 106px;
+  height: 78px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 24px;
+  gap: 22px;
+  overflow: visible;
 }
 .wordmark {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
+  line-height: 0;
 }
 .wordmark img {
-  width: 160px;
-  height: 90px;
-  object-fit: cover;
-  object-position: center;
-  border-radius: 6px;
+  display: block;
+  width: auto;
+  height: 78px;
+  object-fit: contain;
 }
-.header-inner nav {
+.header-links {
   display: flex;
-  gap: 32px;
+  gap: 22px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
   font-size: 13px;
   color: var(--muted);
 }
-.header-inner nav a:hover {
+.header-links::-webkit-scrollbar {
+  display: none;
+}
+.header-links a:hover,
+.header-icons a:hover {
   color: var(--ink);
 }
-.header-actions {
+.header-icons {
   display: flex;
   align-items: center;
-  gap: 17px;
+  gap: 2px;
+  margin-left: auto;
+  flex-shrink: 0;
 }
-.theme-toggle {
-  width: 34px;
+.header-icons a {
+  width: 36px;
   height: 36px;
   display: grid;
   place-items: center;
-  border-radius: 5px;
+  color: var(--muted);
+  border-radius: 8px;
 }
-.theme-toggle:hover {
+.header-icons a:hover {
   background: var(--paper);
 }
+.header-icons svg {
+  width: 20px;
+  height: 20px;
+}
+.theme-toggle {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 60;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  backdrop-filter: blur(12px);
+  color: var(--ink);
+}
+.theme-toggle:hover {
+  border-color: var(--accent);
+}
 .theme-toggle svg {
-  width: 19px;
-  height: 19px;
+  width: 18px;
+  height: 18px;
 }
 .hero {
   padding-block: 64px 12px;
@@ -327,21 +367,28 @@ p {
 .metric-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 16px;
+  gap: 8px;
   margin: 2px 0 20px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.4;
 }
-.metric-chips a {
-  color: var(--muted);
+.shield {
+  display: inline-flex;
+  height: 20px;
+  overflow: hidden;
+  border-radius: 3px;
+  font-family: Verdana, Geneva, DejaVu Sans, sans-serif;
+  font-size: 11px;
+  line-height: 20px;
+  letter-spacing: 0;
+  color: #fff;
 }
-.metric-chips a:hover {
-  color: var(--accent);
+.shield span {
+  padding: 0 6px;
 }
-.metric-chips strong {
-  color: var(--ink);
-  font-weight: 500;
+.shield span:first-child {
+  background: #555;
+}
+.shield:hover {
+  filter: brightness(1.08);
 }
 
 /* Product Hunt official product embeds */
@@ -1205,14 +1252,11 @@ details[open] > summary .disclosure-plus {
   .header-inner {
     gap: 18px;
   }
-  .header-inner nav {
-    gap: 18px;
+  .header-links {
+    gap: 16px;
   }
-  .header-actions {
-    gap: 9px;
-  }
-  .header-actions .button {
-    display: none;
+  .header-icons {
+    gap: 0;
   }
   .principles h3 {
     font-size: 21px;
@@ -1258,25 +1302,37 @@ details[open] > summary .disclosure-plus {
     width: calc(100% - 36px);
   }
   .header-inner {
-    height: 88px;
+    height: auto;
+    min-height: 64px;
+    flex-wrap: wrap;
+    align-content: center;
+    row-gap: 0;
+    padding-bottom: 8px;
   }
-  .wordmark img {
-    width: 128px;
-    height: 72px;
+  .site-header::before {
+    inset: 8px 0;
   }
-  .header-inner nav {
-    font-size: 11px;
-    gap: 16px;
-    margin-left: auto;
+  .header-inner .wordmark img {
+    height: 64px;
   }
-  .nav-features {
-    display: none;
+  .header-links {
+    order: 3;
+    flex: 1 0 100%;
+    font-size: 12px;
+    gap: 14px;
   }
-  .header-actions {
-    margin-left: -7px;
+  .header-links a {
+    flex-shrink: 0;
+  }
+  .header-icons a {
+    width: 32px;
+    height: 32px;
   }
   .theme-toggle {
-    width: 27px;
+    left: 12px;
+    bottom: 12px;
+    width: 36px;
+    height: 36px;
   }
   .hero {
     padding-top: 34px;
@@ -1647,14 +1703,6 @@ details[open] > summary .disclosure-plus {
 .account-links {
   margin-top: 28px;
   color: var(--muted);
-}
-
-/* Keep the expanded navigation usable alongside the Cloud link. */
-@media (max-width: 1100px) {
-  .header-inner { height: auto; min-height: 106px; flex-wrap: wrap; padding-block: 8px 14px; gap: 4px 20px; }
-  .header-inner nav { order: 3; flex: 0 0 100%; min-width: 0; overflow-x: auto; gap: 24px; padding: 8px 2px; font-size: .875rem; white-space: nowrap; }
-  .header-inner nav a { flex-shrink: 0; }
-  .header-actions { margin-left: auto; }
 }
 
 .section-ruler { display: none; }

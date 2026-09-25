@@ -8,6 +8,7 @@ import {
 import { CloudProvider } from "../cloud/provider";
 import { useEffect } from "react";
 import { ThemeProvider, useTheme } from "../theme";
+import { CloudIcon, DiscordIcon, DownloadIcon, GitHubIcon, SparkleIcon } from "../components/nav-icons";
 import { SectionRuler } from "../components/section-ruler";
 import { DISCORD, REPO, SITE_ORIGIN, sitePath } from "../site";
 import appCss from "../styles.css?url";
@@ -39,9 +40,19 @@ export const Route = createRootRoute({
       { property: "og:url", content: SITE_ORIGIN },
       {
         property: "og:image",
-        content: `${SITE_ORIGIN}/media/branding/logo-0.5.8-social.png`,
+        content: `${SITE_ORIGIN}/media/branding/og-welcome-0.6.0.png`,
+      },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      {
+        property: "og:image:alt",
+        content: "The omadesign 0.6.0 welcome screen",
       },
       { name: "twitter:card", content: "summary_large_image" },
+      {
+        name: "twitter:image",
+        content: `${SITE_ORIGIN}/media/branding/og-welcome-0.6.0.png`,
+      },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -106,47 +117,34 @@ function Document() {
                 height="90"
               />
             </a>
-            <nav aria-label="Main navigation">
-              <a href={sitePath("cloud")}>Cloud</a>
-              <a className="nav-features" href={sitePath("#features")}>
-                Features
-              </a>
-              <a href={sitePath("#ai")}>AI workflows</a>
-              <a href={sitePath("showcase")}>Showcase</a>
+            <nav className="header-links" aria-label="Main navigation">
+              <a href={sitePath("#features")}>Features</a>
               <a href={sitePath("updates")}>Updates</a>
-              <a href={sitePath("compete")}>Compete</a>
+              <a href={sitePath("showcase")}>Showcase</a>
               <a href={sitePath("docs")}>Docs</a>
-              <a href={DISCORD}>Discord</a>
-              <a href={REPO}>
-                GitHub <span aria-hidden="true">↗</span>
-              </a>
             </nav>
-            <div className="header-actions">
-              <button
-                className="theme-toggle"
-                type="button"
-                aria-label={`Use ${theme === "mocha" ? "light" : "dark"} theme`}
-                onClick={() => setTheme(theme === "mocha" ? "latte" : "mocha")}
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  aria-hidden="true"
-                >
-                  <circle cx="12" cy="12" r="8" />
-                  <path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" />
-                </svg>
-              </button>
-              <a className="button button-small" href={sitePath("#install")}>
-                Get omadesign <span aria-hidden="true">↗</span>
-              </a>
+            <div className="header-icons">
+              <a href={DISCORD} aria-label="Discord"><DiscordIcon /></a>
+              <a href={REPO} aria-label="GitHub"><GitHubIcon /></a>
+              <a href={sitePath("#install")} aria-label="Download"><DownloadIcon /></a>
+              <a href={sitePath("cloud")} aria-label="Cloud"><CloudIcon /></a>
+              <a href={sitePath("#ai")} aria-label="AI workflows"><SparkleIcon /></a>
             </div>
           </div>
         </header>
         <Outlet />
         <SectionRuler />
+        <button
+          className="theme-toggle"
+          type="button"
+          aria-label={`Use ${theme === "mocha" ? "light" : "dark"} theme`}
+          onClick={() => setTheme(theme === "mocha" ? "latte" : "mocha")}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+            <circle cx="12" cy="12" r="8" />
+            <path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" />
+          </svg>
+        </button>
         <footer className="site-footer">
           <div className="shell footer-top">
             <a className="wordmark" href={sitePath()}>
@@ -165,6 +163,7 @@ function Document() {
             </span>
             <div>
               <a href={sitePath("updates")}>Updates</a>
+              <a href={sitePath("compete")}>Compete</a>
               <a href={sitePath("docs/roadmap")}>Roadmap</a>
               <a href={sitePath("docs/contributing")}>Contribute</a>
               <a href={DISCORD}>Join the conversation</a>
