@@ -406,10 +406,18 @@ fn palette_editor(ui: &mut Ui, studio: &mut Studio, draft: &mut PaletteDraft, pa
 }
 
 fn add_colour(draft: &mut PaletteDraft, color: Rgba) {
+    if draft.palettes.is_empty() {
+        draft
+            .palettes
+            .push(Palette::new("Palette 1", Vec::new()));
+        draft.selected = 0;
+        draft.selected_name();
+    }
     let Some(palette) = draft.palettes.get(draft.selected) else {
         return;
     };
     if palette.colors.contains(&color) {
+        draft.message = format!("{} is already in this palette.", color.hex());
         return;
     }
     if palette.colors.len() >= crate::palette::MAX_COLORS_PER_PALETTE {
@@ -460,6 +468,61 @@ fn current_colour(studio: &Studio) -> Rgba {
         Fill::None => studio.brush.color,
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::document::{Shape, Style};
+    use crate::geom::{Geom, Pt};
+
+    #[test]
+    fn sampled_color_reaches_the_selection_and_the_palette() {
+        let mut studio = Studio::new();
+        let orange = Rgba::parse_hex("#FF9900").unwrap();
+        let mut shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(10.0, 10.0),
+                size: Pt::new(40.0, 30.0),
+                radius: 0.0,
+            },
+            Style {
+                fill: Fill::Solid(orange),
+                stroke: None,
+            },
+        );
+        let id = shape.id;
+        shape.style.fill = Fill::Solid(orange);
+        studio.doc.layers[1]
+            .kind
+            .shapes_mut()
+            .unwrap()
+            .push(shape);
+        studio.selection = vec![(1, id)];
+        studio.fill_active = true;
+        let sample = Rgba::parse_hex("#3366CC").unwrap();
+        studio.take_sampled(sample, true);
+        assert_eq!(studio.brush.color, sample);
+        assert_eq!(studio.recent[0], sample);
+        assert_eq!(
+            studio.doc.find_shape(1, id).unwrap().style.fill,
+            Fill::Solid(sample)
+        );
+        assert_eq!(current_colour(&studio), sample);
+        let mut draft = PaletteDraft::default();
+        add_colour(&mut draft, current_colour(&studio));
+        assert_eq!(draft.palettes.len(), 1);
+        assert_eq!(draft.palettes[0].colors, vec![sample]);
+        let gradient = crate::gradient::Gradient::new(crate::gradient::GradientKind::Linear, orange, sample);
+        studio.set_fill(Fill::Gradient(gradient));
+        let next = Rgba::parse_hex("#00AA44").unwrap();
+        studio.take_sampled(next, true);
+        match &studio.doc.find_shape(1, id).unwrap().style.fill {
+            Fill::Gradient(gradient) => assert_eq!(gradient.stops[0].color, next),
+            other => panic!("gradient kept, got {other:?}"),
+        }
+        assert_eq!(studio.recent[0], next);
+    }
+}
+
 fn apply_colour(studio: &mut Studio, color: Rgba, fill: bool) {
     if fill {
         studio.set_fill(Fill::Solid(color));

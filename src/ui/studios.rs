@@ -663,6 +663,9 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
             },
             |ui| {
                 if gradient_editor::editor(ui, &mut gradient, bounds) {
+                    for stop in &gradient.stops {
+                        studio.push_recent(stop.color);
+                    }
                     let angle_only = gradient.kind == rest.kind && gradient.stops == rest.stops;
                     if studio.is_motion()
                         && angle_only
@@ -1807,17 +1810,6 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
                 }
             }
             if ui
-                .small_button("Simplify")
-                .on_hover_text("Drop the extra nodes a boolean leaves on a straight edge")
-                .clicked()
-            {
-                for (layer, id) in studio.selection.clone() {
-                    edit_shape_geometry(studio, layer, id, |geometry| {
-                        crate::geom::simplify_geom(geometry, 1.5);
-                    });
-                }
-            }
-            if ui
                 .small_button("Compound")
                 .on_hover_text("Ctrl+8")
                 .clicked()
@@ -1825,6 +1817,14 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
                 studio.combine_selected();
             }
         });
+    }
+    if studio.selection_has_path()
+        && ui
+            .small_button("Simplify")
+            .on_hover_text("Fit each selected path. Corners stay sharp and straight lines stay straight.")
+            .clicked()
+    {
+        studio.simplify_selection();
     }
     if compound
         && ui

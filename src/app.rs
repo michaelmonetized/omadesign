@@ -106,6 +106,7 @@ pub struct ObjSnap {
     pub origin: Pt,
     pub size: Pt,
     pub rot: f32,
+    pub shear: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -155,6 +156,12 @@ pub enum Op {
         orig: Vec<ObjSnap>,
         center: Pt,
         start_angle: f32,
+    },
+    Skew {
+        orig: Vec<ObjSnap>,
+        handle: usize,
+        bounds: Bounds,
+        start: Pt,
     },
     Node {
         layer: usize,
@@ -281,6 +288,8 @@ pub struct Studio {
     pub last_tool: Tool,
     pub op: Option<Op>,
     pub deformation: Option<deform::DeformSession>,
+    /// Original objects for the open free-transform session. None means the tool is idle.
+    pub free_transform: Option<Vec<ObjSnap>>,
     pub selection: Vec<(usize, u64)>,
     /// Explicit sidebar layer target, independent of its selected descendants.
     pub selected_layer: Option<u64>,
@@ -457,6 +466,44 @@ impl Default for SectionOpen {
     }
 }
 
+fn adjacent_vector_layer(doc: &Document, layer: usize, forward: bool) -> Option<usize> {
+    let mut index = if forward {
+        layer.checked_add(1)?
+    } else {
+        layer.checked_sub(1)?
+    };
+    loop {
+        let candidate = doc.layers.get(index)?;
+        if doc.layer_editable(index) && candidate.kind.shapes().is_some() {
+            return Some(index);
+        }
+        index = if forward {
+            index.checked_add(1)?
+        } else {
+            index.checked_sub(1)?
+        };
+    }
+}
+
+fn recolor_fill(fill: Fill, color: Rgba) -> Fill {
+    match fill {
+        Fill::Linear { from, to, c1, .. } => Fill::Linear {
+            from,
+            to,
+            c0: color,
+            c1,
+        },
+        Fill::Radial { c1, .. } => Fill::Radial { c0: color, c1 },
+        Fill::Gradient(mut gradient) => {
+            if let Some(stop) = gradient.stops.first_mut() {
+                stop.color = color;
+            }
+            Fill::Gradient(gradient)
+        }
+        Fill::None | Fill::Solid(_) => Fill::Solid(color),
+    }
+}
+
 impl Default for Studio {
     fn default() -> Self {
         Self::new()
@@ -475,6 +522,7 @@ impl Studio {
             last_tool: Tool::Select,
             op: None,
             deformation: None,
+            free_transform: None,
             selection: vec![],
             show_preferences: false,
             updates: Default::default(),
@@ -1092,6 +1140,7 @@ impl Studio {
                             origin: Pt::ZERO,
                             size: Pt::ZERO,
                             rot: s.rotation,
+                            shear: 0.0,
                         });
                     }
                 }
@@ -1108,6 +1157,7 @@ impl Studio {
                     origin: o,
                     size: sz,
                     rot,
+                    shear: layer.kind.raster_shear(),
                 });
             }
         }
@@ -2256,12 +2306,166 @@ impl Studio {
             self.status = "Select objects to transform".into();
             return;
         }
+        if self.free_transform.is_some() {
+            self.finish_free_transform(false);
+        }
         self.commit_type_edit();
+        self.end_deform(false);
         self.set_tool(Tool::Select);
         self.artboard_sel.clear();
-        self.status =
-            "Free transform · drag to move · handles scale · top grip rotates · Shift constrains"
-                .into();
+        self.free_transform = Some(self.capture_transform_baseline());
+        self.status = "Free transform · corners scale · edges skew · top grip rotates · Shift constrains · Enter commits · Esc cancels"
+            .into();
+    }
+
+    pub fn finish_free_transform(&mut self, cancel: bool) {
+        let Some(baseline) = self.free_transform.take() else {
+            return;
+        };
+        if cancel {
+            self.restore_snaps(&baseline);
+            self.op = None;
+            self.status = "Transform cancelled".into();
+            return;
+        }
+        let commands = self.transform_commands(&baseline);
+        if commands.is_empty() {
+            self.status = "Transform".into();
+            return;
+        }
+        self.history.push(Cmd::Batch(commands));
+        self.dirty = true;
+        self.mark();
+        self.status = "Transformed".into();
+    }
+
+    fn capture_transform_baseline(&self) -> Vec<ObjSnap> {
+        self.selection
+            .iter()
+            .filter_map(|(layer, id)| {
+                if *id == RASTER_ID {
+                    let kind = &self.doc.layers.get(*layer)?.kind;
+                    let (origin, size, rot) = kind.raster_xform()?;
+                    Some(ObjSnap {
+                        layer: *layer,
+                        id: RASTER_ID,
+                        geom: None,
+                        origin,
+                        size,
+                        rot,
+                        shear: kind.raster_shear(),
+                    })
+                } else {
+                    let shape = self.doc.find_shape(*layer, *id)?;
+                    Some(ObjSnap {
+                        layer: *layer,
+                        id: *id,
+                        geom: Some(shape.geom.clone()),
+                        origin: Pt::ZERO,
+                        size: Pt::ZERO,
+                        rot: shape.rotation,
+                        shear: 0.0,
+                    })
+                }
+            })
+            .collect()
+    }
+
+    pub(crate) fn restore_snaps(&mut self, snaps: &[ObjSnap]) {
+        for snap in snaps {
+            if snap.id == RASTER_ID {
+                if let Some(layer) = self.doc.layers.get_mut(snap.layer) {
+                    layer
+                        .kind
+                        .set_raster_xform(snap.origin, snap.size, snap.rot);
+                    layer.kind.set_raster_shear(snap.shear);
+                }
+            } else if let Some(shape) = self.doc.find_shape_mut(snap.layer, snap.id) {
+                if let Some(geom) = &snap.geom {
+                    shape.geom = geom.clone();
+                }
+                shape.rotation = snap.rot;
+            }
+        }
+    }
+
+    pub fn shear_selection(&mut self, horizontal: bool, amount: f32) {
+        let Some(bounds) = self.selection_bounds() else {
+            return;
+        };
+        for (layer, id) in self.selection.clone() {
+            if id == RASTER_ID {
+                if horizontal
+                    && let Some(layer) = self.doc.layers.get_mut(layer)
+                {
+                    layer
+                        .kind
+                        .set_raster_shear(layer.kind.raster_shear() + amount);
+                }
+                continue;
+            }
+            if let Some(shape) = self.doc.find_shape_mut(layer, id) {
+                crate::geom::shear_geom(&mut shape.geom, bounds, horizontal, amount);
+            }
+        }
+    }
+
+    fn transform_commands(&self, baseline: &[ObjSnap]) -> Vec<Cmd> {
+    let mut commands = Vec::new();
+    for snap in baseline {
+        if snap.id == RASTER_ID {
+            let Some(kind) = self.doc.layers.get(snap.layer).map(|layer| &layer.kind) else {
+                continue;
+            };
+            let Some((origin, size, rotation)) = kind.raster_xform() else {
+                continue;
+            };
+            let shear = kind.raster_shear();
+            if (origin - snap.origin).length() > 0.2
+                || (size - snap.size).length() > 0.2
+                || (rotation - snap.rot).abs() > 1e-4
+            {
+                commands.push(Cmd::SetRasterXform {
+                    layer: snap.layer,
+                    before: (snap.origin, snap.size, snap.rot),
+                    after: (origin, size, rotation),
+                });
+            }
+            if (shear - snap.shear).abs() > 1e-4 {
+                commands.push(Cmd::SetRasterShear {
+                    layer: snap.layer,
+                    before: snap.shear,
+                    after: shear,
+                });
+            }
+        } else if let Some(shape) = self.doc.find_shape(snap.layer, snap.id)
+            && (snap.geom.as_ref().is_some_and(|geom| *geom != shape.geom)
+                || (shape.rotation - snap.rot).abs() > 1e-4)
+        {
+            commands.push(Cmd::SetGeom {
+                layer: snap.layer,
+                id: snap.id,
+                before: snap.geom.clone().unwrap_or_else(|| shape.geom.clone()),
+                after: shape.geom.clone(),
+                rot_before: snap.rot,
+                rot_after: shape.rotation,
+            });
+        }
+    }
+    commands
+}
+
+    fn selection_bounds(&self) -> Option<Bounds> {
+        let mut bounds: Option<Bounds> = None;
+        for &(layer, id) in &self.selection {
+            let next = if id == RASTER_ID {
+                self.doc.layers.get(layer)?.kind.raster_bounds()?
+            } else {
+                self.doc.find_shape(layer, id)?.world_bbox()
+            };
+            bounds = Some(bounds.map_or(next, |bounds| bounds.union(next)));
+        }
+        bounds
     }
 
     pub fn use_template(&mut self, id: &str, width: f32, height: f32, dpi: f32) {
@@ -3173,7 +3377,7 @@ impl Studio {
             let mut order: Vec<_> = shapes.iter().map(|s| s.id).collect();
             let mut desired = order.clone();
             if extreme {
-                desired.sort_by_key(|&id| picked(id) == forward);
+                continue;
             } else if forward {
                 for i in (0..desired.len().saturating_sub(1)).rev() {
                     if picked(desired[i]) && !picked(desired[i + 1]) {
@@ -3196,8 +3400,45 @@ impl Studio {
                 order.insert(to, id);
                 commands.push(Cmd::ReorderShape { layer, from, to });
             }
+            let run = if forward {
+                shapes
+                    .iter()
+                    .rev()
+                    .take_while(|shape| picked(shape.id))
+                    .count()
+            } else {
+                shapes
+                    .iter()
+                    .take_while(|shape| picked(shape.id))
+                    .count()
+            };
+            if run > 0
+                && let Some(target) = adjacent_vector_layer(&self.doc, layer, forward)
+            {
+                let from_index = if forward { shapes.len() - run } else { 0 };
+                let to_index = if forward {
+                    0
+                } else {
+                    self.doc.layers[target]
+                        .kind
+                        .shapes()
+                        .map(|items| items.len())
+                        .unwrap_or(0)
+                };
+                commands.push(Cmd::MoveShapes {
+                    from_layer: layer,
+                    from_index,
+                    to_layer: target,
+                    to_index,
+                    count: run,
+                });
+            }
+        }
+        if extreme {
+            commands.extend(self.extreme_stack_moves(forward, &selected));
         }
         if commands.is_empty() {
+            self.status = "Nothing above or below that object can take it".into();
             return;
         }
         self.commit(Cmd::Batch(commands));
@@ -3213,6 +3454,120 @@ impl Studio {
             "sent backward"
         }
         .into();
+    }
+
+    fn extreme_stack_moves(
+        &self,
+        forward: bool,
+        selected: &HashSet<(usize, u64)>,
+    ) -> Vec<Cmd> {
+        let layers: Vec<usize> = self
+            .doc
+            .layers
+            .iter()
+            .enumerate()
+            .filter(|(index, layer)| {
+                self.doc.layer_editable(*index) && layer.kind.shapes().is_some()
+            })
+            .map(|(index, _)| index)
+            .collect();
+        let Some(&target) = (if forward {
+            layers.last()
+        } else {
+            layers.first()
+        }) else {
+            return Vec::new();
+        };
+        let mut ordered = Vec::new();
+        for &layer in &layers {
+            let Some(shapes) = self.doc.layers[layer].kind.shapes() else {
+                continue;
+            };
+            for shape in shapes {
+                if !shape.locked && selected.contains(&(layer, shape.id)) {
+                    ordered.push((layer, shape.id));
+                }
+            }
+        }
+        if ordered.is_empty() {
+            return Vec::new();
+        }
+        let mut stacks: Vec<Option<Vec<u64>>> = self
+            .doc
+            .layers
+            .iter()
+            .map(|layer| {
+                layer
+                    .kind
+                    .shapes()
+                    .map(|shapes| shapes.iter().map(|shape| shape.id).collect())
+            })
+            .collect();
+        let mut commands = Vec::new();
+        let moving: Vec<(usize, u64)> = if forward {
+            ordered.clone()
+        } else {
+            ordered.iter().rev().copied().collect()
+        };
+        for (layer, id) in moving {
+            if layer == target {
+                continue;
+            }
+            let Some(source) = stacks[layer].as_mut() else {
+                continue;
+            };
+            let Some(from_index) = source.iter().position(|item| *item == id) else {
+                continue;
+            };
+            source.remove(from_index);
+            let Some(dest) = stacks[target].as_mut() else {
+                continue;
+            };
+            let to_index = if forward { dest.len() } else { 0 };
+            dest.insert(to_index, id);
+            commands.push(Cmd::MoveShapes {
+                from_layer: layer,
+                from_index,
+                to_layer: target,
+                to_index,
+                count: 1,
+            });
+        }
+        let Some(current) = stacks[target].clone() else {
+            return commands;
+        };
+        let picked: Vec<u64> = ordered
+            .iter()
+            .map(|(_, id)| *id)
+            .filter(|id| current.contains(id))
+            .collect();
+        let rest: Vec<u64> = current
+            .iter()
+            .copied()
+            .filter(|id| !picked.contains(id))
+            .collect();
+        let desired = if forward {
+            rest.into_iter().chain(picked).collect::<Vec<_>>()
+        } else {
+            picked.into_iter().chain(rest).collect()
+        };
+        let mut order = current;
+        for to in 0..order.len() {
+            if order.get(to) == desired.get(to) {
+                continue;
+            }
+            let Some(from) = order.iter().position(|id| Some(id) == desired.get(to)) else {
+                continue;
+            };
+            let id = order.remove(from);
+            order.insert(to, id);
+            commands.push(Cmd::ReorderShape {
+                layer: target,
+                from,
+                to,
+            });
+        }
+        commands
     }
 
     pub fn add_guide(&mut self, vertical: bool, pos: f32) {
@@ -3312,14 +3667,57 @@ impl Studio {
     }
 
     pub fn take_sampled(&mut self, color: Rgba, screen: bool) {
-        self.style.fill = Fill::Solid(color);
         self.brush.color = color;
         self.push_recent(color);
+        if self.fill_active {
+            let fill = self
+                .primary()
+                .and_then(|(layer, id)| self.doc.find_shape(layer, id))
+                .map(|shape| shape.style.fill.clone())
+                .unwrap_or_else(|| self.style.fill.clone());
+            self.set_fill(recolor_fill(fill, color));
+        } else {
+            self.recolor_active_stroke(color);
+        }
         self.status = if screen {
             format!("sampled screen {}", color.hex())
         } else {
             format!("sampled {}", color.hex())
         };
+    }
+
+    fn recolor_active_stroke(&mut self, color: Rgba) {
+        let mut stroke = self
+            .primary()
+            .and_then(|(layer, id)| self.doc.find_shape(layer, id))
+            .and_then(|shape| shape.style.stroke.clone())
+            .or_else(|| self.style.stroke.clone())
+            .unwrap_or_default();
+        stroke.color = color;
+        if let Some(gradient) = &mut stroke.gradient
+            && let Some(stop) = gradient.stops.first_mut()
+        {
+            stop.color = color;
+        }
+        self.style.stroke = Some(stroke.clone());
+        let commands = self
+            .selection
+            .iter()
+            .filter_map(|&(layer, id)| {
+                let shape = self.doc.find_shape(layer, id)?;
+                let mut after = shape.style.clone();
+                after.stroke = Some(stroke.clone());
+                (after != shape.style).then(|| Cmd::SetStyle {
+                    layer,
+                    id,
+                    before: shape.style.clone(),
+                    after,
+                })
+            })
+            .collect::<Vec<_>>();
+        if !commands.is_empty() {
+            self.commit(Cmd::Batch(commands));
+        }
     }
 
     pub fn push_recent(&mut self, c: Rgba) {

@@ -431,6 +431,7 @@ fn layer_pixels(
         origin,
         size,
         rotation,
+        ..
     } = &layer.kind
     {
         let no_resize = size.x.abs() <= 0.5 && size.y.abs() <= 0.5

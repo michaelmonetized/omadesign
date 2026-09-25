@@ -288,6 +288,61 @@ impl Studio {
         self.status = "Expanded to filled outlines".into();
     }
 
+    pub fn selection_has_path(&self) -> bool {
+        self.selection.iter().any(|(layer, id)| {
+            self.doc.find_shape(*layer, *id).is_some_and(|shape| {
+                matches!(
+                    shape.geom,
+                    Geom::Path { .. } | Geom::Paths { .. } | Geom::Poly { .. }
+                )
+            })
+        })
+    }
+
+    pub fn simplify_selection(&mut self) {
+        let targets: Vec<_> = self
+            .selection
+            .iter()
+            .copied()
+            .filter(|(layer, id)| {
+                self.doc.find_shape(*layer, *id).is_some_and(|shape| {
+                    matches!(
+                        shape.geom,
+                        Geom::Path { .. } | Geom::Paths { .. } | Geom::Poly { .. }
+                    )
+                })
+            })
+            .collect();
+        if targets.is_empty() {
+            self.status = "Select a path to simplify".into();
+            return;
+        }
+        let mut commands = Vec::new();
+        for (layer, id) in targets {
+            let Some(shape) = self.doc.find_shape(layer, id) else {
+                continue;
+            };
+            let mut after = shape.geom.clone();
+            crate::geom::simplify_geom(&mut after, 1.25);
+            if after != shape.geom {
+                commands.push(Cmd::SetGeom {
+                    layer,
+                    id,
+                    before: shape.geom.clone(),
+                    after,
+                    rot_before: shape.rotation,
+                    rot_after: shape.rotation,
+                });
+            }
+        }
+        if commands.is_empty() {
+            self.status = "Already simple".into();
+            return;
+        }
+        self.commit(Cmd::Batch(commands));
+        self.status = "Simplified".into();
+    }
+
     pub fn pathfinder(&mut self, operation: BoolOp) {
         self.pathfinder_operation(Some(operation));
     }
@@ -597,5 +652,135 @@ mod text_outline_tests {
             studio.redo();
             assert_eq!(studio.doc.find_shape(1, id), Some(&outlined));
         }
+    }
+}
+
+#[cfg(test)]
+mod stack_tests {
+    use super::*;
+    use crate::geom::Pt;
+
+    fn shape(x: f32) -> Shape {
+        Shape::new(
+            Geom::Rect {
+                origin: Pt::new(x, 10.0),
+                size: Pt::new(20.0, 20.0),
+                radius: 0.0,
+            },
+            Style::default(),
+        )
+    }
+
+    fn ids(studio: &Studio, layer: usize) -> Vec<u64> {
+        studio.doc.layers[layer]
+            .kind
+            .shapes()
+            .unwrap()
+            .iter()
+            .map(|shape| shape.id)
+            .collect()
+    }
+
+    #[test]
+    fn bring_forward_and_send_backward_cross_layers() {
+        let mut studio = Studio::new();
+        studio.doc.layers.push(Layer::vector("Layer 2"));
+        let lower = shape(10.0);
+        let upper = shape(40.0);
+        let lower_id = lower.id;
+        let upper_id = upper.id;
+        studio.doc.layers[1].kind.shapes_mut().unwrap().push(lower);
+        studio.doc.layers[2].kind.shapes_mut().unwrap().push(upper);
+        studio.selection = vec![(1, lower_id)];
+        studio.bring_forward();
+        assert_eq!(ids(&studio, 1), Vec::<u64>::new());
+        assert_eq!(ids(&studio, 2), vec![lower_id, upper_id]);
+        assert_eq!(studio.selection, vec![(2, lower_id)]);
+        studio.send_backward();
+        assert_eq!(ids(&studio, 1), vec![lower_id]);
+        assert_eq!(ids(&studio, 2), vec![upper_id]);
+        studio.selection = vec![(1, lower_id)];
+        studio.bring_to_front();
+        assert_eq!(ids(&studio, 2), vec![upper_id, lower_id]);
+        studio.undo();
+        assert_eq!(ids(&studio, 1), vec![lower_id]);
+        assert_eq!(ids(&studio, 2), vec![upper_id]);
+    }
+
+    #[test]
+    fn a_locked_layer_is_skipped() {
+        let mut studio = Studio::new();
+        let mut locked = Layer::vector("Locked");
+        locked.locked = true;
+        studio.doc.layers.push(locked);
+        studio.doc.layers.push(Layer::vector("Above"));
+        let lower = shape(10.0);
+        let above = shape(80.0);
+        let lower_id = lower.id;
+        let above_id = above.id;
+        studio.doc.layers[1].kind.shapes_mut().unwrap().push(lower);
+        studio.doc.layers[3].kind.shapes_mut().unwrap().push(above);
+        studio.selection = vec![(1, lower_id)];
+        studio.bring_forward();
+        assert!(ids(&studio, 2).is_empty());
+        assert_eq!(ids(&studio, 3), vec![lower_id, above_id]);
+    }
+
+    #[test]
+    fn free_transform_scales_rotates_and_shears_in_one_undo() {
+        let mut studio = Studio::new();
+        let rect = shape(20.0);
+        let id = rect.id;
+        studio.doc.layers[1].kind.shapes_mut().unwrap().push(rect);
+        let pixels = crate::document::Pixels::from_rgba(2, 2, [200, 20, 20, 255].repeat(4)).unwrap();
+        let image = studio.doc.layers.len();
+        studio.doc.layers.push(Layer::placed_raster(
+            "photo",
+            pixels,
+            Pt::new(80.0, 30.0),
+            Pt::new(40.0, 40.0),
+        ));
+        studio.selection = vec![(1, id), (image, RASTER_ID)];
+        let history = studio.history.len();
+        studio.free_transform();
+        let before = studio.doc.find_shape(1, id).unwrap().geom.clone();
+        let Geom::Rect { origin, size, .. } = before else {
+            panic!("rect");
+        };
+        studio
+            .doc
+            .find_shape_mut(1, id)
+            .unwrap()
+            .geom
+            .map_into(
+                crate::geom::Bounds::from_min_size(origin, size),
+                crate::geom::Bounds::from_min_size(origin, size * 2.0),
+            );
+        studio.doc.find_shape_mut(1, id).unwrap().rotation = 0.4;
+        studio.doc.layers[image]
+            .kind
+            .set_raster_xform(Pt::new(90.0, 40.0), Pt::new(80.0, 50.0), 0.3);
+        studio.shear_selection(true, 16.0);
+        studio.finish_free_transform(false);
+        assert_eq!(studio.history.len(), history + 1);
+        assert_ne!(studio.doc.find_shape(1, id).unwrap().geom, before);
+        assert!((studio.doc.layers[image].kind.raster_shear() - 16.0).abs() < 0.01);
+        let (origin, size, rotation) = studio.doc.layers[image].kind.raster_xform().unwrap();
+        assert!((origin.x - 90.0).abs() < 0.1 && (size.x - 80.0).abs() < 0.1);
+        assert!((rotation - 0.3).abs() < 0.01);
+        studio.undo();
+        assert_eq!(studio.doc.find_shape(1, id).unwrap().geom, before);
+        assert!(studio.doc.layers[image].kind.raster_shear().abs() < 0.01);
+        let (origin, size, rotation) = studio.doc.layers[image].kind.raster_xform().unwrap();
+        assert!((origin.x - 80.0).abs() < 0.1 && (size.x - 40.0).abs() < 0.1);
+        assert!(rotation.abs() < 0.01);
+        studio.redo();
+        assert!((studio.doc.layers[image].kind.raster_shear() - 16.0).abs() < 0.01);
+        studio.free_transform();
+        studio.shear_selection(true, 8.0);
+        let dirty = studio.history.len();
+        studio.finish_free_transform(true);
+        assert_eq!(studio.history.len(), dirty);
+        assert!((studio.doc.layers[image].kind.raster_shear() - 16.0).abs() < 0.01);
     }
 }

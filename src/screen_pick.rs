@@ -11,8 +11,32 @@ pub fn parse_cursor_pos(text: &str) -> Option<(i32, i32)> {
 }
 
 pub fn parse_hex_color(text: &str) -> Option<Rgba> {
-    let token = text.split_whitespace().next()?;
-    Rgba::parse_hex(token)
+    let plain = strip_ansi(text);
+    for token in plain.split_whitespace() {
+        let token = token.trim_matches(|c: char| c != '#' && !c.is_ascii_hexdigit());
+        if let Some(color) = Rgba::parse_hex(token) {
+            return Some(color);
+        }
+    }
+    None
+}
+
+fn strip_ansi(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\u{1b}' && chars.peek() == Some(&'[') {
+            chars.next();
+            for next in chars.by_ref() {
+                if next == 'm' {
+                    break;
+                }
+            }
+            continue;
+        }
+        out.push(ch);
+    }
+    out
 }
 
 pub fn parse_ppm_pixel(data: &[u8]) -> Option<Rgba> {
@@ -147,7 +171,7 @@ fn ensure() -> Result<bool, String> {
         return Ok(false);
     }
     match Command::new("hyprpicker")
-        .args(["-q", "-f", "hex", "-l"])
+        .args(["-q", "-b", "-f", "hex", "-l"])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -222,6 +246,10 @@ mod tests {
         assert_eq!(
             parse_hex_color("  #0a1b2c extra"),
             Some(Rgba::rgb(10, 27, 44))
+        );
+        assert_eq!(
+            parse_hex_color("\u{1b}[38;2;255;153;0m#ff9900\u{1b}[0m\n"),
+            Some(Rgba::rgb(255, 153, 0))
         );
         let mut ppm = b"P6\n# note\n1 1\n255\n".to_vec();
         ppm.extend_from_slice(&[9, 8, 7]);

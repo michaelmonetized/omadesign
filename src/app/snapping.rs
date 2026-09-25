@@ -260,6 +260,7 @@ mod tests {
                 origin: shape.geom.bbox().min,
                 size: shape.geom.bbox().size(),
                 rot: 0.0,
+                shear: 0.0,
             }],
             start,
         });

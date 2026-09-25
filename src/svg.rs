@@ -1180,6 +1180,7 @@ mod mask_tests {
             origin,
             size,
             rotation,
+            ..
         } = &mut layer.kind
         {
             pixels.data = [255, 0, 0, 255].repeat(8);

@@ -478,6 +478,7 @@ impl Writer<'_> {
             origin,
             size,
             rotation,
+            ..
         } = &layer.kind
             && layer.mask.is_none()
             && !layer.filters.active()

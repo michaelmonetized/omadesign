@@ -439,6 +439,130 @@ pub fn snap_point(doc: &Document, settings: SnapSettings, point: Pt, scale: f32)
         .0
 }
 
+/// Snap one guide coordinate. `vertical` guides snap in x; horizontal guides snap in y.
+pub fn snap_guide(
+    doc: &Document,
+    settings: SnapSettings,
+    vertical: bool,
+    pos: f32,
+    scale: f32,
+) -> (f32, Feedback) {
+    if !settings.enabled || !pos.is_finite() {
+        return (pos, Feedback::default());
+    }
+    let tolerance = settings.threshold.max(1.0) / scale.max(0.01);
+    let mut best: Option<(f32, f32, (Pt, Pt))> = None;
+    let consider = |best: &mut Option<(f32, f32, (Pt, Pt))>, target: f32, line: (Pt, Pt)| {
+        let distance = (target - pos).abs();
+        if distance <= tolerance && best.is_none_or(|(current, _, _)| distance < current) {
+            *best = Some((distance, target, line));
+        }
+    };
+    if settings.artboards {
+        let boards: Vec<Bounds> = if doc.artboards.is_empty() {
+            vec![Bounds::from_min_size(
+                Pt::ZERO,
+                Pt::new(doc.width, doc.height),
+            )]
+        } else {
+            doc.artboards
+                .iter()
+                .map(|board| board.local_bounds())
+                .collect()
+        };
+        for bounds in boards {
+            let (edge_a, center, edge_b, span_a, span_b) = if vertical {
+                (
+                    bounds.min.x,
+                    bounds.center().x,
+                    bounds.max.x,
+                    bounds.min.y,
+                    bounds.max.y,
+                )
+            } else {
+                (
+                    bounds.min.y,
+                    bounds.center().y,
+                    bounds.max.y,
+                    bounds.min.x,
+                    bounds.max.x,
+                )
+            };
+            for target in [edge_a, center, edge_b] {
+                let line = if vertical {
+                    (Pt::new(target, span_a), Pt::new(target, span_b))
+                } else {
+                    (Pt::new(span_a, target), Pt::new(span_b, target))
+                };
+                consider(&mut best, target, line);
+            }
+        }
+    }
+    if settings.objects {
+        for (index, layer) in doc.layers.iter().enumerate() {
+            if !doc.layer_editable(index) {
+                continue;
+            }
+            if let Some(shapes) = layer.kind.shapes() {
+                for shape in shapes {
+                    if !shape.visible || shape.locked || shape.guide {
+                        continue;
+                    }
+                    let bounds = shape.world_bbox();
+                    let (edge_a, center, edge_b, span_a, span_b) = if vertical {
+                        (
+                            bounds.min.x,
+                            bounds.center().x,
+                            bounds.max.x,
+                            bounds.min.y,
+                            bounds.max.y,
+                        )
+                    } else {
+                        (
+                            bounds.min.y,
+                            bounds.center().y,
+                            bounds.max.y,
+                            bounds.min.x,
+                            bounds.max.x,
+                        )
+                    };
+                    for target in [edge_a, center, edge_b] {
+                        let line = if vertical {
+                            (Pt::new(target, span_a), Pt::new(target, span_b))
+                        } else {
+                            (Pt::new(span_a, target), Pt::new(span_b, target))
+                        };
+                        consider(&mut best, target, line);
+                    }
+                }
+            }
+        }
+    }
+    if settings.grid && doc.grid.size > 0.5 {
+        let step = doc.grid.size;
+        let origin = if vertical {
+            doc.ruler.origin.x
+        } else {
+            doc.ruler.origin.y
+        };
+        let snapped = origin + ((pos - origin) / step).round() * step;
+        let line = if vertical {
+            (Pt::new(snapped, 0.0), Pt::new(snapped, doc.height))
+        } else {
+            (Pt::new(0.0, snapped), Pt::new(doc.width, snapped))
+        };
+        consider(&mut best, snapped, line);
+    }
+    match best {
+        Some((_, target, line)) => {
+            let mut feedback = Feedback::default();
+            feedback.lines.push(line);
+            (target, feedback)
+        }
+        None => (pos, Feedback::default()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -472,6 +596,30 @@ mod tests {
             ..Default::default()
         }
     }
+    #[test]
+    fn a_guide_snaps_to_an_object_edge_and_an_artboard_center() {
+        let mut doc = Document::new("guides", 800.0, 600.0, 96.0);
+        object(&mut doc, 100.0, true);
+        let settings = SnapSettings {
+            grid: false,
+            guides: false,
+            artboards: false,
+            ..Default::default()
+        };
+        let (x, feedback) = snap_guide(&doc, settings, true, 102.0, 1.0);
+        assert!((x - 100.0).abs() < 0.01);
+        assert_eq!(feedback.lines.len(), 1);
+        let mut page = settings;
+        page.objects = false;
+        page.artboards = true;
+        let (center, feedback) = snap_guide(&doc, page, false, 304.0, 1.0);
+        assert!((center - 300.0).abs() < 0.01, "{center}");
+        assert_eq!(feedback.lines.len(), 1);
+        let mut off = settings;
+        off.enabled = false;
+        assert_eq!(snap_guide(&doc, off, true, 102.0, 1.0).0, 102.0);
+    }
+
     #[test]
     fn moving_edges_and_centers_snap_without_snapping_to_self_or_hidden_shapes() {
         let mut doc = Document::new("snap", 800.0, 600.0, 96.0);

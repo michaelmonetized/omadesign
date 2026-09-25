@@ -469,6 +469,7 @@ impl Studio {
                     origin,
                     size,
                     rotation,
+                    ..
                 } => {
                     if pixels.is_invisible() {
                         continue;

@@ -80,6 +80,10 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     library::tick(&ctx, studio);
     plugins::tick(&ctx, studio);
     canvas::poll_screen_pick(&ctx, studio);
+    theme::poll(&ctx);
+    ctx.data_mut(|data| {
+        data.insert_temp(eframe::egui::Id::new("oma-recent-colors"), studio.recent.clone())
+    });
     if !studio.file_dialog_pending()
         && !studio.show_preferences
         && !studio.updates.freezing

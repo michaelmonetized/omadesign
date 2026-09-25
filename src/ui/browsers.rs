@@ -166,10 +166,33 @@ pub fn show_asset_browser(ui: &mut egui::Ui, studio: &mut Studio) {
                             return;
                         }
                     }
-                } else {
+                } else if let crate::document::LayerKind::Raster { pixels, .. } = layer.kind {
+                    let board = studio
+                        .doc
+                        .artboards
+                        .iter()
+                        .find(|board| board.size.x > 1.0 && board.size.y > 1.0)
+                        .map(|board| board.local_bounds())
+                        .unwrap_or_else(|| {
+                            crate::geom::Bounds::from_min_size(
+                                crate::geom::Pt::ZERO,
+                                crate::geom::Pt::new(studio.doc.width, studio.doc.height),
+                            )
+                        });
+                    let native = crate::geom::Pt::new(pixels.w.max(1) as f32, pixels.h.max(1) as f32);
+                    let scale = (board.width() * 0.8 / native.x)
+                        .min(board.height() * 0.8 / native.y)
+                        .min(1.0)
+                        .max(0.01);
+                    let size = native * scale;
+                    let origin = board.center() - size * 0.5;
+                    let placed = Layer::placed_raster(name.clone(), pixels, origin, size);
                     let index = studio.doc.layers.len();
-                    studio.commit(Cmd::AddLayer { index, layer });
+                    studio.commit(Cmd::AddLayer { index, layer: placed });
                     studio.active_layer = Some(index);
+                    studio.selected_layer = None;
+                    studio.selection = vec![(index, crate::document::RASTER_ID)];
+                    studio.tool = crate::tools::Tool::Select;
                     studio.status = format!("Added {name}");
                 }
                 studio.asset_status.clear();

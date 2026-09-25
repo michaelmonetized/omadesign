@@ -154,6 +154,35 @@ fn picker_contents(ui: &mut Ui, id: Id, color: &mut Rgba, state: &mut PickerStat
             request_sample(ui.ctx(), id);
         }
     });
+    let recent = ui.ctx().data(|data| {
+        data.get_temp::<Vec<Rgba>>(Id::new("oma-recent-colors"))
+            .unwrap_or_default()
+    });
+    if !recent.is_empty() {
+        ui.add_space(4.0);
+        ui.label("Recent");
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
+            for (index, swatch) in recent.iter().take(12).enumerate() {
+                if chip(ui, *swatch, vec2(18.0, 18.0))
+                    .on_hover_text(swatch.hex())
+                    .clicked()
+                {
+                    *color = *swatch;
+                    state.hsv = egui::ecolor::Hsva::from_srgba_unmultiplied(color.to_array());
+                    ui.data_mut(|data| {
+                        let mut colors = data
+                            .get_temp::<Vec<Rgba>>(Id::new("oma-recent-colors"))
+                            .unwrap_or_default();
+                        colors.retain(|item| item != swatch);
+                        colors.insert(0, *swatch);
+                        data.insert_temp(Id::new("oma-recent-colors"), colors);
+                        let _ = index;
+                    });
+                }
+            }
+        });
+    }
 }
 
 /// Hex text with copy, paste, and keyboard clipboard while the field is focused.
@@ -184,6 +213,9 @@ pub(crate) fn hex_field(
         *color = parsed;
         text = color.hex();
         changed = true;
+    }
+    if !response.has_focus() && Rgba::parse_hex(text.trim()).is_none() {
+        text = color.hex();
     }
     if response.has_focus() {
         let paste = ui.input(|input| {

@@ -407,6 +407,7 @@ pub fn layer_pixel_transform(layer: &Layer) -> Transform {
         origin,
         size,
         rotation,
+        shear,
     } = &layer.kind
     else {
         return if let Some(mask) = &layer.mask
@@ -436,6 +437,11 @@ pub fn layer_pixel_transform(layer: &Layer) -> Transform {
             .pre_concat(Transform::from_rotate(rotation.to_degrees()))
             .pre_concat(Transform::from_translate(-centre.x, -centre.y))
             .pre_concat(transform);
+    }
+    if shear.abs() > 1e-4 {
+        let slope = *shear / dimensions.y.max(1.0);
+        let shear_xf = Transform::from_row(1.0, 0.0, slope, 1.0, -slope * origin.y, 0.0);
+        transform = shear_xf.pre_concat(transform);
     }
     transform
 }

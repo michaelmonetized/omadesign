@@ -821,6 +821,15 @@ fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
                     return;
                 }
                 HandleKind::Scale(i, b) => {
+                    if studio.free_transform.is_some() && matches!(i, 4 | 5 | 6 | 7) {
+                        studio.op = Some(Op::Skew {
+                            orig: snapshot_with_children(studio),
+                            handle: i,
+                            bounds: b,
+                            start: pick,
+                        });
+                        return;
+                    }
                     studio.op = Some(Op::Resize {
                         orig: snapshot_with_children(studio),
                         handle: i,
@@ -875,6 +884,9 @@ fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
                     selection_on_click,
                 });
             } else {
+                if studio.free_transform.is_some() {
+                    studio.finish_free_transform(false);
+                }
                 studio.op = Some(Op::Marquee {
                     start: snap,
                     cur: snap,
@@ -1095,6 +1107,8 @@ fn snap_changed(studio: &Studio, snap: &ObjSnap) -> bool {
                 (o - snap.origin).length() > 0.2
                     || (sz - snap.size).length() > 0.2
                     || (rot - snap.rot).abs() > 1e-4
+                    || (studio.doc.layers[snap.layer].kind.raster_shear() - snap.shear).abs()
+                        > 1e-4
             })
     } else {
         studio.doc.find_shape(snap.layer, snap.id).is_some_and(|s| {
@@ -1108,13 +1122,34 @@ fn object_commands(studio: &Studio, orig: Vec<ObjSnap>) -> Vec<crate::document::
         .filter(|snap| snap_changed(studio, snap))
         .filter_map(|snap| {
             if snap.id == RASTER_ID {
-                let (origin, size, rotation) =
-                    studio.doc.layers.get(snap.layer)?.kind.raster_xform()?;
-                Some(crate::document::Cmd::SetRasterXform {
-                    layer: snap.layer,
-                    before: (snap.origin, snap.size, snap.rot),
-                    after: (origin, size, rotation),
-                })
+                let kind = &studio.doc.layers.get(snap.layer)?.kind;
+                let (origin, size, rotation) = kind.raster_xform()?;
+                let shear = kind.raster_shear();
+                let mut commands = Vec::new();
+                if (origin - snap.origin).length() > 0.2
+                    || (size - snap.size).length() > 0.2
+                    || (rotation - snap.rot).abs() > 1e-4
+                {
+                    commands.push(crate::document::Cmd::SetRasterXform {
+                        layer: snap.layer,
+                        before: (snap.origin, snap.size, snap.rot),
+                        after: (origin, size, rotation),
+                    });
+                }
+                if (shear - snap.shear).abs() > 1e-4 {
+                    commands.push(crate::document::Cmd::SetRasterShear {
+                        layer: snap.layer,
+                        before: snap.shear,
+                        after: shear,
+                    });
+                }
+                if commands.is_empty() {
+                    None
+                } else if commands.len() == 1 {
+                    commands.pop()
+                } else {
+                    Some(crate::document::Cmd::Batch(commands))
+                }
             } else {
                 let shape = studio.doc.find_shape(snap.layer, snap.id)?;
                 Some(crate::document::Cmd::SetGeom {
@@ -1142,6 +1177,9 @@ fn commit_canvas_commands(studio: &mut Studio, commands: Vec<crate::document::Cm
 }
 
 fn commit_obj_snaps(studio: &mut Studio, orig: Vec<ObjSnap>) {
+    if studio.free_transform.is_some() {
+        return;
+    }
     let commands = object_commands(studio, orig);
     commit_canvas_commands(studio, commands);
 }
@@ -1213,6 +1251,9 @@ fn layout_drop_frame(studio: &Studio, world: Pt) -> Option<u64> {
 }
 
 fn commit_move(studio: &mut Studio, orig: Vec<ObjSnap>, world: Pt) {
+    if studio.free_transform.is_some() {
+        return;
+    }
     let commands = object_commands(studio, orig);
     if studio.persona == Persona::Layout {
         let parent = layout_drop_frame(studio, world);
@@ -1253,6 +1294,7 @@ fn snaps_for(studio: &Studio, ids: &[(usize, u64)]) -> Vec<ObjSnap> {
                     origin,
                     size,
                     rot,
+                    shear: layer.kind.raster_shear(),
                 })
             } else {
                 studio.doc.find_shape(*li, *id).map(|s| ObjSnap {
@@ -1262,6 +1304,7 @@ fn snaps_for(studio: &Studio, ids: &[(usize, u64)]) -> Vec<ObjSnap> {
                     origin: Pt::ZERO,
                     size: Pt::ZERO,
                     rot: s.rotation,
+                    shear: 0.0,
                 })
             }
         })
@@ -1599,6 +1642,7 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
             Op::Move { .. }
                 | Op::Resize { .. }
                 | Op::Rotate { .. }
+                | Op::Skew { .. }
                 | Op::Node { .. }
                 | Op::Corner { .. }
                 | Op::ArtboardMove { .. }
@@ -1611,6 +1655,26 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
         )
     ) {
         studio.mark();
+    }
+    if let Some(Op::Skew {
+        orig,
+        handle,
+        start,
+        ..
+    }) = &studio.op
+    {
+        let orig = orig.clone();
+        let handle = *handle;
+        let start = *start;
+        studio.restore_snaps(&orig);
+        let delta = world - start;
+        let (horizontal, amount) = match handle {
+            4 => (true, -delta.x),
+            6 => (true, delta.x),
+            7 => (false, -delta.y),
+            _ => (false, delta.y),
+        };
+        studio.shear_selection(horizontal, amount);
     }
     match &mut studio.op {
         Some(Op::Create {
@@ -1853,6 +1917,7 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                 crate::layout::apply_resize(&mut studio.doc, &orig_geoms, &changed);
             }
         }
+        Some(Op::Skew { .. }) => {}
         Some(Op::Rotate {
             orig,
             center,
@@ -2204,7 +2269,7 @@ fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) 
                 }
             }
         }
-        Some(Op::Resize { orig, .. }) | Some(Op::Rotate { orig, .. }) => {
+        Some(Op::Resize { orig, .. }) | Some(Op::Rotate { orig, .. }) | Some(Op::Skew { orig, .. }) => {
             if studio.is_motion() {
                 commit_pose_drag(studio);
             } else if orig.iter().any(|s| snap_changed(studio, s)) {
