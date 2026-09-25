@@ -3,6 +3,7 @@
 //! Tracks are offsets from rest (X/Y/rotation/gradient angle/stroke width),
 //! multipliers (scale, width, height), or a color (fill). Opacity is absolute.
 //! Animated SVG is CSS @keyframes. Lottie is the Bodymovin 5.x shape subset.
+//! A `.lottie` file is that JSON inside a dotLottie zip.
 
 use crate::color::Rgba;
 use crate::document::{Cap, Document, Fill, Join, Shape, Stroke, Style};
@@ -787,6 +788,33 @@ pub fn export_lottie(doc: &Document) -> Result<String, String> {
     })).map_err(|error| error.to_string())
 }
 
+/// dotLottie zip for `doc`.
+///
+/// Writes `manifest.json` and `animations/animation.json`. The animation file
+/// is the JSON from [`export_lottie`]. Returns the zip bytes, or that export's
+/// error when the composition cannot be preserved.
+pub fn export_dotlottie(doc: &Document) -> Result<Vec<u8>, String> {
+    let animation = export_lottie(doc)?;
+    let manifest = r#"{"version":"1.0","revision":1,"generator":"omadesign","animations":[{"id":"animation"}]}"#;
+    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    zip.start_file("manifest.json", options)
+        .map_err(|error| error.to_string())?;
+    std::io::Write::write_all(&mut zip, manifest.as_bytes()).map_err(|error| error.to_string())?;
+    zip.start_file(
+        "animations/animation.json",
+        zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated),
+    )
+    .map_err(|error| error.to_string())?;
+    std::io::Write::write_all(&mut zip, animation.as_bytes()).map_err(|error| error.to_string())?;
+    Ok(zip
+        .finish()
+        .map_err(|error| error.to_string())?
+        .into_inner())
+}
+
 fn shape_layer(
     shape: &Shape,
     motion: &Motion,
@@ -1076,8 +1104,16 @@ pub struct LottieImport {
 }
 
 /// Import a Lottie 5.x JSON. Shape layers (ty=4) with path/ellipse/rect.
+///
+/// `json` is the file text. Returns the shapes and timeline, or an error.
+/// A JSON object with no `v`, no `fr` and no `layers` array is not a Lottie.
+/// A Lottie whose layers produce no vectors says so.
 pub fn import_lottie(json: &str) -> Result<LottieImport, String> {
+    let json = json.trim_start_matches('\u{feff}');
     let v: Value = serde_json::from_str(json).map_err(|e| e.to_string())?;
+    let Some(layers) = v.get("layers").and_then(Value::as_array) else {
+        return Err(import_failure(&v));
+    };
     let w = js_f32(&v["w"]).unwrap_or(1280.0);
     let h = js_f32(&v["h"]).unwrap_or(800.0);
     let fps = js_f32(&v["fr"]).unwrap_or(30.0).clamp(1.0, 120.0);
@@ -1091,7 +1127,6 @@ pub fn import_lottie(json: &str) -> Result<LottieImport, String> {
         tracks: vec![],
     };
     let mut shapes = Vec::new();
-    let layers = v["layers"].as_array().cloned().unwrap_or_default();
     for layer in layers.iter().rev() {
         let ty = js_f32(&layer["ty"]).unwrap_or(-1.0) as i32;
         if ty != 4 {
@@ -1115,7 +1150,7 @@ pub fn import_lottie(json: &str) -> Result<LottieImport, String> {
         shapes.push(shape);
     }
     if shapes.is_empty() {
-        return Err("no shape layers in this Lottie".into());
+        return Err(import_failure(&v));
     }
     Ok(LottieImport {
         width: w,
@@ -1123,6 +1158,205 @@ pub fn import_lottie(json: &str) -> Result<LottieImport, String> {
         motion,
         shapes,
     })
+}
+
+/// Import Lottie JSON or a dotLottie zip from `bytes`.
+///
+/// JSON may start with whitespace. A zip (`PK`) is read from the animation
+/// named in `manifest.json`, or from `animations/*.json`. Returns the same
+/// import as [`import_lottie`], or an error containing "not a Lottie" when
+/// the bytes are neither.
+pub fn import_lottie_bytes(bytes: &[u8]) -> Result<LottieImport, String> {
+    let bytes = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes);
+    if starts_with_json_object(bytes) {
+        let json = std::str::from_utf8(bytes).map_err(|_| "not a Lottie".to_string())?;
+        return import_lottie(json);
+    }
+    if bytes.starts_with(b"PK") {
+        let json = animation_json_from_dotlottie(bytes)?;
+        return import_lottie(&json);
+    }
+    Err("not a Lottie".into())
+}
+
+fn starts_with_json_object(bytes: &[u8]) -> bool {
+    bytes
+        .iter()
+        .find(|byte| !byte.is_ascii_whitespace())
+        .copied()
+        == Some(b'{')
+}
+
+fn import_failure(value: &Value) -> String {
+    let marked = |key: &str| value.get(key).is_some_and(|item| !item.is_null());
+    let has_layers = value.get("layers").is_some_and(Value::is_array);
+    if !has_layers && !marked("v") && !marked("fr") {
+        "not a Lottie".into()
+    } else {
+        "no vector layers".into()
+    }
+}
+
+fn animation_json_from_dotlottie(bytes: &[u8]) -> Result<String, String> {
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))
+        .map_err(|_| "not a Lottie".to_string())?;
+    if archive.is_empty() || archive.len() > 4_096 {
+        return Err("not a Lottie".into());
+    }
+    let mut stored = HashMap::<String, String>::new();
+    for index in 0..archive.len() {
+        let file = archive
+            .by_index(index)
+            .map_err(|_| "not a Lottie".to_string())?;
+        if file.is_dir() {
+            continue;
+        }
+        let Some(key) = normalize_zip_path(file.name()) else {
+            continue;
+        };
+        stored.insert(key, file.name().to_string());
+    }
+    let mut paths = Vec::new();
+    if let Some(manifest) = zip_text(&mut archive, &stored, "manifest.json")? {
+        if let Ok(manifest) = serde_json::from_str::<Value>(&manifest) {
+            for path in manifest_animation_paths(&manifest) {
+                push_new(&mut paths, path);
+            }
+        }
+    }
+    let mut found: Vec<String> = stored
+        .keys()
+        .filter(|name| is_packaged_animation(name))
+        .cloned()
+        .collect();
+    found.sort();
+    for path in found {
+        push_new(&mut paths, path);
+    }
+    for path in paths {
+        if let Some(json) = zip_text(&mut archive, &stored, &path)? {
+            return Ok(json);
+        }
+    }
+    Err("not a Lottie".into())
+}
+
+fn push_new(paths: &mut Vec<String>, path: String) {
+    if !paths.iter().any(|have| have == &path) {
+        paths.push(path);
+    }
+}
+
+fn manifest_animation_paths(manifest: &Value) -> Vec<String> {
+    let Some(animation) = preferred_animation(manifest) else {
+        return Vec::new();
+    };
+    let mut paths = Vec::new();
+    if let Some(file) = animation
+        .get("file")
+        .or_else(|| animation.get("path"))
+        .and_then(Value::as_str)
+    {
+        if let Some(file) = normalize_zip_path(file) {
+            paths.push(file);
+        }
+    }
+    if let Some(id) = animation.get("id").and_then(Value::as_str) {
+        if animation_id_ok(id) {
+            paths.push(format!("animations/{id}.json"));
+            paths.push(format!("a/{id}.json"));
+        }
+    }
+    paths
+}
+
+fn preferred_animation(manifest: &Value) -> Option<&Value> {
+    let animations = manifest.get("animations")?.as_array()?;
+    let preferred = manifest
+        .get("activeAnimationId")
+        .and_then(Value::as_str)
+        .or_else(|| {
+            manifest
+                .pointer("/initial/animation")
+                .and_then(Value::as_str)
+        });
+    preferred
+        .and_then(|id| {
+            animations
+                .iter()
+                .find(|animation| animation.get("id").and_then(Value::as_str) == Some(id))
+        })
+        .or_else(|| animations.first())
+}
+
+fn animation_id_ok(id: &str) -> bool {
+    !id.is_empty() && !id.contains(['/', '\\', '\0']) && id != "." && id != ".."
+}
+
+fn is_packaged_animation(name: &str) -> bool {
+    let Some((dir, file)) = name.rsplit_once('/') else {
+        return false;
+    };
+    if dir != "animations" && dir != "a" {
+        return false;
+    }
+    let Some(stem) = file.strip_suffix(".json") else {
+        return false;
+    };
+    !stem.is_empty() && stem != "." && stem != ".."
+}
+
+fn normalize_zip_path(name: &str) -> Option<String> {
+    if name.contains('\0') {
+        return None;
+    }
+    let mut name = name.replace('\\', "/");
+    while let Some(rest) = name.strip_prefix("./") {
+        name = rest.to_string();
+    }
+    let name = name.trim_start_matches('/');
+    if name.is_empty()
+        || name
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
+    {
+        return None;
+    }
+    Some(name.to_string())
+}
+
+fn zip_text<R: std::io::Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    stored: &HashMap<String, String>,
+    name: &str,
+) -> Result<Option<String>, String> {
+    use std::io::Read;
+    let Some(key) = normalize_zip_path(name) else {
+        return Ok(None);
+    };
+    let Some(raw) = stored.get(&key) else {
+        return Ok(None);
+    };
+    let mut file = match archive.by_name(raw) {
+        Ok(file) => file,
+        Err(zip::result::ZipError::FileNotFound) => return Ok(None),
+        Err(_) => return Err("not a Lottie".into()),
+    };
+    const LIMIT: u64 = 32 * 1024 * 1024;
+    if file.size() > LIMIT {
+        return Err("not a Lottie".into());
+    }
+    let mut buf = Vec::new();
+    file.by_ref()
+        .take(LIMIT + 1)
+        .read_to_end(&mut buf)
+        .map_err(|_| "not a Lottie".to_string())?;
+    if buf.len() as u64 > LIMIT {
+        return Err("not a Lottie".into());
+    }
+    String::from_utf8(buf)
+        .map(Some)
+        .map_err(|_| "not a Lottie".to_string())
 }
 
 fn apply_lottie_transform(
@@ -1755,5 +1989,176 @@ mod tests {
         assert!(svg.contains("mask-type=\"luminance\""));
         assert!(svg.contains("data:image/png;base64,"));
         assert!(svg.contains("attributeName=\"height\""));
+    }
+
+    fn rotating_rect() -> Document {
+        let mut doc = Document::new("spin", 160.0, 90.0, 72.0);
+        let shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(20.0, 16.0),
+                size: Pt::new(48.0, 32.0),
+                radius: 0.0,
+            },
+            Style {
+                fill: Fill::Solid(Rgba::rgb(79, 140, 255)),
+                stroke: None,
+            },
+        );
+        let id = shape.id;
+        apply(&mut doc, &Cmd::AddShape { layer: 1, shape });
+        doc.motion
+            .set_key(id, Prop::Rotation, 0.0, 0.0, Ease::Linear);
+        doc.motion
+            .set_key(id, Prop::Rotation, doc.motion.duration, 1.0, Ease::Linear);
+        doc
+    }
+
+    fn vector_shape_count(doc: &Document) -> usize {
+        doc.layers
+            .iter()
+            .filter_map(|layer| layer.kind.shapes())
+            .map(|shapes| shapes.len())
+            .sum()
+    }
+
+    fn vector_layer_count(doc: &Document) -> usize {
+        doc.layers
+            .iter()
+            .filter(|layer| layer.kind.shapes().is_some_and(|shapes| !shapes.is_empty()))
+            .count()
+    }
+
+    fn assert_spin(doc: &Document, imported: &LottieImport) {
+        assert_eq!(imported.shapes.len(), vector_shape_count(doc));
+        assert_eq!(imported.shapes.len(), vector_layer_count(doc));
+        assert!((imported.motion.duration - doc.motion.duration).abs() < 1e-3);
+        let id = imported.shapes[0].id;
+        let start = imported.motion.pose(id, 0.0).rotation;
+        let end = imported.motion.pose(id, imported.motion.duration).rotation;
+        assert!(start.abs() < 1e-3, "start rotation {start}");
+        assert!(
+            (end - 1.0).abs() < 1e-3,
+            "rotation should change over the clip, end {end}"
+        );
+    }
+
+    #[test]
+    fn export_lottie_import_bytes_keeps_shapes_duration_and_rotation() {
+        let doc = rotating_rect();
+        let json = export_lottie(&doc).unwrap();
+        let exported: Value = serde_json::from_str(&json).unwrap();
+        let imported = import_lottie_bytes(json.as_bytes()).unwrap();
+        assert_eq!(
+            imported.shapes.len(),
+            exported["layers"].as_array().unwrap().len()
+        );
+        assert_spin(&doc, &imported);
+    }
+
+    #[test]
+    fn export_dotlottie_is_a_zip_and_imports() {
+        use std::io::Read;
+        let doc = rotating_rect();
+        let bytes = export_dotlottie(&doc).unwrap();
+        assert!(bytes.starts_with(b"PK"), "dotLottie is a zip");
+        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes.as_slice())).unwrap();
+        let mut manifest = String::new();
+        archive
+            .by_name("manifest.json")
+            .unwrap()
+            .read_to_string(&mut manifest)
+            .unwrap();
+        assert_eq!(
+            manifest,
+            r#"{"version":"1.0","revision":1,"generator":"omadesign","animations":[{"id":"animation"}]}"#
+        );
+        let mut animation = String::new();
+        archive
+            .by_name("animations/animation.json")
+            .unwrap()
+            .read_to_string(&mut animation)
+            .unwrap();
+        assert_eq!(animation, export_lottie(&doc).unwrap());
+        let imported = import_lottie_bytes(&bytes).unwrap();
+        assert_spin(&doc, &imported);
+    }
+
+    fn expect_err(result: Result<LottieImport, String>) -> String {
+        match result {
+            Err(error) => error,
+            Ok(_) => panic!("expected a Lottie error"),
+        }
+    }
+
+    #[test]
+    fn plain_object_is_not_a_lottie() {
+        let err = expect_err(import_lottie(r#"{"hello":1}"#));
+        assert!(err.contains("not a Lottie"), "{err}");
+        let err = expect_err(import_lottie_bytes(br#"{"hello":1}"#));
+        assert!(err.contains("not a Lottie"), "{err}");
+        let err = expect_err(import_lottie_bytes(b"\n  {\"hello\":1}"));
+        assert!(err.contains("not a Lottie"), "{err}");
+        let err = expect_err(import_lottie_bytes(b"hello"));
+        assert!(err.contains("not a Lottie"), "{err}");
+    }
+
+    #[test]
+    fn image_only_lottie_reports_no_vector_layers() {
+        let json = r#"{"v":"5.7.4","fr":30,"ip":0,"op":30,"w":100,"h":100,"layers":[{"ty":2,"nm":"photo"}]}"#;
+        let err = expect_err(import_lottie(json));
+        assert!(err.contains("no vector layers"), "{err}");
+        assert!(!err.contains("not a Lottie"), "{err}");
+    }
+
+    #[test]
+    fn third_party_rect_lottie_imports_from_json_and_dotlottie() {
+        let json = r#"{"v":"5.5.7","fr":30,"ip":0,"op":60,"w":200,"h":200,"nm":"box","layers":[{"ddd":0,"ind":1,"ty":4,"nm":"Rectangle","sr":1,"ks":{"o":{"a":0,"k":100},"r":{"a":1,"k":[{"t":0,"s":[0]},{"t":60,"s":[90]}]},"p":{"a":0,"k":[100,100,0]},"a":{"a":0,"k":[0,0,0]},"s":{"a":0,"k":[100,100,100]}},"ao":0,"shapes":[{"ty":"gr","it":[{"ty":"rc","p":{"a":0,"k":[0,0]},"s":{"a":0,"k":[80,40]},"r":{"a":0,"k":0}},{"ty":"fl","c":{"a":0,"k":[0.31,0.55,1,1]},"o":{"a":0,"k":100}},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100}}],"nm":"Rect"}],"ip":0,"op":60,"st":0,"bm":0}]}"#;
+        let imported = import_lottie_bytes(json.as_bytes()).unwrap();
+        assert_eq!(imported.shapes.len(), 1);
+        assert!((imported.motion.duration - 2.0).abs() < 1e-3);
+        match &imported.shapes[0].geom {
+            Geom::Rect { size, .. } => {
+                assert!((size.x - 80.0).abs() < 0.01);
+                assert!((size.y - 40.0).abs() < 0.01);
+            }
+            other => panic!("expected a rect, got {other:?}"),
+        }
+        let id = imported.shapes[0].id;
+        let start = imported.motion.pose(id, 0.0).rotation;
+        let end = imported.motion.pose(id, 2.0).rotation;
+        assert!(start.abs() < 1e-3, "{start}");
+        assert!(
+            (end - std::f32::consts::FRAC_PI_2).abs() < 1e-3,
+            "rotation should change, end {end}"
+        );
+
+        let packaged = zip_files(&[
+            (
+                "manifest.json",
+                r#"{"version":"1.0","animations":[{"id":"box","file":"animations/box.json"}]}"#,
+            ),
+            ("animations/aaa.json", r#"{"hello":1}"#),
+            ("animations/box.json", json),
+        ]);
+        assert!(packaged.starts_with(b"PK"));
+        let from_zip = import_lottie_bytes(&packaged).unwrap();
+        assert_eq!(from_zip.shapes.len(), 1);
+        assert!((from_zip.motion.duration - 2.0).abs() < 1e-3);
+
+        let bare = zip_files(&[("animations/box.json", json)]);
+        let from_dir = import_lottie_bytes(&bare).unwrap();
+        assert_eq!(from_dir.shapes.len(), 1);
+        assert!((from_dir.motion.duration - imported.motion.duration).abs() < 1e-3);
+    }
+
+    fn zip_files(files: &[(&str, &str)]) -> Vec<u8> {
+        use std::io::Write;
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let options = zip::write::SimpleFileOptions::default();
+        for (name, body) in files {
+            zip.start_file(*name, options).unwrap();
+            zip.write_all(body.as_bytes()).unwrap();
+        }
+        zip.finish().unwrap().into_inner()
     }
 }
