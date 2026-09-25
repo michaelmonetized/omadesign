@@ -1010,8 +1010,8 @@ mod tests {
         );
         assert_eq!(subtracted, vec![255, 0, 255, 0]);
         assert_eq!(selected_count(&added), 2);
-        let shifted = shift_mask(&[0, 255, 0, 0], 2, 2, 1, 0);
-        assert_eq!(shifted, vec![0, 0, 255, 0]);
+        let shifted = shift_mask(&[255, 0, 0, 0], 2, 2, 1, 0);
+        assert_eq!(shifted, vec![0, 255, 0, 0]);
         let feathered = feather_mask(&[0, 255, 0, 0], 2, 2, 1);
         assert!(feathered.iter().any(|p| *p > 0 && *p < 255));
         let sheared = shear_mask(&[255, 0, 255, 0], 2, 2, 0.0);
