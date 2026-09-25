@@ -3,6 +3,7 @@
 //! `~/.config/omadesign/assets.toml` (`pixabay_key = "..."`).
 
 use serde::{Deserialize, Serialize};
+use std::io::Read;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AssetHit {
@@ -235,6 +236,28 @@ fn urlencoding(s: &str) -> String {
         }
     }
     out
+}
+
+/// Fetch a small preview. Thumbs are allowed to be smaller than a full photo.
+pub fn fetch_thumb(url: &str) -> Result<Vec<u8>, String> {
+    if url.is_empty() {
+        return Err("No preview".into());
+    }
+    let resp = ureq::get(url)
+        .timeout(std::time::Duration::from_secs(12))
+        .call()
+        .map_err(|e| e.to_string())?;
+    if resp.status() != 200 {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+    let mut bytes = Vec::new();
+    resp.into_reader()
+        .read_to_end(&mut bytes)
+        .map_err(|e| e.to_string())?;
+    if bytes.len() < 32 {
+        return Err("Preview was empty".into());
+    }
+    Ok(bytes)
 }
 
 /// Fetch full-resolution bytes for an asset hit.

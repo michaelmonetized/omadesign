@@ -2,8 +2,8 @@ use super::jobs;
 use crate::app::Studio;
 use crate::document::{Cmd, Layer};
 use crate::geom::{Geom, Pt};
-use crate::ui::theme;
-use eframe::egui::{self, RichText, ScrollArea};
+use crate::ui::{icons, theme};
+use eframe::egui::{self, Align2, RichText, ScrollArea};
 
 const SHAPE: &str = "shape-download";
 const SEARCH: &str = "photo-search";
@@ -68,11 +68,31 @@ pub fn show_shape_browser(ui: &mut egui::Ui, studio: &mut Studio) {
                     .show(ui, |ui| {
                         for (i, icon) in icons.iter().enumerate() {
                             ui.vertical(|ui| {
+                                let (thumb, _) =
+                                    ui.allocate_exact_size(egui::vec2(120.0, 44.0), egui::Sense::hover());
+                                if icon.lib == "Phosphor"
+                                    && let Some(glyph) = crate::shape_browser::phosphor_char(icon.name)
+                                {
+                                    ui.painter().text(
+                                        thumb.center(),
+                                        Align2::CENTER_CENTER,
+                                        glyph.to_string(),
+                                        icons::font(28.0),
+                                        theme::fg(),
+                                    );
+                                } else {
+                                    ui.painter().rect_stroke(
+                                        thumb.shrink(6.0),
+                                        4.0,
+                                        egui::Stroke::new(1.0, theme::border()),
+                                        egui::StrokeKind::Inside,
+                                    );
+                                }
                                 if ui
                                     .add_enabled(
                                         !downloading,
                                         egui::Button::new(icon.name)
-                                            .min_size(egui::vec2(120.0, 34.0)),
+                                            .min_size(egui::vec2(120.0, 28.0)),
                                     )
                                     .on_hover_text(format!("{} · {}", icon.lib, icon.name))
                                     .clicked()
@@ -208,6 +228,7 @@ pub fn show_asset_browser(ui: &mut egui::Ui, studio: &mut Studio) {
                 ui.label(RichText::new(&studio.asset_status).small().color(theme::fg_weak()));
             });
             ui.add_space(8.0);
+            let thumbs = photo_thumbs(ui, &studio.asset_results);
             let mut chosen = None;
             ScrollArea::vertical().max_height(330.0).show(ui, |ui| {
                 if studio.asset_results.is_empty() && !searching {
@@ -217,6 +238,15 @@ pub fn show_asset_browser(ui: &mut egui::Ui, studio: &mut Studio) {
                     for (i, hit) in studio.asset_results.iter().enumerate() {
                         ui.vertical(|ui| {
                             ui.set_width(175.0);
+                            if let Some(texture) = thumbs.get(&hit.thumb_url) {
+                                ui.image((texture.id(), egui::vec2(160.0, 100.0)));
+                            } else {
+                                let (rect, _) = ui.allocate_exact_size(
+                                    egui::vec2(160.0, 100.0),
+                                    egui::Sense::hover(),
+                                );
+                                ui.painter().rect_filled(rect, 4.0, theme::bg_widget());
+                            }
                             ui.label(RichText::new(&hit.tags).size(13.0));
                             ui.label(RichText::new(format!("{} · {} × {}", hit.provider, hit.w, hit.h))
                                 .small().color(theme::fg_weak()));
@@ -251,6 +281,53 @@ pub fn show_asset_browser(ui: &mut egui::Ui, studio: &mut Studio) {
         jobs::cancel::<PhotoResult>(ui.ctx(), PHOTO);
         studio.asset_status.clear();
     }
+}
+
+const THUMB: &str = "photo-thumb";
+
+fn photo_thumbs(
+    ui: &mut egui::Ui,
+    hits: &[crate::asset_browser::AssetHit],
+) -> std::collections::HashMap<String, egui::TextureHandle> {
+    let id = egui::Id::new("photo-thumb-cache");
+    if let Some(Ok((url, bytes))) = jobs::poll::<(String, Vec<u8>)>(ui.ctx(), THUMB) {
+        if let Some(image) = decode_thumb(&bytes) {
+            let texture = ui.ctx().load_texture(&url, image, egui::TextureOptions::LINEAR);
+            ui.ctx().data_mut(|data| {
+                let mut cache = data
+                    .get_temp::<std::collections::HashMap<String, egui::TextureHandle>>(id)
+                    .unwrap_or_default();
+                cache.insert(url, texture);
+                data.insert_temp(id, cache);
+            });
+        }
+    }
+    let cache = ui
+        .ctx()
+        .data(|data| data.get_temp::<std::collections::HashMap<String, egui::TextureHandle>>(id))
+        .unwrap_or_default();
+    if !jobs::is_running::<(String, Vec<u8>)>(ui.ctx(), THUMB)
+        && let Some(hit) = hits
+            .iter()
+            .find(|hit| !hit.thumb_url.is_empty() && !cache.contains_key(&hit.thumb_url))
+    {
+        let url = hit.thumb_url.clone();
+        jobs::start(ui.ctx(), THUMB, move || {
+            crate::asset_browser::fetch_thumb(&url).map(|bytes| (url, bytes))
+        });
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_millis(200));
+    }
+    cache
+}
+
+fn decode_thumb(bytes: &[u8]) -> Option<egui::ColorImage> {
+    let image = image::load_from_memory(bytes).ok()?.thumbnail(320, 200);
+    let rgba = image.to_rgba8();
+    Some(egui::ColorImage::from_rgba_unmultiplied(
+        [rgba.width() as usize, rgba.height() as usize],
+        rgba.as_raw(),
+    ))
 }
 
 #[cfg(test)]

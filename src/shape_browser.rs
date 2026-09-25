@@ -60,6 +60,13 @@ fn all_icons() -> &'static [Icon] {
     })
 }
 
+pub fn phosphor_char(name: &str) -> Option<char> {
+    crate::phosphor_map::ICONS
+        .iter()
+        .find(|(icon, _)| *icon == name)
+        .and_then(|(_, point)| char::from_u32(*point))
+}
+
 pub fn search(query: &str, lib: &str, limit: usize) -> Vec<Icon> {
     let q = query.trim().to_ascii_lowercase();
     let matching_libs: Vec<_> = libs()
@@ -1002,6 +1009,12 @@ fn tokenize(d: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn phosphor_names_have_a_preview_glyph() {
+        assert!(phosphor_char("star").is_some());
+        assert!(phosphor_char("not-a-real-icon").is_none());
+    }
 
     #[test]
     fn tokenize_simple() {
