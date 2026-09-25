@@ -122,6 +122,11 @@ pub enum PendingNav {
     Quit,
 }
 
+struct PendingSvgExport {
+    bytes: Vec<u8>,
+    warnings: Vec<String>,
+}
+
 pub enum Op {
     Create {
         from_center: bool,
@@ -392,6 +397,7 @@ pub struct Studio {
     pub last_input: Instant,
     pub last_swap: Option<Instant>,
     pub pending_nav: Option<PendingNav>,
+    pending_svg_export: Option<PendingSvgExport>,
     pub allow_close: bool,
     pub welcome_page: WelcomePage,
     pub startup_preferences: startup::Preferences,
@@ -586,6 +592,7 @@ impl Studio {
             last_input: Instant::now(),
             last_swap: None,
             pending_nav: None,
+            pending_svg_export: None,
             allow_close: false,
             welcome_page: WelcomePage::New,
             startup_preferences: startup::Preferences::default(),
@@ -3421,11 +3428,60 @@ impl Studio {
     pub fn export_animated_svg(&mut self) {
         self.end_deform(false);
         self.end_pixel_stroke(false);
+        let report = match crate::svg::animated_export(&self.doc) {
+            Ok(report) => report,
+            Err(error) => {
+                crate::telemetry::count("error.export");
+                self.status = format!("export failed: {error}");
+                return;
+            }
+        };
+        if report.warnings.is_empty() {
+            self.choose_animated_svg(report.svg.into_bytes(), Vec::new());
+            return;
+        }
+        self.status = report.warnings.join("; ");
+        self.pending_svg_export = Some(PendingSvgExport {
+            bytes: report.svg.into_bytes(),
+            warnings: report.warnings,
+        });
+    }
+
+    pub(crate) fn animated_svg_warnings(&self) -> &[String] {
+        match &self.pending_svg_export {
+            Some(pending) => pending.warnings.as_slice(),
+            None => &[],
+        }
+    }
+
+    pub(crate) fn resolve_animated_svg(&mut self, write: bool) {
+        let Some(pending) = self.pending_svg_export.take() else {
+            return;
+        };
+        if !write {
+            self.status = "Animated SVG export cancelled.".into();
+            return;
+        }
+        let PendingSvgExport { bytes, warnings } = pending;
+        self.choose_animated_svg(bytes, warnings);
+    }
+
+    fn choose_animated_svg(&mut self, bytes: Vec<u8>, warnings: Vec<String>) {
+        if self.file_dialog_pending() {
+            self.status = "A file chooser is already open.".into();
+            if !warnings.is_empty() {
+                self.pending_svg_export = Some(PendingSvgExport { bytes, warnings });
+            }
+            return;
+        }
         self.request_file_dialog(
             || crate::project::dialog_export("Animated SVG", "svg"),
-            |_, studio, path| {
-                let result = crate::svg::export_animated(&studio.doc).map(String::into_bytes);
-                studio.complete_export(&path, result);
+            move |_, studio, path| {
+                studio.complete_export(&path, Ok(bytes));
+                if !warnings.is_empty() && studio.status.starts_with("exported ") {
+                    let note = warnings.join("; ");
+                    studio.status = format!("{} · {note}", studio.status);
+                }
             },
         );
     }
