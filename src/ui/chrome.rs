@@ -125,10 +125,14 @@ fn zoom_corner(ui: &mut Ui, studio: &mut Studio) {
             studio.photo.view_scale = 1.0 / studio.photo.fit_scale.max(0.001);
             studio.photo.view_offset = eframe::egui::Vec2::ZERO;
         } else {
-            studio.zoom_by(
-                1.0 / studio.view.scale.max(0.001),
-                studio.canvas_zoom_anchor(),
-            );
+            let anchor = studio
+                .canvas_rect
+                .map(|rect| {
+                    let center = rect.center();
+                    Pt::new(center.x, center.y)
+                })
+                .unwrap_or(Pt::ZERO);
+            studio.zoom_by(1.0 / studio.view.scale.max(0.001), anchor);
         }
     }
     ui.label(
