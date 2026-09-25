@@ -13,7 +13,6 @@ import { ShortcutHud } from "../components/shortcut-hud";
 import { FeatureExplorer } from "../components/feature-explorer";
 import { Install } from "../components/install";
 import { MetricChips } from "../components/metric-chips";
-import { ProductHuntEmbed } from "../components/product-hunt-embed";
 import { FilePreview } from "../components/file-preview";
 import { Arrow, Shot } from "../components/studio-ui";
 import { useScrollMotion } from "../components/scroll-motion";
@@ -50,10 +49,9 @@ function Home() {
             </span>
           </p>
         </div>
-        <a className="text-link" href="#cloud">Watch the Omadesign Cloud announcement ↗</a>
-        <Install />
-        <ProductHuntEmbed />
+        <a className="text-link" href="#cloud">Explore Omadesign Cloud ↗</a>
         <MetricChips metrics={metrics} />
+        <Install />
       </section>
       <section className="hero-stage">
         <StudioCarousel selected={studio} onSelect={setStudio} />
