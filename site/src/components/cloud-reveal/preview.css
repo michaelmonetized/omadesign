@@ -1,0 +1,17 @@
+.cloud-dreamscape-preview { background: #10111a; color: #f5f1ff; font-family: var(--font-sans, "DM Sans", system-ui, sans-serif); }
+.cloud-dreamscape-preview * { box-sizing: border-box; }
+.dreamscape-product { position: relative; min-height: 100svh; padding: clamp(80px, 12vw, 180px) max(24px, calc((100vw - 1180px) / 2)); background: #10111a; }
+.dreamscape-eyebrow { margin: 0 0 26px; color: #c6f785; font-size: .75rem; letter-spacing: .14em; text-transform: uppercase; }
+.dreamscape-product h1 { max-width: 960px; margin: 0; font-size: clamp(2.75rem, 7vw, 6rem); line-height: 1.03; letter-spacing: -.065em; font-weight: 500; }
+.dreamscape-product-intro { max-width: 650px; margin: 30px 0 0; color: #bcb6ca; font-size: clamp(1rem, 2vw, 1.375rem); line-height: 1.6; }
+.dreamscape-product-links { display: flex; flex-wrap: wrap; gap: 18px 32px; margin-top: 36px; }
+.dreamscape-product a { display: inline-flex; align-items: center; gap: 18px; min-height: 44px; color: #e8e2f0; text-decoration: none; font-size: .875rem; }
+.dreamscape-product a:hover { color: #c6f785; text-decoration: underline; text-underline-offset: 6px; }
+.dreamscape-product a:focus-visible { outline: 2px solid #c6f785; outline-offset: 5px; }
+.dreamscape-product-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 44px; padding-block: clamp(70px, 10vw, 140px) 80px; }
+.dreamscape-product-details article { border-top: 1px solid #302b3c; padding-top: 24px; }
+.dreamscape-product-details span { color: #898293; font-size: .75rem; font-variant-numeric: tabular-nums; }
+.dreamscape-product-details h2 { margin: 34px 0 14px; font-size: 1.5rem; font-weight: 500; letter-spacing: -.03em; }
+.dreamscape-product-details p { max-width: 300px; margin: 0; color: #a8a0b6; font-size: .9375rem; line-height: 1.7; }
+.dreamscape-return { border-top: 1px solid #302b3c; padding-top: 20px; }
+@media (max-width: 650px) { .dreamscape-product-details { grid-template-columns: 1fr; gap: 36px; padding-block: 70px 60px; } .dreamscape-product-details h2 { margin-top: 20px; } .dreamscape-product-details p { max-width: none; } }

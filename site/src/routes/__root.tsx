@@ -8,6 +8,7 @@ import {
 import { CloudProvider } from "../cloud/provider";
 import { useEffect } from "react";
 import { ThemeProvider, useTheme } from "../theme";
+import { SectionRuler } from "../components/section-ruler";
 import { DISCORD, REPO, SITE_ORIGIN, sitePath } from "../site";
 import appCss from "../styles.css?url";
 
@@ -145,6 +146,7 @@ function Document() {
           </div>
         </header>
         <Outlet />
+        <SectionRuler />
         <footer className="site-footer">
           <div className="shell footer-top">
             <a className="wordmark" href={sitePath()}>

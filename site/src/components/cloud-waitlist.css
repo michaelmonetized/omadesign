@@ -1,13 +1,12 @@
-.cloud-takeover { position: fixed; inset: 0; width: 100%; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 0; border: 0; background: #0d091a; color: #f5f1ff; overflow: auto; color-scheme: dark; }
-.cloud-takeover::backdrop { background: #0d091a; }
-.cloud-takeover[open] .cloud-scene { animation: cloud-scene-in 1.8s cubic-bezier(.2,.7,.2,1) both; }
-.cloud-scene { position: relative; min-height: 100%; display: flex; flex-direction: column; isolation: isolate; }
-.cloud-film { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; z-index: -3; }
+.cloud-announcement { --cloud-scroll: 0; --cloud-nav-height: 0px; position: relative; height: calc(max(100svh, var(--cloud-content-height, 0px)) + 65svh); color: #f5f1ff; background: #0d091a; color-scheme: dark; font-family: var(--font-sans, "DM Sans", system-ui, sans-serif); }
+.cloud-announcement *, .cloud-announcement *::before, .cloud-announcement *::after { box-sizing: border-box; }
+.cloud-scene { position: sticky; top: var(--cloud-nav-height); height: calc(100svh - var(--cloud-nav-height)); min-height: 620px; display: flex; flex-direction: column; isolation: isolate; overflow: hidden; overflow-anchor: none; animation: cloud-scene-in 1.8s cubic-bezier(.2,.7,.2,1) both; }
+.cloud-stage { position: absolute; inset: 0; z-index: -3; pointer-events: none; }
 .cloud-shade { position: absolute; inset: 0; z-index: -2; background: linear-gradient(90deg, #090615d9 0%, #09061565 32%, #09061500 54%, #0906158c 100%), linear-gradient(0deg, #090615c9, #09061500 65%); }
 .cloud-topline, .cloud-controls { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 28px clamp(24px, 4vw, 76px); }
 .cloud-topline > span { font-size: 1rem; font-weight: 650; letter-spacing: -.04em; }
-.cloud-topline button, .cloud-controls button { font-size: .875rem; padding: 10px 0; color: #f5f1ff; min-height: 44px; }
-.cloud-topline button:hover, .cloud-controls button:hover { text-decoration: underline; text-underline-offset: 5px; }
+.cloud-topline a, .cloud-controls button { font-size: .875rem; padding: 10px 0; color: #f5f1ff; min-height: 44px; }
+.cloud-topline a:hover, .cloud-controls button:hover { text-decoration: underline; text-underline-offset: 5px; }
 .cloud-columns { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: end; column-gap: clamp(80px, 18vw, 380px); padding: 32px clamp(24px, 5vw, 96px) 30px; }
 .cloud-copy { max-width: 440px; }
 .cloud-copy h1 { font-size: clamp(3rem, 5.8vw, 6.5rem); line-height: .98; letter-spacing: -.065em; white-space: nowrap; }
@@ -18,7 +17,7 @@
 .cloud-feature-mark { font-size: 1.1rem; color: #d6ff80; padding-top: 1px; }
 .cloud-feature-stack h2 { font-size: clamp(1rem, 1.25vw, 1.25rem); font-weight: 550; line-height: 1.25; letter-spacing: -.02em; }
 .cloud-feature-stack p { font-size: .875rem; color: #d9d1e8; margin-top: 5px; line-height: 1.5; max-width: 330px; }
-.cloud-invitation { opacity: 0; transform: translateY(28px); transition: opacity 1.2s ease, transform 1.2s cubic-bezier(.2,.7,.2,1); pointer-events: none; padding-bottom: 35px; }
+.cloud-invitation { opacity: 0; transform: translateY(28px); transition: opacity .8s ease, transform .8s cubic-bezier(.2,.7,.2,1); pointer-events: none; padding-bottom: 35px; }
 .cloud-invitation[data-ready="true"] { opacity: 1; transform: none; pointer-events: auto; }
 .cloud-signup { position: relative; max-width: 520px; margin-left: auto; }
 .cloud-signup h2 { font-size: clamp(2rem, 3.4vw, 4rem); line-height: 1.05; letter-spacing: -.055em; margin-bottom: 28px; }
@@ -58,4 +57,18 @@
   .cloud-copy h1 { font-size: 2.4rem; }
   .cloud-signup h2 { font-size: 1.65rem; margin-bottom: 10px; }
 }
-@media (prefers-reduced-motion: reduce) { .cloud-takeover[open] .cloud-scene { animation: none; } .cloud-feature-stack li, .cloud-invitation { transition: none; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .cloud-scene { animation: none; } .cloud-feature-stack li, .cloud-invitation { transition: none; transform: none; } }
+
+/* Keep the original content motion. Native scrolling moves the whole scene away. */
+.cloud-topline, .cloud-columns, .cloud-controls { opacity: clamp(0, calc(1 - var(--cloud-scroll) * 1.65), 1); }
+.cloud-announcement[data-departed="true"] .cloud-topline,
+.cloud-announcement[data-departed="true"] .cloud-columns,
+.cloud-announcement[data-departed="true"] .cloud-controls { visibility: hidden; pointer-events: none; }
+.cloud-announcement a:focus-visible, .cloud-announcement button:focus-visible { outline: 2px solid #d6ff80; outline-offset: 5px; }
+@media (max-height: 700px) { .cloud-scene { position: relative; top: 0; height: auto; min-height: calc(100svh - var(--cloud-nav-height)); } }
+
+/* Preserve panel placement after removing the introductory chrome. */
+.cloud-topline { min-height: 100px; }
+.cloud-controls { min-height: 78px; justify-content: flex-end; }
+@media (max-height: 780px) and (min-width: 801px) { .cloud-topline { min-height: 68px; } }
+@media (max-width: 800px) { .cloud-topline { min-height: 60px; } .cloud-controls { min-height: 55px; } }

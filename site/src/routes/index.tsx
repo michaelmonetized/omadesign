@@ -32,7 +32,7 @@ function Home() {
   return (
     <main id="main" ref={motion}>
       <CloudIntro />
-      <section className="hero shell">
+      <section className="hero shell" id="omadesign-product">
         <div className="hero-heading">
           <RevealText
             as="h1"

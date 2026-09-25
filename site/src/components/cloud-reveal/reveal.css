@@ -1,0 +1,17 @@
+.cloud-reveal { position:absolute; inset:0; overflow:hidden; isolation:isolate; background:#080c20; pointer-events:none; }
+.cloud-reveal canvas,.dream-fallback { position:absolute; inset:0; width:100%; height:100%; }
+.cloud-reveal canvas { display:block; }
+.dream-fallback { background:radial-gradient(ellipse at 50% 45%,#32294199,transparent 55%),linear-gradient(#080c20,#1a1733); }
+.cloud-reveal[data-renderer="webgl"] .dream-fallback { display:none; }
+.cloud-reveal[data-renderer="fallback"] canvas { visibility:hidden; }
+.dream-lockup { position:absolute; inset:0; transform-origin:50% 40%; will-change:transform; pointer-events:none; }
+.dream-icon,.dream-wordmark { position:absolute; left:50%; top:40%; overflow:visible; transform:translate(-50%,-50%); pointer-events:none; }
+.dream-icon { width:var(--dream-mark-size,260px); height:var(--dream-mark-size,260px); color:#c7f779; opacity:0; filter:drop-shadow(0 0 12px #c1f88166); }
+.dream-wordmark { width:calc(var(--dream-mark-size,260px)*1.68); height:auto; filter:drop-shadow(0 1px 3px #132021cc) drop-shadow(0 0 8px #e4e0ff40); }
+.dream-fallback-clouds { position:absolute; inset:0; transform:translateY(calc((1 - var(--dream-rise,0))*-28% + var(--dream-exit,0)*-50%)); opacity:calc(1 - var(--dream-exit,0)); }
+.dream-fallback-clouds i { position:absolute; aspect-ratio:1.5; border-radius:50%; background:radial-gradient(ellipse at 38% 26%,#e1dff1 2%,#aca8cd 35%,#6b638f 65%,#39335700 74%); filter:blur(5px); animation:dream-cloud-drift 11s ease-in-out infinite alternate; }
+.dream-fallback-fireflies i { position:absolute; width:4px; height:4px; border-radius:50%; background:#ffe4a1; box-shadow:0 0 9px 3px #ffc95c77,0 0 22px 6px #eaa43b22; animation:dream-firefly-float 7s ease-in-out infinite alternate; }
+.cloud-reveal[data-motion="paused"] .dream-fallback i { animation-play-state:paused; }
+@keyframes dream-cloud-drift { to { transform:translate3d(7%,5%,0) scale(1.06); } }
+@keyframes dream-firefly-float { 0% {transform:translate3d(-8px,8px,0);opacity:.45} 60%{opacity:1}100%{transform:translate3d(16px,-24px,0);opacity:.65} }
+@media(prefers-reduced-motion:reduce) { .dream-fallback i {animation:none;} }
