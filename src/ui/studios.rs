@@ -60,6 +60,8 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                     if motion {
                         motion_studio(ui, studio);
                         section_gap(ui);
+                        transform_studio(ui, studio, true);
+                        section_gap(ui);
                     }
                     if reshaping {
                         super::deform::inspector(ui, studio);
@@ -642,6 +644,15 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
                     crate::geom::Pt::new(100., 100.),
                 )
             });
+        let rest = gradient.clone();
+        if studio.is_motion()
+            && let Some((_, id)) = studio.primary()
+        {
+            let offset = studio.live_pose(id).gradient_angle.unwrap_or(0.0);
+            if offset.abs() > 1e-3 {
+                gradient.set_angle(rest.angle(bounds) + offset, bounds);
+            }
+        }
         ui.push_id(
             if studio.fill_active {
                 "fill-gradient"
@@ -650,7 +661,24 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
             },
             |ui| {
                 if gradient_editor::editor(ui, &mut gradient, bounds) {
-                    apply_gradient(studio, Some(gradient));
+                    let angle_only = gradient.kind == rest.kind && gradient.stops == rest.stops;
+                    if studio.is_motion()
+                        && angle_only
+                        && let Some((_, id)) = studio.primary()
+                    {
+                        studio.key_prop(
+                            id,
+                            crate::motion::Prop::GradientAngle,
+                            gradient.angle(bounds) - rest.angle(bounds),
+                        );
+                    } else if studio.is_motion() {
+                        let mut next = rest.clone();
+                        next.stops = gradient.stops.clone();
+                        next.kind = gradient.kind;
+                        apply_gradient(studio, Some(next));
+                    } else {
+                        apply_gradient(studio, Some(gradient.clone()));
+                    }
                 }
             },
         );
@@ -1231,6 +1259,27 @@ fn motion_keys(ui: &mut Ui, studio: &mut Studio) {
             }
         }
     }
+    if let Some(shape) = studio
+        .doc
+        .find_shape(studio.primary().map(|p| p.0).unwrap_or(0), id)
+    {
+        let baked = if let crate::document::Fill::Gradient(gradient) = &shape.style.fill {
+            Some(gradient.clone())
+        } else {
+            shape
+                .style
+                .stroke
+                .as_ref()
+                .and_then(|stroke| stroke.gradient.clone())
+        };
+        if let Some(gradient) = baked {
+            let rest = gradient.angle(shape.geom.bbox());
+            let mut shown = rest + pose.gradient_angle.unwrap_or(0.0);
+            if inspector_slider(ui, "Gradient", &mut shown, -360.0..=360.0, "°") {
+                studio.key_prop(id, crate::motion::Prop::GradientAngle, shown - rest);
+            }
+        }
+    }
 }
 
 fn artboard_transform(ui: &mut Ui, studio: &mut Studio) {
@@ -1385,6 +1434,13 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
         return;
     };
     let bounds = shape.world_bbox();
+    let motion = studio.is_motion();
+    let pose = studio.live_pose(id);
+    let shown = if motion {
+        pose.map_bounds(bounds)
+    } else {
+        bounds
+    };
     let layout_frame = shape.layout.frame;
     let rotation = shape.rotation;
     let opacity = shape.opacity;
@@ -1405,26 +1461,71 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
         None
     };
     let compound = matches!(&shape.geom, Geom::Poly { contours, .. } if contours.len() > 1);
-    let mut x = bounds.min.x;
-    let mut y = bounds.min.y;
-    let mut width = bounds.width().max(1.0);
-    let mut height = bounds.height().max(1.0);
+    let mut x = shown.min.x;
+    let mut y = shown.min.y;
+    let mut width = shown.width().max(1.0);
+    let mut height = shown.height().max(1.0);
     let changed = bounds_fields(ui, &mut x, &mut y, &mut width, &mut height, 1.0);
     if changed {
-        let destination = crate::geom::Bounds {
-            min: crate::geom::Pt::new(x, y),
-            max: crate::geom::Pt::new(x + width, y + height),
-        };
-        if layout_frame {
-            studio.set_layout_frame_bounds(layer, id, destination);
+        if motion {
+            let dx = x - shown.min.x;
+            let dy = y - shown.min.y;
+            let sx = width / shown.width().max(1.0);
+            let sy = height / shown.height().max(1.0);
+            let mut after = studio.doc.motion.clone();
+            let t = studio.playhead;
+            if dx.abs() > 0.01 {
+                after.set_key(
+                    id,
+                    crate::motion::Prop::X,
+                    t,
+                    pose.dx + dx,
+                    crate::motion::Ease::EaseInOut,
+                );
+            }
+            if dy.abs() > 0.01 {
+                after.set_key(
+                    id,
+                    crate::motion::Prop::Y,
+                    t,
+                    pose.dy + dy,
+                    crate::motion::Ease::EaseInOut,
+                );
+            }
+            if (sx - 1.0).abs() > 0.001 || (sy - 1.0).abs() > 0.001 {
+                after.set_key(
+                    id,
+                    crate::motion::Prop::Scale,
+                    t,
+                    pose.scale * ((sx + sy) * 0.5),
+                    crate::motion::Ease::EaseInOut,
+                );
+            }
+            studio.commit_motion(after);
         } else {
-            edit_shape_geometry(studio, layer, id, |geometry| {
-                geometry.map_into(bounds, destination)
-            });
+            let destination = crate::geom::Bounds {
+                min: crate::geom::Pt::new(x, y),
+                max: crate::geom::Pt::new(x + width, y + height),
+            };
+            if layout_frame {
+                studio.set_layout_frame_bounds(layer, id, destination);
+            } else {
+                edit_shape_geometry(studio, layer, id, |geometry| {
+                    geometry.map_into(bounds, destination)
+                });
+            }
         }
     }
-    let mut degrees = rotation.to_degrees();
-    let mut opacity_percent = opacity * 100.0;
+    let mut degrees = if motion {
+        (rotation + pose.rotation).to_degrees()
+    } else {
+        rotation.to_degrees()
+    };
+    let mut opacity_percent = if motion {
+        pose.opacity.unwrap_or(opacity) * 100.0
+    } else {
+        opacity * 100.0
+    };
     let mut rotation_changed = false;
     let mut opacity_changed = false;
     ui.columns(2, |columns| {
@@ -1439,22 +1540,34 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
         );
     });
     if rotation_changed && let Some(shape) = studio.doc.find_shape(layer, id) {
-        studio.commit(crate::document::Cmd::SetGeom {
-            layer,
-            id,
-            before: shape.geom.clone(),
-            after: shape.geom.clone(),
-            rot_before: rotation,
-            rot_after: degrees.to_radians(),
-        });
+        if motion {
+            studio.key_prop(
+                id,
+                crate::motion::Prop::Rotation,
+                degrees.to_radians() - rotation,
+            );
+        } else {
+            studio.commit(crate::document::Cmd::SetGeom {
+                layer,
+                id,
+                before: shape.geom.clone(),
+                after: shape.geom.clone(),
+                rot_before: rotation,
+                rot_after: degrees.to_radians(),
+            });
+        }
     }
     if opacity_changed {
-        studio.commit(crate::document::Cmd::SetOpacity {
-            layer,
-            id,
-            before: opacity,
-            after: opacity_percent / 100.0,
-        });
+        if motion {
+            studio.key_prop(id, crate::motion::Prop::Opacity, opacity_percent / 100.0);
+        } else {
+            studio.commit(crate::document::Cmd::SetOpacity {
+                layer,
+                id,
+                before: opacity,
+                after: opacity_percent / 100.0,
+            });
+        }
     }
     let mut blend = original_blend;
     ui.horizontal(|ui| {

@@ -184,7 +184,19 @@ fn paint_timeline(ui: &mut Ui, studio: &mut Studio, rect: Rect, resp: &eframe::e
             rows.push((*id, shape_name(studio, *id)));
         }
     }
-    rows.truncate(((lane.height() / ROW).floor() as usize).max(1));
+    let visible = ((lane.height() / ROW).floor() as usize).max(1);
+    let max_scroll = rows.len().saturating_sub(visible);
+    if resp.hovered() {
+        let wheel = resp.ctx.input(|input| input.smooth_scroll_delta.y);
+        if wheel > 0.0 {
+            studio.timeline_scroll = studio.timeline_scroll.saturating_sub(1);
+        } else if wheel < 0.0 {
+            studio.timeline_scroll = studio.timeline_scroll.saturating_add(1);
+        }
+    }
+    studio.timeline_scroll = studio.timeline_scroll.min(max_scroll);
+    let start = studio.timeline_scroll;
+    let rows: Vec<(u64, String)> = rows.into_iter().skip(start).take(visible).collect();
 
     studio.forget_stale_key();
     let mut clicked_key: Option<(u64, Prop, usize)> = None;
@@ -362,6 +374,7 @@ fn prop_color(p: Prop) -> Color32 {
         Prop::Opacity => Color32::from_rgb(0xF5, 0xC2, 0xE7),
         Prop::StrokeReveal => accent(),
         Prop::FillReveal => fg(),
+        Prop::GradientAngle => Color32::from_rgb(0x94, 0xE2, 0xD5),
     }
 }
 

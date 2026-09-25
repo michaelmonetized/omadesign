@@ -309,6 +309,8 @@ pub struct Studio {
     pub photo: PhotoSession,
     pub status: String,
     pub cursor: Option<Pt>,
+    /// Rows scrolled off the top of the motion timeline.
+    pub timeline_scroll: usize,
     pub canvas_rect: Option<Rect>,
     pub need_fit: bool,
     pub export_scale: u32,
@@ -502,6 +504,7 @@ impl Studio {
             photo: PhotoSession::new(),
             status: "Welcome home. V to move, R for a rectangle, B to paint, or open Photo.".into(),
             cursor: None,
+            timeline_scroll: 0,
             canvas_rect: None,
             need_fit: true,
             export_scale: 1,
@@ -1274,6 +1277,9 @@ impl Studio {
             }
             if let Some(reveal) = pose.fill_reveal {
                 after.set_key(id, Prop::FillReveal, t, reveal, ease);
+            }
+            if let Some(angle) = pose.gradient_angle {
+                after.set_key(id, Prop::GradientAngle, t, angle, ease);
             }
         }
         self.commit_motion(after);

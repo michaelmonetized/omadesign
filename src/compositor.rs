@@ -627,6 +627,22 @@ pub(crate) fn item_alpha(
     Some(pm.pixels().iter().map(|p| p.alpha()).collect())
 }
 
+/// Rotate a shape's gradient by `offset` degrees. The saved design stays put.
+fn tilt_gradient(shape: &mut Shape, offset: f32) {
+    let bounds = shape.geom.bbox();
+    if let Fill::Gradient(gradient) = &mut shape.style.fill {
+        let rest = gradient.angle(bounds);
+        gradient.set_angle(rest + offset, bounds);
+        return;
+    }
+    if let Some(stroke) = &mut shape.style.stroke
+        && let Some(gradient) = &mut stroke.gradient
+    {
+        let rest = gradient.angle(bounds);
+        gradient.set_angle(rest + offset, bounds);
+    }
+}
+
 fn draw_shape_masked(
     pm: &mut Pixmap,
     shape: &Shape,
@@ -636,6 +652,15 @@ fn draw_shape_masked(
     pose: Pose,
     mask: Option<&tiny_skia::Mask>,
 ) {
+    let angled;
+    let shape = if let Some(offset) = pose.gradient_angle.filter(|offset| offset.abs() > 1e-3) {
+        let mut owned = shape.clone();
+        tilt_gradient(&mut owned, offset);
+        angled = owned;
+        &angled
+    } else {
+        shape
+    };
     let own_mask = object_mask(pm, shape, t, pose, mask);
     let mask = own_mask.as_ref().or(mask);
     let alpha = pose.opacity.unwrap_or(shape.opacity).clamp(0.0, 1.0);
@@ -1176,6 +1201,46 @@ mod tests {
         );
         assert!(pixels.pixel(75, 15).unwrap().alpha() > 200);
         assert_eq!(pixels.pixel(15, 15).unwrap().alpha(), 0);
+    }
+
+    #[test]
+    fn gradient_angle_offset_turns_the_fill() {
+        let shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(10.0, 10.0),
+                size: Pt::new(40.0, 40.0),
+                radius: 0.0,
+            },
+            Style {
+                fill: Fill::Gradient(crate::gradient::Gradient::new(
+                    crate::gradient::GradientKind::Linear,
+                    Rgba::rgb(255, 0, 0),
+                    Rgba::rgb(0, 0, 255),
+                )),
+                stroke: None,
+            },
+        );
+        let render = |offset: Option<f32>| {
+            let mut pixels = Pixmap::new(80, 80).unwrap();
+            draw_shape(
+                &mut pixels,
+                &shape,
+                Transform::identity(),
+                1.0,
+                tiny_skia::BlendMode::SourceOver,
+                Pose {
+                    gradient_angle: offset,
+                    ..Pose::identity()
+                },
+            );
+            pixels
+        };
+        let flat = render(None);
+        let turned = render(Some(180.0));
+        let left = flat.pixel(14, 30).unwrap();
+        let left_turned = turned.pixel(14, 30).unwrap();
+        assert!(left.red() > left.blue());
+        assert!(left_turned.blue() > left_turned.red());
     }
 
     #[test]

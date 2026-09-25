@@ -1,6 +1,6 @@
 //! Motion clip: rest pose stays in the document, view pose is evaluated at t.
 //!
-//! Tracks are offsets from rest (X/Y/rotation) or absolute (scale, opacity).
+//! Tracks are offsets from rest (X/Y/rotation/gradient angle) or absolute (scale, opacity).
 //! Animated SVG is CSS @keyframes. Lottie is the Bodymovin 5.x shape subset.
 
 use crate::color::Rgba;
@@ -19,6 +19,7 @@ pub enum Prop {
     Opacity,
     StrokeReveal,
     FillReveal,
+    GradientAngle,
 }
 
 impl Prop {
@@ -31,6 +32,7 @@ impl Prop {
             Prop::Opacity => "Opacity",
             Prop::StrokeReveal => "Draw stroke",
             Prop::FillReveal => "Fill reveal",
+            Prop::GradientAngle => "Gradient",
         }
     }
 
@@ -38,11 +40,12 @@ impl Prop {
         match self {
             Prop::Scale => 1.0,
             Prop::Opacity | Prop::StrokeReveal | Prop::FillReveal => 1.0,
+            Prop::GradientAngle => 0.0,
             _ => 0.0,
         }
     }
 
-    pub fn all() -> [Prop; 7] {
+    pub fn all() -> [Prop; 8] {
         [
             Prop::X,
             Prop::Y,
@@ -51,6 +54,7 @@ impl Prop {
             Prop::Opacity,
             Prop::StrokeReveal,
             Prop::FillReveal,
+            Prop::GradientAngle,
         ]
     }
 }
@@ -145,6 +149,7 @@ pub struct Pose {
     pub opacity: Option<f32>,
     pub stroke_reveal: Option<f32>,
     pub fill_reveal: Option<f32>,
+    pub gradient_angle: Option<f32>,
 }
 
 impl Pose {
@@ -157,6 +162,7 @@ impl Pose {
             opacity: None,
             stroke_reveal: None,
             fill_reveal: None,
+            gradient_angle: None,
         }
     }
 
@@ -168,6 +174,7 @@ impl Pose {
             && self.opacity.is_none()
             && self.stroke_reveal.is_none()
             && self.fill_reveal.is_none()
+            && self.gradient_angle.is_none()
     }
 
     pub fn map(self, center: Pt, p: Pt) -> Pt {
@@ -238,6 +245,7 @@ impl Motion {
             opacity: self.value(shape, Prop::Opacity, t),
             stroke_reveal: self.value(shape, Prop::StrokeReveal, t),
             fill_reveal: self.value(shape, Prop::FillReveal, t),
+            gradient_angle: self.value(shape, Prop::GradientAngle, t),
         }
     }
 
@@ -1310,6 +1318,14 @@ mod tests {
         m.remove_key(3, Prop::Y, 0);
         assert_eq!(m.key_after_remove(3, Prop::Y, 0), None);
         assert!(!m.has_shape(3));
+    }
+
+    #[test]
+    fn gradient_angle_is_a_key_on_the_pose() {
+        let mut motion = Motion::default();
+        motion.set_key(7, Prop::GradientAngle, 1.0, 90.0, Ease::Linear);
+        assert!(motion.pose(7, 0.0).gradient_angle.unwrap().abs() < 0.01);
+        assert!((motion.pose(7, 1.0).gradient_angle.unwrap() - 90.0).abs() < 0.01);
     }
 
     #[test]
