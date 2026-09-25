@@ -731,7 +731,8 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
 }
 
 pub(super) fn poll_screen_pick(ctx: &eframe::egui::Context, studio: &mut Studio) {
-    let tick = crate::screen_pick::sync(studio.tool == Tool::Eyedropper);
+    let for_picker = super::color_picker::sample_request(ctx).is_some();
+    let tick = crate::screen_pick::sync(studio.tool == Tool::Eyedropper || for_picker);
     if tick.live {
         ctx.request_repaint_after(std::time::Duration::from_millis(80));
     }
@@ -740,8 +741,19 @@ pub(super) fn poll_screen_pick(ctx: &eframe::egui::Context, studio: &mut Studio)
     }
     if let Some(result) = tick.finished {
         match result {
+            Ok(color) if for_picker => {
+                super::color_picker::finish_sample(ctx, color);
+                crate::screen_pick::stop();
+                studio.push_recent(color);
+                studio.status = format!("sampled screen {}", color.hex());
+            }
             Ok(color) => studio.take_sampled(color, true),
-            Err(error) => studio.status = error,
+            Err(error) => {
+                if for_picker {
+                    super::color_picker::clear_sample(ctx);
+                }
+                studio.status = error;
+            }
         }
     }
 }

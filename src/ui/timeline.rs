@@ -379,6 +379,9 @@ fn prop_color(p: Prop) -> Color32 {
         Prop::Height => Color32::from_rgb(0xA6, 0xD1, 0x89),
         Prop::StrokeWidth => Color32::from_rgb(0xE6, 0xC3, 0x84),
         Prop::Fill => Color32::from_rgb(0xF3, 0x8B, 0xA8),
+        Prop::Dash => Color32::from_rgb(0xBA, 0xC2, 0xDE),
+        Prop::Gap => Color32::from_rgb(0x93, 0x9A, 0xB7),
+        Prop::DashLength => Color32::from_rgb(0x7A, 0xA2, 0xF7),
     }
 }
 

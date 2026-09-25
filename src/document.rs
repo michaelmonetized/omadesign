@@ -143,6 +143,9 @@ pub struct Stroke {
     pub cap: Cap,
     pub join: Join,
     pub dash: Option<(f32, f32)>,
+    /// How far the dash pattern slides along the stroke, in pixels.
+    #[serde(default)]
+    pub dash_offset: f32,
 }
 
 impl Default for Stroke {
@@ -155,6 +158,7 @@ impl Default for Stroke {
             cap: Cap::Round,
             join: Join::Round,
             dash: None,
+            dash_offset: 0.0,
         }
     }
 }

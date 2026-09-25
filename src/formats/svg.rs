@@ -510,7 +510,6 @@ impl Reader<'_> {
                 || s.linejoin() == usvg::LineJoin::Miter
                     && (s.miterlimit().get() - 4.).abs() > 0.001
                 || s.dasharray().is_some_and(|a| a.len() != 2)
-                || s.dashoffset().abs() > 0.01
             {
                 return Ok(false);
             }
@@ -530,6 +529,7 @@ impl Reader<'_> {
                     _ => Join::Miter,
                 },
                 dash: s.dasharray().map(|a| (a[0] * sx, a[1] * sx)),
+                dash_offset: s.dashoffset() * sx,
             })
         } else {
             None

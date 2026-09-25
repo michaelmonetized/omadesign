@@ -29,7 +29,7 @@ pub fn expand(shape: &Shape) -> Option<Geom> {
     let path = shape.get_cached_path(96)?;
     let dashed = match stroke
         .dash
-        .and_then(|(on, off)| StrokeDash::new(vec![on, off], 0.0))
+        .and_then(|(on, off)| StrokeDash::new(vec![on, off], stroke.dash_offset))
     {
         Some(dash) => Some(path.dash(&dash, 1.0)?),
         None => None,

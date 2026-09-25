@@ -1,7 +1,53 @@
 //! One alpha-capable picker for artwork, paint, gradients and effect colors.
 use crate::color::Rgba;
+use crate::ui::icons::{self, ph};
 use eframe::egui::{self, Color32, Id, Popup, PopupCloseBehavior, Sense, Ui, vec2};
 use std::hash::Hash;
+
+const SAMPLE_REQUEST: &str = "color-picker-sample";
+const SAMPLE_RESULT: &str = "color-picker-sample-result";
+
+/// The open color picker that asked for the next screen pixel, if any.
+pub(crate) fn sample_request(ctx: &egui::Context) -> Option<Id> {
+    ctx.data(|data| data.get_temp::<Id>(Id::new(SAMPLE_REQUEST)))
+        .filter(|id| *id != Id::NULL)
+}
+
+/// Hand a screen pixel back to the picker that asked for it.
+pub(crate) fn finish_sample(ctx: &egui::Context, color: Rgba) {
+    let Some(id) = sample_request(ctx) else {
+        return;
+    };
+    ctx.data_mut(|data| {
+        data.insert_temp(Id::new(SAMPLE_REQUEST), Id::NULL);
+        data.insert_temp(Id::new(SAMPLE_RESULT), (id, color));
+    });
+}
+
+/// Drop a cancelled screen sample.
+pub(crate) fn clear_sample(ctx: &egui::Context) {
+    ctx.data_mut(|data| {
+        data.insert_temp(Id::new(SAMPLE_REQUEST), Id::NULL);
+        data.insert_temp(Id::new(SAMPLE_RESULT), (Id::NULL, Rgba::TRANSPARENT));
+    });
+}
+
+fn take_sample(ctx: &egui::Context, id: Id) -> Option<Rgba> {
+    let hit = ctx.data(|data| data.get_temp::<(Id, Rgba)>(Id::new(SAMPLE_RESULT)));
+    let Some((who, color)) = hit else {
+        return None;
+    };
+    if who != id || who == Id::NULL {
+        return None;
+    }
+    ctx.data_mut(|data| data.insert_temp(Id::new(SAMPLE_RESULT), (Id::NULL, Rgba::TRANSPARENT)));
+    Some(color)
+}
+
+fn request_sample(ctx: &egui::Context, id: Id) {
+    ctx.data_mut(|data| data.insert_temp(Id::new(SAMPLE_REQUEST), id));
+    crate::screen_pick::rearm();
+}
 
 #[derive(Clone)]
 struct PickerState {
@@ -52,6 +98,11 @@ pub(crate) fn color_edit(ui: &mut Ui, salt: impl Hash + std::fmt::Debug, color: 
         state.hsv = egui::ecolor::Hsva::from_srgba_unmultiplied(color.to_array());
     }
     let before = *color;
+    if let Some(sampled) = take_sample(ui.ctx(), id) {
+        *color = sampled;
+        state.hsv = egui::ecolor::Hsva::from_srgba_unmultiplied(color.to_array());
+        state.last = sampled;
+    }
     let response = chip(ui, *color, vec2(26.0, 22.0))
         .on_hover_text(format!("{} · Edit color and alpha", color.hex()));
     if response.clicked() && !Popup::is_id_open(ui.ctx(), popup) {
@@ -94,21 +145,91 @@ fn picker_contents(ui: &mut Ui, id: Id, color: &mut Rgba, state: &mut PickerStat
     ) {
         *color = Rgba::from_array(state.hsv.to_srgba_unmultiplied());
     }
-    let text_id = id.with("hex");
-    let mut hex = ui
-        .data(|data| data.get_temp::<(Rgba, String)>(text_id))
+    ui.horizontal(|ui| {
+        ui.label("Hex");
+        if hex_field(ui, id.with("hex"), color, 0.0, true) {
+            state.hsv = egui::ecolor::Hsva::from_srgba_unmultiplied(color.to_array());
+        }
+        if icons::tiny_icon(ui, ph::EYEDROPPER, "Sample a screen pixel", false) {
+            request_sample(ui.ctx(), id);
+        }
+    });
+}
+
+/// Hex text with copy, paste, and keyboard clipboard while the field is focused.
+pub(crate) fn hex_field(
+    ui: &mut Ui,
+    id: Id,
+    color: &mut Rgba,
+    reserve: f32,
+    buttons: bool,
+) -> bool {
+    let mut text = ui
+        .data(|data| data.get_temp::<(Rgba, String)>(id))
         .filter(|(source, _)| source == color)
         .map(|(_, text)| text)
         .unwrap_or_else(|| color.hex());
-    ui.horizontal(|ui| {
-        ui.label("Hex / RGBA");
-        let response = ui.add(egui::TextEdit::singleline(&mut hex).desired_width(120.0));
-        if response.changed()
-            && let Some(parsed) = Rgba::parse_hex(&hex)
+    let mut changed = false;
+    let button_reserve = if buttons { 52.0 } else { 0.0 };
+    let width = (ui.available_width() - reserve - button_reserve).clamp(28.0, 120.0);
+    let response = ui.add(
+        egui::TextEdit::singleline(&mut text)
+            .id(id.with("edit"))
+            .desired_width(width)
+            .hint_text("#RRGGBB"),
+    );
+    if response.changed()
+        && let Some(parsed) = Rgba::parse_hex(&text)
+    {
+        *color = parsed;
+        text = color.hex();
+        changed = true;
+    }
+    if response.has_focus() {
+        let paste = ui.input(|input| {
+            input.events.iter().find_map(|event| match event {
+                egui::Event::Paste(text) => Some(text.clone()),
+                _ => None,
+            })
+        });
+        let copy = ui.input(|input| {
+            input.events.iter().any(|event| matches!(event, egui::Event::Copy))
+                || input
+                    .events
+                    .iter()
+                    .any(|event| matches!(event, egui::Event::Key { key: egui::Key::C, pressed: true, modifiers, .. } if modifiers.command || modifiers.ctrl))
+        });
+        if copy {
+            ui.ctx().copy_text(if text.is_empty() {
+                color.hex()
+            } else {
+                text.clone()
+            });
+        }
+        if let Some(raw) = paste
+            && let Some(parsed) = Rgba::parse_hex(raw.trim())
         {
             *color = parsed;
-            state.hsv = egui::ecolor::Hsva::from_srgba_unmultiplied(color.to_array());
+            text = color.hex();
+            changed = true;
         }
-    });
-    ui.data_mut(|data| data.insert_temp(text_id, (*color, hex)));
+    }
+    if buttons {
+        if icons::tiny_icon(ui, ph::COPY, "Copy hex", false) {
+            ui.ctx().copy_text(color.hex());
+        }
+        if ui
+            .add_sized([22.0, 22.0], egui::Button::new("↓").small())
+            .on_hover_text("Paste hex")
+            .clicked()
+            && let Ok(crate::clipboard::ClipboardContent::Text(raw)) = crate::clipboard::read()
+            && let Some(parsed) = Rgba::parse_hex(raw.trim())
+        {
+            *color = parsed;
+            text = color.hex();
+            changed = true;
+        }
+    }
+    ui.data_mut(|data| data.insert_temp(id, (*color, text)));
+    changed
 }

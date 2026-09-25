@@ -635,9 +635,18 @@ fn posed_paint(shape: &mut Shape, pose: Pose) {
     if let Some(color) = pose.fill_color {
         recolor_fill(&mut shape.style.fill, color);
     }
-    if let Some(extra) = pose.stroke_width.filter(|extra| extra.abs() > 1e-3) {
-        if let Some(stroke) = &mut shape.style.stroke {
+    if let Some(stroke) = &mut shape.style.stroke {
+        if let Some(extra) = pose.stroke_width.filter(|extra| extra.abs() > 1e-3) {
             stroke.width = (stroke.width + extra).max(0.0);
+        }
+        if pose.dash.is_some() || pose.gap.is_some() || pose.dash_length.is_some() {
+            let (on, off) = stroke.dash.unwrap_or((0.0, 0.0));
+            let on = (on + pose.dash.unwrap_or(0.0)).max(0.0);
+            let off = (off + pose.gap.unwrap_or(0.0)).max(0.0);
+            if on > 0.05 || off > 0.05 {
+                stroke.dash = Some((on, off));
+            }
+            stroke.dash_offset += pose.dash_length.unwrap_or(0.0);
         }
     }
 }
@@ -687,6 +696,9 @@ fn draw_shape_masked(
         .is_some_and(|offset| offset.abs() > 1e-3)
         || pose.fill_color.is_some()
         || pose.stroke_width.is_some_and(|extra| extra.abs() > 1e-3)
+        || pose.dash.is_some()
+        || pose.gap.is_some()
+        || pose.dash_length.is_some()
     {
         let mut owned = shape.clone();
         posed_paint(&mut owned, pose);
@@ -929,7 +941,7 @@ fn draw_shape_inner(
             ..SkStroke::default()
         };
         if let Some((on, off)) = stroke.dash {
-            sk.dash = StrokeDash::new(vec![on, off], 0.0);
+            sk.dash = StrokeDash::new(vec![on, off], stroke.dash_offset);
         }
         let aligned =
             shape.geom.is_closed() && stroke.alignment != crate::document::StrokeAlignment::Center;

@@ -95,6 +95,7 @@ impl State {
                 cap: Cap::Butt,
                 join: Join::Miter,
                 dash: None,
+                dash_offset: 0.0,
             },
             fill_alpha: 1.,
             stroke_alpha: 1.,

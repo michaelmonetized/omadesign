@@ -25,6 +25,9 @@ pub enum Prop {
     Height,
     StrokeWidth,
     Fill,
+    Dash,
+    Gap,
+    DashLength,
 }
 
 impl Prop {
@@ -42,6 +45,9 @@ impl Prop {
             Prop::Height => "Height",
             Prop::StrokeWidth => "Stroke width",
             Prop::Fill => "Fill",
+            Prop::Dash => "Dash",
+            Prop::Gap => "Gap",
+            Prop::DashLength => "Dash length",
         }
     }
 
@@ -49,12 +55,17 @@ impl Prop {
         match self {
             Prop::Scale | Prop::Width | Prop::Height => 1.0,
             Prop::Opacity | Prop::StrokeReveal | Prop::FillReveal => 1.0,
-            Prop::GradientAngle | Prop::StrokeWidth | Prop::Fill => 0.0,
+            Prop::GradientAngle
+            | Prop::StrokeWidth
+            | Prop::Fill
+            | Prop::Dash
+            | Prop::Gap
+            | Prop::DashLength => 0.0,
             _ => 0.0,
         }
     }
 
-    pub fn all() -> [Prop; 12] {
+    pub fn all() -> [Prop; 15] {
         [
             Prop::X,
             Prop::Y,
@@ -68,6 +79,9 @@ impl Prop {
             Prop::Height,
             Prop::StrokeWidth,
             Prop::Fill,
+            Prop::Dash,
+            Prop::Gap,
+            Prop::DashLength,
         ]
     }
 }
@@ -196,6 +210,12 @@ pub struct Pose {
     pub stroke_width: Option<f32>,
     /// Replaces the designed fill color while this key is active.
     pub fill_color: Option<Rgba>,
+    /// Added to the designed dash length, in pixels.
+    pub dash: Option<f32>,
+    /// Added to the designed gap length, in pixels.
+    pub gap: Option<f32>,
+    /// Added to the designed dash offset, in pixels.
+    pub dash_length: Option<f32>,
 }
 
 impl Pose {
@@ -213,6 +233,9 @@ impl Pose {
             gradient_angle: None,
             stroke_width: None,
             fill_color: None,
+            dash: None,
+            gap: None,
+            dash_length: None,
         }
     }
 
@@ -229,6 +252,9 @@ impl Pose {
             && self.gradient_angle.is_none()
             && self.stroke_width.is_none()
             && self.fill_color.is_none()
+            && self.dash.is_none()
+            && self.gap.is_none()
+            && self.dash_length.is_none()
     }
 
     pub fn map(self, center: Pt, p: Pt) -> Pt {
@@ -314,6 +340,9 @@ impl Motion {
             gradient_angle: self.value(shape, Prop::GradientAngle, t),
             stroke_width: self.value(shape, Prop::StrokeWidth, t),
             fill_color: self.color_value(shape, Prop::Fill, t),
+            dash: self.value(shape, Prop::Dash, t),
+            gap: self.value(shape, Prop::Gap, t),
+            dash_length: self.value(shape, Prop::DashLength, t),
         }
     }
 
@@ -1237,6 +1266,7 @@ fn layer_geom(layer: &Value) -> Option<(Geom, Fill, Option<Stroke>)> {
                             cap: Cap::Round,
                             join: Join::Round,
                             dash: None,
+                            dash_offset: 0.0,
                         });
                     }
                 }
@@ -1484,6 +1514,22 @@ mod tests {
         motion.set_key(1, Prop::StrokeWidth, 1.0, 12.0, Ease::Linear);
         assert!(motion.pose(1, 0.0).stroke_width.unwrap().abs() < 0.01);
         assert!((motion.pose(1, 1.0).stroke_width.unwrap() - 12.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn dash_array_and_length_key_apart() {
+        let mut motion = Motion::default();
+        motion.set_key(1, Prop::Dash, 1.0, 8.0, Ease::Linear);
+        motion.set_key(1, Prop::Gap, 1.0, 4.0, Ease::Linear);
+        motion.set_key(1, Prop::DashLength, 1.0, 3.0, Ease::Linear);
+        let start = motion.pose(1, 0.0);
+        assert!(start.dash.unwrap().abs() < 0.01);
+        assert!(start.gap.unwrap().abs() < 0.01);
+        assert!(start.dash_length.unwrap().abs() < 0.01);
+        let end = motion.pose(1, 1.0);
+        assert!((end.dash.unwrap() - 8.0).abs() < 0.01);
+        assert!((end.gap.unwrap() - 4.0).abs() < 0.01);
+        assert!((end.dash_length.unwrap() - 3.0).abs() < 0.01);
     }
 
     #[test]

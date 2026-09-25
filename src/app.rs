@@ -1289,6 +1289,15 @@ impl Studio {
             if let Some(color) = pose.fill_color {
                 after.set_color_key(id, t, color, ease);
             }
+            if let Some(extra) = pose.dash {
+                after.set_key(id, Prop::Dash, t, extra, ease);
+            }
+            if let Some(extra) = pose.gap {
+                after.set_key(id, Prop::Gap, t, extra, ease);
+            }
+            if let Some(extra) = pose.dash_length {
+                after.set_key(id, Prop::DashLength, t, extra, ease);
+            }
         }
         self.commit_motion(after);
         self.status = format!("keyed at {:.2}s", t);
@@ -3709,6 +3718,7 @@ impl Studio {
                     cap: Self::cap_from_svg(el.stroke_cap.as_deref()),
                     join: Self::join_from_svg(el.stroke_join.as_deref()),
                     dash: None,
+                    dash_offset: 0.0,
                 }),
                 crate::shape_browser::SvgPaint::Unspecified if el.stroke_width > 0.05 => {
                     Some(Stroke {
@@ -3719,6 +3729,7 @@ impl Studio {
                         cap: Self::cap_from_svg(el.stroke_cap.as_deref()),
                         join: Self::join_from_svg(el.stroke_join.as_deref()),
                         dash: None,
+                        dash_offset: 0.0,
                     })
                 }
                 crate::shape_browser::SvgPaint::Unspecified => None,

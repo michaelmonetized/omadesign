@@ -83,6 +83,7 @@ fn white_stroke() -> Style {
             cap: Cap::Square,
             join: Join::Miter,
             dash: None,
+            dash_offset: 0.0,
         }),
     }
 }
@@ -221,6 +222,7 @@ fn guide_shape() -> Shape {
                 cap: Cap::Butt,
                 join: Join::Miter,
                 dash: None,
+                dash_offset: 0.0,
             }),
         },
     );

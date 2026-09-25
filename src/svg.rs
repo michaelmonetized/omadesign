@@ -388,7 +388,14 @@ fn write_shape(
         Some(s) if s.width > 0.0 => {
             let dash = s
                 .dash
-                .map(|(a, b)| format!(" stroke-dasharray=\"{a} {b}\""))
+                .map(|(a, b)| {
+                    let offset = if s.dash_offset.abs() > 0.01 {
+                        format!(" stroke-dashoffset=\"{:.2}\"", s.dash_offset)
+                    } else {
+                        String::new()
+                    };
+                    format!(" stroke-dasharray=\"{a} {b}\"{offset}")
+                })
                 .unwrap_or_default();
             format!(
                 " stroke=\"{}\" stroke-width=\"{:.2}\" stroke-linecap=\"{}\" stroke-linejoin=\"{}\"{dash}",

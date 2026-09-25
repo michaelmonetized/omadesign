@@ -4,7 +4,7 @@ mod gradient_editor;
 use super::layer_drag;
 
 use crate::app::Studio;
-use crate::color::{Blend, Rgba};
+use crate::color::Blend;
 use crate::document::{Cap, Fill, Join, Stroke as DocStroke};
 use crate::geom::Geom;
 use crate::tools::{Persona, Tool};
@@ -432,7 +432,6 @@ fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
     {
         color = keyed;
     }
-    let shown = Some(color);
     let mut changed = false;
     let mut remove = false;
     let label = if fill { "Fill" } else { "Stroke" };
@@ -467,28 +466,16 @@ fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
                         changed = true;
                         studio.fill_active = fill;
                     }
-                    let input_id = ui.make_persistent_id(("hex", studio.primary()));
-                    let mut hex = ui
-                        .data(|d| d.get_temp::<(Option<Rgba>, String)>(input_id))
-                        .filter(|(source, _)| *source == shown)
-                        .map(|(_, text)| text)
-                        .unwrap_or_else(|| shown.map(|c| c.hex()).unwrap_or_default());
-                    let field_width = (ui.available_width() - 94.0).max(28.0);
-                    let response = ui.add(
-                        eframe::egui::TextEdit::singleline(&mut hex)
-                            .id(input_id)
-                            .desired_width(field_width)
-                            .font(eframe::egui::TextStyle::Small)
-                            .frame(Frame::NONE)
-                            .hint_text("None"),
-                    );
-                    if response.lost_focus()
-                        && let Some(value) = Rgba::parse_hex(&hex)
-                    {
-                        changed |= shown != Some(value);
-                        color = value;
+                    if crate::ui::color_picker::hex_field(
+                        ui,
+                        ui.id().with(("appearance-hex", fill, studio.primary())),
+                        &mut color,
+                        96.0,
+                        false,
+                    ) {
+                        changed = true;
+                        studio.fill_active = fill;
                     }
-                    ui.data_mut(|d| d.insert_temp(input_id, (shown, hex)));
                     let mut opacity = f32::from(color.a) / 255.0 * 100.0;
                     if ui
                         .add(
@@ -865,7 +852,48 @@ fn stroke_studio(ui: &mut Ui, studio: &mut Studio) {
     let mut dashed = stroke.dash.is_some();
     if ui.checkbox(&mut dashed, "Dashed line").changed() {
         stroke.dash = if dashed { Some((6.0, 4.0)) } else { None };
+        if !dashed {
+            stroke.dash_offset = 0.0;
+        }
         changed = true;
+    }
+    if dashed {
+        let (rest_dash, rest_gap) = stroke.dash.unwrap_or((6.0, 4.0));
+        let mut dash = rest_dash;
+        let mut gap = rest_gap;
+        let mut length = stroke.dash_offset;
+        if studio.is_motion()
+            && let Some((_, id)) = studio.primary()
+        {
+            let pose = studio.live_pose(id);
+            dash += pose.dash.unwrap_or(0.0);
+            gap += pose.gap.unwrap_or(0.0);
+            length += pose.dash_length.unwrap_or(0.0);
+        }
+        let dash_changed = number_field(ui, "Dash", &mut dash, 0.0..=10_000.0, " px");
+        let gap_changed = number_field(ui, "Gap", &mut gap, 0.0..=10_000.0, " px");
+        let length_changed = number_field(ui, "Length", &mut length, -10_000.0..=10_000.0, " px");
+        if studio.is_motion()
+            && let Some((_, id)) = studio.primary()
+        {
+            if dash_changed {
+                studio.key_prop(id, crate::motion::Prop::Dash, dash - rest_dash);
+            }
+            if gap_changed {
+                studio.key_prop(id, crate::motion::Prop::Gap, gap - rest_gap);
+            }
+            if length_changed {
+                studio.key_prop(
+                    id,
+                    crate::motion::Prop::DashLength,
+                    length - stroke.dash_offset,
+                );
+            }
+        } else if dash_changed || gap_changed || length_changed {
+            stroke.dash = Some((dash, gap));
+            stroke.dash_offset = length;
+            changed = true;
+        }
     }
     if changed {
         studio.style.stroke = if stroke.width <= 0.01 {
@@ -1307,25 +1335,47 @@ fn motion_keys(ui: &mut Ui, studio: &mut Studio) {
             }
         }
     }
-    if let Some(shape) = studio
+    let paint = studio
         .doc
         .find_shape(studio.primary().map(|p| p.0).unwrap_or(0), id)
+        .map(|shape| {
+            let gradient = match &shape.style.fill {
+                crate::document::Fill::Gradient(gradient) => {
+                    Some(gradient.angle(shape.geom.bbox()))
+                }
+                _ => shape
+                    .style
+                    .stroke
+                    .as_ref()
+                    .and_then(|stroke| stroke.gradient.as_ref())
+                    .map(|gradient| gradient.angle(shape.geom.bbox())),
+            };
+            let dash = shape.style.stroke.as_ref().map(|stroke| {
+                let (on, off) = stroke.dash.unwrap_or((0.0, 0.0));
+                (on, off, stroke.dash_offset)
+            });
+            (gradient, dash)
+        });
+    if let Some((rest, _)) = paint
+        && let Some(rest) = rest
     {
-        let baked = if let crate::document::Fill::Gradient(gradient) = &shape.style.fill {
-            Some(gradient.clone())
-        } else {
-            shape
-                .style
-                .stroke
-                .as_ref()
-                .and_then(|stroke| stroke.gradient.clone())
-        };
-        if let Some(gradient) = baked {
-            let rest = gradient.angle(shape.geom.bbox());
-            let mut shown = rest + pose.gradient_angle.unwrap_or(0.0);
-            if inspector_slider(ui, "Gradient", &mut shown, -360.0..=360.0, "°") {
-                studio.key_prop(id, crate::motion::Prop::GradientAngle, shown - rest);
-            }
+        let mut shown = rest + pose.gradient_angle.unwrap_or(0.0);
+        if inspector_slider(ui, "Gradient", &mut shown, -360.0..=360.0, "°") {
+            studio.key_prop(id, crate::motion::Prop::GradientAngle, shown - rest);
+        }
+    }
+    if let Some((_, Some((rest_dash, rest_gap, rest_length)))) = paint {
+        let mut dash = rest_dash + pose.dash.unwrap_or(0.0);
+        let mut gap = rest_gap + pose.gap.unwrap_or(0.0);
+        let mut length = rest_length + pose.dash_length.unwrap_or(0.0);
+        if inspector_slider(ui, "Dash", &mut dash, 0.0..=400.0, " px") {
+            studio.key_prop(id, crate::motion::Prop::Dash, dash - rest_dash);
+        }
+        if inspector_slider(ui, "Gap", &mut gap, 0.0..=400.0, " px") {
+            studio.key_prop(id, crate::motion::Prop::Gap, gap - rest_gap);
+        }
+        if inspector_slider(ui, "Length", &mut length, -400.0..=400.0, " px") {
+            studio.key_prop(id, crate::motion::Prop::DashLength, length - rest_length);
         }
     }
 }
