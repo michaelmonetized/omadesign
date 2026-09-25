@@ -154,6 +154,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
             egui_shortcuts(ui, studio);
         }
         unsaved_dialog(ui, studio);
+        svg_export_dialog(ui, studio);
     }
     if !studio.updates.freezing {
         studio.tick_swap(&ctx);
@@ -221,6 +222,41 @@ fn unsaved_dialog(ui: &mut Ui, studio: &mut Studio) {
         });
     if dialog.should_close() {
         studio.pending_nav = None;
+    }
+}
+
+fn svg_export_dialog(ui: &mut Ui, studio: &mut Studio) {
+    if studio.animated_svg_warnings().is_empty() {
+        return;
+    }
+    let warnings = studio.animated_svg_warnings().to_vec();
+    let ctx = ui.ctx().clone();
+    let dialog =
+        eframe::egui::Modal::new(eframe::egui::Id::new("svg-export-warnings")).show(&ctx, |ui| {
+            ui.set_width(420.0);
+            ui.heading("SVG can't carry these");
+            ui.add_space(6.0);
+            eframe::egui::ScrollArea::vertical()
+                .max_height(240.0)
+                .show(ui, |ui| {
+                    for warning in &warnings {
+                        ui.label(warning);
+                    }
+                });
+            ui.add_space(12.0);
+            ui.label("Continue writes the file anyway. Cancel leaves it unwritten.");
+            ui.add_space(12.0);
+            ui.horizontal(|ui| {
+                if ui.button("Cancel").clicked() {
+                    studio.resolve_animated_svg(false);
+                }
+                if ui.button("Continue").clicked() {
+                    studio.resolve_animated_svg(true);
+                }
+            });
+        });
+    if dialog.should_close() {
+        studio.resolve_animated_svg(false);
     }
 }
 
