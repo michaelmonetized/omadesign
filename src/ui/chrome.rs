@@ -83,40 +83,6 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
                                 studio.need_fit = true;
                             }
                         }
-                        let actual_zoom = if photo {
-                            studio.photo.view_scale * studio.photo.fit_scale
-                        } else {
-                            studio.view.scale
-                        };
-                        eframe::egui::ComboBox::from_id_salt("zoom-preset")
-                            .selected_text(format!("{:.0}%", actual_zoom * 100.0))
-                            .width(64.0)
-                            .show_ui(ui, |ui| {
-                                for (zoom, label) in [
-                                    (0.25, "25%"),
-                                    (0.5, "50%"),
-                                    (1.0, "100%"),
-                                    (1.5, "150%"),
-                                    (2.0, "200%"),
-                                    (4.0, "400%"),
-                                ] {
-                                    if ui
-                                        .selectable_label((actual_zoom - zoom).abs() < 0.01, label)
-                                        .clicked()
-                                    {
-                                        if photo {
-                                            studio.photo.view_scale =
-                                                zoom / studio.photo.fit_scale.max(0.001);
-                                            studio.photo.view_offset = eframe::egui::Vec2::ZERO;
-                                        } else {
-                                            studio.zoom_by(
-                                                zoom / studio.view.scale.max(0.001),
-                                                studio.canvas_zoom_anchor(),
-                                            );
-                                        }
-                                    }
-                                }
-                            });
                         ui.add_space(8.0);
                         if icons::icon_button(
                             ui,
@@ -141,6 +107,35 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
                 });
             }
         });
+}
+
+fn zoom_corner(ui: &mut Ui, studio: &mut Studio) {
+    let photo = studio.persona == Persona::Photo;
+    let actual = if photo {
+        studio.photo.view_scale * studio.photo.fit_scale
+    } else {
+        studio.view.scale
+    };
+    if ui
+        .small_button("100%")
+        .on_hover_text("Zoom to 100% at the center")
+        .clicked()
+    {
+        if photo {
+            studio.photo.view_scale = 1.0 / studio.photo.fit_scale.max(0.001);
+            studio.photo.view_offset = eframe::egui::Vec2::ZERO;
+        } else {
+            studio.zoom_by(
+                1.0 / studio.view.scale.max(0.001),
+                studio.canvas_zoom_anchor(),
+            );
+        }
+    }
+    ui.label(
+        RichText::new(format!("{:.0}%", actual * 100.0))
+            .small()
+            .color(fg()),
+    );
 }
 
 fn main_menus(ui: &mut Ui, studio: &mut Studio) {
@@ -1143,6 +1138,8 @@ pub fn status_bar(ui: &mut Ui, studio: &mut Studio) {
             let width = ui.available_width();
             if studio.persona == Persona::Photo {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    zoom_corner(ui, studio);
+                    ui.add_space(12.0);
                     if let Some(image) = studio.photo.selected() {
                         let (w, h) = image.dimensions();
                         let (w, h) = image.develop.output_dim(w, h);
@@ -1165,6 +1162,8 @@ pub fn status_bar(ui: &mut Ui, studio: &mut Studio) {
             }
             // Reserve metadata before the hint, so a long tool description truncates.
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                zoom_corner(ui, studio);
+                ui.add_space(12.0);
                 ui.label(
                     RichText::new(format!(
                         "{:.0} × {:.0} px",
