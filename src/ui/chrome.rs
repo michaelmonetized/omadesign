@@ -84,21 +84,8 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
                             }
                         }
                         ui.add_space(8.0);
-                        if icons::icon_button(
-                            ui,
-                            ph::IMAGES,
-                            "Free photos",
-                            studio.show_asset_browser,
-                        ) {
-                            studio.show_asset_browser = !studio.show_asset_browser;
-                        }
-                        if icons::icon_button(
-                            ui,
-                            ph::SHAPES,
-                            "Shape library",
-                            studio.show_shape_browser,
-                        ) {
-                            studio.show_shape_browser = !studio.show_shape_browser;
+                        if photo {
+                            library_buttons(ui, studio);
                         }
                         if !compact && photo && ui.button("Place in Design").clicked() {
                             studio.send_photo_to_design();
@@ -1067,8 +1054,14 @@ pub fn left_toolbar(ui: &mut Ui, studio: &mut Studio) {
                 Persona::Motion => Tool::motion_well(),
                 Persona::Layout => Tool::layout_well(),
             };
+            let libraries = matches!(
+                studio.persona,
+                Persona::Design | Persona::Pixel | Persona::Layout | Persona::Motion
+            );
+            let reserved = if libraries { 78.0 } else { 0.0 };
             ScrollArea::vertical()
                 .id_salt("tools-scroll")
+                .max_height((ui.available_height() - reserved).max(40.0))
                 .scroll_bar_visibility(eframe::egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
                 .show(ui, |ui| {
                     let mut last_group = "";
@@ -1104,7 +1097,31 @@ pub fn left_toolbar(ui: &mut Ui, studio: &mut Studio) {
                         }
                     }
                 });
+            if libraries {
+                ui.add_space(4.0);
+                icons::well_separator(ui);
+                library_buttons(ui, studio);
+            }
         });
+}
+
+fn library_buttons(ui: &mut Ui, studio: &mut Studio) {
+    if icons::icon_button(
+        ui,
+        ph::SHAPES,
+        "Shape library",
+        studio.show_shape_browser,
+    ) {
+        studio.show_shape_browser = !studio.show_shape_browser;
+    }
+    if icons::icon_button(
+        ui,
+        ph::IMAGES,
+        "Free photos",
+        studio.show_asset_browser,
+    ) {
+        studio.show_asset_browser = !studio.show_asset_browser;
+    }
 }
 
 pub fn status_bar(ui: &mut Ui, studio: &mut Studio) {
