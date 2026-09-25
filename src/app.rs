@@ -1269,6 +1269,8 @@ impl Studio {
             after.set_key(id, Prop::Y, t, pose.dy, ease);
             after.set_key(id, Prop::Rotation, t, pose.rotation, ease);
             after.set_key(id, Prop::Scale, t, pose.scale, ease);
+            after.set_key(id, Prop::Width, t, pose.width_scale, ease);
+            after.set_key(id, Prop::Height, t, pose.height_scale, ease);
             if let Some(op) = pose.opacity {
                 after.set_key(id, Prop::Opacity, t, op, ease);
             }
@@ -1281,6 +1283,12 @@ impl Studio {
             if let Some(angle) = pose.gradient_angle {
                 after.set_key(id, Prop::GradientAngle, t, angle, ease);
             }
+            if let Some(extra) = pose.stroke_width {
+                after.set_key(id, Prop::StrokeWidth, t, extra, ease);
+            }
+            if let Some(color) = pose.fill_color {
+                after.set_color_key(id, t, color, ease);
+            }
         }
         self.commit_motion(after);
         self.status = format!("keyed at {:.2}s", t);
@@ -1290,6 +1298,23 @@ impl Studio {
         let mut after = self.doc.motion.clone();
         after.set_key(id, prop, self.playhead, value, Ease::EaseInOut);
         self.commit_motion(after);
+    }
+
+    /// Key the fill color. The designed color stays at the start until a key says otherwise.
+    pub fn key_fill(&mut self, id: u64, color: crate::color::Rgba, rest: crate::color::Rgba) {
+        let mut after = self.doc.motion.clone();
+        let t = self.playhead;
+        let missing = !after.tracks.iter().any(|track| {
+            track.shape == id
+                && track.prop == Prop::Fill
+                && track.keys.iter().any(|key| key.color.is_some())
+        });
+        if missing && t > 1e-3 {
+            after.set_color_key(id, 0.0, rest, Ease::EaseInOut);
+        }
+        after.set_color_key(id, t, color, Ease::EaseInOut);
+        self.commit_motion(after);
+        self.status = format!("fill keyed at {t:.2}s");
     }
 
     pub fn commit(&mut self, cmd: Cmd) {

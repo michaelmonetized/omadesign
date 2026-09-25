@@ -627,6 +627,35 @@ pub(crate) fn item_alpha(
     Some(pm.pixels().iter().map(|p| p.alpha()).collect())
 }
 
+/// Paint the keyed fill, stroke width, and gradient angle onto a copy of the design.
+fn posed_paint(shape: &mut Shape, pose: Pose) {
+    if let Some(offset) = pose.gradient_angle.filter(|offset| offset.abs() > 1e-3) {
+        tilt_gradient(shape, offset);
+    }
+    if let Some(color) = pose.fill_color {
+        recolor_fill(&mut shape.style.fill, color);
+    }
+    if let Some(extra) = pose.stroke_width.filter(|extra| extra.abs() > 1e-3) {
+        if let Some(stroke) = &mut shape.style.stroke {
+            stroke.width = (stroke.width + extra).max(0.0);
+        }
+    }
+}
+
+/// Replace the visible fill color and leave the fill type alone.
+fn recolor_fill(fill: &mut Fill, color: crate::color::Rgba) {
+    match fill {
+        Fill::Solid(slot) => *slot = color,
+        Fill::Linear { c0, .. } | Fill::Radial { c0, .. } => *c0 = color,
+        Fill::Gradient(gradient) => {
+            if let Some(stop) = gradient.stops.first_mut() {
+                stop.color = color;
+            }
+        }
+        Fill::None => *fill = Fill::Solid(color),
+    }
+}
+
 /// Rotate a shape's gradient by `offset` degrees. The saved design stays put.
 fn tilt_gradient(shape: &mut Shape, offset: f32) {
     let bounds = shape.geom.bbox();
@@ -652,12 +681,17 @@ fn draw_shape_masked(
     pose: Pose,
     mask: Option<&tiny_skia::Mask>,
 ) {
-    let angled;
-    let shape = if let Some(offset) = pose.gradient_angle.filter(|offset| offset.abs() > 1e-3) {
+    let painted;
+    let shape = if pose
+        .gradient_angle
+        .is_some_and(|offset| offset.abs() > 1e-3)
+        || pose.fill_color.is_some()
+        || pose.stroke_width.is_some_and(|extra| extra.abs() > 1e-3)
+    {
         let mut owned = shape.clone();
-        tilt_gradient(&mut owned, offset);
-        angled = owned;
-        &angled
+        posed_paint(&mut owned, pose);
+        painted = owned;
+        &painted
     } else {
         shape
     };
@@ -1241,6 +1275,77 @@ mod tests {
         let left_turned = turned.pixel(14, 30).unwrap();
         assert!(left.red() > left.blue());
         assert!(left_turned.blue() > left_turned.red());
+    }
+
+    #[test]
+    fn width_scale_stretches_without_changing_height() {
+        let shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(30.0, 30.0),
+                size: Pt::new(20.0, 20.0),
+                radius: 0.0,
+            },
+            Style {
+                fill: Fill::Solid(Rgba::rgb(255, 0, 0)),
+                stroke: None,
+            },
+        );
+        let render = |width_scale: f32| {
+            let mut pixels = Pixmap::new(100, 80).unwrap();
+            draw_shape(
+                &mut pixels,
+                &shape,
+                Transform::identity(),
+                1.0,
+                tiny_skia::BlendMode::SourceOver,
+                Pose {
+                    width_scale,
+                    ..Pose::identity()
+                },
+            );
+            pixels
+        };
+        let rest = render(1.0);
+        let wide = render(2.0);
+        assert_eq!(rest.pixel(22, 40).unwrap().alpha(), 0);
+        assert!(wide.pixel(22, 40).unwrap().red() > 200);
+        assert_eq!(wide.pixel(40, 18).unwrap().alpha(), 0);
+    }
+
+    #[test]
+    fn keyed_fill_replaces_the_designed_color() {
+        let shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(10.0, 10.0),
+                size: Pt::new(20.0, 20.0),
+                radius: 0.0,
+            },
+            Style {
+                fill: Fill::Solid(Rgba::rgb(255, 0, 0)),
+                stroke: Some(crate::document::Stroke {
+                    color: Rgba::rgb(0, 0, 255),
+                    width: 2.0,
+                    ..Default::default()
+                }),
+            },
+        );
+        let mut pixels = Pixmap::new(50, 40).unwrap();
+        draw_shape(
+            &mut pixels,
+            &shape,
+            Transform::identity(),
+            1.0,
+            tiny_skia::BlendMode::SourceOver,
+            Pose {
+                fill_color: Some(Rgba::rgb(0, 180, 0)),
+                stroke_width: Some(8.0),
+                ..Pose::identity()
+            },
+        );
+        let fill = pixels.pixel(20, 20).unwrap();
+        assert!(fill.green() > fill.red() && fill.green() > 150);
+        let stroke = pixels.pixel(6, 20).unwrap();
+        assert!(stroke.blue() > 150);
     }
 
     #[test]

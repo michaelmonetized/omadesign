@@ -1,6 +1,7 @@
 //! Motion clip: rest pose stays in the document, view pose is evaluated at t.
 //!
-//! Tracks are offsets from rest (X/Y/rotation/gradient angle) or absolute (scale, opacity).
+//! Tracks are offsets from rest (X/Y/rotation/gradient angle/stroke width),
+//! multipliers (scale, width, height), or a color (fill). Opacity is absolute.
 //! Animated SVG is CSS @keyframes. Lottie is the Bodymovin 5.x shape subset.
 
 use crate::color::Rgba;
@@ -20,6 +21,10 @@ pub enum Prop {
     StrokeReveal,
     FillReveal,
     GradientAngle,
+    Width,
+    Height,
+    StrokeWidth,
+    Fill,
 }
 
 impl Prop {
@@ -33,19 +38,23 @@ impl Prop {
             Prop::StrokeReveal => "Draw stroke",
             Prop::FillReveal => "Fill reveal",
             Prop::GradientAngle => "Gradient",
+            Prop::Width => "Width",
+            Prop::Height => "Height",
+            Prop::StrokeWidth => "Stroke width",
+            Prop::Fill => "Fill",
         }
     }
 
     pub fn identity(self) -> f32 {
         match self {
-            Prop::Scale => 1.0,
+            Prop::Scale | Prop::Width | Prop::Height => 1.0,
             Prop::Opacity | Prop::StrokeReveal | Prop::FillReveal => 1.0,
-            Prop::GradientAngle => 0.0,
+            Prop::GradientAngle | Prop::StrokeWidth | Prop::Fill => 0.0,
             _ => 0.0,
         }
     }
 
-    pub fn all() -> [Prop; 8] {
+    pub fn all() -> [Prop; 12] {
         [
             Prop::X,
             Prop::Y,
@@ -55,6 +64,10 @@ impl Prop {
             Prop::StrokeReveal,
             Prop::FillReveal,
             Prop::GradientAngle,
+            Prop::Width,
+            Prop::Height,
+            Prop::StrokeWidth,
+            Prop::Fill,
         ]
     }
 }
@@ -111,6 +124,31 @@ pub struct Key {
     pub t: f32,
     pub value: f32,
     pub ease: Ease,
+    /// Fill keys carry a color. Every other channel leaves this empty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<Rgba>,
+}
+
+impl Key {
+    /// A number key. Fill uses [`Key::color_at`].
+    pub fn at(t: f32, value: f32, ease: Ease) -> Self {
+        Self {
+            t,
+            value,
+            ease,
+            color: None,
+        }
+    }
+
+    /// A fill-color key.
+    pub fn color_at(t: f32, color: Rgba, ease: Ease) -> Self {
+        Self {
+            t,
+            value: 0.0,
+            ease,
+            color: Some(color),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -146,10 +184,18 @@ pub struct Pose {
     pub dy: f32,
     pub rotation: f32,
     pub scale: f32,
+    /// Multiplier on the designed width. 1 leaves it alone.
+    pub width_scale: f32,
+    /// Multiplier on the designed height. 1 leaves it alone.
+    pub height_scale: f32,
     pub opacity: Option<f32>,
     pub stroke_reveal: Option<f32>,
     pub fill_reveal: Option<f32>,
     pub gradient_angle: Option<f32>,
+    /// Added to the designed stroke width, in pixels.
+    pub stroke_width: Option<f32>,
+    /// Replaces the designed fill color while this key is active.
+    pub fill_color: Option<Rgba>,
 }
 
 impl Pose {
@@ -159,10 +205,14 @@ impl Pose {
             dy: 0.0,
             rotation: 0.0,
             scale: 1.0,
+            width_scale: 1.0,
+            height_scale: 1.0,
             opacity: None,
             stroke_reveal: None,
             fill_reveal: None,
             gradient_angle: None,
+            stroke_width: None,
+            fill_color: None,
         }
     }
 
@@ -171,15 +221,20 @@ impl Pose {
             && self.dy.abs() < 1e-5
             && self.rotation.abs() < 1e-5
             && (self.scale - 1.0).abs() < 1e-5
+            && (self.width_scale - 1.0).abs() < 1e-5
+            && (self.height_scale - 1.0).abs() < 1e-5
             && self.opacity.is_none()
             && self.stroke_reveal.is_none()
             && self.fill_reveal.is_none()
             && self.gradient_angle.is_none()
+            && self.stroke_width.is_none()
+            && self.fill_color.is_none()
     }
 
     pub fn map(self, center: Pt, p: Pt) -> Pt {
         let mut q = p - center;
-        q = q * self.scale;
+        q.x *= self.scale * self.width_scale;
+        q.y *= self.scale * self.height_scale;
         q = q.rotate(self.rotation);
         q + center + Pt::new(self.dx, self.dy)
     }
@@ -187,8 +242,13 @@ impl Pose {
     pub fn unmap(self, center: Pt, p: Pt) -> Pt {
         let mut q = p - Pt::new(self.dx, self.dy) - center;
         q = q.rotate(-self.rotation);
-        if self.scale.abs() > 1e-6 {
-            q = q / self.scale;
+        let sx = self.scale * self.width_scale;
+        let sy = self.scale * self.height_scale;
+        if sx.abs() > 1e-6 {
+            q.x /= sx;
+        }
+        if sy.abs() > 1e-6 {
+            q.y /= sy;
         }
         q + center
     }
@@ -215,7 +275,11 @@ impl Pose {
         }
         let deg = self.rotation.to_degrees();
         let mut t = Transform::from_translate(-center.x, -center.y);
-        t = Transform::from_scale(self.scale, self.scale).pre_concat(t);
+        t = Transform::from_scale(
+            self.scale * self.width_scale,
+            self.scale * self.height_scale,
+        )
+        .pre_concat(t);
         if deg.abs() > 1e-5 {
             t = Transform::from_rotate(deg).pre_concat(t);
         }
@@ -242,10 +306,38 @@ impl Motion {
             dy: self.value(shape, Prop::Y, t).unwrap_or(0.0),
             rotation: self.value(shape, Prop::Rotation, t).unwrap_or(0.0),
             scale: self.value(shape, Prop::Scale, t).unwrap_or(1.0),
+            width_scale: self.value(shape, Prop::Width, t).unwrap_or(1.0),
+            height_scale: self.value(shape, Prop::Height, t).unwrap_or(1.0),
             opacity: self.value(shape, Prop::Opacity, t),
             stroke_reveal: self.value(shape, Prop::StrokeReveal, t),
             fill_reveal: self.value(shape, Prop::FillReveal, t),
             gradient_angle: self.value(shape, Prop::GradientAngle, t),
+            stroke_width: self.value(shape, Prop::StrokeWidth, t),
+            fill_color: self.color_value(shape, Prop::Fill, t),
+        }
+    }
+
+    /// Sample a fill color. Empty when this shape has no fill keys.
+    pub fn color_value(&self, shape: u64, prop: Prop, t: f32) -> Option<Rgba> {
+        let track = self
+            .tracks
+            .iter()
+            .find(|tr| tr.shape == shape && tr.prop == prop)?;
+        eval_color(&track.keys, t, self.duration)
+    }
+
+    /// Key a fill color. The first key away from zero keeps the designed color at the start.
+    pub fn set_color_key(&mut self, shape: u64, t: f32, color: Rgba, ease: Ease) {
+        let duration = self.duration.max(0.05);
+        let t = t.clamp(0.0, duration);
+        let idx = self.ensure_track(shape, Prop::Fill);
+        let keys = &mut self.tracks[idx].keys;
+        if let Some(k) = keys.iter_mut().find(|k| (k.t - t).abs() < 1.0 / 120.0) {
+            k.color = Some(color);
+            k.ease = ease;
+        } else {
+            keys.push(Key::color_at(t, color, ease));
+            keys.sort_by(|a, b| a.t.partial_cmp(&b.t).unwrap_or(std::cmp::Ordering::Equal));
         }
     }
 
@@ -255,17 +347,13 @@ impl Motion {
         let idx = self.ensure_track(shape, prop);
         let keys = &mut self.tracks[idx].keys;
         if keys.is_empty() && t > 1e-3 {
-            keys.push(Key {
-                t: 0.0,
-                value: prop.identity(),
-                ease,
-            });
+            keys.push(Key::at(0.0, prop.identity(), ease));
         }
         if let Some(k) = keys.iter_mut().find(|k| (k.t - t).abs() < 1.0 / 120.0) {
             k.value = value;
             k.ease = ease;
         } else {
-            keys.push(Key { t, value, ease });
+            keys.push(Key::at(t, value, ease));
             keys.sort_by(|a, b| a.t.partial_cmp(&b.t).unwrap_or(std::cmp::Ordering::Equal));
         }
     }
@@ -382,7 +470,14 @@ impl Motion {
         for time in times {
             let pose = self.pose(shape, time);
             let percent = (time / duration * 100.0).clamp(0.0, 100.0);
-            css.push_str(&format!("  {percent:.5}% {{ transform: translate({:.4}px, {:.4}px) rotate({:.4}deg) scale({:.5}); }}\n", pose.dx, pose.dy, pose.rotation.to_degrees(), pose.scale));
+            css.push_str(&format!(
+                "  {percent:.5}% {{ transform: translate({:.4}px, {:.4}px) rotate({:.4}deg) scale({:.5}, {:.5}); }}\n",
+                pose.dx,
+                pose.dy,
+                pose.rotation.to_degrees(),
+                pose.scale * pose.width_scale,
+                pose.scale * pose.height_scale
+            ));
             opacity.push_str(&format!(
                 "  {percent:.5}% {{ opacity: {:.5}; }}\n",
                 pose.opacity.unwrap_or(rest_opacity)
@@ -415,6 +510,39 @@ fn eval_keys(keys: &[Key], t: f32, duration: f32) -> Option<f32> {
         }
     }
     Some(last.value)
+}
+
+fn eval_color(keys: &[Key], t: f32, duration: f32) -> Option<Rgba> {
+    if keys.is_empty() || keys.iter().any(|key| key.color.is_none()) {
+        return None;
+    }
+    let t = t.clamp(0.0, duration.max(keys.last().map(|k| k.t).unwrap_or(0.0)));
+    if t <= keys[0].t {
+        return keys[0].color;
+    }
+    let last = keys.last().unwrap();
+    if t >= last.t {
+        return last.color;
+    }
+    for pair in keys.windows(2) {
+        if t >= pair[0].t && t <= pair[1].t {
+            let span = (pair[1].t - pair[0].t).max(1e-9);
+            let u = pair[0].ease.apply((t - pair[0].t) / span);
+            return Some(lerp_rgba(pair[0].color.unwrap(), pair[1].color.unwrap(), u));
+        }
+    }
+    last.color
+}
+
+fn lerp_rgba(from: Rgba, to: Rgba, u: f32) -> Rgba {
+    let channel =
+        |start: u8, end: u8| (start as f32 + (end as f32 - start as f32) * u).round() as u8;
+    Rgba::new(
+        channel(from.r, to.r),
+        channel(from.g, to.g),
+        channel(from.b, to.b),
+        channel(from.a, to.a),
+    )
 }
 
 /// A real path-length reveal shared by the native renderer and export helpers.
@@ -497,7 +625,7 @@ pub fn hit_test(
                     .unwrap_or_else(|| doc.motion.pose(shape.id, t));
                 let c = shape.world_bbox().center();
                 let q = pose.unmap(c, p);
-                let s = slack / pose.scale.max(0.05);
+                let s = slack / (pose.scale * pose.width_scale.max(pose.height_scale)).max(0.05);
                 if (!shape.guide && shape.contains_world(q)) || shape.dist_world(q) <= s {
                     return Some((li, shape.id));
                 }
@@ -880,7 +1008,7 @@ fn lottie_transform(shape: &Shape, motion: &Motion, fps: f32, center: Pt) -> Val
         "r":lottie_scalar_anim(&times,fps,|t|motion.pose(shape.id,t).rotation.to_degrees()),
         "p":lottie_vec2_anim(&times,fps,|t|{let pose=motion.pose(shape.id,t);[center.x+pose.dx,center.y+pose.dy]}),
         "a":{"a":0,"k":[0,0,0]},
-        "s":lottie_vec2_anim(&times,fps,|t|{let s=motion.pose(shape.id,t).scale*100.0;[s,s]})
+        "s":lottie_vec2_anim(&times,fps,|t|{let pose=motion.pose(shape.id,t);[pose.scale*pose.width_scale*100.0, pose.scale*pose.height_scale*100.0]})
     })
 }
 
@@ -1318,6 +1446,44 @@ mod tests {
         m.remove_key(3, Prop::Y, 0);
         assert_eq!(m.key_after_remove(3, Prop::Y, 0), None);
         assert!(!m.has_shape(3));
+    }
+
+    #[test]
+    fn width_and_height_scale_on_their_own_axes() {
+        let mut motion = Motion::default();
+        motion.set_key(1, Prop::Width, 1.0, 2.0, Ease::Linear);
+        motion.set_key(1, Prop::Height, 1.0, 0.5, Ease::Linear);
+        let pose = motion.pose(1, 1.0);
+        let center = Pt::new(0.0, 0.0);
+        let right = pose.map(center, Pt::new(10.0, 0.0));
+        let up = pose.map(center, Pt::new(0.0, 10.0));
+        assert!((right.x - 20.0).abs() < 0.01);
+        assert!(right.y.abs() < 0.01);
+        assert!(up.x.abs() < 0.01);
+        assert!((up.y - 5.0).abs() < 0.01);
+        assert!((motion.pose(1, 0.0).width_scale - 1.0).abs() < 0.01);
+        assert!((motion.pose(1, 0.0).height_scale - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn fill_color_holds_the_design_then_moves() {
+        let mut motion = Motion::default();
+        let rest = Rgba::rgb(255, 0, 0);
+        let next = Rgba::rgb(0, 0, 255);
+        motion.set_color_key(1, 0.0, rest, Ease::Linear);
+        motion.set_color_key(1, 1.0, next, Ease::Linear);
+        assert_eq!(motion.pose(1, 0.0).fill_color, Some(rest));
+        let mid = motion.pose(1, 0.5).fill_color.unwrap();
+        assert!(mid.r > 100 && mid.b > 100);
+        assert_eq!(motion.pose(1, 1.0).fill_color, Some(next));
+    }
+
+    #[test]
+    fn stroke_width_is_an_offset_from_the_design() {
+        let mut motion = Motion::default();
+        motion.set_key(1, Prop::StrokeWidth, 1.0, 12.0, Ease::Linear);
+        assert!(motion.pose(1, 0.0).stroke_width.unwrap().abs() < 0.01);
+        assert!((motion.pose(1, 1.0).stroke_width.unwrap() - 12.0).abs() < 0.01);
     }
 
     #[test]

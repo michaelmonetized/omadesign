@@ -423,7 +423,16 @@ fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
         }
         return;
     }
-    let mut color = original.unwrap_or(studio.brush.color);
+    let rest_color = original.unwrap_or(studio.brush.color);
+    let mut color = rest_color;
+    if fill
+        && studio.is_motion()
+        && let Some((_, id)) = studio.primary()
+        && let Some(keyed) = studio.live_pose(id).fill_color
+    {
+        color = keyed;
+    }
+    let shown = Some(color);
     let mut changed = false;
     let mut remove = false;
     let label = if fill { "Fill" } else { "Stroke" };
@@ -461,9 +470,9 @@ fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
                     let input_id = ui.make_persistent_id(("hex", studio.primary()));
                     let mut hex = ui
                         .data(|d| d.get_temp::<(Option<Rgba>, String)>(input_id))
-                        .filter(|(source, _)| *source == original)
+                        .filter(|(source, _)| *source == shown)
                         .map(|(_, text)| text)
-                        .unwrap_or_else(|| original.map(|c| c.hex()).unwrap_or_default());
+                        .unwrap_or_else(|| shown.map(|c| c.hex()).unwrap_or_default());
                     let field_width = (ui.available_width() - 94.0).max(28.0);
                     let response = ui.add(
                         eframe::egui::TextEdit::singleline(&mut hex)
@@ -476,10 +485,10 @@ fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
                     if response.lost_focus()
                         && let Some(value) = Rgba::parse_hex(&hex)
                     {
-                        changed |= original != Some(value);
+                        changed |= shown != Some(value);
                         color = value;
                     }
-                    ui.data_mut(|d| d.insert_temp(input_id, (original, hex)));
+                    ui.data_mut(|d| d.insert_temp(input_id, (shown, hex)));
                     let mut opacity = f32::from(color.a) / 255.0 * 100.0;
                     if ui
                         .add(
@@ -512,7 +521,13 @@ fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
             apply_stroke(studio, None);
         }
     } else if changed {
-        if fill {
+        if fill
+            && studio.is_motion()
+            && let Some((_, id)) = studio.primary()
+        {
+            studio.key_fill(id, color, rest_color);
+            studio.brush.color = color;
+        } else if fill {
             let fill = match source_fill {
                 Fill::Linear { from, to, c1, .. } => Fill::Linear {
                     from,
@@ -759,7 +774,22 @@ fn color_grid(ui: &mut Ui, studio: &mut Studio, recent: bool) {
             let response = response.on_hover_text(color.hex());
             if response.clicked() {
                 if studio.fill_active {
-                    studio.set_fill(Fill::Solid(color));
+                    let style = inspected_style(studio);
+                    let rest = match &style.fill {
+                        Fill::Solid(current)
+                        | Fill::Linear { c0: current, .. }
+                        | Fill::Radial { c0: current, .. } => *current,
+                        Fill::Gradient(gradient) => gradient.sample(0.),
+                        Fill::None => color,
+                    };
+                    if studio.is_motion()
+                        && !style.fill.is_none()
+                        && let Some((_, id)) = studio.primary()
+                    {
+                        studio.key_fill(id, color, rest);
+                    } else {
+                        studio.set_fill(Fill::Solid(color));
+                    }
                     studio.brush.color = color;
                 } else {
                     studio.style = inspected_style(studio).clone();
@@ -780,7 +810,25 @@ fn stroke_studio(ui: &mut Ui, studio: &mut Studio) {
         studio.style.stroke = enabled.then(|| stroke.clone());
         apply_stroke(studio, studio.style.stroke.clone());
     }
-    let mut changed = number_field(ui, "Width", &mut stroke.width, 0.0..=100_000.0, " px");
+    let rest_width = stroke.width;
+    let mut width = rest_width;
+    if studio.is_motion()
+        && let Some((_, id)) = studio.primary()
+    {
+        width += studio.live_pose(id).stroke_width.unwrap_or(0.0);
+    }
+    let width_changed = number_field(ui, "Width", &mut width, 0.0..=100_000.0, " px");
+    let mut changed = false;
+    if width_changed {
+        if studio.is_motion()
+            && let Some((_, id)) = studio.primary()
+        {
+            studio.key_prop(id, crate::motion::Prop::StrokeWidth, width - rest_width);
+        } else {
+            stroke.width = width;
+            changed = true;
+        }
+    }
     ui.horizontal_wrapped(|ui| {
         use crate::document::StrokeAlignment;
         ui.label(RichText::new("Position").small().color(fg_weak()));
@@ -1492,12 +1540,21 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
                     crate::motion::Ease::EaseInOut,
                 );
             }
-            if (sx - 1.0).abs() > 0.001 || (sy - 1.0).abs() > 0.001 {
+            if (sx - 1.0).abs() > 0.001 {
                 after.set_key(
                     id,
-                    crate::motion::Prop::Scale,
+                    crate::motion::Prop::Width,
                     t,
-                    pose.scale * ((sx + sy) * 0.5),
+                    pose.width_scale * sx,
+                    crate::motion::Ease::EaseInOut,
+                );
+            }
+            if (sy - 1.0).abs() > 0.001 {
+                after.set_key(
+                    id,
+                    crate::motion::Prop::Height,
+                    t,
+                    pose.height_scale * sy,
                     crate::motion::Ease::EaseInOut,
                 );
             }

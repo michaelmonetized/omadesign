@@ -332,25 +332,15 @@ pub fn apply(
             let guard_value = before.value(target.id, prop, guard);
             keys.retain(|key| key.t < start || key.t > end);
             if was_empty && start > 0.0 {
-                keys.push(Key {
-                    t: 0.0,
-                    value: points[0].1,
-                    ease: Linear,
-                });
+                keys.push(Key::at(0.0, points[0].1, Linear));
             } else if start > 0.0
                 && let Some(value) = guard_value
             {
                 keys.retain(|key| (key.t - guard).abs() > 1e-5);
-                keys.push(Key {
-                    t: guard,
-                    value,
-                    ease: Linear,
-                });
+                keys.push(Key::at(guard, value, Linear));
             }
-            keys.extend(points.into_iter().map(|(fraction, value, ease)| Key {
-                t: start + fraction * options.duration,
-                value,
-                ease,
+            keys.extend(points.into_iter().map(|(fraction, value, ease)| {
+                Key::at(start + fraction * options.duration, value, ease)
             }));
             keys.sort_by(|a, b| a.t.total_cmp(&b.t));
             let replacement = Track {

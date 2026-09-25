@@ -375,6 +375,10 @@ fn prop_color(p: Prop) -> Color32 {
         Prop::StrokeReveal => accent(),
         Prop::FillReveal => fg(),
         Prop::GradientAngle => Color32::from_rgb(0x94, 0xE2, 0xD5),
+        Prop::Width => Color32::from_rgb(0x74, 0xC7, 0xEC),
+        Prop::Height => Color32::from_rgb(0xA6, 0xD1, 0x89),
+        Prop::StrokeWidth => Color32::from_rgb(0xE6, 0xC3, 0x84),
+        Prop::Fill => Color32::from_rgb(0xF3, 0x8B, 0xA8),
     }
 }
 
