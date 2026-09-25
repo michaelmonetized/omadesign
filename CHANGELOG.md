@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-09-25 · 0.6.0 — Key the design you already made.
+
+- Brush, eraser, clone, heal, and smudge draw the brush edge on the canvas
+  while the cursor is over the picture. The ring follows the size and the zoom.
+- The clone brush has size, edge, opacity, flow, and Aligned. Aligned keeps
+  the source offset while you paint. Off repeats the same source point.
+- A pixel selection can move, resize, feather, and distort. Arrow keys nudge
+  it while a selection tool is active.
+- Apple glass displaces the picture through a turbulence map, in the app and
+  in the SVG filter. The existing Displacement effect stays.
+- Simplify, next to Pathfinder, drops the extra nodes a boolean subtract
+  leaves on a straight edge. Corner handles stay.
+- Shape and icon rows show a thumbnail. Phosphor draws the glyph. The other
+  libraries draw a stand-in until you pick the name. Free photos load their
+  thumbnail while the browser is open.
+- Vector, Pixel, Layout, and Motion keep the shape library and the photo
+  picker at the bottom of the tool stack. Shapes sit above photos. Photo keeps
+  those two buttons in the top bar.
+- The zoom percent and a 100% button sit at the bottom right. 100% holds the
+  middle of the canvas and lands on actual size. Fit stays in the top bar.
+- Motion keys position, rotation, and opacity. Width and height key on their
+  own, as multipliers on the designed size, beside uniform scale. Gradient
+  angle keys too.
+- Fill color keys and moves from the color you designed. Stroke width keys as
+  a pixel offset from the designed stroke. Dash, gap, and dash length key on
+  their own. Length slides the pattern along the stroke.
+- Blend mode stays a design edit. It does not key.
+- Every color picker has an eyedropper. The sample comes back to that picker.
+  The hex field copies and pastes.
+
 ## 2026-09-24 · 0.5.9 — Click the pixel you mean.
 
 Michael passed QA on this build the same day.

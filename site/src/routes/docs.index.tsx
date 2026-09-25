@@ -78,10 +78,10 @@ function DocsOverview() {
         </pre>
         <aside className="docs-note" aria-label="Version information">
           <p>
-            {RELEASE_TAG} samples any screen pixel, subtracts from a selection,
-            and runs a pixel filter on a page of vectors. Clipboard paste and
-            cloud snapshot review remain included. Affinity import also needs
-            the optional{" "}
+            {RELEASE_TAG} keys the design you already made: position, size, fill,
+            and stroke. The brush shows its edge. Clipboard paste and cloud
+            snapshot review remain included. Affinity import also needs the
+            optional{" "}
             <Link to="/docs/affinity">bridge setup</Link>. Read the{" "}
             <Link to="/updates">studio log</Link> or the{" "}
             <a href={RELEASE_URL}>release notes</a>.

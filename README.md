@@ -5,7 +5,7 @@
 [![upvotes](https://img.shields.io/endpoint?url=https%3A%2F%2Fomadesign.app%2Fapi%2Fstats%3Fbadge%3Dupvotes&style=flat)](https://www.producthunt.com/products/omadesign)
 [![stars](https://img.shields.io/endpoint?url=https%3A%2F%2Fomadesign.app%2Fapi%2Fstats%3Fbadge%3Dstars&style=flat)](https://github.com/michaelmonetized/omadesign/stargazers)
 
-[Download v0.5.9](https://github.com/michaelmonetized/omadesign/releases/tag/v0.5.9) · [Explore the studio](https://omadesign.app/) · [Updates](https://omadesign.app/updates) · [User manual](https://omadesign.app/docs/manual/) · [Showcase](https://omadesign.app/showcase) · [Discord](https://discord.gg/ejkZS2RBx) · [Build from source](docs/CONTRIBUTING.md)
+[Download v0.6.0](https://github.com/michaelmonetized/omadesign/releases/tag/v0.6.0) · [Explore the studio](https://omadesign.app/) · [Updates](https://omadesign.app/updates) · [User manual](https://omadesign.app/docs/manual/) · [Showcase](https://omadesign.app/showcase) · [Discord](https://discord.gg/ejkZS2RBx) · [Build from source](docs/CONTRIBUTING.md)
 
 A native Linux studio for **design, layout, paint, photograph, and motion**. One
 document, one layer stack. Built so a designer coming from macOS can sit down

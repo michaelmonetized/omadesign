@@ -55,8 +55,8 @@ export function Install() {
         </a>
       </div>
       <p className="install-version">
-        {RELEASE_TAG} installs into ~/.local. The eyedropper leaves the window,
-        and a vector page can take a pixel filter.{" "}
+        {RELEASE_TAG} installs into ~/.local. Motion keys the design you already
+        made, and the brush shows its edge.{" "}
         <a href={sitePath("updates")}>What shipped</a>
         {" · "}
         <a href={RELEASE_URL}>Release notes</a>.

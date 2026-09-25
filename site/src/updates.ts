@@ -8,6 +8,11 @@ export type UpdatePost = {
 
 export const updates: UpdatePost[] = [
   {
+    slug: "0.6.0", version: "0.6.0", date: "2026-09-25",
+    title: "Key the design you already made",
+    dek: "Motion keys position, width, height, rotation, opacity, gradient angle, fill, stroke width, dash, gap, and dash length. Blend stays a design edit. The brush draws its edge. Clone has size, edge, opacity, flow, and an aligned source. A selection can move, resize, feather, and distort. Apple glass displaces through turbulence. Simplify drops extra nodes. Libraries show thumbnails. Pickers and zoom sit at the edges. Color pickers sample the screen and copy hex.",
+  },
+  {
     slug: "0.5.9", version: "0.5.9", date: "2026-09-24",
     title: "Click the pixel you mean",
     dek: "The eyedropper samples any pixel on the screen. Alt subtracts from a selection. Dilate and erode hold a hard cutout. Welcome links come forward. Cloud sign-in tells you you're in. Midnight Duotone bakes a vector page. The pen drops its forward handle.",

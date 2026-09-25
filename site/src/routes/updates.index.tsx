@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import keyTheDesign from "../../../docs/blog/0.6.0-key-the-design.md?raw";
 import pixelYouMean from "../../../docs/blog/0.5.9-click-the-pixel.md?raw";
 import plugins from "../../../docs/blog/0.5.8-make-it-your-studio.md?raw";
 import identity from "../../../docs/blog/0.5.7-a-new-mark.md?raw";
@@ -12,6 +13,7 @@ import { CURL } from "../site";
 import { latestUpdate, updates } from "../updates";
 
 const bodies: Record<string, { markdown: string; path: string }> = {
+  "0.6.0": { markdown: keyTheDesign, path: "docs/blog/0.6.0-key-the-design.md" },
   "0.5.9": { markdown: pixelYouMean, path: "docs/blog/0.5.9-click-the-pixel.md" },
   "0.5.8": { markdown: plugins, path: "docs/blog/0.5.8-make-it-your-studio.md" },
   "0.5.7": { markdown: identity, path: "docs/blog/0.5.7-a-new-mark.md" },
@@ -29,7 +31,7 @@ export const Route = createFileRoute("/updates/")({
       {
         name: "description",
         content:
-          "Studio notes from omadesign. 0.5.9 samples any screen pixel, subtracts from a selection, and filters a page of vectors.",
+          "Studio notes from omadesign. 0.6.0 keys the design you already made, and the brush shows its edge.",
       },
     ],
   }),
