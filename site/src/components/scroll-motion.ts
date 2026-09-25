@@ -93,7 +93,7 @@ export function useScrollMotion() {
       for (const element of page!.querySelectorAll<HTMLElement>(surfaces)) {
         if (
           known.has(element) ||
-          element.closest(".studio-carousel") ||
+          element.closest(".studio-carousel, [data-cloud-experience]") ||
           element.matches(".section-heading,.hero-heading")
         )
           continue;
@@ -116,7 +116,7 @@ export function useScrollMotion() {
       for (const element of page!.querySelectorAll<HTMLElement>(
         ":scope > section, :scope > .btw-strip",
       )) {
-        if (scenes.has(element)) continue;
+        if (scenes.has(element) || element.matches("[data-cloud-experience]")) continue;
         scenes.add(element);
         element.dataset.motionScene = "";
         viewport.observe(element);

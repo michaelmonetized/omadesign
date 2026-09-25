@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { sitePath } from "../site";
+import { CloudReveal, type CloudRevealHandle } from "./cloud-reveal";
 import "./cloud-waitlist.css";
 
 const features = [
@@ -10,110 +11,82 @@ const features = [
   ["Competitions", "Submit public showcase work when a competition is open."],
 ];
 
-export function CloudIntro() {
-  const dialog = useRef<HTMLDialogElement>(null);
-  const video = useRef<HTMLVideoElement>(null);
-  const autoStart = useRef(true);
-  const [open, setOpen] = useState(true);
-  const [playing, setPlaying] = useState(false);
-  const [playBlocked, setPlayBlocked] = useState(false);
-  const [muted, setMuted] = useState(true);
+/** A living part of the homepage. Native document scrolling always stays available. */
+export function CloudIntro({ siteBase }: { siteBase?: string } = {}) {
+  const section = useRef<HTMLElement>(null);
+  const scene = useRef<HTMLDivElement>(null);
+  const reveal = useRef<CloudRevealHandle>(null);
+  const [settled, setSettled] = useState(false);
   const [visibleCount, setVisibleCount] = useState(0);
   const [ready, setReady] = useState(false);
-
-  function revealActions() { setVisibleCount(features.length); setReady(true); }
+  const revealContent = useCallback((count: number, complete: boolean) => { setVisibleCount(count); setReady(complete); }, []);
+  const markSettled = useCallback(() => setSettled(true), []);
+  const destination = (path: string) => siteBase ? `${siteBase}/${path}` : sitePath(path);
 
   useEffect(() => {
-    const reopen = () => { if (window.location.hash === "#cloud") setOpen(true); };
-    reopen();
-    window.addEventListener("hashchange", reopen);
-    return () => window.removeEventListener("hashchange", reopen);
+    const element = section.current;
+    const viewport = scene.current;
+    if (!element || !viewport) return;
+    const header = document.querySelector<HTMLElement>(".site-header");
+    let frame = 0;
+    let headerHeight = 0;
+    let contentHeight = 0;
+    let previousProgress = -1;
+
+    const update = () => {
+      frame = 0;
+      const nextHeaderHeight = header?.getBoundingClientRect().height ?? 0;
+      if (nextHeaderHeight !== headerHeight) {
+        headerHeight = nextHeaderHeight;
+        element.style.setProperty("--cloud-nav-height", `${headerHeight}px`);
+      }
+      if (contentHeight !== viewport.clientHeight) {
+        contentHeight = viewport.clientHeight;
+        element.style.setProperty("--cloud-content-height", `${contentHeight}px`);
+      }
+      const bounds = element.getBoundingClientRect();
+      const travel = Math.max(1, bounds.height - viewport.clientHeight);
+      const overflow = Math.max(0, contentHeight - (window.innerHeight - headerHeight));
+      const progress = Math.max(0, Math.min(1, (headerHeight - bounds.top - overflow) / travel));
+      if (progress !== previousProgress) {
+        element.style.setProperty("--cloud-scroll", String(progress));
+        element.dataset.departed = String(progress > 0.56);
+        reveal.current?.setScroll(progress);
+        previousProgress = progress;
+      }
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
+    const resize = new ResizeObserver(schedule);
+    resize.observe(element);
+    resize.observe(viewport);
+    if (header) resize.observe(header);
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule, { passive: true });
+    update();
+    return () => {
+      cancelAnimationFrame(frame);
+      resize.disconnect();
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+    };
   }, []);
 
-  useEffect(() => {
-    if (!open) return;
-    const modal = dialog.current;
-    const player = video.current;
-    if (!modal || !player) return;
-    const previousFocus = document.activeElement as HTMLElement | null;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    modal.showModal();
-    // Set the DOM properties before play(): Safari must see a muted, inline
-    // player even when React hydrates an already-rendered video element.
-    player.defaultMuted = true;
-    player.muted = true;
-    player.playsInline = true;
-    player.setAttribute("muted", "");
-    player.setAttribute("playsinline", "");
-    setMuted(true);
-    autoStart.current = true;
-    const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
-    let active = true;
-    let started = false;
-    const markStarted = () => { started = true; setPlayBlocked(false); };
-    const start = () => {
-      if (!active || started || !autoStart.current || preference.matches) return;
-      void player.play().catch(error => {
-        if (!active || started || !autoStart.current || preference.matches) return;
-        if (error.name === "NotAllowedError") setPlayBlocked(true);
-        else if (error.name !== "AbortError") revealActions();
-      });
-    };
-    const apply = () => {
-      if (preference.matches) { player.pause(); revealActions(); }
-      else { started = false; start(); }
-    };
-    player.addEventListener("playing", markStarted);
-    player.addEventListener("canplay", start);
-    apply();
-    const frame = window.requestAnimationFrame(start);
-    preference.addEventListener("change", apply);
-    // Playback must never block access to the cloud workspace.
-    const fallback = window.setTimeout(() => { if (!started) revealActions(); }, 8000);
-    return () => {
-      active = false;
-      window.cancelAnimationFrame(frame);
-      window.clearTimeout(fallback);
-      player.removeEventListener("playing", markStarted);
-      player.removeEventListener("canplay", start);
-      preference.removeEventListener("change", apply);
-      player.pause();
-      modal.close();
-      document.body.style.overflow = overflow;
-      previousFocus?.focus();
-    };
-  }, [open]);
-
-  function close() {
-    setOpen(false);
-    if (window.location.hash === "#cloud") history.replaceState(null, "", window.location.pathname + window.location.search);
-  }
-
   return (
-    <dialog ref={dialog} className="cloud-takeover" aria-labelledby="cloud-title" onCancel={close}>
-      <div className="cloud-scene">
-        <video ref={video} className="cloud-film" muted={muted} playsInline preload={open ? "auto" : "none"}
-          poster={sitePath("media/cloud/reveal.webp")} width="1280" height="720"
-          aria-label="Omadesign logo emerging from moonlit clouds"
-          onPlaying={() => { setPlaying(true); setPlayBlocked(false); }} onPause={() => setPlaying(false)}
-          onEnded={() => { setPlaying(false); revealActions(); }} onError={revealActions}
-          onTimeUpdate={event => setVisibleCount(Math.min(features.length, Math.max(0, Math.floor((event.currentTarget.currentTime - 3) / 2.7) + 1)))}>
-          <source src={sitePath("media/cloud/reveal.webm")} type="video/webm" />
-          <source src={sitePath("media/cloud/reveal.mp4")} type="video/mp4" />
-        </video>
-        <div className="cloud-shade" />
-        <header className="cloud-topline">
-          <span>omadesign</span>
-          <button type="button" onClick={close} autoFocus>Explore Omadesign <span aria-hidden="true">↗</span></button>
-        </header>
+    <section ref={section} id="cloud" className="cloud-announcement" data-cloud-experience=""
+      data-settled={settled} aria-labelledby="cloud-title">
+      <div ref={scene} className="cloud-scene">
+        <div className="cloud-stage" aria-hidden="true">
+          <CloudReveal ref={reveal} onSettled={markSettled} onContentProgress={revealContent} />
+        </div>
+        <div className="cloud-shade" aria-hidden="true" />
+        <div className="cloud-topline" aria-hidden="true" />
         <div className="cloud-columns">
           <div className="cloud-copy">
             <h1 id="cloud-title">cloud collab</h1>
             <p className="cloud-kicker">project sharing and snapshot review</p>
             <ul className="cloud-feature-stack" aria-label="Cloud collaboration features">
               {features.map(([title, description], index) => (
-                <li key={title} data-visible={ready || visibleCount >= features.length - index}>
+                <li key={title} data-visible={visibleCount >= features.length - index}>
                   <span className="cloud-feature-mark" aria-hidden="true">↗</span>
                   <div><h2>{title}</h2><p>{description}</p></div>
                 </li>
@@ -125,31 +98,17 @@ export function CloudIntro() {
               <h2 id="cloud-start-title">share the work</h2>
               <p className="cloud-summary">Sign in to share files, invite reviewers and publish a finished export. Keep designing in the native app.</p>
               <div className="cloud-actions">
-                <a className="button" href={sitePath("cloud")}>Open cloud projects ↗</a>
-                <a className="text-link" href={sitePath("docs/cloud")}>Read the cloud guide ↗</a>
+                <a className="button" href={destination("cloud")}>Open cloud projects ↗</a>
+                <a className="text-link" href={destination("docs/cloud")}>Read the cloud guide ↗</a>
               </div>
               <p className="cloud-consent">Private project access. Explicit uploads. No simultaneous canvas editing.</p>
             </section>
           </div>
         </div>
         <footer className="cloud-controls">
-          <div>
-            <button type="button" onClick={() => {
-              const player = video.current;
-              if (!player) return;
-              autoStart.current = false;
-              if (playing) player.pause();
-              else { if (player.ended) player.currentTime = 0; void player.play().catch(revealActions); }
-            }}>{playing ? "Pause" : playBlocked ? "Tap to play" : "Play"}</button>
-            <button type="button" aria-pressed={!muted} onClick={() => {
-              if (video.current) video.current.muted = !muted;
-              setMuted(!muted);
-            }}>{muted ? "Sound on" : "Sound off"}</button>
-          </div>
-          {!ready && <button type="button" onClick={() => { autoStart.current = false; video.current?.pause(); revealActions(); }}>Show cloud links ↓</button>}
           {ready && <span className="cloud-release-note">Included in Omadesign</span>}
         </footer>
       </div>
-    </dialog>
+    </section>
   );
 }
