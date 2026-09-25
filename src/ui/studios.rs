@@ -1934,9 +1934,23 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
                     inspector_slider(ui, "xChannel", x_ch, 0..=3, "");
                     inspector_slider(ui, "yChannel", y_ch, 0..=3, "");
                 }
-                crate::filter::Fx::AppleGlass { scale, frequency } => {
-                    inspector_slider(ui, "Scale", scale, 0.0..=80.0, "");
-                    inspector_slider(ui, "Frequency", frequency, 0.005..=0.2, "");
+                crate::filter::Fx::AppleGlass(glass) => {
+                    inspector_slider(ui, "Refraction", &mut glass.ior, 1.0..=2.5, "");
+                    inspector_slider(ui, "Color fringing", &mut glass.chromatic, 0.0..=0.2, "");
+                    inspector_slider(ui, "Edge", &mut glass.edge_width, 1.0..=400.0, "");
+                    inspector_slider(ui, "Highlight", &mut glass.spec_power, 1.0..=128.0, "");
+                    inspector_slider(
+                        ui,
+                        "Highlight strength",
+                        &mut glass.spec_intensity,
+                        0.0..=2.0,
+                        "",
+                    );
+                    inspector_slider(ui, "Rim light", &mut glass.fresnel_intensity, 0.0..=2.0, "");
+                    inspector_slider(ui, "Blur", &mut glass.blur, 0.0..=5.0, "");
+                    inspector_slider(ui, "Split", &mut glass.split, 0.0..=1.0, "");
+                    inspector_slider(ui, "Split angle", &mut glass.split_angle, 0.0..=360.0, "");
+                    inspector_slider(ui, "Falloff", &mut glass.falloff, 0.0..=300.0, "");
                 }
             }
         });

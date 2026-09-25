@@ -5,6 +5,10 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use tiny_skia::Pixmap;
 
+#[path = "glass.rs"]
+mod glass;
+pub use glass::AppleGlass;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FilterStack {
     #[serde(default = "default_true")]
@@ -36,7 +40,7 @@ impl FilterStack {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Fx {
     Blur {
         std: f32,
@@ -90,11 +94,8 @@ pub enum Fx {
         x_ch: u8,
         y_ch: u8,
     },
-    /// Frosted refraction: noise drives an feDisplacementMap.
-    AppleGlass {
-        scale: f32,
-        frequency: f32,
-    },
+    /// Liquid glass lens. See [`AppleGlass`].
+    AppleGlass(AppleGlass),
 }
 
 impl Fx {
@@ -114,7 +115,7 @@ impl Fx {
             Fx::ColorMatrix { .. } => "Color matrix",
             Fx::Turbulence { .. } => "Turbulence",
             Fx::Displacement { .. } => "Displacement",
-            Fx::AppleGlass { .. } => "Apple glass",
+            Fx::AppleGlass(_) => "Apple glass",
         }
     }
 
@@ -161,10 +162,7 @@ impl Fx {
                 x_ch: 0,
                 y_ch: 1,
             }),
-            ("Apple glass", || Fx::AppleGlass {
-                scale: 18.0,
-                frequency: 0.04,
-            }),
+            ("Apple glass", || Fx::AppleGlass(AppleGlass::default())),
         ]
     }
 }
@@ -215,7 +213,7 @@ fn apply_one(pm: &mut Pixmap, fx: &Fx) {
             seed,
         } => turbulence(pm, fractal, base.max(0.001), octaves.max(1), seed),
         Fx::Displacement { scale, x_ch, y_ch } => displacement(pm, scale, x_ch.min(3), y_ch.min(3)),
-        Fx::AppleGlass { scale, frequency } => apple_glass(pm, scale, frequency),
+        Fx::AppleGlass(glass) => glass::apply(pm, &glass),
     }
 }
 
@@ -724,33 +722,6 @@ fn displacement(pm: &mut Pixmap, scale: f32, x_ch: u8, y_ch: u8) {
     pm.data_mut().copy_from_slice(&out);
 }
 
-fn apple_glass(pm: &mut Pixmap, scale: f32, frequency: f32) {
-    if scale.abs() < 0.05 {
-        return;
-    }
-    let w = pm.width() as i32;
-    let h = pm.height() as i32;
-    let src = pm.data().to_vec();
-    let mut out = vec![0u8; src.len()];
-    let frequency = frequency.max(0.001);
-    for y in 0..h {
-        for x in 0..w {
-            let nx = (x as f32 * frequency).floor() as i32;
-            let ny = (y as f32 * frequency).floor() as i32;
-            let dx = hash(nx, ny, 2) * scale;
-            let dy = hash(nx, ny, 9) * scale;
-            let sx = (x as f32 + dx).round() as i32;
-            let sy = (y as f32 + dy).round() as i32;
-            let i = idx(w, x, y, 0);
-            if sx >= 0 && sy >= 0 && sx < w && sy < h {
-                let si = idx(w, sx, sy, 0);
-                out[i..i + 4].copy_from_slice(&src[si..si + 4]);
-            }
-        }
-    }
-    pm.data_mut().copy_from_slice(&out);
-}
-
 /// Extra user-space padding a stack needs so blur/offset is not clipped.
 pub fn svg_pad(stack: &FilterStack) -> f32 {
     if stack.is_empty() {
@@ -765,7 +736,11 @@ pub fn svg_pad(stack: &FilterStack) -> f32 {
             }
             Fx::Offset { dx, dy } => pad += dx.abs() + dy.abs(),
             Fx::Morphology { radius, .. } => pad += radius.max(0.0),
-            Fx::Displacement { scale, .. } | Fx::AppleGlass { scale, .. } => pad += scale.abs(),
+            Fx::Displacement { scale, .. } => pad += scale.abs(),
+            Fx::AppleGlass(glass) => {
+                let blur = glass.blur.max(0.0);
+                pad += blur * 4.0 + blur * glass.split.abs();
+            }
             _ => {}
         }
     }
@@ -912,13 +887,10 @@ pub fn svg_filter(id: &str, stack: &FilterStack, region: [f32; 4]) -> Option<Str
                     ch(*y_ch)
                 ));
             }
-            Fx::AppleGlass { scale, frequency } => {
-                let map = format!("{id}-glass");
+            Fx::AppleGlass(glass) => {
                 body.push_str(&format!(
-                    "<feTurbulence type=\"fractalNoise\" baseFrequency=\"{frequency:.4}\" numOctaves=\"2\" seed=\"2\" result=\"{map}\"/>\n"
-                ));
-                body.push_str(&format!(
-                    "<feDisplacementMap in=\"{last}\" in2=\"{map}\" scale=\"{scale:.2}\" xChannelSelector=\"R\" yChannelSelector=\"G\" result=\"{out}\"/>\n"
+                    "<feGaussianBlur in=\"{last}\" stdDeviation=\"{:.3}\" result=\"{out}\"/>\n",
+                    glass.blur.max(0.0)
                 ));
             }
         }
@@ -928,6 +900,18 @@ pub fn svg_filter(id: &str, stack: &FilterStack, region: [f32; 4]) -> Option<Str
     Some(format!(
         "<filter id=\"{id}\" filterUnits=\"userSpaceOnUse\" primitiveUnits=\"userSpaceOnUse\" x=\"{x:.1}\" y=\"{y:.1}\" width=\"{w:.1}\" height=\"{h:.1}\" color-interpolation-filters=\"sRGB\">\n{body}</filter>\n"
     ))
+}
+
+/// Notes for effects an SVG file can only approximate.
+///
+/// `stack` is the filter stack being exported. Each string is a warning a
+/// caller can show next to the file. The Apple glass note names that effect.
+pub fn export_notes(stack: &FilterStack) -> Vec<String> {
+    if stack.items.iter().any(|fx| matches!(fx, Fx::AppleGlass(_))) {
+        vec!["Apple glass is a lens on the canvas and in PNG. SVG uses a mild blur instead.".into()]
+    } else {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]
@@ -958,28 +942,117 @@ mod tests {
         assert!(pm.data()[3] > 0 || pm.data()[((8 * 32 + 9) * 4) + 3] > 0);
     }
 
+    fn round_cover(x: u32, y: u32, w: u32, h: u32) -> bool {
+        let px = x as f32 + 0.5 - w as f32 * 0.5;
+        let py = y as f32 + 0.5 - h as f32 * 0.5;
+        let radius = 8.0;
+        let hx = w as f32 * 0.5 - 4.0;
+        let hy = h as f32 * 0.5 - 4.0;
+        let qx = px.abs() - hx + radius;
+        let qy = py.abs() - hy + radius;
+        qx.max(qy).min(0.0) + qx.max(0.0).hypot(qy.max(0.0)) - radius <= 0.0
+    }
+
+    fn paint(w: u32, h: u32, pixel: impl Fn(u32, u32) -> [u8; 4]) -> Pixmap {
+        let mut pm = Pixmap::new(w, h).unwrap();
+        for y in 0..h {
+            for x in 0..w {
+                let i = ((y * w + x) * 4) as usize;
+                pm.data_mut()[i..i + 4].copy_from_slice(&pixel(x, y));
+            }
+        }
+        pm
+    }
+
     #[test]
-    fn apple_glass_is_a_displacement_of_turbulence() {
-        let svg = svg_filter(
-            "glass",
-            &FilterStack {
-                enabled: true,
-                items: vec![Fx::AppleGlass {
-                    scale: 12.0,
-                    frequency: 0.05,
-                }],
-            },
-            [0.0, 0.0, 32.0, 32.0],
-        )
-        .unwrap();
-        assert!(svg.contains("<feTurbulence"));
-        assert!(svg.contains("<feDisplacementMap"));
-        assert!(svg.contains("in2=\"glass-glass\""));
-        let mut pm = solid(20, 40, 200, 255);
-        pm.data_mut()[0..4].copy_from_slice(&[255, 0, 0, 255]);
+    fn apple_glass_lens_shifts_a_gradient_and_matches_twelveux_defaults() {
+        let glass = AppleGlass::default();
+        assert_eq!(glass.ior, 2.0);
+        assert_eq!(glass.chromatic, 0.13);
+        assert_eq!(glass.edge_width, 200.0);
+        assert_eq!(glass.spec_power, 55.61);
+        assert_eq!(glass.spec_intensity, 0.96);
+        assert_eq!(glass.fresnel_intensity, 1.2);
+        assert_eq!(glass.blur, 1.2);
+        assert_eq!(glass.split, 0.45);
+        assert_eq!(glass.split_angle, 130.0);
+        assert_eq!(glass.falloff, 168.0);
+        let made = Fx::catalog()
+            .iter()
+            .find(|(name, _)| *name == "Apple glass")
+            .unwrap()
+            .1();
+        assert_eq!(made, Fx::AppleGlass(AppleGlass::default()));
+
+        let w = 64u32;
+        let h = 48u32;
+        assert!(round_cover(w / 2, h / 2, w, h));
+        assert!(!round_cover(0, 0, w, h));
+        let mut pm = paint(w, h, |x, y| {
+            let a = if round_cover(x, y, w, h) { 255 } else { 0 };
+            [(x * 255 / (w - 1)) as u8, (y * 255 / (h - 1)) as u8, 40, a]
+        });
         let before = pm.data().to_vec();
-        apple_glass(&mut pm, 8.0, 0.2);
-        assert_ne!(pm.data(), before.as_slice());
+        let stack = FilterStack {
+            enabled: true,
+            items: vec![Fx::AppleGlass(AppleGlass::default())],
+        };
+        apply(&mut pm, &stack);
+        let mut shifted = 0i32;
+        for (old, new) in before.chunks_exact(4).zip(pm.data().chunks_exact(4)) {
+            if old[3] == 0 {
+                assert_eq!(old, new);
+            } else {
+                shifted = shifted.max(
+                    (0..3)
+                        .map(|c| (old[c] as i32 - new[c] as i32).abs())
+                        .max()
+                        .unwrap(),
+                );
+            }
+        }
+        assert!(shifted >= 8, "refracted shift was only {shifted}");
+
+        let mut flat = paint(48, 48, |x, y| {
+            let a = if round_cover(x, y, 48, 48) { 255 } else { 0 };
+            [24, 70, 180, a]
+        });
+        let flat_before = flat.data().to_vec();
+        apply(&mut flat, &stack);
+        let brighter = flat_before
+            .chunks_exact(4)
+            .zip(flat.data().chunks_exact(4))
+            .any(|(old, new)| old[3] > 0 && (0..3).any(|c| new[c] > old[c]));
+        assert!(brighter, "flat glass showed no highlight");
+
+        let svg = svg_filter("glass", &stack, [0.0, 0.0, 32.0, 32.0]).unwrap();
+        assert!(svg.contains("<feGaussianBlur"));
+        assert!(svg.contains("stdDeviation=\"1.200\""));
+        assert!(!svg.contains("feTurbulence"));
+        assert!(!svg.contains("feDisplacementMap"));
+        let notes = export_notes(&stack);
+        assert!(notes.iter().any(|note| note.contains("Apple glass")));
+    }
+
+    #[test]
+    fn apple_glass_round_trips_and_old_scale_fields_still_load() {
+        let fx = Fx::AppleGlass(AppleGlass::default());
+        let json = serde_json::to_string(&fx).unwrap();
+        assert_eq!(serde_json::from_str::<Fx>(&json).unwrap(), fx);
+        let old: Fx =
+            serde_json::from_str(r#"{"AppleGlass":{"scale":18.0,"frequency":0.04}}"#).unwrap();
+        assert_eq!(old, Fx::AppleGlass(AppleGlass::default()));
+        let partial: Fx =
+            serde_json::from_str(r#"{"AppleGlass":{"ior":1.25,"scale":9.0}}"#).unwrap();
+        match partial {
+            Fx::AppleGlass(glass) => {
+                assert_eq!(glass.ior, 1.25);
+                assert_eq!(glass.edge_width, 200.0);
+                assert_eq!(glass.chromatic, 0.13);
+                assert_eq!(glass.falloff, 168.0);
+            }
+            other => panic!("expected Apple glass, got {other:?}"),
+        }
     }
 
     #[test]
