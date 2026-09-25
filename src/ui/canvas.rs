@@ -2780,7 +2780,27 @@ fn draw_bleed_safe(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
     }
 }
 
+fn paint_brush_ring(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
+    if !matches!(
+        studio.tool,
+        Tool::Brush | Tool::Eraser | Tool::Clone | Tool::Heal | Tool::Smudge
+    ) {
+        return;
+    }
+    let Some(world) = studio.cursor else {
+        return;
+    };
+    let center = win(rect, studio.view, world);
+    if !rect.contains(center) {
+        return;
+    }
+    let radius = (studio.brush.size * studio.view.scale * 0.5).max(1.0);
+    p.circle_stroke(center, radius + 1.0, Stroke::new(1.0, Color32::BLACK));
+    p.circle_stroke(center, radius, Stroke::new(1.0, Color32::WHITE));
+}
+
 fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio, pen_preview: Option<Pt>) {
+    paint_brush_ring(p, rect, studio);
     let v = studio.view;
     if let Some(Op::Create {
         kind,
