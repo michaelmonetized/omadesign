@@ -1,4 +1,5 @@
 mod agent;
+pub(crate) mod anim_export;
 mod browsers;
 mod canvas;
 mod chrome;
@@ -145,6 +146,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         cloud::modal(ui, studio);
         layout_preview::show(ui, studio);
         raster::show(ui, studio);
+        anim_export::show(ui, studio);
 
         if studio.show_shortcuts {
             egui_shortcuts(ui, studio);

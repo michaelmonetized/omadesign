@@ -418,6 +418,7 @@ pub struct Studio {
     pub publish_title: String,
     pub publish_tags: String,
     pub publish_summary: String,
+    pub anim_export: Option<crate::anim_export::AnimExport>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -612,6 +613,7 @@ impl Studio {
             publish_title: String::new(),
             publish_tags: String::new(),
             publish_summary: String::new(),
+            anim_export: None,
         };
         s.ensure_tabs();
         s.doc.grid.visible = false;
@@ -3924,6 +3926,7 @@ impl eframe::App for Studio {
         self.poll_clipboard_jobs(&ctx);
         self.photo.poll(&ctx);
         crate::ui::photo::poll_jobs(&ctx, self);
+        crate::ui::anim_export::poll(&ctx, self);
         crate::ui::run(ui, self);
         if !self.file_dialog_pending() {
             self.import_notes_window(&ctx);
