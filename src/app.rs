@@ -3441,6 +3441,18 @@ impl Studio {
         );
     }
 
+    pub fn export_dotlottie(&mut self) {
+        self.end_deform(false);
+        self.end_pixel_stroke(false);
+        self.request_file_dialog(
+            || crate::project::dialog_export("Lottie .lottie", "lottie"),
+            |_, studio, path| {
+                let result = motion::export_dotlottie(&studio.doc);
+                studio.complete_export(&path, result);
+            },
+        );
+    }
+
     pub fn import_lottie(&mut self) {
         self.request_file_dialog(
             || {
@@ -3448,15 +3460,19 @@ impl Studio {
                     .add_filter("Lottie", &["json", "lottie"])
                     .pick_file()
             },
-            |_, studio, path| match std::fs::read_to_string(&path) {
-                Ok(s) => studio.import_lottie_str(&s),
+            |_, studio, path| match std::fs::read(&path) {
+                Ok(bytes) => studio.import_lottie_bytes(&bytes),
                 Err(e) => studio.status = format!("read failed: {e}"),
             },
         );
     }
 
     pub fn import_lottie_str(&mut self, json: &str) {
-        match motion::import_lottie(json) {
+        self.import_lottie_bytes(json.as_bytes());
+    }
+
+    pub fn import_lottie_bytes(&mut self, bytes: &[u8]) {
+        match motion::import_lottie_bytes(bytes) {
             Ok(imp) => {
                 let empty = self
                     .doc
@@ -3522,8 +3538,8 @@ impl Studio {
             return;
         }
         if ext == "json" || ext == "lottie" {
-            match std::fs::read_to_string(path) {
-                Ok(s) => self.import_lottie_str(&s),
+            match std::fs::read(path) {
+                Ok(bytes) => self.import_lottie_bytes(&bytes),
                 Err(e) => self.status = format!("read failed: {e}"),
             }
             return;

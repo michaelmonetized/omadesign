@@ -276,8 +276,12 @@ fn file_menu(ui: &mut Ui, studio: &mut Studio) {
             studio.export_animated_svg();
             ui.close();
         }
-        if ui.button("Export Lottie…").clicked() {
+        if ui.button("Export Lottie JSON…").clicked() {
             studio.export_lottie();
+            ui.close();
+        }
+        if ui.button("Export Lottie .lottie…").clicked() {
+            studio.export_dotlottie();
             ui.close();
         }
         ui.separator();
