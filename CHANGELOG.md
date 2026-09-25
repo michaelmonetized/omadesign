@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-09-25 · 0.6.0 — The bundles replaced.
+
+Same version. The Linux archives on the 0.6.0 release were rebuilt from the QA revision and uploaded over the original files.
+
+- The eyedropper writes the sample onto the active fill or stroke, including the first stop of a gradient, and into the color dialog that asked for it. Recent colors stay in the picker.
+- Apple glass is the twelveux lens: refraction, color fringe, highlight, rim light, blur, split, and falloff.
+- Simplify runs on one path, from the inspector and from Object → Pathfinder.
+- The Omarchy theme reloads when the theme file changes.
+- Paste takes a PNG, JPEG, or SVG copied from the file manager.
+- A Picsum photo lands as a picture you can select.
+- An animated SVG keeps a rotating gradient and names the effects it cannot represent. WebM export plays the motion.
+- A ruler guide snaps while you drag it.
+
 ## 2026-09-25 · 0.6.0 — Key the design you already made.
 
 - Brush, eraser, clone, heal, and smudge draw the brush edge on the canvas
