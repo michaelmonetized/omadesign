@@ -663,6 +663,9 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
             },
             |ui| {
                 if gradient_editor::editor(ui, &mut gradient, bounds) {
+                    for stop in &gradient.stops {
+                        studio.push_recent(stop.color);
+                    }
                     let angle_only = gradient.kind == rest.kind && gradient.stops == rest.stops;
                     if studio.is_motion()
                         && angle_only
@@ -1807,17 +1810,6 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
                 }
             }
             if ui
-                .small_button("Simplify")
-                .on_hover_text("Drop the extra nodes a boolean leaves on a straight edge")
-                .clicked()
-            {
-                for (layer, id) in studio.selection.clone() {
-                    edit_shape_geometry(studio, layer, id, |geometry| {
-                        crate::geom::simplify_geom(geometry, 1.5);
-                    });
-                }
-            }
-            if ui
                 .small_button("Compound")
                 .on_hover_text("Ctrl+8")
                 .clicked()
@@ -1825,6 +1817,14 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
                 studio.combine_selected();
             }
         });
+    }
+    if studio.selection_has_path()
+        && ui
+            .small_button("Simplify")
+            .on_hover_text("Fit each selected path. Corners stay sharp and straight lines stay straight.")
+            .clicked()
+    {
+        studio.simplify_selection();
     }
     if compound
         && ui
@@ -1934,9 +1934,23 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
                     inspector_slider(ui, "xChannel", x_ch, 0..=3, "");
                     inspector_slider(ui, "yChannel", y_ch, 0..=3, "");
                 }
-                crate::filter::Fx::AppleGlass { scale, frequency } => {
-                    inspector_slider(ui, "Scale", scale, 0.0..=80.0, "");
-                    inspector_slider(ui, "Frequency", frequency, 0.005..=0.2, "");
+                crate::filter::Fx::AppleGlass(glass) => {
+                    inspector_slider(ui, "Refraction", &mut glass.ior, 1.0..=2.5, "");
+                    inspector_slider(ui, "Color fringing", &mut glass.chromatic, 0.0..=0.2, "");
+                    inspector_slider(ui, "Edge", &mut glass.edge_width, 1.0..=400.0, "");
+                    inspector_slider(ui, "Highlight", &mut glass.spec_power, 1.0..=128.0, "");
+                    inspector_slider(
+                        ui,
+                        "Highlight strength",
+                        &mut glass.spec_intensity,
+                        0.0..=2.0,
+                        "",
+                    );
+                    inspector_slider(ui, "Rim light", &mut glass.fresnel_intensity, 0.0..=2.0, "");
+                    inspector_slider(ui, "Blur", &mut glass.blur, 0.0..=5.0, "");
+                    inspector_slider(ui, "Split", &mut glass.split, 0.0..=1.0, "");
+                    inspector_slider(ui, "Split angle", &mut glass.split_angle, 0.0..=360.0, "");
+                    inspector_slider(ui, "Falloff", &mut glass.falloff, 0.0..=300.0, "");
                 }
             }
         });

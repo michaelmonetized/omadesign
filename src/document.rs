@@ -578,6 +578,9 @@ pub enum LayerKind {
         size: Pt,
         #[serde(default)]
         rotation: f32,
+        /// Horizontal shift of the bottom edge, in document pixels. The top edge stays put.
+        #[serde(default)]
+        shear: f32,
     },
 }
 
@@ -628,6 +631,19 @@ impl LayerKind {
         }
     }
 
+    pub fn raster_shear(&self) -> f32 {
+        match self {
+            LayerKind::Raster { shear, .. } => *shear,
+            _ => 0.0,
+        }
+    }
+
+    pub fn set_raster_shear(&mut self, shear: f32) {
+        if let LayerKind::Raster { shear: slot, .. } = self {
+            *slot = shear;
+        }
+    }
+
     pub fn raster_xform(&self) -> Option<(Pt, Pt, f32)> {
         match self {
             LayerKind::Raster {
@@ -635,6 +651,7 @@ impl LayerKind {
                 origin,
                 size,
                 rotation,
+                ..
             } => {
                 let sz = if size.x.abs() > 0.5 && size.y.abs() > 0.5 {
                     *size
@@ -682,6 +699,7 @@ impl LayerKind {
             origin,
             size,
             rotation,
+            ..
         } = self
         else {
             return false;
@@ -786,6 +804,7 @@ impl Layer {
                 origin: Pt::ZERO,
                 size: Pt::ZERO,
                 rotation: 0.0,
+                shear: 0.0,
             },
             filters: crate::filter::FilterStack::default(),
         }
@@ -810,6 +829,7 @@ impl Layer {
                 origin,
                 size,
                 rotation: 0.0,
+                shear: 0.0,
             },
             filters: crate::filter::FilterStack::default(),
         }
@@ -1625,6 +1645,14 @@ pub enum Cmd {
         from: usize,
         to: usize,
     },
+    /// Move a contiguous run of shapes onto another layer without dropping motion.
+    MoveShapes {
+        from_layer: usize,
+        from_index: usize,
+        to_layer: usize,
+        to_index: usize,
+        count: usize,
+    },
     SetGeoms {
         items: Vec<(usize, u64, Geom, Geom, f32, f32)>,
     },
@@ -1689,6 +1717,11 @@ pub enum Cmd {
         layer: usize,
         before: (Pt, Pt, f32),
         after: (Pt, Pt, f32),
+    },
+    SetRasterShear {
+        layer: usize,
+        before: f32,
+        after: f32,
     },
     SetArtboards {
         before: Vec<Artboard>,
@@ -2067,6 +2100,19 @@ fn invert_cmd(cmd: Cmd) -> Cmd {
             from: to,
             to: from,
         },
+        Cmd::MoveShapes {
+            from_layer,
+            from_index,
+            to_layer,
+            to_index,
+            count,
+        } => Cmd::MoveShapes {
+            from_layer: to_layer,
+            from_index: to_index,
+            to_layer: from_layer,
+            to_index: from_index,
+            count,
+        },
         Cmd::SetGeoms { items } => Cmd::SetGeoms {
             items: items
                 .into_iter()
@@ -2160,6 +2206,15 @@ fn invert_cmd(cmd: Cmd) -> Cmd {
             before,
             after,
         } => Cmd::SetRasterXform {
+            layer,
+            before: after,
+            after: before,
+        },
+        Cmd::SetRasterShear {
+            layer,
+            before,
+            after,
+        } => Cmd::SetRasterShear {
             layer,
             before: after,
             after: before,
@@ -2330,6 +2385,52 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
                 vs.insert(t, shape);
             }
         }
+        Cmd::MoveShapes {
+            from_layer,
+            from_index,
+            to_layer,
+            to_index,
+            count,
+        } => {
+            if from_layer == to_layer || *count == 0 {
+                return;
+            }
+            let moved = {
+                let Some(source) = doc
+                    .layers
+                    .get_mut(*from_layer)
+                    .and_then(|layer| layer.kind.shapes_mut())
+                else {
+                    return;
+                };
+                if *from_index >= source.len() {
+                    return;
+                }
+                let end = (*from_index + *count).min(source.len());
+                source.drain(*from_index..end).collect::<Vec<_>>()
+            };
+            let Some(dest) = doc
+                .layers
+                .get_mut(*to_layer)
+                .and_then(|layer| layer.kind.shapes_mut())
+            else {
+                if let Some(source) = doc
+                    .layers
+                    .get_mut(*from_layer)
+                    .and_then(|layer| layer.kind.shapes_mut())
+                {
+                    let at = (*from_index).min(source.len());
+                    for (offset, shape) in moved.into_iter().enumerate() {
+                        source.insert(at + offset, shape);
+                    }
+                }
+                return;
+            };
+            let at = (*to_index).min(dest.len());
+            for (offset, shape) in moved.into_iter().enumerate() {
+                dest.insert(at + offset, shape);
+            }
+        }
         Cmd::SetGeoms { items } => {
             for (layer, id, _, after, _, rot_after) in items {
                 if let Some(s) = doc.find_shape_mut(*layer, *id) {
@@ -2406,6 +2507,11 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
         Cmd::SetRasterXform { layer, after, .. } => {
             if let Some(l) = doc.layers.get_mut(*layer) {
                 l.kind.set_raster_xform(after.0, after.1, after.2);
+            }
+        }
+        Cmd::SetRasterShear { layer, after, .. } => {
+            if let Some(layer) = doc.layers.get_mut(*layer) {
+                layer.kind.set_raster_shear(*after);
             }
         }
         Cmd::SetArtboards { after, .. } => {

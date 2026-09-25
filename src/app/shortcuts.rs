@@ -572,6 +572,10 @@ impl Studio {
             self.end_deform(key == Key::Escape);
             return true;
         }
+        if self.free_transform.is_some() && matches!(key, Key::Escape | Key::Enter) {
+            self.finish_free_transform(key == Key::Escape);
+            return true;
+        }
         let step = if shift { 10.0 } else { 1.0 };
         match key {
             Key::Delete | Key::Backspace => {

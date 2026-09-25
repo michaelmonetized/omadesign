@@ -202,6 +202,7 @@ impl Studio {
                 Cmd::ReorderLayer { .. }
                 | Cmd::AddLayer { .. }
                 | Cmd::RemoveLayer { .. }
+                | Cmd::MoveShapes { .. }
                 | Cmd::SetVectorShapes { .. } => true,
                 Cmd::Batch(commands) => commands.iter().any(changes_layer_indices),
                 _ => false,

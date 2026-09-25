@@ -276,9 +276,24 @@ fn file_menu(ui: &mut Ui, studio: &mut Studio) {
             studio.export_animated_svg();
             ui.close();
         }
-        if ui.button("Export Lottie…").clicked() {
+        if ui.button("Export Lottie JSON…").clicked() {
             studio.export_lottie();
             ui.close();
+        }
+        if ui.button("Export Lottie .lottie…").clicked() {
+            studio.export_dotlottie();
+            ui.close();
+        }
+        for (label, kind) in [
+            ("Export GIF…", crate::anim_export::AnimKind::Gif),
+            ("Export APNG…", crate::anim_export::AnimKind::Apng),
+            ("Export MP4…", crate::anim_export::AnimKind::Mp4),
+            ("Export WebM…", crate::anim_export::AnimKind::Webm),
+        ] {
+            if ui.button(label).clicked() {
+                super::anim_export::open(studio, kind);
+                ui.close();
+            }
         }
         ui.separator();
         ui.label(RichText::new("Layout frame").small().color(fg_weak()));

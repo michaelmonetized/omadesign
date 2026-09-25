@@ -49,10 +49,18 @@ pub fn read() -> Result<ClipboardContent, String> {
     {
         if std::env::var_os("WAYLAND_DISPLAY").is_some() {
             match read_wayland() {
-                Ok(content) => return Ok(content),
+                Ok(content) if !matches!(content, ClipboardContent::Empty) => return Ok(content),
+                Ok(_) => {
+                    if let Some(content) = read_wl_paste() {
+                        return Ok(content);
+                    }
+                }
                 // Some compositors do not expose data-control. Their XWayland selection
                 // remains useful; an empty Wayland selection must never use this fallback.
                 Err(WaylandError::Unavailable(error)) => {
+                    if let Some(content) = read_wl_paste() {
+                        return Ok(content);
+                    }
                     if std::env::var_os("DISPLAY").is_none() {
                         return Err(error);
                     }
@@ -98,6 +106,27 @@ pub fn parse_text(text: &str) -> Result<ClipboardContent, String> {
     };
     if !file_lines.is_empty() && file_lines.iter().all(|line| line.starts_with("file:")) {
         return parse_file_list(trimmed);
+    }
+    let path_lines: Vec<&str> = lines
+        .iter()
+        .copied()
+        .filter(|line| Path::new(line).is_absolute())
+        .collect();
+    if !path_lines.is_empty() && path_lines.len() == lines.len() {
+        let paths: Vec<PathBuf> = path_lines.iter().map(PathBuf::from).collect();
+        if paths.iter().all(|path| path.is_file()) {
+            if paths.iter().any(|path| !is_image_path(path) && !is_svg_path(path))
+                && paths.iter().all(|path| !is_image_path(path))
+            {
+                return Err(format!(
+                    "Can't paste {} — use a PNG, JPEG, WebP, GIF, or SVG",
+                    paths[0].display()
+                ));
+            }
+            return Ok(ClipboardContent::Files(
+                paths.into_iter().filter(|path| is_image_path(path)).collect(),
+            ));
+        }
     }
     // Some file managers expose the copied local filename as plain text only.
     let path = Path::new(trimmed);
@@ -160,6 +189,45 @@ fn parse_file_list(text: &str) -> Result<ClipboardContent, String> {
     } else {
         Ok(ClipboardContent::Files(paths))
     }
+}
+
+fn is_svg_path(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("svg"))
+}
+
+fn read_wl_paste() -> Option<ClipboardContent> {
+    let listed = std::process::Command::new("wl-paste")
+        .arg("--list-types")
+        .output()
+        .ok()?;
+    if !listed.status.success() {
+        return None;
+    }
+    let offered = String::from_utf8_lossy(&listed.stdout);
+    let content = read_candidates(|mime| {
+        let present = offered.lines().any(|line| {
+            let line = line.trim();
+            line.eq_ignore_ascii_case(mime)
+                || line
+                    .split(';')
+                    .next()
+                    .is_some_and(|base| base.eq_ignore_ascii_case(mime))
+        });
+        if !present {
+            return Ok(None);
+        }
+        let output = std::process::Command::new("wl-paste")
+            .args(["--no-newline", "--type", mime])
+            .output()
+            .map_err(|error| error.to_string())?;
+        if !output.status.success() || output.stdout.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(output.stdout))
+    })
+    .ok()?;
+    Some(content)
 }
 
 fn is_image_path(path: &Path) -> bool {

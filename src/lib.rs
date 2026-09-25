@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod align;
+pub mod anim_export;
 pub mod app;
 pub mod asset_browser;
 pub mod boolean;
@@ -36,6 +37,7 @@ pub mod project;
 pub mod raster;
 pub mod screen_pick;
 pub mod shape_browser;
+pub mod simplify;
 pub mod shots;
 pub mod snap;
 pub mod svg;

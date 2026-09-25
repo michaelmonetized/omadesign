@@ -7,9 +7,10 @@ use eframe::egui::{
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant, SystemTime};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Palette {
     pub accent: Color32,
     pub blue: Color32,
@@ -34,10 +35,79 @@ pub struct Palette {
     pub dark: bool,
 }
 
-static PALETTE: OnceLock<Palette> = OnceLock::new();
+struct LiveTheme {
+    palette: Palette,
+    font: String,
+    colors_key: Option<u128>,
+    name_key: Option<u128>,
+    warned: bool,
+}
 
-pub fn p() -> &'static Palette {
-    PALETTE.get_or_init(Palette::load)
+static LIVE: OnceLock<Mutex<LiveTheme>> = OnceLock::new();
+
+fn live() -> &'static Mutex<LiveTheme> {
+    LIVE.get_or_init(|| {
+        Mutex::new(LiveTheme {
+            palette: Palette::load(),
+            font: omarchy_font_name().unwrap_or_default(),
+            colors_key: file_key(&omarchy_colors_path()),
+            name_key: file_key(&omarchy_name_path()),
+            warned: false,
+        })
+    })
+}
+
+pub fn p() -> Palette {
+    live()
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+        .palette
+}
+
+/// Re-read the Omarchy theme after it changes on disk. A bad file keeps the last good palette.
+pub fn poll(ctx: &Context) {
+    let id = eframe::egui::Id::new("omarchy-theme-poll");
+    let now = Instant::now();
+    let due = ctx
+        .data(|data| data.get_temp::<Instant>(id))
+        .is_none_or(|then| now.duration_since(then) >= Duration::from_millis(400));
+    if !due {
+        return;
+    }
+    ctx.data_mut(|data| data.insert_temp(id, now));
+    ctx.request_repaint_after(Duration::from_millis(500));
+    let colors_key = file_key(&omarchy_colors_path());
+    let name_key = file_key(&omarchy_name_path());
+    let font = omarchy_font_name().unwrap_or_default();
+    let mut state = live().lock().unwrap_or_else(|poison| poison.into_inner());
+    let files_changed = colors_key != state.colors_key || name_key != state.name_key;
+    let font_changed = font != state.font;
+    if !files_changed && !font_changed {
+        return;
+    }
+    if files_changed {
+        match palette_from_file(&omarchy_colors_path()) {
+            Some(palette) => {
+                state.palette = palette;
+                state.warned = false;
+            }
+            None => {
+                if !state.warned {
+                    eprintln!(
+                        "omadesign: Omarchy theme colors could not be read; keeping the current palette"
+                    );
+                    state.warned = true;
+                }
+            }
+        }
+        state.colors_key = colors_key;
+        state.name_key = name_key;
+    }
+    if font_changed {
+        state.font = font;
+    }
+    drop(state);
+    apply(ctx);
 }
 
 pub fn accent() -> Color32 {
@@ -161,6 +231,47 @@ fn read_to_string(p: &Path) -> Option<String> {
 
 fn home() -> PathBuf {
     PathBuf::from(std::env::var("HOME").unwrap_or_default())
+}
+
+fn omarchy_colors_path() -> PathBuf {
+    home().join(".local/state/omarchy/current/theme/colors.toml")
+}
+
+fn omarchy_name_path() -> PathBuf {
+    home().join(".local/state/omarchy/current/theme.name")
+}
+
+fn file_key(path: &Path) -> Option<u128> {
+    let meta = std::fs::metadata(path).ok()?;
+    let modified = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+    let nanos = modified
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    Some(nanos ^ u128::from(meta.len()))
+}
+
+fn palette_from_toml(text: &str) -> Option<Palette> {
+    let map = parse_kv(text);
+    let known = get(
+        &map,
+        &[
+            "background",
+            "base",
+            "bg",
+            "foreground",
+            "text",
+            "fg",
+            "accent",
+        ],
+    )
+    .is_some();
+    known.then(|| Palette::from_map(&map))
+}
+
+fn palette_from_file(path: &Path) -> Option<Palette> {
+    let text = std::fs::read_to_string(path).ok()?;
+    palette_from_toml(&text)
 }
 
 fn omarchy_theme_name() -> Option<String> {
@@ -524,5 +635,35 @@ mod tests {
         assert_eq!(p.bg_window, Color32::from_rgb(0x01, 0x01, 0x01));
         assert_eq!(p.accent, Color32::from_rgb(0x89, 0xB4, 0xFA));
         assert!(p.dark);
+    }
+
+    #[test]
+    fn reloads_palette_from_a_changed_colors_file() {
+        let dir = std::env::temp_dir().join(format!(
+            "omadesign-theme-{}-{}",
+            std::process::id(),
+            crate::document::next_id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("colors.toml");
+        std::fs::write(
+            &path,
+            "background = \"#010101\"\nforeground = \"#eeeeee\"\naccent = \"#89b4fa\"\n",
+        )
+        .unwrap();
+        let first = palette_from_file(&path).unwrap();
+        assert_eq!(first.bg_window, Color32::from_rgb(0x01, 0x01, 0x01));
+        std::fs::write(
+            &path,
+            "background = \"#fafafa\"\nforeground = \"#111111\"\naccent = \"#cc0000\"\n",
+        )
+        .unwrap();
+        let second = palette_from_file(&path).unwrap();
+        assert_eq!(second.bg_window, Color32::from_rgb(0xfa, 0xfa, 0xfa));
+        assert!(!second.dark);
+        std::fs::write(&path, "this is not a theme\n").unwrap();
+        assert!(palette_from_file(&path).is_none());
+        assert!(palette_from_file(&dir.join("missing.toml")).is_none());
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

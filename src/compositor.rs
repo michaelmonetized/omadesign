@@ -218,6 +218,36 @@ pub(crate) fn render_export(doc: &Document, scale: u32) -> Result<Pixmap, String
     Ok(pm)
 }
 
+/// Export one frame at a motion time.
+///
+/// Same plates and `groups::draw` as still export, with the pose evaluated at `time`.
+/// Transparent frames stay empty behind the artwork. Opaque frames are painted on white first.
+pub fn render_export_at(
+    doc: &Document,
+    scale: f32,
+    time: f32,
+    transparent: bool,
+) -> Result<Pixmap, String> {
+    let s = if scale.is_finite() {
+        scale.clamp(0.1, 8.0)
+    } else {
+        1.0
+    };
+    let time = if time.is_finite() { time } else { 0.0 };
+    let w = (doc.width * s).round().max(1.0) as u32;
+    let h = (doc.height * s).round().max(1.0) as u32;
+    let mut pm = Pixmap::new(w, h).ok_or("could not allocate export pixmap")?;
+    if !transparent {
+        pm.fill(tiny_skia::Color::WHITE);
+        if !doc.transparent {
+            draw_export_plates(&mut pm, doc, s);
+        }
+    }
+    let t = Transform::from_scale(s, s);
+    groups::draw(&mut pm, doc, t, &Draft::none(), Some(time), None);
+    Ok(pm)
+}
+
 pub fn export_png(doc: &Document, scale: u32) -> Result<Vec<u8>, String> {
     render_export(doc, scale)?
         .encode_png()
@@ -407,6 +437,7 @@ pub fn layer_pixel_transform(layer: &Layer) -> Transform {
         origin,
         size,
         rotation,
+        shear,
     } = &layer.kind
     else {
         return if let Some(mask) = &layer.mask
@@ -436,6 +467,11 @@ pub fn layer_pixel_transform(layer: &Layer) -> Transform {
             .pre_concat(Transform::from_rotate(rotation.to_degrees()))
             .pre_concat(Transform::from_translate(-centre.x, -centre.y))
             .pre_concat(transform);
+    }
+    if shear.abs() > 1e-4 {
+        let slope = *shear / dimensions.y.max(1.0);
+        let shear_xf = Transform::from_row(1.0, 0.0, slope, 1.0, -slope * origin.y, 0.0);
+        transform = shear_xf.pre_concat(transform);
     }
     transform
 }

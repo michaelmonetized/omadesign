@@ -1416,136 +1416,45 @@ pub fn insert_anchor(anchors: &mut Vec<Anchor>, closed: bool, p: Pt, slack: f32)
     }
 }
 
-/// Drop anchors that sit on the line between their neighbors.
-/// Boolean subtract leaves a polyline of those anchors. Handles that already
-/// bend the curve are kept.
-pub fn simplify_geom(geom: &mut Geom, epsilon: f32) {
-    let epsilon = epsilon.max(0.0);
-    match geom {
-        Geom::Path { anchors, closed } => {
-            *anchors = simplify_anchors(anchors, *closed, epsilon);
+/// Shear around `bounds`. Horizontal moves the bottom edge by `amount`; vertical moves the right edge.
+pub fn shear_geom(geom: &mut Geom, bounds: Bounds, horizontal: bool, amount: f32) {
+    if amount.abs() < 1e-4 {
+        return;
+    }
+    if !matches!(geom, Geom::Path { .. } | Geom::Paths { .. }) {
+        *geom = geom.to_path();
+    }
+    let width = bounds.width().max(1.0);
+    let height = bounds.height().max(1.0);
+    let map = |point: Pt| {
+        if horizontal {
+            let t = (point.y - bounds.min.y) / height;
+            Pt::new(point.x + amount * t, point.y)
+        } else {
+            let t = (point.x - bounds.min.x) / width;
+            Pt::new(point.x, point.y + amount * t)
         }
+    };
+    let shift = |anchor: &mut Anchor| {
+        let point = map(anchor.pt);
+        anchor.h_in = map(anchor.pt + anchor.h_in) - point;
+        anchor.h_out = map(anchor.pt + anchor.h_out) - point;
+        anchor.pt = point;
+    };
+    match geom {
+        Geom::Path { anchors, .. } => anchors.iter_mut().for_each(shift),
         Geom::Paths { paths, .. } => {
             for path in paths {
-                path.anchors = simplify_anchors(&path.anchors, path.closed, epsilon);
-            }
-        }
-        Geom::Poly { contours, .. } => {
-            for contour in contours {
-                *contour = simplify_points(contour, true, epsilon);
+                path.anchors.iter_mut().for_each(&shift);
             }
         }
         _ => {}
     }
 }
 
-fn simplify_anchors(anchors: &[Anchor], closed: bool, epsilon: f32) -> Vec<Anchor> {
-    if anchors.len() < 3 {
-        return anchors.to_vec();
-    }
-    let points: Vec<Pt> = anchors.iter().map(|anchor| anchor.pt).collect();
-    let kept = simplify_points(&points, closed, epsilon);
-    let mut out = Vec::new();
-    for point in kept {
-        let Some(anchor) = anchors.iter().min_by(|a, b| {
-            (a.pt - point)
-                .length_sq()
-                .partial_cmp(&(b.pt - point).length_sq())
-                .unwrap_or(std::cmp::Ordering::Equal)
-        }) else {
-            continue;
-        };
-        if out.last().is_some_and(|prev: &Anchor| prev.pt == anchor.pt) {
-            continue;
-        }
-        out.push(*anchor);
-    }
-    if closed && out.len() < 3 {
-        anchors.to_vec()
-    } else if out.len() < 2 {
-        anchors.to_vec()
-    } else {
-        out
-    }
-}
-
-fn simplify_points(points: &[Pt], closed: bool, epsilon: f32) -> Vec<Pt> {
-    if points.len() < 3 {
-        return points.to_vec();
-    }
-    if !closed {
-        return rdp(points, epsilon);
-    }
-    if points.len() < 4 {
-        return points.to_vec();
-    }
-    let mut far = 0.0;
-    let mut split = 1;
-    for (index, point) in points.iter().enumerate().skip(1) {
-        let distance = (*point - points[0]).length_sq();
-        if distance > far {
-            far = distance;
-            split = index;
-        }
-    }
-    let mut first = rdp(&points[..=split], epsilon);
-    let mut second = points[split..].to_vec();
-    second.push(points[0]);
-    second = rdp(&second, epsilon);
-    if second.len() > 2 {
-        first.extend_from_slice(&second[1..second.len() - 1]);
-    }
-    if first.len() < 3 {
-        points.to_vec()
-    } else {
-        first
-    }
-}
-
-fn rdp(points: &[Pt], epsilon: f32) -> Vec<Pt> {
-    if points.len() < 3 {
-        return points.to_vec();
-    }
-    let mut keep = vec![false; points.len()];
-    keep[0] = true;
-    keep[points.len() - 1] = true;
-    rdp_mark(points, 0, points.len() - 1, epsilon, &mut keep);
-    points
-        .iter()
-        .enumerate()
-        .filter(|(index, _)| keep[*index])
-        .map(|(_, point)| *point)
-        .collect()
-}
-
-fn rdp_mark(points: &[Pt], start: usize, end: usize, epsilon: f32, keep: &mut [bool]) {
-    if end <= start + 1 {
-        return;
-    }
-    let mut far = 0.0;
-    let mut index = start;
-    for i in start + 1..end {
-        let distance = point_segment_distance(points[i], points[start], points[end]);
-        if distance > far {
-            far = distance;
-            index = i;
-        }
-    }
-    if far > epsilon {
-        keep[index] = true;
-        rdp_mark(points, start, index, epsilon, keep);
-        rdp_mark(points, index, end, epsilon, keep);
-    }
-}
-
-fn point_segment_distance(point: Pt, start: Pt, end: Pt) -> f32 {
-    let span = end - start;
-    let len_sq = span.length_sq();
-    if len_sq < 1e-8 {
-        return (point - start).length();
-    }
-    let t = ((point - start).dot(span) / len_sq).clamp(0.0, 1.0);
-    (point - (start + span * t)).length()
+/// Fit each selected path to the fewest nodes that stay within `epsilon`.
+pub fn simplify_geom(geom: &mut Geom, epsilon: f32) {
+    crate::simplify::apply(geom, epsilon.max(0.0));
 }
 
 #[cfg(test)]

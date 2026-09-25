@@ -151,6 +151,7 @@ fn snapshot(doc: &Document) -> Document {
                 origin,
                 size,
                 rotation,
+                shear,
             } => {
                 target.kind = LayerKind::Raster {
                     pixels: proxy_pixels(pixels, ratio),
@@ -161,6 +162,7 @@ fn snapshot(doc: &Document) -> Document {
                         Pt::new(pixels.w as f32, pixels.h as f32)
                     },
                     rotation: *rotation,
+                    shear: *shear,
                 };
             }
             LayerKind::Vector { .. } => {
@@ -298,6 +300,7 @@ mod tests {
             origin,
             size,
             rotation,
+            ..
         } = &layer.kind
         else {
             unreachable!()

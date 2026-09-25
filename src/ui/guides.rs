@@ -219,8 +219,26 @@ pub fn handle_input(ui: &mut Ui, studio: &mut Studio, rect: Rect) -> bool {
                     *world = point;
                     if *vertical {
                         world.x += state.guide_grab_offset;
+                        let (snapped, feedback) = crate::snap::snap_guide(
+                            &studio.doc,
+                            studio.effective_snap(),
+                            true,
+                            world.x,
+                            studio.view.scale,
+                        );
+                        world.x = snapped;
+                        studio.snap_feedback = feedback;
                     } else {
                         world.y += state.guide_grab_offset;
+                        let (snapped, feedback) = crate::snap::snap_guide(
+                            &studio.doc,
+                            studio.effective_snap(),
+                            false,
+                            world.y,
+                            studio.view.scale,
+                        );
+                        world.y = snapped;
+                        studio.snap_feedback = feedback;
                     }
                 }
                 Drag::Origin { world } => *world = point,
@@ -229,6 +247,7 @@ pub fn handle_input(ui: &mut Ui, studio: &mut Studio, rect: Rect) -> bool {
         ctx.request_repaint();
     }
     if released && let Some(drag) = state.drag.take() {
+        studio.snap_feedback = crate::snap::Feedback::default();
         let inside = pointer.is_some_and(|p| content_rect(rect, studio.show_rulers).contains(p));
         match drag {
             Drag::Guide {
@@ -725,6 +744,7 @@ mod tests {
         studio.view.offset = Pt::ZERO;
         studio.doc.guides.clear();
         studio.doc.ruler.guides_locked = false;
+        studio.snap.grid = false;
         frame(&ctx, &mut studio, vec![]);
         (ctx, studio)
     }
@@ -760,6 +780,12 @@ mod tests {
                 pos: 150.0
             }
         );
+        studio.snap.grid = true;
+        frame(&ctx, &mut studio, button(150.0, 180.0, true));
+        frame(&ctx, &mut studio, button(149.0, 180.0, false));
+        assert_eq!(studio.doc.guides[1].pos, 152.0);
+        studio.undo();
+        studio.snap.grid = false;
         frame(&ctx, &mut studio, button(152.0, 180.0, true));
         frame(&ctx, &mut studio, button(152.0, 180.0, false));
         assert_eq!(

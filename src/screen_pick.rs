@@ -11,8 +11,40 @@ pub fn parse_cursor_pos(text: &str) -> Option<(i32, i32)> {
 }
 
 pub fn parse_hex_color(text: &str) -> Option<Rgba> {
-    let token = text.split_whitespace().next()?;
-    Rgba::parse_hex(token)
+    let plain = strip_ansi(text);
+    let mut bare = None;
+    for token in plain.split_whitespace() {
+        let token = token.trim_matches(|c: char| c != '#' && !c.is_ascii_hexdigit());
+        if token.starts_with('#') {
+            if let Some(color) = Rgba::parse_hex(token) {
+                return Some(color);
+            }
+        } else if bare.is_none()
+            && matches!(token.len(), 6 | 8)
+            && let Some(color) = Rgba::parse_hex(token)
+        {
+            bare = Some(color);
+        }
+    }
+    bare
+}
+
+fn strip_ansi(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\u{1b}' && chars.peek() == Some(&'[') {
+            chars.next();
+            for next in chars.by_ref() {
+                if next == 'm' {
+                    break;
+                }
+            }
+            continue;
+        }
+        out.push(ch);
+    }
+    out
 }
 
 pub fn parse_ppm_pixel(data: &[u8]) -> Option<Rgba> {
@@ -147,10 +179,10 @@ fn ensure() -> Result<bool, String> {
         return Ok(false);
     }
     match Command::new("hyprpicker")
-        .args(["-q", "-f", "hex", "-l"])
+        .args(picker_args())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
     {
         Ok(child) => {
@@ -161,35 +193,59 @@ fn ensure() -> Result<bool, String> {
     }
 }
 
+/// Arguments for one screen grab.
+///
+/// Do not pass `-q`. hyprpicker prints the picked color through its logger,
+/// and quiet mode drops that line, so the loupe closes and every picker
+/// receives nothing.
+fn picker_args() -> &'static [&'static str] {
+    &["-b", "-f", "hex", "-l"]
+}
+
 fn take() -> Option<Result<Rgba, String>> {
-    let mut slot = lock();
-    let live = slot.as_mut()?;
-    let status = match live.0.try_wait() {
-        Ok(None) => return None,
-        Ok(Some(status)) => status,
-        Err(_) => {
-            slot.take();
-            HOLD.store(true, Ordering::Relaxed);
-            return Some(Err(
-                "Screen pick cancelled. Press I to sample the screen.".into()
-            ));
-        }
-    };
-    let mut live = slot.take()?;
     let mut out = String::new();
-    if let Some(mut stdout) = live.0.stdout.take() {
-        let _ = stdout.read_to_string(&mut out);
-    }
+    let status = {
+        let mut slot = lock();
+        let live = slot.as_mut()?;
+        let status = match live.0.try_wait() {
+            Ok(None) => return None,
+            Ok(Some(status)) => status,
+            Err(_) => {
+                slot.take();
+                HOLD.store(true, Ordering::Relaxed);
+                return Some(Err(
+                    "Screen pick cancelled. Press I to sample the screen.".into()
+                ));
+            }
+        };
+        let mut live = slot.take()?;
+        if let Some(mut stdout) = live.0.stdout.take() {
+            let _ = stdout.read_to_string(&mut out);
+        }
+        if let Some(mut stderr) = live.0.stderr.take() {
+            let mut err = String::new();
+            let _ = stderr.read_to_string(&mut err);
+            if !err.trim().is_empty() {
+                if !out.is_empty() && !out.ends_with('\n') {
+                    out.push('\n');
+                }
+                out.push_str(&err);
+            }
+        }
+        status
+    };
     HOLD.store(true, Ordering::Relaxed);
-    if !status.success() {
-        return Some(Err(
-            "Screen pick cancelled. Press I to sample the screen.".into()
-        ));
+    if let Some(color) = parse_hex_color(&out) {
+        return Some(Ok(color));
     }
-    Some(
-        parse_hex_color(&out)
-            .ok_or_else(|| "Screen pick cancelled. Press I to sample the screen.".into()),
-    )
+    if status.success()
+        && let Ok(color) = sample_screen(None)
+    {
+        return Some(Ok(color));
+    }
+    Some(Err(
+        "Screen pick cancelled. Press I to sample the screen.".into()
+    ))
 }
 
 fn kill() {
@@ -223,6 +279,22 @@ mod tests {
             parse_hex_color("  #0a1b2c extra"),
             Some(Rgba::rgb(10, 27, 44))
         );
+        assert_eq!(
+            parse_hex_color("\u{1b}[38;2;255;153;0m#ff9900\u{1b}[0m\n"),
+            Some(Rgba::rgb(255, 153, 0))
+        );
+        assert_eq!(
+            parse_hex_color(
+                "wp_fractional_scale_v1 not supported, fractional scaling won't work\n#FF9900\n"
+            ),
+            Some(Rgba::rgb(255, 153, 0))
+        );
+        assert_eq!(parse_hex_color(""), None);
+        assert!(
+            !picker_args().contains(&"-q"),
+            "quiet mode drops the color hyprpicker prints"
+        );
+        assert_eq!(picker_args(), &["-b", "-f", "hex", "-l"]);
         let mut ppm = b"P6\n# note\n1 1\n255\n".to_vec();
         ppm.extend_from_slice(&[9, 8, 7]);
         assert_eq!(parse_ppm_pixel(&ppm), Some(Rgba::rgb(9, 8, 7)));

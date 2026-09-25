@@ -519,8 +519,26 @@ pub(super) fn register(lua: &Lua, state: Shared) -> LuaResult<()> {
                     Fx::Displacement { scale, x_ch, y_ch } => {
                         within(*scale, 4096.) && *x_ch < 4 && *y_ch < 4
                     }
-                    Fx::AppleGlass { scale, frequency } => {
-                        within(*scale, 4096.) && within(*frequency, 1.) && *frequency > 0.
+                    Fx::AppleGlass(glass) => {
+                        within(glass.ior, 4.)
+                            && glass.ior >= 1.
+                            && within(glass.chromatic, 1.)
+                            && glass.chromatic >= 0.
+                            && within(glass.edge_width, 4096.)
+                            && glass.edge_width >= 0.
+                            && within(glass.spec_power, 1024.)
+                            && glass.spec_power >= 0.
+                            && within(glass.spec_intensity, 8.)
+                            && glass.spec_intensity >= 0.
+                            && within(glass.fresnel_intensity, 8.)
+                            && glass.fresnel_intensity >= 0.
+                            && within(glass.blur, 64.)
+                            && glass.blur >= 0.
+                            && within(glass.split, 4.)
+                            && glass.split >= 0.
+                            && within(glass.split_angle, 3600.)
+                            && within(glass.falloff, 8192.)
+                            && glass.falloff >= 0.
                     }
                     Fx::ColorMatrix { values } => values.iter().all(|n| within(*n, 100.)),
                     Fx::HueRotate { degrees } => within(*degrees, 36000.),

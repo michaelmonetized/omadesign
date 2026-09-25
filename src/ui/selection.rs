@@ -213,6 +213,17 @@ pub fn menu(ui: &mut Ui, studio: &mut Studio) {
 }
 
 pub fn pathfinder_menu(ui: &mut Ui, studio: &mut Studio) {
+    if ui
+        .add_enabled(
+            studio.selection_has_path(),
+            egui::Button::new("Simplify"),
+        )
+        .on_hover_text("Fit each selected path. Corners stay sharp.")
+        .clicked()
+    {
+        studio.simplify_selection();
+        ui.close();
+    }
     for operation in crate::boolean::BoolOp::all() {
         if ui
             .add_enabled(

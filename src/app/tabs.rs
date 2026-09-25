@@ -84,6 +84,9 @@ impl Studio {
         self.end_deform(true);
         self.reset_snap_gesture();
         self.paint_mask = false;
+        if self.pending_svg_export.take().is_some() {
+            self.status = "Animated SVG export cancelled.".into();
+        }
         let t = &mut self.tabs[i];
         swap(&mut self.doc, &mut t.doc);
         swap(&mut self.path, &mut t.path);

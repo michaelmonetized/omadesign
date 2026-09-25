@@ -496,7 +496,51 @@ pub fn export_frame(doc: &Document, layer: usize, frame_id: u64) -> Result<Strin
 }
 
 pub fn export_animated(doc: &Document) -> Result<String, String> {
-    export_inner(doc, true, true)
+    Ok(animated_export(doc)?.svg)
+}
+
+/// Animated SVG plus every effect the file cannot carry.
+pub struct SvgExport {
+    pub svg: String,
+    pub warnings: Vec<String>,
+}
+
+/// Build an animated SVG.
+///
+/// Mapped motion is CSS or SMIL. Move, rotate, scale, width, and height share
+/// one transform. Opacity is its own track. Fill reveal and stroke reveal are
+/// SMIL. A linear or radial gradient angle is `animateTransform` on
+/// `gradientTransform`, added to the designed angle. Stroke width, fill color,
+/// dash, gap, and dash offset are not mapped.
+///
+/// `warnings` names each unmapped effect and its layer or object. That includes
+/// Apple glass, turbulence, displacement, color matrix, and a pixel layer that
+/// is flattened into the file. A rotating linear or radial gradient is not a warning.
+pub fn animated_export(doc: &Document) -> Result<SvgExport, String> {
+    Ok(SvgExport {
+        svg: export_inner(doc, true, true)?,
+        warnings: export_warnings(doc),
+    })
+}
+
+fn animate_tag(
+    tag: &str,
+    attribute: &str,
+    extra: &str,
+    motion: &crate::motion::Motion,
+    times: &[f32],
+    values: &str,
+) -> String {
+    let duration = motion.duration.max(0.05);
+    let keys = times
+        .iter()
+        .map(|t| format!("{:.7}", (t / duration).clamp(0.0, 1.0)))
+        .collect::<Vec<_>>()
+        .join(";");
+    let repeat = if motion.looped { "indefinite" } else { "1" };
+    format!(
+        "<{tag} attributeName=\"{attribute}\"{extra} dur=\"{duration:.4}s\" repeatCount=\"{repeat}\" fill=\"freeze\" calcMode=\"linear\" keyTimes=\"{keys}\" values=\"{values}\"/>\n"
+    )
 }
 
 fn animate_attribute(
@@ -505,21 +549,223 @@ fn animate_attribute(
     times: &[f32],
     values: impl Fn(f32) -> f32,
 ) -> String {
-    let duration = motion.duration.max(0.05);
-    let keys = times
-        .iter()
-        .map(|t| format!("{:.7}", (t / duration).clamp(0.0, 1.0)))
-        .collect::<Vec<_>>()
-        .join(";");
     let values = times
         .iter()
         .map(|t| format!("{:.6}", values(*t)))
         .collect::<Vec<_>>()
         .join(";");
-    let repeat = if motion.looped { "indefinite" } else { "1" };
-    format!(
-        "<animate attributeName=\"{attribute}\" dur=\"{duration:.4}s\" repeatCount=\"{repeat}\" fill=\"freeze\" calcMode=\"linear\" keyTimes=\"{keys}\" values=\"{values}\"/>\n"
+    animate_tag("animate", attribute, "", motion, times, &values)
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum SpinTarget {
+    Fill,
+    Stroke,
+}
+
+fn svg_gradient(kind: crate::gradient::GradientKind) -> bool {
+    matches!(
+        kind,
+        crate::gradient::GradientKind::Linear | crate::gradient::GradientKind::Radial
     )
+}
+
+fn spin_placement(shape: &Shape) -> Option<(SpinTarget, Pt)> {
+    let bounds = shape.geom.bbox();
+    let center_of = |gradient: &crate::gradient::Gradient| {
+        let (start, end) = gradient.endpoints(bounds);
+        if gradient.kind == crate::gradient::GradientKind::Linear {
+            (start + end) * 0.5
+        } else {
+            start
+        }
+    };
+    match &shape.style.fill {
+        Fill::Gradient(gradient) if svg_gradient(gradient.kind) => {
+            Some((SpinTarget::Fill, center_of(gradient)))
+        }
+        Fill::Linear { .. } | Fill::Radial { .. } => {
+            let gradient = shape.style.fill.gradient()?;
+            Some((SpinTarget::Fill, center_of(&gradient)))
+        }
+        Fill::Gradient(_) => None,
+        _ => {
+            let gradient = shape.style.stroke.as_ref()?.gradient.as_ref()?;
+            svg_gradient(gradient.kind).then(|| (SpinTarget::Stroke, center_of(gradient)))
+        }
+    }
+}
+
+fn gradient_turns(motion: &crate::motion::Motion, shape: u64, times: &[f32]) -> bool {
+    motion.tracks.iter().any(|track| {
+        track.shape == shape
+            && track.prop == crate::motion::Prop::GradientAngle
+            && !track.keys.is_empty()
+    }) || times.iter().any(|time| {
+        motion
+            .pose(shape, *time)
+            .gradient_angle
+            .is_some_and(|angle| angle.abs() > 1e-3)
+    })
+}
+
+fn gradient_motion(
+    motion: &crate::motion::Motion,
+    shape: &Shape,
+    times: &[f32],
+) -> (Option<SpinTarget>, String) {
+    let Some((target, center)) = spin_placement(shape) else {
+        return (None, String::new());
+    };
+    if !gradient_turns(motion, shape.id, times) {
+        return (Some(target), String::new());
+    }
+    let values = times
+        .iter()
+        .map(|time| {
+            let offset = motion
+                .pose(shape.id, *time)
+                .gradient_angle
+                .unwrap_or(0.0);
+            format!("{offset:.6} {:.4} {:.4}", center.x, center.y)
+        })
+        .collect::<Vec<_>>()
+        .join(";");
+    (
+        Some(target),
+        animate_tag(
+            "animateTransform",
+            "gradientTransform",
+            " type=\"rotate\"",
+            motion,
+            times,
+            &values,
+        ),
+    )
+}
+
+fn insert_gradient_motion(defs: &mut String, start: usize, motion: &str) {
+    if motion.is_empty() || start > defs.len() {
+        return;
+    }
+    let region = &defs[start..];
+    let linear = region.find("</linearGradient>");
+    let radial = region.find("</radialGradient>");
+    let Some(at) = linear.into_iter().chain(radial).min() else {
+        return;
+    };
+    defs.insert_str(start + at, motion);
+}
+
+fn svg_fx(fx: &crate::filter::Fx) -> bool {
+    !matches!(
+        fx,
+        crate::filter::Fx::AppleGlass { .. }
+            | crate::filter::Fx::Turbulence { .. }
+            | crate::filter::Fx::Displacement { .. }
+            | crate::filter::Fx::ColorMatrix { .. }
+    )
+}
+
+fn motion_exported(shape: &Shape, prop: crate::motion::Prop) -> bool {
+    use crate::motion::Prop;
+    match prop {
+        Prop::X
+        | Prop::Y
+        | Prop::Rotation
+        | Prop::Scale
+        | Prop::Width
+        | Prop::Height
+        | Prop::Opacity => true,
+        Prop::FillReveal => {
+            !shape.layout.frame && !shape.style.fill.is_none() && shape.geom.is_closed()
+        }
+        Prop::StrokeReveal => {
+            !shape.layout.frame
+                && shape
+                    .style
+                    .stroke
+                    .as_ref()
+                    .is_some_and(|stroke| stroke.width > 0.0)
+        }
+        Prop::GradientAngle => match spin_placement(shape) {
+            Some((SpinTarget::Fill, _)) => {
+                shape.layout.frame || (shape.geom.is_closed() && !shape.style.fill.is_none())
+            }
+            Some((SpinTarget::Stroke, _)) => {
+                shape.layout.frame
+                    || shape
+                        .style
+                        .stroke
+                        .as_ref()
+                        .is_some_and(|stroke| stroke.width > 0.0)
+            }
+            None => false,
+        },
+        Prop::StrokeWidth | Prop::Fill | Prop::Dash | Prop::Gap | Prop::DashLength => false,
+    }
+}
+
+fn export_warnings(doc: &Document) -> Vec<String> {
+    let mut warnings = Vec::new();
+    for layer in &doc.layers {
+        if layer.filters.active() {
+            for fx in &layer.filters.items {
+                if !svg_fx(fx) {
+                    warnings.push(format!(
+                        "{} on layer \"{}\" is not representable in SVG",
+                        fx.name(),
+                        layer.name
+                    ));
+                }
+            }
+        }
+        match &layer.kind {
+            LayerKind::Raster { pixels, .. } => {
+                if !pixels.is_invisible() && !crate::compositor::is_paper_raster(layer) {
+                    warnings.push(format!(
+                        "Pixel layer \"{}\" is flattened into the SVG",
+                        layer.name
+                    ));
+                }
+            }
+            LayerKind::Vector { shapes } => {
+                for shape in shapes {
+                    if shape.guide {
+                        continue;
+                    }
+                    if shape.filters.active() {
+                        for fx in &shape.filters.items {
+                            if !svg_fx(fx) {
+                                warnings.push(format!(
+                                    "{} on \"{}\" in layer \"{}\" is not representable in SVG",
+                                    fx.name(),
+                                    shape.name,
+                                    layer.name
+                                ));
+                            }
+                        }
+                    }
+                    for track in doc
+                        .motion
+                        .tracks
+                        .iter()
+                        .filter(|track| track.shape == shape.id && !track.keys.is_empty())
+                    {
+                        if !motion_exported(shape, track.prop) {
+                            warnings.push(format!(
+                                "{} on \"{}\" in layer \"{}\" is not in the animated SVG",
+                                track.prop.name(),
+                                shape.name,
+                                layer.name
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    warnings
 }
 
 fn write_animated_shape(
@@ -533,6 +779,7 @@ fn write_animated_shape(
     let times = motion.sample_times(shape.id);
     let bounds = shape.world_bbox();
     let center = bounds.center();
+    let (spin_target, spin) = gradient_motion(motion, shape, &times);
     body.push_str(&format!(
         "<g class=\"oma-a\" style=\"animation-name: oma-{}; transform-origin: {:.4}px {:.4}px\">\n",
         shape.id, center.x, center.y
@@ -574,6 +821,7 @@ fn write_animated_shape(
             defs.push_str("</rect></clipPath>\n");
             body.push_str(&format!("<g clip-path=\"url(#{id})\">\n"));
         }
+        let defs_at = defs.len();
         let mut part = String::new();
         write_shape(
             &mut part,
@@ -583,6 +831,9 @@ fn write_animated_shape(
             &xf_attr(&component),
             true,
         );
+        if spin_target == Some(SpinTarget::Fill) {
+            insert_gradient_motion(defs, defs_at, &spin);
+        }
         body.push_str(&part.replacen(
             &format!("id=\"oma-{}\"", shape.id),
             &format!("id=\"oma-{}-fill\"", shape.id),
@@ -670,6 +921,7 @@ fn write_animated_shape(
             defs.push_str("</mask>\n");
             body.push_str(&format!("<g mask=\"url(#{id})\">\n"));
         }
+        let defs_at = defs.len();
         let mut part = String::new();
         write_shape(
             &mut part,
@@ -679,6 +931,9 @@ fn write_animated_shape(
             &xf_attr(&component),
             true,
         );
+        if spin_target == Some(SpinTarget::Stroke) {
+            insert_gradient_motion(defs, defs_at, &spin);
+        }
         body.push_str(&part.replacen(
             &format!("id=\"oma-{}\"", shape.id),
             &format!("id=\"oma-{}-stroke\"", shape.id),
@@ -811,7 +1066,15 @@ fn write_shape_tree(
                 if let Some(id) = &object_mask {
                     body.push_str(&format!("<g mask=\"url(#{id})\">"));
                 }
+                let defs_at = defs.len();
                 write_shape(body, defs, grad_id, &background, "", false);
+                if animate {
+                    let (target, spin) =
+                        gradient_motion(motion, shape, &motion.sample_times(shape.id));
+                    if target.is_some() {
+                        insert_gradient_motion(defs, defs_at, &spin);
+                    }
+                }
                 if shape.layout.clip {
                     let clip_id = format!("oma-frame-clip-{}", shape.id);
                     defs.push_str(&format!("<clipPath id=\"{clip_id}\" clipPathUnits=\"userSpaceOnUse\"><path d=\"{}\"/></clipPath>\n",path_data(&background)));
@@ -1162,6 +1425,216 @@ mod tests {
         assert!(s.contains("fill=\"#000000\""), "{s}");
         assert!(!s.contains("rgba(0,0,0"), "{s}");
     }
+
+    fn rotating_gradient(kind: crate::gradient::GradientKind) -> SvgExport {
+        let mut doc = Document::new("Gradient", 200.0, 120.0, 72.0);
+        let mut shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(10.0, 10.0),
+                size: Pt::new(80.0, 40.0),
+                radius: 0.0,
+            },
+            Style {
+                fill: Fill::Gradient(crate::gradient::Gradient::new(
+                    kind,
+                    crate::color::Rgba::rgb(20, 40, 200),
+                    crate::color::Rgba::rgb(240, 180, 40),
+                )),
+                stroke: None,
+            },
+        );
+        shape.name = "Swatch".into();
+        let id = shape.id;
+        apply(&mut doc, &Cmd::AddShape { layer: 1, shape });
+        doc.layers[1].name = "Art".into();
+        doc.motion.duration = 1.0;
+        doc.motion
+            .set_key(id, crate::motion::Prop::GradientAngle, 0.0, 0.0, crate::motion::Ease::Linear);
+        doc.motion.set_key(
+            id,
+            crate::motion::Prop::GradientAngle,
+            1.0,
+            90.0,
+            crate::motion::Ease::Linear,
+        );
+        animated_export(&doc).unwrap()
+    }
+
+    #[test]
+    fn rotating_linear_gradient_is_an_animate_transform() {
+        let report = rotating_gradient(crate::gradient::GradientKind::Linear);
+        assert!(
+            report.warnings.is_empty(),
+            "a rotating gradient is expressible: {:?}",
+            report.warnings
+        );
+        let parsed = roxmltree::Document::parse(&report.svg).expect("svg");
+        let spin = parsed
+            .descendants()
+            .find(|node| {
+                node.tag_name().name() == "animateTransform"
+                    && node.attribute("attributeName") == Some("gradientTransform")
+            })
+            .expect("animateTransform");
+        assert_eq!(spin.attribute("type"), Some("rotate"));
+        assert_eq!(
+            spin.parent().unwrap().tag_name().name(),
+            "linearGradient",
+            "{}",
+            report.svg
+        );
+        let angles: Vec<f32> = spin
+            .attribute("values")
+            .unwrap()
+            .split(';')
+            .filter_map(|sample| sample.split_whitespace().next()?.parse().ok())
+            .collect();
+        assert!(
+            angles.windows(2).any(|pair| (pair[0] - pair[1]).abs() > 1.0),
+            "values must change: {angles:?}"
+        );
+        assert!(angles.iter().any(|angle| angle.abs() < 0.01), "{angles:?}");
+        assert!(
+            angles.iter().any(|angle| (angle - 90.0).abs() < 0.01),
+            "{angles:?}"
+        );
+        let gradient = spin.parent().unwrap();
+        let y1: f32 = gradient.attribute("y1").unwrap().parse().unwrap();
+        let y2: f32 = gradient.attribute("y2").unwrap().parse().unwrap();
+        assert!(
+            (y1 - y2).abs() < 0.01,
+            "the designed gradient stays put, got y1={y1} y2={y2}"
+        );
+        assert!(report.svg.contains("@keyframes"), "{}", report.svg);
+    }
+
+    #[test]
+    fn rotating_radial_gradient_spins_around_its_center() {
+        let report = rotating_gradient(crate::gradient::GradientKind::Radial);
+        assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+        let parsed = roxmltree::Document::parse(&report.svg).unwrap();
+        let spin = parsed
+            .descendants()
+            .find(|node| node.tag_name().name() == "animateTransform")
+            .expect("animateTransform");
+        assert_eq!(spin.parent().unwrap().tag_name().name(), "radialGradient");
+        let values = spin.attribute("values").unwrap();
+        let angles: Vec<f32> = values
+            .split(';')
+            .filter_map(|sample| sample.split_whitespace().next()?.parse().ok())
+            .collect();
+        assert!(angles.windows(2).any(|pair| (pair[0] - pair[1]).abs() > 1.0), "{values}");
+        assert!(values.contains("50.0000") && values.contains("30.0000"), "{values}");
+    }
+
+    #[test]
+    fn unsupported_effect_names_the_shape_and_layer() {
+        let mut doc = Document::new("Effects", 120.0, 80.0, 72.0);
+        let mut shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(12.0, 12.0),
+                size: Pt::new(40.0, 24.0),
+                radius: 0.0,
+            },
+            Style::default(),
+        );
+        shape.name = "Badge".into();
+        shape.filters.items.push(crate::filter::Fx::Turbulence {
+            fractal: true,
+            base: 0.04,
+            octaves: 2,
+            seed: 1,
+        });
+        apply(&mut doc, &Cmd::AddShape { layer: 1, shape });
+        doc.layers[1].name = "Art".into();
+        doc.layers[1].filters.items.push(crate::filter::Fx::Displacement {
+            scale: 12.0,
+            x_ch: 0,
+            y_ch: 1,
+        });
+        let report = animated_export(&doc).unwrap();
+        roxmltree::Document::parse(&report.svg).expect("svg");
+        assert!(
+            report.warnings.iter().any(|warning| {
+                warning.contains("Turbulence") && warning.contains("Badge") && warning.contains("Art")
+            }),
+            "{:?}",
+            report.warnings
+        );
+        assert!(
+            report.warnings.iter().any(|warning| {
+                warning.contains("Displacement") && warning.contains("Art")
+            }),
+            "{:?}",
+            report.warnings
+        );
+    }
+
+    #[test]
+    fn flattened_pixels_and_unmapped_motion_are_named() {
+        let mut doc = Document::new("Mixed", 80.0, 80.0, 72.0);
+        let mut shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(8.0, 8.0),
+                size: Pt::new(30.0, 20.0),
+                radius: 0.0,
+            },
+            Style::default(),
+        );
+        shape.name = "Badge".into();
+        let id = shape.id;
+        apply(&mut doc, &Cmd::AddShape { layer: 1, shape });
+        doc.layers[1].name = "Art".into();
+        doc.layers[1].filters.items.push(crate::filter::Fx::ColorMatrix {
+            values: [0.0; 20],
+        });
+        doc.motion.set_key(
+            id,
+            crate::motion::Prop::StrokeWidth,
+            1.0,
+            6.0,
+            crate::motion::Ease::Linear,
+        );
+        let mut photo = Layer::raster("Photo", 4, 4);
+        if let LayerKind::Raster { pixels, .. } = &mut photo.kind {
+            pixels.data.fill(255);
+        }
+        doc.layers.push(photo);
+        let report = animated_export(&doc).unwrap();
+        roxmltree::Document::parse(&report.svg).expect("svg");
+        assert!(
+            report.warnings.iter().any(|warning| {
+                warning.contains("Stroke width")
+                    && warning.contains("Badge")
+                    && warning.contains("Art")
+            }),
+            "{:?}",
+            report.warnings
+        );
+        assert!(
+            report.warnings.iter().any(|warning| {
+                warning.contains("Photo") && warning.contains("flattened")
+            }),
+            "{:?}",
+            report.warnings
+        );
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("Color matrix") && warning.contains("Art")),
+            "{:?}",
+            report.warnings
+        );
+        assert!(
+            report
+                .warnings
+                .iter()
+                .all(|warning| !warning.contains("Gradient")),
+            "{:?}",
+            report.warnings
+        );
+    }
 }
 
 #[cfg(test)]
@@ -1180,6 +1653,7 @@ mod mask_tests {
             origin,
             size,
             rotation,
+            ..
         } = &mut layer.kind
         {
             pixels.data = [255, 0, 0, 255].repeat(8);
