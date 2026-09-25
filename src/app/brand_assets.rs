@@ -433,7 +433,9 @@ pub(super) fn scale_filters(stack: &mut crate::filter::FilterStack, scale: f32) 
                 *dy *= scale;
             }
             Fx::Morphology { radius, .. } => *radius *= scale,
-            Fx::Displacement { scale: amount, .. } => *amount *= scale,
+            Fx::Displacement { scale: amount, .. } | Fx::AppleGlass { scale: amount, .. } => {
+                *amount *= scale
+            }
             Fx::Turbulence { base, .. } => *base /= scale,
             _ => {}
         }

@@ -1713,6 +1713,10 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
                     inspector_slider(ui, "xChannel", x_ch, 0..=3, "");
                     inspector_slider(ui, "yChannel", y_ch, 0..=3, "");
                 }
+                crate::filter::Fx::AppleGlass { scale, frequency } => {
+                    inspector_slider(ui, "Scale", scale, 0.0..=80.0, "");
+                    inspector_slider(ui, "Frequency", frequency, 0.005..=0.2, "");
+                }
             }
         });
     }

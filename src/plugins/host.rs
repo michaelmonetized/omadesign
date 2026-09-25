@@ -519,6 +519,9 @@ pub(super) fn register(lua: &Lua, state: Shared) -> LuaResult<()> {
                     Fx::Displacement { scale, x_ch, y_ch } => {
                         within(*scale, 4096.) && *x_ch < 4 && *y_ch < 4
                     }
+                    Fx::AppleGlass { scale, frequency } => {
+                        within(*scale, 4096.) && within(*frequency, 1.) && *frequency > 0.
+                    }
                     Fx::ColorMatrix { values } => values.iter().all(|n| within(*n, 100.)),
                     Fx::HueRotate { degrees } => within(*degrees, 36000.),
                     Fx::Saturate { amount }

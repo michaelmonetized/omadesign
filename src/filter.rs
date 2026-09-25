@@ -90,6 +90,11 @@ pub enum Fx {
         x_ch: u8,
         y_ch: u8,
     },
+    /// Frosted refraction: noise drives an feDisplacementMap.
+    AppleGlass {
+        scale: f32,
+        frequency: f32,
+    },
 }
 
 impl Fx {
@@ -109,6 +114,7 @@ impl Fx {
             Fx::ColorMatrix { .. } => "Color matrix",
             Fx::Turbulence { .. } => "Turbulence",
             Fx::Displacement { .. } => "Displacement",
+            Fx::AppleGlass { .. } => "Apple glass",
         }
     }
 
@@ -154,6 +160,10 @@ impl Fx {
                 scale: 20.0,
                 x_ch: 0,
                 y_ch: 1,
+            }),
+            ("Apple glass", || Fx::AppleGlass {
+                scale: 18.0,
+                frequency: 0.04,
             }),
         ]
     }
@@ -205,6 +215,7 @@ fn apply_one(pm: &mut Pixmap, fx: &Fx) {
             seed,
         } => turbulence(pm, fractal, base.max(0.001), octaves.max(1), seed),
         Fx::Displacement { scale, x_ch, y_ch } => displacement(pm, scale, x_ch.min(3), y_ch.min(3)),
+        Fx::AppleGlass { scale, frequency } => apple_glass(pm, scale, frequency),
     }
 }
 
@@ -713,6 +724,33 @@ fn displacement(pm: &mut Pixmap, scale: f32, x_ch: u8, y_ch: u8) {
     pm.data_mut().copy_from_slice(&out);
 }
 
+fn apple_glass(pm: &mut Pixmap, scale: f32, frequency: f32) {
+    if scale.abs() < 0.05 {
+        return;
+    }
+    let w = pm.width() as i32;
+    let h = pm.height() as i32;
+    let src = pm.data().to_vec();
+    let mut out = vec![0u8; src.len()];
+    let frequency = frequency.max(0.001);
+    for y in 0..h {
+        for x in 0..w {
+            let nx = (x as f32 * frequency).floor() as i32;
+            let ny = (y as f32 * frequency).floor() as i32;
+            let dx = hash(nx, ny, 2) * scale;
+            let dy = hash(nx, ny, 9) * scale;
+            let sx = (x as f32 + dx).round() as i32;
+            let sy = (y as f32 + dy).round() as i32;
+            let i = idx(w, x, y, 0);
+            if sx >= 0 && sy >= 0 && sx < w && sy < h {
+                let si = idx(w, sx, sy, 0);
+                out[i..i + 4].copy_from_slice(&src[si..si + 4]);
+            }
+        }
+    }
+    pm.data_mut().copy_from_slice(&out);
+}
+
 /// Extra user-space padding a stack needs so blur/offset is not clipped.
 pub fn svg_pad(stack: &FilterStack) -> f32 {
     if stack.is_empty() {
@@ -727,7 +765,7 @@ pub fn svg_pad(stack: &FilterStack) -> f32 {
             }
             Fx::Offset { dx, dy } => pad += dx.abs() + dy.abs(),
             Fx::Morphology { radius, .. } => pad += radius.max(0.0),
-            Fx::Displacement { scale, .. } => pad += scale.abs(),
+            Fx::Displacement { scale, .. } | Fx::AppleGlass { scale, .. } => pad += scale.abs(),
             _ => {}
         }
     }
@@ -874,6 +912,15 @@ pub fn svg_filter(id: &str, stack: &FilterStack, region: [f32; 4]) -> Option<Str
                     ch(*y_ch)
                 ));
             }
+            Fx::AppleGlass { scale, frequency } => {
+                let map = format!("{id}-glass");
+                body.push_str(&format!(
+                    "<feTurbulence type=\"fractalNoise\" baseFrequency=\"{frequency:.4}\" numOctaves=\"2\" seed=\"2\" result=\"{map}\"/>\n"
+                ));
+                body.push_str(&format!(
+                    "<feDisplacementMap in=\"{last}\" in2=\"{map}\" scale=\"{scale:.2}\" xChannelSelector=\"R\" yChannelSelector=\"G\" result=\"{out}\"/>\n"
+                ));
+            }
         }
         last = out;
     }
@@ -909,6 +956,30 @@ mod tests {
         blur(&mut pm, 3.0);
         assert_ne!(pm.data(), before.as_slice());
         assert!(pm.data()[3] > 0 || pm.data()[((8 * 32 + 9) * 4) + 3] > 0);
+    }
+
+    #[test]
+    fn apple_glass_is_a_displacement_of_turbulence() {
+        let svg = svg_filter(
+            "glass",
+            &FilterStack {
+                enabled: true,
+                items: vec![Fx::AppleGlass {
+                    scale: 12.0,
+                    frequency: 0.05,
+                }],
+            },
+            [0.0, 0.0, 32.0, 32.0],
+        )
+        .unwrap();
+        assert!(svg.contains("<feTurbulence"));
+        assert!(svg.contains("<feDisplacementMap"));
+        assert!(svg.contains("in2=\"glass-glass\""));
+        let mut pm = solid(20, 40, 200, 255);
+        pm.data_mut()[0..4].copy_from_slice(&[255, 0, 0, 255]);
+        let before = pm.data().to_vec();
+        apple_glass(&mut pm, 8.0, 0.2);
+        assert_ne!(pm.data(), before.as_slice());
     }
 
     #[test]
