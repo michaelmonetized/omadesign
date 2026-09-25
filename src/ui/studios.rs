@@ -1586,6 +1586,17 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
                 }
             }
             if ui
+                .small_button("Simplify")
+                .on_hover_text("Drop the extra nodes a boolean leaves on a straight edge")
+                .clicked()
+            {
+                for (layer, id) in studio.selection.clone() {
+                    edit_shape_geometry(studio, layer, id, |geometry| {
+                        crate::geom::simplify_geom(geometry, 1.5);
+                    });
+                }
+            }
+            if ui
                 .small_button("Compound")
                 .on_hover_text("Ctrl+8")
                 .clicked()
