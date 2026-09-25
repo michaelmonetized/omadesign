@@ -38,9 +38,19 @@ export const Route = createRootRoute({
       { property: "og:url", content: SITE_ORIGIN },
       {
         property: "og:image",
-        content: `${SITE_ORIGIN}/media/branding/logo-0.5.8-social.png`,
+        content: `${SITE_ORIGIN}/media/branding/og-welcome-0.6.0.png`,
+      },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      {
+        property: "og:image:alt",
+        content: "The omadesign 0.6.0 welcome screen",
       },
       { name: "twitter:card", content: "summary_large_image" },
+      {
+        name: "twitter:image",
+        content: `${SITE_ORIGIN}/media/branding/og-welcome-0.6.0.png`,
+      },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
