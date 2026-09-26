@@ -4,14 +4,18 @@
 
 Same version. The Linux archives on the 0.6.0 release were rebuilt from the QA revision and uploaded over the original files.
 
-- The eyedropper writes the sample onto the active fill or stroke, including the first stop of a gradient, and into the color dialog that asked for it. Recent colors stay in the picker.
-- Apple glass is the twelveux lens: refraction, color fringe, highlight, rim light, blur, split, and falloff.
-- Simplify runs on one path, from the inspector and from Object → Pathfinder.
-- The Omarchy theme reloads when the theme file changes.
-- Paste takes a PNG, JPEG, or SVG copied from the file manager.
-- A Picsum photo lands as a picture you can select.
-- An animated SVG keeps a rotating gradient and names the effects it cannot represent. WebM export plays the motion.
-- A ruler guide snaps while you drag it.
+- The eyedropper writes the sample onto the active fill or stroke, including the first stop of a gradient, and into the color dialog that asked for it. It never clears the current color. Recent colors stay in the picker, and a palette can keep the sample. (#128, #130)
+- Free transform scales, rotates, and shears the selection. Enter commits it as one undo. Esc puts the artwork back. (#129)
+- Apple glass is the twelveux lens: refraction, color fringe, highlight, rim light, blur, split, and falloff. (#131)
+- Simplify runs on one path, from the inspector and from Object → Pathfinder. (#132)
+- The Omarchy theme reloads when the theme file changes. (#133)
+- Paste takes a PNG, JPEG, or SVG copied from the file manager. (#134)
+- A Picsum photo lands as a picture you can select. The artboard background stays put. (#135)
+- Bring forward at the top of a layer moves the object onto the layer above. Send backward does the reverse. Locked layers are skipped. (#136)
+- An animated SVG keeps a rotating gradient and names the effects it cannot represent, so you can cancel before the save. (#137)
+- Lottie import opens `.json` and `.lottie`. Export writes either. A file that is not Lottie says so. (#138)
+- A ruler guide snaps to object edges, artboard centers, and the grid while you drag it. Ctrl turns snapping off. (#139)
+- Motion exports GIF, APNG, MP4, and WebM from the canvas renderer. GIF and APNG encode in the app. MP4 and WebM use ffmpeg and say so when it is missing. (#140)
 
 ## 2026-09-25 · 0.6.0 — Key the design you already made.
 
@@ -58,6 +62,61 @@ Michael passed QA on this build the same day.
   image layer, then filters it. Alpha stays. Undo removes the layer.
 - Clicking the open end of a live pen path drops the forward handle and keeps
   the incoming one, so the next segment can leave a sharp corner.
+
+## 2026-09-22 · 0.5.8 — Make it your studio.
+
+- Lua 5.4 plugins. The plugin manager runs actions with typed parameters,
+  cancels a run in progress, and undoes a whole run in one step. Plugins can
+  add canvas tools and opt-in behaviors, install from a folder, file, or ZIP,
+  and run in batch from the command line.
+- Twelve starter actions cover filters, effects, icons, brushes, tools,
+  patterns, gradients, swatches, and automation. Plugins you changed survive
+  an update.
+- Alt-drag a node's radius handle to round every corner, or Shift-select
+  corners and set their radii together.
+- Repeated Boolean operations keep editable contours and holes.
+- View → Guides has Lock all guides and Unlock all guides.
+- The welcome logo is transparent and 25% larger, on a dark background with
+  lighter gradient panels and buttons, Phosphor links, and a rounded
+  project-folder outline.
+- The title bar and wordmark menu stay on the welcome screen. Open and
+  Preferences show once. The filter icon has no background, turns blue on
+  hover, and red while a filter is on.
+- The template chooser opens at a stable width.
+- Packages carry the Lua 5.4.9 runtime copyright notice.
+
+[Plugin authoring guide](https://omadesign.app/docs/plugins). See the
+[release validation](docs/releases/0.5.8.md).
+
+## 2026-09-21 · 0.5.7 — A new mark, a new cut.
+
+- The official mark is on the welcome and About screens, the desktop icon,
+  and the website.
+- The homepage film is reshot: 32 seconds of native footage, cut on beats 1
+  and 3 of a 120 BPM grid. It moves through local work, nested projects,
+  templates, agent prompts, editing, brand assets, Layout, and Motion, and
+  closes on the new mark.
+- Existing documents, projects, and preferences stay in place.
+
+See the [release validation](docs/releases/0.5.7.md).
+
+## 2026-09-21 · 0.5.6 — Your work, ready when you are.
+
+- A new welcome screen browses every local `.oma` under your home directory,
+  with natural-aspect thumbnails, mode filtering, recovery, and multiple
+  selection.
+- `.omabrand` projects are found at any depth. Subprojects open in place, and
+  shared Team projects show after you sign in.
+- Vector and Layout start from a template or a blank size, Raster from size
+  setup, and Photo from a workspace, folder, or image.
+- Ask your Omarchy agent to teach or create, with version-matched Markdown
+  docs and the bundled `omadesign-create` skill.
+- The welcome margins paint with the active Omarchy background.
+- The app and the website link the Omadesign Discord.
+- The first stable release with the 0.5.5 nightly's editing, masks and
+  strokes, Photo browser, native chooser, preferences, and update work.
+
+See the [release validation](docs/releases/0.5.6.md).
 
 ## 2026-09-20 · 0.5.5-nightly.1 — A clearer workspace.
 
