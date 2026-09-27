@@ -160,6 +160,10 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
         ui.heading(if dialog.copy { "AI upscale photo" } else { "Export" });
         let (w,h) = dialog.source.lock().unwrap().dimensions();
         ui.label(format!("{} × {} px · {}", w, h, if matches!(*dialog.source.lock().unwrap(), Source::Photo(_)) { "developed photo" } else { "document" }));
+        if let Source::Document(doc)=&*dialog.source.lock().unwrap() {
+            let overflow=doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter(|s|matches!(&s.geom,crate::geom::Geom::Text(t) if t.layout.as_ref().is_some_and(|l|l.overflow))).count();
+            if overflow>0 {ui.colored_label(egui::Color32::from_rgb(240,145,70),format!("{overflow} text frame(s) overflow. Hidden text remains editable in the project."));}
+        }
         ui.separator();
         ui.add_enabled_ui(!dialog.busy, |ui| {
             egui::ComboBox::from_id_salt("still-export-format").selected_text(dialog.format.label()).show_ui(ui, |ui| {

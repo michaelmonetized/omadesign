@@ -1438,8 +1438,10 @@ impl Studio {
         crate::telemetry::count("feature.edit");
         self.end_pixel_stroke(false);
         self.end_deform(false);
+        let text_frames_before = crate::text_geometry::frame_snapshot(&self.doc);
         self.apply_with_layer_selection(&cmd);
         let mut changes = vec![cmd];
+        for change in crate::text_geometry::reconcile_threads(&text_frames_before, &self.doc) { crate::document::apply(&mut self.doc, &change); changes.push(change); }
         changes.extend(self.reconcile_layout());
         for change in crate::text_geometry::reconcile_links(&self.doc) {
             crate::document::apply(&mut self.doc, &change);
@@ -2113,13 +2115,16 @@ impl Studio {
     }
 
     pub fn begin_type_edit(&mut self, hit: (usize, u64), world: Pt) {
+        let frame_hit = hit;
+        let frame_caret = self.doc.find_shape(hit.0,hit.1).and_then(|s|if let Geom::Text(t)=&s.geom{crate::text_geometry::hit_char(t,world)}else{None});
+        let hit = self.story_head(hit);
         self.selected_layer = None;
         if self.editing_text(hit.0, hit.1) {
             let caret = self
                 .doc
                 .find_shape(hit.0, hit.1)
                 .and_then(|s| match &s.geom {
-                    Geom::Text(run) => Some(crate::text::hit_char(run, world)),
+                    Geom::Text(run) => Some(frame_caret.unwrap_or_else(||crate::text::hit_char(run, world))),
                     _ => None,
                 });
             if let (Some(c), Some(e)) = (caret, self.type_edit.as_mut()) {
@@ -2134,11 +2139,11 @@ impl Studio {
         let Geom::Text(run) = &s.geom else {
             return;
         };
-        let caret = crate::text::hit_char(run, world);
+        let caret = frame_caret.unwrap_or_else(||crate::text::hit_char(run, world));
         let defaults = run.clone();
         let before = s.geom.clone();
         self.sync_type_defaults(&defaults);
-        self.selection = vec![hit];
+        self.selection = vec![frame_hit];
         self.active_layer = Some(hit.0);
         self.type_edit = Some(TypeEdit {
             layer: hit.0,
@@ -2154,7 +2159,7 @@ impl Studio {
     pub fn editing_text(&self, layer: usize, id: u64) -> bool {
         self.type_edit
             .as_ref()
-            .is_some_and(|e| e.layer == layer && e.id == id)
+            .is_some_and(|e| (e.layer,e.id) == self.story_head((layer,id)))
     }
 
     pub fn commit_type_edit(&mut self) {
@@ -2371,7 +2376,7 @@ impl Studio {
             self.reshape_live_type();
             return;
         }
-        if let Some((li, id)) = self.primary()
+        if let Some((li, id)) = self.primary().map(|hit|self.story_head(hit))
             && let Some(s) = self.doc.find_shape(li, id)
             && matches!(s.geom, Geom::Text(_))
         {
@@ -2405,18 +2410,14 @@ impl Studio {
     }
 
     pub fn selected_type(&self) -> Option<TypeRun> {
-        if let Some(e) = &self.type_edit
-            && let Some(s) = self.doc.find_shape(e.layer, e.id)
-            && let Geom::Text(run) = &s.geom
-        {
-            return Some(run.clone());
+        let hit=self.primary().or_else(||self.type_edit.as_ref().map(|e|(e.layer,e.id)))?;
+        let shape=self.doc.find_shape(hit.0,hit.1)?;
+        let Geom::Text(frame)=&shape.geom else{return None};
+        let head=self.story_head(hit);
+        if head!=hit && let Some(source)=self.doc.find_shape(head.0,head.1) && let Geom::Text(story)=&source.geom {
+            let mut combined=story.clone();combined.origin=frame.origin;combined.frame=frame.frame.clone();combined.thread=frame.thread.clone();combined.layout=frame.layout.clone();combined.contours=frame.contours.clone();return Some(combined);
         }
-        let (li, id) = self.primary()?;
-        let s = self.doc.find_shape(li, id)?;
-        match &s.geom {
-            Geom::Text(run) => Some(run.clone()),
-            _ => None,
-        }
+        Some(frame.clone())
     }
 
     pub fn set_tool(&mut self, t: Tool) {

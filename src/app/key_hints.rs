@@ -465,6 +465,7 @@ impl Studio {
                     Tool::Text => {
                         add("Click", "Place or edit text", false);
                         add("Click path", "Type on its outline", false);
+                        add("Drag", "Create a text box", false);
                     }
                     Tool::Gradient => {
                         add(

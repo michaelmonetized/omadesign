@@ -416,6 +416,7 @@ fn write_shape(
     if let Geom::Text(run) = &shape.geom
         && !text_as_paths
         && run.on_path.is_none()
+        && run.frame.is_none()
         && !run.font.starts_with("omatype:")
         && run.paragraphs.is_empty()
         && !matches!(run.align,crate::geom::TextAlign::Justify{..})

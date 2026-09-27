@@ -23,6 +23,8 @@ const SIZE: [u32; 2] = [1600, 900];
 enum Target {
     FirstPathText,
     PathStartHandle,
+    FrameOut(usize),
+    FrameText(usize),
     Text(&'static str),
     FieldNth(&'static str, usize),
     Any(&'static str),
@@ -56,6 +58,7 @@ enum ActionKind {
     VerifySpacing(&'static str),
     CheckPath(&'static str),
     NativeClipboard(&'static str),
+    CheckArea(&'static str),
 }
 struct Action {
     start: u32,
@@ -200,6 +203,33 @@ fn schedule(scene: &str) -> Vec<Action> {
         "path-clipboard" => vec![
             event(0.7,Click(FirstPathText)),event(1.2,NativeClipboard("c")),event(1.8,Click(Any("Edit"))),event(2.2,Click(Any("Paste"))),event(3.2,CheckPath("paste-alone")),
             event(3.7,Key(egui::Key::Z,ctrl())),event(4.2,Key(egui::Key::A,ctrl())),event(4.7,NativeClipboard("c")),event(5.3,Click(Any("Edit"))),event(5.7,Click(Any("Paste"))),event(7.,CheckPath("paste-together")),event(7.5,Key(egui::Key::Z,ctrl())),
+        ],
+        "area-type" => vec![
+            event(0.7,Key(egui::Key::T,Modifiers::NONE)),
+            drag(1.1,1.3,Drag(World(70.,100.),World(420.,350.))),
+            drag(2.8,5.,Type("A single story can travel through several frames. Every word remains editable as the layout changes. A circular illustration pushes the lines to either side of its actual outline. Move the illustration and the paragraph immediately finds new space.
+Typography stays readable with deliberate hyphenation, useful overflow controls, and frames that resize without stretching the letters. This final paragraph continues in another frame, keeping the original text and all of its paragraph settings intact.")),
+            event(8.,Key(egui::Key::Escape,Modifiers::NONE)),event(8.4,CheckArea("created")),
+            event(8.8,Click(Text("Arrange"))),event(9.1,Click(Text("Align"))),
+            event(9.5,Click(FrameOut(0))),event(10.1,Click(World(520.,100.))),event(11.,CheckArea("two")),
+            event(11.5,Click(FrameOut(1))),event(12.1,Click(World(520.,390.))),event(13.,CheckArea("three")),
+            event(13.5,Click(Any("View"))),event(14.,Click(Any("Show text threads"))),event(14.4,Key(egui::Key::Escape,Modifiers::NONE)),event(14.7,Key(egui::Key::V,Modifiers::NONE)),
+            event(15.,Click(FrameText(1))),event(15.5,Key(egui::Key::Delete,Modifiers::NONE)),event(16.2,CheckArea("middle-deleted")),
+            event(17.,Key(egui::Key::Z,ctrl())),event(17.6,CheckArea("three")),
+            event(18.,Key(egui::Key::V,Modifiers::NONE)),event(18.5,Click(World(230.,210.))),
+            drag(19.,1.4,Drag(World(230.,210.),World(285.,245.))),
+            event(21.,Click(FrameText(0))),drag(21.5,1.2,Delta(Field("Width"),-60.)),
+            event(23.,CheckArea("resized")),
+            event(23.5,Click(FrameText(2))),event(24.,Click(Any("Clip"))),event(24.5,Click(Any("Ellipsis"))),
+            event(25.,Click(Any("Limit lines"))),event(25.5,Click(Text("Bottom"))),event(26.5,CheckArea("ellipsis")),
+            event(27.,Key(egui::Key::T,Modifiers::NONE)),event(27.5,Click(FrameText(1))),event(28.,Key(egui::Key::A,ctrl())),
+            drag(28.5,3.,Type("Editing a threaded frame edits its entire story. Selection crosses frame boundaries, and undo restores every original word. The text remains editable while the frame size, wrapping obstacle, and overflow preferences stay independent.")),
+            event(32.,Key(egui::Key::Escape,Modifiers::NONE)),event(32.5,CheckArea("edited")),
+            event(33.,Key(egui::Key::Z,ctrl())),event(34.,CheckArea("story-restored")),
+            event(35.,Key(egui::Key::V,Modifiers::NONE)),event(35.5,Click(World(285.,245.))),
+            event(36.,Click(Any("Object"))),event(36.5,Click(Any("Type"))),event(37.,Click(Any("Text inside shape"))),
+            drag(37.5,3.,Type("A closed outline becomes an editable text frame. Words follow its interior while every hidden word stays in the original story.")),
+            event(41.,Key(egui::Key::Escape,Modifiers::NONE)),event(42.,CheckArea("shape-frame")),
         ],
         "path-type" => vec![
             event(0.7, Key(egui::Key::T, Modifiers::NONE)),
@@ -900,6 +930,14 @@ fn seed(scene: &str) -> Studio {
             *s.doc.layers[0].kind.shapes_mut().unwrap() = vec![bg, subject];
         }
 
+        "area-type" => {
+            use omadesign::{document::{Layer,Shape,Style,Fill},text_geometry::{TextWrap,WrapMode}};
+            s.doc=Document::new("Area text and threaded stories · issue 150",960.,680.,96.);
+            let mut circle=Shape::new(Geom::Ellipse{center:Pt::new(230.,210.),radii:Pt::splat(58.)},Style{fill:Fill::Solid(Rgba::from_hex(0xC5E2E4)),stroke:None});
+            circle.text_wrap=TextWrap{mode:WrapMode::ObjectShape,offset:[10.;4],..Default::default()};
+            let mut layer=Layer::vector("Wrap illustration");layer.kind.shapes_mut().unwrap().push(circle);s.doc.layers.push(layer);
+            s.active_layer=Some(1);s.persona=Persona::Design;s.tool=Tool::Text;s.text_px=25.;s.style=Style{fill:Fill::Solid(Rgba::from_hex(0x18364A)),stroke:None};
+        }
         "path-type" | "path-clipboard" => {
             use omadesign::{geom::Anchor,document::{Shape,Style,Fill,Stroke}};
             s.doc=Document::new("Live type on paths · issue 149",960.,680.,96.);
@@ -1098,6 +1136,7 @@ impl Capture {
             "spacing-resize" => 18,
             "path-type" => 60,
             "path-clipboard" => 9,
+            "area-type" => 44,
             "welcome-browse" => 23,
             "welcome-vector" | "welcome-layout" => 9,
             "welcome-raster" => 8,
@@ -1196,6 +1235,10 @@ impl Capture {
                 .map(|(_, r)| *r)
         };
         match t {
+            Target::FrameOut(index) | Target::FrameText(index) => {
+                let run=self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter_map(|s|if let Geom::Text(t)=&s.geom{t.frame.as_ref().map(|_|t)}else{None}).nth(*index)?;
+                let p=if matches!(t,Target::FrameOut(_)){omadesign::text_geometry::frame_bounds(run)?.max-Pt::new(0.,12./self.studio.view.scale)}else{run.contours.first().and_then(|c|c.first()).copied().unwrap_or(omadesign::text_geometry::frame_bounds(run)?.center())};Some(self.world(p.x,p.y))
+            },
             Target::FirstPathText | Target::PathStartHandle => {
                 let run=self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().find_map(|s|if let Geom::Text(t)=&s.geom {t.on_path.as_ref().map(|_|t)}else{None})?;
                 if matches!(t,Target::PathStartHandle){let (p,tangent)=omadesign::text_geometry::path_position(run,0.)?;Some(self.world(p.x,p.y)-egui::vec2(tangent.x,tangent.y)*6.)}
@@ -1291,6 +1334,21 @@ impl Capture {
             }
             if self.frame == a.start {
                 match &a.kind {
+                    ActionKind::CheckArea(phase) => {
+                        let frames:Vec<_>=self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter_map(|s|if let Geom::Text(t)=&s.geom{t.frame.as_ref().map(|_|(s.id,t))}else{None}).collect();
+                        let count=frames.len();let head=frames.iter().find(|(_,t)|t.thread.as_ref().is_none_or(|t|t.prev.is_none())).map(|(_,t)|*t);
+                        let passed=match *phase{
+                            "shape-frame"=>frames.iter().any(|(_,t)|t.frame.as_ref().is_some_and(|f|f.contour.is_some())&&!t.contours.is_empty()),
+                            "created"=>count==1&&head.is_some_and(|t|t.layout.as_ref().is_some_and(|l|l.overflow)),
+                            "two"=>count==2&&frames.iter().all(|(_,t)|t.thread.is_some()),
+                            "three"=>count==3&&frames.iter().all(|(_,t)|t.thread.is_some()),
+                            "middle-deleted"=>count==2&&frames.iter().all(|(_,t)|t.thread.is_some()),
+                            "resized"=>head.is_some_and(|t|t.frame.as_ref().unwrap().size.x<345.&&t.px==25.),
+                            "ellipsis"=>frames.iter().any(|(_,t)|t.frame.as_ref().is_some_and(|f|f.overflow==omadesign::text_geometry::Overflow::Ellipsis&&f.max_lines==Some(1))),
+                            "edited"=>head.is_some_and(|t|t.content.starts_with("Editing a threaded")),
+                            "story-restored"=>head.is_some_and(|t|t.content.starts_with("A single story")),_=>false};
+                        if !passed{self.errors.push(format!("area lifecycle {phase} failed: {count} frames"));}
+                    },
                     ActionKind::NativeClipboard(key) => {
                         let focus=format!("hl.dsp.focus({{window=\"pid:{}\"}})",std::process::id());
                         let _=Command::new("hyprctl").args(["dispatch",&focus]).output();
@@ -1647,6 +1705,13 @@ impl eframe::App for Capture {
                         }
                         Err(error) => self.errors.push(format!("Native save failed: {error}")),
                     }
+                }
+                if self.scene=="area-type" {
+                    let encoded=omadesign::project::encode(&self.studio.doc).unwrap();fs::write(self.directory.join("area-type.oma"),&encoded).unwrap();let restored=omadesign::project::decode(&encoded).unwrap();
+                    let frames:Vec<_>=restored.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter_map(|s|if let Geom::Text(t)=&s.geom{t.frame.as_ref().map(|f|serde_json::json!({"id":s.id,"frame":f,"thread":t.thread,"source_characters":t.content.chars().count(),"visible_range":t.layout.as_ref().map(|l|(l.visible_start,l.visible_end)),"overflow":t.layout.as_ref().is_some_and(|l|l.overflow)}))}else{None}).collect();
+                    fs::write(self.directory.join("area-type-export.svg"),omadesign::svg::export(&restored).unwrap()).unwrap();
+                    fs::write(self.directory.join("area-type-result.json"),serde_json::to_vec_pretty(&serde_json::json!({"saved_and_reopened":true,"frames":frames,"unresolved_input_targets":self.errors,"renderer":"native WGPU","recording_frames":self.frame})).unwrap()).unwrap();
+                    assert!(self.errors.is_empty(),"all area text native assertions and UI targets pass");
                 }
                 if self.scene=="path-type" || self.scene=="path-clipboard" {
                     let project=omadesign::project::encode(&self.studio.doc).unwrap();

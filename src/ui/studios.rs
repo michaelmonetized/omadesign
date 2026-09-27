@@ -58,6 +58,7 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                 .auto_shrink([false, true])
                 .show(ui, |ui| {
                     super::selection::arrange_panel(ui, studio);
+                    super::text_geometry::wrap_inspector(ui, studio);
                     section_gap(ui);
                     if motion {
                         motion_studio(ui, studio);
@@ -929,6 +930,7 @@ fn apply_stroke(studio: &mut Studio, stroke: Option<DocStroke>) {
 
 fn character_studio(ui: &mut Ui, studio: &mut Studio) {
     heading(ui, "Typography");
+    super::text_geometry::frame_inspector(ui, studio);
     super::text_geometry::path_inspector(ui, studio);
     let live = studio.selected_type();
     let font = live
@@ -2533,6 +2535,7 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                                 }
                                             }
                                         } else {
+                                            if matches!(&shape.geom, Geom::Text(t) if t.layout.as_ref().is_some_and(|l|l.overflow)) { ui.colored_label(eframe::egui::Color32::from_rgb(240,55,75), "+").on_hover_text("Text overflows its frame"); }
                                             let guide_name;
                                             let name = if shape.guide {
                                                 guide_name = format!("Guide · {}", shape.name);

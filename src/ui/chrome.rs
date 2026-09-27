@@ -618,6 +618,7 @@ fn object_menu(ui: &mut Ui, studio: &mut Studio) {
 
 fn view_menu(ui: &mut Ui, studio: &mut Studio) {
     ui.menu_button("View", |ui| {
+        super::text_geometry::thread_view_menu(ui);
         ui.menu_button("Start tab", |ui| super::welcome::startup_preferences(ui, studio));
         ui.separator();
         if ui.button("Document conversion notes…").clicked() {

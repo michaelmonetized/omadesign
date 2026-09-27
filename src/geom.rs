@@ -1,6 +1,7 @@
 //! Geometry primitives. No UI types. Callers and tests share this seam.
 
 use serde::{Deserialize, Serialize};
+pub use crate::text_geometry::{TextOnPath, PathAlign, TextFrame, TextThread, TextWrap, WrapMode, VAlign, Overflow};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Pt {
@@ -683,6 +684,10 @@ pub struct TypeRun {
     pub contours: Vec<Vec<Pt>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_path: Option<crate::text_geometry::TextOnPath>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame: Option<crate::text_geometry::TextFrame>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread: Option<crate::text_geometry::TextThread>,
     #[serde(skip)]
     pub layout: Option<crate::text_geometry::TextGeometryLayout>,
 }
@@ -708,6 +713,8 @@ impl Default for TypeRun {
             smcp: false,
             contours: vec![],
             on_path: None,
+            frame: None,
+            thread: None,
             layout: None,
         }
     }
@@ -876,6 +883,7 @@ impl Geom {
 
     pub fn bbox(&self) -> Bounds {
         match self {
+            Geom::Text(run) if run.frame.is_some() => return crate::text_geometry::frame_bounds(run).unwrap(),
             Geom::Text(run) if run.on_path.is_none() && run.wrap_width.is_some() => {
                 let (width, height) = crate::text::measure(run);
                 return Bounds::from_min_size(
@@ -1046,6 +1054,13 @@ impl Geom {
             }
             Geom::Text(t) => {
                 t.origin = src.map_pt(t.origin, dst);
+                if let Some(frame) = &mut t.frame {
+                    frame.size.x *= sx; frame.size.y *= sy;
+                    t.wrap_width = Some((frame.size.x-frame.inset[1]-frame.inset[3]).max(1.));
+                    t.layout = None;
+                    t.contours = crate::text_geometry::shape_frame(t);
+                    return;
+                }
                 t.px *= sy;
                 t.tracking *= sx;
                 t.leading *= sy;

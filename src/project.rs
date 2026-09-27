@@ -23,6 +23,8 @@ pub fn encode(doc: &Document) -> Result<String, String> {
             12
         } else if doc.layers.iter().filter_map(|l| l.kind.shapes()).flatten().any(|s| matches!(&s.geom, crate::geom::Geom::Text(t) if !t.features.is_empty() || t.spans.iter().any(|s| !s.features.is_empty()))) {
             11
+        } else if doc.layers.iter().any(|l| !l.text_wrap.is_none() || l.kind.shapes().unwrap_or(&[]).iter().any(|s| !s.text_wrap.is_none() || matches!(&s.geom,crate::geom::Geom::Text(t) if t.frame.is_some() || t.thread.is_some()))) {
+            10
         } else if doc.layers.iter().filter_map(|l| l.kind.shapes()).flatten().any(|s| matches!(&s.geom, crate::geom::Geom::Text(t) if t.on_path.is_some())) {
             9
         } else if doc.layers.iter().filter_map(|l| l.kind.shapes()).flatten().any(|s| matches!(&s.geom, crate::geom::Geom::Text(t) if t.wrap_width.is_some() || !t.paragraphs.is_empty() || !t.spans.is_empty() || matches!(t.align, crate::geom::TextAlign::Justify{..}))) {

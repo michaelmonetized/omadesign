@@ -19,7 +19,8 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         Sense::click_and_drag(),
     );
     studio.canvas_rect = Some(rect);
-    let text_geometry_input = super::text_geometry::brackets(ui, rect, studio);
+    let text_geometry_input = super::text_geometry::brackets(ui, rect, studio) | super::text_geometry::frame_ports(ui,rect,studio);
+    let text_geometry_input = text_geometry_input || super::text_geometry::area_input(studio,&resp,rect);
     if studio.type_edit.is_some()
         && (resp.clicked() || ui.ctx().memory(|memory| memory.focused().is_none()))
     {
@@ -3128,6 +3129,11 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio, pen_pre
         && let Geom::Text(run) = &s.geom
     {
         draw_type_caret(p, rect, studio, run, edit.caret, edit.anchor);
+        if run.thread.is_some() {
+            for layer in &studio.doc.layers { for shape in layer.kind.shapes().unwrap_or(&[]) {
+                if shape.id != edit.id && let Geom::Text(other)=&shape.geom && other.thread.as_ref().is_some_and(|t|t.story==edit.id) { draw_type_caret(p,rect,studio,other,edit.caret,edit.anchor); }
+            }}
+        }
     }
 }
 
@@ -3149,7 +3155,7 @@ fn draw_type_caret(
     }
     }
     let phase = (p.ctx().input(|i| i.time) * 2.0).fract();
-    let on = phase < 0.5;
+    let on = phase < 0.5 && run.layout.as_ref().is_none_or(|l| run.frame.is_none() || (caret>=l.visible_start&&caret<=l.visible_end));
     let next = if on { 0.5 - phase } else { 1.0 - phase };
     p.ctx()
         .request_repaint_after(std::time::Duration::from_secs_f64(next * 0.5 + 0.001));

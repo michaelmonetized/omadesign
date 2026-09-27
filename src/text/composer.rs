@@ -17,6 +17,7 @@ pub struct LayoutGlyph {
 #[derive(Clone, Debug)]
 pub struct LayoutLine {
     pub text: String,
+    pub hyphenated: bool,
     pub start: usize,
     pub end: usize,
     pub paragraph: usize,
@@ -321,6 +322,7 @@ pub fn compose(run: &TypeRun) -> Arc<Vec<LayoutLine>> {
             }
             lines.push(LayoutLine {
                 text: source.to_owned(),
+                hyphenated: hyphen,
                 start,
                 end,
                 paragraph: base,
