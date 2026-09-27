@@ -125,6 +125,7 @@ fn schedule(scene: &str) -> Vec<Action> {
             event(19., AttachmentCount(8)),
             event(19.5, Clipboard("unknown")),
             event(21., AttachmentCount(9)),
+            event(21.2, ScrollAt(At(1400., 630.), -600.)),
             event(22., Click(Any("Send"))),
             event(24., Expect("Attachment delivery verified.")),
             event(25., Click(Any("New"))),
@@ -1538,7 +1539,7 @@ impl Capture {
                 let title = &self.studio.agent.history.iter().find(|thread| {
                     thread.messages.iter().any(|entry| entry.role == "user" && entry.attachments.len() == 9)
                 })?.title;
-                self.labels.iter().find(|(text, rect)| text == title && rect.left() > 1100.)
+                self.labels.iter().find(|(text, _)| text == title)
                     .map(|(_, rect)| rect.center())
             }
             Target::Any(s) => label(s, false).map(|r| r.center()),

@@ -82,8 +82,7 @@ pub(super) fn tick(ctx: &egui::Context, studio: &mut Studio) {
 }
 
 pub(super) fn button(ui: &mut egui::Ui, studio: &mut Studio) {
-    if super::icons::sparkle_button(ui, studio.agent.visible).clicked()
-    {
+    if super::icons::sparkle_button(ui, studio.agent.visible).clicked() {
         if studio.agent.visible {
             studio.agent.visible = false;
             ui.ctx()
@@ -155,34 +154,51 @@ fn body(ui: &mut egui::Ui, studio: &mut Studio, agent: &mut Workspace, height: f
                 }
                 for thread in history {
                     ui.push_id(&thread.id, |ui| {
-                        egui::CollapsingHeader::new(&thread.title).show(ui, |ui| {
-                            ui.small(format!(
-                                "{} · {}",
-                                thread.settings.profile.name,
-                                thread
-                                    .document
-                                    .as_ref()
-                                    .map_or("Unsaved canvas".into(), |p| p.display().to_string())
-                            ));
-                            if ui
-                                .add_enabled(
-                                    !agent.busy && !agent.connecting,
-                                    egui::Button::new("Continue in saved document"),
-                                )
-                                .clicked()
-                            {
-                                if let Err(e) = agent.restore(thread.clone(), studio) {
-                                    agent.error = e;
+                        let title = egui::WidgetText::from(thread.title.as_str()).into_galley(
+                            ui,
+                            Some(egui::TextWrapMode::Truncate),
+                            (ui.available_width()
+                                - ui.spacing().indent
+                                - 2. * ui.spacing().button_padding.x)
+                                .max(1.),
+                            egui::TextStyle::Button,
+                        );
+                        egui::CollapsingHeader::new(title)
+                            .id_salt(&thread.id)
+                            .show(ui, |ui| {
+                                ui.small(format!(
+                                    "{} · {}",
+                                    thread.settings.profile.name,
+                                    thread
+                                        .document
+                                        .as_ref()
+                                        .map_or("Unsaved canvas".into(), |p| p
+                                            .display()
+                                            .to_string())
+                                ));
+                                if ui
+                                    .add_enabled(
+                                        !agent.busy && !agent.connecting,
+                                        egui::Button::new("Continue in saved document"),
+                                    )
+                                    .clicked()
+                                {
+                                    if let Err(e) = agent.restore(thread.clone(), studio) {
+                                        agent.error = e;
+                                    }
                                 }
-                            }
-                            for entry in &thread.messages {
-                                if matches!(entry.role.as_str(), "user" | "assistant") {
-                                    ui.label(RichText::new(&entry.role).strong());
-                                    ui.label(&entry.text);
-                                    super::agent_attachments::chips(ui, &entry.attachments, false);
+                                for entry in &thread.messages {
+                                    if matches!(entry.role.as_str(), "user" | "assistant") {
+                                        ui.label(RichText::new(&entry.role).strong());
+                                        ui.add(egui::Label::new(&entry.text).wrap());
+                                        super::agent_attachments::chips(
+                                            ui,
+                                            &entry.attachments,
+                                            false,
+                                        );
+                                    }
                                 }
-                            }
-                        });
+                            });
                     });
                 }
             });
@@ -273,7 +289,7 @@ fn body(ui: &mut egui::Ui, studio: &mut Studio, agent: &mut Workspace, height: f
                 if let Some(thread)=&agent.thread{
                     for (i,entry) in thread.messages.iter().enumerate(){ui.push_id(i,|ui|{
                         match entry.role.as_str(){
-                            "user"=>{ui.add_space(8.0);ui.label(RichText::new("You").strong());ui.label(&entry.text);super::agent_attachments::chips(ui,&entry.attachments,false);}
+                            "user"=>{ui.add_space(8.0);ui.label(RichText::new("You").strong());ui.add(egui::Label::new(&entry.text).wrap());super::agent_attachments::chips(ui,&entry.attachments,false);}
                             "assistant"=>{ui.add_space(8.0);ui.label(RichText::new(&agent.settings.profile.name).strong().color(super::theme::accent()));ui.add(egui::Label::new(&entry.text).wrap().selectable(true));}
                             "tool"=>{let icon=match entry.status.as_str(){"completed"=>"✓","failed"=>"!",_=>"·"};ui.small(format!("{icon} {}",tool_title(&entry.text)));}
                             "design"=>{ui.label(RichText::new(format!("✓ Canvas · {}",entry.text)).small().color(super::theme::accent()));}
@@ -592,6 +608,85 @@ mod tests {
             "Filtering a provider must keep the picker open"
         );
         assert!(s.agent.connection.is_none());
+    }
+    #[test]
+    fn attachment_history_titles_and_restored_tokens_stay_inside_panel() {
+        use crate::agent::workspace::{Entry, Thread};
+        for size in [egui::vec2(960., 640.), egui::vec2(1600., 900.)] {
+            let ctx = egui::Context::default();
+            crate::ui::theme::apply(&ctx);
+            let mut studio = Studio::new();
+            studio.agent.visible = true;
+            studio.agent.loaded = true;
+            studio.agent.show_history = true;
+            let title = "Attachment references including [📎 extraordinarily-long-file-name.pdf]"
+                .to_owned();
+            let thread = Thread {
+                id: "attachment-history-qa".into(),
+                title: title.clone(),
+                settings: studio.agent.settings.clone(),
+                purpose: studio.agent.purpose,
+                session_id: None,
+                document: Some("/tmp/attachment-history.oma".into()),
+                updated: 0,
+                messages: vec![Entry {
+                    role: "user".into(),
+                    text: "[📎 extraordinarily-long-file-name.pdf · a0123456789abcdef] ".repeat(20),
+                    id: String::new(),
+                    status: String::new(),
+                    attachments: vec![],
+                }],
+            };
+            studio.agent.thread = Some(thread.clone());
+            studio.agent.history = vec![thread];
+            let mut header = None;
+            for _ in 0..8 {
+                let labels = frame(&ctx, &mut studio, size, vec![]);
+                for wanted in ["Send", title.as_str()] {
+                    let (_, rect, clip) =
+                        labels.iter().find(|(text, _, _)| text == wanted).unwrap();
+                    assert!(
+                        rect.left() >= 0. && rect.right() <= size.x && clip.contains(rect.center()),
+                        "{wanted}: {rect:?} clip={clip:?}"
+                    );
+                    if wanted == title {
+                        header = Some(rect.center());
+                    }
+                }
+            }
+            let pos = header.unwrap();
+            frame(
+                &ctx,
+                &mut studio,
+                size,
+                vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed: true,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed: false,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+            );
+            for _ in 0..8 {
+                let labels = frame(&ctx, &mut studio, size, vec![]);
+                for wanted in ["Send", "Continue in saved document"] {
+                    let (_, rect, clip) =
+                        labels.iter().find(|(text, _, _)| text == wanted).unwrap();
+                    assert!(
+                        rect.left() >= 0. && rect.right() <= size.x && clip.contains(rect.center()),
+                        "{wanted}: {rect:?} clip={clip:?}"
+                    );
+                }
+            }
+        }
     }
     #[test]
     fn twenty_attachment_chips_and_long_tokens_keep_composer_controls_visible() {
