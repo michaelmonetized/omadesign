@@ -1,0 +1,30 @@
+
+running 1 test
+test formats::pdf::tests::pdf_object_and_effect_blends_match_layer_isolation_and_native_pixels ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 727 filtered out; finished in 0.35s
+
+
+running 1 test
+test app::layout_edit::reparent_tests::placed_raster_becomes_embedded_image_and_undo_restores_original_layer ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 727 filtered out; finished in 4.21s
+
+
+running 1 test
+test layout_export::tests::html_shadow_and_inner_shadow_multiply_effect_and_color_opacity ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 727 filtered out; finished in 0.00s
+
+
+running 1 test
+test app::clipboard::tests::legacy_clipboard_effects_keep_project_migration_appearance ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 727 filtered out; finished in 1.30s
+
+
+running 1 test
+test app::clipboard::tests::clipboard_preserves_independent_appearance_fields ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 727 filtered out; finished in 1.87s
+

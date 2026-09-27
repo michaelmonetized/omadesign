@@ -56,3 +56,5 @@ and 205.416 ms independent (+0.145%)**, within the observed round-to-round varia
 (about 2%). This is an unoptimized local CPU compositor comparison, not a WGPU
 presentation or release-build frame-rate claim. The compatible single-effect path
 now reuses the original local effect application and one transformed blit.
+
+Additional confirmed clipboard/HTML/Layout conversion review fixes and four actual native-compositor/PDF/Poppler parity fixtures are documented in [the review followup](review-followup/README.md). The proposed cross-layer PDF change was disproved and was not applied.
