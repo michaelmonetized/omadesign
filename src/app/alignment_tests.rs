@@ -206,3 +206,24 @@ fn selected_visible_layer_carries_locked_objects_but_individual_selection_does_n
     assert_eq!(s.doc.find_shape(0,b).unwrap().world_bbox().min.x,160.);
     s.selected_layer=None;s.selection=vec![(0,b)];assert!(!s.can_align_selection());
 }
+
+#[test]
+fn selected_plain_layer_inside_group_uses_only_visible_shapes() {
+    let mut s = fixture();
+    let a = add(&mut s, 170., 150.);
+    let b = add(&mut s, 230., 220.);
+    let group = Layer::group("Parent");
+    s.doc.layers[0].parent = Some(group.id);
+    s.doc.layers.push(group);
+    s.doc.find_shape_mut(0, b).unwrap().visible = false;
+    s.doc.find_shape_mut(0, a).unwrap().locked = true;
+    s.activate_layer_tree(0);
+    let before = saved(&s);
+    let history = s.history.len();
+    assert_eq!(s.alignment_item_count(), 1);
+    assert_eq!(s.align_targets().0, vec![(0, a)]);
+    s.align_sel(Align::Right);
+    assert_eq!(s.doc.find_shape(0, a).unwrap().world_bbox().max.x, 400.);
+    assert_eq!(s.doc.find_shape(0, b).unwrap().world_bbox().min.x, 230.);
+    history_roundtrip(&mut s, before, history);
+}

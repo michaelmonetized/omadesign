@@ -42,7 +42,7 @@ type Item = (Vec<(usize, u64)>, Bounds);
 /// group item restores ordinary per-object eligibility.
 pub fn eligible_target(doc: &Document, li: usize, id: u64, individual: Option<(usize, u64)>, layer_unit: bool) -> bool {
     let Some(layer) = doc.layers.get(li) else { return false };
-    let group = (individual != Some((li, id))).then(|| doc.layer_ancestors(li).last().copied()).flatten();
+    let group = (!layer_unit && individual != Some((li, id))).then(|| doc.layer_ancestors(li).last().copied()).flatten();
     let parent_unit = group.is_some_and(|root| doc.layer_visible(root) && !doc.layers[root].locked);
     if !parent_unit && !doc.layer_editable(li) { return false; }
     if id == crate::document::RASTER_ID { return layer.kind.raster_bounds().is_some(); }
