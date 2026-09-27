@@ -432,7 +432,7 @@ mod tests {
         assert_eq!(t.spans, r.spans);
         let html = paragraph_html(t);
         assert!(html.contains("top:-4px"));
-        assert!(html.contains("letter-spacing:0em"));
+        assert!(html.contains("letter-spacing:calc(0em + var(--oma-paragraph-letter-spacing, 0em))"));
     }
     #[test]
     fn clipboard_keeps_spacing_styles_and_internal_pair_positions() {

@@ -566,7 +566,7 @@ pub fn paragraph_spacing_css(run: &TypeRun, style: &crate::geom::ParagraphStyle)
 pub fn character_css(run:&TypeRun,style:&crate::geom::CharSpan)->String {
     use std::fmt::Write;
     let mut css=String::new();
-    if let Some(value)=style.tracking{let _=write!(css,"letter-spacing:{}em;",value/1000.);}
+    if let Some(value)=style.tracking{let _=write!(css,"letter-spacing:calc({}em + var(--oma-paragraph-letter-spacing, 0em));",value/1000.);}
     if let Some(value)=style.leading{let _=write!(css,"line-height:{}px;",value.pixels(run.px));}
     if let Some(mode)=style.kerning{let _=write!(css,"font-kerning:{};",if mode==crate::geom::KernMode::Metrics{"normal"}else{"none"});}
     if let Some(value)=style.baseline_shift{let _=write!(css,"position:relative;top:{}px;",-value);}
