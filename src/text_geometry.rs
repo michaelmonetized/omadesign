@@ -87,7 +87,13 @@ impl ArcPath {
 
 pub fn guide_path(shape: &Shape) -> Option<ArcPath> {
     if matches!(shape.geom, Geom::Text(_)) { return None; }
-    let converted = shape.geom.to_path();
+    let mut converted = if let Geom::Rect { .. } = &shape.geom {
+        let bounds=shape.geom.bbox();
+        Geom::Rect{origin:bounds.min,size:bounds.size(),radius:0.}.to_path()
+    } else {shape.geom.to_path()};
+    if matches!(shape.geom,Geom::Rect{..}) && let Geom::Path{anchors,..}=&mut converted {
+        for (anchor,radius) in anchors.iter_mut().zip(shape.effective_corners()) {anchor.radius=radius;}
+    }
     let (anchors,closed) = match &converted {
         Geom::Path {anchors,closed} => (anchors,*closed),
         Geom::Paths {paths,..} => { let p=paths.first()?; (&p.anchors,p.closed) },
@@ -290,5 +296,21 @@ pub fn remap_copy(shape:&mut Shape,ids:&HashMap<u64,u64>) {
         assert!((x(&spaced,1)-x(&original,1)-3.).abs()<0.01,"{} {}",x(&spaced,1),x(&original,1));
         run.update_paragraphs(0,4,|p|p.align=TextAlign::Center);let centered=layout_on_path(&run);assert!(x(&centered,0)>400.);
         run.update_paragraphs(0,4,|p|p.align=TextAlign::End);let right=layout_on_path(&run);assert!(x(&right,0)>x(&centered,0)+300.);
+    }
+}
+
+#[cfg(test)]
+mod rounded_guide_regression {
+    use super::*;
+    #[test]
+    fn independent_rectangle_corners_and_rotation_match_the_visible_guide() {
+        let mut shape=Shape::new(Geom::Rect{origin:Pt::new(10.,20.),size:Pt::new(160.,100.),radius:0.},Default::default());
+        shape.corners=[28.,5.,0.,40.];shape.rotation=0.31;
+        let rounded=guide_path(&shape).unwrap();
+        let expected=520.-(2.-std::f32::consts::FRAC_PI_2)*73.;assert!((rounded.length-expected).abs()<0.2,"{} vs {}",rounded.length,expected);
+        let visible=shape.world_contours(128);let contour=&visible[0];
+        for step in 0..200 {let point=rounded.point_and_tangent_at(rounded.length*step as f32/200.).0;let distance=(0..contour.len()).map(|i|crate::geom::seg_dist(point,contour[i],contour[(i+1)%contour.len()])).fold(f32::INFINITY,f32::min);assert!(distance<0.5,"guide drift {distance}");}
+        shape.corners=[0.;4];let sharp=guide_path(&shape).unwrap();assert!(sharp.length>rounded.length+25.);
+        shape.geom=Geom::Rect{origin:Pt::new(170.,120.),size:Pt::new(-160.,-100.),radius:0.};shape.corners=[28.,5.,0.,40.];assert!((guide_path(&shape).unwrap().length-rounded.length).abs()<0.001);
     }
 }
