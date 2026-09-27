@@ -1,0 +1,109 @@
+{
+  "paragraphs": [
+    {
+      "align": {
+        "Justify": {
+          "last": "Start"
+        }
+      },
+      "allow_orphans": true,
+      "break_mode": "Normal",
+      "hyphen": null,
+      "hyphenate": true,
+      "keep_together": "None",
+      "keep_with_next": 0,
+      "letter_spacing": [
+        0.0,
+        0.0,
+        8.0
+      ],
+      "min_end_lines": 2,
+      "min_start_lines": 2,
+      "overflow_wrap": false,
+      "runt": null,
+      "start": 0,
+      "word_spacing": [
+        80.0,
+        100.0,
+        250.0
+      ]
+    },
+    {
+      "align": {
+        "Justify": {
+          "last": "Start"
+        }
+      },
+      "allow_orphans": true,
+      "break_mode": "Normal",
+      "hyphen": null,
+      "hyphenate": true,
+      "keep_together": "None",
+      "keep_with_next": 0,
+      "letter_spacing": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "min_end_lines": 2,
+      "min_start_lines": 2,
+      "overflow_wrap": false,
+      "runt": null,
+      "start": 143,
+      "word_spacing": [
+        80.0,
+        100.0,
+        133.0
+      ]
+    },
+    {
+      "align": "Center",
+      "allow_orphans": true,
+      "break_mode": "Normal",
+      "hyphen": null,
+      "hyphenate": true,
+      "keep_together": "None",
+      "keep_with_next": 0,
+      "letter_spacing": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "min_end_lines": 2,
+      "min_start_lines": 2,
+      "overflow_wrap": false,
+      "runt": null,
+      "start": 211,
+      "word_spacing": [
+        80.0,
+        100.0,
+        133.0
+      ]
+    }
+  ],
+  "recording_frames": 300,
+  "renderer": "native WGPU",
+  "saved_and_reopened": true,
+  "unicode_source": "Thoughtful typography gives every idea room to breathe. Paragraph composition balances word spacing, line endings, and the rhythm of language.\nEach paragraph carries its own alignment and line breaking choices.\nA new paragraph inherits its own alignment.",
+  "unresolved_input_targets": [],
+  "visual_lines": 6,
+  "hyphenation_stretch_regression": {
+    "font": "EB Garamond",
+    "measure_px": 320,
+    "size_px": 24,
+    "word_spacing_limits_percent": [
+      80,
+      100,
+      1000
+    ],
+    "hyphenation_off": {
+      "average": 5.1154933,
+      "maximum": 10.0
+    },
+    "hyphenation_on": {
+      "average": 3.2009127,
+      "maximum": 8.343888
+    },
+    "passed": true
+  }
+}
