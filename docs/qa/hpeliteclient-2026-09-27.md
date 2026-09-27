@@ -11,6 +11,11 @@ fast under its current desktop load. Background removal is useful for small
 images. Native interaction checks pass, with substantial frame-time spikes.**
 This is functional x86_64 coverage, not a smooth-performance signoff.
 
+The follow-up [everyday authoring report](authoring-hpeliteclient-2026-09-27.md)
+rebuilds the user's infographic as editable artwork and measures real Pen,
+Brush, typing, pan and zoom interactions. Those workflows also pass correctness
+checks but fail the responsiveness check on this loaded host.
+
 ## Hardware and installed artifact
 
 - Four AMD Ryzen Embedded R2314 cores, integrated Radeon Vega graphics.

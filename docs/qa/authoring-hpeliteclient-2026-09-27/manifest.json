@@ -1,0 +1,66 @@
+{
+  "application_code_commit": "221834bdd8af5aee8554a0e835629cbe2f467558",
+  "installed_application_sha256": "fd293af0d47e2bfda8550a1c2107177060b8e0a9d41785f299c9f5849f9091d8",
+  "files": {
+    "artifacts/hpeliteclient-infographic-20260927/infographic-seed.oma": {
+      "bytes": 472296,
+      "sha256": "d75a60c1803b4718d171a897f2330b3faec80018a02d27ee6c5447b88eeef7a7"
+    },
+    "artifacts/hpeliteclient-infographic-20260927/type-tasks.json": {
+      "bytes": 624,
+      "sha256": "e859dd9c2e990468c36c818616addfbb47c46f0951f6e6e4f5be4c5eb0b96efe"
+    },
+    "artifacts/hpeliteclient-infographic-20260927/editable-infographic/infographic.oma": {
+      "bytes": 510467,
+      "sha256": "03c889850699b51d47b9918d8c05e02b2681823e7a29f3671940fa7538602cbf"
+    },
+    "artifacts/hpeliteclient-infographic-20260927/editable-infographic/infographic.png": {
+      "bytes": 324073,
+      "sha256": "6ab1fabdca38276c03032fa364815c9ab464c375e942e5dcc1d3acfba6da7502"
+    },
+    "artifacts/hpeliteclient-infographic-20260927/editable-infographic.zip": {
+      "bytes": 7372594,
+      "sha256": "cc47e9aee5d60e37024b6b08243a47dd459a60ce388dc071894aa57927a57f42"
+    },
+    "target/x86_64-unknown-linux-gnu/release/authoring_qa": {
+      "bytes": 53440144,
+      "sha256": "307152e9e2b4b703113ffa1798839636d53f68a8fcf104970212038f0bba98e1"
+    },
+    "target/x86_64-unknown-linux-gnu/release/canvas_profile": {
+      "bytes": 5661592,
+      "sha256": "287fe87f5762ad9f2af1706040b15779b3f19008fe3a9807f3d5eb96afad9859"
+    },
+    "artifacts/hpeliteclient-infographic-20260927/editable-infographic/.omabrand/fonts/2387344100d213108cead7abcdc1263c.ttf": {
+      "bytes": 2968744,
+      "sha256": "b7c0dcee217aa017207f21b0915b5159451fa8b7fb619af8afb6349352ca8770"
+    },
+    "artifacts/hpeliteclient-infographic-20260927/editable-infographic/.omabrand/fonts/2819ebc145fb746db9eb78bdeea2bc3a.ttf": {
+      "bytes": 646360,
+      "sha256": "5d4d9e0ded710a4603e10afebfce2c2d56fa0d216890e8915511d2a53a004c1c"
+    },
+    "artifacts/hpeliteclient-infographic-20260927/editable-infographic/.omabrand/fonts/64a2d3719cd24cfc90c61e80239af081.ttf": {
+      "bytes": 2968556,
+      "sha256": "7fdb146f5b2ab3a435a6e975899de7e0958a1e3c17f5fc86c5b2e28271452adc"
+    },
+    "artifacts/hpeliteclient-infographic-20260927/editable-infographic/.omabrand/fonts/Nerd-Fonts-OFL.txt": {
+      "bytes": 4301,
+      "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2"
+    },
+    "artifacts/hpeliteclient-infographic-20260927/editable-infographic/.omabrand/fonts/Noto-OFL.txt": {
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    "artifacts/hpeliteclient-infographic-20260927/editable-infographic/.omabrand/fonts/bb80be15ebaedfabdf34beb2e53006b2.ttf": {
+      "bytes": 2968648,
+      "sha256": "5f800630112c2094efeb09f65c0e7247e4e6c85d2b61384b6e89de95b9bd5aa3"
+    },
+    "artifacts/hpeliteclient-infographic-20260927/editable-infographic/.omabrand/fonts/c40328406c229b6198215f56453385f2.ttf": {
+      "bytes": 631484,
+      "sha256": "1df075a380fc7cb898acf64c1f7b3b4dd780de3caa860178bf929de35817a913"
+    },
+    "artifacts/hpeliteclient-infographic-20260927/editable-infographic/.omabrand/fonts/ff1bcc1d0e36c222e930ee514700e1e0.ttf": {
+      "bytes": 2968820,
+      "sha256": "704898874930bd2dbf9ebdcc0bbe5d9b7c2714fe537d0ca0f5cb0cbb49915bc8"
+    }
+  }
+}
