@@ -1,0 +1,55 @@
+{
+  "manual_kern": {
+    "22": 20.0
+  },
+  "recording_frames": 480,
+  "renderer": "native WGPU",
+  "reopened_by_application": true,
+  "saved_by_ctrl_s": true,
+  "source": "AVATAR Wa typography\nSpacing gives each word room to breathe.",
+  "spans": [
+    {
+      "baseline_shift": 2.0,
+      "end": 21,
+      "features": [],
+      "hscale": 118.0,
+      "kerning": "Optical",
+      "leading": {
+        "Fixed": 54.80000305175781
+      },
+      "no_break": false,
+      "start": 0,
+      "tracking": 120.0,
+      "vscale": 126.0
+    },
+    {
+      "baseline_shift": 4.0,
+      "end": 23,
+      "features": [],
+      "hscale": 118.0,
+      "kerning": "Optical",
+      "leading": {
+        "Fixed": 54.80000305175781
+      },
+      "no_break": false,
+      "start": 21,
+      "tracking": 120.0,
+      "vscale": 126.0
+    },
+    {
+      "baseline_shift": 2.0,
+      "end": 61,
+      "features": [],
+      "hscale": 118.0,
+      "kerning": "Optical",
+      "leading": {
+        "Fixed": 54.80000305175781
+      },
+      "no_break": false,
+      "start": 23,
+      "tracking": 120.0,
+      "vscale": 126.0
+    }
+  ],
+  "unresolved_input_targets": []
+}

@@ -24,6 +24,7 @@ enum Target {
     Text(&'static str),
     FieldNth(&'static str, usize),
     Any(&'static str),
+    Prefix(&'static str),
     Left(&'static str),
     Field(&'static str),
     Menu(&'static str),
@@ -145,12 +146,18 @@ fn schedule(scene: &str) -> Vec<Action> {
             event(22., Key(egui::Key::ArrowRight, Modifiers{alt:true,..Modifiers::NONE})),
             event(24., Key(egui::Key::A, ctrl())),
             event(25., Key(egui::Key::ArrowRight, Modifiers{alt:true,..ctrl()})),
+            event(26., ScrollAt(At(1480.,560.), -220.)),
             event(28., Key(egui::Key::Escape, Modifiers::NONE)),
             event(30., Key(egui::Key::Z, ctrl())),
             event(32., Key(egui::Key::Z, Modifiers{shift:true,..ctrl()})),
             event(34., Key(egui::Key::S, ctrl())),
             event(36., ReopenSaved),
             event(38., Click(World(180.,130.))),
+            event(40., Click(At(70.,20.))),
+            event(41., ScrollAt(At(800.,500.), -120.)),
+            event(42., Expect("Typography increments")),
+            drag(43., 1., Delta(Prefix("Tracking / kerning "), 10.)),
+            event(46., Click(Any("Close"))),
         ],
         "opentype" => vec![
             event(1., Key(egui::Key::A, ctrl())),
@@ -981,10 +988,11 @@ impl Capture {
         if matches!(scene.as_str(), "independent-effects" | "paragraphs" | "opentype" | "spacing") {
             studio.path = Some(directory.join(format!("{scene}-final.oma")));
         }
+        if scene == "spacing" { studio.load_startup_preferences(); }
         let seconds = match scene.as_str() {
             "paragraphs" => 30,
             "opentype" => 20,
-            "spacing" => 40,
+            "spacing" => 48,
             "welcome-browse" => 23,
             "welcome-vector" | "welcome-layout" => 9,
             "welcome-raster" => 8,
@@ -1061,6 +1069,7 @@ impl Capture {
                     .map(|(_, r)| r.center())
             }
             Target::Any(s) => label(s, false).map(|r| r.center()),
+            Target::Prefix(s) => self.labels.iter().find(|(text,_)|text.starts_with(s)).map(|(_,r)|r.center()),
             Target::Left(s) => self
                 .labels
                 .iter()
@@ -1478,8 +1487,18 @@ impl eframe::App for Capture {
                     fs::write(self.directory.join("opentype-export.html"),omadesign::text::paragraph_html(run)).unwrap();
                 }
                 if self.scene=="spacing" {
+                    assert!(self.errors.is_empty(),"unresolved native input targets: {:?}",self.errors);
+                    assert!(self.studio.tab_count()>1,"application did not reopen the saved document");
+                    assert_eq!(self.studio.history.len(),0,"reopened document should have fresh history");
+                    assert!(self.studio.startup_preferences.tracking_step>20,"configurable typography increment did not change");
+                    let pref_path=std::path::PathBuf::from(std::env::var_os("XDG_CONFIG_HOME").unwrap()).join("omadesign/preferences.json");
+                    let prefs:serde_json::Value=serde_json::from_slice(&fs::read(&pref_path).unwrap()).unwrap();
+                    assert_eq!(prefs["tracking_step"].as_u64(),Some(self.studio.startup_preferences.tracking_step as u64));
+                    fs::copy(pref_path,self.directory.join("spacing-preferences.json")).unwrap();
                     let restored=omadesign::project::load_from(&self.directory.join("spacing-final.oma")).unwrap();
                     let run=restored.layers[1].kind.shapes().unwrap().iter().find_map(|s|if let Geom::Text(t)=&s.geom{Some(t)}else{None}).unwrap();
+                    let open_run=self.studio.doc.layers[1].kind.shapes().unwrap().iter().find_map(|s|if let Geom::Text(t)=&s.geom{Some(t)}else{None}).unwrap();
+                    assert_eq!(open_run.spans,run.spans);assert_eq!(open_run.manual_kern,run.manual_kern);
                     assert!(!run.manual_kern.is_empty(),"manual kerning shortcut did not persist");
                     assert!(run.spans.iter().any(|s|s.kerning==Some(omadesign::geom::KernMode::Optical)),"optical control did not apply");
                     assert!(run.spans.iter().any(|s|s.hscale.unwrap_or(100.)>100.),"horizontal scale did not change");
@@ -1488,7 +1507,11 @@ impl eframe::App for Capture {
                     assert!(run.spans.iter().all(|s|s.tracking==Some(120.)),"tracking/reset shortcuts did not apply");
                     fs::write(self.directory.join("spacing-result.json"),serde_json::to_vec_pretty(&serde_json::json!({"saved_by_ctrl_s":true,"reopened_by_application":true,"spans":run.spans,"manual_kern":run.manual_kern,"source":run.content,"unresolved_input_targets":self.errors,"renderer":"native WGPU","recording_frames":self.frame})).unwrap()).unwrap();
                     fs::write(self.directory.join("spacing-export.svg"),omadesign::svg::export(&restored).unwrap()).unwrap();
-                    fs::write(self.directory.join("spacing-export.html"),omadesign::text::paragraph_html(run)).unwrap();
+                    let mut export=restored.clone();
+                    let mut frame=omadesign::document::Shape::new(Geom::Rect{origin:Pt::ZERO,size:Pt::new(960.,680.),radius:0.},omadesign::document::Style{fill:omadesign::document::Fill::Solid(Rgba::WHITE),stroke:None});
+                    frame.layout=omadesign::layout::FrameLayout::frame();let frame_id=frame.id;
+                    let shapes=export.layers[1].kind.shapes_mut().unwrap();for shape in shapes.iter_mut(){shape.layout.parent=Some(frame_id);}shapes.insert(0,frame);
+                    fs::write(self.directory.join("spacing-export.html"),omadesign::layout_export::export_html(&export,1,frame_id).unwrap()).unwrap();
                 }
                 self.encoder.take().unwrap().finish();
                 fs::write(
