@@ -35,6 +35,7 @@ mod raster;
 mod retouch;
 mod selection;
 mod studios;
+mod text_geometry;
 mod templates;
 pub mod theme;
 mod timeline;

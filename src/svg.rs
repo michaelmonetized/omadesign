@@ -415,6 +415,7 @@ fn write_shape(
     // may not have the brand font. Text stays editable in the original document.
     if let Geom::Text(run) = &shape.geom
         && !text_as_paths
+        && run.on_path.is_none()
         && !run.font.starts_with("omatype:")
         && run.paragraphs.is_empty()
         && !matches!(run.align,crate::geom::TextAlign::Justify{..})

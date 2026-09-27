@@ -565,6 +565,8 @@ impl Studio {
             })
             .collect();
         let copied: HashSet<_> = shapes.iter().map(|s| s.id).collect();
+        let copied_ids: HashMap<_,_> = copied.iter().map(|id|(*id,*id)).collect();
+        for shape in &mut shapes { crate::text_geometry::remap_copy(shape, &copied_ids); }
         // A copied subtree no longer inherits frames that were not copied.
         // Bake their rotation into the root and translate its whole subtree,
         // preserving the same canvas position as ordinary position-preserving paste.
@@ -835,6 +837,7 @@ impl Studio {
                 .map(|s| (s.id, crate::document::next_id()))
                 .collect();
             for mut shape in shapes {
+                crate::text_geometry::remap_copy(&mut shape, &remap);
                 shape.id = remap[&shape.id];
                 crate::layout_components::remap_duplicate(&mut shape, &remap);
                 shape.layout.parent = shape.layout.parent.and_then(|id| remap.get(&id).copied());

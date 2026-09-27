@@ -32,6 +32,7 @@ mod snapping;
 pub mod startup;
 mod tabs;
 mod typography;
+mod text_geometry;
 pub mod updates;
 
 pub use key_hints::{KeyHint, KeyHints};
@@ -876,6 +877,7 @@ impl Studio {
     }
 
     pub fn mark(&mut self) {
+        crate::text_geometry::reflow(&mut self.doc);
         self.canvas_gen = self.canvas_gen.wrapping_add(1);
         self.last_input = Instant::now();
     }
@@ -1439,6 +1441,10 @@ impl Studio {
         self.apply_with_layer_selection(&cmd);
         let mut changes = vec![cmd];
         changes.extend(self.reconcile_layout());
+        for change in crate::text_geometry::reconcile_links(&self.doc) {
+            crate::document::apply(&mut self.doc, &change);
+            changes.push(change);
+        }
         self.history.push(if changes.len() == 1 {
             changes.remove(0)
         } else {

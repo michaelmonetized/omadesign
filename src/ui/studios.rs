@@ -929,6 +929,7 @@ fn apply_stroke(studio: &mut Studio, stroke: Option<DocStroke>) {
 
 fn character_studio(ui: &mut Ui, studio: &mut Studio) {
     heading(ui, "Typography");
+    super::text_geometry::path_inspector(ui, studio);
     let live = studio.selected_type();
     let font = live
         .as_ref()
