@@ -507,342 +507,50 @@ pub fn shape(run: &TypeRun) -> Vec<Vec<Pt>> {
     buzz_shape(&bytes, run).unwrap_or_else(|| fallback_block(&run.content, run.px, run.origin))
 }
 
-fn buzz_shape(bytes: &[u8], run: &TypeRun) -> Option<Vec<Vec<Pt>>> {
-    let face = rustybuzz::Face::from_slice(bytes, 0)?;
-    let font = ab_glyph::FontRef::try_from_slice(bytes).ok()?;
-    let upem = {
-        let u = face.units_per_em();
-        if u == 0 {
-            return None;
-        }
-        u as f32
-    };
-    let scale = run.px.max(1.0) / upem;
-    let features = ot_features(run);
-    let mut subpaths = Vec::new();
-    let mut y = run.origin.y;
-    for line in visual_lines(run) {
-        let line = line.text;
-        if !line.is_empty() {
-            let mut buffer = rustybuzz::UnicodeBuffer::new();
-            buffer.push_str(line);
-            buffer.set_direction(rustybuzz::Direction::LeftToRight);
-            let glyphs = rustybuzz::shape(&face, &features, buffer);
-            let mut pen = 0.0f32;
-            let offset = line_offset(run, line);
-            for (info, pos) in glyphs.glyph_infos().iter().zip(glyphs.glyph_positions()) {
-                let gid = GlyphId(info.glyph_id as u16);
-                let ox = run.origin.x + offset + (pen + pos.x_offset as f32) * scale;
-                let oy = y - pos.y_offset as f32 * scale;
-                if let Some(outline) = font.outline(gid) {
-                    let mapped = map_curves(&outline.curves, ox, oy, scale);
-                    subpaths.extend(flatten_outline(&mapped));
-                }
-                pen += pos.x_advance as f32;
-                if run.tracking.abs() > 1e-6 {
-                    pen += run.tracking / scale;
-                }
-            }
-        }
-        y += run.line_height();
-    }
-    if subpaths.is_empty() && !run.content.trim().is_empty() {
-        Some(fallback_block(&run.content, run.px, run.origin))
-    } else {
-        Some(subpaths)
-    }
+fn buzz_shape(_bytes: &[u8], run: &TypeRun) -> Option<Vec<Vec<Pt>>> {
+    Some(compose(run).iter().flat_map(|line|line.glyphs.iter().flat_map(|g|glyph_contours(run,g))).collect())
 }
 
-pub fn fill_contours(geom: &mut crate::geom::Geom) {
-    if let crate::geom::Geom::Text(run) = geom {
-        run.contours = shape(run);
-    }
-}
+mod composer;
+mod edit;
+pub mod hyphenation;
+pub use composer::{compose, compose_plain, glyph_contours, paragraph_style, LayoutGlyph, LayoutLine};
 
-pub fn measure(run: &TypeRun) -> (f32, f32) {
-    let mut max_w = 0.0f32;
-    let mut lines = 0;
-    for line in visual_lines(run) {
-        max_w = max_w.max(line_width(run, line.text));
-        lines += 1;
-    }
-    (
-        run.wrap_width.unwrap_or(max_w),
-        run.line_height() * lines as f32,
-    )
+pub fn fill_contours(geom: &mut crate::geom::Geom) { if let crate::geom::Geom::Text(run)=geom {run.contours=shape(run);} }
+pub fn measure(run:&TypeRun)->(f32,f32) {
+    let lines=compose(run);(run.wrap_width.unwrap_or_else(||lines.iter().map(|l|l.width).fold(0.,f32::max)),lines.iter().map(|l|l.height).sum())
 }
-
-struct VisualLine<'a> {
-    text: &'a str,
-    start: usize,
+pub fn caret_pt(run:&TypeRun,char_idx:usize)->Pt {
+    let lines=compose(run);let idx=char_idx.min(run.content.chars().count());
+    let line=&lines[lines.iter().rposition(|l|l.start<=idx).unwrap_or(0)];
+    Pt::new(run.origin.x+line.caret_x(idx),run.origin.y+line.baseline)
 }
-
-/// Keep source character positions intact across soft wraps, including Unicode.
-fn visual_lines(run: &TypeRun) -> Vec<VisualLine<'_>> {
-    #[derive(Hash, PartialEq, Eq, Clone)]
-    struct Key {
-        content: String,
-        font: String,
-        revision: u64,
-        px: u32,
-        tracking: u32,
-        width: Option<u32>,
-        features: [bool; 4],
-    }
-    type Range = (usize, usize, usize);
-    static CACHE: OnceLock<Mutex<HashMap<Key, Vec<Range>>>> = OnceLock::new();
-    let key = Key {
-        content: run.content.clone(),
-        font: run.font.clone(),
-        revision: FONT_REVISION.load(std::sync::atomic::Ordering::Relaxed),
-        px: run.px.to_bits(),
-        tracking: run.tracking.to_bits(),
-        width: run.wrap_width.map(f32::to_bits),
-        features: [run.kern, run.liga, run.tnum, run.smcp],
-    };
-    let cache = CACHE.get_or_init(Default::default);
-    if let Some(ranges) = cache
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .get(&key)
-        .cloned()
-    {
-        return ranges
-            .into_iter()
-            .map(|(a, b, start)| VisualLine {
-                text: &run.content[a..b],
-                start,
-            })
-            .collect();
-    }
-    let mut lines = Vec::new();
-    let mut base = 0;
-    for paragraph in run.content.split('\n') {
-        let Some(width) = run.wrap_width.filter(|w| w.is_finite() && *w > 0.0) else {
-            lines.push(VisualLine {
-                text: paragraph,
-                start: base,
-            });
-            base += paragraph.chars().count() + 1;
-            continue;
-        };
-        let mut start = 0;
-        let mut start_char = base;
-        if paragraph.is_empty() {
-            lines.push(VisualLine {
-                text: paragraph,
-                start: base,
-            });
-        }
-        while start < paragraph.len() {
-            let rest = &paragraph[start..];
-            let mut end = 0;
-            let mut space = None;
-            for (i, ch) in rest.char_indices() {
-                let next = i + ch.len_utf8();
-                if end > 0 && line_width(run, &rest[..next]) > width {
-                    break;
-                }
-                end = next;
-                if ch.is_whitespace() {
-                    space = Some(next);
-                }
-            }
-            if end < rest.len() {
-                end = space.filter(|p| *p <= end).unwrap_or(end);
-            }
-            end = end.max(rest.chars().next().map_or(0, char::len_utf8));
-            let text = &rest[..end];
-            lines.push(VisualLine {
-                text,
-                start: start_char,
-            });
-            start_char += text.chars().count();
-            start += end;
-        }
-        base += paragraph.chars().count() + 1;
-    }
-    let ranges = lines
-        .iter()
-        .map(|line| {
-            let start = line.text.as_ptr() as usize - run.content.as_ptr() as usize;
-            (start, start + line.text.len(), line.start)
-        })
-        .collect();
-    let mut cache = cache.lock().unwrap_or_else(|e| e.into_inner());
-    if cache.len() >= 256 {
-        cache.clear();
-    }
-    cache.insert(key, ranges);
-    lines
+pub fn hit_char(run:&TypeRun,p:Pt)->usize {
+    let lines=compose(run);
+    let line=lines.iter().min_by(|a,b|(a.baseline-(p.y-run.origin.y)).abs().total_cmp(&(b.baseline-(p.y-run.origin.y)).abs())).unwrap();
+    line.carets.iter().min_by(|(_,a),(_,b)|(run.origin.x+a-p.x).abs().total_cmp(&(run.origin.x+b-p.x).abs())).map_or(line.start,|(i,_)|*i)
 }
-
-fn line_offset(run: &TypeRun, text: &str) -> f32 {
-    let remaining = (run.wrap_width.unwrap_or(0.0) - line_width(run, text)).max(0.0);
-    match run.align {
-        crate::geom::TextAlign::Start => 0.0,
-        crate::geom::TextAlign::Center => remaining * 0.5,
-        crate::geom::TextAlign::End => remaining,
-    }
+pub fn selection_rects(run:&TypeRun,a:usize,b:usize)->Vec<(Pt,Pt)> {
+    let lo=a.min(b);let hi=a.max(b);
+    compose(run).iter().filter_map(|l| {
+        let a=lo.max(l.start);let b=hi.min(l.end);if a>=b{return None;}
+        Some((Pt::new(run.origin.x+l.caret_x(a),run.origin.y+l.baseline-run.px*0.9),Pt::new(run.origin.x+l.caret_x(b),run.origin.y+l.baseline+run.px*0.25)))
+    }).collect()
 }
-
-fn line_width(run: &TypeRun, line: &str) -> f32 {
-    type Key = (String, String, u64, u32, u32, [bool; 4]);
-    static CACHE: OnceLock<Mutex<HashMap<Key, f32>>> = OnceLock::new();
-    let key = (
-        run.font.clone(),
-        line.to_string(),
-        FONT_REVISION.load(std::sync::atomic::Ordering::Relaxed),
-        run.px.to_bits(),
-        run.tracking.to_bits(),
-        [run.kern, run.liga, run.tnum, run.smcp],
-    );
-    let cache = CACHE.get_or_init(Default::default);
-    if let Some(width) = cache
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .get(&key)
-        .copied()
-    {
-        return width;
+pub fn char_to_byte(s:&str,char_idx:usize)->usize {s.char_indices().nth(char_idx).map(|(i,_)|i).unwrap_or(s.len())}
+pub fn paragraph_html(run:&TypeRun)->String {
+    use crate::geom::{TextAlign,LastLine,BreakMode};
+    let escape=|s:&str|s.replace('&',"&amp;").replace('<',"&lt;").replace('>',"&gt;");
+    let mut base=0;let mut html=String::new();
+    for text in run.content.split('\n') {
+        let p=paragraph_style(run,base);
+        let (align,last)=match p.align {TextAlign::Start=>("left","auto"),TextAlign::Center=>("center","auto"),TextAlign::End=>("right","auto"),TextAlign::Justify{last}=>("justify",match last{LastLine::Start=>"left",LastLine::Center=>"center",LastLine::End=>"right",LastLine::Justify=>"justify"})};
+        html.push_str(&format!("<span style=\"display:block;min-height:1em;text-align:{align};text-align-last:{last};white-space:{};word-break:{};overflow-wrap:{};hyphens:{}\">{}</span>",if p.break_mode==BreakMode::KeepAll{"pre"}else{"pre-wrap"},if p.break_mode==BreakMode::BreakAll{"break-all"}else{"normal"},if p.overflow_wrap{"anywhere"}else{"normal"},if p.hyphenate{"auto"}else{"manual"},escape(text)));
+        base+=text.chars().count()+1;
     }
-    let width = line_width_uncached(run, line);
-    let mut cache = cache.lock().unwrap_or_else(|e| e.into_inner());
-    if cache.len() >= 4096 {
-        cache.clear();
-    }
-    cache.insert(key, width);
-    width
+    html
 }
-
-fn line_width_uncached(run: &TypeRun, line: &str) -> f32 {
-    if line.is_empty() {
-        return 0.0;
-    }
-    let Some(path) = resolve_path(run) else {
-        return run.px * 0.55 * line.chars().count() as f32;
-    };
-    let Some(bytes) = font_bytes(&path) else {
-        return run.px * 0.55 * line.chars().count() as f32;
-    };
-    let Some(face) = rustybuzz::Face::from_slice(&bytes, 0) else {
-        return run.px * 0.55 * line.chars().count() as f32;
-    };
-    let upem = face.units_per_em() as f32;
-    if upem < 1.0 {
-        return run.px * 0.55 * line.chars().count() as f32;
-    }
-    let scale = run.px.max(1.0) / upem;
-    let mut buffer = rustybuzz::UnicodeBuffer::new();
-    buffer.push_str(line);
-    buffer.set_direction(rustybuzz::Direction::LeftToRight);
-    let glyphs = rustybuzz::shape(&face, &ot_features(run), buffer);
-    let mut w = 0.0f32;
-    for pos in glyphs.glyph_positions() {
-        w += pos.x_advance as f32 * scale + run.tracking;
-    }
-    w
-}
-
-pub fn caret_pt(run: &TypeRun, char_idx: usize) -> Pt {
-    let idx = char_idx.min(run.content.chars().count());
-    let lines = visual_lines(run);
-    let line_i = lines.iter().rposition(|l| l.start <= idx).unwrap_or(0);
-    let line = &lines[line_i];
-    let prefix: String = line.text.chars().take(idx - line.start).collect();
-    let w = line_width(run, &prefix);
-    Pt::new(
-        run.origin.x + line_offset(run, line.text) + w,
-        run.origin.y + line_i as f32 * run.line_height(),
-    )
-}
-
-pub fn hit_char(run: &TypeRun, p: Pt) -> usize {
-    let lines = visual_lines(run);
-    if lines.is_empty() {
-        return 0;
-    }
-    let lh = run.line_height();
-    let mut line_i = ((p.y - (run.origin.y - run.px * 0.85)) / lh).floor() as i32;
-    line_i = line_i.clamp(0, lines.len() as i32 - 1);
-    let line_i = line_i as usize;
-    for (i, line) in lines.iter().enumerate() {
-        if i == line_i {
-            let n = line.text.chars().count();
-            let mut best = 0usize;
-            let mut best_d = f32::INFINITY;
-            for col in 0..=n {
-                let prefix: String = line.text.chars().take(col).collect();
-                let x = run.origin.x + line_offset(run, line.text) + line_width(run, &prefix);
-                let d = (x - p.x).abs();
-                if d < best_d {
-                    best_d = d;
-                    best = col;
-                }
-            }
-            return line.start + best;
-        }
-    }
-    run.content.chars().count()
-}
-
-pub fn selection_rects(run: &TypeRun, a: usize, b: usize) -> Vec<(Pt, Pt)> {
-    let lo = a.min(b);
-    let hi = a.max(b);
-    if lo == hi {
-        return vec![];
-    }
-    let mut out = vec![];
-    for (line_i, line) in visual_lines(run).iter().enumerate() {
-        let n = line.text.chars().count();
-        let start = line.start;
-        let end = start + n;
-        let seg_lo = lo.max(start);
-        let seg_hi = hi.min(end);
-        if seg_lo < seg_hi {
-            let x = run.origin.x + line_offset(run, line.text);
-            let a: String = line.text.chars().take(seg_lo - start).collect();
-            let b: String = line.text.chars().take(seg_hi - start).collect();
-            let y = run.origin.y + line_i as f32 * run.line_height();
-            let p0 = Pt::new(x + line_width(run, &a), y);
-            let p1 = Pt::new(x + line_width(run, &b), y);
-            let top = p0.y - run.px * 0.9;
-            let bot = p0.y + run.px * 0.25;
-            out.push((Pt::new(p0.x, top), Pt::new(p1.x.max(p0.x + 2.0), bot)));
-        }
-    }
-    out
-}
-
-pub fn char_to_byte(s: &str, char_idx: usize) -> usize {
-    s.char_indices()
-        .nth(char_idx)
-        .map(|(i, _)| i)
-        .unwrap_or(s.len())
-}
-
-pub fn glyph_count(run: &TypeRun) -> usize {
-    let Some(path) = resolve_path(run) else {
-        return run.content.chars().filter(|c| *c != '\n').count();
-    };
-    let Some(bytes) = font_bytes(&path) else {
-        return 0;
-    };
-    let Some(face) = rustybuzz::Face::from_slice(&bytes, 0) else {
-        return 0;
-    };
-    let mut n = 0usize;
-    for line in run.content.split('\n') {
-        if line.is_empty() {
-            continue;
-        }
-        let mut buffer = rustybuzz::UnicodeBuffer::new();
-        buffer.push_str(line);
-        let glyphs = rustybuzz::shape(&face, &ot_features(run), buffer);
-        n += glyphs.glyph_infos().len();
-    }
-    n
-}
+pub fn glyph_count(run:&TypeRun)->usize {compose(run).iter().map(|l|l.glyphs.len()).sum()}
 
 /// Scan ~/Projects for `next/font/google` imports and return the most frequent
 /// family (e.g. “Inter”). Underscores in the identifier are turned into spaces
@@ -1103,13 +811,13 @@ mod tests {
         let mut r = run("A quiet place to make excellent work.\nCafé 東京");
         r.px = 20.0;
         r.wrap_width = Some(110.0);
-        let rows = visual_lines(&r);
+        let rows = compose(&r);
         assert!(rows.len() > 2);
         assert_eq!(
-            rows.iter().map(|l| l.text).collect::<String>(),
+            rows.iter().map(|l| l.text.as_str()).collect::<String>(),
             r.content.replace('\n', "")
         );
-        for line in rows {
+        for line in rows.iter() {
             let p = caret_pt(&r, line.start);
             assert_eq!(hit_char(&r, p), line.start);
         }

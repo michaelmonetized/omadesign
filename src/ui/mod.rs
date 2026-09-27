@@ -28,6 +28,7 @@ mod pixel_selection;
 mod pixel_edit;
 mod plugins;
 mod preferences;
+mod paragraph;
 mod raster;
 mod retouch;
 mod selection;

@@ -2,7 +2,7 @@
 use super::theme::{accent, bg_panel, fg_weak};
 use crate::app::Studio;
 use crate::document::Cmd;
-use crate::geom::{Geom, TextAlign};
+use crate::geom::{Geom};
 use crate::layout::{
     AutoStack, Constraint, Sizing, StackAlign, StackAxis, StackFlow, StackJustify,
 };
@@ -432,37 +432,7 @@ pub fn inspector(ui: &mut Ui, studio: &mut Studio) {
         copy_changed!(width,height,min_width,max_width,min_height,max_height,clip,absolute,constraint_x,constraint_y,stack,breakpoints,text_size,aspect_ratio,image);
     });
     }
-    if let Geom::Text(mut run) = shape.geom.clone() {
-        label(ui, "Paragraph");
-        let before = run.clone();
-        let mut wrap = run.wrap_width.is_some();
-        if ui.checkbox(&mut wrap, "Wrap text to width").changed() {
-            run.wrap_width = wrap.then_some(shape.world_bbox().width().max(100.0));
-        }
-        if let Some(width) = &mut run.wrap_width {
-            ui.add(DragValue::new(width).range(1.0..=10000.0).prefix("Width "));
-        }
-        ui.horizontal(|ui| {
-            for (name, v) in [
-                ("Left", TextAlign::Start),
-                ("Center", TextAlign::Center),
-                ("Right", TextAlign::End),
-            ] {
-                ui.selectable_value(&mut run.align, v, name);
-            }
-        });
-        if run != before {
-            run.contours = crate::text::shape(&run);
-            studio.commit(Cmd::SetGeom {
-                layer,
-                id,
-                before: Geom::Text(before),
-                after: Geom::Text(run),
-                rot_before: shape.rotation,
-                rot_after: shape.rotation,
-            });
-        }
-    }
+    if matches!(shape.geom, Geom::Text(_)) { super::paragraph::show(ui, studio); }
     super::layout_preview::interaction_editor(ui, studio);
     super::layout_preview::component_editor(ui, studio);
     variables(ui, studio);

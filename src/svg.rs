@@ -416,23 +416,16 @@ fn write_shape(
     if let Geom::Text(run) = &shape.geom
         && !text_as_paths
         && !run.font.starts_with("omatype:")
+        && run.spans.is_empty()
     {
         let family = crate::text::label_for(&run.font);
-        let escaped = run
-            .content
-            .replace('&', "&amp;")
-            .replace('<', "&lt;")
-            .replace('>', "&gt;");
-        body.push_str(&format!(
-            "  <text id=\"oma-{}\" x=\"{:.3}\" y=\"{:.3}\" font-family=\"{}\" font-size=\"{:.2}\" {fill_attr}{stroke_attr} opacity=\"{:.3}\"{extra}>{}</text>\n",
-            shape.id,
-            run.origin.x,
-            run.origin.y,
-            xml_escape(&family),
-            run.px,
-            shape.opacity,
-            escaped
-        ));
+        body.push_str(&format!("  <text id=\"oma-{}\" font-family=\"{}\" font-size=\"{:.2}\" {fill_attr}{stroke_attr} opacity=\"{:.3}\"{extra} xml:space=\"preserve\">",shape.id,xml_escape(&family),run.px,shape.opacity));
+        for line in crate::text::compose(run).iter() {
+            // Absolute character positions preserve wrapping and justification.
+            let positions=line.text.chars().enumerate().map(|(i,_)|format!("{:.3}",run.origin.x+line.caret_x(line.start+i))).collect::<Vec<_>>().join(" ");
+            body.push_str(&format!("<tspan x=\"{positions}\" y=\"{:.3}\">{}</tspan>",run.origin.y+line.baseline,xml_escape(&line.text.replace('\u{ad}',""))));
+        }
+        body.push_str("</text>\n");
         return;
     }
     if let Geom::Ellipse { center, radii } = &shape.geom {

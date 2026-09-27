@@ -123,6 +123,24 @@ fn schedule(scene: &str) -> Vec<Action> {
             ),
             event(21., Key(egui::Key::S, ctrl())),
         ],
+        "paragraphs" => vec![
+            event(1., Key(egui::Key::A, ctrl())),
+            event(2., Key(egui::Key::J, Modifiers{shift:true,..ctrl()})),
+            event(4., Key(egui::Key::F, Modifiers{shift:true,..ctrl()})),
+            event(6., Key(egui::Key::C, Modifiers{shift:true,..ctrl()})),
+            event(8., Key(egui::Key::R, Modifiers{shift:true,..ctrl()})),
+            event(10., Key(egui::Key::L, Modifiers{shift:true,..ctrl()})),
+            event(12., Key(egui::Key::J, Modifiers{shift:true,..ctrl()})),
+            event(14., Key(egui::Key::ArrowRight, Modifiers::NONE)),
+            event(15., Key(egui::Key::Enter, Modifiers::NONE)),
+            event(16., Type("A new paragraph inherits its own alignment.")),
+            event(18., Key(egui::Key::C, Modifiers{shift:true,..ctrl()})),
+            event(20., Key(egui::Key::Escape, Modifiers::NONE)),
+            event(22., Key(egui::Key::Z, ctrl())),
+            event(24., Key(egui::Key::Z, Modifiers{shift:true,..ctrl()})),
+            event(26., Click(Text("Line breaking"))),
+            event(27., Click(Text("Hyphenate"))),
+        ],
         "welcome-browse" => vec![
             event(0.5, Expect("Your Work")),
             drag(0.8, 0.7, Move(At(105., 180.))),
@@ -753,6 +771,17 @@ fn seed(scene: &str) -> Studio {
             *s.doc.layers[0].kind.shapes_mut().unwrap() = vec![bg, subject];
         }
 
+        "paragraphs" => {
+            use omadesign::{geom::{TypeRun,ParagraphStyle},document::{Shape,Style,Fill}};
+            s.doc=Document::new("Paragraph composition · issue 148",960.,680.,96.);
+            let mut run=TypeRun{origin:Pt::new(90.,130.),content:"Thoughtful typography gives every idea room to breathe. Paragraph composition balances word spacing, line endings, and the rhythm of language.\nEach paragraph carries its own alignment and line breaking choices.".into(),font:"/usr/share/fonts/gsfonts/NimbusRoman-Regular.otf".into(),px:30.,wrap_width:Some(710.),paragraphs:vec![ParagraphStyle{word_spacing:[80.,100.,250.],letter_spacing:[0.,0.,8.],..Default::default()}],..Default::default()};
+            run.contours=omadesign::text::shape(&run);
+            let shape=Shape::new(Geom::Text(run),Style{fill:Fill::Solid(Rgba::from_hex(0x24344A)),stroke:None});
+            let id=shape.id;
+            s.doc.layers[1].kind.shapes_mut().unwrap().push(shape);
+            s.active_layer=Some(1);s.selection=vec![(1,id)];s.persona=Persona::Design;s.tool=Tool::Text;
+            s.begin_type_edit((1,id),Pt::new(90.,130.));
+        }
         scene if scene.starts_with("welcome-") => {
             s.show_welcome = true;
             s.welcome_page = omadesign::app::WelcomePage::Recents;
@@ -897,6 +926,7 @@ impl Capture {
             studio.path = Some(directory.join("independent-effects-final.oma"));
         }
         let seconds = match scene.as_str() {
+            "paragraphs" => 30,
             "welcome-browse" => 23,
             "welcome-vector" | "welcome-layout" => 9,
             "welcome-raster" => 8,
@@ -1309,7 +1339,7 @@ impl eframe::App for Capture {
                 fs::write(self.directory.join(format!("selection-state-{}.json",self.frame)),serde_json::to_vec_pretty(&value).unwrap()).unwrap();
             }
             if self.frame >= self.total {
-                if matches!(self.scene.as_str(), "graphics" | "chroma") {
+                if matches!(self.scene.as_str(), "graphics" | "chroma" | "paragraphs") {
                     omadesign::project::save_to(
                         &self.studio.doc,
                         &self.directory.join(format!("{}-final.oma", self.scene)),
@@ -1361,6 +1391,16 @@ impl eframe::App for Capture {
                         }
                         Err(error) => self.errors.push(format!("Native save failed: {error}")),
                     }
+                }
+                if self.scene=="paragraphs" {
+                    let saved=omadesign::project::encode(&self.studio.doc).unwrap();
+                    let restored=omadesign::project::decode(&saved).unwrap();
+                    let run=restored.layers[1].kind.shapes().unwrap().iter().find_map(|s|if let Geom::Text(t)=&s.geom{Some(t)}else{None}).unwrap();
+                    assert!(run.content.ends_with("A new paragraph inherits its own alignment."));
+                    assert!(run.paragraphs.len()>=3);
+                    let lines=omadesign::text::compose(run);
+                    fs::write(self.directory.join("paragraphs-result.json"),serde_json::to_vec_pretty(&serde_json::json!({"saved_and_reopened":true,"paragraphs":run.paragraphs,"visual_lines":lines.len(),"unicode_source":run.content,"unresolved_input_targets":self.errors,"renderer":"native WGPU","recording_frames":self.frame})).unwrap()).unwrap();
+                    fs::write(self.directory.join("paragraphs-export.svg"),omadesign::svg::export(&restored).unwrap()).unwrap();
                 }
                 self.encoder.take().unwrap().finish();
                 fs::write(
