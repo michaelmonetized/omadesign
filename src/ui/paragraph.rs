@@ -15,7 +15,8 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     let mut p = crate::text::paragraph_style(&run, caret);
     let before = p.clone();
     ui.strong("Paragraph");
-    ui.horizontal_wrapped(|ui| {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x=4.;
         for (name, align) in [
             ("Left", TextAlign::Start),
             ("Center", TextAlign::Center),
@@ -45,7 +46,22 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
                 },
             ),
         ] {
-            ui.selectable_value(&mut p.align, align, name);
+            let selected=p.align==align;
+            let clicked=match align {
+                TextAlign::Start=>super::icons::icon_button(ui,"\u{e484}",name,selected),
+                TextAlign::Center=>super::icons::icon_button(ui,"\u{e480}",name,selected),
+                TextAlign::End=>super::icons::icon_button(ui,"\u{e486}",name,selected),
+                TextAlign::Justify{last}=>{
+                    let (rect,response)=ui.allocate_exact_size(egui::vec2(30.,28.),egui::Sense::click());
+                    response.widget_info(||egui::WidgetInfo::selected(egui::WidgetType::Button,ui.is_enabled(),selected,name));
+                    if selected||response.hovered(){ui.painter().rect_filled(rect.shrink(1.),6.,if selected{super::theme::accent_soft()}else{super::theme::bg_widget_hover()});}
+                    let color=if selected{super::theme::accent()}else{super::theme::fg_weak()};
+                    for row in 0..4 {let width=if row==3&&last!=LastLine::Justify{10.}else{18.};let shift=if row==3{match last{LastLine::Center=>4.,LastLine::End=>8.,_=>0.}}else{0.};let x=rect.min.x+6.+shift;let y=rect.min.y+6.+row as f32*5.;ui.painter().line_segment([egui::pos2(x,y),egui::pos2(x+width,y)],egui::Stroke::new(1.2,color));}
+                    response.on_hover_text(match last{LastLine::Start=>"Justify, last line left",LastLine::Center=>"Justify, last line centered",LastLine::End=>"Justify, last line right",LastLine::Justify=>"Justify all lines"}).clicked()
+                }
+            };
+            if clicked{p.align=align;}
+
         }
     });
     let mut wrap = run.wrap_width.is_some();

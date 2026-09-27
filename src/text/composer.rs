@@ -21,6 +21,7 @@ pub struct LayoutLine {
     pub end: usize,
     pub paragraph: usize,
     pub last: bool,
+    pub hyphenated: bool,
     pub baseline: f32,
     pub height: f32,
     pub offset: f32,
@@ -306,6 +307,7 @@ pub fn compose(run: &TypeRun) -> Arc<Vec<LayoutLine>> {
                 end,
                 paragraph: base,
                 last,
+                hyphenated: hyphen,
                 baseline,
                 height,
                 offset,
@@ -626,5 +628,21 @@ mod tests {
         assert_eq!(paragraph_style(&r, 6).align, TextAlign::End);
         let json = serde_json::to_string(&r).unwrap();
         assert_eq!(serde_json::from_str::<TypeRun>(&json).unwrap(), r);
+    }
+}
+
+#[cfg(test)] mod stretch_tests {
+    use super::*;
+    #[test] fn dictionary_hyphenation_reduces_word_space_stretch() {
+        let text="Typography and composition establish the rhythm of communication. Beautiful paragraphs balance the distribution of information with comfortable reading. Hyphenation distributes complicated terminology across available lines and improves consistency between neighboring words. Designers refine proportions and relationships while preserving the integrity of individual characters.";
+        let mut sample=TypeRun{font:concat!(env!("CARGO_MANIFEST_DIR"),"/tests/assets/fonts/EBGaramond.ttf").into(),content:text.into(),px:24.,wrap_width:Some(320.),..Default::default()};
+        sample.update_paragraphs(0,text.chars().count(),|p|{p.align=TextAlign::Justify{last:LastLine::Start};p.word_spacing=[80.,100.,1000.];p.hyphen=Some(crate::geom::HyphenSettings{capitalized:true,last_word:true,..Default::default()});});
+        fn metric(run:&TypeRun)->(f32,f32) {
+            let base=TypeRun{content:"x x".into(),wrap_width:None,paragraphs:vec![],..run.clone()};let space=compose(&base)[0].glyphs.iter().find(|g|g.is_space).unwrap().advance;
+            let lines=compose(run);let values:Vec<_>=lines.iter().filter(|l|!l.last).flat_map(|l|l.glyphs.iter().take_while(|g|g.x<l.width).filter(|g|g.is_space).map(|g|g.advance/space)).collect();
+            (values.iter().sum::<f32>()/values.len().max(1) as f32,values.into_iter().fold(0.,f32::max))
+        }
+        let off=metric(&sample);sample.paragraphs[0].hyphenate=true;let on=metric(&sample);
+        eprintln!("justification stretch: off={off:?}, on={on:?}");assert!(on.0<off.0&&on.1<off.1);
     }
 }

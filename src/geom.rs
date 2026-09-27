@@ -732,7 +732,10 @@ pub struct HyphenSettings {
     pub language: String, pub min_word_len: usize, pub min_before: usize, pub min_after: usize,
     pub max_consecutive: usize, pub zone: f32, pub capitalized: bool, pub last_word: bool,
 }
-impl Default for HyphenSettings { fn default() -> Self { Self { language: "en-US".into(), min_word_len: 6, min_before: 3, min_after: 3, max_consecutive: 2, zone: 0.0, capitalized: false, last_word: false } } }
+fn system_text_language()->String {
+    ["LC_ALL","LC_CTYPE","LANG"].into_iter().find_map(|key|std::env::var(key).ok().filter(|value|!value.is_empty())).map(|value|value.split('.').next().unwrap_or("en-US").replace('_',"-")).filter(|value|value!="C"&&value!="POSIX").unwrap_or_else(||"en-US".into())
+}
+impl Default for HyphenSettings { fn default() -> Self { Self { language: system_text_language(), min_word_len: 6, min_before: 3, min_after: 3, max_consecutive: 2, zone: 0.0, capitalized: false, last_word: false } } }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RuntRule { pub words: usize, pub characters: usize }

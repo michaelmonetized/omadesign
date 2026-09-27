@@ -416,6 +416,9 @@ fn write_shape(
     if let Geom::Text(run) = &shape.geom
         && !text_as_paths
         && !run.font.starts_with("omatype:")
+        && run.paragraphs.is_empty()
+        && !matches!(run.align,crate::geom::TextAlign::Justify{..})
+        && !run.content.contains('\u{ad}')
         && run.spans.is_empty()
     {
         let family = crate::text::label_for(&run.font);
