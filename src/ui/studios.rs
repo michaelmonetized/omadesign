@@ -1637,18 +1637,14 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
         opacity * 100.0
     };
     let mut rotation_changed = false;
-    let mut opacity_changed = false;
+    let opacity_changed;
     ui.columns(2, |columns| {
         rotation_changed =
             number_field(&mut columns[0], "Rotate", &mut degrees, -180.0..=180.0, "°");
-        opacity_changed = number_field(
-            &mut columns[1],
-            "Opacity",
-            &mut opacity_percent,
-            0.0..=100.0,
-            "%",
-        );
+        columns[1].add_space(15.0);
+        super::selection::flip_icons(&mut columns[1], studio);
     });
+    opacity_changed = number_field(ui, "Opacity", &mut opacity_percent, 0.0..=100.0, "%");
     if rotation_changed && let Some(shape) = studio.doc.find_shape(layer, id) {
         if motion {
             studio.key_prop(
@@ -1710,23 +1706,6 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
             studio.commit(crate::document::Cmd::Batch(commands));
         }
     }
-    ui.horizontal(|ui| {
-        ui.label(RichText::new("Flip").small().color(fg_weak()));
-        for (horizontal, label) in [(true, "Horizontal"), (false, "Vertical")] {
-            if ui
-                .add_enabled(
-                    studio.can_flip_selection(),
-                    eframe::egui::Button::new(label).small(),
-                )
-                .on_disabled_hover_text(
-                    "Select an unlocked vector object. Convert text to paths before flipping.",
-                )
-                .clicked()
-            {
-                studio.flip_selection(horizontal);
-            }
-        }
-    });
     if let Some(mut count) = polygon
         && number_field(ui, "Sides", &mut count, 3..=16, "")
     {
@@ -2623,7 +2602,7 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                                     }
                                                     ui.separator();
                                                     if let Some(horizontal) =
-                                                        super::selection::flip_buttons(
+                                                        super::selection::transform_menu(
                                                             ui,
                                                             objects_editable
                                                                 && shape.visible

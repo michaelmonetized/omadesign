@@ -37,24 +37,7 @@ pub(super) fn arrange_panel(ui: &mut Ui, studio: &mut Studio) {
                         ui.end_row();
                     });
             });
-            ui.horizontal(|ui| {
-                let enabled = studio.can_flip_selection();
-                for (horizontal, label, hint) in [
-                    (true, "Flip H", "Mirror horizontally"),
-                    (false, "Flip V", "Mirror vertically"),
-                ] {
-                    if ui
-                        .add_enabled(enabled, egui::Button::new(label))
-                        .on_hover_text(hint)
-                        .on_disabled_hover_text(
-                            "Select an unlocked vector object. Convert text to paths to flip it.",
-                        )
-                        .clicked()
-                    {
-                        studio.flip_selection(horizontal);
-                    }
-                }
-            });
+
         });
     egui::CollapsingHeader::new("Align")
         .default_open(true)
@@ -103,25 +86,44 @@ pub(super) fn arrange_panel(ui: &mut Ui, studio: &mut Studio) {
         });
 }
 
-/// Shared flip actions for the Object menu and object context menus.
-pub(super) fn flip_buttons(ui: &mut Ui, enabled: bool) -> Option<bool> {
-    for (horizontal, label, hint) in [
-        (true, "Flip horizontal", "Mirror left to right (X)"),
-        (false, "Flip vertical", "Mirror top to bottom (Y)"),
-    ] {
-        if ui
-            .add_enabled(enabled, egui::Button::new(label))
-            .on_hover_text(hint)
-            .on_disabled_hover_text(
-                "Select an unlocked vector object. For text, use Object → Convert to path first.",
-            )
-            .clicked()
-        {
-            ui.close();
-            return Some(horizontal);
+/// The same Transform submenu in the menubar, canvas, and object rows.
+pub(super) fn transform_menu(ui: &mut Ui, enabled: bool) -> Option<bool> {
+    ui.menu_button("Transform", |ui| {
+        for (horizontal, label, shortcut) in [
+            (true, "Flip Horizontal", "Shift+H"),
+            (false, "Flip Vertical", "Shift+V"),
+        ] {
+            if ui
+                .add_enabled(enabled, egui::Button::new(label).shortcut_text(shortcut))
+                .on_disabled_hover_text(FLIP_DISABLED)
+                .clicked()
+            {
+                ui.close();
+                return Some(horizontal);
+            }
         }
-    }
-    None
+        None
+    }).inner.flatten()
+}
+
+const FLIP_DISABLED: &str =
+    "Select an unlocked vector object. Convert text to paths before flipping.";
+
+/// One inspector home, beside Rotate.
+pub(super) fn flip_icons(ui: &mut Ui, studio: &mut Studio) {
+    use super::icons::{self, ph};
+    ui.add_enabled_ui(studio.can_flip_selection(), |ui| {
+        ui.horizontal(|ui| {
+            for (horizontal, glyph, tip) in [
+                (true, ph::FLIP_HORIZONTAL, "Flip horizontal (Shift+H)"),
+                (false, ph::FLIP_VERTICAL, "Flip vertical (Shift+V)"),
+            ] {
+                if icons::tiny_icon(ui, glyph, tip, false) {
+                    studio.flip_selection(horizontal);
+                }
+            }
+        });
+    }).response.on_disabled_hover_text(FLIP_DISABLED);
 }
 
 pub fn menu(ui: &mut Ui, studio: &mut Studio) {

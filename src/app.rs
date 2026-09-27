@@ -928,6 +928,11 @@ impl Studio {
         self.commit_type_edit();
         self.end_deform(false);
         self.reset_snap_gesture();
+        let center = self.selection.iter()
+            .filter_map(|&(layer, id)| self.flip_target(layer, id).map(Shape::world_bbox))
+            .reduce(|a, b| a.union(b)).unwrap().center();
+        let skipped = self.selection.iter()
+            .filter(|&&(layer, id)| self.flip_target(layer, id).is_none()).count();
         let mut commands = Vec::new();
         let mut seen = HashSet::new();
         for &(layer, id) in &self.selection {
@@ -960,16 +965,15 @@ impl Studio {
                 Geom::Polygon { .. } | Geom::Star { .. } => shape.geom.to_path(),
                 other => other.clone(),
             };
-            let center = shape.geom.bbox().center();
-            let visible_center = shape.world_bbox().center();
+            let local_center = shape.geom.bbox().center();
             let translation = if horizontal {
-                Pt::new(2.0 * (visible_center.x - center.x), 0.0)
+                Pt::new(2.0 * (center.x - local_center.x), 0.0)
             } else {
-                Pt::new(0.0, 2.0 * (visible_center.y - center.y))
+                Pt::new(0.0, 2.0 * (center.y - local_center.y))
             };
-            after.flip_about(center, horizontal);
-            // Asymmetric paths can have a different visible centre after rotation.
-            // Keep their canvas bounds stationary while changing the local pivot.
+            after.flip_about(local_center, horizontal);
+            // Reflect all eligible shapes about the same selection center.
+            // The translation also accounts for asymmetric rotated bounds.
             after.translate(translation);
             // F * R(angle) = R(-angle) * F: mirror the visible canvas axis,
             // including objects that already carry a separate rotation.
@@ -992,9 +996,9 @@ impl Studio {
                             endpoint[1] * source_bounds.height(),
                         );
                     if horizontal {
-                        point.x = 2.0 * center.x - point.x;
+                        point.x = 2.0 * local_center.x - point.x;
                     } else {
-                        point.y = 2.0 * center.y - point.y;
+                        point.y = 2.0 * local_center.y - point.y;
                     }
                     point += translation;
                     *endpoint = [
@@ -1035,8 +1039,9 @@ impl Studio {
         }
         self.commit(Cmd::Batch(commands));
         self.status = format!(
-            "Flipped {}",
-            if horizontal { "horizontal" } else { "vertical" }
+            "Flipped {}{}",
+            if horizontal { "horizontal" } else { "vertical" },
+            if skipped > 0 { format!(" · skipped {skipped} ineligible object(s)") } else { String::new() }
         );
     }
 

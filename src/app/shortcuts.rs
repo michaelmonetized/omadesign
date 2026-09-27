@@ -37,10 +37,15 @@ pub(super) enum Shortcut {
     ToggleSnapping,
     FreeTransform,
     ToggleKeyHud,
+    FlipHorizontal,
+    FlipVertical,
 }
 
 impl Shortcut {
     pub(super) fn available(self, persona: Persona) -> bool {
+        if matches!(self, Self::FlipHorizontal | Self::FlipVertical) {
+            return matches!(persona, Persona::Design | Persona::Layout | Persona::Motion);
+        }
         if persona == Persona::Photo {
             self.global()
                 || matches!(
@@ -90,7 +95,11 @@ pub(super) fn key_shortcut(key: Key, mods: Modifiers) -> Option<Shortcut> {
         return Some(Help);
     }
     if !(mods.command || mods.ctrl || mods.mac_cmd) {
-        return None;
+        return match (key, mods.shift, mods.alt) {
+            (Key::H, true, false) => Some(FlipHorizontal),
+            (Key::V, true, false) => Some(FlipVertical),
+            _ => None,
+        };
     }
     if mods.alt {
         return match (key, mods.shift) {
@@ -331,6 +340,8 @@ impl Studio {
 
     fn run_shortcut(&mut self, ctx: &egui::Context, shortcut: Shortcut, payload: Option<&str>) {
         match shortcut {
+            Shortcut::FlipHorizontal => self.flip_selection(true),
+            Shortcut::FlipVertical => self.flip_selection(false),
             Shortcut::ToggleGuides => self.toggle_guides(),
             Shortcut::ToggleKeyHud => self.show_key_hud = !self.show_key_hud,
             Shortcut::FreeTransform => {if self.persona==Persona::Pixel {self.begin_pixel_edit(super::pixel_edit::ModeKind::Transform);}else{self.free_transform();}},
@@ -789,6 +800,45 @@ mod tests {
 
     fn count(studio: &Studio) -> usize {
         studio.doc.layers[1].kind.shapes().unwrap().len()
+    }
+
+    #[test]
+    fn flip_shortcuts_are_canvas_only_and_preserve_tools_and_typing() {
+        assert_eq!(key_shortcut(Key::H, Modifiers::SHIFT), Some(Shortcut::FlipHorizontal));
+        assert_eq!(key_shortcut(Key::V, Modifiers::SHIFT), Some(Shortcut::FlipVertical));
+        assert_eq!(key_shortcut(Key::V, Modifiers::SHIFT | Modifiers::CTRL), Some(Shortcut::PasteAdjustments));
+        assert_eq!(key_shortcut(Key::H, Modifiers::NONE), None);
+        assert_eq!(key_shortcut(Key::V, Modifiers::NONE), None);
+        assert_eq!(key_shortcut(Key::H, Modifiers::SHIFT | Modifiers::ALT), None);
+        for persona in [Persona::Design, Persona::Layout, Persona::Motion] {
+            let ctx = context();
+            let mut studio = Studio::new();
+            let first = add_rectangle(&mut studio, 10.0);
+            let second = add_rectangle(&mut studio, 70.0);
+            studio.persona = persona;
+            studio.selection = vec![(1, first), (1, second)];
+            let before = studio.doc.clone();
+            let history = studio.history.len();
+            frame(&ctx, &mut studio, vec![key(Key::H, Modifiers::SHIFT)]);
+            assert_eq!(studio.history.len(), history + 1);
+            assert!(studio.doc.find_shape(1, first).unwrap().world_bbox().min.x > 50.0);
+            studio.undo();
+            assert_eq!(crate::project::encode(&studio.doc).unwrap(), crate::project::encode(&before).unwrap());
+            studio.redo();
+            assert!(studio.doc.find_shape(1, first).unwrap().world_bbox().min.x > 50.0);
+            frame(&ctx, &mut studio, vec![key(Key::H, Modifiers::NONE)]);
+            assert_eq!(studio.tool, Tool::Hand);
+            frame(&ctx, &mut studio, vec![key(Key::V, Modifiers::NONE)]);
+            assert_eq!(studio.tool, Tool::Select);
+        }
+        assert!(!Shortcut::FlipHorizontal.available(Persona::Photo));
+        assert!(!Shortcut::FlipVertical.available(Persona::Pixel));
+        let ctx = context();
+        let mut studio = Studio::new();
+        add_rectangle(&mut studio, 10.0);
+        studio.place_text(Pt::new(60.0, 80.0));
+        frame(&ctx, &mut studio, vec![key(Key::H, Modifiers::SHIFT), Event::Text("H".into()), key(Key::V, Modifiers::SHIFT), Event::Text("V".into())]);
+        assert_eq!(studio.live_type_mut().unwrap().content, "HV");
     }
 
     #[test]
