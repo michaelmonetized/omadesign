@@ -1,0 +1,20 @@
+{
+  "paths": [
+    [
+      19,
+      12,
+      "EDITABLE TYPE FOLLOWS THE CURVE",
+      35
+    ],
+    [
+      337,
+      13,
+      "Open curves remain live",
+      29
+    ]
+  ],
+  "recording_frames": 600,
+  "renderer": "native WGPU",
+  "saved_and_reopened": true,
+  "unresolved_input_targets": []
+}
