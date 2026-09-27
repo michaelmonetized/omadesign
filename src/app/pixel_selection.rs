@@ -1,43 +1,20 @@
 //! Edits to selection coverage, independent of the pixels being selected.
 use super::{Studio, masking::SelectionSpace};
 use std::collections::VecDeque;
-use tiny_skia::Transform;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Edit {
-    Move {
-        x: f32,
-        y: f32,
-    },
-    Resize {
-        width: f32,
-        height: f32,
-    },
-    Grow {
-        radius: u32,
-    },
-    Shrink {
-        radius: u32,
-    },
-    Feather {
-        radius: u32,
-    },
-    Reshape {
-        angle: f32,
-        skew_x: f32,
-        skew_y: f32,
-    },
+    Grow { radius: u32 },
+    Shrink { radius: u32 },
+    Feather { radius: u32 },
 }
 
 impl Edit {
     pub fn title(self) -> &'static str {
         match self {
-            Self::Move { .. } => "Move selection",
-            Self::Resize { .. } => "Resize selection",
             Self::Grow { .. } => "Grow selection",
             Self::Shrink { .. } => "Shrink selection",
             Self::Feather { .. } => "Feather selection",
-            Self::Reshape { .. } => "Reshape selection",
         }
     }
 }
@@ -92,48 +69,18 @@ pub fn edit(
     space: SelectionSpace,
     operation: Edit,
 ) -> Option<(Vec<u8>, SelectionSpace)> {
-    let (x0, y0, x1, y1) = crate::paint::selection_bounds(values, space.w, space.h)?;
-    let mut output = space;
-    let center = ((x0 + x1) as f32 * 0.5, (y0 + y1) as f32 * 0.5);
-    let local = match operation {
-        Edit::Move { x, y } if x.is_finite() && y.is_finite() => Transform::from_translate(x, y),
-        Edit::Resize { width, height }
-            if width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0 =>
-        {
-            Transform::from_translate(x0 as f32, y0 as f32)
-                .pre_scale(width / (x1 - x0) as f32, height / (y1 - y0) as f32)
-                .pre_translate(-(x0 as f32), -(y0 as f32))
-        }
-        Edit::Reshape {
-            angle,
-            skew_x,
-            skew_y,
-        } if angle.is_finite() && skew_x.is_finite() && skew_y.is_finite() => {
-            // Compose two shears, which stays invertible even when both are 45°.
-            let sx = skew_x.clamp(-80.0, 80.0).to_radians().tan();
-            let sy = skew_y.clamp(-80.0, 80.0).to_radians().tan();
-            Transform::from_translate(center.0, center.1)
-                .pre_rotate(angle)
-                .pre_concat(Transform::from_row(1.0, 0.0, sx, 1.0, 0.0, 0.0))
-                .pre_concat(Transform::from_row(1.0, sy, 0.0, 1.0, 0.0, 0.0))
-                .pre_translate(-center.0, -center.1)
-        }
-        Edit::Grow { radius } | Edit::Shrink { radius } | Edit::Feather { radius } => {
-            let radius = radius.min(1024) as usize;
-            let values = coverage(
-                values,
-                space.w as usize,
-                space.h as usize,
-                radius,
-                operation,
-            );
-            return Some((values, output));
-        }
-        _ => return None,
-    };
-    output.transform = space.transform.pre_concat(local);
-    output.transform.invert()?;
-    Some((super::masking::resample(values, output, space)?, space))
+    crate::paint::selection_bounds(values, space.w, space.h)?;
+    let (Edit::Grow { radius } | Edit::Shrink { radius } | Edit::Feather { radius }) = operation;
+    Some((
+        coverage(
+            values,
+            space.w as usize,
+            space.h as usize,
+            radius.min(1024) as usize,
+            operation,
+        ),
+        space,
+    ))
 }
 
 /// Two sliding-window passes keep even large radii linear in the mask size.
@@ -208,59 +155,14 @@ fn line(input: impl Iterator<Item = u8>, radius: usize, operation: Edit) -> Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{geom::Pt, paint};
+    use crate::paint;
+    use tiny_skia::Transform;
 
     fn space() -> SelectionSpace {
         SelectionSpace {
             w: 24,
             h: 20,
             transform: Transform::identity(),
-        }
-    }
-
-    #[test]
-    fn all_selection_shapes_move_resize_and_reshape_without_touching_source() {
-        let space = space();
-        for source in [
-            paint::fill_rect_mask(24, 20, 6.0, 6.0, 12.0, 12.0),
-            paint::fill_ellipse_mask(24, 20, 6.0, 6.0, 12.0, 12.0),
-            paint::fill_poly_mask(
-                24,
-                20,
-                &[Pt::new(6.0, 6.0), Pt::new(12.0, 7.0), Pt::new(9.0, 12.0)],
-            ),
-        ] {
-            let original = source.clone();
-            let (moved, result_space) =
-                edit(&source, space, Edit::Move { x: 2.0, y: -1.0 }).unwrap();
-            assert_eq!(result_space, space);
-            for y in 1..20 {
-                for x in 0..22 {
-                    assert_eq!(source[y * 24 + x], moved[(y - 1) * 24 + x + 2]);
-                }
-            }
-            let (resized, _) = edit(
-                &source,
-                space,
-                Edit::Resize {
-                    width: 10.0,
-                    height: 8.0,
-                },
-            )
-            .unwrap();
-            assert!(paint::selected_count(&resized) > paint::selected_count(&source));
-            let (reshaped, _) = edit(
-                &source,
-                space,
-                Edit::Reshape {
-                    angle: 20.0,
-                    skew_x: 15.0,
-                    skew_y: -10.0,
-                },
-            )
-            .unwrap();
-            assert_ne!(reshaped, source);
-            assert_eq!(source, original);
         }
     }
 
@@ -303,53 +205,6 @@ mod tests {
         assert_eq!(
             line([255, 255, 255].into_iter(), 1, Edit::Feather { radius: 1 }),
             [170, 255, 170]
-        );
-    }
-
-    #[test]
-    fn edits_preserve_placed_raster_space_and_reject_invalid_transforms() {
-        let mut space = space();
-        space.transform = Transform::from_translate(40.0, 70.0)
-            .pre_rotate(30.0)
-            .pre_scale(2.0, 3.0);
-        let source = paint::fill_rect_mask(24, 20, 6.0, 6.0, 12.0, 12.0);
-        let (moved, output) = edit(&source, space, Edit::Move { x: 2.0, y: 1.0 }).unwrap();
-        assert_eq!(output, space);
-        assert!(moved[8 * 24 + 10] > 250);
-        assert_eq!(moved[5 * 24 + 5], 0);
-        assert!(
-            edit(
-                &source,
-                space,
-                Edit::Resize {
-                    width: 0.0,
-                    height: 2.0
-                }
-            )
-            .is_none()
-        );
-        assert!(
-            edit(
-                &source,
-                space,
-                Edit::Move {
-                    x: f32::NAN,
-                    y: 0.0
-                }
-            )
-            .is_none()
-        );
-        assert!(
-            edit(
-                &source,
-                space,
-                Edit::Reshape {
-                    angle: 0.0,
-                    skew_x: 45.0,
-                    skew_y: 45.0
-                }
-            )
-            .is_some()
         );
     }
 

@@ -265,33 +265,35 @@ fn schedule(scene: &str) -> Vec<Action> {
             event(38.6, Click(Text("Multiply"))),
             event(39.2, Click(Any("Normal"))),
         ],
-        "pixel-selection" => {
-            let mut actions = vec![drag(
-                1.0,
-                1.0,
-                Drag(World(180.0, 180.0), World(480.0, 430.0)),
-            )];
-            for (index, label) in [
-                "Move…",
-                "Resize…",
-                "Grow…",
-                "Shrink…",
-                "Feather…",
-                "Reshape…",
-            ]
-            .into_iter()
-            .enumerate()
-            {
-                let at = 3.0 + index as f32 * 3.0;
-                actions.push(event(at, Click(Any("Select"))));
-                actions.push(event(at + 0.4, Click(Any(label))));
-                actions.push(event(
-                    at + 2.5,
-                    Click(Any(if index == 5 { "Cancel" } else { "Apply" })),
-                ));
-            }
-            actions
-        }
+        "agent-picker" => vec![
+            event(1.,Click(Any("6 Astra ▾"))),
+            event(2.,Expect("Search models…")),
+            event(3.,Click(Any("Claude"))),
+            event(4.,Expect("Claude")),
+            event(5.,Click(Any("Codex"))),
+            event(5.6,Click(Any("6 Sol"))),
+            event(6.6,Click(Any("Ultra"))),
+            event(7.2,Click(Any("High"))),
+            event(8.,Click(Any("6 Sol ▾"))),
+        ],
+        "pixel-selection" => vec![
+            drag(0.5,0.7,Drag(World(180.,180.),World(480.,430.))),
+            event(1.5,Click(Any("Select"))),event(1.8,Click(Any("Move / resize selection"))),
+            drag(2.2,0.7,Drag(World(330.,305.),World(390.,345.))),
+            drag(3.2,0.7,Drag(World(540.,470.),World(620.,500.))),
+            event(4.1,Key(egui::Key::Enter,Modifiers::NONE)),
+            event(4.5,Click(Any("Select"))),event(4.8,Hover(Any("Reshape"))),event(5.2,Click(Any("Distort"))),
+            drag(5.6,0.7,Drag(World(240.,220.),World(280.,170.))),event(6.5,Key(egui::Key::Enter,Modifiers::NONE)),
+            event(6.8,Click(Any("Select"))),event(7.1,Click(Any("Feather…"))),event(8.,Click(Any("Apply"))),
+            event(8.4,Click(Any("Select"))),event(8.7,Click(Any("New Bézier selection"))),
+            event(9.2,Click(World(200.,200.))),drag(9.6,0.5,Drag(World(550.,200.),World(600.,260.))),
+            event(10.4,Click(World(550.,520.))),event(10.8,Click(World(200.,520.))),event(11.2,Click(World(200.,200.))),
+            event(11.8,ModifiedClick(World(200.,360.),Modifiers{shift:true,..Modifiers::NONE})),
+            event(12.3,ModifiedClick(World(200.,360.),ctrl())),
+            drag(12.8,0.7,Drag(World(200.,360.),World(150.,340.))),
+            event(14.,ModifiedClick(World(150.,340.),Modifiers{alt:true,..Modifiers::NONE})),
+            event(14.6,Key(egui::Key::Enter,Modifiers::NONE)),
+        ],
         "pixel" => vec![
             drag(1., 1.2, Delta(Field("Size"), 14.)),
             drag(3., 2.2, Drag(World(500., 655.), World(630., 730.))),
@@ -675,6 +677,10 @@ fn seed(scene: &str) -> Studio {
             }
             s.photo.select_image(0);
         }
+        "agent-picker" => {
+            s.doc=Document::new("Agent providers",960.,640.,96.);
+            s.persona=Persona::Design;s.tool=Tool::Select;s.agent.load();s.agent.visible=true;
+        }
         "pixel" | "pixel-selection" => {
             let img =
                 omadesign::photo::load_file(Path::new("examples/site-showcase/pixel-original.png"))
@@ -793,7 +799,8 @@ impl Capture {
             "design" => 42,
             "photo" => 24,
             "pixel" | "motion" | "brand-kit" => 30,
-            "pixel-selection" => 22,
+            "pixel-selection" => 16,
+            "agent-picker" => 10,
             _ => panic!("unknown scene"),
         };
         let mut actions = schedule(&scene);
@@ -1168,6 +1175,10 @@ impl eframe::App for Capture {
             self.ready_since = Instant::now();
             self.pending = false;
             self.stepped = false;
+            if self.scene=="pixel-selection" && self.frame.is_multiple_of(30) {
+                let value=serde_json::json!({"frame":self.frame,"path":self.studio.pixel_selection_path()});
+                fs::write(self.directory.join(format!("selection-state-{}.json",self.frame)),serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+            }
             if self.frame >= self.total {
                 if matches!(self.scene.as_str(), "graphics" | "chroma") {
                     omadesign::project::save_to(
@@ -1205,6 +1216,7 @@ impl eframe::App for Capture {
         if self.stepped
             && !self.pending
             && (live_interaction || omadesign::ui::scene_ready(&ctx, &self.studio))
+            && (self.scene!="agent-picker" || (!self.studio.agent.connecting && !self.studio.agent.discovery.providers.iter().any(|p|p.status==omadesign::agent::discovery::Status::Checking)))
         {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
             self.pending = true;
@@ -1226,6 +1238,7 @@ impl eframe::App for Capture {
 }
 fn main() -> eframe::Result {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if let Some(result)=omadesign::agent::cli(&args) {if let Err(e)=result{eprintln!("{e}");std::process::exit(2);}return Ok(());}
     let scene = args
         .first()
         .expect("SCENE OUTPUT_DIR [--probe] [--fps 30|60]")

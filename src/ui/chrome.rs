@@ -1103,7 +1103,7 @@ pub fn left_toolbar(ui: &mut Ui, studio: &mut Studio) {
                             | Tool::Clone
                             | Tool::Heal
                             | Tool::Smudge => "paint",
-                            Tool::Marquee | Tool::EllipseMarquee | Tool::Lasso | Tool::Wand => {
+                            Tool::Marquee | Tool::EllipseMarquee | Tool::Lasso | Tool::BezierLasso | Tool::Wand => {
                                 "selpx"
                             }
                             Tool::Hand | Tool::Zoom | Tool::Crop => "nav",

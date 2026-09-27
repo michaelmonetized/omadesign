@@ -183,6 +183,7 @@ fn tool_glyph(tool: Tool) -> &'static str {
         Tool::Marquee => ph::SELECTION,
         Tool::EllipseMarquee => ph::CIRCLE_DASHED,
         Tool::Lasso => ph::POLYGON,
+        Tool::BezierLasso => ph::BEZIER_CURVE,
         Tool::Wand => ph::MAGIC_WAND,
         Tool::Hand => ph::HAND,
         Tool::Zoom => ph::MAGNIFYING_GLASS_PLUS,

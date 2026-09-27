@@ -160,6 +160,10 @@ fn main() -> eframe::Result {
     let directory = PathBuf::from(args.first().expect("agent_qa OUTPUT_DIRECTORY"));
     std::fs::create_dir_all(&directory).unwrap();
     let directory = directory.canonicalize().unwrap();
+    if args.iter().any(|a| a == "--discover") {
+        discover(&directory);
+        return Ok(());
+    }
     let resume = args
         .windows(2)
         .find(|w| w[0] == "--resume-from")
@@ -188,4 +192,114 @@ fn main() -> eframe::Result {
             Ok(Box::new(Capture::start(directory, resume)))
         }),
     )
+}
+
+fn discover(directory: &std::path::Path) {
+    use agent::{
+        discovery::{Discovery, Status},
+        runtime::{Command, Connection, Event},
+    };
+    let ctx = egui::Context::default();
+    let mut discovery = Discovery::default();
+    discovery.poll(&ctx, directory, true);
+    let started = Instant::now();
+    loop {
+        discovery.poll(&ctx, directory, false);
+        if !discovery
+            .providers
+            .iter()
+            .any(|p| p.status == Status::Checking)
+            || started.elapsed() > Duration::from_secs(30)
+        {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let mut report = vec![];
+    for provider in &discovery.providers {
+        let mut changes = vec![];
+        if provider.profile.name == "Codex" && provider.status == Status::Ready {
+            let connection = Connection::start(
+                provider.profile.clone(),
+                directory.to_path_buf(),
+                None,
+                std::env::current_exe().unwrap(),
+                ctx.clone(),
+            )
+            .unwrap();
+            let mut metadata = serde_json::Value::Null;
+            while let Ok(event) = connection.events.recv_timeout(Duration::from_secs(25)) {
+                match event {
+                    Event::Session { data, .. } => {
+                        metadata = data;
+                        break;
+                    }
+                    Event::Error(e) => panic!("{e}"),
+                    _ => (),
+                }
+            }
+            assert!(!metadata.is_null());
+            for category in ["model", "thought_level"] {
+                let Some(option) = agent::discovery::options(&metadata)
+                    .into_iter()
+                    .find(|o| o.category == category)
+                else {
+                    continue;
+                };
+                let choice = if category == "thought_level" {
+                    option.choices.iter().find(|c| c.id != option.current)
+                } else {
+                    option.choices.iter().find(|c| c.id == option.current)
+                }
+                .unwrap_or(&option.choices[0]);
+                let value = choice.id.clone();
+                connection
+                    .send(if option.legacy {
+                        Command::Model(value.clone())
+                    } else {
+                        Command::Config {
+                            id: option.id.clone(),
+                            value: value.clone(),
+                        }
+                    })
+                    .unwrap();
+                let mut accepted = false;
+                let started = Instant::now();
+                while started.elapsed() < Duration::from_secs(15) {
+                    match connection.events.recv_timeout(Duration::from_millis(100)) {
+                        Ok(Event::Update(update)) => {
+                            if update["configOptions"].is_array() {
+                                metadata["configOptions"] = update["configOptions"].clone();
+                            }
+                            if update["currentModelId"].is_string() {
+                                metadata["models"]["currentModelId"] =
+                                    update["currentModelId"].clone();
+                            }
+                            accepted = agent::discovery::options(&metadata)
+                                .iter()
+                                .any(|o| o.id == option.id && o.current == value);
+                            if accepted {
+                                break;
+                            }
+                        }
+                        Ok(Event::Error(e)) => panic!("Setting {}: {e}", option.id),
+                        _ => (),
+                    }
+                }
+                assert!(accepted, "{} was not accepted", option.id);
+                changes.push(
+                    serde_json::json!({"option":option.id,"value":value,"accepted":accepted}),
+                );
+            }
+        }
+        report.push(serde_json::json!({"provider":provider.profile.name,"status":provider.status.label(),"detail":provider.detail,"metadata":provider.metadata,"verified_changes":changes}));
+    }
+    std::fs::write(
+        directory.join("discovery.json"),
+        serde_json::to_vec_pretty(&report).unwrap(),
+    )
+    .unwrap();
+    for provider in &discovery.providers {
+        println!("{}: {}", provider.profile.name, provider.status.label());
+    }
 }

@@ -478,7 +478,7 @@ pub fn execute(
                 studio.canvas_gen
             ));
         }
-        if studio.op.is_some() || studio.type_edit.is_some() || studio.deformation.is_some() {
+        if studio.op.is_some() || studio.type_edit.is_some() || studio.deformation.is_some() || studio.pixel_edit.is_some() {
             return Err(
                 "The designer is editing the canvas. Retry after the gesture finishes.".into(),
             );

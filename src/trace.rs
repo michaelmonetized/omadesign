@@ -284,7 +284,7 @@ fn contours_to_traced(mask: &[u8], w: u32, h: u32, opts: TraceOpts, color: Rgba)
 }
 
 /// Pixel-edge walk. Interior stays on the left so outers are CCW and holes CW.
-fn trace_mask(mask: &[u8], w: u32, h: u32) -> Vec<Vec<Pt>> {
+pub(crate) fn trace_mask(mask: &[u8], w: u32, h: u32) -> Vec<Vec<Pt>> {
     let fg = |x: i32, y: i32| -> bool {
         if x < 0 || y < 0 || x >= w as i32 || y >= h as i32 {
             return false;

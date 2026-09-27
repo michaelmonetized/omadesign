@@ -62,6 +62,10 @@ pub struct Settings {
     pub profile: Profile,
     pub directory: PathBuf,
     pub live_edits: bool,
+    #[serde(default)]
+    pub selections: std::collections::BTreeMap<String, String>,
+    #[serde(default)]
+    pub favorites: Vec<String>,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -71,6 +75,8 @@ impl Default for Settings {
                 .map(PathBuf::from)
                 .unwrap_or_else(|| "/tmp".into()),
             live_edits: true,
+            selections: Default::default(),
+            favorites: vec![],
         }
     }
 }

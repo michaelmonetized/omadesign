@@ -78,11 +78,12 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
             rect,
             space_pan || studio.tool == Tool::Hand,
         );
-    let guide_input = !plugin_input
+    let pixel_input = !plugin_input && !brand_input && super::pixel_edit::input(studio, &resp, rect, space_pan || studio.tool == Tool::Hand);
+    let guide_input = !pixel_input && !plugin_input
         && !brand_input
         && studio.deformation.is_none()
         && super::guides::handle_input(ui, studio, rect);
-    let deform_input = if plugin_input || guide_input || brand_input {
+    let deform_input = if pixel_input { true } else if plugin_input || guide_input || brand_input {
         false
     } else {
         super::deform::input(studio, &resp, rect, space_pan || studio.tool == Tool::Hand)
@@ -279,6 +280,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     draw_bleed_safe(&painter, rect, studio);
     draw_overlays(&painter, rect, studio, pen_preview);
     super::deform::paint(&painter, rect, studio);
+    super::pixel_edit::paint(&painter, rect, studio);
     super::plugins::paint(ui, studio, rect);
     if !plugin_input && !brand_input && !guide_input && !deform_input {
         set_cursor(ui, studio, &resp);
@@ -1092,6 +1094,7 @@ fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
                 ellipse: true,
             })
         }
+        Tool::BezierLasso => {},
         Tool::Lasso => studio.op = Some(Op::Lasso { pts: vec![snap] }),
         Tool::Crop => {
             studio.op = Some(Op::CropPhoto {
@@ -3164,7 +3167,7 @@ fn draw_pixel_sel(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
     if mask.len() != w as usize * h as usize {
         return;
     }
-    let Some((x0, y0, x1, y1)) = paint::selection_bounds(mask, w, h) else {
+    let Some(_) = paint::selection_bounds(mask, w, h) else {
         return;
     };
     let id = eframe::egui::Id::new(("pixel-sel-overlay", preview.is_some()));
@@ -3212,28 +3215,14 @@ fn draw_pixel_sel(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
     mesh.add_triangle(0, 1, 2);
     mesh.add_triangle(0, 2, 3);
     p.add(Shape::mesh(mesh));
-    let outline = [
-        corner(x0, y0),
-        corner(x1, y0),
-        corner(x1, y1),
-        corner(x0, y1),
-        corner(x0, y0),
-    ];
-    let phase = (p.ctx().input(|i| i.time) * 28.0) as f32;
-    p.extend(Shape::dashed_line_with_offset(
-        &outline,
-        Stroke::new(1.0, Color32::WHITE),
-        &[5.0],
-        &[5.0],
-        phase,
-    ));
-    p.extend(Shape::dashed_line_with_offset(
-        &outline,
-        Stroke::new(1.0, Color32::BLACK),
-        &[5.0],
-        &[5.0],
-        phase + 5.0,
-    ));
+    let contours=super::pixel_edit::outlines(p.ctx(),mask,w,h,generation,preview.is_some(),&studio.swap_id);
+    let phase=(p.ctx().input(|i|i.time)*28.0)as f32;
+    for contour in contours.iter() {
+        let outline:Vec<_>=contour.iter().chain(contour.first()).map(|p|corner(p.x as u32,p.y as u32)).collect();
+        for (color,offset) in [(Color32::WHITE,0.0),(Color32::BLACK,5.0)] {
+            p.extend(Shape::dashed_line_with_offset(&outline,Stroke::new(1.0,color),&[5.0],&[5.0],phase+offset));
+        }
+    }
     p.ctx()
         .request_repaint_after(std::time::Duration::from_millis(32));
 }
@@ -3291,7 +3280,7 @@ fn set_cursor(ui: &mut Ui, studio: &Studio, resp: &eframe::egui::Response) {
             | Tool::Heal
             | Tool::Smudge => CursorIcon::Crosshair,
             Tool::Eyedropper | Tool::Trace => CursorIcon::Crosshair,
-            Tool::Crop | Tool::Marquee | Tool::EllipseMarquee | Tool::Lasso => {
+            Tool::Crop | Tool::Marquee | Tool::EllipseMarquee | Tool::Lasso | Tool::BezierLasso => {
                 CursorIcon::Crosshair
             }
             Tool::Select => CursorIcon::Default,

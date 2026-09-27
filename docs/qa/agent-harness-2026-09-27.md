@@ -1,5 +1,8 @@
 # Native ACP harness and selection dialogs — 2026-09-27
 
+The selection transform dialogs described here were subsequently replaced by
+[direct handles and a Bézier lasso, with a live provider/model picker](selection-handles-providers-2026-09-27.md).
+
 ## Source and migration
 
 Work is in the primary `/home/michael/Projects/omadesign` checkout on

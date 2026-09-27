@@ -74,6 +74,9 @@ pub(super) fn tick(ctx: &egui::Context, studio: &mut Studio) {
         }
     }
     agent.poll(studio, ctx);
+    if agent.visible {
+        agent.discovery.poll(ctx, &agent.settings.directory, false);
+    }
     ctx.data_mut(|d| d.insert_temp(Id::new(VISIBLE), agent.visible));
     studio.agent = agent;
 }
@@ -116,107 +119,6 @@ fn connection_settings(ui: &mut egui::Ui, agent: &mut Workspace) {
     ui.checkbox(&mut agent.follow_canvas, "Keep the design in view");
 }
 
-fn session_options(ui: &mut egui::Ui, agent: &mut Workspace) {
-    let options = agent.metadata["configOptions"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
-    ui.add_enabled_ui(agent.ready && !agent.busy, |ui| {
-        if !options.is_empty() {
-            for option in options.iter().filter(|v| v["type"] == "select") {
-                let Some(id) = option["id"].as_str() else {
-                    continue;
-                };
-                let mut choices = vec![];
-                for v in option["options"].as_array().into_iter().flatten() {
-                    if let Some(group) = v["options"].as_array() {
-                        choices.extend(group.iter().cloned());
-                    } else {
-                        choices.push(v.clone());
-                    }
-                }
-                let current = option["currentValue"].as_str().unwrap_or_default();
-                let label = choices
-                    .iter()
-                    .find(|v| v["value"] == current)
-                    .and_then(|v| v["name"].as_str())
-                    .unwrap_or(current);
-                egui::ComboBox::from_id_salt(("agent-config", id))
-                    .selected_text(label)
-                    .width(220.0)
-                    .show_ui(ui, |ui| {
-                        for choice in choices {
-                            let value = choice["value"].as_str().unwrap_or_default();
-                            if ui
-                                .selectable_label(
-                                    value == current,
-                                    choice["name"].as_str().unwrap_or(value),
-                                )
-                                .clicked()
-                            {
-                                if let Some(c) = &agent.connection {
-                                    let _ = c.send(Command::Config {
-                                        id: id.into(),
-                                        value: value.into(),
-                                    });
-                                }
-                            }
-                        }
-                    })
-                    .response
-                    .on_hover_text(option["name"].as_str().unwrap_or(id));
-            }
-        } else {
-            for (key, available, current, label) in [
-                ("models", "availableModels", "currentModelId", "model"),
-                ("modes", "availableModes", "currentModeId", "mode"),
-            ] {
-                let choices = agent.metadata[key][available]
-                    .as_array()
-                    .cloned()
-                    .unwrap_or_default();
-                if choices.is_empty() {
-                    continue;
-                }
-                let active = agent.metadata[key][current]
-                    .as_str()
-                    .unwrap_or_default()
-                    .to_owned();
-                let display = choices
-                    .iter()
-                    .find(|v| v[if key == "models" { "modelId" } else { "id" }] == active)
-                    .and_then(|v| v["name"].as_str())
-                    .unwrap_or(&active);
-                egui::ComboBox::from_id_salt(("agent-session", key))
-                    .selected_text(display)
-                    .width(220.0)
-                    .show_ui(ui, |ui| {
-                        for choice in choices {
-                            let id = choice[if key == "models" { "modelId" } else { "id" }]
-                                .as_str()
-                                .unwrap_or_default();
-                            if ui
-                                .selectable_label(
-                                    id == active,
-                                    choice["name"].as_str().unwrap_or(id),
-                                )
-                                .clicked()
-                            {
-                                if let Some(c) = &agent.connection {
-                                    let _ = c.send(if label == "model" {
-                                        Command::Model(id.into())
-                                    } else {
-                                        Command::Mode(id.into())
-                                    });
-                                }
-                            }
-                        }
-                    });
-            }
-        }
-    });
-}
-
 fn body(ui: &mut egui::Ui, studio: &mut Studio, agent: &mut Workspace, height: f32) {
     let start_y = ui.cursor().top();
     ui.horizontal(|ui| {
@@ -239,7 +141,7 @@ fn body(ui: &mut egui::Ui, studio: &mut Studio, agent: &mut Workspace, height: f
         }
     });
     ui.separator();
-    if agent.show_settings || agent.thread.is_none() {
+    if agent.show_settings {
         egui::ScrollArea::vertical()
             .id_salt("agent-settings-scroll")
             .max_height(240.0)
@@ -299,7 +201,7 @@ fn body(ui: &mut egui::Ui, studio: &mut Studio, agent: &mut Workspace, height: f
     });
     if agent.ready {
         egui::CollapsingHeader::new(format!("{} settings", agent.settings.profile.name))
-            .show(ui, |ui| session_options(ui, agent));
+            .show(ui, |ui| super::agent_picker::other_options(ui, agent));
     }
     if !agent.error.is_empty() {
         ui.label(
@@ -408,7 +310,7 @@ pub(super) fn panel(ui: &mut egui::Ui, studio: &mut Studio) {
                     }
                 });
             });
-            let body_height = (ui.available_height() - 150.0).max(80.0);
+            let body_height = (ui.available_height() - 184.0).max(80.0);
             egui::ScrollArea::vertical()
                 .id_salt("agent-body")
                 .max_height(body_height)
@@ -425,6 +327,7 @@ pub(super) fn panel(ui: &mut egui::Ui, studio: &mut Studio) {
                     agent.status = "Disconnected".into();
                 }
             });
+            super::agent_picker::picker(ui, studio, &mut agent);
             let field = ui.add(
                 egui::TextEdit::multiline(&mut agent.request)
                     .desired_rows(3)
@@ -577,5 +480,121 @@ mod tests {
                 assert!(clip.contains(rect.center()), "{wanted} clipped");
             }
         }
+    }
+    #[test]
+    fn provider_popup_shows_advertised_models_status_and_effort_at_compact_size() {
+        let ctx = egui::Context::default();
+        crate::ui::theme::apply(&ctx);
+        let mut s = Studio::new();
+        s.agent.visible = true;
+        s.agent.loaded = true;
+        let metadata = serde_json::json!({"configOptions":[
+            {"id":"model","name":"Model","category":"model","type":"select","currentValue":"test","options":[{"value":"test","name":"Fixture Model"},{"value":"second","name":"Second Model"},{"value":"third","name":"Third Model"}]},
+            {"id":"effort","name":"Effort","category":"thought_level","type":"select","currentValue":"high","options":[{"value":"high","name":"High"},{"value":"low","name":"Low"}]}]});
+        s.agent.discovery.providers = vec![crate::agent::discovery::Provider {
+            profile: s.agent.settings.profile.clone(),
+            status: crate::agent::discovery::Status::Ready,
+            metadata,
+            detail: "Fixture session".into(),
+        }];
+        let size = egui::vec2(960., 640.);
+        frame(&ctx, &mut s, size, vec![]);
+        let labels = frame(&ctx, &mut s, size, vec![]);
+        for wanted in ["Fixture Model ▾", "High"] {
+            assert!(
+                labels.iter().any(|(text, rect, clip)| text == wanted
+                    && clip.contains(rect.center())
+                    && rect.bottom() < size.y),
+                "Missing {wanted}"
+            );
+        }
+        let pos = labels
+            .iter()
+            .find(|(text, _, _)| text == "Fixture Model ▾")
+            .unwrap()
+            .1
+            .center();
+        frame(&ctx, &mut s, size, vec![egui::Event::PointerMoved(pos)]);
+        frame(
+            &ctx,
+            &mut s,
+            size,
+            vec![egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+        frame(
+            &ctx,
+            &mut s,
+            size,
+            vec![egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+        let labels = frame(&ctx, &mut s, size, vec![]);
+        for wanted in ["Search models…", "Fixture Model", "Codex · Ready"] {
+            assert!(
+                labels
+                    .iter()
+                    .any(|(text, rect, clip)| text == wanted && clip.contains(rect.center())),
+                "Missing {wanted}: {labels:?}"
+            );
+        }
+        let first = labels
+            .iter()
+            .find(|(text, _, _)| text == "Fixture Model")
+            .unwrap()
+            .1;
+        let second = labels
+            .iter()
+            .find(|(text, _, _)| text == "Second Model")
+            .unwrap()
+            .1;
+        assert!(
+            second.top() > first.bottom(),
+            "Model choices must be vertical rows"
+        );
+        assert!(second.right() < size.x && first.left() >= 0.);
+        let pos = labels
+            .iter()
+            .find(|(text, _, _)| text == "Codex")
+            .unwrap()
+            .1
+            .center();
+        frame(&ctx, &mut s, size, vec![egui::Event::PointerMoved(pos)]);
+        frame(
+            &ctx,
+            &mut s,
+            size,
+            vec![egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+        frame(
+            &ctx,
+            &mut s,
+            size,
+            vec![egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+        let labels = frame(&ctx, &mut s, size, vec![]);
+        assert!(
+            labels.iter().any(|(text, _, _)| text == "Search models…"),
+            "Filtering a provider must keep the picker open"
+        );
+        assert!(s.agent.connection.is_none());
     }
 }

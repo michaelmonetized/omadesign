@@ -50,6 +50,7 @@ impl Thread {
 
 pub struct Workspace {
     pub visible: bool,
+    pub discovery: super::discovery::Discovery,
     pub loaded: bool,
     pub settings: Settings,
     pub purpose: Purpose,
@@ -86,6 +87,7 @@ impl Default for Workspace {
         let settings = Settings::default();
         Self {
             visible: false,
+            discovery: Default::default(),
             loaded: false,
             config_args: serde_json::to_string(&settings.profile.args).unwrap(),
             config_directory: settings.directory.display().to_string(),
@@ -126,6 +128,7 @@ impl Workspace {
         }
         self.loaded = true;
         self.settings = Settings::load();
+        self.discovery.filter = Some(self.settings.profile.name.clone());
         self.sync_fields();
         self.refresh_history();
         let (tx, rx) = mpsc::channel::<Thread>();
@@ -366,6 +369,57 @@ impl Workspace {
         self.status = "Working on your design…".into();
         Ok(())
     }
+    pub fn save_preferences(&mut self) {
+        self.dirty = true;
+        if self.thread.is_some() && self.writer.is_some() {
+            self.persist(true);
+        } else if let Err(e) = self.settings.save() {
+            self.error = e;
+        }
+    }
+    pub fn choose_option(&mut self, option: &super::discovery::OptionSet, value: &str) {
+        if !option.choices.iter().any(|c| c.id == value) {
+            return;
+        }
+        self.settings.selections.insert(
+            format!("{}/{}", self.settings.profile.name, option.id),
+            value.into(),
+        );
+        self.save_preferences();
+        if self.ready
+            && let Some(c) = &self.connection
+        {
+            let command = if option.legacy {
+                if option.category == "model" {
+                    Command::Model(value.into())
+                } else {
+                    Command::Mode(value.into())
+                }
+            } else {
+                Command::Config {
+                    id: option.id.clone(),
+                    value: value.into(),
+                }
+            };
+            if let Err(e) = c.send(command) {
+                self.error = e;
+            }
+        }
+    }
+    fn restore_options(&mut self) {
+        for option in super::discovery::options(&self.metadata) {
+            if let Some(value) = self
+                .settings
+                .selections
+                .get(&format!("{}/{}", self.settings.profile.name, option.id))
+                .cloned()
+                && value != option.current
+                && option.choices.iter().any(|c| c.id == value)
+            {
+                self.choose_option(&option, &value);
+            }
+        }
+    }
     pub fn stop(&mut self) {
         if let Some(c) = &self.connection {
             c.cancel();
@@ -379,7 +433,9 @@ impl Workspace {
             return Err("Open this conversation's saved document before continuing it. Unsaved-document conversations remain readable in history.".into());
         }
         self.disconnect();
+        let favorites = self.settings.favorites.clone();
         self.settings = thread.settings.clone();
+        self.settings.favorites = favorites;
         self.purpose = thread.purpose;
         self.sync_fields();
         self.thread = Some(thread);
@@ -420,6 +476,7 @@ impl Workspace {
                 Event::Session { id, data, restored } => {
                     self.metadata = data;
                     self.ready = true;
+                    self.restore_options();
                     self.connecting = false;
                     self.status = "Connected · ready to design".into();
                     if let Some(thread) = &mut self.thread {

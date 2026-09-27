@@ -228,11 +228,14 @@ fn run(
     let mut permissions: HashMap<String, (Value, Vec<String>)> = HashMap::new();
     let mut startup = Some(Instant::now());
     let mut cancelling: Option<Instant> = None;
+    let mut queued_prompt: Option<String> = None;
+    let mut configurations = std::collections::VecDeque::new();
     loop {
         for command in commands.try_iter() {
             match command {
                 Command::Shutdown => return Ok(()),
                 Command::Cancel => {
+                    queued_prompt = None;
                     accepting.store(false, Ordering::Release);
                     if let Some(id) = &session {
                         bridge::write_message(
@@ -280,51 +283,59 @@ fn run(
                     };
                     match command {
                         Command::Prompt(text) => {
-                            if pending.values().any(|p| matches!(p, Pending::Prompt)) {
+                            if queued_prompt.is_some()
+                                || pending.values().any(|p| matches!(p, Pending::Prompt))
+                            {
                                 let _ = events
                                     .send(Event::Error("An agent turn is already running".into()));
                                 continue;
                             }
                             cancelling = None;
-                            accepting.store(true, Ordering::Release);
-                            request(
-                                &mut input,
-                                &mut pending,
-                                &mut next,
-                                "session/prompt",
-                                json!({"sessionId":id,"prompt":[{"type":"text","text":text}]}),
-                                Pending::Prompt,
-                            )?;
+                            queued_prompt = Some(text);
                         }
-                        Command::Model(model) => request(
-                            &mut input,
-                            &mut pending,
-                            &mut next,
+                        Command::Model(model) => configurations.push_back((
                             "session/set_model",
                             json!({"sessionId":id,"modelId":model}),
                             Pending::Configure(Some(("model", model))),
-                        )?,
-                        Command::Mode(mode) => request(
-                            &mut input,
-                            &mut pending,
-                            &mut next,
+                        )),
+                        Command::Mode(mode) => configurations.push_back((
                             "session/set_mode",
                             json!({"sessionId":id,"modeId":mode}),
                             Pending::Configure(Some(("mode", mode))),
-                        )?,
-                        Command::Config { id: option, value } => request(
-                            &mut input,
-                            &mut pending,
-                            &mut next,
+                        )),
+                        Command::Config { id: option, value } => configurations.push_back((
                             "session/set_config_option",
                             json!({"sessionId":id,"configId":option,"value":value}),
                             Pending::Configure(None),
-                        )?,
+                        )),
                         _ => (),
                     }
                 }
             }
             ctx.request_repaint();
+        }
+        if !pending
+            .values()
+            .any(|p| matches!(p, Pending::Configure(_) | Pending::Prompt))
+            && let Some((method, params, kind)) = configurations.pop_front()
+        {
+            request(&mut input, &mut pending, &mut next, method, params, kind)?;
+        }
+        if cancelling.is_none()
+            && configurations.is_empty()
+            && !pending.values().any(|p| matches!(p, Pending::Configure(_)))
+            && let Some(text) = queued_prompt.take()
+            && let Some(id) = &session
+        {
+            accepting.store(true, Ordering::Release);
+            request(
+                &mut input,
+                &mut pending,
+                &mut next,
+                "session/prompt",
+                json!({"sessionId":id,"prompt":[{"type":"text","text":text}]}),
+                Pending::Prompt,
+            )?;
         }
         if startup.is_some_and(|t| t.elapsed() > Duration::from_secs(120)) {
             return Err("Agent connection timed out. Check its command and local sign-in.".into());
@@ -402,6 +413,12 @@ fn run(
                         .unwrap_or("Agent request failed")
                         .to_owned(),
                 ));
+                if matches!(kind, Pending::Configure(_)) {
+                    configurations.clear();
+                    if queued_prompt.take().is_some() {
+                        let _ = events.send(Event::Complete("error".into()));
+                    }
+                }
                 if matches!(kind, Pending::Prompt) {
                     accepting.store(false, Ordering::Release);
                     cancelling = None;

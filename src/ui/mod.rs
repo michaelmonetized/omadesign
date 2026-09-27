@@ -1,4 +1,5 @@
 mod agent;
+mod agent_picker;
 pub(crate) mod anim_export;
 mod browsers;
 mod canvas;
@@ -21,6 +22,7 @@ mod motion_presets;
 pub(crate) mod photo;
 mod photo_detail;
 mod pixel_selection;
+mod pixel_edit;
 mod plugins;
 mod preferences;
 mod raster;
@@ -89,6 +91,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
             studio.recent.clone(),
         )
     });
+    studio.poll_pixel_edit(&ctx);
     agent::tick(&ctx, studio);
     if !studio.file_dialog_pending()
         && !studio.show_preferences
@@ -193,6 +196,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
 
 /// Screenshot scenes wait for their actual template previews, not a fixed sleep.
 pub fn scene_ready(ctx: &eframe::egui::Context, studio: &Studio) -> bool {
+    if studio.pixel_edit.as_ref().is_some_and(|e|e.pending()||e.job.is_some()) {return false;}
     !studio.cloud_busy()
         && (!studio.show_welcome || welcome::ready(ctx))
         && (studio.show_welcome || chrome::document_previews_ready(ctx))

@@ -18,8 +18,6 @@ struct Session {
     space: SelectionSpace,
     settings: Edit,
     initial: Edit,
-    aspect: f32,
-    lock_aspect: bool,
     preview: Option<Preview>,
     rendered: Option<Edit>,
     revision: u64,
@@ -60,7 +58,7 @@ fn open(ctx: &Context, studio: &mut Studio, settings: Edit) {
         return;
     };
     let source = studio.pixel_sel.as_ref().unwrap();
-    let Some((x0, y0, x1, y1)) = crate::paint::selection_bounds(source, space.w, space.h) else {
+    let Some(_) = crate::paint::selection_bounds(source, space.w, space.h) else {
         return;
     };
     ctx.data_mut(|d| {
@@ -73,8 +71,6 @@ fn open(ctx: &Context, studio: &mut Studio, settings: Edit) {
                 space,
                 settings,
                 initial: settings,
-                aspect: (x1 - x0) as f32 / (y1 - y0) as f32,
-                lock_aspect: true,
                 preview: None,
                 rendered: None,
                 revision: 0,
@@ -108,124 +104,55 @@ pub(super) fn menu(ui: &mut Ui, studio: &mut Studio) {
     let bounds = studio
         .pixel_selection_space()
         .and_then(|s| crate::paint::selection_bounds(studio.pixel_sel.as_ref()?, s.w, s.h));
-    let (width, height) = bounds.map_or((1.0, 1.0), |(x0, y0, x1, y1)| {
-        ((x1 - x0) as f32, (y1 - y0) as f32)
+    let enabled = bounds.is_some();
+    if ui
+        .add_enabled(enabled, egui::Button::new("Move / resize selection"))
+        .clicked()
+    {
+        studio.begin_pixel_edit(crate::app::pixel_edit::ModeKind::Transform);
+        ui.close();
+    }
+    ui.add_enabled_ui(enabled, |ui| {
+        ui.menu_button("Reshape", |ui| {
+            for mode in crate::deform::Mode::ALL {
+                if ui.button(mode.label()).clicked() {
+                    studio.begin_pixel_edit(crate::app::pixel_edit::ModeKind::Reshape(mode));
+                    ui.close();
+                }
+            }
+        })
     });
     for (label, settings) in [
-        ("Move…", Edit::Move { x: 0.0, y: 0.0 }),
-        ("Resize…", Edit::Resize { width, height }),
         ("Grow…", Edit::Grow { radius: 1 }),
         ("Shrink…", Edit::Shrink { radius: 1 }),
         ("Feather…", Edit::Feather { radius: 2 }),
-        (
-            "Reshape…",
-            Edit::Reshape {
-                angle: 0.0,
-                skew_x: 0.0,
-                skew_y: 0.0,
-            },
-        ),
     ] {
-        if ui
-            .add_enabled(bounds.is_some(), egui::Button::new(label))
-            .on_disabled_hover_text("Make a marquee, ellipse, or lasso selection first.")
-            .clicked()
-        {
+        if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
+            studio.pixel_edit = None;
             open(ui.ctx(), studio, settings);
             ui.close();
         }
+    }
+    if ui.button("Edit Bézier selection").clicked() {
+        studio.set_tool(crate::tools::Tool::BezierLasso);
+        studio.begin_pixel_edit(crate::app::pixel_edit::ModeKind::Bezier);
+        ui.close();
+    }
+
+    if ui.button("New Bézier selection").clicked() {
+        studio.set_tool(crate::tools::Tool::BezierLasso);
+        studio.begin_new_bezier();
+        ui.close();
     }
 }
 
 fn controls(ui: &mut Ui, session: &mut Session) {
     match &mut session.settings {
-        Edit::Move { x, y } => {
-            ui.horizontal(|ui| {
-                ui.label("Horizontal");
-                ui.add(
-                    egui::DragValue::new(x)
-                        .speed(1.0)
-                        .range(-100_000.0..=100_000.0)
-                        .suffix(" px"),
-                );
-            });
-            ui.horizontal(|ui| {
-                ui.label("Vertical");
-                ui.add(
-                    egui::DragValue::new(y)
-                        .speed(1.0)
-                        .range(-100_000.0..=100_000.0)
-                        .suffix(" px"),
-                );
-            });
-        }
-        Edit::Resize { width, height } => {
-            ui.horizontal(|ui| {
-                ui.label("Width");
-                if ui
-                    .add(
-                        egui::DragValue::new(width)
-                            .speed(1.0)
-                            .range(1.0..=100_000.0)
-                            .suffix(" px"),
-                    )
-                    .changed()
-                    && session.lock_aspect
-                {
-                    *height = *width / session.aspect;
-                }
-            });
-            ui.horizontal(|ui| {
-                ui.label("Height");
-                if ui
-                    .add(
-                        egui::DragValue::new(height)
-                            .speed(1.0)
-                            .range(1.0..=100_000.0)
-                            .suffix(" px"),
-                    )
-                    .changed()
-                    && session.lock_aspect
-                {
-                    *width = *height * session.aspect;
-                }
-            });
-            if ui
-                .checkbox(&mut session.lock_aspect, "Keep proportions")
-                .changed()
-                && session.lock_aspect
-            {
-                session.aspect = *width / *height;
-            }
-            ui.small("Anchored at the selection’s top-left corner.");
-        }
         Edit::Grow { radius } | Edit::Shrink { radius } | Edit::Feather { radius } => {
             ui.horizontal(|ui| {
                 ui.label("Radius");
                 ui.add(egui::DragValue::new(radius).range(0..=1024).suffix(" px"));
             });
-        }
-        Edit::Reshape {
-            angle,
-            skew_x,
-            skew_y,
-        } => {
-            ui.add(
-                egui::Slider::new(angle, -180.0..=180.0)
-                    .text("Rotation")
-                    .suffix("°"),
-            );
-            ui.add(
-                egui::Slider::new(skew_x, -80.0..=80.0)
-                    .text("Horizontal skew")
-                    .suffix("°"),
-            );
-            ui.add(
-                egui::Slider::new(skew_y, -80.0..=80.0)
-                    .text("Vertical skew")
-                    .suffix("°"),
-            );
-            ui.small("Reshape around the center of the selection.");
         }
     }
 }
@@ -436,14 +363,7 @@ mod tests {
         let mut studio = studio();
         let original = studio.pixel_sel.clone();
         let pixels = studio.doc.layers[0].kind.pixels().unwrap().data.clone();
-        for label in [
-            "Move…",
-            "Resize…",
-            "Grow…",
-            "Shrink…",
-            "Feather…",
-            "Reshape…",
-        ] {
+        for label in ["Grow…", "Shrink…", "Feather…"] {
             frame(&ctx, &mut studio, vec![]);
             click(&ctx, &mut studio, "Select");
             click(&ctx, &mut studio, label);

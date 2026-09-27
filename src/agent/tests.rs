@@ -282,6 +282,7 @@ fn transcripts_and_custom_profiles_round_trip_without_credentials() {
         },
         directory: directory.clone(),
         live_edits: true,
+        ..Default::default()
     };
     let path = directory.join("settings.json");
     config::write(&path, &settings).unwrap();
@@ -299,7 +300,9 @@ fn transcripts_and_custom_profiles_round_trip_without_credentials() {
 fn acp_transport_negotiates_sessions_streams_permissions_and_cancels() {
     use std::time::{Duration, Instant};
     let script = r#"
-import json,sys
+import json,sys,threading
+configured=0
+inflight=False
 def emit(value):
  print(json.dumps(value),flush=True)
 def result(id,value):
@@ -314,7 +317,17 @@ for line in sys.stdin:
   assert p['cwd'].startswith('/') and p['mcpServers'][0]['name']=='omadesign'
   assert p['mcpServers'][0]['args']==['--agent-mcp']
   result(m['id'],{'sessionId':'real-wire-fixture'})
+ elif method=='session/set_config_option':
+  assert not inflight, 'Configuration changes must be serialized'
+  inflight=True
+  def finish(id=m['id'], value=p['value'], option=p['configId']):
+   global configured,inflight
+   configured+=1
+   inflight=False
+   result(id,{'configOptions':[{'id':option,'category':'thought_level','type':'select','currentValue':value,'options':[{'value':value,'name':value}]}]})
+  threading.Timer(0.05,finish).start()
  elif method=='session/prompt':
+  assert configured==2 and not inflight, 'Prompt raced configuration acknowledgement'
   assert p['sessionId']=='real-wire-fixture'
   prompt=m['id']
   emit({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'real-wire-fixture','update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':'Building live'}}}})
@@ -356,9 +369,19 @@ for line in sys.stdin:
         }
     };
     wait(|e| matches!(e, runtime::Event::Session { .. }));
+    c.send(runtime::Command::Config {
+        id: "model".into(),
+        value: "fixture-model".into(),
+    })
+    .unwrap();
+    c.send(runtime::Command::Config {
+        id: "effort".into(),
+        value: "high".into(),
+    })
+    .unwrap();
     c.send(runtime::Command::Prompt("Design".into())).unwrap();
     assert!(
-        matches!(wait(|e|matches!(e,runtime::Event::Update(_))),runtime::Event::Update(v) if v["content"]["text"]=="Building live")
+        matches!(wait(|e|matches!(e,runtime::Event::Update(v) if v["sessionUpdate"]=="agent_message_chunk")),runtime::Event::Update(v) if v["content"]["text"]=="Building live")
     );
     let runtime::Event::Permission { id, .. } =
         wait(|e| matches!(e, runtime::Event::Permission { .. }))
