@@ -1,0 +1,24 @@
+{
+  "checks": [
+    "one flip pair in inspector",
+    "flip is one edit",
+    "undo restores exact artwork",
+    "redo restores flip",
+    "horizontal shortcut",
+    "menu shortcuts",
+    "Layout shortcut",
+    "Motion shortcut",
+    "typing preserves H and V",
+    "save reopen"
+  ],
+  "fps": 10,
+  "frames": 370,
+  "input": "actual egui pointer and keyboard events",
+  "issue": "154",
+  "renderer": "native WGPU",
+  "size": [
+    1600,
+    1000
+  ],
+  "wall_seconds": 112.192555743
+}

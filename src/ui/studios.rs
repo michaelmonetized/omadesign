@@ -1641,7 +1641,6 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
     ui.columns(2, |columns| {
         rotation_changed =
             number_field(&mut columns[0], "Rotate", &mut degrees, -180.0..=180.0, "°");
-        columns[1].add_space(15.0);
         super::selection::flip_icons(&mut columns[1], studio);
     });
     opacity_changed = number_field(ui, "Opacity", &mut opacity_percent, 0.0..=100.0, "%");
