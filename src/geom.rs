@@ -1053,8 +1053,10 @@ impl Geom {
                 }
             }
             Geom::Text(t) => {
+                let frame_origin=src.map_pt(t.origin-Pt::new(0.,t.px*0.85),dst)+Pt::new(0.,t.px*0.85);
                 t.origin = src.map_pt(t.origin, dst);
                 if let Some(frame) = &mut t.frame {
+                    t.origin=frame_origin;
                     frame.size.x *= sx; frame.size.y *= sy;
                     t.wrap_width = Some((frame.size.x-frame.inset[1]-frame.inset[3]).max(1.));
                     t.layout = None;

@@ -2367,7 +2367,9 @@ impl Studio {
         if self.type_edit.is_some() {
             let mut snap = None;
             if let Some(run) = self.live_type_mut() {
+                let size_before=run.px;
                 f(run);
+                if run.frame.is_some(){run.origin.y+=(run.px-size_before)*0.85;}
                 snap = Some(run.clone());
             }
             if let Some(r) = &snap {
@@ -2384,7 +2386,9 @@ impl Studio {
             let before = s.geom.clone();
             let rot = s.rotation;
             if let Geom::Text(run) = &mut after {
+                let size_before=run.px;
                 f(run);
+                if run.frame.is_some(){run.origin.y+=(run.px-size_before)*0.85;}
             }
             let defaults = match &after {
                 Geom::Text(run) => Some(run.clone()),

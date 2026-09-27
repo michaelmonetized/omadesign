@@ -229,6 +229,11 @@ impl Studio {
                         }
                         let offset = after.content.chars().count();
                         after.content.push_str(&b.content);
+                        after.manual_kern.extend(
+                            b.manual_kern
+                                .iter()
+                                .map(|(&index, &value)| (index + offset, value)),
+                        );
                         after
                             .paragraphs
                             .extend(b.paragraphs.iter().cloned().map(|mut p| {
@@ -363,6 +368,7 @@ impl Studio {
                         s.end = s.end.min(split);
                     }
                     after.paragraphs.retain(|p| p.start < split);
+                    after.manual_kern.retain(|&index, _| index < split);
                 }
                 if shape.id == at.1 {
                     if let Some(t) = &mut after.thread {
@@ -380,11 +386,12 @@ impl Studio {
                         }
                     }
                     if shape.id == next {
+                        let top = after.origin.y-after.px*0.85;
                         let origin = after.origin;
                         let frame = after.frame.clone();
                         let thread = after.thread.clone();
                         after = tail.clone();
-                        after.origin = origin;
+                        after.origin = Pt::new(origin.x,top+after.px*0.85);
                         after.frame = frame;
                         after.thread = thread;
                     }
