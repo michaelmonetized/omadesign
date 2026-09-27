@@ -2,6 +2,10 @@
 
 [e2e.mp4](e2e.mp4) records the actual native WGPU viewport at 1600×900,
 480 frames / 48 seconds at 10 fps, with zero unresolved input targets.
+The recorded product revision is `af0697c3578316fa90d17a1b45ecd79ab27c03ed`,
+the actual stacked branch including the preceding inspector, effects, paragraph
+and OpenType changes. The library was rebuilt from this checkout immediately
+before the recorder was linked and copied to its isolated executable.
 `result.json` verifies the saved document. `recorded.oma` is the exact recorded
 file; `saved.oma` is its portable copy with identical EB Garamond bytes in
 `.omabrand/fonts` and only the font reference changed to its native archive ID. `native.png` shows the mixed baseline field beside live text; `preferences.json`
@@ -26,7 +30,7 @@ relative. Documents require version 12 only when the new spacing fields exist.
 Optical kerning samples each glyph's outline at 16 shared heights and adjusts
 the lower-quartile side-profile gap toward 0.075 em, capped at ±0.15 em. Font
 profiles and pair adjustments are cached. Manual pairs add to any mode and
-split default ligatures at the edited boundary so their movement remains
+split standard, contextual, discretionary and historical ligatures at the edited boundary so their movement remains
 visible. This is an outline-based algorithm, not an attempt to match a
 proprietary application's optical values.
 
@@ -34,7 +38,8 @@ Rich SVG outlines preserve exact positioned glyphs. HTML uses CSS spans for
 representable metrics and inline outlined SVG for manual/optical kerning or
 range scale. Text remains editable in the saved `.oma`.
 
-Validation: all 32 text tests, the responsive character scaling test, all 21
+Validation: the existing inspector-width regression across frames and personas,
+all 34 text tests, the responsive character scaling test, all 21
 existing shortcut tests, and all 3 HTML layout export tests pass.
 
 Focused regression coverage includes legacy tracking conversion, per-line

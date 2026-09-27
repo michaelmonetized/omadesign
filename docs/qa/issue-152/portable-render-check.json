@@ -1,74 +1,74 @@
 [
   {
-    "convert_ms": 63.394404,
+    "convert_ms": 60.547711,
     "layer": "Background",
-    "render_ms": 24.12945,
+    "render_ms": 22.294161,
     "round": 0
   },
   {
-    "convert_ms": 63.227987999999996,
+    "convert_ms": 60.748634,
     "layer": "Background",
-    "render_ms": 5.809059,
+    "render_ms": 5.429619,
     "round": 1
   },
   {
-    "convert_ms": 63.503862999999996,
+    "convert_ms": 59.799898,
     "layer": "Background",
-    "render_ms": 5.800102,
+    "render_ms": 5.223322,
     "round": 2
   },
   {
-    "convert_ms": 64.674284,
+    "convert_ms": 59.647393,
     "layer": "Background",
-    "render_ms": 5.723851000000001,
+    "render_ms": 5.22203,
     "round": 3
   },
   {
-    "convert_ms": 62.377818000000005,
+    "convert_ms": 59.963111,
     "layer": "Layer 1",
-    "render_ms": 24.621118,
+    "render_ms": 22.405748,
     "round": 0
   },
   {
-    "convert_ms": 63.70748900000001,
+    "convert_ms": 60.39854,
     "layer": "Layer 1",
-    "render_ms": 24.401117,
+    "render_ms": 22.153031,
     "round": 1
   },
   {
-    "convert_ms": 62.388276,
+    "convert_ms": 59.805065,
     "layer": "Layer 1",
-    "render_ms": 23.27678,
+    "render_ms": 21.914941,
     "round": 2
   },
   {
-    "convert_ms": 62.652902,
+    "convert_ms": 59.638935,
     "layer": "Layer 1",
-    "render_ms": 22.888987,
+    "render_ms": 21.876565,
     "round": 3
   },
   {
-    "convert_ms": 62.300526000000005,
+    "convert_ms": 59.527765,
     "layer": "ALL",
-    "render_ms": 41.376003000000004,
+    "render_ms": 39.151661,
     "round": 0
   },
   {
-    "convert_ms": 61.337898,
+    "convert_ms": 60.874636,
     "layer": "ALL",
-    "render_ms": 23.255614,
+    "render_ms": 21.998902,
     "round": 1
   },
   {
-    "convert_ms": 61.861608,
+    "convert_ms": 60.593835999999996,
     "layer": "ALL",
-    "render_ms": 22.405193999999998,
+    "render_ms": 22.349912,
     "round": 2
   },
   {
-    "convert_ms": 62.55161,
+    "convert_ms": 60.272492,
     "layer": "ALL",
-    "render_ms": 23.02903,
+    "render_ms": 22.238242,
     "round": 3
   }
 ]
