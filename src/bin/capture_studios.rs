@@ -969,6 +969,7 @@ fn seed(scene: &str) -> Studio {
             s.doc=Document::new("Area text and threaded stories · issue 150",960.,680.,96.);
             let mut circle=Shape::new(Geom::Ellipse{center:Pt::new(230.,210.),radii:Pt::splat(58.)},Style{fill:Fill::Solid(Rgba::from_hex(0xC5E2E4)),stroke:None});
             circle.text_wrap=TextWrap{mode:if scene=="area-options"{WrapMode::None}else{WrapMode::ObjectShape},offset:if scene=="area-options"{[0.;4]}else{[10.;4]},..Default::default()};
+            if scene=="area-invert" {circle.style.fill=Fill::None;circle.style.stroke=Some(omadesign::document::Stroke{width:2.,color:Rgba::from_hex(0x7295AD),..Default::default()});}
             let mut layer=Layer::vector("Wrap illustration");layer.kind.shapes_mut().unwrap().push(circle);s.doc.layers.push(layer);
             s.active_layer=Some(1);s.persona=Persona::Design;s.tool=Tool::Text;s.text_px=25.;s.style=Style{fill:Fill::Solid(Rgba::from_hex(0x18364A)),stroke:None};
             if scene=="area-options" || scene=="area-invert" {
