@@ -11,3 +11,5 @@ Local automated checks: four geometry/history tests cover all six alignments, no
 Reproduce with `cargo build --locked --offline --bin inspector_qa`, then `target/debug/inspector_qa 155 /tmp/issue-155-qa` in a graphical session. The harness uses isolated XDG profiles. Existing installed builds and accepted 0.5.0 human-QA evidence are unchanged.
 
 As specified in the issue, raster alignment uses the raster frame, including transparent borders. Close the agent panel to access the inspector's Align/Distribute controls.
+
+Additional native acceptance: [parent followup](parent-review/README.md), 10 seconds, six passing assertions, plus focused regression coverage.

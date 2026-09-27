@@ -1,0 +1,6 @@
+PASS: group is one alignment unit
+PASS: remember positions
+PASS: selection moved together
+PASS: undo restores exact artwork
+PASS: selection moved together
+PASS: save reopen

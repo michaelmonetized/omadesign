@@ -1,0 +1,27 @@
+{
+  "source_revision": "175583d170b9be8b40875d4927e50b9e7769737f",
+  "binary_sha256": "7e2094abf73b60ae9b0556f1d36449571e09946feee063c6d013deeb71e8ea53",
+  "video": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "width": 1600,
+        "height": 1000,
+        "r_frame_rate": "10/1",
+        "nb_frames": "100"
+      }
+    ],
+    "format": {
+      "duration": "10.000000"
+    }
+  },
+  "files_sha256": {
+    "issue-155-parent.mp4": "66da5b8370136788b23a6d134fe0eadfe4624c212432a2f0566fb6f2250965c8",
+    "result.json": "53a7c48e6c5c390f031b294a92d444439d3a4eed5e7ef202fb0a001a0af56d2f",
+    "saved.oma": "c9f64e5b5a033d1b91a9eff4ee9cef00f900d9e9e9b6420b8fc5379d29c2c380",
+    "native.png": "30cca1f31404151406bc95a76ec902bd8b44c8d6a4754145b1106bf4231cb6a0",
+    "tests.log": "9bf73b3e05406b9fb77e00a0a0088c3503117d4a8973316d04f760cb52381b21",
+    "native.log": "c0c861902dcbd2eb51873d16643bfccbcda3d9f4be993e303a44434f8b9d7359"
+  }
+}
