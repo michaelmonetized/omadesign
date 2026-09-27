@@ -460,6 +460,7 @@ fn layout_frame_continued(
             row += 1;
             continue;
         }
+        let placed_before_row = placed.len();
         for (left, right) in spans {
             if index >= total {
                 break;
@@ -477,6 +478,12 @@ fn layout_frame_continued(
             let Some(line) = composed.first().cloned() else {
                 break;
             };
+            // An unbreakable word may overflow the composer measure. A narrow
+            // interval beside an obstacle is optional: defer the word until a
+            // wider interval instead of consuming and clipping its characters.
+            if line.width > right - left + 0.01 && right - left < inner.width() - 0.01 {
+                continue;
+            }
             let (_ascent, descent) = line_metrics(&local, &line);
             let baseline = y;
             if height_limit && baseline + descent > inner.max.y + 0.001 {
@@ -509,7 +516,7 @@ fn layout_frame_continued(
         }
         previous_baseline = Some(y);
         row += 1;
-        visible_rows += 1;
+        visible_rows += usize::from(placed.len() > placed_before_row);
     }
     // Respect paragraph boundaries when advancing to another frame. A paragraph
     // taller than an empty frame still advances; it must never create a flow loop.
@@ -1229,6 +1236,22 @@ mod tests {
             },
             locked: false,
         }
+    }
+    #[test]
+    fn words_skip_narrow_obstacle_intervals_without_losing_characters() {
+        let mut text=run();
+        text.font=concat!(env!("CARGO_MANIFEST_DIR"),"/tests/assets/fonts/EBGaramond.ttf").into();
+        text.content="Two remaining words stay intact".into();
+        text.frame.as_mut().unwrap().size=Pt::new(220.,240.);
+        let bounds=frame_bounds(&text).unwrap();
+        let blocker=obstacle(Geom::Rect{origin:bounds.min+Pt::new(90.,0.),size:Pt::new(110.,100.),radius:0.});
+        let layout=layout_frame(&text,&text,0,&[blocker],false);
+        assert_eq!(layout.visible_end,text.content.chars().count());
+        assert!(!layout.overflow);
+        assert!(layout.carets.iter().all(|(_,point,_)|point.x<=bounds.max.x+0.01),"No consumed word may cross the frame edge from a narrow interval");
+        let first=layout.carets.iter().find(|(index,_,_)|*index==0).unwrap().1;
+        let next=layout.carets.iter().filter(|(index,_,_)|*index==4).last().unwrap().1;
+        assert!(next.y>first.y,"The word must move below the first row instead of clipping in its narrow right interval");
     }
     #[test]
     fn rectangle_circle_offset_and_invert_compute_distinct_free_spans() {
