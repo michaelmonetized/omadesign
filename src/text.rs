@@ -558,7 +558,7 @@ pub fn styled_html(run:&TypeRun,start:usize,text:&str)->String {
         while to<chars.len()&&run.character_style(start+to)==style {to+=1;}
         let mut features=vec![(*b"kern",u32::from(run.kern)),(*b"liga",u32::from(run.liga)),(*b"clig",u32::from(run.liga)),(*b"tnum",u32::from(run.tnum)),(*b"smcp",u32::from(run.smcp)),(*b"c2sc",u32::from(run.smcp))];
         for &(tag,value) in run.features.iter().chain(&style.features) {features.retain(|(t,_)|*t!=tag);features.push((tag,value));}
-        out.push_str(&format!("<span style=\"font-feature-settings:{};{}\">{}</span>",feature_css(&features),if style.no_break{"white-space:nowrap"}else{""},escape(&chars[from..to].iter().collect::<String>())));
+        out.push_str(&format!("<span style=\"font-feature-settings:{};{}\">{}</span>",feature_css(&features),if style.no_break{"white-space:pre;"}else{""},escape(&chars[from..to].iter().collect::<String>())));
         from=to;
     }
     out

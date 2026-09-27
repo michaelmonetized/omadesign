@@ -229,6 +229,13 @@ pub fn glyph_alternates(run: &TypeRun, start: usize, end: usize) -> Vec<GlyphAlt
         let styled=ids(&r);assert_eq!(styled[0],plain[0]);assert_eq!(styled[5],plain[5]);
         assert_ne!(styled[2],plain[2]);assert_ne!(styled[3],plain[3]);
     }
+    #[test] fn no_break_html_preserves_repeated_spaces() {
+        let mut r=run("x a  b y");r.set_character_style(2,6,|s|s.no_break=true);
+        let html=paragraph_html(&r);
+        assert!(html.contains("white-space:pre;"));
+        assert!(html.contains("a  b</span>"));
+        assert!(!html.contains("white-space:nowrap"));
+    }
     #[test] fn html_exports_range_features() {
         let mut r=run("one TWO");r.set_character_style(4,7,|s|s.features=vec![(*b"smcp",1)]);
         let html=paragraph_html(&r);assert!(html.contains("'smcp' 1"));assert!(html.contains("'smcp' 0"));assert!(html.contains("TWO</span>"));
