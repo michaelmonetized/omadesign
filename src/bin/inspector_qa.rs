@@ -138,6 +138,13 @@ fn actions(issue: &str) -> VecDeque<Action> {
             Check("save reopen"),
         ]
         .into(),
+        "155-parent" => vec![
+            Check("group is one alignment unit"),Check("remember positions"),
+            Click("\u{E510}"),Check("selection moved together"),
+            Press(Key::Z,ctrl()),Check("undo restores exact artwork"),
+            Click("\u{E506}"),Check("selection moved together"),
+            Press(Key::S,ctrl()),Check("save reopen"),
+        ].into(),
         "155" => {
             let mut q = vec![Check("one Align row and no Arrange menu")];
             for (glyph, check) in [
@@ -227,6 +234,13 @@ impl Qa {
             third.name = "Outside artboards".into();
             studio.doc.layers[0].kind.shapes_mut().unwrap().push(third);
             studio.selection.truncate(1);
+        }
+        if issue == "155-parent" {
+            studio.group_selected();
+            let (li,id)=studio.selection[1];
+            let child=studio.doc.find_shape_mut(li,id).unwrap();child.visible=false;child.locked=true;
+            let hit=studio.selection[0];studio.selection=studio.selection_for_hit(hit);
+            studio.history.clear();studio.dirty=false;
         }
         studio.path = Some(output.join("result.oma"));
         let original = omadesign::project::encode(&studio.doc).unwrap();
