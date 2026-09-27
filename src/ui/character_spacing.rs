@@ -23,11 +23,14 @@ fn numeric(
     suffix: &str,
 ) -> Option<f32> {
     let mut n = value.unwrap_or(fallback);
-    ui.label(label).on_hover_text(if label == "Tracking" {
-        "Letter spacing (tracking), in thousandths of an em"
-    } else {
-        label
-    });
+    let help = match label {
+        "Tracking" => "Letter spacing (tracking), in thousandths of an em (1/1000 em)",
+        "Horizontal" => "Horizontal glyph scale, as a percentage of its original width",
+        "Vertical" => "Vertical glyph scale, as a percentage of its original height",
+        "Pair kerning" => "Manual pair kerning, in thousandths of an em (1/1000 em)",
+        _ => label,
+    };
+    ui.label(label).on_hover_text(help);
     let response = ui.add(
         egui::DragValue::new(&mut n)
             .range(range)
@@ -41,7 +44,7 @@ fn numeric(
                 }
             }),
     );
-    response.changed().then_some(n)
+    response.on_hover_text(help).changed().then_some(n)
 }
 pub fn show(ui: &mut Ui, studio: &mut Studio) {
     let values = studio.selected_character_metrics();
@@ -56,8 +59,9 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         .show(ui, |ui| {
             ui.label("Leading");
             ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.;
                 egui::ComboBox::from_id_salt("leading_mode")
-                    .width(70.)
+                    .width(54.)
                     .selected_text(match lead {
                         Some(Leading::Auto(_)) => "Auto",
                         Some(Leading::Fixed(_)) => "Fixed",
@@ -147,7 +151,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
                     Some(*run.manual_kern.get(&edit.caret).unwrap_or(&0.)),
                     0.,
                     -1000.0..=10000.0,
-                    " /1000 em",
+                    " /1000",
                 ) {
                     studio.patch_type(|r| {
                         r.manual_kern.insert(edit.caret, value);
@@ -161,14 +165,14 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
                 common(&values, |s| s.tracking),
                 0.,
                 -1000.0..=10000.0,
-                " /1000 em",
+                " /1000",
             ) {
                 studio.patch_character(|s| s.tracking = Some(value));
             }
             ui.end_row();
             if let Some(value) = numeric(
                 ui,
-                "Vertical scale",
+                "Vertical",
                 common(&values, |s| s.vscale),
                 100.,
                 1.0..=1000.0,
@@ -179,7 +183,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
             ui.end_row();
             if let Some(value) = numeric(
                 ui,
-                "Horizontal scale",
+                "Horizontal",
                 common(&values, |s| s.hscale),
                 100.,
                 1.0..=1000.0,
