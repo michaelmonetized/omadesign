@@ -14,7 +14,30 @@ pub(super) fn pixels(studio: &Studio, layer: usize, mask: bool) -> Option<&Pixel
     }
 }
 
-fn publish(studio: &mut Studio, layer: usize, mask: bool, buffer: &tiny_skia::Pixmap) {
+fn publish(
+    studio: &mut Studio,
+    layer: usize,
+    mask: bool,
+    buffer: &tiny_skia::Pixmap,
+    before: &[u8],
+) {
+    // Keep working buffers unfeathered so moving the pointer cannot repeatedly
+    // attenuate earlier dabs. Only the displayed/committed result is blended.
+    let feathered = if !mask {
+        studio.pixel_sel_mask(layer).and_then(|selection| {
+            if !selection.iter().any(|v| *v > 0 && *v < 255) {
+                return None;
+            }
+            let original =
+                Pixels::from_rgba(buffer.width(), buffer.height(), before.to_vec())?.to_pixmap()?;
+            let mut output = buffer.clone();
+            paint::feather_edit(&mut output, &original, &selection);
+            Some(output)
+        })
+    } else {
+        None
+    };
+    let buffer = feathered.as_ref().unwrap_or(buffer);
     let Some(layer) = studio.doc.layers.get_mut(layer) else {
         return;
     };
@@ -78,7 +101,7 @@ pub(super) fn start(studio: &mut Studio, world: Pt) {
         paint::stamp(&mut buf, point, &brush, erase && !mask);
     }
     clip_working(studio, layer, mask, &mut buf, None, &before);
-    publish(studio, layer, mask, &buf);
+    publish(studio, layer, mask, &buf, &before);
     studio.op = Some(Op::Retouch {
         layer,
         mask,
@@ -200,7 +223,7 @@ pub(super) fn start_clone(studio: &mut Studio, world: Pt) {
     {
         paint::restrict_pixmap(&mut buf, original, &sel);
     }
-    publish(studio, layer, false, &buf);
+    publish(studio, layer, false, &buf, &before);
     studio.op = Some(Op::Clone {
         layer,
         last: Some(world),
@@ -322,7 +345,7 @@ pub(super) fn drag(studio: &mut Studio, world: Pt) {
             paint::stroke_to(&mut buf, from, point, &brush, erase && !mask);
         }
         clip_working(studio, layer, mask, &mut buf, None, &before);
-        publish(studio, layer, mask, &buf);
+        publish(studio, layer, mask, &buf, &before);
     }
     studio.op = Some(Op::Retouch {
         layer,
@@ -390,7 +413,7 @@ pub(super) fn fill(studio: &mut Studio, world: Pt) {
         studio.fill_tolerance,
         clip.as_deref(),
     );
-    publish(studio, layer, mask, &buffer);
+    publish(studio, layer, mask, &buffer, &before);
     finish(studio, layer, mask, before);
 }
 
@@ -463,7 +486,7 @@ pub(super) fn smudge_drag(studio: &mut Studio, world: Pt) {
         {
             paint::restrict_pixmap(&mut buf, original, &sel);
         }
-        publish(studio, layer, false, &buf);
+        publish(studio, layer, false, &buf, &before);
     }
     studio.op = Some(Op::Smudge {
         layer,
@@ -511,7 +534,7 @@ pub(super) fn clone_drag(studio: &mut Studio, world: Pt) {
         {
             paint::restrict_pixmap(&mut buf, original, &sel);
         }
-        publish(studio, layer, false, &buf);
+        publish(studio, layer, false, &buf, &before);
     }
     studio.op = Some(Op::Clone {
         layer,
@@ -817,6 +840,49 @@ mod tests {
         assert!(painted[0] > 100, "selected side should paint {painted:?}");
         let outside = rgba(&studio, 12, 8, false);
         assert_eq!(outside, [160, 170, 180, 255], "unselected pixels stay put");
+    }
+
+    #[test]
+    fn feathered_selection_limits_entire_brush_stroke_without_fading_earlier_dabs() {
+        let mut studio = studio(32, 16);
+        studio.tool = Tool::Brush;
+        studio.brush.color = Rgba::rgb(255, 0, 0);
+        studio.set_pixel_sel(Some(vec![128; 32 * 16]));
+        start_brush(&mut studio, Pt::new(4.0, 8.0));
+        brush_drag(&mut studio, Pt::new(14.0, 8.0));
+        brush_drag(&mut studio, Pt::new(26.0, 8.0));
+        studio.end_pixel_stroke(false);
+        for x in [4, 10, 20] {
+            let actual = rgba(&studio, x, 8, false);
+            assert!(
+                (200..=210).contains(&actual[0]),
+                "half-selected red at {x}: {actual:?}"
+            );
+            assert!(
+                (80..=90).contains(&actual[1]),
+                "half-selected green at {x}: {actual:?}"
+            );
+        }
+        studio.undo();
+        assert_eq!(rgba(&studio, 4, 8, false), [160, 170, 180, 255]);
+    }
+
+    #[test]
+    fn feathered_fill_and_eraser_blend_with_original_pixels() {
+        let mut studio = studio(32, 16);
+        studio.set_pixel_sel(Some(vec![128; 32 * 16]));
+        studio.style.fill = Fill::Solid(Rgba::rgb(255, 0, 0));
+        fill(&mut studio, Pt::new(8.0, 8.0));
+        assert_eq!(rgba(&studio, 8, 8, false), [208, 85, 90, 255]);
+        studio.undo();
+        studio.tool = Tool::Eraser;
+        start(&mut studio, Pt::new(4.0, 8.0));
+        drag(&mut studio, Pt::new(14.0, 8.0));
+        drag(&mut studio, Pt::new(26.0, 8.0));
+        studio.end_pixel_stroke(false);
+        for x in [4, 10, 20] {
+            assert!((125..=130).contains(&rgba(&studio, x, 8, false)[3]));
+        }
     }
 
     #[test]

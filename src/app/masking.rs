@@ -14,7 +14,11 @@ pub struct ItemMask {
     pub space: SelectionSpace,
 }
 
-fn resample(values: &[u8], source: SelectionSpace, target: SelectionSpace) -> Option<Vec<u8>> {
+pub(super) fn resample(
+    values: &[u8],
+    source: SelectionSpace,
+    target: SelectionSpace,
+) -> Option<Vec<u8>> {
     if values.len() != source.w as usize * source.h as usize {
         return None;
     }
@@ -61,6 +65,12 @@ impl Studio {
                 return false;
             }
         };
+        let buffer = buffer.map(|mut buffer| {
+            if let Some(selection) = self.pixel_sel_mask(layer) {
+                paint::feather_overlay(&mut buffer, &selection);
+            }
+            buffer
+        });
         let Some(target) = self.doc.layers.get_mut(layer) else {
             return true;
         };
@@ -135,6 +145,20 @@ impl Studio {
             || "Pixel selection cleared".into(),
             |mask| format!("{} pixels selected", paint::selected_count(mask)),
         );
+    }
+
+    pub(crate) fn selection_target_space(&self) -> Option<SelectionSpace> {
+        self.raster_target()
+            .and_then(|i| self.layer_selection_space(i))
+            .or_else(|| {
+                let w = self.doc.width.ceil().max(1.) as u32;
+                let h = self.doc.height.ceil().max(1.) as u32;
+                (u64::from(w) * u64::from(h) <= 64_000_000).then_some(SelectionSpace {
+                    w,
+                    h,
+                    transform: tiny_skia::Transform::identity(),
+                })
+            })
     }
 
     pub fn nudge_pixel_sel(&mut self, dx: i32, dy: i32) {

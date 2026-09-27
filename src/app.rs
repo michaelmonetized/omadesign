@@ -19,6 +19,7 @@ pub mod libraries;
 pub(crate) mod masking;
 mod motion_presets;
 mod photo_session;
+pub(crate) mod pixel_selection;
 mod placement;
 mod recovery;
 mod restart;
@@ -281,6 +282,7 @@ pub struct TypeEdit {
 }
 
 pub struct Studio {
+    pub agent: crate::agent::Workspace,
     pub show_preferences: bool,
     pub updates: updates::Updates,
     pub settings_page: u8,
@@ -520,6 +522,7 @@ impl Default for Studio {
 impl Studio {
     pub fn new() -> Self {
         let mut s = Self {
+            agent: Default::default(),
             doc: Document::new("Untitled", 1280.0, 800.0, 72.0),
             path: None,
             dirty: false,

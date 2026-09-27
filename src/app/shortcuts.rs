@@ -384,6 +384,8 @@ impl Studio {
                     if !self.photo.is_batching() {
                         self.photo.select_all_images();
                     }
+                } else if self.persona == Persona::Pixel {
+                    self.select_all_pixels();
                 } else {
                     self.select_all();
                 }

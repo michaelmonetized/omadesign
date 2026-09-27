@@ -207,10 +207,23 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
             .as_ref()
             .is_some_and(|t| t.size() == [w as usize, h as usize]);
     if !reuse {
+        let feathered = if let Some(Op::Brush { layer, buf, .. }) = &studio.op {
+            studio.pixel_sel_mask(*layer).map(|mask| {
+                let mut overlay = buf.clone();
+                paint::feather_overlay(&mut overlay, &mask);
+                overlay
+            })
+        } else {
+            None
+        };
         let draft = match &studio.op {
             Some(Op::Brush { layer, buf, .. }) => Draft {
                 preview: None,
-                brush: Some((*layer, buf, studio.brush.opacity)),
+                brush: Some((
+                    *layer,
+                    feathered.as_ref().unwrap_or(buf),
+                    studio.brush.opacity,
+                )),
             },
             _ => Draft::none(),
         };
@@ -2402,8 +2415,14 @@ fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) 
             commit_canvas_commands(studio, commands);
         }
         Some(Op::Brush {
-            layer, buf, before, ..
+            layer,
+            mut buf,
+            before,
+            ..
         }) => {
+            if let Some(mask) = studio.pixel_sel_mask(layer) {
+                paint::feather_overlay(&mut buf, &mask);
+            }
             if let Some(px) = studio
                 .doc
                 .layers
@@ -3117,18 +3136,27 @@ fn draw_type_caret(
 }
 
 fn draw_pixel_sel(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
-    let Some(mask) = studio.pixel_sel.as_ref() else {
+    let preview = super::pixel_selection::canvas_preview(p.ctx(), studio);
+    let Some(mask) = preview
+        .as_ref()
+        .map(|(v, _, _)| v.as_ref())
+        .or(studio.pixel_sel.as_ref())
+    else {
         return;
     };
-    let space = studio.pixel_sel_space.or_else(|| {
-        let layer = studio.doc.layers.get(studio.raster_target()?)?;
-        let pixels = layer.kind.pixels()?;
-        Some(crate::app::masking::SelectionSpace {
-            w: pixels.w,
-            h: pixels.h,
-            transform: compositor::layer_pixel_transform(layer),
-        })
-    });
+    let space = preview
+        .as_ref()
+        .map(|(_, s, _)| *s)
+        .or(studio.pixel_sel_space)
+        .or_else(|| {
+            let layer = studio.doc.layers.get(studio.raster_target()?)?;
+            let pixels = layer.kind.pixels()?;
+            Some(crate::app::masking::SelectionSpace {
+                w: pixels.w,
+                h: pixels.h,
+                transform: compositor::layer_pixel_transform(layer),
+            })
+        });
     let Some(space) = space else {
         return;
     };
@@ -3139,10 +3167,13 @@ fn draw_pixel_sel(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
     let Some((x0, y0, x1, y1)) = paint::selection_bounds(mask, w, h) else {
         return;
     };
-    let id = eframe::egui::Id::new("pixel-sel-overlay");
+    let id = eframe::egui::Id::new(("pixel-sel-overlay", preview.is_some()));
+    let generation = preview
+        .as_ref()
+        .map_or(studio.pixel_sel_gen, |(_, _, revision)| *revision);
     let tex = p.ctx().data(|data| {
         data.get_temp::<(u64, eframe::egui::TextureHandle)>(id)
-            .filter(|(generation, _)| *generation == studio.pixel_sel_gen)
+            .filter(|(cached, _)| *cached == generation)
             .map(|(_, tex)| tex)
     });
     let tex = tex.unwrap_or_else(|| {
@@ -3153,7 +3184,7 @@ fn draw_pixel_sel(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
             .ctx()
             .load_texture("pixel-sel", image, TextureOptions::NEAREST);
         p.ctx().data_mut(|data| {
-            data.insert_temp(id, (studio.pixel_sel_gen, tex.clone()));
+            data.insert_temp(id, (generation, tex.clone()));
         });
         tex
     });

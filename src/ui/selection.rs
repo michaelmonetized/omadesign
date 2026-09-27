@@ -125,6 +125,10 @@ pub(super) fn flip_buttons(ui: &mut Ui, enabled: bool) -> Option<bool> {
 }
 
 pub fn menu(ui: &mut Ui, studio: &mut Studio) {
+    if studio.persona == crate::tools::Persona::Pixel {
+        super::pixel_selection::menu(ui, studio);
+        return;
+    }
     if studio.persona == crate::tools::Persona::Photo {
         ui.add_enabled_ui(!studio.photo.is_batching(), |ui| {
             if ui

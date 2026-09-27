@@ -78,17 +78,30 @@ remain in **omadesign → Config**.
 
 ### Learn and create with your agent
 
-**Learn with AI** opens a free-form question box. **Create with agent** opens a
-brief box and uses the project you are browsing as the working directory when
-one is selected. Both hand the prompt to Omarchy's configured default agent.
-If none is installed and selected, follow the instructions shown to choose one
-in **Omarchy → Setup → Default → Agent**. Omadesign does not choose one for you.
+**Learn with AI**, **Create with agent**, and the toolbar's **Agent** button open
+the native agent panel beside the canvas. Choose Codex, Claude, Gemini,
+OpenCode, or a custom local ACP agent under **Connection**. Codex and Claude use
+pinned ACP adapters downloaded through `npx` on first connection; Gemini and
+OpenCode use their installed CLI. Your agent's own local authentication is reused.
+An agent can also present its sign-in methods in the panel.
 
-Learning prompts include the [Markdown documentation index](https://omadesign.app/llms.txt)
-and instructions to fetch relevant pages. Creation prompts point to the bundled
-[Omadesign creation skill](https://omadesign.app/skills/omadesign-create/SKILL.md),
-which describes editable documents, project brand assets and native preview
-verification. Version-matched help is also available offline:
+Describe what to make and select **Send** (Ctrl+Enter). Native shapes, text,
+gradients, effects, frames, and layers appear incrementally as the agent works.
+Each design tool call is undoable, and the agent can inspect a rendered canvas
+snapshot before refining its work. **Learn** sessions are read-only. **Allow live
+canvas edits** controls writing in Create sessions; permissions requested by the
+agent appear inline with their available choices.
+
+**Stop** cancels the current turn and rejects queued changes. Completed artwork
+remains on the canvas and can be undone normally. Switching documents disconnects
+the agent to protect the new canvas. **New** starts a conversation for the active
+document. **History** retains conversations locally; open the saved document and
+choose **Continue in saved document** to reconnect. Session loading is used when
+the chosen agent supports it. Unsaved-document conversations remain readable.
+
+See [the agent harness guide](agent-harness.md) for connection details, native
+tools, persistence, and protocol behavior. Version-matched help and the separate
+offline creation skill remain available:
 
 ```sh
 omadesign --agent-docs manual

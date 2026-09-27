@@ -314,6 +314,39 @@ pub fn clip_overlay(pm: &mut Pixmap, mask: &[u8]) {
     }
 }
 
+/// Apply soft coverage once to a completed overlay, not repeatedly to its dabs.
+pub fn feather_overlay(pm: &mut Pixmap, mask: &[u8]) {
+    if mask.len() != pm.width() as usize * pm.height() as usize {
+        return;
+    }
+    for (rgba, &coverage) in pm.data_mut().chunks_exact_mut(4).zip(mask) {
+        for channel in rgba {
+            *channel = ((*channel as u32 * coverage as u32 + 127) / 255) as u8;
+        }
+    }
+}
+
+/// Blend an accumulated edit with the stroke-start pixels using soft coverage.
+pub fn feather_edit(pm: &mut Pixmap, original: &Pixmap, mask: &[u8]) {
+    if pm.width() != original.width()
+        || pm.height() != original.height()
+        || mask.len() != pm.width() as usize * pm.height() as usize
+    {
+        return;
+    }
+    for ((rgba, before), &coverage) in pm
+        .data_mut()
+        .chunks_exact_mut(4)
+        .zip(original.data().chunks_exact(4))
+        .zip(mask)
+    {
+        let amount = coverage as u32;
+        for (channel, &old) in rgba.iter_mut().zip(before) {
+            *channel = ((*channel as u32 * amount + old as u32 * (255 - amount) + 127) / 255) as u8;
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PixelCombine {
     Replace,
@@ -679,8 +712,7 @@ pub fn shift_mask(src: &[u8], w: u32, h: u32, dx: i32, dy: i32) -> Vec<u8> {
             let sx = x - dx;
             let sy = y - dy;
             if sx >= 0 && sy >= 0 && (sx as u32) < w && (sy as u32) < h {
-                out[(y as u32 * w + x as u32) as usize] =
-                    src[(sy as u32 * w + sx as u32) as usize];
+                out[(y as u32 * w + x as u32) as usize] = src[(sy as u32 * w + sx as u32) as usize];
             }
         }
     }

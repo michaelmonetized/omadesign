@@ -155,11 +155,11 @@ fn schedule(scene: &str) -> Vec<Action> {
             event(1.6, ScrollAt(At(810., 720.), -380.)),
             drag(2.4, 0.8, Move(Any("Learn with AI"))),
             event(3.3, Click(Any("Learn with AI"))),
-            event(3.8, Expect("Ask anything…")),
+            event(3.8, Expect("Design with agent")),
             drag(4.2, 3., Type("How do I make a responsive landing page?")),
             event(7.6, Expect("How do I make a responsive landing page?")),
-            drag(8.1, 0.7, Move(Any("Cancel"))),
-            event(9., Click(Any("Cancel"))),
+            drag(8.1, 0.7, Move(Any("Agent"))),
+            event(9., Click(Any("Agent"))),
             drag(9.6, 0.7, Move(Any("Create with agent"))),
             event(10.5, Click(Any("Create with agent"))),
             drag(
@@ -171,8 +171,8 @@ fn schedule(scene: &str) -> Vec<Action> {
                 16.2,
                 Expect("Create an editable poster for a late-night listening party."),
             ),
-            drag(17., 0.8, Move(Any("Cancel"))),
-            event(18., Click(Any("Cancel"))),
+            drag(17., 0.8, Move(Any("Agent"))),
+            event(18., Click(Any("Agent"))),
             drag(18.8, 0.8, Move(At(850., 80.))),
         ],
         "layout" => vec![
@@ -265,6 +265,33 @@ fn schedule(scene: &str) -> Vec<Action> {
             event(38.6, Click(Text("Multiply"))),
             event(39.2, Click(Any("Normal"))),
         ],
+        "pixel-selection" => {
+            let mut actions = vec![drag(
+                1.0,
+                1.0,
+                Drag(World(180.0, 180.0), World(480.0, 430.0)),
+            )];
+            for (index, label) in [
+                "Move…",
+                "Resize…",
+                "Grow…",
+                "Shrink…",
+                "Feather…",
+                "Reshape…",
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let at = 3.0 + index as f32 * 3.0;
+                actions.push(event(at, Click(Any("Select"))));
+                actions.push(event(at + 0.4, Click(Any(label))));
+                actions.push(event(
+                    at + 2.5,
+                    Click(Any(if index == 5 { "Cancel" } else { "Apply" })),
+                ));
+            }
+            actions
+        }
         "pixel" => vec![
             drag(1., 1.2, Delta(Field("Size"), 14.)),
             drag(3., 2.2, Drag(World(500., 655.), World(630., 730.))),
@@ -648,7 +675,7 @@ fn seed(scene: &str) -> Studio {
             }
             s.photo.select_image(0);
         }
-        "pixel" => {
+        "pixel" | "pixel-selection" => {
             let img =
                 omadesign::photo::load_file(Path::new("examples/site-showcase/pixel-original.png"))
                     .unwrap();
@@ -670,6 +697,10 @@ fn seed(scene: &str) -> Studio {
             s.brush.opacity = 0.55;
             s.brush.flow = 0.6;
             s.brush.hardness = 0.45;
+            if scene == "pixel-selection" {
+                s.active_layer = Some(0);
+                s.tool = Tool::EllipseMarquee;
+            }
         }
         _ => {
             let file = if scene == "motion" {
@@ -762,6 +793,7 @@ impl Capture {
             "design" => 42,
             "photo" => 24,
             "pixel" | "motion" | "brand-kit" => 30,
+            "pixel-selection" => 22,
             _ => panic!("unknown scene"),
         };
         let mut actions = schedule(&scene);
