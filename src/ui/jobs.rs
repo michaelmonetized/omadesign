@@ -7,6 +7,7 @@ pub(super) struct Progress {
     done: AtomicU32,
     total: AtomicU32,
     cancel: AtomicBool,
+    stage: Mutex<String>,
 }
 
 impl Progress {
@@ -15,6 +16,7 @@ impl Progress {
             done: AtomicU32::new(0),
             total: AtomicU32::new(total),
             cancel: AtomicBool::new(false),
+            stage: Mutex::new(String::new()),
         })
     }
 
@@ -25,6 +27,27 @@ impl Progress {
     pub(super) fn cancelled(&self) -> bool {
         self.cancel.load(Ordering::Relaxed)
     }
+}
+
+impl crate::ml::Progress for Progress {
+    fn report(&self, stage: &str, done: usize, total: usize) {
+        if let Ok(mut current) = self.stage.lock() {
+            *current = stage.into();
+        }
+        self.total
+            .store(total.min(u32::MAX as usize) as u32, Ordering::Relaxed);
+        self.done
+            .store(done.min(u32::MAX as usize) as u32, Ordering::Relaxed);
+    }
+    fn cancelled(&self) -> bool {
+        self.cancelled()
+    }
+}
+
+pub(super) fn stage<T: Send + 'static>(ctx: &egui::Context, id: &'static str) -> String {
+    ctx.data(|d| d.get_temp::<Job<T>>(egui::Id::new(id)))
+        .and_then(|j| j.progress.stage.lock().ok().map(|s| s.clone()))
+        .unwrap_or_default()
 }
 
 // A window owns its request. Removing it drops the receiver, so a late network

@@ -26,6 +26,8 @@ pub mod layout_prototype;
 pub mod layout_templates;
 pub mod layout_tokens;
 pub mod motion;
+pub mod ml;
+pub mod background_removal;
 pub mod motion_presets;
 pub mod paint;
 pub mod palette;

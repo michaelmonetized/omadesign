@@ -24,7 +24,7 @@ pub fn show(ctx: &egui::Context, studio: &mut Studio) {
         });
         ui.add_space(8.);
         ui.horizontal(|ui| {
-            for (page, label) in [(0, "Config"), (1, "Update"), (2, "About")] {
+            for (page, label) in [(0, "Config"), (1, "Update"), (2, "About"), (3, "Credits")] {
                 if ui
                     .add_enabled(
                         !studio.updates.freezing,
@@ -43,6 +43,7 @@ pub fn show(ctx: &egui::Context, studio: &mut Studio) {
             .show(ui, |ui| match studio.settings_page {
                 1 => update(ui, studio),
                 2 => about(ui, studio),
+                3 => super::credits::show(ui),
                 _ => config(ui, studio),
             });
     });

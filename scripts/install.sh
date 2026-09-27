@@ -26,6 +26,11 @@ if [ -f "$SCRIPT_DIR/../Cargo.toml" ]; then
   SKILL_DIR="$ROOT_DIR/skills"
   DOCS_DIR="$ROOT_DIR/docs"
   DOCS_INDEX="$ROOT_DIR/site/public/llms.txt"
+  case "$(uname -m)" in aarch64) ML_ARCH=aarch64 ;; x86_64) ML_ARCH=x64 ;; *) echo 'Unsupported runtime architecture' >&2; exit 1 ;; esac
+  ML_LIB_DIR="$ROOT_DIR/target/ml-downloads/onnxruntime-linux-$ML_ARCH-1.28.0/lib"
+  ML_LICENSE_DIR="$ROOT_DIR/vendor/ml-notices"
+  RUST_LICENSE_DIR="$ROOT_DIR/vendor/rust-notices"
+  PHOSPHOR_LICENSE="$ROOT_DIR/assets/phosphor/LICENSE-MIT"
 else
   SOURCE_BIN="$SCRIPT_DIR/omadesign"
   DESKTOP_FILE="$SCRIPT_DIR/omadesign.desktop"
@@ -37,6 +42,14 @@ else
   SKILL_DIR="$SCRIPT_DIR/skills"
   DOCS_DIR="$SCRIPT_DIR/docs"
   DOCS_INDEX="$SCRIPT_DIR/docs/llms.txt"
+  ML_LIB_DIR="$SCRIPT_DIR/lib"
+  ML_LICENSE_DIR="$SCRIPT_DIR/licenses/ml"
+  RUST_LICENSE_DIR="$SCRIPT_DIR/licenses/rust"
+  PHOSPHOR_LICENSE="$SCRIPT_DIR/LICENSE-Phosphor"
+fi
+if [ ! -f "$ML_LIB_DIR/libonnxruntime.so.1" ] || [ ! -f "$ML_LICENSE_DIR/ONNXRuntime-ThirdPartyNotices.txt" ] || [ ! -f "$RUST_LICENSE_DIR/licenses.json" ]; then
+  echo "omadesign: installation is missing ONNX Runtime or third-party notices (source builds: run scripts/prepare-ml-runtime.sh)" >&2
+  exit 1
 fi
 if [ ! -x "$SOURCE_BIN" ]; then
   echo "omadesign: build first with cargo build --release --bin omadesign" >&2
@@ -76,6 +89,17 @@ install -Dm644 "$ICON_FILE" "$DATA/icons/hicolor/scalable/apps/omadesign.svg"
 mkdir -p "$DATA/omadesign/licenses/libraw" "$DATA/omadesign/licenses/native-notices"
 cp "$LICENSE_DIR/libraw/"* "$DATA/omadesign/licenses/libraw/"
 cp "$LICENSE_DIR/native-notices/"* "$DATA/omadesign/licenses/native-notices/"
+mkdir -p "$DATA/omadesign/lib" "$DATA/omadesign/licenses/ml" "$DATA/omadesign/licenses/rust"
+# Stage shared libraries before rename so a running process retains its inode.
+for library in "$ML_LIB_DIR/"*.so*; do
+  destination="$DATA/omadesign/lib/$(basename "$library")"
+  temporary="$(mktemp "$DATA/omadesign/lib/.runtime.XXXXXX")"
+  install -m755 "$library" "$temporary"
+  mv -f "$temporary" "$destination"
+done
+cp "$ML_LICENSE_DIR/"* "$DATA/omadesign/licenses/ml/"
+cp "$RUST_LICENSE_DIR/"* "$DATA/omadesign/licenses/rust/"
+install -Dm644 "$PHOSPHOR_LICENSE" "$DATA/omadesign/licenses/LICENSE-Phosphor"
 install -Dm644 "$SKILL_DIR/omadesign-create/SKILL.md" "$DATA/omadesign/skills/omadesign-create/SKILL.md"
 for document in MANUAL.md layout.md format-support.md cloud.md plugins.md CONTRIBUTING.md; do
   install -Dm644 "$DOCS_DIR/$document" "$DATA/omadesign/docs/$document"

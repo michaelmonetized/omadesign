@@ -2,8 +2,10 @@ mod agent;
 mod agent_picker;
 pub(crate) mod anim_export;
 mod browsers;
+mod background_removal;
 mod canvas;
 mod chrome;
+mod credits;
 mod cloud;
 mod color_picker;
 mod deform;
@@ -49,6 +51,10 @@ pub fn preview_raster_filter(
 
 pub fn preview_raster_chroma(ctx: &eframe::egui::Context, studio: &mut Studio) {
     raster::open(ctx, studio, crate::raster::Kind::ChromaKey);
+}
+
+pub fn preview_background_removal(ctx: &eframe::egui::Context, studio: &mut Studio) {
+    background_removal::open(ctx, studio);
 }
 
 pub fn present_layout(ctx: &eframe::egui::Context, studio: &mut Studio) {
@@ -97,6 +103,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         && !studio.show_preferences
         && !studio.updates.freezing
         && !pixel_selection::is_open(&ctx)
+        && !background_removal::is_open(&ctx)
         && !plugins::is_open(&ctx)
         && !welcome::modal_open(&ctx)
         && !studio.show_templates
@@ -108,6 +115,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         && !studio.updates.freezing
         && !layout_preview::is_open(&ctx)
         && !raster::is_open(&ctx)
+        && !background_removal::is_open(&ctx)
         && !pixel_selection::is_open(&ctx)
         && !plugins::is_open(&ctx)
         && !welcome::modal_open(&ctx)
@@ -119,7 +127,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     layout::poll_image(&ctx, studio);
 
     // Keep the canvas visible for previews while preventing edits behind the dialog.
-    if pixel_selection::is_open(&ctx) {
+    if pixel_selection::is_open(&ctx) || background_removal::is_open(&ctx) {
         ui.disable();
     }
 
@@ -165,6 +173,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         cloud::modal(ui, studio);
         layout_preview::show(ui, studio);
         raster::show(ui, studio);
+        background_removal::show(&ctx, studio);
         anim_export::show(ui, studio);
         pixel_selection::show(&ctx, studio);
 
@@ -177,7 +186,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     if !studio.updates.freezing {
         studio.tick_swap(&ctx);
     }
-    studio.poll_updates(&ctx, jobs::any_running(&ctx) || raster::is_open(&ctx));
+    studio.poll_updates(&ctx, jobs::any_running(&ctx) || raster::is_open(&ctx) || background_removal::is_open(&ctx));
     studio.remember_current_mode();
     crate::telemetry::activity(
         studio.persona,
@@ -203,6 +212,7 @@ pub fn scene_ready(ctx: &eframe::egui::Context, studio: &Studio) -> bool {
         && !studio.photo.is_loading_previews()
         && library::ready(ctx, studio)
         && raster::ready(ctx)
+        && background_removal::ready(ctx)
         && pixel_selection::ready(ctx)
         && (studio.persona != Persona::Photo || photo_detail::ready(ctx))
         && (!(studio.show_templates

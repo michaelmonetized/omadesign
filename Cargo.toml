@@ -20,6 +20,8 @@ name = "gen_media"
 path = "src/bin/gen_media.rs"
 
 [dependencies]
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "load-dynamic", "api-27"] }
+sha2 = "0.10"
 mlua = { version = "0.12", features = ["lua54", "vendored", "serde"] }
 ab_glyph = "0.2.32"
 base64 = "0.22"

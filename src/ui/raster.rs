@@ -64,6 +64,7 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
     });
     ui.label(RichText::new("Raster studio").strong().size(12.0));
     let mut chosen = None;
+    let mut remove_background = false;
     ui.add_enabled_ui(editable, |ui| {
         ui.horizontal(|ui| {
             for (label, bank) in [("Filters", Bank::Filters), ("Effects", Bank::Effects)] {
@@ -83,6 +84,18 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                             continue;
                         }
                         ui.menu_button(category, |ui| {
+                            if bank == Bank::Filters
+                                && category == "Key & transparency"
+                                && ui
+                                    .add_enabled(
+                                        super::background_removal::available(studio),
+                                        egui::Button::new("Remove Background…"),
+                                    )
+                                    .clicked()
+                            {
+                                remove_background = true;
+                                ui.close();
+                            }
                             for kind in Kind::ALL
                                 .into_iter()
                                 .filter(|kind| kind.bank() == bank && kind.category() == category)
@@ -109,11 +122,24 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
             chosen = Some(Kind::ChromaKey);
         }
     });
+    if ui
+        .add_enabled(
+            super::background_removal::available(studio),
+            egui::Button::new("Remove Background…"),
+        )
+        .on_hover_text("Find the subject offline and create an editable layer mask")
+        .clicked()
+    {
+        remove_background = true;
+    }
     if !editable {
         ui.small("Select an unlocked pixel layer or editable layer mask.");
     }
     if let Some(kind) = chosen {
         open(ui.ctx(), studio, kind);
+    }
+    if remove_background {
+        super::background_removal::open(ui.ctx(), studio);
     }
 }
 
