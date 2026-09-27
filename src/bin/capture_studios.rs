@@ -243,8 +243,8 @@ fn schedule(scene: &str) -> Vec<Action> {
             event(47.,Click(Any("Object"))),event(47.5,Click(Any("Type"))),event(48.,Click(Any("Release text from path"))),
             event(48.5,ModifiedClick(World(100.,320.),Modifiers{shift:true,..Modifiers::NONE})),
             event(49.,Click(Any("Object"))),event(49.5,Click(Any("Type"))),event(50.,Click(Any("Attach text to path"))),event(50.5,CheckPath("restored")),
-            event(51.,Click(World(100.,320.))),event(51.5,Key(egui::Key::Delete,Modifiers::NONE)),event(52.,CheckPath("guide-deleted")),
-            event(53.,Key(egui::Key::Z,ctrl())),event(54.,CheckPath("restored")),event(55.,Click(FirstPathText)),
+            event(50.7,Click(World(930.,610.))),event(51.,Click(World(300.,120.))),event(51.3,CheckPath("before-guide-delete")),event(51.5,Key(egui::Key::Delete,Modifiers::NONE)),event(52.,CheckPath("guide-deleted")),
+            event(53.,Key(egui::Key::Z,ctrl())),event(54.,CheckPath("guide-undo")),event(55.,Click(FirstPathText)),
             event(56.,Key(egui::Key::S,ctrl())),event(57.2,ReopenSaved),event(58.2,CheckPath("restored")),
         ],
         "paragraphs" => vec![
@@ -680,6 +680,7 @@ struct Capture {
     ready_since: Instant,
     spacing_reference: Option<Geom>,
     spacing_resized: Option<Geom>,
+    path_delete_snapshot: Option<(u64, Vec<(u64, Option<u64>)>, serde_json::Value)>,
 }
 
 fn prepare_kit() -> PathBuf {
@@ -1086,7 +1087,7 @@ fn seed(scene: &str) -> Studio {
 impl Capture {
     fn new(scene: String, directory: PathBuf, probe: bool, fps: u32) -> Self {
         let mut studio = seed(&scene);
-        if matches!(scene.as_str(), "independent-effects" | "paragraphs" | "opentype" | "spacing" | "spacing-resize") {
+        if matches!(scene.as_str(), "independent-effects" | "paragraphs" | "opentype" | "spacing" | "spacing-resize" | "path-type") {
             studio.path = Some(directory.join(format!("{scene}-final.oma")));
         }
         if scene == "spacing" { studio.load_startup_preferences(); }
@@ -1138,6 +1139,7 @@ impl Capture {
             errors: vec![],
             fps,
             ready_since: Instant::now(),
+            path_delete_snapshot: None,
         }
     }
     fn verify_spacing(&mut self, stage: &str) {
@@ -1299,8 +1301,26 @@ impl Capture {
                         let texts:Vec<_>=self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter_map(|s|if let Geom::Text(t)=&s.geom{Some((s.id,t))}else{None}).collect();
                         let attached=texts.iter().filter(|(_,t)|t.on_path.is_some()).count();
                         let selected=self.studio.selection.first().and_then(|(_,id)|texts.iter().find(|(tid,_)|tid==id)).map(|(_,t)|*t);
-                        let passed=match *phase{"released"|"paste-alone"=>selected.is_some_and(|t|t.on_path.is_none()),"restored"=>attached==2,"guide-deleted"=>attached==1&&texts.len()==2,"overflow"=>selected.is_some_and(|t|t.layout.as_ref().is_some_and(|l|l.overflow)),"paste-together"=>attached==4&&texts.iter().all(|(_,t)|t.on_path.as_ref().is_none_or(|p|self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().any(|s|s.id==p.path_id))),_=>false};
-                        if !passed{self.errors.push(format!("path lifecycle {phase} failed: {attached} links"));}
+                        let current: Vec<_> = texts.iter().map(|(id,t)|(*id,t.on_path.as_ref().map(|p|p.path_id))).collect();
+                        let passed = match *phase {
+                            "released" | "paste-alone" => selected.is_some_and(|t|t.on_path.is_none()),
+                            "restored" => attached == 2,
+                            "before-guide-delete" => {
+                                let guide=self.studio.selection.first().filter(|_|self.studio.selection.len()==1).and_then(|(_,id)|self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().find(|s|s.id==*id && !matches!(s.geom,Geom::Text(_))));
+                                if let Some(guide)=guide.filter(|guide|current.iter().any(|(_,id)|*id==Some(guide.id))) {
+                                    self.path_delete_snapshot=Some((guide.id,current.clone(),serde_json::to_value(&guide.geom).unwrap()));true
+                                } else { false }
+                            },
+                            "guide-deleted" => self.path_delete_snapshot.as_ref().is_some_and(|(guide,before,_)| {
+                                !self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().any(|s|s.id==*guide) && current.len()==before.len() && before.iter().all(|(id,path)|current.contains(&(*id,if *path==Some(*guide){None}else{*path})))
+                            }),
+                            "guide-undo" => self.path_delete_snapshot.as_ref().is_some_and(|(guide,before,geom)|current==*before && self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().any(|s|s.id==*guide && serde_json::to_value(&s.geom).ok().as_ref()==Some(geom))),
+                            "overflow" => selected.is_some_and(|t|t.layout.as_ref().is_some_and(|l|l.overflow)),
+                            "paste-together" => attached==4 && texts.iter().all(|(_,t)|t.on_path.as_ref().is_none_or(|p|self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().any(|s|s.id==p.path_id))),
+                            _ => false,
+                        };
+                        if !passed{self.errors.push(format!("path lifecycle {phase} failed: {attached} links, {} texts, selection {:?}",texts.len(),self.studio.selection));}
+
                     },
                     ActionKind::Click(t) => {
                         if let Some(p) = self.target(t) {
