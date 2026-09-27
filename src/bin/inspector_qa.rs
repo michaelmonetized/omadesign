@@ -89,6 +89,14 @@ fn fixture() -> Studio {
 fn actions(issue: &str) -> VecDeque<Action> {
     use Action::*;
     match issue {
+        "154-motion" => vec![
+            Press(Key::H, Modifiers::SHIFT), Check("posed horizontal reflection"),
+            Press(Key::Z, ctrl()), Check("undo restores exact artwork"),
+            Press(Key::V, Modifiers::SHIFT), Check("posed vertical reflection"),
+            Press(Key::Z, ctrl()), Check("undo restores exact artwork"),
+            Press(Key::H, Modifiers::SHIFT), Check("posed horizontal reflection"),
+            Press(Key::S, ctrl()), Check("save reopen"),
+        ].into(),
         "154" => vec![
             Check("one flip pair in inspector"),
             Click("\u{ED6A}"),
@@ -135,6 +143,16 @@ fn actions(issue: &str) -> VecDeque<Action> {
 impl Qa {
     fn new(issue: String, output: PathBuf) -> Self {
         let mut studio = fixture();
+        if issue == "154-motion" {
+            use omadesign::motion::{Prop,Ease};
+            studio.persona=Persona::Motion;studio.playhead=0.7;
+            for (i,(_,id)) in studio.selection.clone().into_iter().enumerate() {
+                for (prop,a,b) in [(Prop::X,0.,80.),(Prop::Y,-20.,40.),(Prop::Rotation,-0.2,0.3),(Prop::Width,0.8,1.2),(Prop::Height,1.1,0.9)] {
+                    studio.doc.motion.set_key(id,prop,0.,a*(i as f32+1.),Ease::Linear);
+                    studio.doc.motion.set_key(id,prop,1.4,b*(i as f32+1.),Ease::EaseInOut);
+                }
+            }
+        }
         studio.path = Some(output.join("result.oma"));
         let original = omadesign::project::encode(&studio.doc).unwrap();
         let history = studio.history.len();
@@ -224,6 +242,23 @@ impl Qa {
     }
     fn check(&mut self, name: &str) {
         match name {
+            "posed horizontal reflection" | "posed vertical reflection" => {
+                let horizontal=name=="posed horizontal reflection";
+                let before=omadesign::project::decode(&self.original).unwrap();
+                let axis=self.studio.selection.iter().map(|&(li,id)|before.motion.pose(id,self.studio.playhead).map_bounds(before.find_shape(li,id).unwrap().world_bbox())).reduce(|a,b|a.union(b)).unwrap().center();
+                for &(li,id) in &self.studio.selection {
+                    let original=before.find_shape(li,id).unwrap();let actual=self.studio.doc.find_shape(li,id).unwrap();
+                    for t in [0.,self.studio.playhead,1.4] {
+                        let points:Vec<_>=actual.world_contours(64).into_iter().flatten().map(|p|self.studio.doc.motion.pose(id,t).map(actual.world_bbox().center(),p)).collect();
+                        for p in original.world_contours(64).into_iter().flatten() {
+                            let p=before.motion.pose(id,t).map(original.world_bbox().center(),p);
+                            let expected=if horizontal {Pt::new(2.*axis.x-p.x,p.y)}else{Pt::new(p.x,2.*axis.y-p.y)};
+                            assert!(points.iter().any(|q|(*q-expected).length()<0.003));
+                        }
+                    }
+                }
+                assert_eq!(self.studio.history.len(),self.history+1);
+            }
             "one flip pair in inspector" => {
                 for glyph in ["\u{ED6A}", "\u{ED6C}"] {
                     assert_eq!(self.labels.iter().filter(|(s, _)| s == glyph).count(), 1);
