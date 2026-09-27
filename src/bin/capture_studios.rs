@@ -59,6 +59,7 @@ enum ActionKind {
     CheckPath(&'static str),
     NativeClipboard(&'static str),
     CheckArea(&'static str),
+    Reveal(&'static str),
 }
 struct Action {
     start: u32,
@@ -204,6 +205,32 @@ fn schedule(scene: &str) -> Vec<Action> {
             event(0.7,Click(FirstPathText)),event(1.2,NativeClipboard("c")),event(1.8,Click(Any("Edit"))),event(2.2,Click(Any("Paste"))),event(3.2,CheckPath("paste-alone")),
             event(3.7,Key(egui::Key::Z,ctrl())),event(4.2,Key(egui::Key::A,ctrl())),event(4.7,NativeClipboard("c")),event(5.3,Click(Any("Edit"))),event(5.7,Click(Any("Paste"))),event(7.,CheckPath("paste-together")),event(7.5,Key(egui::Key::Z,ctrl())),
         ],
+        "area-options" => vec![
+            event(0.7,Click(Text("Arrange"))),event(1.1,Click(Text("Align"))),
+            event(2.,Click(Text("Center"))),event(3.,CheckArea("valign-center")),
+            event(4.,Click(Text("Bottom"))),event(5.,CheckArea("valign-bottom")),
+            event(6.,Click(Text("Justify"))),event(7.,CheckArea("valign-justify")),event(8.,Click(Text("Top"))),
+            drag(9.,0.8,Delta(Field("Inset top"),16.)),drag(10.,0.8,Delta(Field("Inset right"),16.)),drag(11.,0.8,Delta(Field("Inset bottom"),16.)),drag(12.,0.8,Delta(Field("Inset left"),16.)),event(13.,CheckArea("insets")),
+            event(14.,Click(Text("Clip"))),event(14.5,Click(Any("Visible"))),event(15.5,CheckArea("visible")),event(16.,Click(Text("Visible"))),event(16.5,Click(Any("Clip"))),
+            event(17.,Click(Text("Auto height"))),event(18.,CheckArea("auto-height")),event(19.,Click(Text("Auto height"))),
+            event(20.,Click(Text("Limit lines"))),event(21.,Click(Text("Clip"))),event(21.5,Click(Any("Ellipsis"))),event(22.5,CheckArea("ellipsis")),event(23.,Click(Text("Limit lines"))),
+            event(24.,Click(Any("Object"))),event(24.5,Click(Any("Type"))),event(25.,Click(Any("Convert to point text"))),event(25.5,CheckArea("point")),
+            event(26.,Click(Any("Object"))),event(26.5,Click(Any("Type"))),event(27.,Click(Any("Convert to area text"))),event(27.5,CheckArea("area")),event(27.7,Key(egui::Key::Z,ctrl())),event(27.9,Key(egui::Key::Z,ctrl())),
+            event(28.,Key(egui::Key::T,Modifiers::NONE)),event(28.2,Click(FrameText(0))),event(28.4,Key(egui::Key::Home,ctrl())),event(28.6,Click(Text("Text frame"))),drag(29.,1.5,Reveal("Line breaking")),event(31.,Click(Text("Line breaking"))),
+            drag(31.5,1.5,Reveal("Hyphenate")),event(33.5,Click(Text("Hyphenate"))),event(34.,CheckArea("hyphenated")),event(34.5,Click(Text("Hyphenation settings"))),
+            drag(35.,1.5,Reveal("Minimum word length")),drag(37.,0.8,Delta(Field("Minimum word length"),8.)),drag(38.,0.8,Delta(Field("Before hyphen"),-8.)),drag(39.,0.8,Delta(Field("After hyphen"),-8.)),
+            drag(40.,1.2,Reveal("Consecutive lines")),drag(41.5,0.8,Delta(Field("Consecutive lines"),-10.)),event(42.5,CheckArea("hyphen-limits")),
+            event(43.,Key(egui::Key::V,Modifiers::NONE)),event(43.5,Click(World(230.,210.))),event(44.,Scroll(3000.)),
+            event(45.,Click(Text("Text wrap"))),event(46.,Click(Text("None"))),event(46.5,Click(Any("Bounding box"))),
+            drag(47.,0.8,Delta(Field("Top"),16.)),drag(48.,0.8,Delta(Field("Right"),16.)),event(49.,CheckArea("wrap-box")),
+            event(50.,Click(Text("BoundingBox"))),event(50.5,Click(Any("Object shape"))),drag(51.,0.8,Delta(Field("Offset"),10.)),
+            event(52.,Click(Text("Invert: flow inside object"))),event(53.,CheckArea("wrap-inside")),event(54.,Click(Text("Invert: flow inside object"))),
+            event(55.,Click(Text("ObjectShape"))),event(55.5,Click(Any("Jump object"))),event(56.5,CheckArea("wrap-jump")),
+            event(57.,Click(Text("JumpObject"))),event(57.5,Click(Any("None"))),event(58.5,CheckArea("wrap-none")),
+            event(59.,Click(Text("None"))),event(59.5,Click(Any("Object shape"))),event(60.5,Click(Text("Ignore on locked layers"))),event(61.5,Click(Text("Wrap affects text above only"))),event(62.5,CheckArea("wrap-options")),event(62.8,Click(Text("Wrap affects text above only"))),
+            drag(63.,1.5,Drag(World(230.,210.),World(330.,280.))),event(65.,Key(egui::Key::Z,ctrl())),
+            event(66.,Key(egui::Key::S,ctrl())),event(67.2,ReopenSaved),event(68.2,CheckArea("hyphen-limits")),
+        ],
         "area-type" => vec![
             event(0.7,Key(egui::Key::T,Modifiers::NONE)),
             drag(1.1,1.3,Drag(World(70.,100.),World(420.,350.))),
@@ -230,6 +257,7 @@ Typography stays readable with deliberate hyphenation, useful overflow controls,
             event(36.,Click(Any("Object"))),event(36.5,Click(Any("Type"))),event(37.,Click(Any("Text inside shape"))),
             drag(37.5,3.,Type("A closed outline becomes an editable text frame. Words follow its interior while every hidden word stays in the original story.")),
             event(41.,Key(egui::Key::Escape,Modifiers::NONE)),event(42.,CheckArea("shape-frame")),
+            event(43.,Key(egui::Key::S,ctrl())),event(44.2,ReopenSaved),event(45.2,CheckArea("shape-frame")),
         ],
         "path-type" => vec![
             event(0.7, Key(egui::Key::T, Modifiers::NONE)),
@@ -930,13 +958,19 @@ fn seed(scene: &str) -> Studio {
             *s.doc.layers[0].kind.shapes_mut().unwrap() = vec![bg, subject];
         }
 
-        "area-type" => {
+        "area-type" | "area-options" => {
             use omadesign::{document::{Layer,Shape,Style,Fill},text_geometry::{TextWrap,WrapMode}};
             s.doc=Document::new("Area text and threaded stories · issue 150",960.,680.,96.);
             let mut circle=Shape::new(Geom::Ellipse{center:Pt::new(230.,210.),radii:Pt::splat(58.)},Style{fill:Fill::Solid(Rgba::from_hex(0xC5E2E4)),stroke:None});
-            circle.text_wrap=TextWrap{mode:WrapMode::ObjectShape,offset:[10.;4],..Default::default()};
+            circle.text_wrap=TextWrap{mode:if scene=="area-options"{WrapMode::None}else{WrapMode::ObjectShape},offset:if scene=="area-options"{[0.;4]}else{[10.;4]},..Default::default()};
             let mut layer=Layer::vector("Wrap illustration");layer.kind.shapes_mut().unwrap().push(circle);s.doc.layers.push(layer);
             s.active_layer=Some(1);s.persona=Persona::Design;s.tool=Tool::Text;s.text_px=25.;s.style=Style{fill:Fill::Solid(Rgba::from_hex(0x18364A)),stroke:None};
+            if scene=="area-options" {
+                s.place_area_text(omadesign::geom::Bounds::from_min_size(Pt::new(70.,100.),Pt::new(350.,250.)));
+                s.type_insert("Typography remains editable through hyphenation, transformation, internationalization, and collaboration. A circular illustration can push the words aside, make them jump below its bounds, or contain them inside its outline. Every character stays in the story when visible text is clipped or ends in an ellipsis.\nThe next paragraph retains its own settings, while auto height, insets and vertical alignment provide practical control over the frame.");
+                s.commit_type_edit();s.tool=Tool::Select;
+            }
+
         }
         "path-type" | "path-clipboard" => {
             use omadesign::{geom::Anchor,document::{Shape,Style,Fill,Stroke}};
@@ -1125,7 +1159,7 @@ fn seed(scene: &str) -> Studio {
 impl Capture {
     fn new(scene: String, directory: PathBuf, probe: bool, fps: u32) -> Self {
         let mut studio = seed(&scene);
-        if matches!(scene.as_str(), "independent-effects" | "paragraphs" | "opentype" | "spacing" | "spacing-resize" | "path-type") {
+        if matches!(scene.as_str(), "independent-effects" | "paragraphs" | "opentype" | "spacing" | "spacing-resize" | "path-type" | "area-type" | "area-options") {
             studio.path = Some(directory.join(format!("{scene}-final.oma")));
         }
         if scene == "spacing" { studio.load_startup_preferences(); }
@@ -1136,7 +1170,8 @@ impl Capture {
             "spacing-resize" => 18,
             "path-type" => 60,
             "path-clipboard" => 9,
-            "area-type" => 44,
+            "area-type" => 47,
+            "area-options" => 70,
             "welcome-browse" => 23,
             "welcome-vector" | "welcome-layout" => 9,
             "welcome-raster" => 8,
@@ -1337,7 +1372,24 @@ impl Capture {
                     ActionKind::CheckArea(phase) => {
                         let frames:Vec<_>=self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter_map(|s|if let Geom::Text(t)=&s.geom{t.frame.as_ref().map(|_|(s.id,t))}else{None}).collect();
                         let count=frames.len();let head=frames.iter().find(|(_,t)|t.thread.as_ref().is_none_or(|t|t.prev.is_none())).map(|(_,t)|*t);
+                        let wrap=self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().find(|s|matches!(s.geom,Geom::Ellipse{..})).map(|s|&s.text_wrap);
                         let passed=match *phase{
+                            "valign-center"=>head.is_some_and(|t|t.frame.as_ref().unwrap().valign==omadesign::text_geometry::VAlign::Center),
+                            "valign-bottom"=>head.is_some_and(|t|t.frame.as_ref().unwrap().valign==omadesign::text_geometry::VAlign::Bottom),
+                            "valign-justify"=>head.is_some_and(|t|t.frame.as_ref().unwrap().valign==omadesign::text_geometry::VAlign::Justify),
+                            "insets"=>head.is_some_and(|t|t.frame.as_ref().unwrap().inset.iter().all(|v|*v>0.)),
+                            "visible"=>head.is_some_and(|t|t.frame.as_ref().unwrap().overflow==omadesign::text_geometry::Overflow::Visible && t.layout.as_ref().is_some_and(|l|l.overflow)),
+                            "auto-height"=>head.is_some_and(|t|t.frame.as_ref().is_some_and(|f|f.auto_height&&f.size.y>250.)),
+                            "point"=>count==0 && self.studio.selected_type().is_some_and(|t|t.frame.is_none()),
+                            "area"=>count==1,
+                            "hyphenated"=>head.is_some_and(|t|omadesign::text::paragraph_style(t,0).hyphenate),
+                            "hyphen-limits"=>head.is_some_and(|t|omadesign::text::paragraph_style(t,0).hyphen.is_some_and(|h|h.min_word_len!=6&&h.min_before==1&&h.min_after==1&&h.max_consecutive==0)),
+                            "wrap-box"=>wrap.is_some_and(|w|w.mode==omadesign::text_geometry::WrapMode::BoundingBox&&w.offset[0]>0.&&w.offset[1]>0.),
+                            "wrap-inside"=>wrap.is_some_and(|w|w.mode==omadesign::text_geometry::WrapMode::ObjectShape&&w.invert&&w.offset[0]>0.),
+                            "wrap-jump"=>wrap.is_some_and(|w|w.mode==omadesign::text_geometry::WrapMode::JumpObject),
+                            "wrap-none"=>wrap.is_some_and(|w|w.mode==omadesign::text_geometry::WrapMode::None),
+                            "wrap-options"=>wrap.is_some_and(|w|w.ignore_locked) && self.studio.doc.text_wrap_above_only,
+
                             "shape-frame"=>frames.iter().any(|(_,t)|t.frame.as_ref().is_some_and(|f|f.contour.is_some())&&!t.contours.is_empty()),
                             "created"=>count==1&&head.is_some_and(|t|t.layout.as_ref().is_some_and(|l|l.overflow)),
                             "two"=>count==2&&frames.iter().all(|(_,t)|t.thread.is_some()),
@@ -1467,7 +1519,7 @@ impl Capture {
                         if !path.exists(){self.errors.push(format!("native saved file missing: {}",path.display()));}else{self.studio.open_path(path);}
                     }
                     ActionKind::VerifySpacing(stage) => self.verify_spacing(stage),
-                    ActionKind::Type(_) => {}
+                    ActionKind::Type(_) | ActionKind::Reveal(_) => {}
                     ActionKind::Drag(from, to) => a.points = self.target(from).zip(self.target(to)),
                     ActionKind::Delta(t, dx) => {
                         a.points = self.target(t).map(|p| (p, p + egui::vec2(*dx, 0.)))
@@ -1490,6 +1542,13 @@ impl Capture {
                         self.errors
                             .push(format!("frame {}: {:?} target missing", self.frame, a.kind));
                     }
+                }
+            }
+            if let ActionKind::Reveal(label) = &a.kind {
+                let shown=self.labels.iter().any(|(text,r)|text==label&&r.left()>1100.&&r.top()>80.&&r.bottom()<650.);
+                if !shown {
+                    let p=egui::pos2(1440.,520.);self.cursor=p;self.events.extend([Event::PointerMoved(p),Event::MouseWheel{unit:egui::MouseWheelUnit::Point,delta:egui::vec2(0.,-60.),modifiers:Modifiers::NONE,phase:egui::TouchPhase::Move}]);
+                    if self.frame==a.end {self.errors.push(format!("inspector label {label} not revealed"));}
                 }
             }
             if let ActionKind::Type(text) = &a.kind {
@@ -1706,11 +1765,11 @@ impl eframe::App for Capture {
                         Err(error) => self.errors.push(format!("Native save failed: {error}")),
                     }
                 }
-                if self.scene=="area-type" {
-                    let encoded=omadesign::project::encode(&self.studio.doc).unwrap();fs::write(self.directory.join("area-type.oma"),&encoded).unwrap();let restored=omadesign::project::decode(&encoded).unwrap();
+                if self.scene=="area-type" || self.scene=="area-options" {
+                    let encoded=omadesign::project::encode(&self.studio.doc).unwrap();fs::write(self.directory.join(format!("{}.oma",self.scene)),&encoded).unwrap();let restored=omadesign::project::decode(&encoded).unwrap();
                     let frames:Vec<_>=restored.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter_map(|s|if let Geom::Text(t)=&s.geom{t.frame.as_ref().map(|f|serde_json::json!({"id":s.id,"frame":f,"thread":t.thread,"source_characters":t.content.chars().count(),"visible_range":t.layout.as_ref().map(|l|(l.visible_start,l.visible_end)),"overflow":t.layout.as_ref().is_some_and(|l|l.overflow)}))}else{None}).collect();
-                    fs::write(self.directory.join("area-type-export.svg"),omadesign::svg::export(&restored).unwrap()).unwrap();
-                    fs::write(self.directory.join("area-type-result.json"),serde_json::to_vec_pretty(&serde_json::json!({"saved_and_reopened":true,"frames":frames,"unresolved_input_targets":self.errors,"renderer":"native WGPU","recording_frames":self.frame})).unwrap()).unwrap();
+                    fs::write(self.directory.join(format!("{}-export.svg",self.scene)),omadesign::svg::export(&restored).unwrap()).unwrap();
+                    fs::write(self.directory.join(format!("{}-result.json",self.scene)),serde_json::to_vec_pretty(&serde_json::json!({"saved_and_reopened":true,"frames":frames,"unresolved_input_targets":self.errors,"renderer":"native WGPU","recording_frames":self.frame})).unwrap()).unwrap();
                     assert!(self.errors.is_empty(),"all area text native assertions and UI targets pass");
                 }
                 if self.scene=="path-type" || self.scene=="path-clipboard" {
