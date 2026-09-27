@@ -1,0 +1,14 @@
+{
+  "application": "installed portable ARM64 Omadesign",
+  "chooser": "Save File - Synchro desktop portal",
+  "input_document": "upscaled-cutout.oma",
+  "file_menu_shortcut": "Ctrl+E",
+  "ai_factor": 2,
+  "output_dimensions": [
+    640,
+    424
+  ],
+  "sha256": "b19b6427cb8cf9464af32d9a17373aaaa921c3c7fafc50014ae7443362e91376",
+  "alpha_preserved": true,
+  "native_chooser_saved": true
+}

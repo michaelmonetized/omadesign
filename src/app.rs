@@ -4406,7 +4406,6 @@ impl eframe::App for Studio {
         self.poll_file_jobs(&ctx);
         self.poll_clipboard_jobs(&ctx);
         self.photo.poll(&ctx);
-        crate::ui::photo::poll_jobs(&ctx, self);
         crate::ui::anim_export::poll(&ctx, self);
         crate::ui::run(ui, self);
         if !self.file_dialog_pending() {

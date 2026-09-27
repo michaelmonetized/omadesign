@@ -1,0 +1,28 @@
+{
+  "release_url": "https://github.com/michaelmonetized/omadesign/releases/tag/upscale-models-v1",
+  "draft": false,
+  "prerelease": true,
+  "all_model_asset_digests_match_manifest": true,
+  "models": [
+    {
+      "name": "realesr-general-x4v3.onnx",
+      "size": 4866419,
+      "sha256": "74b0bf4bdad2868e256ef722980586b7ff1a8b2c9ba0b8e526498cd28acf5b80"
+    },
+    {
+      "name": "RealESRGAN_x4plus.onnx",
+      "size": 67051641,
+      "sha256": "43c406760a1e6ddb5521a99b2eee6b069a502b9543a2a859857a6ff4ffa76481"
+    },
+    {
+      "name": "RealESRGAN_x2plus.onnx",
+      "size": 67075996,
+      "sha256": "ffa94b343026d70312435c5ce846f85ef705a5f1532a33519df32d8e060ccf3a"
+    },
+    {
+      "name": "RealESRGAN_x4plus_anime_6B.onnx",
+      "size": 17939966,
+      "sha256": "719628b3df414426684930099720b8b37853f13b3b6a37f3adf94485dc7b25d1"
+    }
+  ]
+}

@@ -221,57 +221,16 @@ fn file_menu(ui: &mut Ui, studio: &mut Studio) {
         }
         ui.separator();
         ui.label(RichText::new("Export").small().color(fg_weak()));
+        if ui.add(Button::new("Export…").shortcut_text("Ctrl+E")).clicked() {
+            super::export_dialog::open(ui.ctx(), studio, crate::export::Format::Png, false);
+            ui.close();
+        }
         if studio.persona == Persona::Photo {
-            ui.add_enabled_ui(!super::photo::is_exporting(ui.ctx()), |ui| {
-                for (label, extension) in [
-                    ("Export PNG…  Ctrl+E", "png"),
-                    ("Export TIFF…", "tif"),
-                    ("Export JPEG…", "jpg"),
-                ] {
-                    if ui.button(label).clicked() {
-                        super::photo::export_developed(ui.ctx(), studio, extension);
-                        ui.close();
-                    }
-                }
-            });
-            return;
-        }
-        ui.horizontal(|ui| {
-            ui.label(RichText::new("Scale").small().color(fg_weak()));
-            for s in [1u32, 2, 3] {
-                if ui
-                    .selectable_label(studio.export_scale == s, format!("{s}×"))
-                    .clicked()
-                {
-                    studio.export_scale = s;
-                }
-            }
-        });
-        if ui
-            .add(Button::new("Export PNG…").shortcut_text("Ctrl+E"))
-            .clicked()
-        {
-            studio.export_png();
-            ui.close();
-        }
-        if ui.button("Export JPEG…").clicked() {
-            studio.export_jpeg();
-            ui.close();
-        }
-        if ui.button("Export SVG…").clicked() {
-            studio.export_svg();
-            ui.close();
-        }
-        for (label, extension) in [
-            ("Export Photoshop PSD…", "psd"),
-            ("Export large Photoshop PSB…", "psb"),
-            ("Export layered PDF…", "pdf"),
-            ("Export OpenRaster…", "ora"),
-        ] {
-            if ui.button(label).clicked() {
-                studio.export_layered(extension);
+            if ui.button("AI upscale photo…").clicked() {
+                super::export_dialog::open(ui.ctx(), studio, crate::export::Format::Png, true);
                 ui.close();
             }
+            return;
         }
         if ui.button("Export animated SVG…").clicked() {
             studio.export_animated_svg();

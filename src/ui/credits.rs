@@ -30,6 +30,18 @@ pub(super) fn show(ui: &mut egui::Ui) {
     ui.label("Omadesign includes the following third-party components. Full license and copyright notices are available here offline and in the installed licenses folder.");
     for (name, copyright, license, texts) in [
         (
+            "Real-ESRGAN · General x4v3, x4plus, x2plus, anime 6B",
+            "Copyright (c) 2021, Xintao Wang",
+            "BSD-3-Clause",
+            &[include_str!("../../vendor/ml-notices/RealESRGAN-LICENSE")][..],
+        ),
+        (
+            "BasicSR · model architecture and conversion",
+            "Copyright 2018–2022 BasicSR Authors",
+            "Apache-2.0",
+            &[include_str!("../../vendor/ml-notices/BasicSR-LICENSE")][..],
+        ),
+        (
             "U²-Net / U²-NetP",
             "Xuebin Qin, Zichen Zhang, Chenyang Huang, Masood Dehghan, Osmar R. Zaiane, Martin Jagersand",
             "Apache-2.0",

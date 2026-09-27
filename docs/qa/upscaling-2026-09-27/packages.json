@@ -1,0 +1,26 @@
+{
+  "version": "0.6.0 (inherited base version; local QA archives only)",
+  "packages": [
+    {
+      "architecture": "aarch64",
+      "archive": "omadesign-0.6.0-aarch64-unknown-linux-gnu.tar.gz",
+      "archive_sha256": "754b39c291eac95c6b0730bcf1426e630c8bb4bdf938d275b50c6033f3937d17",
+      "binary_sha256": "41ac716b7eed0800fe6b8dc5136c9174e44c9fc3285ee7eb4cd43784684b22ee",
+      "glibc_ceiling": "2.35",
+      "licenses_verified": true,
+      "native_execution": true
+    },
+    {
+      "architecture": "x86_64",
+      "archive": "omadesign-0.6.0-x86_64-unknown-linux-gnu.tar.gz",
+      "archive_sha256": "3c63e6e6d499ab142f57e00b2d69e8811813815b972f937e616de00fed0911e4",
+      "binary_sha256": "fd293af0d47e2bfda8550a1c2107177060b8e0a9d41785f299c9f5849f9091d8",
+      "glibc_ceiling": "2.35",
+      "licenses_verified": true,
+      "native_execution": false
+    }
+  ],
+  "arm64_archive_install_binary_matches": true,
+  "packaging": "Local Zig builds; final packages assembled using unchanged package() function from scripts/release.sh",
+  "no_application_release": true
+}

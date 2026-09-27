@@ -1,0 +1,17 @@
+{
+  "factor": 4.0,
+  "model": "RealESRGAN_x4plus_anime_6B.onnx",
+  "output": [
+    1280,
+    848
+  ],
+  "runtime": "ONNX Runtime 1.28 CPU",
+  "seconds": 5.767666999,
+  "sha256": "719628b3df414426684930099720b8b37853f13b3b6a37f3adf94485dc7b25d1",
+  "source": [
+    320,
+    212
+  ],
+  "tile": 192,
+  "tiles": 4
+}

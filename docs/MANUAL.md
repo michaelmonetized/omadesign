@@ -264,9 +264,21 @@ In **Pixel**, select an unlocked pixel layer and choose **Remove Background…**
 
 Compare **Preview**, **Original**, and **Mask**. **Radius** controls how far the guided filter follows image detail; **Epsilon** controls how strongly it respects image edges. Positive **Shift edge** expands the mask and negative values contract it. **Matte contrast** tightens or softens the transition. These controls reuse the cached subject mask without repeating inference. **Intersect with existing mask** combines with an existing mask; unchecked replaces it inside the selection.
 
-**Cancel** stops the job and leaves the document untouched. **Apply mask** commits one undo step and selects the mask for brush cleanup. Original pixels remain unchanged, including alpha. Difficult hair, transparent subjects, and ambiguous backgrounds may still need mask painting. The Real-ESRGAN upscale-first and upscale-cutout controls are tracked in #145, following this background-removal core.
+**Cancel** stops the job and leaves the document untouched. **Apply mask** commits one undo step and selects the mask for brush cleanup. With original dimensions retained, source pixels remain unchanged, including alpha. Difficult hair, transparent subjects, and ambiguous backgrounds may still need mask painting.
 
 **Settings → Credits** lists bundled libraries, models, fonts, and icons with full offline license and copyright notices. Source builds must run `sh scripts/prepare-ml-runtime.sh` before using background removal; packaged installations include the runtime.
+
+Choose **Upscale ×2/×4 before removal** for small subjects; the dialog suggests it when the layer or selection is under 512 px on its short side. **Keep original pixel dimensions** computes the matte at higher resolution and returns it to the original grid. Uncheck it to keep the larger pixels and mask. After creating a mask, reopen the dialog and choose **Upscale cutout** to enlarge its RGB and mask together. Placement and size on the canvas stay fixed; pixel resolution increases. Each Apply is one undo step. Cancel discards the preview. Pixel layers and background removal support up to 64 megapixels, including the processing image.
+
+### AI upscaling and still export
+
+**File → Export…** or **Ctrl+E** opens the export dialog. Choose PNG, JPEG or TIFF, a render scale (1–8×), and optionally **AI upscale** at 2×, 4× or a custom factor up to 32×. The displayed dimensions are the final file size: render scale is applied first, then AI scale. Factors larger than a model's native scale use repeated passes, with the last pass resampled to the exact rounded dimensions. Still exports support up to 512 megapixels and 65,536 pixels per side, subject to available memory. SVG, PSD/PSB, PDF and OpenRaster retain native vector/layer structure and do not offer AI upscaling. Animation export remains separate.
+
+In **Photo**, **AI upscale photo…** saves and opens an enlarged copy of the selected photo with its current crop, rotation and adjustments. The camera original and its settings are preserved. Photo copies support up to 64 megapixels; use ordinary Export for larger files. AI output is 8-bit RGB with separately resized transparency. Without AI, RAW PNG and TIFF exports retain 16-bit precision.
+
+The fast **General** Real-ESRGAN model is bundled and works without networking on a fresh installation. Optional **Photo high quality ×4**, **Photo native ×2**, and **Illustration ×4** models download only when you press Download; their sizes and SHA-256 are checked before installation and every load. Models stay in the Omadesign user data directory for subsequent offline use. Settings → Credits and the installed `licenses/ml` folder contain full notices.
+
+Rendering, downloads, AI inference and encoding run in background jobs. Progress shows the current pass and completed tiles. Cancel discards unfinished output, and files are atomically replaced only after a complete successful export. Large images use one overlapping tile per inference; image/output storage still grows with pixel count.
 
 ### Masks
 

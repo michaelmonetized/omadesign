@@ -1596,6 +1596,12 @@ pub enum Cmd {
         before: Option<Pixels>,
         after: Option<Pixels>,
     },
+    /// Replace a pixel grid and its mask together, retaining the layer transform.
+    UpscaleLayer {
+        index: usize,
+        before: (Pixels, Option<Pixels>, Pt),
+        after: (Pixels, Option<Pixels>, Pt),
+    },
     AddShape {
         layer: usize,
         shape: Shape,
@@ -2040,6 +2046,11 @@ fn invert_cmd(cmd: Cmd) -> Cmd {
             before: after,
             after: before,
         },
+        Cmd::UpscaleLayer { index, before, after } => Cmd::UpscaleLayer {
+            index,
+            before: after,
+            after: before,
+        },
         Cmd::SetLayerMask {
             index,
             before,
@@ -2305,6 +2316,16 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
         } => {
             if let Some(shape) = doc.find_shape_mut(*layer, *id) {
                 shape.mask = after.clone();
+            }
+        }
+        Cmd::UpscaleLayer { index, after, .. } => {
+            if let Some(layer) = doc.layers.get_mut(*index) {
+                if let LayerKind::Raster { pixels, size, .. } = &mut layer.kind {
+                    *pixels = after.0.clone();
+                    pixels.touch();
+                    *size = after.2;
+                }
+                layer.mask = after.1.clone();
             }
         }
         Cmd::SetLayerMask { index, after, .. } => {

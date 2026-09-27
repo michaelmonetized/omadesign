@@ -1,0 +1,10 @@
+{
+  "max_channel_error": 0,
+  "mean_channel_error": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "seam_x": 768,
+  "seam_y": 768
+}

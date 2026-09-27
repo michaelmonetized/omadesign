@@ -19,6 +19,7 @@ done
 sh scripts/prepare-ml-runtime.sh aarch64
 sh scripts/prepare-ml-runtime.sh x86_64
 printf '%s  %s\n' 309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8 assets/models/u2netp.onnx | sha256sum -c
+printf '%s  %s\n' 74b0bf4bdad2868e256ef722980586b7ff1a8b2c9ba0b8e526498cd28acf5b80 assets/models/realesr-general-x4v3.onnx | sha256sum -c
 
 chmod +x scripts/zig-cc scripts/zig-cc-aarch64 scripts/zig-cc-x86_64 \
   scripts/zig-cxx-aarch64 scripts/zig-cxx-x86_64

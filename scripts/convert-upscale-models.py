@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Reproduce the pinned fp32 CPU models from BSD-licensed upstream weights.
 
-Based on Real-ESRGAN scripts/pytorch2onnx.py: load params_ema, eval, export.
+Based on Real-ESRGAN scripts/pytorch2onnx.py: load params/params_ema, eval, export.
 Extends it to SRVGG/native x2/anime and dynamic spatial axes. Build-time only.
 Python 3.14, torch 2.9.1, onnx 1.20.0, numpy 2.4.1.
 Usage: python scripts/convert-upscale-models.py [output-directory]
