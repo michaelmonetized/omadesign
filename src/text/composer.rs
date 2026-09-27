@@ -119,8 +119,9 @@ pub fn compose(run: &TypeRun) -> Arc<Vec<LayoutLine>> {
             if style.hyphenate {
                 let settings = style.hyphen.clone().unwrap_or_default();
                 if settings.max_consecutive == 0 || consecutive_hyphens < settings.max_consecutive {
-                    for (word_byte, word) in rest.unicode_word_indices() {
-                        if !settings.last_word && word_byte + word.len() == rest.len() {
+                    let words: Vec<_> = rest.unicode_word_indices().collect();
+                    for (index, &(word_byte, word)) in words.iter().enumerate() {
+                        if !settings.last_word && index + 1 == words.len() {
                             continue;
                         }
                         for offset in hyphen_points(word, &settings) {
@@ -236,6 +237,12 @@ pub fn compose(run: &TypeRun) -> Arc<Vec<LayoutLine>> {
                         let at=base+paragraph[..split].chars().count();
                         if run.spans.iter().any(|s|s.no_break&&s.start<at&&at<s.end)||paragraph[..split].ends_with(['\u{a0}','\u{2011}','\u{2060}'])||paragraph[split..].starts_with(['\u{a0}','\u{2011}','\u{2060}']) {continue;}
 
+                        let candidate = paragraph[split..b].trim();
+                        if candidate.unicode_words().count() <= rule.words
+                            || candidate.chars().count() < rule.characters
+                        {
+                            continue;
+                        }
                         if trim_width(&shape_line(
                             run,
                             face.as_ref(),
@@ -703,5 +710,37 @@ mod tests {
         run.content="カタカナ".into();run.wrap_width=None;let word_width=compose(&run)[0].width;
         run.content.push_str(" a");run.wrap_width=Some(word_width+0.5);run.update_paragraphs(0,6,|p|p.runt=Some(Default::default()));
         let lines=compose(&run);assert_eq!(lines.len(),2);assert!(lines[0].text.starts_with("カタカナ"),"Runt adjustment must move whole Unicode words");
+    }
+}
+
+
+#[cfg(test)]
+mod review_regressions {
+    use super::*;
+    fn run(text: &str) -> TypeRun {
+        TypeRun { content: text.into(), font: concat!(env!("CARGO_MANIFEST_DIR"), "/tests/assets/fonts/EBGaramond.ttf").into(), px: 24., ..Default::default() }
+    }
+    #[test]
+    fn last_word_hyphenation_ignores_trailing_punctuation_and_whitespace() {
+        for suffix in ["", ".", ",  ", "!\u{2003}", "’)"] {
+            let mut sample = run(&format!("communication{suffix}"));
+            sample.wrap_width = Some(measure(&run("communi-")).0 + 0.1);
+            sample.update_paragraphs(0, 0, |p| { p.hyphenate = true; p.hyphen = Some(crate::geom::HyphenSettings { last_word: false, ..Default::default() }); });
+            assert!(compose(&sample).iter().all(|line| !line.hyphenated), "last word unexpectedly hyphenated: {suffix:?}");
+            sample.paragraphs[0].hyphen.as_mut().unwrap().last_word = true;
+            assert!(compose(&sample).iter().any(|line| line.hyphenated), "fixture must offer dictionary hyphens: {suffix:?}");
+        }
+        let mut sample = run("communication follows."); sample.wrap_width = Some(measure(&run("communi-")).0 + 0.1);
+        sample.update_paragraphs(0,0,|p|{p.hyphenate=true;p.hyphen=Some(crate::geom::HyphenSettings{last_word:false,..Default::default()});});
+        assert!(compose(&sample)[0].hyphenated, "earlier words remain eligible");
+    }
+    #[test]
+    fn runt_repair_continues_until_both_configured_thresholds_are_satisfied() {
+        let mut sample = run("a b c d e f g h i j");
+        sample.wrap_width = Some(measure(&run("a b c d e f g h")).0 + 0.1);
+        sample.update_paragraphs(0, 0, |p| p.runt = Some(crate::geom::RuntRule { words: 3, characters: 7 }));
+        let lines=compose(&sample); let last=&lines.last().unwrap().text;
+        assert!(last.unicode_words().count() > 3 && last.trim().chars().count() >= 7, "runt remains after first fitting split: {last:?}");
+        assert!(lines.iter().all(|line|line.width<=sample.wrap_width.unwrap()+0.01));
     }
 }

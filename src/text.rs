@@ -538,6 +538,16 @@ pub fn selection_rects(run:&TypeRun,a:usize,b:usize)->Vec<(Pt,Pt)> {
     }).collect()
 }
 pub fn char_to_byte(s:&str,char_idx:usize)->usize {s.char_indices().nth(char_idx).map(|(i,_)|i).unwrap_or(s.len())}
+pub fn paragraph_spacing_css(run: &TypeRun, style: &crate::geom::ParagraphStyle) -> String {
+    // CSS word spacing adds to the font's space advance; the inspector stores
+    // a percentage of that advance. Measure the same space as the composer.
+    let space_run = TypeRun { content: " ".into(), wrap_width: None, paragraphs: vec![], spans: vec![], ..run.clone() };
+    let space = compose_plain(&space_run)[0].glyphs.iter().map(|glyph| glyph.advance).sum::<f32>();
+    let untracked = TypeRun { tracking: 0., ..space_run };
+    let base_space = compose_plain(&untracked)[0].glyphs.iter().map(|glyph| glyph.advance).sum::<f32>();
+    let px = run.px.max(1.);
+    format!("--oma-paragraph-letter-spacing:{}em;letter-spacing:calc({}em + var(--oma-paragraph-letter-spacing));word-spacing:{}em;", style.letter_spacing[1] / 100., (space - base_space) / px, space * (style.word_spacing[1] / 100. - 1.) / px)
+}
 pub fn paragraph_html(run:&TypeRun)->String {
     use crate::geom::{TextAlign,LastLine,BreakMode};
     let escape=|s:&str|s.replace('&',"&amp;").replace('<',"&lt;").replace('>',"&gt;");
@@ -545,10 +555,31 @@ pub fn paragraph_html(run:&TypeRun)->String {
     for text in run.content.split('\n') {
         let p=paragraph_style(run,base);
         let (align,last)=match p.align {TextAlign::Start=>("left","auto"),TextAlign::Center=>("center","auto"),TextAlign::End=>("right","auto"),TextAlign::Justify{last}=>("justify",match last{LastLine::Start=>"left",LastLine::Center=>"center",LastLine::End=>"right",LastLine::Justify=>"justify"})};
-        html.push_str(&format!("<span style=\"display:block;min-height:1em;text-align:{align};text-align-last:{last};white-space:{};word-break:{};overflow-wrap:{};hyphens:{}\">{}</span>",if p.break_mode==BreakMode::KeepAll{"pre"}else{"pre-wrap"},if p.break_mode==BreakMode::BreakAll{"break-all"}else{"normal"},if p.overflow_wrap{"anywhere"}else{"normal"},if p.hyphenate{"auto"}else{"manual"},escape(text)));
+        html.push_str(&format!("<span style=\"display:block;min-height:1em;text-align:{align};text-align-last:{last};{}white-space:{};word-break:{};overflow-wrap:{};hyphens:{}\">{}</span>",paragraph_spacing_css(run,&p),if p.break_mode==BreakMode::KeepAll{"pre"}else{"pre-wrap"},if p.break_mode==BreakMode::BreakAll{"break-all"}else{"normal"},if p.overflow_wrap{"anywhere"}else{"normal"},if p.hyphenate{"auto"}else{"manual"},escape(text)));
         base+=text.chars().count()+1;
     }
     html
+}
+#[cfg(test)]
+mod paragraph_export_spacing_tests {
+    use super::*;
+    #[test]
+    fn paragraph_export_preserves_desired_spacing_and_adds_tracking() {
+        let mut run = TypeRun { content: "one two\nthree four".into(), font: concat!(env!("CARGO_MANIFEST_DIR"), "/tests/assets/fonts/EBGaramond.ttf").into(), px: 20., tracking: 2., ..Default::default() };
+        run.update_paragraphs(0, 0, |p| { p.word_spacing=[80.,150.,200.]; p.letter_spacing=[0.,10.,20.]; });
+        run.update_paragraphs(8, 8, |p| { p.word_spacing=[50.,75.,100.]; p.letter_spacing=[-10.,-5.,0.]; });
+        let html=paragraph_html(&run);
+        assert!(html.contains("--oma-paragraph-letter-spacing:0.1em;letter-spacing:calc(0.1em + var(--oma-paragraph-letter-spacing))"));
+        assert!(html.contains("--oma-paragraph-letter-spacing:-0.05em;"));
+        for paragraph in &run.paragraphs {
+            let mut probe=run.clone(); probe.content="x x".into(); probe.paragraphs=vec![crate::geom::ParagraphStyle { start:0, ..paragraph.clone() }];
+            let laid=compose(&probe); let actual=laid[0].glyphs.iter().find(|g|g.is_space).unwrap().advance;
+            probe.paragraphs.clear(); let normal=compose(&probe)[0].glyphs.iter().find(|g|g.is_space).unwrap().advance;
+            let word_extra=(actual-normal-run.px*paragraph.letter_spacing[1]/100.)/run.px;
+            let css=paragraph_spacing_css(&run,paragraph); let emitted=css.split("word-spacing:").nth(1).unwrap().trim_end_matches("em;").parse::<f32>().unwrap();
+            assert!((emitted-word_extra).abs()<0.00001,"HTML spacing {emitted} differs from composed {word_extra}");
+        }
+    }
 }
 pub fn glyph_count(run:&TypeRun)->usize {compose(run).iter().map(|l|l.glyphs.len()).sum()}
 
