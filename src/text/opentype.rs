@@ -223,6 +223,12 @@ pub fn glyph_alternates(run: &TypeRun, start: usize, end: usize) -> Vec<GlyphAlt
         r.replace_text(1,1,"é",None);assert_eq!(feature_value(&r,1,*b"liga"),0);assert_eq!(feature_value(&r,4,*b"liga"),1);
         r.replace_text(0,3,"",None);assert!(r.spans.is_empty());
     }
+    #[test] fn all_small_caps_converts_both_cases_in_the_selected_range() {
+        let mut r=run("Z Aa Z");let plain=ids(&r);
+        r.set_character_style(2,4,|s|s.features=vec![(*b"smcp",1),(*b"c2sc",1)]);
+        let styled=ids(&r);assert_eq!(styled[0],plain[0]);assert_eq!(styled[5],plain[5]);
+        assert_ne!(styled[2],plain[2]);assert_ne!(styled[3],plain[3]);
+    }
     #[test] fn html_exports_range_features() {
         let mut r=run("one TWO");r.set_character_style(4,7,|s|s.features=vec![(*b"smcp",1)]);
         let html=paragraph_html(&r);assert!(html.contains("'smcp' 1"));assert!(html.contains("'smcp' 0"));assert!(html.contains("TWO</span>"));

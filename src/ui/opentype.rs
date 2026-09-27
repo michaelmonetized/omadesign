@@ -17,13 +17,13 @@ pub fn show(ui: &mut Ui, studio: &mut Studio, font: &str) {
             (*b"salt", "Stylistic alternates"),
             (*b"calt", "Contextual alternates"),
             (*b"smcp", "Small caps"),
-            (*b"c2sc", "Capitals to small caps"),
+            (*b"c2sc", "All small caps"),
             (*b"cpsp", "Capital spacing"),
             (*b"case", "Case-sensitive forms"),
             (*b"zero", "Slashed zero"),
             (*b"frac", "Fractions"),
         ] {
-            if has(&tag) {
+            if has(&tag) && (tag != *b"c2sc" || has(b"smcp")) {
                 toggle(ui, studio, tag, label);
             }
         }
@@ -125,7 +125,9 @@ fn restore_edit_focus(ui: &mut Ui, studio: &Studio) {
     }
 }
 fn toggle(ui: &mut Ui, studio: &mut Studio, tag: [u8; 4], label: &str) {
-    let value = studio.selection_feature(tag);
+    let value = if tag == *b"c2sc" {
+        studio.selection_feature(tag).zip(studio.selection_feature(*b"smcp")).map(|(a,b)|u32::from(a>0&&b>0))
+    } else { studio.selection_feature(tag) };
     let mut on = value.unwrap_or(0) > 0;
     if ui
         .add(egui::Checkbox::new(&mut on, label).indeterminate(value.is_none()))
@@ -133,6 +135,8 @@ fn toggle(ui: &mut Ui, studio: &mut Studio, tag: [u8; 4], label: &str) {
     {
         if tag == *b"liga" {
             studio.patch_features(&[(tag, u32::from(on)), (*b"clig", u32::from(on))]);
+        } else if tag == *b"c2sc" {
+            studio.patch_features(&[(tag, u32::from(on)), (*b"smcp", u32::from(on))]);
         } else {
             studio.patch_feature(tag, u32::from(on));
         }
