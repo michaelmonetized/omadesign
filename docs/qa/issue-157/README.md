@@ -35,3 +35,5 @@ The thread written by the application's persistence worker was read back indepen
 After the recorded run, commit `04638556c2e79758f9db222038ceab3dec36fbc2` additionally preserves both the unsent prompt and a concurrently edited next draft when preparation fails, is stopped, or is cancelled during connection. Pending paste positions move with the restored prefix. [All 13 attachment tests pass](recovery-tests.log), including those three recovery branches. This changes interruption recovery only; the recorded successful delivery and restore path is unchanged.
 
 The recording uses an isolated XDG profile and a synthetic document. It does not modify the installed stable application or accepted QA evidence.
+
+Legacy copied-object attachments now use the same version-aware appearance migration as canvas paste. The regression compares the persisted filters and exact preview PNG against migration of the equivalent version-6 document; [all four ingestion tests pass](legacy-preview-tests.log). The recorded modern attachment workflow is unchanged.

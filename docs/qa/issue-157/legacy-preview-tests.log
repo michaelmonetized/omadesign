@@ -1,0 +1,15 @@
+
+running 1 test
+test agent::attachments::tests::attachment_legacy_object_preview_preserves_migrated_effect_appearance ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 806 filtered out; finished in 0.57s
+
+
+running 4 tests
+test agent::attachments::tests::attachment_ingest_preserves_short_text_and_external_paths_and_bounds_resources ... ok
+test agent::attachments::tests::attachment_images_svg_objects_and_history_roundtrip ... ok
+test agent::attachments::tests::attachment_payload_enforces_typed_and_inline_caps_and_removal ... ok
+test agent::attachments::tests::attachment_legacy_object_preview_preserves_migrated_effect_appearance ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 803 filtered out; finished in 0.56s
+
