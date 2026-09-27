@@ -1,0 +1,161 @@
+{
+  "errors": [],
+  "failedResponses": [],
+  "views": [
+    {
+      "name": "desktop",
+      "timing": {
+        "fps": 60.00150003750097,
+        "mean": 16.66624999999999,
+        "p95": 16.799999999999272,
+        "slow": 0,
+        "max": 16.80000000000291
+      },
+      "state": {
+        "settled": "true",
+        "ambientTime": "30.982",
+        "entrance": "9.200",
+        "scroll": "0.000",
+        "pointer": "0.00,0.00",
+        "renderer": "webgl",
+        "motion": "running"
+      },
+      "canvas": [
+        1726,
+        1043
+      ]
+    },
+    {
+      "name": "portrait",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "overflow": false,
+      "stopped": true,
+      "clickable": {
+        "visible": "visible",
+        "top": 589.765625,
+        "bottom": 637.765625,
+        "href": "https://omadesign.app/cloud",
+        "inViewport": true
+      },
+      "state": {
+        "settled": "true",
+        "ambientTime": "0.000",
+        "entrance": "9.200",
+        "scroll": "0.000",
+        "pointer": "0.00,0.00",
+        "renderer": "webgl",
+        "motion": "paused"
+      },
+      "timing": {
+        "fps": 60.00300015000751,
+        "mean": 16.66583333333333,
+        "p95": 16.799999999999727,
+        "slow": 0,
+        "max": 16.800000000000182
+      }
+    },
+    {
+      "name": "narrow",
+      "viewport": {
+        "width": 320,
+        "height": 568
+      },
+      "overflow": false,
+      "stopped": true,
+      "clickable": {
+        "visible": "visible",
+        "top": 460.21875,
+        "bottom": 508.21875,
+        "href": "https://omadesign.app/cloud",
+        "inViewport": true
+      },
+      "state": {
+        "settled": "true",
+        "ambientTime": "0.000",
+        "entrance": "9.200",
+        "scroll": "0.000",
+        "pointer": "0.00,0.00",
+        "renderer": "webgl",
+        "motion": "paused"
+      }
+    },
+    {
+      "name": "landscape",
+      "viewport": {
+        "width": 844,
+        "height": 390
+      },
+      "overflow": false,
+      "stopped": true,
+      "clickable": {
+        "visible": "visible",
+        "top": 220.796875,
+        "bottom": 268.796875,
+        "href": "https://omadesign.app/cloud",
+        "inViewport": true
+      },
+      "state": {
+        "settled": "true",
+        "ambientTime": "0.000",
+        "entrance": "9.200",
+        "scroll": "0.000",
+        "pointer": "0.00,0.00",
+        "renderer": "webgl",
+        "motion": "paused"
+      }
+    },
+    {
+      "name": "portrait-header",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "overflow": false,
+      "stopped": true,
+      "clickable": {
+        "visible": "visible",
+        "top": 695.765625,
+        "bottom": 743.765625,
+        "href": "https://omadesign.app/cloud",
+        "inViewport": true
+      },
+      "state": {
+        "settled": "true",
+        "ambientTime": "0.000",
+        "entrance": "9.200",
+        "scroll": "0.000",
+        "pointer": "0.00,0.00",
+        "renderer": "webgl",
+        "motion": "paused"
+      }
+    }
+  ],
+  "checks": {
+    "pointer": {
+      "settled": "true",
+      "ambientTime": "31.649",
+      "entrance": "9.200",
+      "scroll": "0.000",
+      "pointer": "0.14,-0.28",
+      "renderer": "webgl",
+      "motion": "running"
+    },
+    "motionPaused": true,
+    "motionResumed": true,
+    "scroll": {
+      "settled": "true",
+      "ambientTime": "33.599",
+      "entrance": "9.200",
+      "scroll": "0.531",
+      "pointer": "-0.89,-0.87",
+      "renderer": "webgl",
+      "motion": "running"
+    },
+    "offscreenPaused": true,
+    "returnResumed": true
+  },
+  "firstRendererMs": 401
+}

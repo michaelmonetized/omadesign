@@ -1,0 +1,26 @@
+{
+  "status": "ok",
+  "deployment": {
+    "id": "dpl_6ShqaypPdbqiT7CKizbyph2ZWCgR",
+    "url": "https://omadesign-o7wmxsy7o-hustle-launch.vercel.app",
+    "inspectorUrl": "https://vercel.com/hustle-launch/omadesign/6ShqaypPdbqiT7CKizbyph2ZWCgR",
+    "readyState": "READY",
+    "target": "production",
+    "deploymentApiUrl": "https://api.vercel.com/v13/deployments/dpl_6ShqaypPdbqiT7CKizbyph2ZWCgR"
+  },
+  "message": "Deployment omadesign-o7wmxsy7o-hustle-launch.vercel.app ready.",
+  "next": [
+    {
+      "command": "vercel curl https://omadesign-o7wmxsy7o-hustle-launch.vercel.app",
+      "when": "Verify deployment, including when Deployment Protection is enabled"
+    },
+    {
+      "command": "vercel inspect omadesign-o7wmxsy7o-hustle-launch.vercel.app",
+      "when": "Inspect deployment"
+    },
+    {
+      "command": "vercel deploy --prod",
+      "when": "Promote to production"
+    }
+  ]
+}

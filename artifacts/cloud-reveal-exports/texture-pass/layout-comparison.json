@@ -1,0 +1,962 @@
+[
+  {
+    "viewport": {
+      "width": 2440,
+      "height": 1456
+    },
+    "deltas": {
+      ".cloud-copy h1": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-kicker": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-feature-stack": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-feature-stack li:nth-child(1)": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-feature-stack li:nth-child(5)": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-invitation": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-signup": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-signup h2": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-summary": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-actions": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-consent": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      }
+    },
+    "actual": {
+      ".cloud-copy h1": {
+        "x": 96,
+        "y": 656.046875,
+        "w": 440,
+        "h": 101.90625,
+        "font": "104px",
+        "weight": "550",
+        "line": "101.92px",
+        "transition": "all"
+      },
+      ".cloud-kicker": {
+        "x": 96,
+        "y": 774.953125,
+        "w": 440,
+        "h": 29.6875,
+        "font": "18px",
+        "weight": "400",
+        "line": "29.7px",
+        "transition": "all"
+      },
+      ".cloud-feature-stack": {
+        "x": 96,
+        "y": 842.640625,
+        "w": 440,
+        "h": 448,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "all"
+      },
+      ".cloud-feature-stack li:nth-child(1)": {
+        "x": 96,
+        "y": 842.640625,
+        "w": 440,
+        "h": 72,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "opacity 0.8s, transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1)"
+      },
+      ".cloud-feature-stack li:nth-child(5)": {
+        "x": 96,
+        "y": 1218.640625,
+        "w": 440,
+        "h": 72,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "opacity 0.8s, transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1)"
+      },
+      ".cloud-invitation": {
+        "x": 1410,
+        "y": 1003.828125,
+        "w": 934,
+        "h": 286.8125,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "opacity 1.2s, transform 1.2s cubic-bezier(0.2, 0.7, 0.2, 1)"
+      },
+      ".cloud-signup": {
+        "x": 1824,
+        "y": 1003.828125,
+        "w": 520,
+        "h": 251.8125,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "all"
+      },
+      ".cloud-signup h2": {
+        "x": 1824,
+        "y": 1003.828125,
+        "w": 520,
+        "h": 67.1875,
+        "font": "64px",
+        "weight": "550",
+        "line": "67.2px",
+        "transition": "all"
+      },
+      ".cloud-summary": {
+        "x": 1824,
+        "y": 1099.015625,
+        "w": 520,
+        "h": 51.1875,
+        "font": "16px",
+        "weight": "400",
+        "line": "25.6px",
+        "transition": "all"
+      },
+      ".cloud-actions": {
+        "x": 1824,
+        "y": 1172.203125,
+        "w": 520,
+        "h": 48,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "all"
+      },
+      ".cloud-consent": {
+        "x": 1824,
+        "y": 1234.203125,
+        "w": 520,
+        "h": 21.4375,
+        "font": "13px",
+        "weight": "400",
+        "line": "21.45px",
+        "transition": "all"
+      }
+    },
+    "expected": {
+      ".cloud-copy h1": {
+        "x": 96,
+        "y": 656.046875,
+        "w": 440,
+        "h": 101.90625,
+        "font": "104px",
+        "weight": "550",
+        "line": "101.92px",
+        "transition": "all"
+      },
+      ".cloud-kicker": {
+        "x": 96,
+        "y": 774.953125,
+        "w": 440,
+        "h": 29.6875,
+        "font": "18px",
+        "weight": "400",
+        "line": "29.7px",
+        "transition": "all"
+      },
+      ".cloud-feature-stack": {
+        "x": 96,
+        "y": 842.640625,
+        "w": 440,
+        "h": 448,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "all"
+      },
+      ".cloud-feature-stack li:nth-child(1)": {
+        "x": 96,
+        "y": 842.640625,
+        "w": 440,
+        "h": 72,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "opacity 0.8s, transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1)"
+      },
+      ".cloud-feature-stack li:nth-child(5)": {
+        "x": 96,
+        "y": 1218.640625,
+        "w": 440,
+        "h": 72,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "opacity 0.8s, transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1)"
+      },
+      ".cloud-invitation": {
+        "x": 1410,
+        "y": 1003.828125,
+        "w": 934,
+        "h": 286.8125,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "opacity 1.2s, transform 1.2s cubic-bezier(0.2, 0.7, 0.2, 1)"
+      },
+      ".cloud-signup": {
+        "x": 1824,
+        "y": 1003.828125,
+        "w": 520,
+        "h": 251.8125,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "all"
+      },
+      ".cloud-signup h2": {
+        "x": 1824,
+        "y": 1003.828125,
+        "w": 520,
+        "h": 67.1875,
+        "font": "64px",
+        "weight": "550",
+        "line": "67.2px",
+        "transition": "all"
+      },
+      ".cloud-summary": {
+        "x": 1824,
+        "y": 1099.015625,
+        "w": 520,
+        "h": 51.1875,
+        "font": "16px",
+        "weight": "400",
+        "line": "25.6px",
+        "transition": "all"
+      },
+      ".cloud-actions": {
+        "x": 1824,
+        "y": 1172.203125,
+        "w": 520,
+        "h": 48,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "all"
+      },
+      ".cloud-consent": {
+        "x": 1824,
+        "y": 1234.203125,
+        "w": 520,
+        "h": 21.4375,
+        "font": "13px",
+        "weight": "400",
+        "line": "21.45px",
+        "transition": "all"
+      }
+    }
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "deltas": {
+      ".cloud-copy h1": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-kicker": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-feature-stack": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-feature-stack li:nth-child(1)": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-feature-stack li:nth-child(5)": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-invitation": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-signup": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-signup h2": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-summary": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-actions": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-consent": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      }
+    },
+    "actual": {
+      ".cloud-copy h1": {
+        "x": 72,
+        "y": 192.328125,
+        "w": 440,
+        "h": 81.84375,
+        "font": "83.52px",
+        "weight": "550",
+        "line": "81.8496px",
+        "transition": "all"
+      },
+      ".cloud-kicker": {
+        "x": 72,
+        "y": 291.171875,
+        "w": 440,
+        "h": 27.328125,
+        "font": "16.56px",
+        "weight": "400",
+        "line": "27.324px",
+        "transition": "all"
+      },
+      ".cloud-feature-stack": {
+        "x": 72,
+        "y": 356.5,
+        "w": 440,
+        "h": 435.5,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "all"
+      },
+      ".cloud-feature-stack li:nth-child(1)": {
+        "x": 72,
+        "y": 356.5,
+        "w": 440,
+        "h": 69.5,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "opacity 0.8s, transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1)"
+      },
+      ".cloud-feature-stack li:nth-child(5)": {
+        "x": 72,
+        "y": 722.5,
+        "w": 440,
+        "h": 69.5,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "opacity 0.8s, transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1)"
+      },
+      ".cloud-invitation": {
+        "x": 849.59375,
+        "y": 520.984375,
+        "w": 518.40625,
+        "h": 271.015625,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "opacity 1.2s, transform 1.2s cubic-bezier(0.2, 0.7, 0.2, 1)"
+      },
+      ".cloud-signup": {
+        "x": 849.59375,
+        "y": 520.984375,
+        "w": 518.40625,
+        "h": 236.015625,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "all"
+      },
+      ".cloud-signup h2": {
+        "x": 849.59375,
+        "y": 520.984375,
+        "w": 518.40625,
+        "h": 51.390625,
+        "font": "48.96px",
+        "weight": "550",
+        "line": "51.408px",
+        "transition": "all"
+      },
+      ".cloud-summary": {
+        "x": 849.59375,
+        "y": 600.375,
+        "w": 518.40625,
+        "h": 51.1875,
+        "font": "16px",
+        "weight": "400",
+        "line": "25.6px",
+        "transition": "all"
+      },
+      ".cloud-actions": {
+        "x": 849.59375,
+        "y": 673.5625,
+        "w": 518.40625,
+        "h": 48,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "all"
+      },
+      ".cloud-consent": {
+        "x": 849.59375,
+        "y": 735.5625,
+        "w": 518.40625,
+        "h": 21.4375,
+        "font": "13px",
+        "weight": "400",
+        "line": "21.45px",
+        "transition": "all"
+      }
+    },
+    "expected": {
+      ".cloud-copy h1": {
+        "x": 72,
+        "y": 192.328125,
+        "w": 440,
+        "h": 81.84375,
+        "font": "83.52px",
+        "weight": "550",
+        "line": "81.8496px",
+        "transition": "all"
+      },
+      ".cloud-kicker": {
+        "x": 72,
+        "y": 291.171875,
+        "w": 440,
+        "h": 27.328125,
+        "font": "16.56px",
+        "weight": "400",
+        "line": "27.324px",
+        "transition": "all"
+      },
+      ".cloud-feature-stack": {
+        "x": 72,
+        "y": 356.5,
+        "w": 440,
+        "h": 435.5,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "all"
+      },
+      ".cloud-feature-stack li:nth-child(1)": {
+        "x": 72,
+        "y": 356.5,
+        "w": 440,
+        "h": 69.5,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "opacity 0.8s, transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1)"
+      },
+      ".cloud-feature-stack li:nth-child(5)": {
+        "x": 72,
+        "y": 722.5,
+        "w": 440,
+        "h": 69.5,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "opacity 0.8s, transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1)"
+      },
+      ".cloud-invitation": {
+        "x": 849.59375,
+        "y": 520.984375,
+        "w": 518.40625,
+        "h": 271.015625,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "opacity 1.2s, transform 1.2s cubic-bezier(0.2, 0.7, 0.2, 1)"
+      },
+      ".cloud-signup": {
+        "x": 849.59375,
+        "y": 520.984375,
+        "w": 518.40625,
+        "h": 236.015625,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "all"
+      },
+      ".cloud-signup h2": {
+        "x": 849.59375,
+        "y": 520.984375,
+        "w": 518.40625,
+        "h": 51.390625,
+        "font": "48.96px",
+        "weight": "550",
+        "line": "51.408px",
+        "transition": "all"
+      },
+      ".cloud-summary": {
+        "x": 849.59375,
+        "y": 600.375,
+        "w": 518.40625,
+        "h": 51.1875,
+        "font": "16px",
+        "weight": "400",
+        "line": "25.6px",
+        "transition": "all"
+      },
+      ".cloud-actions": {
+        "x": 849.59375,
+        "y": 673.5625,
+        "w": 518.40625,
+        "h": 48,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "all"
+      },
+      ".cloud-consent": {
+        "x": 849.59375,
+        "y": 735.5625,
+        "w": 518.40625,
+        "h": 21.4375,
+        "font": "13px",
+        "weight": "400",
+        "line": "21.45px",
+        "transition": "all"
+      }
+    }
+  },
+  {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deltas": {
+      ".cloud-copy h1": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-kicker": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-feature-stack": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-feature-stack li:nth-child(1)": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-feature-stack li:nth-child(5)": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-invitation": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-signup": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-signup h2": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-summary": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-actions": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      },
+      ".cloud-consent": {
+        "dx": 0,
+        "dy": 0,
+        "dw": 0,
+        "dh": 0,
+        "fontMatch": true,
+        "transitionMatch": true
+      }
+    },
+    "actual": {
+      ".cloud-copy h1": {
+        "x": 24,
+        "y": 167.34375,
+        "w": 342,
+        "h": 37.625,
+        "font": "38.4px",
+        "weight": "550",
+        "line": "37.632px",
+        "transition": "all"
+      },
+      ".cloud-kicker": {
+        "x": 24,
+        "y": 212.96875,
+        "w": 342,
+        "h": 23.09375,
+        "font": "14px",
+        "weight": "400",
+        "line": "23.1px",
+        "transition": "all"
+      },
+      ".cloud-feature-stack": {
+        "x": 24,
+        "y": 256.0625,
+        "w": 342,
+        "h": 168,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "all"
+      },
+      ".cloud-feature-stack li:nth-child(1)": {
+        "x": 24,
+        "y": 256.0625,
+        "w": 342,
+        "h": 24,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "opacity 0.8s, transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1)"
+      },
+      ".cloud-feature-stack li:nth-child(5)": {
+        "x": 24,
+        "y": 400.0625,
+        "w": 342,
+        "h": 24,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "opacity 0.8s, transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1)"
+      },
+      ".cloud-invitation": {
+        "x": 24,
+        "y": 446.0625,
+        "w": 342,
+        "h": 243.578125,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "opacity 1.2s, transform 1.2s cubic-bezier(0.2, 0.7, 0.2, 1)"
+      },
+      ".cloud-signup": {
+        "x": 24,
+        "y": 446.0625,
+        "w": 342,
+        "h": 243.578125,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "all"
+      },
+      ".cloud-signup h2": {
+        "x": 24,
+        "y": 446.0625,
+        "w": 342,
+        "h": 31.921875,
+        "font": "30.4px",
+        "weight": "550",
+        "line": "31.92px",
+        "transition": "all"
+      },
+      ".cloud-summary": {
+        "x": 24,
+        "y": 490.984375,
+        "w": 342,
+        "h": 76.78125,
+        "font": "16px",
+        "weight": "400",
+        "line": "25.6px",
+        "transition": "all"
+      },
+      ".cloud-actions": {
+        "x": 24,
+        "y": 589.765625,
+        "w": 342,
+        "h": 48,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "all"
+      },
+      ".cloud-consent": {
+        "x": 24,
+        "y": 646.765625,
+        "w": 342,
+        "h": 42.875,
+        "font": "13px",
+        "weight": "400",
+        "line": "21.45px",
+        "transition": "all"
+      }
+    },
+    "expected": {
+      ".cloud-copy h1": {
+        "x": 24,
+        "y": 167.34375,
+        "w": 342,
+        "h": 37.625,
+        "font": "38.4px",
+        "weight": "550",
+        "line": "37.632px",
+        "transition": "all"
+      },
+      ".cloud-kicker": {
+        "x": 24,
+        "y": 212.96875,
+        "w": 342,
+        "h": 23.09375,
+        "font": "14px",
+        "weight": "400",
+        "line": "23.1px",
+        "transition": "all"
+      },
+      ".cloud-feature-stack": {
+        "x": 24,
+        "y": 256.0625,
+        "w": 342,
+        "h": 168,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "all"
+      },
+      ".cloud-feature-stack li:nth-child(1)": {
+        "x": 24,
+        "y": 256.0625,
+        "w": 342,
+        "h": 24,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "opacity 0.8s, transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1)"
+      },
+      ".cloud-feature-stack li:nth-child(5)": {
+        "x": 24,
+        "y": 400.0625,
+        "w": 342,
+        "h": 24,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "opacity 0.8s, transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1)"
+      },
+      ".cloud-invitation": {
+        "x": 24,
+        "y": 446.0625,
+        "w": 342,
+        "h": 243.578125,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "opacity 1.2s, transform 1.2s cubic-bezier(0.2, 0.7, 0.2, 1)"
+      },
+      ".cloud-signup": {
+        "x": 24,
+        "y": 446.0625,
+        "w": 342,
+        "h": 243.578125,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "all"
+      },
+      ".cloud-signup h2": {
+        "x": 24,
+        "y": 446.0625,
+        "w": 342,
+        "h": 31.921875,
+        "font": "30.4px",
+        "weight": "550",
+        "line": "31.92px",
+        "transition": "all"
+      },
+      ".cloud-summary": {
+        "x": 24,
+        "y": 490.984375,
+        "w": 342,
+        "h": 76.78125,
+        "font": "16px",
+        "weight": "400",
+        "line": "25.6px",
+        "transition": "all"
+      },
+      ".cloud-actions": {
+        "x": 24,
+        "y": 589.765625,
+        "w": 342,
+        "h": 48,
+        "font": "16px",
+        "weight": "400",
+        "line": "normal",
+        "transition": "all"
+      },
+      ".cloud-consent": {
+        "x": 24,
+        "y": 646.765625,
+        "w": 342,
+        "h": 42.875,
+        "font": "13px",
+        "weight": "400",
+        "line": "21.45px",
+        "transition": "all"
+      }
+    }
+  }
+]

@@ -1,0 +1,2075 @@
+{
+  "errors": [],
+  "results": [
+    {
+      "stage": "desktop-settled",
+      "dataset": {
+        "settled": "true",
+        "ambientTime": "10.283",
+        "entrance": "9.200",
+        "scroll": "0.000",
+        "pointer": "0.00,0.00",
+        "renderer": "webgl",
+        "motion": "running"
+      },
+      "section": {
+        "cloudExperience": "",
+        "settled": "true",
+        "motion": "true",
+        "departed": "false"
+      },
+      "raf": {
+        "scheduled": 1171,
+        "completed": 1170
+      },
+      "bodyOverflow": "visible",
+      "bodyPosition": "static",
+      "videoCount": 0,
+      "dialogCount": 0,
+      "rangeCount": 0,
+      "scrollY": 0,
+      "canvas": {
+        "width": 1440,
+        "height": 900
+      },
+      "gpu": {
+        "renderer": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+        "vendor": "Google Inc. (Mesa)"
+      },
+      "logo": {
+        "x": 622.0799560546875,
+        "y": 172.0800018310547,
+        "w": 195.840087890625,
+        "h": 195.83998107910156,
+        "bottom": 367.91998291015625,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "wordmark": {
+        "x": 555.4984130859375,
+        "y": 254.26968383789062,
+        "w": 329.003173828125,
+        "h": 31.460601806640625,
+        "bottom": 285.73028564453125,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "content": {
+        "x": 360,
+        "y": 432,
+        "w": 720,
+        "h": 253.59375,
+        "bottom": 685.59375,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "actions": {
+        "x": 360,
+        "y": 604.59375,
+        "w": 720,
+        "h": 46,
+        "bottom": 650.59375,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "cue": {
+        "x": 667.6640625,
+        "y": 841,
+        "w": 104.671875,
+        "h": 44,
+        "bottom": 885,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "scene": {
+        "x": 0,
+        "y": 0,
+        "w": 1440,
+        "h": 900,
+        "bottom": 900,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "product": {
+        "x": 0,
+        "y": 1485,
+        "w": 1440,
+        "h": 1286.90625,
+        "bottom": 2771.90625,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "overflow": false,
+      "links": [
+        {
+          "text": "Explore Omadesign \u2197",
+          "href": "#omadesign-product"
+        },
+        {
+          "text": "Open cloud projects \u2197",
+          "href": "https://omadesign.app/cloud"
+        },
+        {
+          "text": "Cloud guide \u2197",
+          "href": "https://omadesign.app/docs/cloud"
+        },
+        {
+          "text": "Keep exploring\u2193",
+          "href": "#omadesign-product"
+        }
+      ]
+    },
+    {
+      "stage": "desktop-perf",
+      "count": 301,
+      "meanMs": 16.666112956810633,
+      "p95Ms": 16.799999999999272,
+      "maxMs": 16.80000000000109,
+      "framesOver25": 0,
+      "fps": 60.001993421708356
+    },
+    {
+      "stage": "desktop-25sec",
+      "dataset": {
+        "settled": "true",
+        "ambientTime": "25.282",
+        "entrance": "9.200",
+        "scroll": "0.000",
+        "pointer": "0.00,0.00",
+        "renderer": "webgl",
+        "motion": "running"
+      },
+      "section": {
+        "cloudExperience": "",
+        "settled": "true",
+        "motion": "true",
+        "departed": "false"
+      },
+      "raf": {
+        "scheduled": 2953,
+        "completed": 2952
+      },
+      "bodyOverflow": "visible",
+      "bodyPosition": "static",
+      "videoCount": 0,
+      "dialogCount": 0,
+      "rangeCount": 0,
+      "scrollY": 0,
+      "canvas": {
+        "width": 1440,
+        "height": 900
+      },
+      "gpu": {
+        "renderer": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+        "vendor": "Google Inc. (Mesa)"
+      },
+      "logo": {
+        "x": 622.0799560546875,
+        "y": 172.0800018310547,
+        "w": 195.840087890625,
+        "h": 195.83998107910156,
+        "bottom": 367.91998291015625,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "wordmark": {
+        "x": 555.4984130859375,
+        "y": 254.26968383789062,
+        "w": 329.003173828125,
+        "h": 31.460601806640625,
+        "bottom": 285.73028564453125,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "content": {
+        "x": 360,
+        "y": 432,
+        "w": 720,
+        "h": 253.59375,
+        "bottom": 685.59375,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "actions": {
+        "x": 360,
+        "y": 604.59375,
+        "w": 720,
+        "h": 46,
+        "bottom": 650.59375,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "cue": {
+        "x": 667.6640625,
+        "y": 841,
+        "w": 104.671875,
+        "h": 44,
+        "bottom": 885,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "scene": {
+        "x": 0,
+        "y": 0,
+        "w": 1440,
+        "h": 900,
+        "bottom": 900,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "product": {
+        "x": 0,
+        "y": 1485,
+        "w": 1440,
+        "h": 1286.90625,
+        "bottom": 2771.90625,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "overflow": false,
+      "links": [
+        {
+          "text": "Explore Omadesign \u2197",
+          "href": "#omadesign-product"
+        },
+        {
+          "text": "Open cloud projects \u2197",
+          "href": "https://omadesign.app/cloud"
+        },
+        {
+          "text": "Cloud guide \u2197",
+          "href": "https://omadesign.app/docs/cloud"
+        },
+        {
+          "text": "Keep exploring\u2193",
+          "href": "#omadesign-product"
+        }
+      ]
+    },
+    {
+      "stage": "desktop-pointer",
+      "dataset": {
+        "settled": "true",
+        "ambientTime": "26.616",
+        "entrance": "9.200",
+        "scroll": "0.000",
+        "pointer": "0.61,-0.62",
+        "renderer": "webgl",
+        "motion": "running"
+      },
+      "section": {
+        "cloudExperience": "",
+        "settled": "true",
+        "motion": "true",
+        "departed": "false"
+      },
+      "raf": {
+        "scheduled": 3039,
+        "completed": 3038
+      },
+      "bodyOverflow": "visible",
+      "bodyPosition": "static",
+      "videoCount": 0,
+      "dialogCount": 0,
+      "rangeCount": 0,
+      "scrollY": 0,
+      "canvas": {
+        "width": 1440,
+        "height": 900
+      },
+      "gpu": {
+        "renderer": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+        "vendor": "Google Inc. (Mesa)"
+      },
+      "logo": {
+        "x": 622.0799560546875,
+        "y": 172.0800018310547,
+        "w": 195.840087890625,
+        "h": 195.83998107910156,
+        "bottom": 367.91998291015625,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "wordmark": {
+        "x": 555.4984130859375,
+        "y": 254.26968383789062,
+        "w": 329.003173828125,
+        "h": 31.460601806640625,
+        "bottom": 285.73028564453125,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "content": {
+        "x": 360,
+        "y": 432,
+        "w": 720,
+        "h": 253.59375,
+        "bottom": 685.59375,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "actions": {
+        "x": 360,
+        "y": 604.59375,
+        "w": 720,
+        "h": 46,
+        "bottom": 650.59375,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "cue": {
+        "x": 667.6640625,
+        "y": 841,
+        "w": 104.671875,
+        "h": 44,
+        "bottom": 885,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "scene": {
+        "x": 0,
+        "y": 0,
+        "w": 1440,
+        "h": 900,
+        "bottom": 900,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "product": {
+        "x": 0,
+        "y": 1485,
+        "w": 1440,
+        "h": 1286.90625,
+        "bottom": 2771.90625,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "overflow": false,
+      "links": [
+        {
+          "text": "Explore Omadesign \u2197",
+          "href": "#omadesign-product"
+        },
+        {
+          "text": "Open cloud projects \u2197",
+          "href": "https://omadesign.app/cloud"
+        },
+        {
+          "text": "Cloud guide \u2197",
+          "href": "https://omadesign.app/docs/cloud"
+        },
+        {
+          "text": "Keep exploring\u2193",
+          "href": "#omadesign-product"
+        }
+      ]
+    },
+    {
+      "stage": "desktop-scroll-partial",
+      "dataset": {
+        "settled": "true",
+        "ambientTime": "27.949",
+        "entrance": "9.200",
+        "scroll": "0.538",
+        "pointer": "0.61,-0.62",
+        "renderer": "webgl",
+        "motion": "running"
+      },
+      "section": {
+        "cloudExperience": "",
+        "settled": "true",
+        "motion": "true",
+        "departed": "false"
+      },
+      "raf": {
+        "scheduled": 3145,
+        "completed": 3144
+      },
+      "bodyOverflow": "visible",
+      "bodyPosition": "static",
+      "videoCount": 0,
+      "dialogCount": 0,
+      "rangeCount": 0,
+      "scrollY": 315,
+      "canvas": {
+        "width": 1440,
+        "height": 900
+      },
+      "gpu": {
+        "renderer": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+        "vendor": "Google Inc. (Mesa)"
+      },
+      "logo": {
+        "x": 625.7703857421875,
+        "y": 88.55047607421875,
+        "w": 188.459228515625,
+        "h": 188.45925903320312,
+        "bottom": 277.0097351074219,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "wordmark": {
+        "x": 561.6981201171875,
+        "y": 167.64263916015625,
+        "w": 316.603759765625,
+        "h": 30.274948120117188,
+        "bottom": 197.91758728027344,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "content": {
+        "x": 360,
+        "y": 397.0122985839844,
+        "w": 720,
+        "h": 253.59378051757812,
+        "bottom": 650.6060791015625,
+        "opacity": "0",
+        "visibility": "visible"
+      },
+      "actions": {
+        "x": 360,
+        "y": 569.6060791015625,
+        "w": 720,
+        "h": 46,
+        "bottom": 615.6060791015625,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "cue": {
+        "x": 667.6640625,
+        "y": 841,
+        "w": 104.671875,
+        "h": 44,
+        "bottom": 885,
+        "opacity": "0",
+        "visibility": "visible"
+      },
+      "scene": {
+        "x": 0,
+        "y": 0,
+        "w": 1440,
+        "h": 900,
+        "bottom": 900,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "product": {
+        "x": 0,
+        "y": 1170,
+        "w": 1440,
+        "h": 1286.90625,
+        "bottom": 2456.90625,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "overflow": false,
+      "links": [
+        {
+          "text": "Explore Omadesign \u2197",
+          "href": "#omadesign-product"
+        },
+        {
+          "text": "Open cloud projects \u2197",
+          "href": "https://omadesign.app/cloud"
+        },
+        {
+          "text": "Cloud guide \u2197",
+          "href": "https://omadesign.app/docs/cloud"
+        },
+        {
+          "text": "Keep exploring\u2193",
+          "href": "#omadesign-product"
+        }
+      ]
+    },
+    {
+      "stage": "desktop-offscreen",
+      "before": {
+        "dataset": {
+          "settled": "true",
+          "ambientTime": "28.615",
+          "entrance": "9.200",
+          "scroll": "0.551",
+          "pointer": "0.61,-0.62",
+          "renderer": "webgl",
+          "motion": "paused"
+        },
+        "section": {
+          "cloudExperience": "",
+          "settled": "true",
+          "motion": "true",
+          "departed": "true"
+        },
+        "raf": {
+          "scheduled": 3222,
+          "completed": 3221
+        },
+        "bodyOverflow": "visible",
+        "bodyPosition": "static",
+        "videoCount": 0,
+        "dialogCount": 0,
+        "rangeCount": 0,
+        "scrollY": 1595,
+        "canvas": {
+          "width": 1440,
+          "height": 900
+        },
+        "gpu": {
+          "renderer": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+          "vendor": "Google Inc. (Mesa)"
+        },
+        "logo": {
+          "x": 628.83544921875,
+          "y": -990.82470703125,
+          "w": 182.32916259765625,
+          "h": 182.3292236328125,
+          "bottom": -808.4954833984375,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "wordmark": {
+          "x": 566.8472290039062,
+          "y": -914.30517578125,
+          "w": 306.3055419921875,
+          "h": 29.2901611328125,
+          "bottom": -885.0150146484375,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "content": {
+          "x": 360,
+          "y": -643,
+          "w": 720,
+          "h": 253.59375,
+          "bottom": -389.40625,
+          "opacity": "0",
+          "visibility": "hidden"
+        },
+        "actions": {
+          "x": 360,
+          "y": -470.40625,
+          "w": 720,
+          "h": 46,
+          "bottom": -424.40625,
+          "opacity": "1",
+          "visibility": "hidden"
+        },
+        "cue": {
+          "x": 667.6640625,
+          "y": -169,
+          "w": 104.671875,
+          "h": 44,
+          "bottom": -125,
+          "opacity": "0",
+          "visibility": "hidden"
+        },
+        "scene": {
+          "x": 0,
+          "y": -1010,
+          "w": 1440,
+          "h": 900,
+          "bottom": -110,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "product": {
+          "x": 0,
+          "y": -110,
+          "w": 1440,
+          "h": 1286.90625,
+          "bottom": 1176.90625,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "overflow": false,
+        "links": [
+          {
+            "text": "Explore Omadesign \u2197",
+            "href": "#omadesign-product"
+          },
+          {
+            "text": "Open cloud projects \u2197",
+            "href": "https://omadesign.app/cloud"
+          },
+          {
+            "text": "Cloud guide \u2197",
+            "href": "https://omadesign.app/docs/cloud"
+          },
+          {
+            "text": "Keep exploring\u2193",
+            "href": "#omadesign-product"
+          }
+        ]
+      },
+      "after": {
+        "dataset": {
+          "settled": "true",
+          "ambientTime": "28.615",
+          "entrance": "9.200",
+          "scroll": "0.551",
+          "pointer": "0.61,-0.62",
+          "renderer": "webgl",
+          "motion": "paused"
+        },
+        "section": {
+          "cloudExperience": "",
+          "settled": "true",
+          "motion": "true",
+          "departed": "true"
+        },
+        "raf": {
+          "scheduled": 3222,
+          "completed": 3221
+        },
+        "bodyOverflow": "visible",
+        "bodyPosition": "static",
+        "videoCount": 0,
+        "dialogCount": 0,
+        "rangeCount": 0,
+        "scrollY": 1595,
+        "canvas": {
+          "width": 1440,
+          "height": 900
+        },
+        "gpu": {
+          "renderer": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+          "vendor": "Google Inc. (Mesa)"
+        },
+        "logo": {
+          "x": 628.83544921875,
+          "y": -990.82470703125,
+          "w": 182.32916259765625,
+          "h": 182.3292236328125,
+          "bottom": -808.4954833984375,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "wordmark": {
+          "x": 566.8472290039062,
+          "y": -914.30517578125,
+          "w": 306.3055419921875,
+          "h": 29.2901611328125,
+          "bottom": -885.0150146484375,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "content": {
+          "x": 360,
+          "y": -643,
+          "w": 720,
+          "h": 253.59375,
+          "bottom": -389.40625,
+          "opacity": "0",
+          "visibility": "hidden"
+        },
+        "actions": {
+          "x": 360,
+          "y": -470.40625,
+          "w": 720,
+          "h": 46,
+          "bottom": -424.40625,
+          "opacity": "1",
+          "visibility": "hidden"
+        },
+        "cue": {
+          "x": 667.6640625,
+          "y": -169,
+          "w": 104.671875,
+          "h": 44,
+          "bottom": -125,
+          "opacity": "0",
+          "visibility": "hidden"
+        },
+        "scene": {
+          "x": 0,
+          "y": -1010,
+          "w": 1440,
+          "h": 900,
+          "bottom": -110,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "product": {
+          "x": 0,
+          "y": -110,
+          "w": 1440,
+          "h": 1286.90625,
+          "bottom": 1176.90625,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "overflow": false,
+        "links": [
+          {
+            "text": "Explore Omadesign \u2197",
+            "href": "#omadesign-product"
+          },
+          {
+            "text": "Open cloud projects \u2197",
+            "href": "https://omadesign.app/cloud"
+          },
+          {
+            "text": "Cloud guide \u2197",
+            "href": "https://omadesign.app/docs/cloud"
+          },
+          {
+            "text": "Keep exploring\u2193",
+            "href": "#omadesign-product"
+          }
+        ]
+      },
+      "ambientFrozen": true,
+      "rafFrozen": true
+    },
+    {
+      "stage": "desktop-resumed",
+      "dataset": {
+        "settled": "true",
+        "ambientTime": "30.265",
+        "entrance": "9.200",
+        "scroll": "0.000",
+        "pointer": "0.00,-0.00",
+        "renderer": "webgl",
+        "motion": "running"
+      },
+      "section": {
+        "cloudExperience": "",
+        "settled": "true",
+        "motion": "true",
+        "departed": "false"
+      },
+      "raf": {
+        "scheduled": 3357,
+        "completed": 3355
+      },
+      "bodyOverflow": "visible",
+      "bodyPosition": "static",
+      "videoCount": 0,
+      "dialogCount": 0,
+      "rangeCount": 0,
+      "scrollY": 0,
+      "canvas": {
+        "width": 1440,
+        "height": 900
+      },
+      "gpu": {
+        "renderer": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+        "vendor": "Google Inc. (Mesa)"
+      },
+      "logo": {
+        "x": 622.0805053710938,
+        "y": 172.0687255859375,
+        "w": 195.83905029296875,
+        "h": 195.8389892578125,
+        "bottom": 367.90771484375,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "wordmark": {
+        "x": 555.499267578125,
+        "y": 254.25799560546875,
+        "w": 329.00146484375,
+        "h": 31.46044921875,
+        "bottom": 285.71844482421875,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "content": {
+        "x": 360,
+        "y": 432,
+        "w": 720,
+        "h": 253.59375,
+        "bottom": 685.59375,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "actions": {
+        "x": 360,
+        "y": 604.59375,
+        "w": 720,
+        "h": 46,
+        "bottom": 650.59375,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "cue": {
+        "x": 667.6640625,
+        "y": 841,
+        "w": 104.671875,
+        "h": 44,
+        "bottom": 885,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "scene": {
+        "x": 0,
+        "y": 0,
+        "w": 1440,
+        "h": 900,
+        "bottom": 900,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "product": {
+        "x": 0,
+        "y": 1485,
+        "w": 1440,
+        "h": 1286.90625,
+        "bottom": 2771.90625,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "overflow": false,
+      "links": [
+        {
+          "text": "Explore Omadesign \u2197",
+          "href": "#omadesign-product"
+        },
+        {
+          "text": "Open cloud projects \u2197",
+          "href": "https://omadesign.app/cloud"
+        },
+        {
+          "text": "Cloud guide \u2197",
+          "href": "https://omadesign.app/docs/cloud"
+        },
+        {
+          "text": "Keep exploring\u2193",
+          "href": "#omadesign-product"
+        }
+      ]
+    },
+    {
+      "stage": "motion-off",
+      "before": {
+        "dataset": {
+          "settled": "true",
+          "ambientTime": "30.515",
+          "entrance": "9.200",
+          "scroll": "0.000",
+          "pointer": "0.00,0.00",
+          "renderer": "webgl",
+          "motion": "paused"
+        },
+        "section": {
+          "cloudExperience": "",
+          "settled": "true",
+          "motion": "false",
+          "departed": "false"
+        },
+        "raf": {
+          "scheduled": 3360,
+          "completed": 3358
+        },
+        "bodyOverflow": "visible",
+        "bodyPosition": "static",
+        "videoCount": 0,
+        "dialogCount": 0,
+        "rangeCount": 0,
+        "scrollY": 0,
+        "canvas": {
+          "width": 1440,
+          "height": 900
+        },
+        "gpu": {
+          "renderer": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+          "vendor": "Google Inc. (Mesa)"
+        },
+        "logo": {
+          "x": 622.0805053710938,
+          "y": 172.0687255859375,
+          "w": 195.83905029296875,
+          "h": 195.8389892578125,
+          "bottom": 367.90771484375,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "wordmark": {
+          "x": 555.499267578125,
+          "y": 254.25799560546875,
+          "w": 329.00146484375,
+          "h": 31.46044921875,
+          "bottom": 285.71844482421875,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "content": {
+          "x": 360,
+          "y": 432,
+          "w": 720,
+          "h": 253.59375,
+          "bottom": 685.59375,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "actions": {
+          "x": 360,
+          "y": 604.59375,
+          "w": 720,
+          "h": 46,
+          "bottom": 650.59375,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "cue": {
+          "x": 667.6640625,
+          "y": 841,
+          "w": 104.671875,
+          "h": 44,
+          "bottom": 885,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "scene": {
+          "x": 0,
+          "y": 0,
+          "w": 1440,
+          "h": 900,
+          "bottom": 900,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "product": {
+          "x": 0,
+          "y": 1485,
+          "w": 1440,
+          "h": 1286.90625,
+          "bottom": 2771.90625,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "overflow": false,
+        "links": [
+          {
+            "text": "Explore Omadesign \u2197",
+            "href": "#omadesign-product"
+          },
+          {
+            "text": "Open cloud projects \u2197",
+            "href": "https://omadesign.app/cloud"
+          },
+          {
+            "text": "Cloud guide \u2197",
+            "href": "https://omadesign.app/docs/cloud"
+          },
+          {
+            "text": "Keep exploring\u2193",
+            "href": "#omadesign-product"
+          }
+        ]
+      },
+      "after": {
+        "dataset": {
+          "settled": "true",
+          "ambientTime": "30.515",
+          "entrance": "9.200",
+          "scroll": "0.000",
+          "pointer": "0.00,0.00",
+          "renderer": "webgl",
+          "motion": "paused"
+        },
+        "section": {
+          "cloudExperience": "",
+          "settled": "true",
+          "motion": "false",
+          "departed": "false"
+        },
+        "raf": {
+          "scheduled": 3360,
+          "completed": 3358
+        },
+        "bodyOverflow": "visible",
+        "bodyPosition": "static",
+        "videoCount": 0,
+        "dialogCount": 0,
+        "rangeCount": 0,
+        "scrollY": 0,
+        "canvas": {
+          "width": 1440,
+          "height": 900
+        },
+        "gpu": {
+          "renderer": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+          "vendor": "Google Inc. (Mesa)"
+        },
+        "logo": {
+          "x": 622.0805053710938,
+          "y": 172.0687255859375,
+          "w": 195.83905029296875,
+          "h": 195.8389892578125,
+          "bottom": 367.90771484375,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "wordmark": {
+          "x": 555.499267578125,
+          "y": 254.25799560546875,
+          "w": 329.00146484375,
+          "h": 31.46044921875,
+          "bottom": 285.71844482421875,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "content": {
+          "x": 360,
+          "y": 432,
+          "w": 720,
+          "h": 253.59375,
+          "bottom": 685.59375,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "actions": {
+          "x": 360,
+          "y": 604.59375,
+          "w": 720,
+          "h": 46,
+          "bottom": 650.59375,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "cue": {
+          "x": 667.6640625,
+          "y": 841,
+          "w": 104.671875,
+          "h": 44,
+          "bottom": 885,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "scene": {
+          "x": 0,
+          "y": 0,
+          "w": 1440,
+          "h": 900,
+          "bottom": 900,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "product": {
+          "x": 0,
+          "y": 1485,
+          "w": 1440,
+          "h": 1286.90625,
+          "bottom": 2771.90625,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "overflow": false,
+        "links": [
+          {
+            "text": "Explore Omadesign \u2197",
+            "href": "#omadesign-product"
+          },
+          {
+            "text": "Open cloud projects \u2197",
+            "href": "https://omadesign.app/cloud"
+          },
+          {
+            "text": "Cloud guide \u2197",
+            "href": "https://omadesign.app/docs/cloud"
+          },
+          {
+            "text": "Keep exploring\u2193",
+            "href": "#omadesign-product"
+          }
+        ]
+      },
+      "ambientFrozen": true,
+      "rafFrozen": true
+    },
+    {
+      "stage": "motion-on",
+      "dataset": {
+        "settled": "true",
+        "ambientTime": "31.215",
+        "entrance": "9.200",
+        "scroll": "0.000",
+        "pointer": "0.87,0.90",
+        "renderer": "webgl",
+        "motion": "running"
+      },
+      "section": {
+        "cloudExperience": "",
+        "settled": "true",
+        "motion": "true",
+        "departed": "false"
+      },
+      "raf": {
+        "scheduled": 3416,
+        "completed": 3413
+      },
+      "bodyOverflow": "visible",
+      "bodyPosition": "static",
+      "videoCount": 0,
+      "dialogCount": 0,
+      "rangeCount": 0,
+      "scrollY": 0,
+      "canvas": {
+        "width": 1440,
+        "height": 900
+      },
+      "gpu": {
+        "renderer": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+        "vendor": "Google Inc. (Mesa)"
+      },
+      "logo": {
+        "x": 622.0805053710938,
+        "y": 172.0687255859375,
+        "w": 195.83905029296875,
+        "h": 195.8389892578125,
+        "bottom": 367.90771484375,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "wordmark": {
+        "x": 555.499267578125,
+        "y": 254.25799560546875,
+        "w": 329.00146484375,
+        "h": 31.46044921875,
+        "bottom": 285.71844482421875,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "content": {
+        "x": 360,
+        "y": 432,
+        "w": 720,
+        "h": 253.59375,
+        "bottom": 685.59375,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "actions": {
+        "x": 360,
+        "y": 604.59375,
+        "w": 720,
+        "h": 46,
+        "bottom": 650.59375,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "cue": {
+        "x": 667.6640625,
+        "y": 841,
+        "w": 104.671875,
+        "h": 44,
+        "bottom": 885,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "scene": {
+        "x": 0,
+        "y": 0,
+        "w": 1440,
+        "h": 900,
+        "bottom": 900,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "product": {
+        "x": 0,
+        "y": 1485,
+        "w": 1440,
+        "h": 1286.90625,
+        "bottom": 2771.90625,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "overflow": false,
+      "links": [
+        {
+          "text": "Explore Omadesign \u2197",
+          "href": "#omadesign-product"
+        },
+        {
+          "text": "Open cloud projects \u2197",
+          "href": "https://omadesign.app/cloud"
+        },
+        {
+          "text": "Cloud guide \u2197",
+          "href": "https://omadesign.app/docs/cloud"
+        },
+        {
+          "text": "Keep exploring\u2193",
+          "href": "#omadesign-product"
+        }
+      ]
+    },
+    {
+      "stage": "keyboard",
+      "tab": [
+        {
+          "tag": "A",
+          "text": "Explore Omadesign \u2197",
+          "href": "#omadesign-product"
+        },
+        {
+          "tag": "BUTTON",
+          "text": "Motion on",
+          "href": null
+        },
+        {
+          "tag": "A",
+          "text": "Open cloud projects \u2197",
+          "href": "https://omadesign.app/cloud"
+        },
+        {
+          "tag": "A",
+          "text": "Cloud guide \u2197",
+          "href": "https://omadesign.app/docs/cloud"
+        },
+        {
+          "tag": "A",
+          "text": "Keep exploring\u2193",
+          "href": "#omadesign-product"
+        },
+        {
+          "tag": "A",
+          "text": "Explore Omadesign \u2197",
+          "href": "https://omadesign.app/"
+        },
+        {
+          "tag": "A",
+          "text": "How cloud collaboration works \u2197",
+          "href": "https://omadesign.app/docs/cloud"
+        }
+      ]
+    },
+    {
+      "stage": "portrait",
+      "dataset": {
+        "settled": "true",
+        "ambientTime": "1.667",
+        "entrance": "9.200",
+        "scroll": "0.000",
+        "pointer": "0.30,0.91",
+        "renderer": "webgl",
+        "motion": "running"
+      },
+      "section": {
+        "cloudExperience": "",
+        "settled": "true",
+        "motion": "true",
+        "departed": "false"
+      },
+      "raf": {
+        "scheduled": 102,
+        "completed": 101
+      },
+      "bodyOverflow": "visible",
+      "bodyPosition": "static",
+      "videoCount": 0,
+      "dialogCount": 0,
+      "rangeCount": 0,
+      "scrollY": 0,
+      "canvas": {
+        "width": 780,
+        "height": 1688
+      },
+      "gpu": {
+        "renderer": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+        "vendor": "Google Inc. (Mesa)"
+      },
+      "logo": {
+        "x": 105.45984649658203,
+        "y": 163.65472412109375,
+        "w": 179.080322265625,
+        "h": 179.080322265625,
+        "bottom": 342.73504638671875,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "wordmark": {
+        "x": 44.568443298339844,
+        "y": 238.8128662109375,
+        "w": 300.8631286621094,
+        "h": 28.7640380859375,
+        "bottom": 267.576904296875,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "content": {
+        "x": 20,
+        "y": 405.109375,
+        "w": 350,
+        "h": 226.71875,
+        "bottom": 631.828125,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "actions": {
+        "x": 20,
+        "y": 558.828125,
+        "w": 350,
+        "h": 46,
+        "bottom": 604.828125,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "cue": {
+        "x": 146.1484375,
+        "y": 791,
+        "w": 97.703125,
+        "h": 44,
+        "bottom": 835,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "scene": {
+        "x": 0,
+        "y": 0,
+        "w": 390,
+        "h": 844,
+        "bottom": 844,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "product": {
+        "x": 0,
+        "y": 1392.59375,
+        "w": 390,
+        "h": 1298.625,
+        "bottom": 2691.21875,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "overflow": false,
+      "links": [
+        {
+          "text": "Explore Omadesign \u2197",
+          "href": "#omadesign-product"
+        },
+        {
+          "text": "Open cloud projects \u2197",
+          "href": "https://omadesign.app/cloud"
+        },
+        {
+          "text": "Cloud guide \u2197",
+          "href": "https://omadesign.app/docs/cloud"
+        },
+        {
+          "text": "Keep exploring\u2193",
+          "href": "#omadesign-product"
+        }
+      ]
+    },
+    {
+      "stage": "portrait-perf",
+      "count": 288,
+      "meanMs": 17.418055555555554,
+      "p95Ms": 16.800000000000182,
+      "maxMs": 116.69999999999982,
+      "framesOver25": 3,
+      "fps": 57.41168965792202
+    },
+    {
+      "stage": "narrow",
+      "dataset": {
+        "settled": "true",
+        "ambientTime": "1.676",
+        "entrance": "9.200",
+        "scroll": "0.000",
+        "pointer": "0.16,0.87",
+        "renderer": "webgl",
+        "motion": "running"
+      },
+      "section": {
+        "cloudExperience": "",
+        "settled": "true",
+        "motion": "true",
+        "departed": "false"
+      },
+      "raf": {
+        "scheduled": 99,
+        "completed": 98
+      },
+      "bodyOverflow": "visible",
+      "bodyPosition": "static",
+      "videoCount": 0,
+      "dialogCount": 0,
+      "rangeCount": 0,
+      "scrollY": 0,
+      "canvas": {
+        "width": 320,
+        "height": 568
+      },
+      "gpu": {
+        "renderer": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+        "vendor": "Google Inc. (Mesa)"
+      },
+      "logo": {
+        "x": 86.53312683105469,
+        "y": 96.92286682128906,
+        "w": 146.93374633789062,
+        "h": 146.93374633789062,
+        "bottom": 243.8566131591797,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "wordmark": {
+        "x": 36.57078552246094,
+        "y": 158.5894317626953,
+        "w": 246.85841369628906,
+        "h": 23.600616455078125,
+        "bottom": 182.19004821777344,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "content": {
+        "x": 20,
+        "y": 261.265625,
+        "w": 280,
+        "h": 242.6875,
+        "bottom": 503.953125,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "actions": {
+        "x": 20,
+        "y": 393.953125,
+        "w": 280,
+        "h": 110,
+        "bottom": 503.953125,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "cue": {
+        "x": 111.1484375,
+        "y": 518,
+        "w": 97.703125,
+        "h": 44,
+        "bottom": 562,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "scene": {
+        "x": 0,
+        "y": 0,
+        "w": 320,
+        "h": 568,
+        "bottom": 568,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "product": {
+        "x": 0,
+        "y": 937.1875,
+        "w": 320,
+        "h": 1349.625,
+        "bottom": 2286.8125,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "overflow": false,
+      "links": [
+        {
+          "text": "Explore Omadesign \u2197",
+          "href": "#omadesign-product"
+        },
+        {
+          "text": "Open cloud projects \u2197",
+          "href": "https://omadesign.app/cloud"
+        },
+        {
+          "text": "Cloud guide \u2197",
+          "href": "https://omadesign.app/docs/cloud"
+        },
+        {
+          "text": "Keep exploring\u2193",
+          "href": "#omadesign-product"
+        }
+      ]
+    },
+    {
+      "stage": "landscape",
+      "dataset": {
+        "settled": "true",
+        "ambientTime": "1.267",
+        "entrance": "9.200",
+        "scroll": "0.000",
+        "pointer": "0.61,0.82",
+        "renderer": "webgl",
+        "motion": "running"
+      },
+      "section": {
+        "cloudExperience": "",
+        "settled": "true",
+        "motion": "true",
+        "departed": "false"
+      },
+      "raf": {
+        "scheduled": 94,
+        "completed": 93
+      },
+      "bodyOverflow": "visible",
+      "bodyPosition": "static",
+      "videoCount": 0,
+      "dialogCount": 0,
+      "rangeCount": 0,
+      "scrollY": 0,
+      "canvas": {
+        "width": 844,
+        "height": 420
+      },
+      "gpu": {
+        "renderer": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+        "vendor": "Google Inc. (Mesa)"
+      },
+      "logo": {
+        "x": 376.30718994140625,
+        "y": 80.30718994140625,
+        "w": 91.3856201171875,
+        "h": 91.3856201171875,
+        "bottom": 171.69281005859375,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "wordmark": {
+        "x": 345.234375,
+        "y": 118.66344451904297,
+        "w": 153.53125,
+        "h": 14.673118591308594,
+        "bottom": 133.33656311035156,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "content": {
+        "x": 62,
+        "y": 193.1875,
+        "w": 720,
+        "h": 153.03125,
+        "bottom": 346.21875,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "actions": {
+        "x": 62,
+        "y": 300.21875,
+        "w": 720,
+        "h": 46,
+        "bottom": 346.21875,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "cue": {
+        "x": 369.6640625,
+        "y": 370,
+        "w": 104.671875,
+        "h": 44,
+        "bottom": 414,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "scene": {
+        "x": 0,
+        "y": 0,
+        "w": 844,
+        "h": 420,
+        "bottom": 420,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "product": {
+        "x": 0,
+        "y": 643.5,
+        "w": 844,
+        "h": 905.109375,
+        "bottom": 1548.609375,
+        "opacity": "1",
+        "visibility": "visible"
+      },
+      "overflow": false,
+      "links": [
+        {
+          "text": "Explore Omadesign \u2197",
+          "href": "#omadesign-product"
+        },
+        {
+          "text": "Open cloud projects \u2197",
+          "href": "https://omadesign.app/cloud"
+        },
+        {
+          "text": "Cloud guide \u2197",
+          "href": "https://omadesign.app/docs/cloud"
+        },
+        {
+          "text": "Keep exploring\u2193",
+          "href": "#omadesign-product"
+        }
+      ]
+    },
+    {
+      "stage": "reduced-motion",
+      "before": {
+        "dataset": {
+          "settled": "true",
+          "ambientTime": "0.000",
+          "entrance": "9.200",
+          "scroll": "0.000",
+          "pointer": "0.00,0.00",
+          "renderer": "webgl",
+          "motion": "paused"
+        },
+        "section": {
+          "cloudExperience": "",
+          "settled": "true",
+          "motion": "false",
+          "departed": "false"
+        },
+        "raf": {
+          "scheduled": 1,
+          "completed": 1
+        },
+        "bodyOverflow": "visible",
+        "bodyPosition": "static",
+        "videoCount": 0,
+        "dialogCount": 0,
+        "rangeCount": 0,
+        "scrollY": 0,
+        "canvas": {
+          "width": 780,
+          "height": 1688
+        },
+        "gpu": {
+          "renderer": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+          "vendor": "Google Inc. (Mesa)"
+        },
+        "logo": {
+          "x": 105.45984649658203,
+          "y": 163.65472412109375,
+          "w": 179.080322265625,
+          "h": 179.080322265625,
+          "bottom": 342.73504638671875,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "wordmark": {
+          "x": 44.568443298339844,
+          "y": 238.8128662109375,
+          "w": 300.8631286621094,
+          "h": 28.7640380859375,
+          "bottom": 267.576904296875,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "content": {
+          "x": 20,
+          "y": 405.109375,
+          "w": 350,
+          "h": 226.71875,
+          "bottom": 631.828125,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "actions": {
+          "x": 20,
+          "y": 558.828125,
+          "w": 350,
+          "h": 46,
+          "bottom": 604.828125,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "cue": {
+          "x": 146.1484375,
+          "y": 791,
+          "w": 97.703125,
+          "h": 44,
+          "bottom": 835,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "scene": {
+          "x": 0,
+          "y": 0,
+          "w": 390,
+          "h": 844,
+          "bottom": 844,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "product": {
+          "x": 0,
+          "y": 1392.59375,
+          "w": 390,
+          "h": 1298.625,
+          "bottom": 2691.21875,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "overflow": false,
+        "links": [
+          {
+            "text": "Explore Omadesign \u2197",
+            "href": "#omadesign-product"
+          },
+          {
+            "text": "Open cloud projects \u2197",
+            "href": "https://omadesign.app/cloud"
+          },
+          {
+            "text": "Cloud guide \u2197",
+            "href": "https://omadesign.app/docs/cloud"
+          },
+          {
+            "text": "Keep exploring\u2193",
+            "href": "#omadesign-product"
+          }
+        ]
+      },
+      "after": {
+        "dataset": {
+          "settled": "true",
+          "ambientTime": "0.000",
+          "entrance": "9.200",
+          "scroll": "0.000",
+          "pointer": "0.00,0.00",
+          "renderer": "webgl",
+          "motion": "paused"
+        },
+        "section": {
+          "cloudExperience": "",
+          "settled": "true",
+          "motion": "false",
+          "departed": "false"
+        },
+        "raf": {
+          "scheduled": 1,
+          "completed": 1
+        },
+        "bodyOverflow": "visible",
+        "bodyPosition": "static",
+        "videoCount": 0,
+        "dialogCount": 0,
+        "rangeCount": 0,
+        "scrollY": 0,
+        "canvas": {
+          "width": 780,
+          "height": 1688
+        },
+        "gpu": {
+          "renderer": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+          "vendor": "Google Inc. (Mesa)"
+        },
+        "logo": {
+          "x": 105.45984649658203,
+          "y": 163.65472412109375,
+          "w": 179.080322265625,
+          "h": 179.080322265625,
+          "bottom": 342.73504638671875,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "wordmark": {
+          "x": 44.568443298339844,
+          "y": 238.8128662109375,
+          "w": 300.8631286621094,
+          "h": 28.7640380859375,
+          "bottom": 267.576904296875,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "content": {
+          "x": 20,
+          "y": 405.109375,
+          "w": 350,
+          "h": 226.71875,
+          "bottom": 631.828125,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "actions": {
+          "x": 20,
+          "y": 558.828125,
+          "w": 350,
+          "h": 46,
+          "bottom": 604.828125,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "cue": {
+          "x": 146.1484375,
+          "y": 791,
+          "w": 97.703125,
+          "h": 44,
+          "bottom": 835,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "scene": {
+          "x": 0,
+          "y": 0,
+          "w": 390,
+          "h": 844,
+          "bottom": 844,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "product": {
+          "x": 0,
+          "y": 1392.59375,
+          "w": 390,
+          "h": 1298.625,
+          "bottom": 2691.21875,
+          "opacity": "1",
+          "visibility": "visible"
+        },
+        "overflow": false,
+        "links": [
+          {
+            "text": "Explore Omadesign \u2197",
+            "href": "#omadesign-product"
+          },
+          {
+            "text": "Open cloud projects \u2197",
+            "href": "https://omadesign.app/cloud"
+          },
+          {
+            "text": "Cloud guide \u2197",
+            "href": "https://omadesign.app/docs/cloud"
+          },
+          {
+            "text": "Keep exploring\u2193",
+            "href": "#omadesign-product"
+          }
+        ]
+      },
+      "ambientFrozen": true,
+      "rafFrozen": true
+    }
+  ],
+  "headerLayoutVerification": [
+    {
+      "name": "landscape-fixed",
+      "h": 390,
+      "w": 844,
+      "header": 0,
+      "cssHeader": "",
+      "rects": [
+        {
+          "sel": ".cloud-scene",
+          "x": 0,
+          "y": 0,
+          "w": 844,
+          "h": 390,
+          "bottom": 390
+        },
+        {
+          "sel": ".dream-icon",
+          "x": 379.569091796875,
+          "y": 74.56906127929688,
+          "w": 84.86184692382812,
+          "h": 84.86187744140625,
+          "bottom": 159.43093872070312
+        },
+        {
+          "sel": ".cloud-content",
+          "x": 62,
+          "y": 191.09375,
+          "w": 720,
+          "h": 68.390625,
+          "bottom": 259.484375
+        },
+        {
+          "sel": ".cloud-actions",
+          "x": 62,
+          "y": 221.484375,
+          "w": 720,
+          "h": 38,
+          "bottom": 259.484375
+        },
+        {
+          "sel": ".cloud-scroll-cue",
+          "x": 369.6640625,
+          "y": 354,
+          "w": 104.671875,
+          "h": 32,
+          "bottom": 386
+        }
+      ],
+      "overflow": false
+    },
+    {
+      "name": "landscape-header106",
+      "h": 390,
+      "w": 844,
+      "header": 106,
+      "cssHeader": "106px",
+      "rects": [
+        {
+          "sel": ".cloud-scene",
+          "x": 0,
+          "y": 106,
+          "w": 844,
+          "h": 284,
+          "bottom": 390
+        },
+        {
+          "sel": ".dream-icon",
+          "x": 391.1025085449219,
+          "y": 160.29824829101562,
+          "w": 61.795013427734375,
+          "h": 61.79499816894531,
+          "bottom": 222.09324645996094
+        },
+        {
+          "sel": ".cloud-content",
+          "x": 62,
+          "y": 245.15625,
+          "w": 720,
+          "h": 68.390625,
+          "bottom": 313.546875
+        },
+        {
+          "sel": ".cloud-actions",
+          "x": 62,
+          "y": 275.546875,
+          "w": 720,
+          "h": 38,
+          "bottom": 313.546875
+        },
+        {
+          "sel": ".cloud-scroll-cue",
+          "x": 369.6640625,
+          "y": 354,
+          "w": 104.671875,
+          "h": 32,
+          "bottom": 386
+        }
+      ],
+      "overflow": false
+    },
+    {
+      "name": "narrow-header106",
+      "h": 568,
+      "w": 320,
+      "header": 106,
+      "cssHeader": "106px",
+      "rects": [
+        {
+          "sel": ".cloud-scene",
+          "x": 0,
+          "y": 106,
+          "w": 320,
+          "h": 462,
+          "bottom": 568
+        },
+        {
+          "sel": ".dream-icon",
+          "x": 99.39047241210938,
+          "y": 183.9879150390625,
+          "w": 121.21905517578125,
+          "h": 121.21905517578125,
+          "bottom": 305.20697021484375
+        },
+        {
+          "sel": ".cloud-content",
+          "x": 20,
+          "y": 318.515625,
+          "w": 280,
+          "h": 178.6875,
+          "bottom": 497.203125
+        },
+        {
+          "sel": ".cloud-actions",
+          "x": 20,
+          "y": 451.203125,
+          "w": 280,
+          "h": 46,
+          "bottom": 497.203125
+        },
+        {
+          "sel": ".cloud-scroll-cue",
+          "x": 111.1484375,
+          "y": 518,
+          "w": 97.703125,
+          "h": 44,
+          "bottom": 562
+        }
+      ],
+      "overflow": false
+    }
+  ],
+  "finalVisualVerification": [
+    {
+      "viewport": {
+        "name": "desktop",
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "state": {
+        "dataset": {
+          "settled": "true",
+          "ambientTime": "1.600",
+          "entrance": "9.200",
+          "scroll": "0.000",
+          "pointer": "0.00,0.00",
+          "renderer": "webgl",
+          "motion": "running"
+        },
+        "canvas": {
+          "width": 1440,
+          "height": 900
+        },
+        "gpu": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)"
+      },
+      "performance": {
+        "count": 121,
+        "meanMs": 16.666115702479342,
+        "p95Ms": 16.799999999999727,
+        "maxMs": 16.800000000000182,
+        "fps": 60.00198353664583,
+        "framesOver25": 0
+      },
+      "errors": []
+    },
+    {
+      "viewport": {
+        "name": "portrait",
+        "width": 390,
+        "height": 844,
+        "dpr": 3
+      },
+      "state": {
+        "dataset": {
+          "settled": "true",
+          "ambientTime": "1.600",
+          "entrance": "9.200",
+          "scroll": "0.000",
+          "pointer": "0.00,0.00",
+          "renderer": "webgl",
+          "motion": "running"
+        },
+        "canvas": {
+          "width": 780,
+          "height": 1688
+        },
+        "gpu": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)"
+      },
+      "performance": null,
+      "errors": []
+    }
+  ],
+  "verifiedAtUtc": "2026-09-23T12:50:25.256206+00:00",
+  "finalVisualNote": "Fresh navigation after final analytic volume shading confirms WebGL on AGX hardware in both desktop and portrait DPR3. Cloud banks are soft and rounded, previous hard rectangular/faceted tile edges are gone, visible warm fireflies remain, exact SVG logo and page content fit. Desktop 2-second RAF sample: mean16.666ms, p9516.8ms, zero frames above25ms. Final scroll recapture after copy-shade correction confirms its inset0 gradient is continuous and the former horizontal35% viewport boundary is gone. No outstanding visual defect identified in inspected final desktop, portrait, and scroll screenshots.",
+  "scopeNote": "Runtime behavior and 25-second persistence were verified before the final shader-only visual refinement. Header106 checks use a sticky .site-header fixture inserted before mount; not actual production header markup. Browser viewport/DPR emulation runs on this desktop AGX GPU, not physical mobile hardware.",
+  "finalScrollVerification": {
+    "dataset": {
+      "settled": "true",
+      "ambientTime": "2.950",
+      "entrance": "9.200",
+      "scroll": "0.538",
+      "pointer": "0.00,0.00",
+      "renderer": "webgl",
+      "motion": "running"
+    },
+    "shade": {
+      "inset": "0px",
+      "background": "rgba(0, 0, 0, 0) radial-gradient(at 50% 64%, rgba(9, 11, 32, 0.227), rgba(0, 0, 0, 0) 70%) repeat scroll 0% 0% / auto padding-box border-box"
+    },
+    "scrollY": 315,
+    "errors": []
+  }
+}
