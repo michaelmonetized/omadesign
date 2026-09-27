@@ -230,6 +230,7 @@ pub fn compose(run: &TypeRun) -> Arc<Vec<LayoutLine>> {
                     let opportunities: Vec<_> = unicode_linebreak::linebreaks(&paragraph[pa..a])
                         .map(|(i, _)| pa + i)
                         .filter(|i| *i > pa && *i < a)
+                        .filter(|i| !paragraph.unicode_word_indices().any(|(start, word)| start < *i && *i < start + word.len()))
                         .collect();
                     for split in opportunities.into_iter().rev() {
                         let at=base+paragraph[..split].chars().count();
@@ -699,5 +700,8 @@ mod tests {
         assert!(compose(&run).len()>1,"Anywhere explicitly permits long-word breaks");
         run.content="inter\u{ad}national".into();run.wrap_width=Some(80.);run.update_paragraphs(0,run.content.chars().count(),|p|p.overflow_wrap=false);
         assert!(compose(&run).iter().any(|l|l.hyphenated),"Explicit discretionary hyphens remain honored");
+        run.content="カタカナ".into();run.wrap_width=None;let word_width=compose(&run)[0].width;
+        run.content.push_str(" a");run.wrap_width=Some(word_width+0.5);run.update_paragraphs(0,6,|p|p.runt=Some(Default::default()));
+        let lines=compose(&run);assert_eq!(lines.len(),2);assert!(lines[0].text.starts_with("カタカナ"),"Runt adjustment must move whole Unicode words");
     }
 }
