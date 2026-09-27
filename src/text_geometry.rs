@@ -136,10 +136,11 @@ pub fn layout_on_path(run: &TypeRun) -> TextGeometryLayout {
     plain.origin=Pt::ZERO; plain.on_path=None; plain.layout=None; plain.wrap_width=None;
     plain.content=plain.content.replace('\n'," ");
     plain.tracking+=on.spacing;
+    for span in &mut plain.spans{if let Some(tracking)=&mut span.tracking{*tracking+=on.spacing/plain.px.max(1.)*1000.;}}
     let lines=crate::text::compose(&plain);
     let mut result=TextGeometryLayout::default();
     let width=lines.iter().map(|line|line.width).fold(0f32,f32::max);
-    let offset=match run.align {TextAlign::Start=>0.,TextAlign::Center=>(span-width).max(0.)*0.5,TextAlign::End=>(span-width).max(0.), _=>0.};
+    let offset=match crate::text::paragraph_style(run,0).align {TextAlign::Start=>0.,TextAlign::Center=>(span-width).max(0.)*0.5,TextAlign::End=>(span-width).max(0.), _=>0.};
     for line in lines.iter() {
         for glyph in &line.glyphs {
             let center=offset+glyph.x+glyph.advance*0.5;
@@ -276,4 +277,17 @@ pub fn remap_copy(shape:&mut Shape,ids:&HashMap<u64,u64>) {
     #[test] fn linked_paths_reflow_on_transform_release_on_delete_and_restore_on_undo(){let(mut studio,guide,id)=scene();let before=studio.doc.find_shape(1,id).unwrap().geom.clone();studio.doc.find_shape_mut(1,guide).unwrap().geom.translate(Pt::new(50.,20.));studio.mark();let Geom::Text(after)=&studio.doc.find_shape(1,id).unwrap().geom else{panic!()};let Geom::Text(before)=before else{panic!()};assert!((after.contours[0][0]-before.contours[0][0]-Pt::new(50.,20.)).length()<0.01);studio.selection=vec![(1,guide)];studio.delete_selection();let Geom::Text(run)=&studio.doc.find_shape(1,id).unwrap().geom else{panic!()};assert!(run.on_path.is_none());studio.undo();let Geom::Text(run)=&studio.doc.find_shape(1,id).unwrap().geom else{panic!()};assert_eq!(run.on_path.as_ref().unwrap().path_id,guide);}
     #[test] fn linked_save_load_copy_and_outlined_svg_preserve_positions(){let(studio,guide,id)=scene();let encoded=crate::project::encode(&studio.doc).unwrap();let restored=crate::project::decode(&encoded).unwrap();let original=studio.doc.find_shape(1,id).unwrap();let loaded=restored.find_shape(1,id).unwrap();let Geom::Text(a)=&original.geom else{panic!()};let Geom::Text(b)=&loaded.geom else{panic!()};assert_eq!(a.contours,b.contours);let svg=crate::svg::export(&restored).unwrap();assert!(svg.contains(&format!("<path id=\"oma-{id}\"")));let mut copy=original.clone();remap_copy(&mut copy,&HashMap::from([(id,id+1000),(guide,guide+1000)]));let Geom::Text(c)=copy.geom else{panic!()};assert_eq!(c.on_path.unwrap().path_id,guide+1000);let mut copy=original.clone();remap_copy(&mut copy,&HashMap::from([(id,id+1000)]));let Geom::Text(c)=copy.geom else{panic!()};assert!(c.on_path.is_none());}
     #[test] fn every_primitive_and_compound_can_guide_type(){for geom in [Geom::Rect{origin:Pt::ZERO,size:Pt::new(100.,50.),radius:4.},Geom::Ellipse{center:Pt::ZERO,radii:Pt::splat(30.)},Geom::Line{a:Pt::ZERO,b:Pt::new(100.,0.)},Geom::Polygon{center:Pt::ZERO,radii:Pt::splat(40.),sides:5},Geom::Star{center:Pt::ZERO,outer:Pt::splat(40.),inner:0.5,points:5},Geom::Paths{paths:vec![crate::geom::PathContour{anchors:vec![crate::geom::Anchor::corner(Pt::ZERO),crate::geom::Anchor::corner(Pt::new(100.,0.))],closed:false}],winding:true}]{assert!(guide_path(&Shape::new(geom,Style::default())).unwrap().length>10.);}}
+}
+
+#[cfg(test)] mod range_path_tests {
+    use super::*;
+    #[test] fn curve_spacing_adds_to_explicit_range_tracking_and_paragraph_alignment() {
+        let guide=Shape::new(Geom::Line{a:Pt::ZERO,b:Pt::new(1000.,0.)},Default::default());
+        let mut run=TypeRun{content:"ABCD".into(),px:20.,on_path:Some(TextOnPath{path_id:guide.id,cache:guide_path(&guide),..Default::default()}),..Default::default()};
+        run.set_character_style(0,4,|span|span.tracking=Some(100.));let original=layout_on_path(&run);
+        run.on_path.as_mut().unwrap().spacing=3.;let spaced=layout_on_path(&run);let x=|layout:&TextGeometryLayout,index|layout.carets.iter().find(|c|c.0==index).unwrap().1.x;
+        assert!((x(&spaced,1)-x(&original,1)-3.).abs()<0.01);
+        run.update_paragraphs(0,4,|p|p.align=TextAlign::Center);let centered=layout_on_path(&run);assert!(x(&centered,0)>400.);
+        run.update_paragraphs(0,4,|p|p.align=TextAlign::End);let right=layout_on_path(&run);assert!(x(&right,0)>x(&centered,0)+300.);
+    }
 }

@@ -64,6 +64,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
 
         }
     });
+    if run.on_path.is_none() {
     let mut wrap = run.wrap_width.is_some();
     let mut width = run.wrap_width.unwrap_or(320.);
     let mut changed = ui.checkbox(&mut wrap, "Wrap text to width").changed();
@@ -79,6 +80,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     }
     if changed {
         studio.patch_type(|t| t.wrap_width = wrap.then_some(width));
+    }
     }
     ui.collapsing("Justification", |ui| {
         egui::Grid::new("justification_limits").show(ui, |ui| {
