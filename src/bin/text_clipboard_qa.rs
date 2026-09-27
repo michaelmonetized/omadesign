@@ -36,6 +36,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     target_app.active_layer = Some(1);
     target_app.place_text(omadesign::geom::Pt::ZERO);
     target_app.patch_type(|run| run.features = vec![(*b"ss02", 1)]);
+    let original_content = match &target_app.type_edit.as_ref().unwrap().before {
+        omadesign::geom::Geom::Text(run) => run.content.clone(),
+        _ => unreachable!(),
+    };
     native_paste(&ctx, &mut target_app, &source.content);
     let offered = Command::new("wl-paste").arg("--list-types").output()?;
     assert!(offered.status.success());
@@ -59,7 +63,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pasted = target_app.selected_type().unwrap();
     target_app.commit_type_edit();
     target_app.undo();
-    assert!(target_app.selected_type().unwrap().content.is_empty());
+    assert_eq!(
+        target_app.selected_type().unwrap().content,
+        original_content
+    );
     target_app.redo();
     assert_eq!(target_app.selected_type().unwrap().spans, pasted.spans);
     for at in 0..source.content.chars().count() {
