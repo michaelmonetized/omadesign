@@ -488,7 +488,8 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
         }
         studio.commit_type_edit();
         if studio.tool == Tool::Text {
-            studio.place_text(pick);
+            if let Some(guide) = studio.text_path_target(pick, slack) { studio.place_text_on_path(pick,guide); }
+            else { studio.place_text(pick); }
         }
         return;
     }

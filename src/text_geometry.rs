@@ -1,6 +1,6 @@
 //! Document-aware editable text geometry. Path samples are adaptive, in world space.
 use crate::document::{Cmd, Document, Shape};
-use crate::geom::{Bounds, Geom, Pt, TextAlign, TypeRun};
+use crate::geom::{Geom, Pt, TextAlign, TypeRun};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -244,4 +244,13 @@ pub fn remap_copy(shape:&mut Shape,ids:&HashMap<u64,u64>) {
         let reverse=path_position(&run,run.on_path.as_ref().unwrap().cache.as_ref().unwrap().length-50.).unwrap();
         assert!((forward.0-reverse.0).length()<0.01);assert!(forward.1.dot(reverse.1) < -0.999);
     }
+}
+
+#[cfg(test)] mod lifecycle_tests {
+    use super::*;
+    use crate::{app::Studio,document::Style};
+    fn scene()->(Studio,u64,u64){let mut studio=Studio::new();let guide=Shape::new(Geom::Ellipse{center:Pt::new(300.,300.),radii:Pt::splat(120.)},Style::default());let guide_id=guide.id;studio.doc.layers[1].kind.shapes_mut().unwrap().push(guide);studio.active_layer=Some(1);studio.place_text_on_path(Pt::new(420.,300.),(1,guide_id));studio.type_insert("Curved ligatures ffi");studio.commit_type_edit();let id=studio.selection[0].1;(studio,guide_id,id)}
+    #[test] fn linked_paths_reflow_on_transform_release_on_delete_and_restore_on_undo(){let(mut studio,guide,id)=scene();let before=studio.doc.find_shape(1,id).unwrap().geom.clone();studio.doc.find_shape_mut(1,guide).unwrap().geom.translate(Pt::new(50.,20.));studio.mark();let Geom::Text(after)=&studio.doc.find_shape(1,id).unwrap().geom else{panic!()};let Geom::Text(before)=before else{panic!()};assert!((after.contours[0][0]-before.contours[0][0]-Pt::new(50.,20.)).length()<0.01);studio.selection=vec![(1,guide)];studio.delete_selection();let Geom::Text(run)=&studio.doc.find_shape(1,id).unwrap().geom else{panic!()};assert!(run.on_path.is_none());studio.undo();let Geom::Text(run)=&studio.doc.find_shape(1,id).unwrap().geom else{panic!()};assert_eq!(run.on_path.as_ref().unwrap().path_id,guide);}
+    #[test] fn linked_save_load_copy_and_outlined_svg_preserve_positions(){let(studio,guide,id)=scene();let encoded=crate::project::encode(&studio.doc).unwrap();let restored=crate::project::decode(&encoded).unwrap();let original=studio.doc.find_shape(1,id).unwrap();let loaded=restored.find_shape(1,id).unwrap();let Geom::Text(a)=&original.geom else{panic!()};let Geom::Text(b)=&loaded.geom else{panic!()};assert_eq!(a.contours,b.contours);let svg=crate::svg::export(&restored).unwrap();assert!(svg.contains(&format!("<path id=\"oma-{id}\"")));let mut copy=original.clone();remap_copy(&mut copy,&HashMap::from([(id,id+1000),(guide,guide+1000)]));let Geom::Text(c)=copy.geom else{panic!()};assert_eq!(c.on_path.unwrap().path_id,guide+1000);let mut copy=original.clone();remap_copy(&mut copy,&HashMap::from([(id,id+1000)]));let Geom::Text(c)=copy.geom else{panic!()};assert!(c.on_path.is_none());}
+    #[test] fn every_primitive_and_compound_can_guide_type(){for geom in [Geom::Rect{origin:Pt::ZERO,size:Pt::new(100.,50.),radius:4.},Geom::Ellipse{center:Pt::ZERO,radii:Pt::splat(30.)},Geom::Line{a:Pt::ZERO,b:Pt::new(100.,0.)},Geom::Polygon{center:Pt::ZERO,radii:Pt::splat(40.),sides:5},Geom::Star{center:Pt::ZERO,outer:Pt::splat(40.),inner:0.5,points:5},Geom::Paths{paths:vec![crate::geom::PathContour{anchors:vec![crate::geom::Anchor::corner(Pt::ZERO),crate::geom::Anchor::corner(Pt::new(100.,0.))],closed:false}],winding:true}]{assert!(guide_path(&Shape::new(geom,Style::default())).unwrap().length>10.);}}
 }

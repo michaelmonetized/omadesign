@@ -34,11 +34,10 @@ pub fn brackets(ui:&mut Ui,rect:Rect,studio:&mut Studio)->bool {
     let selection=studio.selection.clone();
     for (layer,id) in selection {
         let Some(shape)=studio.doc.find_shape(layer,id) else{continue};
-        let Geom::Text(run)=&shape.geom else{continue};
-        let Some(on)=run.on_path.as_ref() else{continue};
+        let Geom::Text(current)=shape.geom.clone() else{continue};
+        let Some(on)=current.on_path.as_ref() else{continue};
         let Some(path)=on.cache.as_ref() else{continue};
         let Some((_,span))=text_geometry::path_interval(on) else{continue};
-        let current=run.clone();
         let view=studio.view;
         for (kind,distance) in [(0,0.),(1,span),(2,span*0.5)] {
             let Some((point,tangent))=text_geometry::path_position(&current,distance) else{continue};
