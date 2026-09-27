@@ -458,6 +458,9 @@ fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1440., 900.])
+            .with_min_inner_size([1440., 900.])
+            .with_max_inner_size([1440., 900.])
+            .with_resizable(false)
             .with_title("Omadesign · everyday authoring QA"),
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()

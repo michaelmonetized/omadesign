@@ -1,0 +1,156 @@
+{
+  "name": "authoring-1",
+  "returncode": 0,
+  "timed_out": false,
+  "wall_seconds": 21.534608792047948,
+  "peak_rss_KiB": 239736,
+  "user_seconds": 16.493034,
+  "system_seconds": 2.863286,
+  "major_page_faults": 139,
+  "before": {
+    "memory": {
+      "MemTotal_KiB": 7963864,
+      "MemAvailable_KiB": 3324448,
+      "SwapTotal_KiB": 15929476,
+      "SwapFree_KiB": 14902080
+    },
+    "loadavg": "0.02 0.15 0.23 2/830 511522",
+    "pressure": {
+      "cpu": "some avg10=0.00 avg60=0.00 avg300=0.00 total=606941279\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=2566839\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=2526720",
+      "io": "some avg10=0.58 avg60=0.96 avg300=0.85 total=1709375488\nfull avg10=0.54 avg60=0.92 avg300=0.83 total=1653401022"
+    },
+    "cpu_policies": {
+      "policy6": {
+        "affected_cpus": "6",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3758414",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy4": {
+        "affected_cpus": "4",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "400000",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy2": {
+        "affected_cpus": "2",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3789345",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy0": {
+        "affected_cpus": "0",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "400000",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy7": {
+        "affected_cpus": "7",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3796152",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy5": {
+        "affected_cpus": "5",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "400000",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy3": {
+        "affected_cpus": "3",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "400000",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy1": {
+        "affected_cpus": "1",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "400000",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      }
+    }
+  },
+  "after": {
+    "memory": {
+      "MemTotal_KiB": 7963864,
+      "MemAvailable_KiB": 3398264,
+      "SwapTotal_KiB": 15929476,
+      "SwapFree_KiB": 14803032
+    },
+    "loadavg": "0.44 0.24 0.26 1/829 512422",
+    "pressure": {
+      "cpu": "some avg10=0.00 avg60=0.00 avg300=0.00 total=607005348\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "memory": "some avg10=0.28 avg60=0.17 avg300=0.04 total=2724349\nfull avg10=0.28 avg60=0.17 avg300=0.04 total=2683106",
+      "io": "some avg10=0.66 avg60=1.13 avg300=0.91 total=1709898230\nfull avg10=0.62 avg60=1.07 avg300=0.88 total=1653897117"
+    },
+    "cpu_policies": {
+      "policy6": {
+        "affected_cpus": "6",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3699435",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy4": {
+        "affected_cpus": "4",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3697871",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy2": {
+        "affected_cpus": "2",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3699798",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy0": {
+        "affected_cpus": "0",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3700337",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy7": {
+        "affected_cpus": "7",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3706710",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy5": {
+        "affected_cpus": "5",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3702107",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy3": {
+        "affected_cpus": "3",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3695224",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy1": {
+        "affected_cpus": "1",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3701166",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      }
+    }
+  },
+  "network": "disabled with unshare -Urn",
+  "limits": "default user-session limits, no per-test CPU or memory ceiling"
+}

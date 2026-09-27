@@ -1,0 +1,1847 @@
+{
+  "hpeliteclient": {
+    "spec": {
+      "host": "hpeliteclient",
+      "architecture": "x86_64",
+      "kernel": "7.2.3-arch1-3",
+      "lscpu": {
+        "returncode": 0,
+        "output": "{\n   \"lscpu\": [\n      {\n         \"field\": \"Architecture:\",\n         \"data\": \"x86_64\"\n      },{\n         \"field\": \"CPU op-mode(s):\",\n         \"data\": \"32-bit, 64-bit\"\n      },{\n         \"field\": \"Address sizes:\",\n         \"data\": \"43 bits physical, 48 bits virtual\"\n      },{\n         \"field\": \"Byte Order:\",\n         \"data\": \"Little Endian\"\n      },{\n         \"field\": \"CPU(s):\",\n         \"data\": \"4\"\n      },{\n         \"field\": \"On-line CPU(s) list:\",\n         \"data\": \"0-3\"\n      },{\n         \"field\": \"Vendor ID:\",\n         \"data\": \"AuthenticAMD\"\n      },{\n         \"field\": \"Model name:\",\n         \"data\": \"AMD Ryzen Embedded R2314 with Radeon Graphics\"\n      },{\n         \"field\": \"CPU family:\",\n         \"data\": \"23\"\n      },{\n         \"field\": \"Model:\",\n         \"data\": \"24\"\n      },{\n         \"field\": \"Thread(s) per core:\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"Core(s) per socket:\",\n         \"data\": \"4\"\n      },{\n         \"field\": \"Socket(s):\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"Stepping:\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"Microcode version:\",\n         \"data\": \"0x8108109\"\n      },{\n         \"field\": \"Frequency boost:\",\n         \"data\": \"enabled\"\n      },{\n         \"field\": \"CPU(s) scaling MHz:\",\n         \"data\": \"44%\"\n      },{\n         \"field\": \"CPU max MHz:\",\n         \"data\": \"3500.0000\"\n      },{\n         \"field\": \"CPU min MHz:\",\n         \"data\": \"1400.0000\"\n      },{\n         \"field\": \"BogoMIPS:\",\n         \"data\": \"4191.79\"\n      },{\n         \"field\": \"Flags:\",\n         \"data\": \"fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpb hw_pstate ssbd ibpb vmmcall fsgsbase bmi1 avx2 smep bmi2 rdseed adx smap clflushopt sha_ni xsaveopt xsavec xgetbv1 clzero xsaveerptr arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold avic v_vmsave_vmload vgif overflow_recov succor smca sev sev_es\"\n      },{\n         \"field\": \"Virtualization:\",\n         \"data\": \"AMD-V\"\n      },{\n         \"field\": \"L1d cache:\",\n         \"data\": \"128 KiB (4 instances)\"\n      },{\n         \"field\": \"L1i cache:\",\n         \"data\": \"256 KiB (4 instances)\"\n      },{\n         \"field\": \"L2 cache:\",\n         \"data\": \"2 MiB (4 instances)\"\n      },{\n         \"field\": \"L3 cache:\",\n         \"data\": \"4 MiB (1 instance)\"\n      },{\n         \"field\": \"NUMA node(s):\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"NUMA node0 CPU(s):\",\n         \"data\": \"0-3\"\n      },{\n         \"field\": \"Vulnerability Gather data sampling:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Ghostwrite:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Indirect target selection:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Itlb multihit:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability L1tf:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Mds:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Meltdown:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Mmio stale data:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Old microcode:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Reg file data sampling:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Retbleed:\",\n         \"data\": \"Mitigation; untrained return thunk; SMT disabled\"\n      },{\n         \"field\": \"Vulnerability Spec rstack overflow:\",\n         \"data\": \"Mitigation; SMT disabled\"\n      },{\n         \"field\": \"Vulnerability Spec store bypass:\",\n         \"data\": \"Mitigation; Speculative Store Bypass disabled via prctl\"\n      },{\n         \"field\": \"Vulnerability Spectre v1:\",\n         \"data\": \"Mitigation; usercopy/swapgs barriers and __user pointer sanitization\"\n      },{\n         \"field\": \"Vulnerability Spectre v2:\",\n         \"data\": \"Mitigation; Retpolines; IBPB conditional; STIBP disabled; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected\"\n      },{\n         \"field\": \"Vulnerability Srbds:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Tsa:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Tsx async abort:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Vmscape:\",\n         \"data\": \"Mitigation; IBPB before exit to userspace\"\n      }\n   ]\n}"
+      },
+      "cpu_topology": {
+        "returncode": 0,
+        "output": "# The following is the parsable format, which can be fed to other\n# programs. Each different item in every column has an unique ID\n# starting usually from zero.\n# CPU,Core,Socket,Online\n0,0,0,Y\n1,1,0,Y\n2,2,0,Y\n3,3,0,Y"
+      },
+      "model": "HP Elite t655 Thin Client",
+      "vendor": "HP",
+      "os_release": "NAME=\"Omarchy\"\nPRETTY_NAME=\"Omarchy\"\nID=omarchy\nID_LIKE=arch\nBUILD_ID=\"4.0.4\"\nVERSION_ID=\"4.0.4\"\nANSI_COLOR=\"38;2;158;206;106\"\nHOME_URL=\"https://omarchy.org/\"\nDOCUMENTATION_URL=\"https://learn.omacom.io/2/the-omarchy-manual\"\nSUPPORT_URL=\"https://discord.gg/tXFUdasqhY\"\nBUG_REPORT_URL=\"https://github.com/basecamp/omarchy/issues\"\nLOGO=omarchy",
+      "graphics": [
+        "04:00.0 VGA compatible controller [0300]: Advanced Micro Devices, Inc. [AMD/ATI] Picasso/Raven 2 [Radeon Vega Series / Radeon Vega Mobile Series] [1002:15d8] (rev 72)",
+        "\tKernel driver in use: amdgpu"
+      ],
+      "graphics_packages": {
+        "returncode": 1,
+        "output": "mesa 1:26.2.2-1\nvulkan-radeon 1:26.2.2-1"
+      },
+      "power_profile": {
+        "returncode": 0,
+        "output": "balanced"
+      },
+      "state": {
+        "memory": {
+          "MemTotal_KiB": 5929656,
+          "MemAvailable_KiB": 769208,
+          "SwapTotal_KiB": 5928956,
+          "SwapFree_KiB": 2205376
+        },
+        "loadavg": "1.63 2.24 1.93 7/1081 2464187",
+        "pressure": {
+          "cpu": "some avg10=11.78 avg60=5.68 avg300=8.91 total=49502440989\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+          "memory": "some avg10=3.78 avg60=1.33 avg300=2.86 total=1025886432\nfull avg10=3.27 avg60=1.07 avg300=1.90 total=778651904",
+          "io": "some avg10=2.36 avg60=0.91 avg300=0.83 total=1558932833\nfull avg10=0.64 avg60=0.34 avg300=0.23 total=768811682"
+        },
+        "cpu_policies": {
+          "policy2": {
+            "affected_cpus": "2",
+            "scaling_governor": "schedutil",
+            "scaling_cur_freq": "1679535",
+            "scaling_min_freq": "1400000",
+            "scaling_max_freq": "2100000"
+          },
+          "policy0": {
+            "affected_cpus": "0",
+            "scaling_governor": "schedutil",
+            "scaling_cur_freq": "1679972",
+            "scaling_min_freq": "1400000",
+            "scaling_max_freq": "2100000"
+          },
+          "policy3": {
+            "affected_cpus": "3",
+            "scaling_governor": "schedutil",
+            "scaling_cur_freq": "1662986",
+            "scaling_min_freq": "1400000",
+            "scaling_max_freq": "2100000"
+          },
+          "policy1": {
+            "affected_cpus": "1",
+            "scaling_governor": "schedutil",
+            "scaling_cur_freq": "1662819",
+            "scaling_min_freq": "1400000",
+            "scaling_max_freq": "2100000"
+          }
+        }
+      },
+      "captured_utc": "2026-09-27T18:41:54Z",
+      "monitors": [
+        {
+          "name": "DP-1",
+          "width": 1920,
+          "height": 1080,
+          "refreshRate": 60.0,
+          "scale": 1,
+          "transform": 0
+        },
+        {
+          "name": "DP-3",
+          "width": 3840,
+          "height": 2160,
+          "refreshRate": 60.0,
+          "scale": 1,
+          "transform": 0
+        }
+      ],
+      "artifacts": {
+        "bin/authoring_qa": {
+          "bytes": 53440144,
+          "sha256": "f8d71ab3dd26c6cdff1955b2ffa11003c1817e46eee0afab293a11ffa153d9a7"
+        },
+        "bin/background_removal_qa": {
+          "bytes": 53669848,
+          "sha256": "1e235dc0a19873ab71bef61909b763ca7295ae0d4cb7bf0cd7434610899defc9"
+        },
+        "bin/canvas_profile": {
+          "bytes": 5661592,
+          "sha256": "287fe87f5762ad9f2af1706040b15779b3f19008fe3a9807f3d5eb96afad9859"
+        },
+        "bin/omadesign": {
+          "bytes": 53691472,
+          "sha256": "fd293af0d47e2bfda8550a1c2107177060b8e0a9d41785f299c9f5849f9091d8"
+        },
+        "bin/upscale_qa": {
+          "bytes": 53697368,
+          "sha256": "8d65544c5440418bba32512bbb10bbbb3358181c38b6388b2339b51ddd01a37e"
+        },
+        "lib/libonnxruntime.so.1.28.0": {
+          "bytes": 24268848,
+          "sha256": "1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab"
+        },
+        "lib/libonnxruntime_providers_shared.so": {
+          "bytes": 14632,
+          "sha256": "086ec1d5388f64153d9c63470d126693db9a182c8ce236d3a1119068471b8a0d"
+        },
+        "inputs/.omabrand/.omatype": {
+          "bytes": 794,
+          "sha256": "ac6929ca4fec50b10dbbc167cc27d6364d29c5b0171c97b67050252245978cd9"
+        },
+        "inputs/.omabrand/fonts/2387344100d213108cead7abcdc1263c.ttf": {
+          "bytes": 2968744,
+          "sha256": "b7c0dcee217aa017207f21b0915b5159451fa8b7fb619af8afb6349352ca8770"
+        },
+        "inputs/.omabrand/fonts/2819ebc145fb746db9eb78bdeea2bc3a.ttf": {
+          "bytes": 646360,
+          "sha256": "5d4d9e0ded710a4603e10afebfce2c2d56fa0d216890e8915511d2a53a004c1c"
+        },
+        "inputs/.omabrand/fonts/64a2d3719cd24cfc90c61e80239af081.ttf": {
+          "bytes": 2968556,
+          "sha256": "7fdb146f5b2ab3a435a6e975899de7e0958a1e3c17f5fc86c5b2e28271452adc"
+        },
+        "inputs/.omabrand/fonts/Nerd-Fonts-OFL.txt": {
+          "bytes": 4301,
+          "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2"
+        },
+        "inputs/.omabrand/fonts/Noto-OFL.txt": {
+          "bytes": 11357,
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        },
+        "inputs/.omabrand/fonts/bb80be15ebaedfabdf34beb2e53006b2.ttf": {
+          "bytes": 2968648,
+          "sha256": "5f800630112c2094efeb09f65c0e7247e4e6c85d2b61384b6e89de95b9bd5aa3"
+        },
+        "inputs/.omabrand/fonts/c40328406c229b6198215f56453385f2.ttf": {
+          "bytes": 631484,
+          "sha256": "1df075a380fc7cb898acf64c1f7b3b4dd780de3caa860178bf929de35817a913"
+        },
+        "inputs/.omabrand/fonts/ff1bcc1d0e36c222e930ee514700e1e0.ttf": {
+          "bytes": 2968820,
+          "sha256": "704898874930bd2dbf9ebdcc0bbe5d9b7c2714fe537d0ca0f5cb0cbb49915bc8"
+        },
+        "inputs/cat-1024.png": {
+          "bytes": 1057041,
+          "sha256": "41888dafdc59123b25129b260a2d91a03306ee67bdfd495cc1bb0e1f0f1eac8e"
+        },
+        "inputs/cat-320.png": {
+          "bytes": 116328,
+          "sha256": "be014031f03404af7f6a4c222caf34c806a55cc943cc33736556e021bc9610ff"
+        },
+        "inputs/infographic-seed.oma": {
+          "bytes": 472296,
+          "sha256": "d75a60c1803b4718d171a897f2330b3faec80018a02d27ee6c5447b88eeef7a7"
+        },
+        "inputs/type-tasks.json": {
+          "bytes": 624,
+          "sha256": "e859dd9c2e990468c36c818616addfbb47c46f0951f6e6e4f5be4c5eb0b96efe"
+        }
+      }
+    },
+    "graphics": {
+      "captured_utc": "2026-09-27T18:45:07Z",
+      "cards": [
+        {
+          "card": "card1",
+          "driver": "amdgpu",
+          "mem_info_vram_total_bytes": 2147483648,
+          "mem_info_vis_vram_total_bytes": 2147483648,
+          "mem_info_gtt_total_bytes": 3035983872
+        }
+      ]
+    },
+    "authoring": {
+      "idle": {
+        "ui_ms": {
+          "n": 120,
+          "p50": 2.5913614999999997,
+          "p95": 67.288922,
+          "max": 284.165524
+        },
+        "interval_ms": {
+          "n": 120,
+          "p50": 17.2876875,
+          "p95": 85.114666,
+          "max": 293.446033
+        },
+        "redraws": 0,
+        "per_run": [
+          {
+            "frames": 60,
+            "p50_ms": 1.7226635,
+            "p95_ms": 11.445079,
+            "max_ms": 101.464917
+          },
+          {
+            "frames": 60,
+            "p50_ms": 3.9401554999999995,
+            "p95_ms": 170.355562,
+            "max_ms": 284.165524
+          }
+        ]
+      },
+      "pen-preview": {
+        "ui_ms": {
+          "n": 96,
+          "p50": 2.1978015,
+          "p95": 4.693969,
+          "max": 59.994530999999995
+        },
+        "interval_ms": {
+          "n": 96,
+          "p50": 16.6695745,
+          "p95": 24.935096,
+          "max": 74.483525
+        },
+        "redraws": 0,
+        "per_run": [
+          {
+            "frames": 48,
+            "p50_ms": 2.3114345,
+            "p95_ms": 6.9799809999999995,
+            "max_ms": 55.702819
+          },
+          {
+            "frames": 48,
+            "p50_ms": 2.0196294999999997,
+            "p95_ms": 2.962361,
+            "max_ms": 59.994530999999995
+          }
+        ]
+      },
+      "pen-commit": {
+        "ui_ms": {
+          "n": 6,
+          "p50": 97.53387649999999,
+          "p95": 141.29783600000002,
+          "max": 141.29783600000002
+        },
+        "interval_ms": {
+          "n": 6,
+          "p50": 111.687674,
+          "p95": 148.445928,
+          "max": 148.445928
+        },
+        "redraws": 6,
+        "per_run": [
+          {
+            "frames": 3,
+            "p50_ms": 121.33869299999999,
+            "p95_ms": 141.29783600000002,
+            "max_ms": 141.29783600000002
+          },
+          {
+            "frames": 3,
+            "p50_ms": 84.355871,
+            "p95_ms": 89.935853,
+            "max_ms": 89.935853
+          }
+        ]
+      },
+      "typing": {
+        "ui_ms": {
+          "n": 166,
+          "p50": 82.046581,
+          "p95": 560.5524979999999,
+          "max": 1534.733093
+        },
+        "interval_ms": {
+          "n": 166,
+          "p50": 90.058265,
+          "p95": 572.1076280000001,
+          "max": 1561.566373
+        },
+        "redraws": 166,
+        "per_run": [
+          {
+            "frames": 83,
+            "p50_ms": 61.751172,
+            "p95_ms": 123.442289,
+            "max_ms": 162.995953
+          },
+          {
+            "frames": 83,
+            "p50_ms": 100.774685,
+            "p95_ms": 678.27539,
+            "max_ms": 1534.733093
+          }
+        ]
+      },
+      "brush-drag": {
+        "ui_ms": {
+          "n": 180,
+          "p50": 97.13915549999999,
+          "p95": 184.49023400000002,
+          "max": 525.935285
+        },
+        "interval_ms": {
+          "n": 180,
+          "p50": 103.697008,
+          "p95": 192.257727,
+          "max": 537.96131
+        },
+        "redraws": 180,
+        "per_run": [
+          {
+            "frames": 90,
+            "p50_ms": 110.086851,
+            "p95_ms": 228.025317,
+            "max_ms": 525.935285
+          },
+          {
+            "frames": 90,
+            "p50_ms": 86.941254,
+            "p95_ms": 144.061293,
+            "max_ms": 211.217033
+          }
+        ]
+      },
+      "pan": {
+        "ui_ms": {
+          "n": 80,
+          "p50": 79.49893549999999,
+          "p95": 144.30995,
+          "max": 237.58714799999998
+        },
+        "interval_ms": {
+          "n": 80,
+          "p50": 86.368881,
+          "p95": 151.18544500000002,
+          "max": 251.38413999999997
+        },
+        "redraws": 76,
+        "per_run": [
+          {
+            "frames": 40,
+            "p50_ms": 73.28135649999999,
+            "p95_ms": 130.738451,
+            "max_ms": 154.318567
+          },
+          {
+            "frames": 40,
+            "p50_ms": 81.8377185,
+            "p95_ms": 151.96834,
+            "max_ms": 237.58714799999998
+          }
+        ]
+      },
+      "zoom": {
+        "ui_ms": {
+          "n": 120,
+          "p50": 147.5828275,
+          "p95": 442.663298,
+          "max": 986.445993
+        },
+        "interval_ms": {
+          "n": 120,
+          "p50": 155.44824899999998,
+          "p95": 458.729141,
+          "max": 1003.4175510000001
+        },
+        "redraws": 120,
+        "per_run": [
+          {
+            "frames": 60,
+            "p50_ms": 118.336928,
+            "p95_ms": 725.507777,
+            "max_ms": 986.445993
+          },
+          {
+            "frames": 60,
+            "p50_ms": 178.5864745,
+            "p95_ms": 319.43145899999996,
+            "max_ms": 401.242814
+          }
+        ]
+      },
+      "save": {
+        "ui_ms": {
+          "n": 2,
+          "p50": 466.73188350000004,
+          "p95": 699.1832340000001,
+          "max": 699.1832340000001
+        },
+        "interval_ms": {
+          "n": 2,
+          "p50": 482.107283,
+          "p95": 713.015445,
+          "max": 713.015445
+        },
+        "redraws": 0,
+        "per_run": [
+          {
+            "frames": 1,
+            "p50_ms": 699.1832340000001,
+            "p95_ms": 699.1832340000001,
+            "max_ms": 699.1832340000001
+          },
+          {
+            "frames": 1,
+            "p50_ms": 234.28053300000002,
+            "p95_ms": 234.28053300000002,
+            "max_ms": 234.28053300000002
+          }
+        ]
+      }
+    },
+    "resources": {
+      "authoring-1": {
+        "name": "authoring-1",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 53.310556615004316,
+        "peak_rss_KiB": 208672,
+        "user_seconds": 32.682693,
+        "system_seconds": 9.870947,
+        "major_page_faults": 8447,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "authoring-2": {
+        "name": "authoring-2",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 69.92517785599921,
+        "peak_rss_KiB": 171112,
+        "user_seconds": 35.105546,
+        "system_seconds": 10.839468,
+        "major_page_faults": 5339,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "background-1024": {
+        "name": "background-1024",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 32.0136272769887,
+        "peak_rss_KiB": 538308,
+        "user_seconds": 44.535435,
+        "system_seconds": 1.2473589999999999,
+        "major_page_faults": 4555,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "background-320": {
+        "name": "background-320",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 5.254489453043789,
+        "peak_rss_KiB": 323992,
+        "user_seconds": 4.433189,
+        "system_seconds": 1.031641,
+        "major_page_faults": 28,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "background_removal_qa-native": {
+        "name": "background_removal_qa-native",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 24.86345603701193,
+        "peak_rss_KiB": 450536,
+        "user_seconds": 12.05057,
+        "system_seconds": 7.300801,
+        "major_page_faults": 2441,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "canvas-profile": {
+        "name": "canvas-profile",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 1.7159058719407767,
+        "peak_rss_KiB": 70104,
+        "user_seconds": 1.1959089999999999,
+        "system_seconds": 0.431083,
+        "major_page_faults": 1,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "package-reopen": {
+        "name": "package-reopen",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 11.717488161986694,
+        "peak_rss_KiB": 150320,
+        "user_seconds": 1.161799,
+        "system_seconds": 3.86575,
+        "major_page_faults": 183,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "upscale-1024-2x": {
+        "name": "upscale-1024-2x",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 166.34762957203202,
+        "peak_rss_KiB": 129964,
+        "user_seconds": 292.895956,
+        "system_seconds": 25.434721,
+        "major_page_faults": 9034,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "upscale-320-2x": {
+        "name": "upscale-320-2x",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 9.554772239993326,
+        "peak_rss_KiB": 102988,
+        "user_seconds": 24.419036,
+        "system_seconds": 1.453641,
+        "major_page_faults": 25,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "upscale-320-4x": {
+        "name": "upscale-320-4x",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 16.192998992977664,
+        "peak_rss_KiB": 103644,
+        "user_seconds": 26.057526,
+        "system_seconds": 1.658684,
+        "major_page_faults": 36,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "upscale_qa-native": {
+        "name": "upscale_qa-native",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 153.08134140097536,
+        "peak_rss_KiB": 618596,
+        "user_seconds": 231.273103,
+        "system_seconds": 30.215362,
+        "major_page_faults": 5278,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      }
+    },
+    "warm_canvas_median_ms": 104.75764799999999,
+    "native_background": {
+      "cancel_preserves_document": true,
+      "elapsed_seconds": 13.646177642,
+      "frames": 238,
+      "inference_frames": 61,
+      "inference_seconds": 5.29931836,
+      "interaction": "real egui pointer and keyboard events",
+      "one_undo_step": true,
+      "pixels_preserved": true,
+      "renderer": "native WGPU",
+      "save_reopen": true,
+      "screenshots": [
+        "01-working",
+        "02-preview",
+        "03-matte",
+        "04-refined",
+        "05-applied",
+        "06-undo",
+        "07-redo-saved",
+        "08-credits"
+      ],
+      "ui_frame_max_ms": 486.65142,
+      "ui_frame_p95_ms": 234.687068,
+      "undo_redo": true
+    },
+    "native_upscale": {
+      "cancel_export_no_partial": true,
+      "cancel_preserves_document": true,
+      "document_export_4x": true,
+      "elapsed_seconds": 140.531886826,
+      "frames": 2376,
+      "inference_frames": 596,
+      "inference_seconds": 49.293538505,
+      "interaction": "real egui pointer and keyboard events; save destinations supplied through the native host callback",
+      "one_undo_step_each": true,
+      "photo_copy_2x_persisted_and_opened": true,
+      "photo_custom_2_5x": true,
+      "renderer": "native WGPU",
+      "save_reopen": true,
+      "screenshots": [
+        "01-upscale-first-preview",
+        "02-upscale-cutout-preview",
+        "03-export-dialog",
+        "04-photo-upscale-dialog",
+        "05-photo-copy-opened",
+        "06-photo-custom-scale",
+        "07-credits"
+      ],
+      "ui_frame_max_ms": 956.7436459999999,
+      "ui_frame_p95_ms": 257.886756,
+      "undo_redo": true,
+      "upscale_cutout": true,
+      "upscale_first": true
+    },
+    "input_hashes_match": true,
+    "canvas_size": [
+      1020,
+      770
+    ]
+  },
+  "intelpro": {
+    "spec": {
+      "host": "intelpro",
+      "architecture": "x86_64",
+      "kernel": "7.2.6-arch2-Watanare-T2-4-t2",
+      "lscpu": {
+        "returncode": 0,
+        "output": "{\n   \"lscpu\": [\n      {\n         \"field\": \"Architecture:\",\n         \"data\": \"x86_64\"\n      },{\n         \"field\": \"CPU op-mode(s):\",\n         \"data\": \"32-bit, 64-bit\"\n      },{\n         \"field\": \"Address sizes:\",\n         \"data\": \"39 bits physical, 48 bits virtual\"\n      },{\n         \"field\": \"Byte Order:\",\n         \"data\": \"Little Endian\"\n      },{\n         \"field\": \"CPU(s):\",\n         \"data\": \"8\"\n      },{\n         \"field\": \"On-line CPU(s) list:\",\n         \"data\": \"0-7\"\n      },{\n         \"field\": \"Vendor ID:\",\n         \"data\": \"GenuineIntel\"\n      },{\n         \"field\": \"Model name:\",\n         \"data\": \"Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz\"\n      },{\n         \"field\": \"CPU family:\",\n         \"data\": \"6\"\n      },{\n         \"field\": \"Model:\",\n         \"data\": \"142\"\n      },{\n         \"field\": \"Thread(s) per core:\",\n         \"data\": \"2\"\n      },{\n         \"field\": \"Core(s) per socket:\",\n         \"data\": \"4\"\n      },{\n         \"field\": \"Socket(s):\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"Stepping:\",\n         \"data\": \"10\"\n      },{\n         \"field\": \"Microcode version:\",\n         \"data\": \"0xf6\"\n      },{\n         \"field\": \"CPU(s) scaling MHz:\",\n         \"data\": \"95%\"\n      },{\n         \"field\": \"CPU max MHz:\",\n         \"data\": \"3900.0000\"\n      },{\n         \"field\": \"CPU min MHz:\",\n         \"data\": \"400.0000\"\n      },{\n         \"field\": \"BogoMIPS:\",\n         \"data\": \"2799.89\"\n      },{\n         \"field\": \"Flags:\",\n         \"data\": \"fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb pti ssbd ibrs ibpb stibp tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid mpx rdseed adx smap clflushopt intel_pt xsaveopt xsavec xgetbv1 xsaves dtherm ida arat pln pts hwp hwp_act_window hwp_epp vnmi md_clear flush_l1d arch_capabilities\"\n      },{\n         \"field\": \"Virtualization:\",\n         \"data\": \"VT-x\"\n      },{\n         \"field\": \"L1d cache:\",\n         \"data\": \"128 KiB (4 instances)\"\n      },{\n         \"field\": \"L1i cache:\",\n         \"data\": \"128 KiB (4 instances)\"\n      },{\n         \"field\": \"L2 cache:\",\n         \"data\": \"1 MiB (4 instances)\"\n      },{\n         \"field\": \"L3 cache:\",\n         \"data\": \"6 MiB (1 instance)\"\n      },{\n         \"field\": \"NUMA node(s):\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"NUMA node0 CPU(s):\",\n         \"data\": \"0-7\"\n      },{\n         \"field\": \"Vulnerability Gather data sampling:\",\n         \"data\": \"Mitigation; Microcode\"\n      },{\n         \"field\": \"Vulnerability Ghostwrite:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Indirect target selection:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Itlb multihit:\",\n         \"data\": \"KVM: Mitigation: Split huge pages\"\n      },{\n         \"field\": \"Vulnerability L1tf:\",\n         \"data\": \"Mitigation; PTE Inversion; VMX conditional cache flushes, SMT vulnerable\"\n      },{\n         \"field\": \"Vulnerability Mds:\",\n         \"data\": \"Mitigation; Clear CPU buffers; SMT vulnerable\"\n      },{\n         \"field\": \"Vulnerability Meltdown:\",\n         \"data\": \"Mitigation; PTI\"\n      },{\n         \"field\": \"Vulnerability Mmio stale data:\",\n         \"data\": \"Mitigation; Clear CPU buffers; SMT vulnerable\"\n      },{\n         \"field\": \"Vulnerability Old microcode:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Reg file data sampling:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Retbleed:\",\n         \"data\": \"Mitigation; IBRS\"\n      },{\n         \"field\": \"Vulnerability Spec rstack overflow:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Spec store bypass:\",\n         \"data\": \"Mitigation; Speculative Store Bypass disabled via prctl\"\n      },{\n         \"field\": \"Vulnerability Spectre v1:\",\n         \"data\": \"Mitigation; usercopy/swapgs barriers and __user pointer sanitization\"\n      },{\n         \"field\": \"Vulnerability Spectre v2:\",\n         \"data\": \"Mitigation; IBRS; IBPB conditional; STIBP conditional; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected\"\n      },{\n         \"field\": \"Vulnerability Srbds:\",\n         \"data\": \"Mitigation; Microcode\"\n      },{\n         \"field\": \"Vulnerability Tsa:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Tsx async abort:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Vmscape:\",\n         \"data\": \"Mitigation; IBPB before exit to userspace\"\n      }\n   ]\n}"
+      },
+      "cpu_topology": {
+        "returncode": 0,
+        "output": "# The following is the parsable format, which can be fed to other\n# programs. Each different item in every column has an unique ID\n# starting usually from zero.\n# CPU,Core,Socket,Online\n0,0,0,Y\n1,1,0,Y\n2,2,0,Y\n3,3,0,Y\n4,0,0,Y\n5,1,0,Y\n6,2,0,Y\n7,3,0,Y"
+      },
+      "model": "MacBookPro15,4",
+      "vendor": "Apple Inc.",
+      "os_release": "NAME=\"Omarchy\"\nPRETTY_NAME=\"Omarchy\"\nID=omarchy\nID_LIKE=arch\nBUILD_ID=\"4.0.4\"\nVERSION_ID=\"4.0.4\"\nANSI_COLOR=\"38;2;158;206;106\"\nHOME_URL=\"https://omarchy.org/\"\nDOCUMENTATION_URL=\"https://learn.omacom.io/2/the-omarchy-manual\"\nSUPPORT_URL=\"https://discord.gg/tXFUdasqhY\"\nBUG_REPORT_URL=\"https://github.com/basecamp/omarchy/issues\"\nLOGO=omarchy",
+      "graphics": [
+        "00:02.0 VGA compatible controller [0300]: Intel Corporation Coffee Lake-U GT3 [Iris Plus Graphics 645] [8086:3ea6] (rev 01)",
+        "\tKernel driver in use: i915"
+      ],
+      "graphics_packages": {
+        "returncode": 1,
+        "output": "mesa 1:26.2.2-1\nvulkan-intel 1:26.2.2-1\nvulkan-asahi 1:26.2.2-1"
+      },
+      "power_profile": {
+        "returncode": 0,
+        "output": "performance"
+      },
+      "state": {
+        "memory": {
+          "MemTotal_KiB": 7963864,
+          "MemAvailable_KiB": 3314796,
+          "SwapTotal_KiB": 15929476,
+          "SwapFree_KiB": 14902080
+        },
+        "loadavg": "0.02 0.15 0.23 1/830 511521",
+        "pressure": {
+          "cpu": "some avg10=0.00 avg60=0.00 avg300=0.00 total=606939784\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+          "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=2565834\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=2525715",
+          "io": "some avg10=0.26 avg60=0.92 avg300=0.84 total=1709368029\nfull avg10=0.22 avg60=0.88 avg300=0.82 total=1653394336"
+        },
+        "cpu_policies": {
+          "policy6": {
+            "affected_cpus": "6",
+            "scaling_governor": "powersave",
+            "scaling_cur_freq": "3700947",
+            "scaling_min_freq": "400000",
+            "scaling_max_freq": "3900000"
+          },
+          "policy4": {
+            "affected_cpus": "4",
+            "scaling_governor": "powersave",
+            "scaling_cur_freq": "3697521",
+            "scaling_min_freq": "400000",
+            "scaling_max_freq": "3900000"
+          },
+          "policy2": {
+            "affected_cpus": "2",
+            "scaling_governor": "powersave",
+            "scaling_cur_freq": "3700125",
+            "scaling_min_freq": "400000",
+            "scaling_max_freq": "3900000"
+          },
+          "policy0": {
+            "affected_cpus": "0",
+            "scaling_governor": "powersave",
+            "scaling_cur_freq": "3701678",
+            "scaling_min_freq": "400000",
+            "scaling_max_freq": "3900000"
+          },
+          "policy7": {
+            "affected_cpus": "7",
+            "scaling_governor": "powersave",
+            "scaling_cur_freq": "400000",
+            "scaling_min_freq": "400000",
+            "scaling_max_freq": "3900000"
+          },
+          "policy5": {
+            "affected_cpus": "5",
+            "scaling_governor": "powersave",
+            "scaling_cur_freq": "3705957",
+            "scaling_min_freq": "400000",
+            "scaling_max_freq": "3900000"
+          },
+          "policy3": {
+            "affected_cpus": "3",
+            "scaling_governor": "powersave",
+            "scaling_cur_freq": "3701635",
+            "scaling_min_freq": "400000",
+            "scaling_max_freq": "3900000"
+          },
+          "policy1": {
+            "affected_cpus": "1",
+            "scaling_governor": "powersave",
+            "scaling_cur_freq": "3700004",
+            "scaling_min_freq": "400000",
+            "scaling_max_freq": "3900000"
+          }
+        }
+      },
+      "captured_utc": "2026-09-27T18:41:52Z",
+      "monitors": [
+        {
+          "name": "DP-1",
+          "width": 1920,
+          "height": 1080,
+          "refreshRate": 60.0,
+          "scale": 1,
+          "transform": 0
+        }
+      ],
+      "artifacts": {
+        "bin/authoring_qa": {
+          "bytes": 53440144,
+          "sha256": "f8d71ab3dd26c6cdff1955b2ffa11003c1817e46eee0afab293a11ffa153d9a7"
+        },
+        "bin/background_removal_qa": {
+          "bytes": 53669848,
+          "sha256": "1e235dc0a19873ab71bef61909b763ca7295ae0d4cb7bf0cd7434610899defc9"
+        },
+        "bin/canvas_profile": {
+          "bytes": 5661592,
+          "sha256": "287fe87f5762ad9f2af1706040b15779b3f19008fe3a9807f3d5eb96afad9859"
+        },
+        "bin/omadesign": {
+          "bytes": 53691472,
+          "sha256": "fd293af0d47e2bfda8550a1c2107177060b8e0a9d41785f299c9f5849f9091d8"
+        },
+        "bin/upscale_qa": {
+          "bytes": 53697368,
+          "sha256": "8d65544c5440418bba32512bbb10bbbb3358181c38b6388b2339b51ddd01a37e"
+        },
+        "lib/libonnxruntime.so.1.28.0": {
+          "bytes": 24268848,
+          "sha256": "1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab"
+        },
+        "lib/libonnxruntime_providers_shared.so": {
+          "bytes": 14632,
+          "sha256": "086ec1d5388f64153d9c63470d126693db9a182c8ce236d3a1119068471b8a0d"
+        },
+        "inputs/.omabrand/.omatype": {
+          "bytes": 794,
+          "sha256": "ac6929ca4fec50b10dbbc167cc27d6364d29c5b0171c97b67050252245978cd9"
+        },
+        "inputs/.omabrand/fonts/2387344100d213108cead7abcdc1263c.ttf": {
+          "bytes": 2968744,
+          "sha256": "b7c0dcee217aa017207f21b0915b5159451fa8b7fb619af8afb6349352ca8770"
+        },
+        "inputs/.omabrand/fonts/2819ebc145fb746db9eb78bdeea2bc3a.ttf": {
+          "bytes": 646360,
+          "sha256": "5d4d9e0ded710a4603e10afebfce2c2d56fa0d216890e8915511d2a53a004c1c"
+        },
+        "inputs/.omabrand/fonts/64a2d3719cd24cfc90c61e80239af081.ttf": {
+          "bytes": 2968556,
+          "sha256": "7fdb146f5b2ab3a435a6e975899de7e0958a1e3c17f5fc86c5b2e28271452adc"
+        },
+        "inputs/.omabrand/fonts/Nerd-Fonts-OFL.txt": {
+          "bytes": 4301,
+          "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2"
+        },
+        "inputs/.omabrand/fonts/Noto-OFL.txt": {
+          "bytes": 11357,
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        },
+        "inputs/.omabrand/fonts/bb80be15ebaedfabdf34beb2e53006b2.ttf": {
+          "bytes": 2968648,
+          "sha256": "5f800630112c2094efeb09f65c0e7247e4e6c85d2b61384b6e89de95b9bd5aa3"
+        },
+        "inputs/.omabrand/fonts/c40328406c229b6198215f56453385f2.ttf": {
+          "bytes": 631484,
+          "sha256": "1df075a380fc7cb898acf64c1f7b3b4dd780de3caa860178bf929de35817a913"
+        },
+        "inputs/.omabrand/fonts/ff1bcc1d0e36c222e930ee514700e1e0.ttf": {
+          "bytes": 2968820,
+          "sha256": "704898874930bd2dbf9ebdcc0bbe5d9b7c2714fe537d0ca0f5cb0cbb49915bc8"
+        },
+        "inputs/cat-1024.png": {
+          "bytes": 1057041,
+          "sha256": "41888dafdc59123b25129b260a2d91a03306ee67bdfd495cc1bb0e1f0f1eac8e"
+        },
+        "inputs/cat-320.png": {
+          "bytes": 116328,
+          "sha256": "be014031f03404af7f6a4c222caf34c806a55cc943cc33736556e021bc9610ff"
+        },
+        "inputs/infographic-seed.oma": {
+          "bytes": 472296,
+          "sha256": "d75a60c1803b4718d171a897f2330b3faec80018a02d27ee6c5447b88eeef7a7"
+        },
+        "inputs/type-tasks.json": {
+          "bytes": 624,
+          "sha256": "e859dd9c2e990468c36c818616addfbb47c46f0951f6e6e4f5be4c5eb0b96efe"
+        }
+      }
+    },
+    "graphics": {
+      "captured_utc": "2026-09-27T18:45:06Z",
+      "cards": [
+        {
+          "card": "card1",
+          "driver": "i915"
+        }
+      ]
+    },
+    "authoring": {
+      "idle": {
+        "ui_ms": {
+          "n": 120,
+          "p50": 1.1751239999999998,
+          "p95": 2.696258,
+          "max": 34.061356
+        },
+        "interval_ms": {
+          "n": 120,
+          "p50": 16.6010065,
+          "p95": 18.157705,
+          "max": 50.136462
+        },
+        "redraws": 0,
+        "per_run": [
+          {
+            "frames": 60,
+            "p50_ms": 1.186377,
+            "p95_ms": 2.696258,
+            "max_ms": 34.061356
+          },
+          {
+            "frames": 60,
+            "p50_ms": 1.1701640000000002,
+            "p95_ms": 1.91291,
+            "max_ms": 21.855113999999997
+          }
+        ]
+      },
+      "pen-preview": {
+        "ui_ms": {
+          "n": 96,
+          "p50": 1.4183020000000002,
+          "p95": 1.84638,
+          "max": 21.982287
+        },
+        "interval_ms": {
+          "n": 96,
+          "p50": 16.6456255,
+          "p95": 17.399797000000003,
+          "max": 37.426169
+        },
+        "redraws": 0,
+        "per_run": [
+          {
+            "frames": 48,
+            "p50_ms": 1.402971,
+            "p95_ms": 1.810308,
+            "max_ms": 21.982287
+          },
+          {
+            "frames": 48,
+            "p50_ms": 1.4449065,
+            "p95_ms": 1.84638,
+            "max_ms": 21.807046
+          }
+        ]
+      },
+      "pen-commit": {
+        "ui_ms": {
+          "n": 6,
+          "p50": 34.679382,
+          "p95": 53.393304,
+          "max": 53.393304
+        },
+        "interval_ms": {
+          "n": 6,
+          "p50": 50.042336500000005,
+          "p95": 68.862997,
+          "max": 68.862997
+        },
+        "redraws": 6,
+        "per_run": [
+          {
+            "frames": 3,
+            "p50_ms": 35.198004,
+            "p95_ms": 53.393304,
+            "max_ms": 53.393304
+          },
+          {
+            "frames": 3,
+            "p50_ms": 34.160759999999996,
+            "p95_ms": 35.721652,
+            "max_ms": 35.721652
+          }
+        ]
+      },
+      "typing": {
+        "ui_ms": {
+          "n": 166,
+          "p50": 31.480135,
+          "p95": 51.163872,
+          "max": 73.331313
+        },
+        "interval_ms": {
+          "n": 166,
+          "p50": 35.007996,
+          "p95": 54.645628,
+          "max": 77.842472
+        },
+        "redraws": 166,
+        "per_run": [
+          {
+            "frames": 83,
+            "p50_ms": 31.558315000000004,
+            "p95_ms": 51.163872,
+            "max_ms": 73.331313
+          },
+          {
+            "frames": 83,
+            "p50_ms": 31.209491,
+            "p95_ms": 51.052733,
+            "max_ms": 52.293715999999996
+          }
+        ]
+      },
+      "brush-drag": {
+        "ui_ms": {
+          "n": 180,
+          "p50": 45.9980595,
+          "p95": 66.877396,
+          "max": 68.224686
+        },
+        "interval_ms": {
+          "n": 180,
+          "p50": 49.5095585,
+          "p95": 70.481272,
+          "max": 71.958817
+        },
+        "redraws": 180,
+        "per_run": [
+          {
+            "frames": 90,
+            "p50_ms": 46.081807,
+            "p95_ms": 67.59138,
+            "max_ms": 68.14572700000001
+          },
+          {
+            "frames": 90,
+            "p50_ms": 45.79328149999999,
+            "p95_ms": 66.877396,
+            "max_ms": 68.224686
+          }
+        ]
+      },
+      "pan": {
+        "ui_ms": {
+          "n": 80,
+          "p50": 41.3360905,
+          "p95": 61.442907,
+          "max": 63.23815200000001
+        },
+        "interval_ms": {
+          "n": 80,
+          "p50": 44.732186,
+          "p95": 65.12137899999999,
+          "max": 66.983711
+        },
+        "redraws": 76,
+        "per_run": [
+          {
+            "frames": 40,
+            "p50_ms": 41.0384,
+            "p95_ms": 61.426212,
+            "max_ms": 62.069171
+          },
+          {
+            "frames": 40,
+            "p50_ms": 41.489883500000005,
+            "p95_ms": 61.51379,
+            "max_ms": 63.23815200000001
+          }
+        ]
+      },
+      "zoom": {
+        "ui_ms": {
+          "n": 120,
+          "p50": 46.664158,
+          "p95": 67.284647,
+          "max": 147.021857
+        },
+        "interval_ms": {
+          "n": 120,
+          "p50": 50.25795049999999,
+          "p95": 70.807597,
+          "max": 160.088063
+        },
+        "redraws": 120,
+        "per_run": [
+          {
+            "frames": 60,
+            "p50_ms": 45.809718000000004,
+            "p95_ms": 67.133758,
+            "max_ms": 67.963398
+          },
+          {
+            "frames": 60,
+            "p50_ms": 47.991480499999994,
+            "p95_ms": 70.58928300000001,
+            "max_ms": 147.021857
+          }
+        ]
+      },
+      "save": {
+        "ui_ms": {
+          "n": 2,
+          "p50": 204.4493705,
+          "p95": 205.369044,
+          "max": 205.369044
+        },
+        "interval_ms": {
+          "n": 2,
+          "p50": 219.83792549999998,
+          "p95": 220.773402,
+          "max": 220.773402
+        },
+        "redraws": 0,
+        "per_run": [
+          {
+            "frames": 1,
+            "p50_ms": 205.369044,
+            "p95_ms": 205.369044,
+            "max_ms": 205.369044
+          },
+          {
+            "frames": 1,
+            "p50_ms": 203.529697,
+            "p95_ms": 203.529697,
+            "max_ms": 203.529697
+          }
+        ]
+      }
+    },
+    "resources": {
+      "authoring-1": {
+        "name": "authoring-1",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 21.534608792047948,
+        "peak_rss_KiB": 239736,
+        "user_seconds": 16.493034,
+        "system_seconds": 2.863286,
+        "major_page_faults": 139,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "authoring-2": {
+        "name": "authoring-2",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 20.92324859800283,
+        "peak_rss_KiB": 239648,
+        "user_seconds": 16.612496,
+        "system_seconds": 2.942008,
+        "major_page_faults": 167,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "background-1024": {
+        "name": "background-1024",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 2.7042034830665216,
+        "peak_rss_KiB": 549304,
+        "user_seconds": 9.294484,
+        "system_seconds": 0.193016,
+        "major_page_faults": 0,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "background-320": {
+        "name": "background-320",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 0.4010130709502846,
+        "peak_rss_KiB": 331792,
+        "user_seconds": 1.075335,
+        "system_seconds": 0.103352,
+        "major_page_faults": 4,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "background_removal_qa-native": {
+        "name": "background_removal_qa-native",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 6.506874309037812,
+        "peak_rss_KiB": 456436,
+        "user_seconds": 5.126289,
+        "system_seconds": 2.356718,
+        "major_page_faults": 150,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "canvas-profile": {
+        "name": "canvas-profile",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 0.8018614769680426,
+        "peak_rss_KiB": 70148,
+        "user_seconds": 0.6425649999999999,
+        "system_seconds": 0.098134,
+        "major_page_faults": 1,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "package-reopen": {
+        "name": "package-reopen",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 3.103573816944845,
+        "peak_rss_KiB": 150996,
+        "user_seconds": 0.71846,
+        "system_seconds": 0.947121,
+        "major_page_faults": 90,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "upscale-1024-2x": {
+        "name": "upscale-1024-2x",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 15.122852595057338,
+        "peak_rss_KiB": 148024,
+        "user_seconds": 56.174686,
+        "system_seconds": 3.021527,
+        "major_page_faults": 0,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "upscale-320-2x": {
+        "name": "upscale-320-2x",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 1.2019678129581735,
+        "peak_rss_KiB": 110400,
+        "user_seconds": 4.25598,
+        "system_seconds": 0.174918,
+        "major_page_faults": 6,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "upscale-320-4x": {
+        "name": "upscale-320-4x",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 1.201768476050347,
+        "peak_rss_KiB": 111484,
+        "user_seconds": 4.292956,
+        "system_seconds": 0.16805,
+        "major_page_faults": 0,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "upscale_qa-native": {
+        "name": "upscale_qa-native",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 19.920062748948112,
+        "peak_rss_KiB": 668428,
+        "user_seconds": 56.624553,
+        "system_seconds": 8.168824,
+        "major_page_faults": 179,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      }
+    },
+    "warm_canvas_median_ms": 46.05297,
+    "native_background": {
+      "cancel_preserves_document": true,
+      "elapsed_seconds": 3.725965064,
+      "frames": 203,
+      "inference_frames": 28,
+      "inference_seconds": 0.484139621,
+      "interaction": "real egui pointer and keyboard events",
+      "one_undo_step": true,
+      "pixels_preserved": true,
+      "renderer": "native WGPU",
+      "save_reopen": true,
+      "screenshots": [
+        "01-working",
+        "02-preview",
+        "03-matte",
+        "04-refined",
+        "05-applied",
+        "06-undo",
+        "07-redo-saved",
+        "08-credits"
+      ],
+      "ui_frame_max_ms": 53.981912,
+      "ui_frame_p95_ms": 21.202337,
+      "undo_redo": true
+    },
+    "native_upscale": {
+      "cancel_export_no_partial": true,
+      "cancel_preserves_document": true,
+      "document_export_4x": true,
+      "elapsed_seconds": 17.455191738,
+      "frames": 985,
+      "inference_frames": 259,
+      "inference_seconds": 4.549476967,
+      "interaction": "real egui pointer and keyboard events; save destinations supplied through the native host callback",
+      "one_undo_step_each": true,
+      "photo_copy_2x_persisted_and_opened": true,
+      "photo_custom_2_5x": true,
+      "renderer": "native WGPU",
+      "save_reopen": true,
+      "screenshots": [
+        "01-upscale-first-preview",
+        "02-upscale-cutout-preview",
+        "03-export-dialog",
+        "04-photo-upscale-dialog",
+        "05-photo-copy-opened",
+        "06-photo-custom-scale",
+        "07-credits"
+      ],
+      "ui_frame_max_ms": 55.185602,
+      "ui_frame_p95_ms": 16.925356,
+      "undo_redo": true,
+      "upscale_cutout": true,
+      "upscale_first": true
+    },
+    "input_hashes_match": true,
+    "canvas_size": [
+      1020,
+      770
+    ]
+  },
+  "m1pro16": {
+    "spec": {
+      "host": "m1pro16",
+      "architecture": "aarch64",
+      "kernel": "7.1.13-3-2-ARCH",
+      "lscpu": {
+        "returncode": 0,
+        "output": "{\n   \"lscpu\": [\n      {\n         \"field\": \"Architecture:\",\n         \"data\": \"aarch64\"\n      },{\n         \"field\": \"CPU op-mode(s):\",\n         \"data\": \"64-bit\"\n      },{\n         \"field\": \"Byte Order:\",\n         \"data\": \"Little Endian\"\n      },{\n         \"field\": \"CPU(s):\",\n         \"data\": \"10\"\n      },{\n         \"field\": \"On-line CPU(s) list:\",\n         \"data\": \"0-9\"\n      },{\n         \"field\": \"Vendor ID:\",\n         \"data\": \"Apple\"\n      },{\n         \"field\": \"Model name:\",\n         \"data\": \"Icestorm-M1-Pro\"\n      },{\n         \"field\": \"Model:\",\n         \"data\": \"0\"\n      },{\n         \"field\": \"Thread(s) per core:\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"Core(s) per socket:\",\n         \"data\": \"2\"\n      },{\n         \"field\": \"Socket(s):\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"Stepping:\",\n         \"data\": \"0x2\"\n      },{\n         \"field\": \"Frequency boost:\",\n         \"data\": \"disabled\"\n      },{\n         \"field\": \"CPU(s) scaling MHz:\",\n         \"data\": \"29%\"\n      },{\n         \"field\": \"CPU max MHz:\",\n         \"data\": \"2064.0000\"\n      },{\n         \"field\": \"CPU min MHz:\",\n         \"data\": \"600.0000\"\n      },{\n         \"field\": \"BogoMIPS:\",\n         \"data\": \"48.00\"\n      },{\n         \"field\": \"Flags:\",\n         \"data\": \"fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 asimddp sha512 asimdfhm dit uscat ilrcpc flagm ssbs sb paca pacg dcpodp flagm2 frint\"\n      },{\n         \"field\": \"Model name:\",\n         \"data\": \"Firestorm-M1-Pro\"\n      },{\n         \"field\": \"Model:\",\n         \"data\": \"0\"\n      },{\n         \"field\": \"Thread(s) per core:\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"Core(s) per socket:\",\n         \"data\": \"8\"\n      },{\n         \"field\": \"Socket(s):\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"Stepping:\",\n         \"data\": \"0x2\"\n      },{\n         \"field\": \"CPU(s) scaling MHz:\",\n         \"data\": \"98%\"\n      },{\n         \"field\": \"CPU max MHz:\",\n         \"data\": \"3036.0000\"\n      },{\n         \"field\": \"CPU min MHz:\",\n         \"data\": \"600.0000\"\n      },{\n         \"field\": \"BogoMIPS:\",\n         \"data\": \"48.00\"\n      },{\n         \"field\": \"Flags:\",\n         \"data\": \"fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 asimddp sha512 asimdfhm dit uscat ilrcpc flagm ssbs sb paca pacg dcpodp flagm2 frint\"\n      },{\n         \"field\": \"L1d cache:\",\n         \"data\": \"1.1 MiB (10 instances)\"\n      },{\n         \"field\": \"L1i cache:\",\n         \"data\": \"1.8 MiB (10 instances)\"\n      },{\n         \"field\": \"L2 cache:\",\n         \"data\": \"28 MiB (3 instances)\"\n      },{\n         \"field\": \"Vulnerability Gather data sampling:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Ghostwrite:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Indirect target selection:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Itlb multihit:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability L1tf:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Mds:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Meltdown:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Mmio stale data:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Old microcode:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Reg file data sampling:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Retbleed:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Spec rstack overflow:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Spec store bypass:\",\n         \"data\": \"Mitigation; Speculative Store Bypass disabled via prctl\"\n      },{\n         \"field\": \"Vulnerability Spectre v1:\",\n         \"data\": \"Mitigation; __user pointer sanitization\"\n      },{\n         \"field\": \"Vulnerability Spectre v2:\",\n         \"data\": \"Mitigation; CSV2, but not BHB\"\n      },{\n         \"field\": \"Vulnerability Srbds:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Tsa:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Tsx async abort:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Vmscape:\",\n         \"data\": \"Not affected\"\n      }\n   ]\n}"
+      },
+      "cpu_topology": {
+        "returncode": 0,
+        "output": "# The following is the parsable format, which can be fed to other\n# programs. Each different item in every column has an unique ID\n# starting usually from zero.\n# CPU,Core,Socket,Online\n0,0,0,Y\n1,1,0,Y\n2,0,0,Y\n3,1,0,Y\n4,2,0,Y\n5,3,0,Y\n6,4,0,Y\n7,5,0,Y\n8,6,0,Y\n9,7,0,Y"
+      },
+      "model": "Apple MacBook Pro (16-inch, M1 Pro, 2021)",
+      "vendor": "Apple Inc.",
+      "os_release": "NAME=\"Arch Linux ARM\"\nPRETTY_NAME=\"Arch Linux ARM\"\nID=archarm\nID_LIKE=arch\nBUILD_ID=rolling\nANSI_COLOR=\"38;2;23;147;209\"\nHOME_URL=\"https://archlinuxarm.org/\"\nDOCUMENTATION_URL=\"https://archlinuxarm.org/wiki\"\nSUPPORT_URL=\"https://archlinuxarm.org/forum\"\nBUG_REPORT_URL=\"https://github.com/archlinuxarm/PKGBUILDs/issues\"\nLOGO=archlinux-logo",
+      "graphics": [],
+      "graphics_packages": {
+        "returncode": 1,
+        "output": "mesa 1:26.2.3-1\nvulkan-asahi 1:26.2.3-1"
+      },
+      "power_profile": {
+        "returncode": 0,
+        "output": "balanced"
+      },
+      "state": {
+        "memory": {
+          "MemTotal_KiB": 15763184,
+          "MemAvailable_KiB": 4638624,
+          "SwapTotal_KiB": 41435616,
+          "SwapFree_KiB": 31217664
+        },
+        "loadavg": "1.23 1.54 1.60 4/1629 3765253",
+        "pressure": {
+          "cpu": "some avg10=0.00 avg60=0.05 avg300=0.24 total=39679074787\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+          "memory": "some avg10=0.00 avg60=0.07 avg300=0.03 total=626994806\nfull avg10=0.00 avg60=0.05 avg300=0.02 total=423692140",
+          "io": "some avg10=0.02 avg60=0.21 avg300=0.11 total=1909319612\nfull avg10=0.02 avg60=0.20 avg300=0.09 total=1216317583"
+        },
+        "cpu_policies": {
+          "policy6": {
+            "affected_cpus": "6 7 8 9",
+            "scaling_governor": "schedutil",
+            "scaling_cur_freq": "3036000",
+            "scaling_min_freq": "600000",
+            "scaling_max_freq": "3036000"
+          },
+          "policy2": {
+            "affected_cpus": "2 3 4 5",
+            "scaling_governor": "schedutil",
+            "scaling_cur_freq": "2904000",
+            "scaling_min_freq": "600000",
+            "scaling_max_freq": "3036000"
+          },
+          "policy0": {
+            "affected_cpus": "0 1",
+            "scaling_governor": "schedutil",
+            "scaling_cur_freq": "972000",
+            "scaling_min_freq": "600000",
+            "scaling_max_freq": "2064000"
+          }
+        }
+      },
+      "captured_utc": "2026-09-27T18:41:37Z",
+      "monitors": [
+        {
+          "name": "eDP-1",
+          "width": 3456,
+          "height": 2234,
+          "refreshRate": 120.0,
+          "scale": 1,
+          "transform": 0
+        }
+      ],
+      "artifacts": {
+        "bin/authoring_qa": {
+          "bytes": 57277160,
+          "sha256": "ebc78813b9f3053cd275c81d5fd1aef1ed603f8b36c76d287c8434f036ca72e7"
+        },
+        "bin/background_removal_qa": {
+          "bytes": 57507440,
+          "sha256": "a47cf4272e7851c51e243dabacbbb920cdfc357b6c35957e077e8a15139fe210"
+        },
+        "bin/canvas_profile": {
+          "bytes": 4593000,
+          "sha256": "162ee1bb3b3a68cec22ef3081febe716d9d100fcd7e41fb7211f2f1a0204664d"
+        },
+        "bin/omadesign": {
+          "bytes": 48012584,
+          "sha256": "41ac716b7eed0800fe6b8dc5136c9174e44c9fc3285ee7eb4cd43784684b22ee"
+        },
+        "bin/upscale_qa": {
+          "bytes": 57577352,
+          "sha256": "152391758c44542e2e14aed98d5e3a1587c9ef11eb029e43eda757651343dad4"
+        },
+        "lib/libonnxruntime.so.1.28.0": {
+          "bytes": 20591712,
+          "sha256": "f1ec1a08eb99bd6e5401340f0a2b101381bf4694415480291dc13bcaa30f9ec7"
+        },
+        "lib/libonnxruntime_providers_shared.so": {
+          "bytes": 198792,
+          "sha256": "3b6be288fbfb7dff8770d08a23defdde18e8f7e0f5a2b344a0e5e238c999ea88"
+        },
+        "inputs/.omabrand/.omatype": {
+          "bytes": 794,
+          "sha256": "ac6929ca4fec50b10dbbc167cc27d6364d29c5b0171c97b67050252245978cd9"
+        },
+        "inputs/.omabrand/fonts/2387344100d213108cead7abcdc1263c.ttf": {
+          "bytes": 2968744,
+          "sha256": "b7c0dcee217aa017207f21b0915b5159451fa8b7fb619af8afb6349352ca8770"
+        },
+        "inputs/.omabrand/fonts/2819ebc145fb746db9eb78bdeea2bc3a.ttf": {
+          "bytes": 646360,
+          "sha256": "5d4d9e0ded710a4603e10afebfce2c2d56fa0d216890e8915511d2a53a004c1c"
+        },
+        "inputs/.omabrand/fonts/64a2d3719cd24cfc90c61e80239af081.ttf": {
+          "bytes": 2968556,
+          "sha256": "7fdb146f5b2ab3a435a6e975899de7e0958a1e3c17f5fc86c5b2e28271452adc"
+        },
+        "inputs/.omabrand/fonts/Nerd-Fonts-OFL.txt": {
+          "bytes": 4301,
+          "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2"
+        },
+        "inputs/.omabrand/fonts/Noto-OFL.txt": {
+          "bytes": 11357,
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        },
+        "inputs/.omabrand/fonts/bb80be15ebaedfabdf34beb2e53006b2.ttf": {
+          "bytes": 2968648,
+          "sha256": "5f800630112c2094efeb09f65c0e7247e4e6c85d2b61384b6e89de95b9bd5aa3"
+        },
+        "inputs/.omabrand/fonts/c40328406c229b6198215f56453385f2.ttf": {
+          "bytes": 631484,
+          "sha256": "1df075a380fc7cb898acf64c1f7b3b4dd780de3caa860178bf929de35817a913"
+        },
+        "inputs/.omabrand/fonts/ff1bcc1d0e36c222e930ee514700e1e0.ttf": {
+          "bytes": 2968820,
+          "sha256": "704898874930bd2dbf9ebdcc0bbe5d9b7c2714fe537d0ca0f5cb0cbb49915bc8"
+        },
+        "inputs/cat-1024.png": {
+          "bytes": 1057041,
+          "sha256": "41888dafdc59123b25129b260a2d91a03306ee67bdfd495cc1bb0e1f0f1eac8e"
+        },
+        "inputs/cat-320.png": {
+          "bytes": 116328,
+          "sha256": "be014031f03404af7f6a4c222caf34c806a55cc943cc33736556e021bc9610ff"
+        },
+        "inputs/infographic-seed.oma": {
+          "bytes": 472296,
+          "sha256": "d75a60c1803b4718d171a897f2330b3faec80018a02d27ee6c5447b88eeef7a7"
+        },
+        "inputs/type-tasks.json": {
+          "bytes": 624,
+          "sha256": "e859dd9c2e990468c36c818616addfbb47c46f0951f6e6e4f5be4c5eb0b96efe"
+        }
+      }
+    },
+    "graphics": {
+      "captured_utc": "2026-09-27T18:45:06Z",
+      "cards": [
+        {
+          "card": "card1",
+          "driver": "asahi"
+        },
+        {
+          "card": "card2",
+          "driver": "apple-drm"
+        }
+      ]
+    },
+    "authoring": {
+      "idle": {
+        "ui_ms": {
+          "n": 120,
+          "p50": 0.288315,
+          "p95": 0.426878,
+          "max": 15.359088
+        },
+        "interval_ms": {
+          "n": 120,
+          "p50": 8.286154,
+          "p95": 17.158936999999998,
+          "max": 31.719685999999996
+        },
+        "redraws": 0,
+        "per_run": [
+          {
+            "frames": 60,
+            "p50_ms": 0.256065,
+            "p95_ms": 0.511463,
+            "max_ms": 14.360579999999999
+          },
+          {
+            "frames": 60,
+            "p50_ms": 0.312107,
+            "p95_ms": 0.407045,
+            "max_ms": 15.359088
+          }
+        ]
+      },
+      "pen-preview": {
+        "ui_ms": {
+          "n": 96,
+          "p50": 0.300398,
+          "p95": 0.5933390000000001,
+          "max": 13.833993
+        },
+        "interval_ms": {
+          "n": 96,
+          "p50": 8.1995275,
+          "p95": 15.914886,
+          "max": 27.138855
+        },
+        "redraws": 0,
+        "per_run": [
+          {
+            "frames": 48,
+            "p50_ms": 0.2905025,
+            "p95_ms": 0.50563,
+            "max_ms": 0.777632
+          },
+          {
+            "frames": 48,
+            "p50_ms": 0.308377,
+            "p95_ms": 0.702256,
+            "max_ms": 13.833993
+          }
+        ]
+      },
+      "pen-commit": {
+        "ui_ms": {
+          "n": 6,
+          "p50": 20.255964000000002,
+          "p95": 33.149698,
+          "max": 33.149698
+        },
+        "interval_ms": {
+          "n": 6,
+          "p50": 28.210718,
+          "p95": 40.978598,
+          "max": 40.978598
+        },
+        "redraws": 6,
+        "per_run": [
+          {
+            "frames": 3,
+            "p50_ms": 20.460049,
+            "p95_ms": 33.149698,
+            "max_ms": 33.149698
+          },
+          {
+            "frames": 3,
+            "p50_ms": 20.051879000000003,
+            "p95_ms": 20.845761,
+            "max_ms": 20.845761
+          }
+        ]
+      },
+      "typing": {
+        "ui_ms": {
+          "n": 166,
+          "p50": 18.827034500000003,
+          "p95": 19.636667,
+          "max": 34.627252
+        },
+        "interval_ms": {
+          "n": 166,
+          "p50": 21.1473255,
+          "p95": 33.544451,
+          "max": 39.880506000000004
+        },
+        "redraws": 166,
+        "per_run": [
+          {
+            "frames": 83,
+            "p50_ms": 18.742618,
+            "p95_ms": 19.520249,
+            "max_ms": 34.627252
+          },
+          {
+            "frames": 83,
+            "p50_ms": 18.890159999999998,
+            "p95_ms": 19.636667,
+            "max_ms": 33.814495
+          }
+        ]
+      },
+      "brush-drag": {
+        "ui_ms": {
+          "n": 180,
+          "p50": 27.6727975,
+          "p95": 41.450726,
+          "max": 46.452645000000004
+        },
+        "interval_ms": {
+          "n": 180,
+          "p50": 32.14954349999999,
+          "p95": 46.545061,
+          "max": 52.881699
+        },
+        "redraws": 180,
+        "per_run": [
+          {
+            "frames": 90,
+            "p50_ms": 27.669881,
+            "p95_ms": 41.450726,
+            "max_ms": 46.452645000000004
+          },
+          {
+            "frames": 90,
+            "p50_ms": 27.675005499999997,
+            "p95_ms": 41.991439,
+            "max_ms": 45.146716000000005
+          }
+        ]
+      },
+      "pan": {
+        "ui_ms": {
+          "n": 80,
+          "p50": 24.3645395,
+          "p95": 37.583859999999994,
+          "max": 40.845596
+        },
+        "interval_ms": {
+          "n": 80,
+          "p50": 29.7423985,
+          "p95": 45.608429,
+          "max": 48.554786
+        },
+        "redraws": 76,
+        "per_run": [
+          {
+            "frames": 40,
+            "p50_ms": 24.415770000000002,
+            "p95_ms": 37.583859999999994,
+            "max_ms": 40.845596
+          },
+          {
+            "frames": 40,
+            "p50_ms": 24.324102,
+            "p95_ms": 37.443526,
+            "max_ms": 39.575628
+          }
+        ]
+      },
+      "zoom": {
+        "ui_ms": {
+          "n": 120,
+          "p50": 26.655476,
+          "p95": 38.795037,
+          "max": 43.079699
+        },
+        "interval_ms": {
+          "n": 120,
+          "p50": 32.09746,
+          "p95": 42.625612,
+          "max": 53.462412
+        },
+        "redraws": 120,
+        "per_run": [
+          {
+            "frames": 60,
+            "p50_ms": 26.6973305,
+            "p95_ms": 37.803738,
+            "max_ms": 43.079699
+          },
+          {
+            "frames": 60,
+            "p50_ms": 26.655476,
+            "p95_ms": 38.795037,
+            "max_ms": 42.911905
+          }
+        ]
+      },
+      "save": {
+        "ui_ms": {
+          "n": 2,
+          "p50": 84.346757,
+          "p95": 89.4143,
+          "max": 89.4143
+        },
+        "interval_ms": {
+          "n": 2,
+          "p50": 97.566536,
+          "p95": 98.530918,
+          "max": 98.530918
+        },
+        "redraws": 0,
+        "per_run": [
+          {
+            "frames": 1,
+            "p50_ms": 89.4143,
+            "p95_ms": 89.4143,
+            "max_ms": 89.4143
+          },
+          {
+            "frames": 1,
+            "p50_ms": 79.279214,
+            "p95_ms": 79.279214,
+            "max_ms": 79.279214
+          }
+        ]
+      }
+    },
+    "resources": {
+      "authoring-1": {
+        "name": "authoring-1",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 14.817295587970875,
+        "peak_rss_KiB": 231856,
+        "user_seconds": 9.517886,
+        "system_seconds": 3.129045,
+        "major_page_faults": 590,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "authoring-2": {
+        "name": "authoring-2",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 14.014416096033528,
+        "peak_rss_KiB": 234176,
+        "user_seconds": 9.507317,
+        "system_seconds": 3.232901,
+        "major_page_faults": 590,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "background-1024": {
+        "name": "background-1024",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 2.0039265119703487,
+        "peak_rss_KiB": 455008,
+        "user_seconds": 7.214939,
+        "system_seconds": 0.041719,
+        "major_page_faults": 0,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "background-320": {
+        "name": "background-320",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 0.30246077000629157,
+        "peak_rss_KiB": 243040,
+        "user_seconds": 0.737723,
+        "system_seconds": 0.035765,
+        "major_page_faults": 17,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "background_removal_qa-native": {
+        "name": "background_removal_qa-native",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 3.4042144489940256,
+        "peak_rss_KiB": 345232,
+        "user_seconds": 2.584829,
+        "system_seconds": 2.000969,
+        "major_page_faults": 24,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "canvas-profile": {
+        "name": "canvas-profile",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 0.5010319569846615,
+        "peak_rss_KiB": 75520,
+        "user_seconds": 0.411975,
+        "system_seconds": 0.044871,
+        "major_page_faults": 2,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "package-reopen": {
+        "name": "package-reopen",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 1.3018923460040241,
+        "peak_rss_KiB": 150464,
+        "user_seconds": 0.40201699999999996,
+        "system_seconds": 0.7863549999999999,
+        "major_page_faults": 24,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "upscale-1024-2x": {
+        "name": "upscale-1024-2x",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 12.117677883943543,
+        "peak_rss_KiB": 115040,
+        "user_seconds": 46.155123,
+        "system_seconds": 0.10253699999999999,
+        "major_page_faults": 0,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "upscale-320-2x": {
+        "name": "upscale-320-2x",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 1.1023035120451823,
+        "peak_rss_KiB": 79840,
+        "user_seconds": 3.989803,
+        "system_seconds": 0.017733,
+        "major_page_faults": 31,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "upscale-320-4x": {
+        "name": "upscale-320-4x",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 1.1036082309437916,
+        "peak_rss_KiB": 81632,
+        "user_seconds": 3.935758,
+        "system_seconds": 0.016940999999999998,
+        "major_page_faults": 0,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      },
+      "upscale_qa-native": {
+        "name": "upscale_qa-native",
+        "returncode": 0,
+        "timed_out": false,
+        "wall_seconds": 11.012405235902406,
+        "peak_rss_KiB": 557984,
+        "user_seconds": 31.041924,
+        "system_seconds": 6.219711,
+        "major_page_faults": 28,
+        "network": "disabled with unshare -Urn",
+        "limits": "default user-session limits, no per-test CPU or memory ceiling"
+      }
+    },
+    "warm_canvas_median_ms": 28.149614,
+    "native_background": {
+      "cancel_preserves_document": true,
+      "elapsed_seconds": 2.071864375,
+      "frames": 207,
+      "inference_frames": 27,
+      "inference_seconds": 0.245384369,
+      "interaction": "real egui pointer and keyboard events",
+      "one_undo_step": true,
+      "pixels_preserved": true,
+      "renderer": "native WGPU",
+      "save_reopen": true,
+      "screenshots": [
+        "01-working",
+        "02-preview",
+        "03-matte",
+        "04-refined",
+        "05-applied",
+        "06-undo",
+        "07-redo-saved",
+        "08-credits"
+      ],
+      "ui_frame_max_ms": 42.076064,
+      "ui_frame_p95_ms": 4.498663,
+      "undo_redo": true
+    },
+    "native_upscale": {
+      "cancel_export_no_partial": true,
+      "cancel_preserves_document": true,
+      "document_export_4x": true,
+      "elapsed_seconds": 10.034890961,
+      "frames": 1080,
+      "inference_frames": 276,
+      "inference_seconds": 2.5992853350000003,
+      "interaction": "real egui pointer and keyboard events; save destinations supplied through the native host callback",
+      "one_undo_step_each": true,
+      "photo_copy_2x_persisted_and_opened": true,
+      "photo_custom_2_5x": true,
+      "renderer": "native WGPU",
+      "save_reopen": true,
+      "screenshots": [
+        "01-upscale-first-preview",
+        "02-upscale-cutout-preview",
+        "03-export-dialog",
+        "04-photo-upscale-dialog",
+        "05-photo-copy-opened",
+        "06-photo-custom-scale",
+        "07-credits"
+      ],
+      "ui_frame_max_ms": 35.891887999999994,
+      "ui_frame_p95_ms": 0.751381,
+      "undo_redo": true,
+      "upscale_cutout": true,
+      "upscale_first": true
+    },
+    "input_hashes_match": true,
+    "canvas_size": [
+      1020,
+      770
+    ]
+  }
+}
