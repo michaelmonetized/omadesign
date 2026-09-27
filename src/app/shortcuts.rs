@@ -447,21 +447,17 @@ impl Studio {
                 if lo == hi {
                     return;
                 }
-                let copied=self.selected_type().map(|run| {
-                    let a=crate::text::char_to_byte(&run.content,lo);let b=crate::text::char_to_byte(&run.content,hi);
-                    let spans=(lo..hi).map(|i|crate::geom::CharSpan{start:i-lo,end:i-lo+1,..run.character_style(i)}).collect();
-                    (run.content[a..b].to_owned(),spans)
-                });
-                if let Some((text,spans))=copied {ctx.copy_text(text.clone());self.type_clip=Some((text,spans));if shortcut==Shortcut::Cut{self.type_delete_range(lo,hi);}}
-            }
-            Shortcut::Paste => {
-                if let Some(text)=payload {
-                    let start=self.type_sel_range().0;
-                    let spans=self.type_clip.as_ref().filter(|(old,_)|old==text).map(|(_,spans)|spans.clone());
-                    self.type_insert(text);
-                    if let Some(spans)=spans {self.patch_type(|run|for span in spans {run.set_character_style(start+span.start,start+span.end,|s|{let (a,b)=(s.start,s.end);*s=crate::geom::CharSpan{start:a,end:b,..span.clone()};});});}
+                if let Some(run)=self.selected_type() {
+                    let copied=crate::clipboard::type_style::RichText::from_run(&run,lo,hi);
+                    #[cfg(test)]
+                    ctx.copy_text(copied.text.clone());
+                    if let Err(error)=crate::clipboard::type_style::write(&copied) {
+                        ctx.copy_text(copied.text.clone()); self.status=error;
+                    }
+                    if shortcut==Shortcut::Cut {self.type_delete_range(lo,hi);}
                 }
             }
+            Shortcut::Paste => self.request_type_clipboard_paste(ctx,payload),
             Shortcut::SelectAll => {
                 let count = self
                     .live_type_mut()
@@ -469,6 +465,7 @@ impl Studio {
                 if let Some(edit) = &mut self.type_edit {
                     edit.anchor = 0;
                     edit.caret = count;
+                    edit.pending_style = None;
                 }
             }
             Shortcut::Undo | Shortcut::Redo => {
