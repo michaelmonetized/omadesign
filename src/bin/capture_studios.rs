@@ -138,9 +138,10 @@ fn schedule(scene: &str) -> Vec<Action> {
             event(20., Key(egui::Key::Escape, Modifiers::NONE)),
             event(22., Key(egui::Key::Z, ctrl())),
             event(24., Key(egui::Key::Z, Modifiers{shift:true,..ctrl()})),
-            event(25., ScrollAt(At(1480.,560.), -650.)),
+            event(25., ScrollAt(At(1480.,560.), -350.)),
             event(26., Click(Text("Line breaking"))),
             event(27., Click(Text("Hyphenate"))),
+            event(28., Key(egui::Key::S, ctrl())),
         ],
         "welcome-browse" => vec![
             event(0.5, Expect("Your Work")),
@@ -923,8 +924,8 @@ fn seed(scene: &str) -> Studio {
 impl Capture {
     fn new(scene: String, directory: PathBuf, probe: bool, fps: u32) -> Self {
         let mut studio = seed(&scene);
-        if scene == "independent-effects" {
-            studio.path = Some(directory.join("independent-effects-final.oma"));
+        if matches!(scene.as_str(), "independent-effects" | "paragraphs") {
+            studio.path = Some(directory.join(format!("{scene}-final.oma")));
         }
         let seconds = match scene.as_str() {
             "paragraphs" => 30,
@@ -1340,7 +1341,7 @@ impl eframe::App for Capture {
                 fs::write(self.directory.join(format!("selection-state-{}.json",self.frame)),serde_json::to_vec_pretty(&value).unwrap()).unwrap();
             }
             if self.frame >= self.total {
-                if matches!(self.scene.as_str(), "graphics" | "chroma" | "paragraphs") {
+                if matches!(self.scene.as_str(), "graphics" | "chroma") {
                     omadesign::project::save_to(
                         &self.studio.doc,
                         &self.directory.join(format!("{}-final.oma", self.scene)),
@@ -1394,8 +1395,7 @@ impl eframe::App for Capture {
                     }
                 }
                 if self.scene=="paragraphs" {
-                    let saved=omadesign::project::encode(&self.studio.doc).unwrap();
-                    let restored=omadesign::project::decode(&saved).unwrap();
+                    let restored=omadesign::project::load_from(&self.directory.join("paragraphs-final.oma")).expect("Ctrl+S must save the edited paragraph document");
                     let run=restored.layers[1].kind.shapes().unwrap().iter().find_map(|s|if let Geom::Text(t)=&s.geom{Some(t)}else{None}).unwrap();
                     assert!(run.content.ends_with("A new paragraph inherits its own alignment."));
                     assert!(run.paragraphs.len()>=3);

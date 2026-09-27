@@ -1,0 +1,23 @@
+
+running 18 tests
+test text::composer::migration_regressions::runt_rebalancing_preserves_no_break_ranges ... ok
+test text::composer::migration_regressions::trailing_discretionary_hyphen_is_invisible_without_break ... ok
+test text::composer::migration_regressions::new_wrap_semantics_roundtrip_and_legacy_point_stays_plain ... ok
+test text::composer::tests::justification_limits_and_last_lines ... ok
+test text::composer::tests::paragraph_edit_roundtrip ... ok
+test text::composer::tests::point_alignment_and_per_paragraph_carets ... ok
+test text::composer::tests::soft_hyphens_only_render_at_break ... ok
+test text::composer::tests::unicode_modes_graphemes_and_no_break ... ok
+test text::hyphenation::tests::capitalization_is_optional ... ok
+test text::hyphenation::tests::dictionary_and_limits ... ok
+test text::tests::caret_walks_forward ... ok
+test text::tests::fill_contours_writes_cache ... ok
+test text::tests::liga_reduces_fi_when_font_supports_it ... ok
+test text::tests::max_font_detection_prefers_inter ... ok
+test text::tests::old_json_defaults_kern_liga_on ... ok
+test text::tests::shapes_when_font_exists ... ok
+test text::tests::wrapped_paragraph_keeps_source_and_caret_positions ... ok
+test text::composer::stretch_tests::dictionary_hyphenation_reduces_word_space_stretch ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 718 filtered out; finished in 1.17s
+

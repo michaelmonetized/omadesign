@@ -1,0 +1,6 @@
+
+running 1 test
+test agent::tests::live_tools_create_editable_text_gradients_and_frames_and_undo_every_step ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 735 filtered out; finished in 5.32s
+
