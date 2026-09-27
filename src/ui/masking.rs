@@ -198,21 +198,8 @@ pub fn selection_tools(ui: &mut Ui, studio: &mut Studio) {
             studio.nudge_pixel_sel(0, 1);
         }
     });
-    ui.horizontal(|ui| {
-        if ui.small_button("Smaller").clicked() {
-            studio.scale_pixel_sel(0.9, 0.9);
-        }
-        if ui.small_button("Larger").clicked() {
-            studio.scale_pixel_sel(1.1, 1.1);
-        }
-    });
-    ui.horizontal(|ui| {
-        if ui.small_button("Feather").clicked() {
-            studio.feather_pixel_sel(2);
-        }
-        if ui.small_button("Distort").clicked() {
-            studio.distort_pixel_sel(0.35);
-        }
+    ui.menu_button("Modify selection…", |ui| {
+        super::pixel_selection::menu(ui, studio);
     });
     ui.label(
         RichText::new("Arrow keys move it while a selection tool is active.")

@@ -15,6 +15,7 @@ struct Capture {
     last_edits: usize,
     screenshots: usize,
     finished: bool,
+    finished_shots: usize,
 }
 impl Capture {
     fn start(directory: PathBuf, resume: Option<PathBuf>) -> Self {
@@ -51,6 +52,7 @@ impl Capture {
             last_edits: 0,
             screenshots: 0,
             finished: false,
+            finished_shots: 0,
         }
     }
     fn report(&mut self) -> Result<(), String> {
@@ -134,11 +136,12 @@ impl eframe::App for Capture {
                     && !self.studio.agent.busy
                     && !self.studio.agent.connecting))
         {
-            self.report().unwrap();
             self.finished = true;
+            self.finished_shots = self.screenshots;
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
         }
-        if self.finished && self.screenshots > 0 {
+        if self.finished && self.screenshots > self.finished_shots {
+            self.report().unwrap();
             self.studio.allow_close = true;
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }

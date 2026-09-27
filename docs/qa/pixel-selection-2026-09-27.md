@@ -18,7 +18,7 @@ with the original pixels. Accumulated stroke buffers remain unfeathered to avoid
 repeated attenuation. Raster filters map selection coverage into their target
 layer's coordinates.
 
-Validation:
+Initial validation on the old 0.5.8 base (superseded):
 
 - `cargo test --lib --locked --offline`: **614 passed, 0 failed, 5 ignored**.
 - Tests cover all three selection shapes, transformed image coordinates,
@@ -40,3 +40,13 @@ Validation:
 No installed application or release was replaced. The accepted 0.5.0 human-QA
 record in `AGENTS.md` remains unchanged; these automated checks are not a new
 human-QA signoff.
+
+## Current-base revalidation
+
+Both the selection dialogs and ACP harness were ported onto `origin/master`
+`a4d5b2faa2df976bfad164658a3732fd058d78d6` (0.6.0) after detecting the stale
+preview-branch base. Upstream selection add/subtract behavior, arrow-key nudging,
+asset-library placement, and the bottom zoom controls were retained. The current
+full library suite passes **672 tests, 0 failures, 5 ignored**. See
+[the combined QA report](agent-harness-2026-09-27.md) for current build and native
+evidence; the initial hashes and captures above do not describe this build.
