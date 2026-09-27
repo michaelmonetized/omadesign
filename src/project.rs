@@ -703,7 +703,9 @@ mod tests {
             gallery_id: String::new(),
         });
         let encoded = encode(&doc).unwrap();
-        assert!(encoded.contains("\"version\":5"));
+        // The template contains wrapped paragraphs. Version 8 preserves the new
+        // Unicode wrapping defaults instead of applying the legacy migration.
+        assert!(encoded.contains("\"version\":8"));
         let back = decode(&encoded).unwrap();
         let frames: Vec<_> = back.layers[0]
             .kind
