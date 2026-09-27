@@ -286,6 +286,11 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     draw_comment_pins(&painter, rect, studio);
     draw_bleed_safe(&painter, rect, studio);
     draw_overlays(&painter, rect, studio, pen_preview);
+    if let Some(edit)=studio.type_edit.as_ref() && edit.caret!=edit.anchor && let Some(run)=studio.selected_type() {
+        let p=crate::text::caret_pt(&run,edit.caret.min(edit.anchor));
+        let at=win(rect,studio.view,Pt::new(p.x,p.y-run.px))-vec2(0.,78.);
+        super::opentype::alternates(ui,studio,at);
+    }
     super::deform::paint(&painter, rect, studio);
     super::pixel_edit::paint(&painter, rect, studio);
     super::plugins::paint(ui, studio, rect);

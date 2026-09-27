@@ -1030,28 +1030,7 @@ fn character_studio(ui: &mut Ui, studio: &mut Studio) {
     if number_field(ui, "Line height", &mut lead, 0.0..=400.0, "") {
         studio.patch_type(|t| t.leading = lead);
     }
-    eframe::egui::CollapsingHeader::new("OpenType features").show(ui, |ui| {
-        let mut kern = live.as_ref().map(|t| t.kern).unwrap_or(studio.text_kern);
-        let mut liga = live.as_ref().map(|t| t.liga).unwrap_or(studio.text_liga);
-        let mut tnum = live.as_ref().map(|t| t.tnum).unwrap_or(studio.text_tnum);
-        let mut smcp = live.as_ref().map(|t| t.smcp).unwrap_or(studio.text_smcp);
-        ui.horizontal(|ui| {
-            if ui.checkbox(&mut kern, "Kerning").changed() {
-                studio.patch_type(|t| t.kern = kern);
-            }
-            if ui.checkbox(&mut liga, "Ligatures").changed() {
-                studio.patch_type(|t| t.liga = liga);
-            }
-        });
-        ui.horizontal(|ui| {
-            if ui.checkbox(&mut tnum, "Tabular figs").changed() {
-                studio.patch_type(|t| t.tnum = tnum);
-            }
-            if ui.checkbox(&mut smcp, "Small caps").changed() {
-                studio.patch_type(|t| t.smcp = smcp);
-            }
-        });
-    });
+    super::opentype::show(ui, studio, &font);
     super::paragraph::show(ui, studio);
     if studio.type_edit.is_some() {
         ui.label(

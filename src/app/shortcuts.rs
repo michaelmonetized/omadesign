@@ -447,18 +447,19 @@ impl Studio {
                 if lo == hi {
                     return;
                 }
-                if let Some(run) = self.live_type_mut() {
-                    let a = crate::text::char_to_byte(&run.content, lo);
-                    let b = crate::text::char_to_byte(&run.content, hi);
-                    ctx.copy_text(run.content[a..b].to_owned());
-                    if shortcut == Shortcut::Cut {
-                        self.type_delete_range(lo, hi);
-                    }
-                }
+                let copied=self.selected_type().map(|run| {
+                    let a=crate::text::char_to_byte(&run.content,lo);let b=crate::text::char_to_byte(&run.content,hi);
+                    let spans=(lo..hi).map(|i|crate::geom::CharSpan{start:i-lo,end:i-lo+1,..run.character_style(i)}).collect();
+                    (run.content[a..b].to_owned(),spans)
+                });
+                if let Some((text,spans))=copied {ctx.copy_text(text.clone());self.type_clip=Some((text,spans));if shortcut==Shortcut::Cut{self.type_delete_range(lo,hi);}}
             }
             Shortcut::Paste => {
-                if let Some(text) = payload {
+                if let Some(text)=payload {
+                    let start=self.type_sel_range().0;
+                    let spans=self.type_clip.as_ref().filter(|(old,_)|old==text).map(|(_,spans)|spans.clone());
                     self.type_insert(text);
+                    if let Some(spans)=spans {self.patch_type(|run|for span in spans {run.set_character_style(start+span.start,start+span.end,|s|{let (a,b)=(s.start,s.end);*s=crate::geom::CharSpan{start:a,end:b,..span.clone()};});});}
                 }
             }
             Shortcut::SelectAll => {

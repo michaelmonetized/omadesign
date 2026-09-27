@@ -28,7 +28,8 @@ impl TypeRun {
     }
     fn assign_character_styles(&mut self, styles: Vec<CharSpan>) {
         self.spans.clear();
-        for (i, style) in styles.into_iter().enumerate() {
+        for (i, mut style) in styles.into_iter().enumerate() {
+            style.start=0;style.end=0;
             if style == CharSpan::default() {
                 continue;
             }

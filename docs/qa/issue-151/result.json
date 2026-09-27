@@ -1,0 +1,57 @@
+{
+  "recording_frames": 200,
+  "renderer": "native WGPU",
+  "saved_and_reopened": true,
+  "source": "office affine fi ffi 0123456789\nEditable typography and stylistic alternates new text",
+  "spans": [
+    {
+      "end": 32,
+      "features": [
+        [
+          [
+            115,
+            109,
+            99,
+            112
+          ],
+          1
+        ]
+      ],
+      "no_break": false,
+      "start": 0
+    },
+    {
+      "end": 33,
+      "features": [
+        [
+          [
+            115,
+            109,
+            99,
+            112
+          ],
+          0
+        ]
+      ],
+      "no_break": false,
+      "start": 32
+    },
+    {
+      "end": 85,
+      "features": [
+        [
+          [
+            115,
+            109,
+            99,
+            112
+          ],
+          1
+        ]
+      ],
+      "no_break": false,
+      "start": 33
+    }
+  ],
+  "unresolved_input_targets": []
+}
