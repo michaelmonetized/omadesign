@@ -21,6 +21,8 @@ const FPS: u32 = 30;
 const SIZE: [u32; 2] = [1600, 900];
 #[derive(Clone, Debug)]
 enum Target {
+    FirstPathText,
+    PathStartHandle,
     Text(&'static str),
     FieldNth(&'static str, usize),
     Any(&'static str),
@@ -52,6 +54,7 @@ enum ActionKind {
     Expect(&'static str),
     ReopenSaved,
     VerifySpacing(&'static str),
+    CheckPath(&'static str),
 }
 struct Action {
     start: u32,
@@ -201,7 +204,7 @@ fn schedule(scene: &str) -> Vec<Action> {
             event(5.6,Expect("Type on path")),
             event(6.1,Click(Text("Flip side and direction"))),
             event(8.,Click(Text("Flip side and direction"))),
-            drag(9.,1.6,Drag(World(300.,120.),World(440.,179.))),
+            drag(9.,1.6,Drag(PathStartHandle,World(440.,179.))),
             event(11.1,Key(egui::Key::Z,ctrl())),
             event(12.2,Key(egui::Key::Z,Modifiers{shift:true,..ctrl()})),
             event(13.2,Key(egui::Key::T,Modifiers::NONE)),
@@ -213,6 +216,30 @@ fn schedule(scene: &str) -> Vec<Action> {
             drag(18.7,1.6,Drag(World(900.,475.),World(920.,500.))),
             event(21.,Key(egui::Key::Z,ctrl())),
             event(22.,Key(egui::Key::Z,Modifiers{shift:true,..ctrl()})),
+            event(23.,Key(egui::Key::V,Modifiers::NONE)),
+            event(23.4,Click(FirstPathText)),
+            event(24.,Click(Any("Object"))),event(24.5,Click(Any("Type"))),event(25.,Click(Any("Release text from path"))),
+            event(25.5,CheckPath("released")),
+            event(26.,Key(egui::Key::Z,ctrl())),event(26.5,CheckPath("restored")),
+            event(27.,Key(egui::Key::C,ctrl())),event(28.,Key(egui::Key::V,ctrl())),
+            event(29.5,CheckPath("paste-alone")),event(30.,Key(egui::Key::Z,ctrl())),
+            event(31.,Key(egui::Key::A,ctrl())),event(31.5,Key(egui::Key::C,ctrl())),event(32.5,Key(egui::Key::V,ctrl())),
+            event(34.,CheckPath("paste-together")),event(35.,Key(egui::Key::Z,ctrl())),
+            event(36.,Click(FirstPathText)),
+            event(37.,CheckPath("restored")),
+            event(38.,Click(Text("Arrange"))),event(38.5,Click(Text("Align"))),
+            drag(39.,0.7,Delta(Field("Baseline shift"),20.)),drag(40.,0.7,Delta(Field("Curve spacing"),10.)),
+            event(41.,Click(Any("Baseline"))),event(41.5,Click(Any("Center"))),
+            event(42.,Click(Any("Center"))),event(42.5,Click(Any("Top"))),
+            event(43.,Click(Any("Top"))),event(43.5,Click(Any("Bottom"))),
+            event(44.,Click(Any("Bottom"))),event(44.5,Click(Any("Baseline"))),
+            drag(45.,0.8,Delta(Field("End %"),-600.)),event(46.,CheckPath("overflow")),
+            event(46.5,Key(egui::Key::Z,ctrl())),
+            event(47.,Click(Any("Object"))),event(47.5,Click(Any("Type"))),event(48.,Click(Any("Release text from path"))),
+            event(48.5,ModifiedClick(World(100.,320.),Modifiers{shift:true,..Modifiers::NONE})),
+            event(49.,Click(Any("Object"))),event(49.5,Click(Any("Type"))),event(50.,Click(Any("Attach text to path"))),event(50.5,CheckPath("restored")),
+            event(51.,Click(World(100.,320.))),event(51.5,Key(egui::Key::Delete,Modifiers::NONE)),event(52.,CheckPath("guide-deleted")),
+            event(53.,Key(egui::Key::Z,ctrl())),event(54.,CheckPath("restored")),event(55.,Click(FirstPathText)),
         ],
         "paragraphs" => vec![
             event(1., Key(egui::Key::A, ctrl())),
@@ -1057,7 +1084,7 @@ impl Capture {
             "opentype" => 20,
             "spacing" => 48,
             "spacing-resize" => 18,
-            "path-type" => 25,
+            "path-type" => 57,
             "welcome-browse" => 23,
             "welcome-vector" | "welcome-layout" => 9,
             "welcome-raster" => 8,
@@ -1155,6 +1182,11 @@ impl Capture {
                 .map(|(_, r)| *r)
         };
         match t {
+            Target::FirstPathText | Target::PathStartHandle => {
+                let run=self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().find_map(|s|if let Geom::Text(t)=&s.geom {t.on_path.as_ref().map(|_|t)}else{None})?;
+                if matches!(t,Target::PathStartHandle){let (p,tangent)=omadesign::text_geometry::path_position(run,0.)?;Some(self.world(p.x,p.y)-egui::vec2(tangent.x,tangent.y)*6.)}
+                else {let p=run.contours.first()?.first()?;Some(self.world(p.x,p.y))}
+            },
             Target::Text(s) => label(s, true).map(|r| r.center()),
 
             Target::FieldNth(s, n) => {
@@ -1245,6 +1277,13 @@ impl Capture {
             }
             if self.frame == a.start {
                 match &a.kind {
+                    ActionKind::CheckPath(phase) => {
+                        let texts:Vec<_>=self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter_map(|s|if let Geom::Text(t)=&s.geom{Some((s.id,t))}else{None}).collect();
+                        let attached=texts.iter().filter(|(_,t)|t.on_path.is_some()).count();
+                        let selected=self.studio.selection.first().and_then(|(_,id)|texts.iter().find(|(tid,_)|tid==id)).map(|(_,t)|*t);
+                        let passed=match *phase{"released"|"paste-alone"=>selected.is_some_and(|t|t.on_path.is_none()),"restored"=>attached==2,"guide-deleted"=>attached==1&&texts.len()==2,"overflow"=>selected.is_some_and(|t|t.layout.as_ref().is_some_and(|l|l.overflow)),"paste-together"=>attached==4&&texts.iter().all(|(_,t)|t.on_path.as_ref().is_none_or(|p|self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().any(|s|s.id==p.path_id))),_=>false};
+                        if !passed{self.errors.push(format!("path lifecycle {phase} failed: {attached} links"));}
+                    },
                     ActionKind::Click(t) => {
                         if let Some(p) = self.target(t) {
                             self.click(p, Modifiers::NONE);
@@ -1576,7 +1615,8 @@ impl eframe::App for Capture {
                     let paths:Vec<_>=restored.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter_map(|s|if let Geom::Text(t)=&s.geom{t.on_path.as_ref().map(|on|(s.id,on.path_id,t.content.clone(),t.contours.len()))}else{None}).collect();
                     assert!(paths.len()>=2,"two editable path text runs created by UI");
                     assert!(paths.iter().all(|p|p.3>0),"path contours survive save/load");
-                    assert!(self.errors.is_empty(),"all native UI targets resolved");
+                    fs::write(self.directory.join("path-type-errors.json"),serde_json::to_vec_pretty(&self.errors).unwrap()).unwrap();
+                    assert!(self.errors.is_empty(),"all native UI targets resolved: {:?}",self.errors);
                     fs::write(self.directory.join("path-type-export.svg"),omadesign::svg::export(&restored).unwrap()).unwrap();
                     fs::write(self.directory.join("path-type-result.json"),serde_json::to_vec_pretty(&serde_json::json!({"saved_and_reopened":true,"paths":paths,"unresolved_input_targets":self.errors,"renderer":"native WGPU","recording_frames":self.frame})).unwrap()).unwrap();
                 }
@@ -1705,7 +1745,7 @@ fn main() -> eframe::Result {
                 .expect("invalid FPS")
         })
         .unwrap_or(FPS);
-    assert!(matches!(fps, 10 | 30 | 60), "FPS must be 10, 30 or 60");
+    assert!(matches!(fps, 10 | 15 | 30 | 60), "FPS must be 10, 15, 30 or 60");
     // Keep the real desktop HOME/theme, isolate every app write and credential.
     let profile = std::env::temp_dir().join(format!("omadesign-recording-{}", std::process::id()));
     for (variable, name) in [

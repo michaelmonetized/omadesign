@@ -105,6 +105,21 @@ mod tests {
     }
 
     #[test]
+    fn path_text_copy_payload_keeps_links_only_with_guide_and_remaps_on_paste() {
+        let mut source=Studio::new();
+        let guide=Shape::new(Geom::Ellipse{center:Pt::new(200.,200.),radii:Pt::splat(100.)},Style::default());
+        let guide_id=guide.id;source.doc.layers[1].kind.shapes_mut().unwrap().push(guide);
+        source.active_layer=Some(1);source.text_px=22.;source.place_text_on_path(Pt::new(200.,100.),(1,guide_id));source.type_insert("Live path clipboard");source.commit_type_edit();let text=source.selection[0];
+        let alone=copy(&mut source);let mut target=Studio::new();target.paste_clipboard(Some(&alone));
+        let (layer,id)=target.selection[0];assert!(matches!(&target.doc.find_shape(layer,id).unwrap().geom,Geom::Text(t) if t.on_path.is_none()));
+        source.selection=vec![text,(1,guide_id)];let together=copy(&mut source);
+        assert_ne!(together,alone);let payload:Vec<Shape>=serde_json::from_str(together.strip_prefix(Studio::CLIP_PREFIX).unwrap()).unwrap();assert_eq!(payload.len(),2);
+        target.paste_clipboard(Some(&together));assert_eq!(target.selection.len(),2);
+        let linked=target.selection.iter().find_map(|&(l,id)|match &target.doc.find_shape(l,id)?.geom{Geom::Text(t)=>Some(t),_=>None}).unwrap();
+        let guide=linked.on_path.as_ref().unwrap().path_id;assert_ne!(guide,guide_id);assert!(target.selection.iter().any(|&(_,id)|id==guide));assert!(!linked.contours.is_empty());
+    }
+
+    #[test]
     fn cross_window_rasters_and_shapes_keep_positions_with_one_undo() {
         let mut source = Studio::new();
         source.place_text(Pt::new(76., 125.));

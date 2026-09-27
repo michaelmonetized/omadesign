@@ -133,6 +133,7 @@ pub fn layout_on_path(run: &TypeRun) -> TextGeometryLayout {
     let Some((_,span))=path_interval(on) else {return TextGeometryLayout::default()};
     let mut plain=run.clone();
     plain.origin=Pt::ZERO; plain.on_path=None; plain.layout=None; plain.wrap_width=None;
+    plain.content=plain.content.replace('\n'," ");
     plain.tracking+=on.spacing;
     let lines=crate::text::compose(&plain);
     let mut result=TextGeometryLayout::default();

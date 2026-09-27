@@ -17,6 +17,7 @@ pub fn path_inspector(ui:&mut Ui,studio:&mut Studio) {
         ui.checkbox(&mut on.flip,"Flip side and direction");
         ui.horizontal(|ui|{ui.label("Baseline shift");ui.add(egui::DragValue::new(&mut on.baseline_shift).speed(0.25).suffix(" px"));});
         ui.horizontal(|ui|{ui.label("Curve spacing");ui.add(egui::DragValue::new(&mut on.spacing).speed(0.1).suffix(" px"));});
+        ui.label("Align to path");
         egui::ComboBox::from_id_salt("path-alignment").selected_text(format!("{:?}",on.align)).show_ui(ui,|ui|{
             for value in [PathAlign::Baseline,PathAlign::Center,PathAlign::Top,PathAlign::Bottom] {ui.selectable_value(&mut on.align,value,format!("{value:?}"));}
         });
@@ -29,6 +30,7 @@ pub fn menu(ui:&mut Ui,studio:&mut Studio) {
     if ui.add_enabled(attached,egui::Button::new("Release text from path")).clicked(){studio.release_text_path();ui.close();}
 }
 pub fn brackets(ui:&mut Ui,rect:Rect,studio:&mut Studio)->bool {
+    if studio.tool==crate::tools::Tool::Node{return false;}
     let painter=ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Foreground,egui::Id::new("text-geometry-brackets"))).with_clip_rect(rect);
     let mut handled=false;
     let selection=studio.selection.clone();
@@ -42,7 +44,7 @@ pub fn brackets(ui:&mut Ui,rect:Rect,studio:&mut Studio)->bool {
         for (kind,distance) in [(0,0.),(1,span),(2,span*0.5)] {
             let Some((point,tangent))=text_geometry::path_position(&current,distance) else{continue};
             let to_screen=|p:Pt|{let p=view.to_screen(p);egui::pos2(rect.min.x+p.x,rect.min.y+p.y)};
-            let center=to_screen(point);
+            let center=to_screen(point)+egui::vec2(tangent.x,tangent.y)*match kind{0=>-6.,1=>6.,_=>0.};
             let color=if kind==1&&current.layout.as_ref().is_some_and(|l|l.overflow){Color32::from_rgb(245,65,75)}else{crate::ui::theme::select()};
             painter.line_segment([to_screen(point-tangent.perp()*9./view.scale),to_screen(point+tangent.perp()*9./view.scale)],Stroke::new(2.,color));
             painter.circle_filled(center,3.,color);
