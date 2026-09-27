@@ -134,7 +134,11 @@ pub fn compose(run: &TypeRun) -> Arc<Vec<LayoutLine>> {
             for (at,hyphen) in &mut candidates {if *at==rest.len(){*hyphen=false;}}
             candidates.sort_unstable();
             candidates.dedup();
-            candidates.retain(|(byte, _)| {
+            let words: Vec<_> = rest.unicode_word_indices().map(|(at, word)| (at, at + word.len())).collect();
+            candidates.retain(|(byte, hyphen)| {
+                if style.break_mode == BreakMode::Word && !hyphen && words.iter().any(|(start, end)| start < byte && byte < end) {
+                    return false;
+                }
                 if *byte == rest.len() {
                     return true;
                 }
@@ -681,5 +685,19 @@ mod tests {
         run.set_character_style(4,13,|s|s.no_break=true);
         run.update_paragraphs(0,0,|p|p.runt=Some(RuntRule::default()));
         assert!(compose(&run).iter().all(|line|line.start<=4||line.start>=13));
+    }
+}
+
+#[cfg(test)] mod word_mode_tests {
+    use super::*;
+    #[test] fn word_mode_keeps_katakana_words_but_anywhere_is_explicit() {
+        let mut run=TypeRun{content:"カタカナ".into(),font:concat!(env!("CARGO_MANIFEST_DIR"),"/tests/assets/fonts/EBGaramond.ttf").into(),px:30.,wrap_width:Some(25.),..Default::default()};
+        assert!(compose(&run).len()>1,"Normal honors UAX14 opportunities inside Katakana");
+        run.update_paragraphs(0,4,|p|p.break_mode=BreakMode::Word);
+        assert_eq!(compose(&run).len(),1,"Word mode retains the Unicode word");
+        run.update_paragraphs(0,4,|p|p.overflow_wrap=true);
+        assert!(compose(&run).len()>1,"Anywhere explicitly permits long-word breaks");
+        run.content="inter\u{ad}national".into();run.wrap_width=Some(80.);run.update_paragraphs(0,run.content.chars().count(),|p|p.overflow_wrap=false);
+        assert!(compose(&run).iter().any(|l|l.hyphenated),"Explicit discretionary hyphens remain honored");
     }
 }
