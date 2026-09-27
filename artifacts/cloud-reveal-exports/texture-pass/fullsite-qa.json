@@ -1,0 +1,120 @@
+[
+  {
+    "canvas": {
+      "width": 1440,
+      "height": 893,
+      "opacity": "1",
+      "animation": "none",
+      "logoOpacity": "1"
+    },
+    "name": "desktop",
+    "status": 200,
+    "title": "omadesign — native Linux creative suite",
+    "state": {
+      "settled": "true",
+      "ambientTime": "26.966",
+      "entrance": "9.200",
+      "scroll": "0.000",
+      "pointer": "0.00,0.00",
+      "renderer": "webgl",
+      "motion": "running"
+    },
+    "headings": [
+      "cloud collab",
+      "Project files + assets",
+      "Team member access",
+      "Client review + annotations",
+      "User showcase",
+      "Competitions",
+      "share the work",
+      "Every idea.One native creative studio.",
+      "Design",
+      "A bigger creative toolkit.A closer look.",
+      "See the tools in motion.",
+      "Give AI the busywork.Keep the art direction.",
+      "Bring your layers.Grade the whole shoot.",
+      "Omarchy first.",
+      "Your brand.Your files.",
+      "Shortcuts for the current tool",
+      "52 editabletemplates.",
+      "See the studio move.",
+      "Features",
+      "Details."
+    ],
+    "chrome": [],
+    "overflow": false,
+    "errors": [],
+    "failed": [],
+    "scroll": {
+      "y": 1560,
+      "departed": "true",
+      "heroVisible": true
+    },
+    "docs": [
+      "Cloud collaboration"
+    ],
+    "cloudRedirect": {
+      "status": 307,
+      "location": "https://omadesign.app/cloud"
+    }
+  },
+  {
+    "canvas": {
+      "width": 390,
+      "height": 844,
+      "opacity": "1",
+      "animation": "none",
+      "logoOpacity": "1"
+    },
+    "name": "phone",
+    "status": 200,
+    "title": "omadesign — native Linux creative suite",
+    "state": {
+      "settled": "true",
+      "ambientTime": "26.666",
+      "entrance": "9.200",
+      "scroll": "0.000",
+      "pointer": "0.00,0.00",
+      "renderer": "webgl",
+      "motion": "running"
+    },
+    "headings": [
+      "cloud collab",
+      "Project files + assets",
+      "Team member access",
+      "Client review + annotations",
+      "User showcase",
+      "Competitions",
+      "share the work",
+      "Every idea.One native creative studio.",
+      "Design",
+      "A bigger creative toolkit.A closer look.",
+      "See the tools in motion.",
+      "Give AI the busywork.Keep the art direction.",
+      "Bring your layers.Grade the whole shoot.",
+      "Omarchy first.",
+      "Your brand.Your files.",
+      "Shortcuts for the current tool",
+      "52 editabletemplates.",
+      "See the studio move.",
+      "Features",
+      "Details."
+    ],
+    "chrome": [],
+    "overflow": false,
+    "errors": [],
+    "failed": [],
+    "scroll": {
+      "y": 1392,
+      "departed": "true",
+      "heroVisible": true
+    },
+    "docs": [
+      "Cloud collaboration"
+    ],
+    "cloudRedirect": {
+      "status": 307,
+      "location": "https://omadesign.app/cloud"
+    }
+  }
+]

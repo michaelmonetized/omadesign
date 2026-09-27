@@ -1,0 +1,19 @@
+{
+  "id": "dpl_21PyUP2SKJVK7dEWWCDKnsaUn4bz",
+  "url": "https://omadesign-mrono83xj-hustle-launch.vercel.app",
+  "target": "preview",
+  "status": "READY",
+  "source": "226639a6316ca5637ac25ab3fee049c8f64bc749 plus local shader changes",
+  "framework": "TanStack Start / Vite / Nitro",
+  "type": "full-site public context preview",
+  "replacesReviewDeployment": "dpl_GJ5Feih9wpcHZxjbN963EVoAceff",
+  "productionBeforeAndAfter": "dpl_Gg88J74WUqaDAxo5Vk3Wki4pZT7h",
+  "verified": {
+    "shaderHashMatches": true,
+    "docsHTTP": 200,
+    "desktopWebGL": true,
+    "phoneWebGL": true,
+    "phoneOverflow": false,
+    "javascriptErrors": []
+  }
+}

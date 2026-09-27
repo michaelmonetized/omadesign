@@ -1,0 +1,44 @@
+[
+  {
+    "path": "/assets/cloud-waitlist-So6ERN9Z.js",
+    "status": 200,
+    "url": "https://omadesign.app/assets/cloud-waitlist-So6ERN9Z.js",
+    "sha256": "04c57f12f94e9ecbf28b6927caf2e236ca5e835f625808907fe6d9ef2d4f4ee7",
+    "bytes": 369391
+  },
+  {
+    "path": "/docs/cloud",
+    "status": 200,
+    "url": "https://omadesign.app/docs/cloud",
+    "sha256": "30bbb246db0d8636ba4acefca00031f497deffd957f3932661651ee85ba782b6",
+    "bytes": 16638
+  },
+  {
+    "path": "/cloud",
+    "status": 200,
+    "url": "https://omadesign.app/cloud",
+    "sha256": "8329c445fbffb846c944535d261e1e2e0d13e86d34f916d89f85550df402438c",
+    "bytes": 6860
+  },
+  {
+    "path": "/install",
+    "status": 200,
+    "url": "https://omadesign.app/install",
+    "sha256": "5cf18da3a512052bc06bbede604ad69ecd8cd408c49164d62e6a721b1fba55ad",
+    "bytes": 2179
+  },
+  {
+    "path": "/robots.txt",
+    "status": 200,
+    "url": "https://omadesign.app/robots.txt",
+    "sha256": "8132fc283b44be6e2666446b3a88f20c3d4bf85ac20d2799bb19f7edfdc366c8",
+    "bytes": 84
+  },
+  {
+    "path": "/sitemap.xml",
+    "status": 200,
+    "url": "https://omadesign.app/sitemap.xml",
+    "sha256": "341ee6267d2e52f4129ca80716bff509bc96d8b191b78f2f15048eeb96014654",
+    "bytes": 899
+  }
+]

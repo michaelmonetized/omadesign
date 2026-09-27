@@ -1,0 +1,11 @@
+{
+  "gesture": {
+    "mean": 0.350555419921875,
+    "channelsChanged": 13459
+  },
+  "dissipated": {
+    "mean": 0,
+    "channelsChanged": 0
+  },
+  "glError": 0
+}

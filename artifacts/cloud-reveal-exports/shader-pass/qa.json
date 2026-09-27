@@ -1,0 +1,67 @@
+{
+  "errors": [],
+  "results": [
+    {
+      "name": "desktop",
+      "dataset": {
+        "settled": "true",
+        "ambientTime": "29.042",
+        "entrance": "9.200",
+        "scroll": "0.000",
+        "pointer": "0.00,0.00",
+        "renderer": "webgl",
+        "motion": "running"
+      },
+      "glError": 0,
+      "overflow": false,
+      "buffer": [
+        1440,
+        900
+      ],
+      "fps": 60.00200006666893,
+      "p95": 16.700000000000728,
+      "offscreenPaused": true
+    },
+    {
+      "name": "portrait",
+      "dataset": {
+        "settled": "true",
+        "ambientTime": "29.315",
+        "entrance": "9.200",
+        "scroll": "0.000",
+        "pointer": "0.00,0.00",
+        "renderer": "webgl",
+        "motion": "running"
+      },
+      "glError": 0,
+      "overflow": false,
+      "buffer": [
+        780,
+        1688
+      ],
+      "fps": 60.00200006666886,
+      "p95": 16.799999999999272
+    },
+    {
+      "name": "reduced",
+      "dataset": {
+        "settled": "true",
+        "ambientTime": "0.000",
+        "entrance": "9.200",
+        "scroll": "0.000",
+        "pointer": "0.00,0.00",
+        "renderer": "webgl",
+        "motion": "paused"
+      },
+      "glError": 0,
+      "overflow": false,
+      "buffer": [
+        390,
+        844
+      ],
+      "fps": 60.00200006666888,
+      "p95": 16.700000000000273,
+      "static": true
+    }
+  ]
+}

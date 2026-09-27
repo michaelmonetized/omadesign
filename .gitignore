@@ -26,3 +26,8 @@ site/.env*
 
 # Root-linked Vercel CLI state for the site/ project.
 /.vercel
+
+# Local build caches, linked checkouts, and the unnamed duplicate draft.
+/.vite/
+/.worktrees/
+/Untitled.oma

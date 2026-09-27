@@ -1,0 +1,243 @@
+[
+  {
+    "kind": "4k-built-hero",
+    "errors": [],
+    "consoleErrors": [],
+    "badResponses": [],
+    "state": {
+      "time": "12.000",
+      "renderer": "webgl",
+      "hardware": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+      "canvas": [
+        3840,
+        2160
+      ],
+      "viewport": [
+        3840,
+        2160,
+        1
+      ],
+      "icon": {
+        "y": 598.3203125,
+        "height": 574.546875
+      },
+      "word": {
+        "y": 1259.265625,
+        "height": 185.90625
+      },
+      "gapRatio": 0.15037665551657556,
+      "centerDistanceRatio": 0.8121617579070464
+    }
+  },
+  {
+    "kind": "portrait-built-hero",
+    "errors": [],
+    "consoleErrors": [],
+    "badResponses": [],
+    "state": {
+      "time": "12.000",
+      "renderer": "webgl",
+      "hardware": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+      "canvas": [
+        1170,
+        2532
+      ],
+      "viewport": [
+        390,
+        844,
+        3
+      ],
+      "icon": {
+        "y": 271.9375,
+        "height": 148.1875
+      },
+      "word": {
+        "y": 453.890625,
+        "height": 25.359375
+      },
+      "gapRatio": 0.22785744411640657,
+      "centerDistanceRatio": 0.8134226064951497
+    }
+  },
+  {
+    "kind": "retreat-gap",
+    "errors": [],
+    "consoleErrors": [],
+    "badResponses": [],
+    "before": {
+      "time": "12.000",
+      "renderer": "webgl",
+      "hardware": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+      "canvas": [
+        1633,
+        919
+      ],
+      "viewport": [
+        1920,
+        1080,
+        1
+      ],
+      "icon": {
+        "y": 299.1640625,
+        "height": 287.265625
+      },
+      "word": {
+        "y": 629.625,
+        "height": 92.953125
+      },
+      "gapRatio": 0.15036714713081317,
+      "centerDistanceRatio": 0.8121566494424802
+    },
+    "after": {
+      "time": "16.000",
+      "renderer": "webgl",
+      "hardware": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+      "canvas": [
+        1633,
+        919
+      ],
+      "viewport": [
+        1920,
+        1080,
+        1
+      ],
+      "icon": {
+        "y": 257.01776123046875,
+        "height": 125.3853759765625
+      },
+      "word": {
+        "y": 401.2569580078125,
+        "height": 40.57208251953125
+      },
+      "gapRatio": 0.15036698382038968,
+      "centerDistanceRatio": 0.81215651550834
+    },
+    "ratioError": 1.633104234899374e-7
+  },
+  {
+    "kind": "desktop-performance",
+    "errors": [],
+    "consoleErrors": [],
+    "badResponses": [],
+    "before": {
+      "time": "0.000",
+      "renderer": "webgl",
+      "hardware": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+      "canvas": [
+        1633,
+        919
+      ],
+      "viewport": [
+        1920,
+        1080,
+        1
+      ],
+      "icon": {
+        "y": 299.1640625,
+        "height": 287.265625
+      },
+      "word": {
+        "y": 597.2249755859375,
+        "height": 92.953125
+      },
+      "gapRatio": 0.037579463557247755,
+      "centerDistanceRatio": 0.6993689658689148
+    },
+    "performance": {
+      "frames": 182,
+      "elapsedMs": 5016.4,
+      "fps": 36.28099832549239,
+      "medianFrameMs": 33.20000000000027,
+      "p95FrameMs": 50,
+      "timelineSeconds": 5.016399999999998,
+      "above38ms": 17
+    },
+    "after": {
+      "time": "5.016",
+      "renderer": "webgl",
+      "hardware": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+      "canvas": [
+        1633,
+        919
+      ],
+      "viewport": [
+        1920,
+        1080,
+        1
+      ],
+      "icon": {
+        "y": 299.1640625,
+        "height": 287.265625
+      },
+      "word": {
+        "y": 597.2249755859375,
+        "height": 92.953125
+      },
+      "gapRatio": 0.037579463557247755,
+      "centerDistanceRatio": 0.6993689658689148
+    }
+  },
+  {
+    "kind": "portrait-performance",
+    "errors": [],
+    "consoleErrors": [],
+    "badResponses": [],
+    "before": {
+      "time": "0.000",
+      "renderer": "webgl",
+      "hardware": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+      "canvas": [
+        833,
+        1802
+      ],
+      "viewport": [
+        390,
+        844,
+        3
+      ],
+      "icon": {
+        "y": 271.9375,
+        "height": 148.1875
+      },
+      "word": {
+        "y": 428.57061767578125,
+        "height": 25.359375
+      },
+      "gapRatio": 0.05699278060417545,
+      "centerDistanceRatio": 0.6425579429829186
+    },
+    "performance": {
+      "frames": 190,
+      "elapsedMs": 5033.122,
+      "fps": 37.74992936789531,
+      "medianFrameMs": 16.800000000000068,
+      "p95FrameMs": 50,
+      "timelineSeconds": 5.033121999999999,
+      "above38ms": 14
+    },
+    "after": {
+      "time": "5.033",
+      "renderer": "webgl",
+      "hardware": "ANGLE (Mesa, AGX G13/G14, OpenGL ES 3.2)",
+      "canvas": [
+        833,
+        1802
+      ],
+      "viewport": [
+        390,
+        844,
+        3
+      ],
+      "icon": {
+        "y": 271.9375,
+        "height": 148.1875
+      },
+      "word": {
+        "y": 428.57061767578125,
+        "height": 25.359375
+      },
+      "gapRatio": 0.05699278060417545,
+      "centerDistanceRatio": 0.6425579429829186
+    }
+  }
+]
