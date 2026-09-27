@@ -39,3 +39,9 @@ ranges during runt adjustment. Focused logs are included.
 All three external Cairo/Poppler interoperability checks also passed; their logs
 are included. The recording uses deterministic render-ready input replay, not
 a realtime performance measurement.
+
+The final paragraph audit also verifies Unicode Word wrapping separately from
+Normal wrapping: Katakana words stay intact, Anywhere explicitly permits overflow
+breaks, discretionary hyphens remain available, and runt avoidance only moves
+whole Unicode words. All 10 composer regressions pass. These two followups do not
+change the ASCII native scenario recorded above.
