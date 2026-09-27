@@ -3143,8 +3143,9 @@ fn draw_type_caret(
         .request_repaint_after(std::time::Duration::from_secs_f64(next * 0.5 + 0.001));
     if on {
         let c = crate::text::caret_pt(run, caret);
-        let top = win(rect, v, Pt::new(c.x, c.y - run.px * 0.9));
-        let bot = win(rect, v, Pt::new(c.x, c.y + run.px * 0.2));
+        let height=crate::text::caret_height(run,caret);
+        let top = win(rect, v, Pt::new(c.x, c.y - height * 0.9));
+        let bot = win(rect, v, Pt::new(c.x, c.y + height * 0.2));
         p.line_segment([top, bot], Stroke::new(1.5, select()));
     }
 }

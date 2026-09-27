@@ -121,9 +121,20 @@ pub(super) fn ranged_features(
             .find(|(_, ch, _)| *ch >= span.end)
             .map_or(visible_len, |(byte, _, _)| *byte);
         if from < to {
+            if let Some(mode)=span.kerning {features.push(byte_feature(b"kern",u32::from(mode==crate::geom::KernMode::Metrics),from,to));}
             features.extend(span.features.iter().map(|(tag, value)| {
                 byte_feature(tag, *value, from, to)
             }));
+        }
+    }
+    // A manually kerned pair needs separate glyphs even when a default ligature
+    // would otherwise merge both source characters into one cluster.
+    for (&at, &amount) in &run.manual_kern {
+        if amount == 0. || at == 0 { continue; }
+        let from = mapping.iter().find(|(_, ch, _)| *ch >= at - 1).map_or(visible_len, |(byte, _, _)| *byte);
+        let to = mapping.iter().find(|(_, ch, _)| *ch >= at + 1).map_or(visible_len, |(byte, _, _)| *byte);
+        if from < to {
+            for tag in [b"liga", b"clig"] {features.push(byte_feature(tag, 0, from, to));}
         }
     }
     features
@@ -163,6 +174,7 @@ pub fn glyph_alternates(run: &TypeRun, start: usize, end: usize) -> Vec<GlyphAlt
         span.end = hi - start;
         Some(span)
     }).collect();
+    sample.manual_kern = run.manual_kern.range((start + 1)..end).map(|(&i, &value)| (i - start, value)).collect();
     sample.contours.clear();
     let initial = compose(&sample);
     let ids: Vec<_> = initial

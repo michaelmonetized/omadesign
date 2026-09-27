@@ -49,6 +49,7 @@ enum ActionKind {
     ScrollAt(Target, f32),
     Type(&'static str),
     Expect(&'static str),
+    ReopenSaved,
 }
 struct Action {
     start: u32,
@@ -122,6 +123,34 @@ fn schedule(scene: &str) -> Vec<Action> {
                 ),
             ),
             event(21., Key(egui::Key::S, ctrl())),
+        ],
+        "spacing" => vec![
+            event(1., Key(egui::Key::A, ctrl())),
+            event(2., Key(egui::Key::ArrowRight, Modifiers{alt:true,..ctrl()})),
+            event(3., Key(egui::Key::ArrowDown, Modifiers{alt:true,..Modifiers::NONE})),
+            event(4., Key(egui::Key::ArrowUp, Modifiers{alt:true,shift:true,..Modifiers::NONE})),
+            event(5., Click(Text("Metrics"))),
+            event(6., Click(Text("Optical"))),
+            drag(8., 1., Delta(Field("Horizontal scale"), 25.)),
+            drag(10., 1., Delta(Field("Vertical scale"), 30.)),
+            event(12., Key(egui::Key::A, ctrl())),
+            event(13., Key(egui::Key::Q, Modifiers{alt:true,..ctrl()})),
+            event(14., Key(egui::Key::ArrowRight, Modifiers{alt:true,..Modifiers::NONE})),
+            event(16., Key(egui::Key::Home, Modifiers::NONE)),
+            event(17., Key(egui::Key::ArrowRight, Modifiers{shift:true,..Modifiers::NONE})),
+            event(18., Key(egui::Key::ArrowRight, Modifiers{shift:true,..Modifiers::NONE})),
+            event(19., Key(egui::Key::ArrowUp, Modifiers{alt:true,shift:true,..Modifiers::NONE})),
+            event(20., Key(egui::Key::Home, Modifiers::NONE)),
+            event(21., Key(egui::Key::ArrowRight, Modifiers::NONE)),
+            event(22., Key(egui::Key::ArrowRight, Modifiers{alt:true,..Modifiers::NONE})),
+            event(24., Key(egui::Key::A, ctrl())),
+            event(25., Key(egui::Key::ArrowRight, Modifiers{alt:true,..ctrl()})),
+            event(28., Key(egui::Key::Escape, Modifiers::NONE)),
+            event(30., Key(egui::Key::Z, ctrl())),
+            event(32., Key(egui::Key::Z, Modifiers{shift:true,..ctrl()})),
+            event(34., Key(egui::Key::S, ctrl())),
+            event(36., ReopenSaved),
+            event(38., Click(World(180.,130.))),
         ],
         "opentype" => vec![
             event(1., Key(egui::Key::A, ctrl())),
@@ -789,13 +818,18 @@ fn seed(scene: &str) -> Studio {
             *s.doc.layers[0].kind.shapes_mut().unwrap() = vec![bg, subject];
         }
 
-        "paragraphs" | "opentype" => {
+        "paragraphs" | "opentype" | "spacing" => {
             use omadesign::{geom::{TypeRun,ParagraphStyle},document::{Shape,Style,Fill}};
             s.doc=Document::new("Paragraph composition · issue 148",960.,680.,96.);
             let mut run=TypeRun{origin:Pt::new(90.,130.),content:"Thoughtful typography gives every idea room to breathe. Paragraph composition balances word spacing, line endings, and the rhythm of language.\nEach paragraph carries its own alignment and line breaking choices.".into(),font:"/usr/share/fonts/gsfonts/NimbusRoman-Regular.otf".into(),px:30.,wrap_width:Some(710.),paragraphs:vec![ParagraphStyle{word_spacing:[80.,100.,250.],letter_spacing:[0.,0.,8.],..Default::default()}],..Default::default()};
             if scene=="opentype" {
                 run.font=fs::canonicalize("tests/assets/fonts/EBGaramond.ttf").unwrap().to_string_lossy().into_owned();
                 run.content="office affine fi ffi 0123456789\nEditable typography and stylistic alternates".into();run.px=44.;run.paragraphs.clear();
+            }
+            if scene=="spacing" {
+                s.doc.name="Character spacing · issue 152".into();
+                run.font=fs::canonicalize("tests/assets/fonts/EBGaramond.ttf").unwrap().to_string_lossy().into_owned();
+                run.content="AVATAR Wa typography\nSpacing gives each word room to breathe.".into();run.px=44.;run.paragraphs.clear();
             }
             run.contours=omadesign::text::shape(&run);
             let shape=Shape::new(Geom::Text(run),Style{fill:Fill::Solid(Rgba::from_hex(0x24344A)),stroke:None});
@@ -944,12 +978,13 @@ fn seed(scene: &str) -> Studio {
 impl Capture {
     fn new(scene: String, directory: PathBuf, probe: bool, fps: u32) -> Self {
         let mut studio = seed(&scene);
-        if matches!(scene.as_str(), "independent-effects" | "paragraphs" | "opentype") {
+        if matches!(scene.as_str(), "independent-effects" | "paragraphs" | "opentype" | "spacing") {
             studio.path = Some(directory.join(format!("{scene}-final.oma")));
         }
         let seconds = match scene.as_str() {
             "paragraphs" => 30,
             "opentype" => 20,
+            "spacing" => 40,
             "welcome-browse" => 23,
             "welcome-vector" | "welcome-layout" => 9,
             "welcome-raster" => 8,
@@ -1176,6 +1211,9 @@ impl Capture {
                                 self.frame
                             ));
                         }
+                    }
+                    ActionKind::ReopenSaved => {
+                        self.studio.open_path(self.directory.join("spacing-final.oma"));
                     }
                     ActionKind::Type(_) => {}
                     ActionKind::Drag(from, to) => a.points = self.target(from).zip(self.target(to)),
@@ -1438,6 +1476,19 @@ impl eframe::App for Capture {
                     fs::write(self.directory.join("opentype-result.json"),serde_json::to_vec_pretty(&serde_json::json!({"saved_and_reopened":true,"spans":run.spans,"source":run.content,"unresolved_input_targets":self.errors,"renderer":"native WGPU","recording_frames":self.frame})).unwrap()).unwrap();
                     fs::write(self.directory.join("opentype-export.svg"),omadesign::svg::export(&restored).unwrap()).unwrap();
                     fs::write(self.directory.join("opentype-export.html"),omadesign::text::paragraph_html(run)).unwrap();
+                }
+                if self.scene=="spacing" {
+                    let restored=omadesign::project::load_from(&self.directory.join("spacing-final.oma")).unwrap();
+                    let run=restored.layers[1].kind.shapes().unwrap().iter().find_map(|s|if let Geom::Text(t)=&s.geom{Some(t)}else{None}).unwrap();
+                    assert!(!run.manual_kern.is_empty(),"manual kerning shortcut did not persist");
+                    assert!(run.spans.iter().any(|s|s.kerning==Some(omadesign::geom::KernMode::Optical)),"optical control did not apply");
+                    assert!(run.spans.iter().any(|s|s.hscale.unwrap_or(100.)>100.),"horizontal scale did not change");
+                    assert!(run.spans.iter().any(|s|s.vscale.unwrap_or(100.)>100.),"vertical scale did not change");
+                    assert!(run.spans.iter().any(|s|s.baseline_shift.unwrap_or(0.)>2.),"range baseline shortcut did not apply");
+                    assert!(run.spans.iter().all(|s|s.tracking==Some(120.)),"tracking/reset shortcuts did not apply");
+                    fs::write(self.directory.join("spacing-result.json"),serde_json::to_vec_pretty(&serde_json::json!({"saved_by_ctrl_s":true,"reopened_by_application":true,"spans":run.spans,"manual_kern":run.manual_kern,"source":run.content,"unresolved_input_targets":self.errors,"renderer":"native WGPU","recording_frames":self.frame})).unwrap()).unwrap();
+                    fs::write(self.directory.join("spacing-export.svg"),omadesign::svg::export(&restored).unwrap()).unwrap();
+                    fs::write(self.directory.join("spacing-export.html"),omadesign::text::paragraph_html(run)).unwrap();
                 }
                 self.encoder.take().unwrap().finish();
                 fs::write(

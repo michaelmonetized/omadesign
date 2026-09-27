@@ -173,6 +173,9 @@ impl TypeRun {
         );
         let a = super::char_to_byte(&self.content, start);
         let b = super::char_to_byte(&self.content, end);
+        self.manual_kern=std::mem::take(&mut self.manual_kern).into_iter().filter_map(|(at,value)| {
+            if start<end && at>=start && at<=end {None} else {Some((if at>=end{at-(end-start)+n}else{at},value))}
+        }).filter(|(at,_)|*at>0).collect();
         self.content.replace_range(a..b, text);
         self.assign_character_spans(chars);
         self.paragraphs.clear();
@@ -204,6 +207,12 @@ impl TypeRun {
             }) {
                 self.paragraphs.push(p);
             }
+        }
+    }
+    pub fn scale_character_metrics(&mut self,ratio:f32) {
+        for span in &mut self.spans {
+            if let Some(crate::geom::Leading::Fixed(value))=&mut span.leading {*value*=ratio.abs();}
+            if let Some(shift)=&mut span.baseline_shift {*shift*=ratio;}
         }
     }
     pub fn update_paragraphs(

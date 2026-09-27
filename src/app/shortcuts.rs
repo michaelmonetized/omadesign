@@ -483,6 +483,33 @@ impl Studio {
             let align=match key {Key::L=>TextAlign::Start,Key::C=>TextAlign::Center,Key::R=>TextAlign::End,Key::J=>TextAlign::Justify{last:LastLine::Start},Key::F=>TextAlign::Justify{last:LastLine::Justify},Key::Minus=>{self.type_insert("\u{ad}");return true;},_=>return false};
             self.patch_paragraph(|p|p.align=align);return true;
         }
+        if modifiers.alt && !modifiers.mac_cmd {
+            let edit=self.type_edit.clone().unwrap();let (a,b)=(edit.caret.min(edit.anchor),edit.caret.max(edit.anchor));
+            let multiplier=if modifiers.ctrl||modifiers.command{5.}else{1.};
+            if (modifiers.ctrl||modifiers.command)&&*key==Key::Q {
+                self.patch_character(|s|s.tracking=Some(0.));
+                self.patch_type(|run|run.manual_kern.retain(|at,_|if a==b{*at!=a}else{*at<a||*at>b}));return true;
+            }
+            match key {
+                Key::ArrowLeft|Key::ArrowRight if !modifiers.shift=>{
+                    let delta=self.startup_preferences.tracking_step.max(1) as f32*multiplier*if *key==Key::ArrowLeft{-1.}else{1.};
+                    if a==b {if a>0 && a<self.selected_type().map_or(0,|r|r.content.chars().count()) {self.patch_type(|run|{let value=run.manual_kern.entry(a).or_default();*value=(*value+delta).clamp(-1000.,10000.);});}}
+                    else {let run=self.selected_type().unwrap();self.patch_character(|s|s.tracking=Some((s.tracking.unwrap_or(run.tracking/run.px.max(1.)*1000.)+delta).clamp(-1000.,10000.)));}
+                    return true;
+                }
+                Key::ArrowUp|Key::ArrowDown=>{
+                    if modifiers.shift {
+                        let delta=self.startup_preferences.baseline_step.max(1) as f32*if *key==Key::ArrowUp{1.}else{-1.};
+                        self.patch_character(|s|s.baseline_shift=Some(s.baseline_shift.unwrap_or(0.)+delta));
+                    } else {
+                        let delta=self.startup_preferences.leading_step.max(1) as f32*if *key==Key::ArrowUp{-1.}else{1.};
+                        let run=self.selected_type().unwrap();self.patch_character(|s|{let current=s.leading.map_or(run.line_height(),|l|l.pixels(run.px));s.leading=Some(crate::geom::Leading::Fixed((current+delta).max(1.)));});
+                    }
+                    return true;
+                }
+                _=>{}
+            }
+        }
         false
     }
 

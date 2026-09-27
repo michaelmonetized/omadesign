@@ -1016,20 +1016,7 @@ fn character_studio(ui: &mut Ui, studio: &mut Studio) {
     if number_field(ui, "Size", &mut px, 8.0..=400.0, " px") {
         studio.patch_type(|t| t.px = px);
     }
-    let mut track = live
-        .as_ref()
-        .map(|t| t.tracking)
-        .unwrap_or(studio.text_tracking);
-    if number_field(ui, "Letter spacing", &mut track, -40.0..=80.0, "") {
-        studio.patch_type(|t| t.tracking = track);
-    }
-    let mut lead = live
-        .as_ref()
-        .map(|t| t.leading)
-        .unwrap_or(studio.text_leading);
-    if number_field(ui, "Line height", &mut lead, 0.0..=400.0, "") {
-        studio.patch_type(|t| t.leading = lead);
-    }
+    super::character_spacing::show(ui,studio);
     super::opentype::show(ui, studio, &font);
     super::paragraph::show(ui, studio);
     if studio.type_edit.is_some() {

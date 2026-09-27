@@ -94,6 +94,11 @@ fn config(ui: &mut egui::Ui, studio: &mut Studio) {
         studio.show_key_hud = studio.startup_preferences.show_key_hud;
     }
     ui.separator();
+    ui.strong("Typography increments");
+    ui.add(egui::DragValue::new(&mut studio.startup_preferences.tracking_step).range(1..=1000).prefix("Tracking / kerning ").suffix(" /1000 em"));
+    ui.add(egui::DragValue::new(&mut studio.startup_preferences.leading_step).range(1..=100).prefix("Leading ").suffix(" px"));
+    ui.add(egui::DragValue::new(&mut studio.startup_preferences.baseline_step).range(1..=100).prefix("Baseline shift ").suffix(" px"));
+    ui.separator();
     ui.strong("Privacy and updates");
     ui.checkbox(
         &mut studio.startup_preferences.anonymous_usage,
