@@ -76,7 +76,10 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
                             .clicked()
                         {
                             studio.patch_character(|s| {
-                                s.leading = Some(Leading::Fixed(run.line_height()))
+                                s.leading = Some(Leading::Fixed(lead.map_or_else(
+                                    || run.line_height(),
+                                    |value| value.pixels(run.px),
+                                )))
                             });
                             restore_edit_focus(ui, studio);
                         }
