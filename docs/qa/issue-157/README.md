@@ -32,4 +32,6 @@ The thread written by the application's persistence worker was read back indepen
 - [22 agent and clipboard tests](agent-tests.log) passed on the complete prepared stack before the final History-only layout fix. The subsequent focused run includes its new History regression. The ACP integration test exercises real subprocess transport for **no capabilities**, **image only**, and **all capabilities**, including unsupported-type file/path fallback.
 - The local fixture peer is in [fake-agent.py](fake-agent.py). No paid provider turn is needed for this proof; named third-party provider services were not independently exercised.
 
+After the recorded run, commit `04638556c2e79758f9db222038ceab3dec36fbc2` additionally preserves both the unsent prompt and a concurrently edited next draft when preparation fails, is stopped, or is cancelled during connection. Pending paste positions move with the restored prefix. [All 13 attachment tests pass](recovery-tests.log), including those three recovery branches. This changes interruption recovery only; the recorded successful delivery and restore path is unchanged.
+
 The recording uses an isolated XDG profile and a synthetic document. It does not modify the installed stable application or accepted QA evidence.

@@ -151,5 +151,15 @@
     }
   },
   "limits": "Deterministic frame-based replay, not real-time performance evidence. Later typography-only inspector fixes are outside this recorded flow.",
-  "paid_provider_turns_run": false
+  "paid_provider_turns_run": false,
+  "post_recording_fix": {
+    "source_sha": "04638556c2e79758f9db222038ceab3dec36fbc2",
+    "scope": "Preserve previous and concurrently edited drafts when send preparation fails or is stopped; preserve pending paste destinations. Successful recorded path unchanged.",
+    "workspace_sha256": "11ef5a1c7d0d7269adffb6f2bda7b05a8b70d176258b586673714971a3efcfcf",
+    "focused_attachment_tests": {
+      "passed": 13,
+      "failed": 0,
+      "log": "recovery-tests.log"
+    }
+  }
 }
