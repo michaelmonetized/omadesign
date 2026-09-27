@@ -3,22 +3,12 @@ use super::*;
 impl Studio {
     /// A selected layer is one movable unit; a canvas selection retains group units.
     pub fn align_targets(&self) -> (Vec<(usize, u64)>, bool) {
-        let eligible = |li: usize, id: u64| {
-            self.doc.layer_editable(li)
-                && if id == RASTER_ID {
-                    self.doc.layers[li].kind.raster_bounds().is_some()
-                } else {
-                    self.doc
-                        .find_shape(li, id)
-                        .is_some_and(|s| s.visible && !s.locked && !s.guide)
-                }
-        };
         if !self.selection.is_empty() {
             return (
                 self.selection
                     .iter()
                     .copied()
-                    .filter(|&(li, id)| eligible(li, id))
+                    .filter(|&(li, id)| align::eligible_target(&self.doc, li, id, self.individual_object, false))
                     .collect(),
                 false,
             );
@@ -39,10 +29,10 @@ impl Studio {
                 if let Some(shapes) = self.doc.layers[li].kind.shapes() {
                     shapes
                         .iter()
-                        .filter(|s| eligible(li, s.id))
+                        .filter(|s| align::eligible_target(&self.doc, li, s.id, self.individual_object, true))
                         .map(|s| (li, s.id))
                         .collect::<Vec<_>>()
-                } else if eligible(li, RASTER_ID) {
+                } else if align::eligible_target(&self.doc, li, RASTER_ID, self.individual_object, true) {
                     vec![(li, RASTER_ID)]
                 } else {
                     vec![]

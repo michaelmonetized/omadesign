@@ -38,11 +38,22 @@ pub fn artboard_for(doc: &Document, bounds: Bounds) -> Bounds {
 
 type Item = (Vec<(usize, u64)>, Bounds);
 
-fn items(doc: &Document, ids: &[(usize, u64)], individual: Option<(usize, u64)>) -> Vec<Item> {
+/// Locked/hidden descendants move with an unlocked selected parent. Entering a
+/// group item restores ordinary per-object eligibility.
+pub fn eligible_target(doc: &Document, li: usize, id: u64, individual: Option<(usize, u64)>, layer_unit: bool) -> bool {
+    let Some(layer) = doc.layers.get(li) else { return false };
+    let group = (individual != Some((li, id))).then(|| doc.layer_ancestors(li).last().copied()).flatten();
+    let parent_unit = group.is_some_and(|root| doc.layer_visible(root) && !doc.layers[root].locked);
+    if !parent_unit && !doc.layer_editable(li) { return false; }
+    if id == crate::document::RASTER_ID { return layer.kind.raster_bounds().is_some(); }
+    doc.find_shape(li, id).is_some_and(|s| !s.guide && (parent_unit || (s.visible && (layer_unit || !s.locked))))
+}
+
+fn items(doc: &Document, ids: &[(usize, u64)], individual: Option<(usize, u64)>, layer_unit: bool) -> Vec<Item> {
     let mut items: Vec<(Option<usize>, Item)> = vec![];
     let mut seen = std::collections::HashSet::new();
     for &(li, id) in ids {
-        if !doc.layer_editable(li) || !seen.insert((li, id)) {
+        if !eligible_target(doc, li, id, individual, layer_unit) || !seen.insert((li, id)) {
             continue;
         }
         // A selected layout frame carries its descendants; avoid aligning those twice.
@@ -55,7 +66,6 @@ fn items(doc: &Document, ids: &[(usize, u64)], individual: Option<(usize, u64)>)
             doc.layers.get(li).and_then(|l| l.kind.raster_bounds())
         } else {
             doc.find_shape(li, id)
-                .filter(|s| s.visible && !s.locked)
                 .map(|s| s.world_bbox())
         };
         let Some(bounds) = bounds else {
@@ -96,7 +106,7 @@ pub fn item_count(
     individual: Option<(usize, u64)>,
     unit: bool,
 ) -> usize {
-    let count = items(doc, ids, individual).len();
+    let count = items(doc, ids, individual, unit).len();
     if unit { count.min(1) } else { count }
 }
 
@@ -108,7 +118,7 @@ pub fn align_with_reference(
     unit: bool,
     reference: AlignTo,
 ) -> Vec<(usize, u64, Pt)> {
-    let mut items = items(doc, ids, individual);
+    let mut items = items(doc, ids, individual, unit);
     let Some(all) = items.iter().map(|(_, b)| *b).reduce(|a, b| a.union(b)) else {
         return vec![];
     };
@@ -148,7 +158,7 @@ pub fn distribute_items(
     how: Distribute,
     individual: Option<(usize, u64)>,
 ) -> Vec<(usize, u64, Pt)> {
-    let mut items = items(doc, ids, individual);
+    let mut items = items(doc, ids, individual, false);
     if items.len() < 3 {
         return vec![];
     }

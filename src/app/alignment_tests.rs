@@ -171,3 +171,38 @@ fn shift_multi_aligns_each_to_its_artboard() {
     }
     history_roundtrip(&mut s, before, history);
 }
+
+#[test]
+fn parent_alignment_preserves_hidden_and_locked_group_descendants() {
+    for from_layer in [false, true] {
+        let mut s = fixture();
+        let a = add(&mut s, 170., 150.);
+        let b = add(&mut s, 230., 220.);
+        s.selection = vec![(0,a),(0,b)]; s.group_selected();
+        let members=s.selection.clone();
+        let group=s.doc.layers.iter().position(|l|l.is_group).unwrap();
+        let (li,id)=members[1];
+        let child=s.doc.find_shape_mut(li,id).unwrap();child.visible=false;child.locked=true;
+        s.doc.layers[li].visible=false;s.doc.layers[li].locked=true;
+        if from_layer { s.activate_layer_tree(group); } else { s.selection=s.selection_for_hit(members[0]); }
+        let centers:Vec<_>=members.iter().map(|&(li,id)|s.doc.find_shape(li,id).unwrap().world_bbox().center()).collect();
+        let before=saved(&s);let history=s.history.len();
+        assert_eq!(s.alignment_item_count(),1);
+        s.align_sel(Align::Right);
+        let after:Vec<_>=members.iter().map(|&(li,id)|s.doc.find_shape(li,id).unwrap().world_bbox()).collect();
+        assert_eq!(after[1].center()-after[0].center(),centers[1]-centers[0]);
+        assert_eq!(after.iter().map(|b|b.max.x).fold(f32::NEG_INFINITY,f32::max),400.);
+        history_roundtrip(&mut s,before,history);
+        s.doc.layers[group].locked=true;assert!(!s.can_align_selection());
+        s.doc.layers[group].locked=false;s.enter_group_item(members[1]);assert!(!s.can_align_selection());
+    }
+}
+#[test]
+fn selected_visible_layer_carries_locked_objects_but_individual_selection_does_not() {
+    let mut s=fixture();let a=add(&mut s,170.,150.);let b=add(&mut s,230.,220.);
+    s.doc.find_shape_mut(0,b).unwrap().locked=true;
+    s.activate_layer_tree(0);s.align_sel(Align::Left);
+    assert_eq!(s.doc.find_shape(0,a).unwrap().world_bbox().min.x,100.);
+    assert_eq!(s.doc.find_shape(0,b).unwrap().world_bbox().min.x,160.);
+    s.selected_layer=None;s.selection=vec![(0,b)];assert!(!s.can_align_selection());
+}
