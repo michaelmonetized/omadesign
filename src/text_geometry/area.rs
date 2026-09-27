@@ -91,6 +91,8 @@ pub struct Obstacle {
     pub locked: bool,
 }
 fn polygon_intervals(poly: &[Pt], y: f32) -> Vec<(f32, f32)> {
+    let bottom=poly.iter().map(|p|p.y).fold(f32::NEG_INFINITY,f32::max);
+    let y=if (y-bottom).abs()<0.0001 {bottom-0.0001}else{y};
     let mut xs = vec![];
     if poly.len() < 3 {
         return vec![];
@@ -355,6 +357,9 @@ pub fn layout_frame(
     layout_frame_continued(frame_run, story, start, obstacles, has_next, 0)
 }
 
+#[derive(Default)]
+struct FlowMetrics { top: f32, bottom: f32, rows: usize }
+
 fn layout_frame_continued(
     frame_run: &TypeRun,
     story: &TypeRun,
@@ -362,6 +367,67 @@ fn layout_frame_continued(
     obstacles: &[Obstacle],
     has_next: bool,
     initial_hyphens: usize,
+) -> TextGeometryLayout {
+    let mut metrics=FlowMetrics::default();
+    let Some(frame)=frame_run.frame.as_ref() else { return TextGeometryLayout::default(); };
+    if frame.valign==VAlign::Top || (obstacles.is_empty() && frame.contour.is_none()) {
+        return layout_frame_pass(frame_run,story,start,obstacles,has_next,initial_hyphens,None,&mut metrics);
+    }
+    // Obstacle intervals depend on the baseline. Reflow at the aligned position
+    // instead of translating glyphs after their collision-free spans were chosen.
+    let height=(frame.size.y-frame.inset[0]-frame.inset[2]).max(0.);
+    let mut best=layout_frame_pass(frame_run,story,start,obstacles,has_next,initial_hyphens,Some((0.,0.)),&mut metrics);
+    if metrics.rows>0 && metrics.bottom>=height-0.01 {return best;}
+    let initially_empty=metrics.rows==0;
+    if initially_empty {
+        let mut probe=frame_run.clone();probe.frame.as_mut().unwrap().contour=None;
+        layout_frame_pass(&probe,story,start,&[],has_next,initial_hyphens,Some((0.,0.)),&mut metrics);
+        if metrics.rows==0 {return best;}
+    }
+    let required_end=best.visible_end;
+    let score=|m:&FlowMetrics|match frame.valign {VAlign::Center=>(height-m.bottom-m.top).abs(),VAlign::Bottom|VAlign::Justify=>(height-m.bottom).abs(),VAlign::Top=>0.};
+    let mut best_score=if initially_empty {f32::INFINITY}else{score(&metrics)};
+    let mut offset=0.;let mut gap=0.;let mut previous:Vec<(f32,f32)>=Vec::new();
+    for _ in 0..8 {
+        let (mut next_offset,mut next_gap)=match frame.valign {
+            VAlign::Center=>((offset+(height-metrics.bottom-metrics.top)*0.5).clamp(-story.line_height(),height),0.),
+            VAlign::Bottom=>((offset+height-metrics.bottom).clamp(-story.line_height(),height),0.),
+            VAlign::Justify if metrics.rows>1=>(0.,(gap+(height-metrics.bottom)/(metrics.rows-1) as f32).clamp(0.,story.line_height()*3.)),
+            _=>break,
+        };
+        if previous.iter().any(|&(x,y)|(x-next_offset).abs()<0.1&&(y-next_gap).abs()<0.1) {next_offset=(next_offset+offset)*0.5;next_gap=(next_gap+gap)*0.5;}
+        if (next_offset-offset).abs()<0.05 && (next_gap-gap).abs()<0.05 {break;}
+        previous.push((next_offset,next_gap));
+        let (old_offset,old_gap)=(offset,gap);
+        offset=next_offset;gap=next_gap;
+        let mut trial_metrics=FlowMetrics::default();
+        let mut trial=layout_frame_pass(frame_run,story,start,obstacles,has_next,initial_hyphens,Some((offset,gap)),&mut trial_metrics);
+        // Tight obstacle bands can add lines. Back off until alignment retains
+        // every character that the top-aligned frame could display.
+        for _ in 0..6 {
+            if trial_metrics.rows>0 && trial.visible_end>=required_end && trial_metrics.bottom<=height+0.01 {break;}
+            offset=(offset+old_offset)*0.5;gap=(gap+old_gap)*0.5;
+            trial=layout_frame_pass(frame_run,story,start,obstacles,has_next,initial_hyphens,Some((offset,gap)),&mut trial_metrics);
+        }
+        if trial_metrics.rows>0 && trial.visible_end>=required_end && trial_metrics.bottom<=height+0.01 {
+            let trial_score=score(&trial_metrics);
+            if trial.visible_end>best.visible_end || (trial.visible_end==best.visible_end && trial_score<best_score) {best_score=trial_score;best=trial;}
+            metrics=trial_metrics;
+            if best_score<0.1 {break;}
+        } else {break;}
+    }
+    best
+}
+
+fn layout_frame_pass(
+    frame_run: &TypeRun,
+    story: &TypeRun,
+    start: usize,
+    obstacles: &[Obstacle],
+    has_next: bool,
+    initial_hyphens: usize,
+    vertical: Option<(f32,f32)>,
+    metrics: &mut FlowMetrics,
 ) -> TextGeometryLayout {
     let Some(frame) = frame_run.frame.as_ref() else {
         return TextGeometryLayout::default();
@@ -402,6 +468,7 @@ fn layout_frame_continued(
     let mut index = start.min(total);
     let mut row = 0usize;
     let mut previous_baseline: Option<f32> = None;
+    let mut previous_had_text = false;
     let mut placed = vec![];
     let mut consecutive = initial_hyphens;
     let mut visible_rows = 0usize;
@@ -446,8 +513,12 @@ fn layout_frame_continued(
         let Some(first) = composed.first() else { break };
         let (ascent, descent) = line_metrics(&probe, first);
         let line_height = first.height.max(ascent + descent);
-        let y = previous_baseline.map_or(inner.min.y + ascent, |baseline| baseline + line_height);
+        let (offset,gap)=vertical.unwrap_or((0.,0.));
+        let y = previous_baseline.map_or(inner.min.y + ascent + offset, |baseline| baseline + line_height + if previous_had_text { gap } else { 0. });
         let row_top = y - ascent;
+        if row_top < inner.min.y - 0.001 {
+            previous_had_text=false;previous_baseline=Some(y);row+=1;continue;
+        }
         if row_top > flow_bottom {
             break;
         }
@@ -456,6 +527,7 @@ fn layout_frame_continued(
         }
         let spans = line_spans(inner, row_top, y + descent, obstacles);
         if spans.is_empty() {
+            previous_had_text = false;
             previous_baseline = Some(y);
             row += 1;
             continue;
@@ -514,9 +586,10 @@ fn layout_frame_continued(
                 break;
             }
         }
+        previous_had_text = placed.len() > placed_before_row;
         previous_baseline = Some(y);
         row += 1;
-        visible_rows += usize::from(placed.len() > placed_before_row);
+        visible_rows += usize::from(previous_had_text);
     }
     // Respect paragraph boundaries when advancing to another frame. A paragraph
     // taller than an empty frame still advances; it must never create a flow loop.
@@ -613,7 +686,10 @@ fn layout_frame_continued(
         .map(|l| l.y + l.descent - inner.min.y)
         .unwrap_or(0.);
     let free = (inner.height() - occupied).max(0.);
-    let align = if mode == Overflow::Visible && occupied > inner.height() {
+    metrics.top=placed.first().map(|line|line.y-line_metrics(&line.run,&line.line).0-inner.min.y).unwrap_or(0.);
+    metrics.bottom=occupied;
+    metrics.rows=placed.iter().enumerate().filter(|(i,line)|*i==0||placed[*i-1].row!=line.row).count();
+    let align = if vertical.is_some() || (mode == Overflow::Visible && occupied > inner.height()) {
         VAlign::Top
     } else {
         frame.valign
@@ -1235,6 +1311,65 @@ mod tests {
                 ..Default::default()
             },
             locked: false,
+        }
+    }
+    #[test]
+    fn vertical_alignment_reflows_around_obstacles_at_final_baselines() {
+        for align in [VAlign::Center,VAlign::Bottom,VAlign::Justify] {
+            let mut text=run();text.font=concat!(env!("CARGO_MANIFEST_DIR"),"/tests/assets/fonts/EBGaramond.ttf").into();
+            text.content="One two three four\nFive six seven eight".into();
+            text.frame.as_mut().unwrap().size=Pt::new(300.,300.);
+            let bounds=frame_bounds(&text).unwrap();
+            let blocker=obstacle(Geom::Rect{origin:bounds.min+Pt::new(80.,if align==VAlign::Bottom{230.}else{80.}),size:Pt::new(140.,90.),radius:0.});
+            let top=layout_frame(&text,&text,0,&[blocker.clone()],false);
+            text.frame.as_mut().unwrap().valign=align;
+            let legacy=layout_frame_pass(&text,&text,0,&[blocker.clone()],false,0,None,&mut FlowMetrics::default());
+            assert!(legacy.contours.iter().flatten().any(|p|blocker.bounds.contains(*p)),"fixture must expose the old {align:?} post-layout translation collision");
+            let timed=std::time::Instant::now();
+            let layout=layout_frame(&text,&text,0,&[blocker.clone()],false);
+            eprintln!("wrapped {align:?} alignment: {:?}",timed.elapsed());
+            assert_eq!(layout.visible_end,text.content.chars().count(),"{align:?} must preserve the whole short story");
+            assert!(layout.contours.iter().flatten().all(|p|!blocker.bounds.contains(*p)),"{align:?} shifted glyphs into the wrap object");
+            let extent=|layout:&TextGeometryLayout|layout.contours.iter().flatten().map(|p|p.y).fold(f32::NEG_INFINITY,f32::max);
+            assert!(extent(&layout)>extent(&top)+10.,"{align:?} must still move the text vertically");
+        }
+    }
+    #[test]
+    fn aligned_closed_frames_and_line_limits_preserve_vertical_semantics() {
+        let mut text=run();text.font=concat!(env!("CARGO_MANIFEST_DIR"),"/tests/assets/fonts/EBGaramond.ttf").into();text.content="Short text\nMore words".into();
+        text.frame.as_mut().unwrap().size=Pt::new(300.,300.);
+        text.frame.as_mut().unwrap().contour=Some(vec![vec![Pt::ZERO,Pt::new(1.,0.),Pt::splat(1.),Pt::new(0.,1.)]]);
+        let bounds=frame_bounds(&text).unwrap();
+        for align in [VAlign::Center,VAlign::Bottom] {
+            text.frame.as_mut().unwrap().valign=align;
+            let layout=layout_frame(&text,&text,0,&[],false);
+            assert_eq!(layout.visible_end,text.content.chars().count());
+            let top=layout.carets.iter().map(|(_,p,_)|p.y-17.).fold(f32::INFINITY,f32::min)-bounds.min.y;
+            let bottom=bounds.max.y-layout.carets.iter().map(|(_,p,_)|p.y+4.).fold(f32::NEG_INFINITY,f32::max);
+            assert!(if align==VAlign::Center {(top-bottom).abs()<0.5}else{bottom.abs()<0.5},"{align:?}: top={top}, bottom={bottom}");
+        }
+        text.frame.as_mut().unwrap().contour=None;text.frame.as_mut().unwrap().max_lines=Some(1);
+        let blocker=obstacle(Geom::Rect{origin:bounds.min+Pt::new(110.,100.),size:Pt::new(60.,80.),radius:0.});
+        text.frame.as_mut().unwrap().valign=VAlign::Center;
+        let limited=layout_frame(&text,&text,0,&[blocker.clone()],false);
+        assert!(limited.overflow);assert!(limited.visible_end<text.content.chars().count());
+        assert!(limited.carets.iter().all(|(_,p,_)|(p.y-limited.carets[0].1.y).abs()<0.01));
+        text.content="Short words remain visible beyond the frame. ".repeat(20);text.frame.as_mut().unwrap().max_lines=None;text.frame.as_mut().unwrap().overflow=Overflow::Visible;
+        let visible=layout_frame(&text,&text,0,&[blocker.clone()],false);text.frame.as_mut().unwrap().valign=VAlign::Top;
+        let top=layout_frame(&text,&text,0,&[blocker],false);
+        assert_eq!(visible.contours,top.contours);assert_eq!(visible.visible_end,text.content.chars().count());
+    }
+    #[test]
+    fn tapered_frame_alignment_finds_baselines_between_top_scan_rows() {
+        for content in ["communication","words"] {
+            let mut text=run();text.font=concat!(env!("CARGO_MANIFEST_DIR"),"/tests/assets/fonts/EBGaramond.ttf").into();text.content=content.into();
+            let width=crate::text::measure(&TypeRun{frame:None,wrap_width:None,..text.clone()}).0;
+            text.frame.as_mut().unwrap().size=Pt::new(if content=="words" {width*2.}else{width*1.25},50.);
+            text.frame.as_mut().unwrap().contour=Some(Geom::Ellipse{center:Pt::splat(0.5),radii:Pt::splat(0.5)}.contours(128));
+            text.frame.as_mut().unwrap().valign=VAlign::Center;
+            let layout=layout_frame(&text,&text,0,&[],false);let bounds=frame_bounds(&text).unwrap();
+            assert_eq!(layout.visible_end,content.chars().count(),"{content} must fit after baseline phase adjustment");
+            let baseline=layout.carets[0].1.y;assert!((baseline-17.-bounds.min.y-14.5).abs()<0.5,"{content} centered baseline={baseline}");
         }
     }
     #[test]
