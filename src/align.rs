@@ -19,13 +19,30 @@ pub enum Distribute {
     Vertical,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AlignTo {
+    Auto,
+    EachToArtboard,
+}
+
+pub fn artboard_for(doc: &Document, bounds: Bounds) -> Bounds {
+    doc.artboards
+        .iter()
+        .find(|a| a.bounds().contains(bounds.center()))
+        .map(|a| a.bounds())
+        .unwrap_or(Bounds::from_min_size(
+            Pt::ZERO,
+            Pt::new(doc.width, doc.height),
+        ))
+}
+
 type Item = (Vec<(usize, u64)>, Bounds);
 
 fn items(doc: &Document, ids: &[(usize, u64)], individual: Option<(usize, u64)>) -> Vec<Item> {
     let mut items: Vec<(Option<usize>, Item)> = vec![];
     let mut seen = std::collections::HashSet::new();
     for &(li, id) in ids {
-        if !seen.insert((li, id)) {
+        if !doc.layer_editable(li) || !seen.insert((li, id)) {
             continue;
         }
         // A selected layout frame carries its descendants; avoid aligning those twice.
@@ -37,7 +54,9 @@ fn items(doc: &Document, ids: &[(usize, u64)], individual: Option<(usize, u64)>)
         let bounds = if id == crate::document::RASTER_ID {
             doc.layers.get(li).and_then(|l| l.kind.raster_bounds())
         } else {
-            doc.find_shape(li, id).map(|s| s.world_bbox())
+            doc.find_shape(li, id)
+                .filter(|s| s.visible && !s.locked)
+                .map(|s| s.world_bbox())
         };
         let Some(bounds) = bounds else {
             continue;
@@ -68,23 +87,39 @@ pub fn align_items(
     how: Align,
     individual: Option<(usize, u64)>,
 ) -> Vec<(usize, u64, Pt)> {
-    let items = items(doc, ids, individual);
-    let Some(mut all) = items.iter().map(|(_, b)| *b).reduce(|a, b| a.union(b)) else {
+    align_with_reference(doc, ids, how, individual, false, AlignTo::Auto)
+}
+
+pub fn item_count(
+    doc: &Document,
+    ids: &[(usize, u64)],
+    individual: Option<(usize, u64)>,
+    unit: bool,
+) -> usize {
+    let count = items(doc, ids, individual).len();
+    if unit { count.min(1) } else { count }
+}
+
+pub fn align_with_reference(
+    doc: &Document,
+    ids: &[(usize, u64)],
+    how: Align,
+    individual: Option<(usize, u64)>,
+    unit: bool,
+    reference: AlignTo,
+) -> Vec<(usize, u64, Pt)> {
+    let mut items = items(doc, ids, individual);
+    let Some(all) = items.iter().map(|(_, b)| *b).reduce(|a, b| a.union(b)) else {
         return vec![];
     };
-    if items.len() == 1 {
-        all = doc
-            .artboards
-            .iter()
-            .find(|a| a.bounds().contains(all.center()))
-            .map(|a| a.bounds())
-            .unwrap_or(Bounds::from_min_size(
-                Pt::ZERO,
-                Pt::new(doc.width, doc.height),
-            ));
+    if unit {
+        let members = items.into_iter().flat_map(|(members, _)| members).collect();
+        items = vec![(members, all)];
     }
+    let each = reference == AlignTo::EachToArtboard || items.len() == 1;
     let mut result = vec![];
     for (members, b) in items {
+        let all = if each { artboard_for(doc, b) } else { all };
         let delta = match how {
             Align::Left => Pt::new(all.min.x - b.min.x, 0.),
             Align::CenterX => Pt::new(all.center().x - b.center().x, 0.),

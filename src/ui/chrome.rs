@@ -136,7 +136,6 @@ fn main_menus(ui: &mut Ui, studio: &mut Studio) {
     ui.menu_button("Select", |ui| super::selection::menu(ui, studio));
     ui.add_enabled_ui(studio.persona != Persona::Photo, |ui| {
         object_menu(ui, studio);
-        arrange_menu(ui, studio);
     });
     view_menu(ui, studio);
     super::plugins::menu(ui, studio);
@@ -623,75 +622,6 @@ fn object_menu(ui: &mut Ui, studio: &mut Studio) {
             if let Some(&id) = studio.artboard_sel.first() {
                 studio.clone_artboard(id);
             }
-            ui.close();
-        }
-    });
-}
-
-fn arrange_menu(ui: &mut Ui, studio: &mut Studio) {
-    ui.menu_button("Arrange", |ui| {
-        ui.label(RichText::new("Align").small().color(fg_weak()));
-        if ui.button("Left").clicked() {
-            studio.align_sel(crate::align::Align::Left);
-            ui.close();
-        }
-        if ui.button("Centre").clicked() {
-            studio.align_sel(crate::align::Align::CenterX);
-            ui.close();
-        }
-        if ui.button("Right").clicked() {
-            studio.align_sel(crate::align::Align::Right);
-            ui.close();
-        }
-        if ui.button("Top").clicked() {
-            studio.align_sel(crate::align::Align::Top);
-            ui.close();
-        }
-        if ui.button("Middle").clicked() {
-            studio.align_sel(crate::align::Align::CenterY);
-            ui.close();
-        }
-        if ui.button("Bottom").clicked() {
-            studio.align_sel(crate::align::Align::Bottom);
-            ui.close();
-        }
-        ui.separator();
-        if ui.button("Distribute horizontally").clicked() {
-            studio.distribute_sel(crate::align::Distribute::Horizontal);
-            ui.close();
-        }
-        if ui.button("Distribute vertically").clicked() {
-            studio.distribute_sel(crate::align::Distribute::Vertical);
-            ui.close();
-        }
-        ui.separator();
-        ui.label(RichText::new("Order").small().color(fg_weak()));
-        if ui
-            .add(Button::new("Bring to front").shortcut_text("Ctrl+Shift+]"))
-            .clicked()
-        {
-            studio.bring_to_front();
-            ui.close();
-        }
-        if ui
-            .add(Button::new("Bring forward").shortcut_text("Ctrl+]"))
-            .clicked()
-        {
-            studio.bring_forward();
-            ui.close();
-        }
-        if ui
-            .add(Button::new("Send backward").shortcut_text("Ctrl+["))
-            .clicked()
-        {
-            studio.send_backward();
-            ui.close();
-        }
-        if ui
-            .add(Button::new("Send to back").shortcut_text("Ctrl+Shift+["))
-            .clicked()
-        {
-            studio.send_to_back();
             ui.close();
         }
     });

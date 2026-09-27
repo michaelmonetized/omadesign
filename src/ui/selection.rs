@@ -42,7 +42,8 @@ pub(super) fn arrange_panel(ui: &mut Ui, studio: &mut Studio) {
     egui::CollapsingHeader::new("Align")
         .default_open(true)
         .show(ui, |ui| {
-            ui.add_enabled_ui(studio.selection.len() >= 2, |ui| {
+            let count = studio.alignment_item_count();
+            ui.add_enabled_ui(studio.can_align_selection(), |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
                     for (icon, label, alignment) in [
@@ -57,13 +58,15 @@ pub(super) fn arrange_panel(ui: &mut Ui, studio: &mut Studio) {
                         (ph::ALIGN_CENTER_V, "Align vertical centers", Align::CenterY),
                         (ph::ALIGN_BOTTOM, "Align bottom", Align::Bottom),
                     ] {
-                        if icons::icon_button(ui, icon, label, false) {
-                            studio.align_sel(alignment);
+                        let hint = if count <= 1 { format!("{label} to artboard") } else { format!("{label} · Shift: each to its artboard") };
+                        if icons::icon_button(ui, icon, &hint, false) {
+                            let reference = if ui.input(|i| i.modifiers.shift) { crate::align::AlignTo::EachToArtboard } else { crate::align::AlignTo::Auto };
+                            studio.align_sel_to(alignment, reference);
                         }
                     }
                 });
-            });
-            ui.add_enabled_ui(studio.selection.len() >= 3, |ui| {
+            }).response.on_disabled_hover_text("Select an object, group or layer to align");
+            ui.add_enabled_ui(count >= 3, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     for (label, hint, distribution) in [
                         (
@@ -250,3 +253,7 @@ pub fn pathfinder_menu(ui: &mut Ui, studio: &mut Studio) {
         ui.close();
     }
 }
+
+#[cfg(test)]
+#[path = "selection_tests.rs"]
+mod tests;
