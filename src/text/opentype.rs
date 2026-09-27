@@ -127,10 +127,24 @@ pub(super) fn ranged_features(
             }));
         }
     }
-    // A manually kerned pair needs separate glyphs even when a default ligature
-    // would otherwise merge both source characters into one cluster.
-    for (&at, &amount) in &run.manual_kern {
-        if amount == 0. || at == 0 { continue; }
+    // A glyph cannot carry different metrics for two characters. Preserve
+    // ligatures inside uniform ranges, but split a cluster across an actual
+    // metric change or an explicitly edited pair.
+    let count = run.content.chars().count();
+    let mut boundaries = std::collections::BTreeSet::new();
+    let metrics = |at| {
+        let s = super::character_metrics(run, at);
+        (s.tracking, s.kerning, s.baseline_shift, s.hscale, s.vscale)
+    };
+    for at in run.spans.iter().flat_map(|span| [span.start, span.end]) {
+        if at > 0 && at < count && metrics(at - 1) != metrics(at) {
+            boundaries.insert(at);
+        }
+    }
+    boundaries.extend(run.manual_kern.iter().filter_map(|(&at, &amount)| {
+        (amount != 0. && at > 0 && at < count).then_some(at)
+    }));
+    for at in boundaries {
         let from = mapping.iter().find(|(_, ch, _)| *ch >= at - 1).map_or(visible_len, |(byte, _, _)| *byte);
         let to = mapping.iter().find(|(_, ch, _)| *ch >= at + 1).map_or(visible_len, |(byte, _, _)| *byte);
         if from < to {

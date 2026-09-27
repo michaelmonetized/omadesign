@@ -422,6 +422,7 @@ fn shape_line(
     let mut pen = 0.;
     let mut result:Vec<LayoutGlyph>=Vec::new();
     let mut previous_cluster=None;
+    let mut previous_untracked_advance = 0.;
     for (info,pos) in shaped.glyph_infos().iter().zip(shaped.glyph_positions()) {
         let (_,cluster,c)=mapping.iter().rev().find(|(byte,_,_)|*byte<=info.cluster as usize).copied().unwrap_or((0,start,' '));
         let metrics=super::character_metrics(run,cluster);
@@ -429,11 +430,13 @@ fn shape_line(
         let vscale=metrics.vscale.unwrap().clamp(1.,1000.)/100.;
         if previous_cluster!=Some(cluster) {
             if previous_cluster.is_some() {pen+=run.manual_kern.get(&cluster).copied().unwrap_or(0.)*run.px/1000.;}
-            if metrics.kerning==Some(crate::geom::KernMode::Optical) && c!=' ' && let Some(left)=result.last().filter(|g|!g.is_space) {pen+=super::metrics::optical_adjustment(run,left,info.glyph_id as u16,hscale);}
+            if metrics.kerning==Some(crate::geom::KernMode::Optical) && c!=' ' && let Some(left)=result.last().filter(|g|!g.is_space) {pen+=super::metrics::optical_adjustment(run,left,previous_untracked_advance,info.glyph_id as u16,hscale);}
         }
-        let advance=pos.x_advance as f32*scale*hscale+metrics.tracking.unwrap()*run.px/1000.;
+        let untracked_advance = pos.x_advance as f32 * scale * hscale;
+        let advance=untracked_advance+metrics.tracking.unwrap()*run.px/1000.;
         result.push(LayoutGlyph{id:info.glyph_id as u16,cluster,x:pen+pos.x_offset as f32*scale*hscale,y:-pos.y_offset as f32*scale*vscale-metrics.baseline_shift.unwrap(),advance,is_space:c==' '||c=='\t',hscale,vscale});
         pen+=advance;previous_cluster=Some(cluster);
+        previous_untracked_advance = untracked_advance;
     }
     let style = paragraph_style(run, start);
     if matches!(style.align,TextAlign::Justify{..}) && run.wrap_width.is_some() && style.break_mode!=BreakMode::KeepAll && let Some(last)=result.last_mut() {last.advance-=super::character_metrics(run,last.cluster).tracking.unwrap()*run.px/1000.;}

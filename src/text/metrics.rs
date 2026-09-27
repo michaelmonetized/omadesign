@@ -76,6 +76,7 @@ fn profile(run: &TypeRun, id: u16) -> Arc<Vec<Option<(f32, f32)>>> {
 pub(super) fn optical_adjustment(
     run: &TypeRun,
     left: &LayoutGlyph,
+    left_untracked_advance: f32,
     right: u16,
     right_scale: f32,
 ) -> f32 {
@@ -86,7 +87,7 @@ pub(super) fn optical_adjustment(
         run.font.clone(),
         left.id,
         right,
-        (left.advance / px).to_bits(),
+        (left_untracked_advance / px).to_bits(),
         left.hscale.to_bits(),
         right_scale.to_bits(),
     );
@@ -100,7 +101,7 @@ pub(super) fn optical_adjustment(
         .iter()
         .zip(b.iter())
         .filter_map(|(a, b)| {
-            Some(left.advance / px + b.as_ref()?.0 * right_scale - a.as_ref()?.1 * left.hscale)
+            Some(left_untracked_advance / px + b.as_ref()?.0 * right_scale - a.as_ref()?.1 * left.hscale)
         })
         .collect();
     if gaps.is_empty() {
@@ -215,6 +216,52 @@ mod tests {
         near(width(&optical), w);
         optical.px *= 2.;
         near(width(&optical), w * 2.);
+    }
+    #[test]
+    fn metric_ranges_inside_ligatures_split_only_the_affected_cluster() {
+        let original = run("fi fi");
+        assert_eq!(glyph_count(&original), 3, "fixture must contain two fi ligatures");
+        for metric in ["tracking", "baseline", "horizontal", "vertical", "kerning"] {
+            let mut styled = original.clone();
+            styled.set_character_style(1, 2, |s| match metric {
+                "tracking" => s.tracking = Some(100.),
+                "baseline" => s.baseline_shift = Some(7.),
+                "horizontal" => s.hscale = Some(150.),
+                "vertical" => s.vscale = Some(160.),
+                _ => s.kerning = Some(KernMode::None),
+            });
+            let lines = compose(&styled);
+            let glyphs = &lines[0].glyphs;
+            assert_eq!(glyphs.iter().map(|g| g.cluster).collect::<Vec<_>>(), vec![0, 1, 2, 3], "{metric}");
+            assert_eq!(glyphs[3].id, compose(&original)[0].glyphs[2].id, "neighboring ligature remains intact: {metric}");
+            let isolated = run("i");
+            let plain_i = compose(&isolated)[0].glyphs[0].clone();
+            match metric {
+                "tracking" => near(glyphs[1].advance, plain_i.advance + 4.),
+                "baseline" => near(glyphs[1].y, -7.),
+                "horizontal" => near(glyphs[1].advance, plain_i.advance * 1.5),
+                "vertical" => near(glyphs[1].vscale, 1.6),
+                _ => {},
+            }
+        }
+        let mut identical = original.clone();
+        identical.set_character_style(1, 2, |s| { s.tracking=Some(0.); s.hscale=Some(100.); });
+        assert_eq!(glyph_count(&identical), 3, "equivalent defaults must preserve ligatures");
+    }
+    #[test]
+    fn optical_kerning_keeps_tracking_additive() {
+        let mut optical = run("AVWa");
+        optical.set_character_style(0, 4, |s| s.kerning=Some(KernMode::Optical));
+        let original=compose(&optical);
+        for tracking in [-40., 40., 100.] {
+            let mut tracked=optical.clone();
+            tracked.set_character_style(0, 4, |s| s.tracking=Some(tracking));
+            let changed=compose(&tracked);
+            for (i,(a,b)) in original[0].glyphs.iter().zip(&changed[0].glyphs).enumerate() {
+                near(b.x-a.x, i as f32 * tracking * optical.px / 1000.);
+            }
+            near(width(&tracked)-width(&optical), 4. * tracking * optical.px / 1000.);
+        }
     }
     #[test]
     fn shifted_scaled_glyphs_caret_selection_and_hits_agree() {
