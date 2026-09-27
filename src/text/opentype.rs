@@ -287,7 +287,7 @@ pub fn glyph_alternates(run: &TypeRun, start: usize, end: usize) -> Vec<GlyphAlt
         let run=studio.selected_type().unwrap();assert_eq!(feature_value(&run,7,*b"smcp"),1);assert_eq!(feature_value(&run,6,*b"smcp"),0);
         studio.commit_type_edit();studio.undo();studio.redo();
         assert_eq!(studio.selected_type().unwrap().spans,run.spans);
-        let encoded=crate::project::encode(&studio.doc).unwrap();assert!(encoded.contains("\"version\":11"));
+        let encoded=crate::project::encode(&studio.doc).unwrap();assert!(encoded.contains("\"version\":12"));
         let decoded=crate::project::decode(&encoded).unwrap();let restored=decoded.layers[1].kind.shapes().unwrap().iter().find_map(|s|if let crate::geom::Geom::Text(t)=&s.geom{Some(t)}else{None}).unwrap();assert_eq!(restored.spans,run.spans);
     }
 }
