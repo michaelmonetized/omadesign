@@ -207,9 +207,9 @@ fn schedule(scene: &str) -> Vec<Action> {
         ],
         "area-options" => vec![
             event(0.7,Click(Text("Arrange"))),event(1.1,Click(Text("Align"))),
-            event(2.,Click(Text("Center"))),event(3.,CheckArea("valign-center")),
-            event(4.,Click(Text("Bottom"))),event(5.,CheckArea("valign-bottom")),
-            event(6.,Click(Text("Justify"))),event(7.,CheckArea("valign-justify")),event(8.,Click(Text("Top"))),
+            event(2.,Click(Text("Frame Center"))),event(3.,CheckArea("valign-center")),
+            event(4.,Click(Text("Frame Bottom"))),event(5.,CheckArea("valign-bottom")),
+            event(6.,Click(Text("Frame Justify"))),event(7.,CheckArea("valign-justify")),event(8.,Click(Text("Frame Top"))),
             drag(9.,0.8,Delta(Field("Inset top"),16.)),drag(10.,0.8,Delta(Field("Inset right"),16.)),drag(11.,0.8,Delta(Field("Inset bottom"),16.)),drag(12.,0.8,Delta(Field("Inset left"),16.)),event(13.,CheckArea("insets")),
             event(14.,Click(Text("Clip"))),event(14.5,Click(Any("Visible"))),event(15.5,CheckArea("visible")),event(16.,Click(Text("Visible"))),event(16.5,Click(Any("Clip"))),
             event(17.,Click(Text("Auto height"))),event(18.,CheckArea("auto-height")),event(19.,Click(Text("Auto height"))),
@@ -221,13 +221,13 @@ fn schedule(scene: &str) -> Vec<Action> {
             drag(35.,1.5,Reveal("Minimum word length")),drag(37.,0.8,Delta(Field("Minimum word length"),8.)),drag(38.,0.8,Delta(Field("Before hyphen"),-8.)),drag(39.,0.8,Delta(Field("After hyphen"),-8.)),
             drag(40.,1.2,Reveal("Consecutive lines")),drag(41.5,0.8,Delta(Field("Consecutive lines"),-10.)),event(42.5,CheckArea("hyphen-limits")),
             event(43.,Key(egui::Key::V,Modifiers::NONE)),event(43.5,Click(World(230.,210.))),event(44.,Scroll(3000.)),
-            event(45.,Click(Text("Text wrap"))),event(46.,Click(Text("None"))),event(46.5,Click(Any("Bounding box"))),
+            event(45.,Click(Text("Text wrap"))),event(46.,Click(Text("Wrap None"))),event(46.5,Click(Text("Wrap Bounding box"))),
             drag(47.,0.8,Delta(Field("Top"),16.)),drag(48.,0.8,Delta(Field("Right"),16.)),event(49.,CheckArea("wrap-box")),
-            event(50.,Click(Text("BoundingBox"))),event(50.5,Click(Any("Object shape"))),drag(51.,0.8,Delta(Field("Offset"),10.)),
+            event(50.,Click(Text("Wrap Bounding box"))),event(50.5,Click(Text("Wrap Object shape"))),drag(51.,0.8,Delta(Field("Offset"),10.)),
             event(52.,Click(Text("Invert: flow inside object"))),event(53.,CheckArea("wrap-inside")),event(54.,Click(Text("Invert: flow inside object"))),
-            event(55.,Click(Text("ObjectShape"))),event(55.5,Click(Any("Jump object"))),event(56.5,CheckArea("wrap-jump")),
-            event(57.,Click(Text("JumpObject"))),event(57.5,Click(Any("None"))),event(58.5,CheckArea("wrap-none")),
-            event(59.,Click(Text("None"))),event(59.5,Click(Any("Object shape"))),event(60.5,Click(Text("Ignore on locked layers"))),event(61.5,Click(Text("Wrap affects text above only"))),event(62.5,CheckArea("wrap-options")),event(62.8,Click(Text("Wrap affects text above only"))),
+            event(55.,Click(Text("Wrap Object shape"))),event(55.5,Click(Text("Wrap Jump object"))),event(56.5,CheckArea("wrap-jump")),
+            event(57.,Click(Text("Wrap Jump object"))),event(57.5,Click(Text("Wrap None"))),event(58.5,CheckArea("wrap-none")),
+            event(59.,Click(Text("Wrap None"))),event(59.5,Click(Text("Wrap Object shape"))),event(60.5,Click(Text("Ignore on locked layers"))),event(61.5,Click(Text("Wrap affects text above only"))),event(62.5,CheckArea("wrap-options")),event(62.8,Click(Text("Wrap affects text above only"))),
             drag(63.,1.5,Drag(World(230.,210.),World(330.,280.))),event(65.,Key(egui::Key::Z,ctrl())),
             event(66.,Key(egui::Key::S,ctrl())),event(67.2,ReopenSaved),event(68.2,CheckArea("hyphen-limits")),
         ],
@@ -248,7 +248,7 @@ Typography stays readable with deliberate hyphenation, useful overflow controls,
             event(21.,Click(FrameText(0))),drag(21.5,1.2,Delta(Field("Width"),-60.)),
             event(23.,CheckArea("resized")),
             event(23.5,Click(FrameText(2))),event(24.,Click(Any("Clip"))),event(24.5,Click(Any("Ellipsis"))),
-            event(25.,Click(Any("Limit lines"))),event(25.5,Click(Text("Bottom"))),event(26.5,CheckArea("ellipsis")),
+            event(25.,Click(Any("Limit lines"))),event(25.5,Click(Text("Frame Bottom"))),event(26.5,CheckArea("ellipsis")),
             event(27.,Key(egui::Key::T,Modifiers::NONE)),event(27.5,Click(FrameText(1))),event(28.,Key(egui::Key::A,ctrl())),
             drag(28.5,3.,Type("Editing a threaded frame edits its entire story. Selection crosses frame boundaries, and undo restores every original word. The text remains editable while the frame size, wrapping obstacle, and overflow preferences stay independent.")),
             event(32.,Key(egui::Key::Escape,Modifiers::NONE)),event(32.5,CheckArea("edited")),
@@ -1272,7 +1272,7 @@ impl Capture {
         match t {
             Target::FrameOut(index) | Target::FrameText(index) => {
                 let run=self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter_map(|s|if let Geom::Text(t)=&s.geom{t.frame.as_ref().map(|_|t)}else{None}).nth(*index)?;
-                let p=if matches!(t,Target::FrameOut(_)){omadesign::text_geometry::frame_bounds(run)?.max-Pt::new(0.,12./self.studio.view.scale)}else{run.contours.first().and_then(|c|c.first()).copied().unwrap_or(omadesign::text_geometry::frame_bounds(run)?.center())};Some(self.world(p.x,p.y))
+                let p=if matches!(t,Target::FrameOut(_)){omadesign::text_geometry::frame_bounds(run)?.max-Pt::new(0.,12./self.studio.view.scale)}else{{ let bounds=omadesign::text_geometry::frame_bounds(run)?;let inset=12./self.studio.view.scale;let input=bounds.min+Pt::new(0.,inset);let output=bounds.max-Pt::new(0.,inset);run.contours.iter().flatten().find(|p|(**p-input).length()>24./self.studio.view.scale&&(**p-output).length()>24./self.studio.view.scale).copied().unwrap_or(bounds.center()) }};Some(self.world(p.x,p.y))
             },
             Target::FirstPathText | Target::PathStartHandle => {
                 let run=self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().find_map(|s|if let Geom::Text(t)=&s.geom {t.on_path.as_ref().map(|_|t)}else{None})?;
@@ -1608,6 +1608,16 @@ impl Capture {
                 }
             }
         });
+        for label in ["None", "Bounding box", "Object shape", "Jump object"] {
+            if let Some(response)=ctx.read_response(egui::Id::new(("text-wrap-mode",label))) {
+                if response.rect.top()>0. && response.rect.bottom()<700. {self.labels.push((format!("Wrap {label}"),response.rect));}
+            }
+        }
+        for label in ["Top", "Center", "Bottom", "Justify"] {
+            if let Some(response)=ctx.read_response(egui::Id::new(("frame-valign",label))) {
+                if response.rect.top()>0. && response.rect.bottom()<700. {self.labels.push((format!("Frame {label}"),response.rect));}
+            }
+        }
         if let Some(response) = ctx.read_response(egui::Id::new("studio-agent-toggle")) {
             self.labels.push(("Agent".into(), response.rect));
         }
