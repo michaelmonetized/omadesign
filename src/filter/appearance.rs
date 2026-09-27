@@ -160,6 +160,37 @@ pub fn composite(
                 .is_none_or(|(b, a)| b == Blend::Normal && a >= 1.)
         })
     {
+        let appearance: Vec<_> = stack
+            .items
+            .iter()
+            .filter(|fx| stack.active() && fx.appearance().is_some())
+            .collect();
+        if let [fx] = appearance.as_slice()
+            && matches!(
+                fx,
+                Fx::Shadow {
+                    knockout: false,
+                    spread: 0.,
+                    ..
+                } | Fx::InnerShadow { choke: 0., .. }
+            )
+        {
+            // This common legacy-compatible stack is exactly the original one-temp
+            // filter algorithm, including its integer blur rounding and allocation cost.
+            super::apply_one(&mut content, fx);
+            dst.draw_pixmap(
+                0,
+                0,
+                content.as_ref(),
+                &PixmapPaint {
+                    quality: tiny_skia::FilterQuality::Bilinear,
+                    ..Default::default()
+                },
+                transform,
+                None,
+            );
+            return;
+        }
         if let Some(mut combined) = Pixmap::new(content.width(), content.height()) {
             for fx in stack.items.iter().filter(|fx| stack.active() && fx.outer()) {
                 if let Some(effect) = effect_pixels(&content, fx) {

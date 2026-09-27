@@ -43,3 +43,16 @@ opacity approximation. PSD reports that per-effect backdrop modes are flattened
 into layer pixels; its compatibility composite retains the complete document.
 PDF rasterizes affected layers/pages where needed. These export boundaries are
 also exposed by the application's existing warning channels.
+
+## Normal/100% timing comparison
+
+`cargo run --locked --bin effects_bench` compares the retained pre-153 renderer
+(`legacy_composite=true`) and the independent appearance path in one executable.
+Both use six rounded rectangles with one Normal/100% shadow each and knockout off,
+at 512×384. Rendering is asserted byte-identical before timing. Three warmup frames
+per path precede nine alternating rounds of eight renders per path (144 measured
+frames); see `benchmark.json` for all samples. The median was **205.120 ms legacy
+and 205.416 ms independent (+0.145%)**, within the observed round-to-round variation
+(about 2%). This is an unoptimized local CPU compositor comparison, not a WGPU
+presentation or release-build frame-rate claim. The compatible single-effect path
+now reuses the original local effect application and one transformed blit.
