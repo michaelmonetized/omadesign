@@ -138,6 +138,7 @@ fn schedule(scene: &str) -> Vec<Action> {
             event(20., Key(egui::Key::Escape, Modifiers::NONE)),
             event(22., Key(egui::Key::Z, ctrl())),
             event(24., Key(egui::Key::Z, Modifiers{shift:true,..ctrl()})),
+            event(25., ScrollAt(At(1480.,560.), -650.)),
             event(26., Click(Text("Line breaking"))),
             event(27., Click(Text("Hyphenate"))),
         ],
