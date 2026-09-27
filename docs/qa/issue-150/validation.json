@@ -1,0 +1,37 @@
+{
+  "source_commit": "2cf5c8e2",
+  "production_followups": [
+    "1703d0e8",
+    "fa015efe"
+  ],
+  "capture_binary_sha256": "cf5b2f4ffdf2af6ffdcca1b5c1bfad747c8518dd7cc0ccc36a4fb04d445321ac",
+  "main": {
+    "frames": 470,
+    "fps": 10,
+    "duration_seconds": 47,
+    "native_errors": 0,
+    "ctrl_s_and_app_reopen": true
+  },
+  "options": {
+    "frames": 700,
+    "fps": 10,
+    "duration_seconds": 70,
+    "native_errors": 0,
+    "ctrl_s_and_app_reopen": true
+  },
+  "focused_tests": {
+    "geometry": 27,
+    "clipboard": 15,
+    "compact_inspector": 1,
+    "failures": 0
+  },
+  "visual_comparison": "Native reopened views and independently rasterized SVG exports inspected; line placement and overflow agree. The obstacle interval regression keeps complete words.",
+  "mixed_paragraph_save_verification": {
+    "first_paragraph_hyphenate": true,
+    "minimum_word_length": 24,
+    "before": 1,
+    "after": 1,
+    "consecutive": 0,
+    "second_paragraph_uses_default_hyphenation_off": true
+  }
+}
