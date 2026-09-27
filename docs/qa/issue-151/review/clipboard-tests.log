@@ -1,0 +1,9 @@
+
+running 4 tests
+test clipboard::type_style::tests::identical_external_plain_text_cannot_reuse_rich_provenance ... ok
+test clipboard::type_style::tests::native_html_round_trip_keeps_unicode_and_rejects_invalid_intervals ... ok
+test clipboard::type_style::tests::copied_effective_features_override_different_destination_defaults ... ok
+test clipboard::type_style::tests::uniform_large_clipboard_uses_one_interval_and_batch_overlay_preserves_neighbors ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 748 filtered out; finished in 0.01s
+

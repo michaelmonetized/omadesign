@@ -1,0 +1,25 @@
+{
+  "backend": "native Wayland clipboard",
+  "checks": [
+    "app-owned typed format plus exact ordinary UTF-8 text",
+    "typed format read from current native owner",
+    "actual app Copy and asynchronous Ctrl+V preserve effective features over different run defaults",
+    "paste survives one-step undo and redo",
+    "independent wl-copy owner replaces identical plain text and clears rich provenance"
+  ],
+  "errors": [],
+  "offered_formats": [
+    "text/plain",
+    "text/plain;charset=utf-8",
+    "application/x-omadesign-text+json",
+    "text/html",
+    "STRING",
+    "UTF8_STRING",
+    "TEXT"
+  ],
+  "status": "passed",
+  "source_commit": "ede93baa",
+  "probe_commit": "54525906",
+  "standalone_base": "b571fc19d511e5c53888324227ba3032bb8c2f18",
+  "upstream_compile_prerequisite": "a6249666"
+}
