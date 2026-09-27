@@ -1,0 +1,145 @@
+{
+  "id": "18d9492695828e360000000000000013",
+  "title": "Match the palette of these references: [📎 pasted-text.txt · 3d0ec0eb73",
+  "settings": {
+    "profile": {
+      "name": "Attachment QA provider",
+      "command": "python3",
+      "args": [
+        "-u",
+        "/home/michael/Projects/omadesign/.worktrees/issues-157-final-qa/docs/qa/issue-157/fake-agent.py",
+        "/home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/acp-received.json"
+      ]
+    },
+    "directory": "/home/michael/Documents/Omadesign-Issues-20260927/157-final-verified",
+    "live_edits": true,
+    "selections": {},
+    "favorites": []
+  },
+  "purpose": "Create",
+  "session_id": "attachment-native-qa",
+  "document": "/home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/attachment-reference.oma",
+  "messages": [
+    {
+      "role": "user",
+      "text": "Match the palette of these references: [📎 pasted-text.txt · 3d0ec0eb73e79566][📎 pasted-image.png · c365b2893c9acb33][📎 pasted-vector.svg · 416c3692d3333a38][📎 brand.pdf · 68114d2508c5ef4f] [📎 reference.mp4 · 340fa3653efd5b5a] [📎 reference.wav · fbe0d0fa88378601] [📎 reference.txt · 01a5eb21c5ee5081][📎 copied-objects.oma · 2ae50d7509d26a78][📎 pasted-file · 5101ede271b85fb3]",
+      "id": "",
+      "status": "",
+      "attachments": [
+        {
+          "id": "3d0ec0eb73e79566",
+          "kind": "Text",
+          "mime": "text/plain",
+          "name": "pasted-text.txt",
+          "size": 2700,
+          "source": "/home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/.omadesign/agent-attachments/18d9492695828e360000000000000013/18d949276c42ccd10000000000000014-pasted-text.txt",
+          "dimensions": null,
+          "delivery": "Sent as embedded context",
+          "preview": null
+        },
+        {
+          "id": "c365b2893c9acb33",
+          "kind": "Image",
+          "mime": "image/png",
+          "name": "pasted-image.png",
+          "size": 1254,
+          "source": "/home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/.omadesign/agent-attachments/18d9492695828e360000000000000013/18d94928f8c6b9190000000000000016-pasted-image.png",
+          "dimensions": [
+            240,
+            160
+          ],
+          "delivery": "Sent as an image",
+          "preview": null
+        },
+        {
+          "id": "416c3692d3333a38",
+          "kind": "Svg",
+          "mime": "image/svg+xml",
+          "name": "pasted-vector.svg",
+          "size": 118,
+          "source": "/home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/.omadesign/agent-attachments/18d9492695828e360000000000000013/18d9492dd4fbc155000000000000001c-pasted-vector.svg",
+          "dimensions": null,
+          "delivery": "Sent as embedded context",
+          "preview": null
+        },
+        {
+          "id": "68114d2508c5ef4f",
+          "kind": "File",
+          "mime": "application/pdf",
+          "name": "brand.pdf",
+          "size": 1046,
+          "source": "/home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/brand.pdf",
+          "dimensions": null,
+          "delivery": "Sent as embedded context",
+          "preview": null
+        },
+        {
+          "id": "340fa3653efd5b5a",
+          "kind": "Video",
+          "mime": "video/mp4",
+          "name": "reference.mp4",
+          "size": 284717,
+          "source": "/home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/reference.mp4",
+          "dimensions": null,
+          "delivery": "Sent as a path; this agent cannot view this type or the inline limit was reached",
+          "preview": null
+        },
+        {
+          "id": "fbe0d0fa88378601",
+          "kind": "Audio",
+          "mime": "audio/wav",
+          "name": "reference.wav",
+          "size": 204,
+          "source": "/home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/reference.wav",
+          "dimensions": null,
+          "delivery": "Sent as audio",
+          "preview": null
+        },
+        {
+          "id": "01a5eb21c5ee5081",
+          "kind": "Text",
+          "mime": "text/plain",
+          "name": "reference.txt",
+          "size": 73,
+          "source": "/home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/reference.txt",
+          "dimensions": null,
+          "delivery": "Sent as embedded context",
+          "preview": null
+        },
+        {
+          "id": "2ae50d7509d26a78",
+          "kind": "Objects",
+          "mime": "application/json",
+          "name": "copied-objects.oma",
+          "size": 1303,
+          "source": "/home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/.omadesign/agent-attachments/18d9492695828e360000000000000013/18d9492fbdaf14050000000000000022-copied-objects.oma",
+          "dimensions": [
+            960,
+            640
+          ],
+          "delivery": "Sent as embedded context",
+          "preview": "/home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/.omadesign/agent-attachments/18d9492695828e360000000000000013/2ae50d7509d26a78-objects.png"
+        },
+        {
+          "id": "5101ede271b85fb3",
+          "kind": "File",
+          "mime": "application/x-omadesign-qa",
+          "name": "pasted-file",
+          "size": 5,
+          "source": "/home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/.omadesign/agent-attachments/18d9492695828e360000000000000013/18d94930cea95ced0000000000000024-pasted-file",
+          "dimensions": null,
+          "delivery": "Sent as embedded context",
+          "preview": null
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "text": "References received: native images, audio, embedded files and a video path. Attachment delivery verified.",
+      "id": "",
+      "status": "",
+      "attachments": []
+    }
+  ],
+  "updated": 1790542814
+}

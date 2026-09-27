@@ -1,0 +1,155 @@
+{
+  "issue": 157,
+  "passed": true,
+  "recorded_source_sha": "e382818602ad962d815c23de631fd747dc943767",
+  "recorded_binary_sha256": "cb2dec59eca9ea752de0a21458c504d3dff273f403928348340dfe328a044beb",
+  "source_sha256": {
+    "src/agent.rs": "5d4a1f67383d46b95db36bde75995340f2f4f05e5f9427ca110a49390000104c",
+    "src/agent/attachments.rs": "2bb4ea824280a4d40ae1603d5175e210e36e5b59ddf019f73ae22bd07f786ec4",
+    "src/agent/workspace.rs": "9368c8e07d6b8db2673c7213389d02c46db7c78556fc70c7253c4ce8972da09f",
+    "src/agent/runtime.rs": "fe62e1f3d4bad772ab04f81b1fb19b9cbf646e74cb314aa2fa7c9c34ad06b489",
+    "src/agent/tests.rs": "5d27ffe8772ab75bdaa4c98816b2a117066e0c8b30b54cdf9dfc32a4d427ad27",
+    "src/ui/agent.rs": "3b8f60e2b5e8bdfd67382686dd453252660cfd403d56bab1bb1532ee16394874",
+    "src/ui/agent_attachments.rs": "4b8153a8e2665b960747e50d4af17a7dd2eb8b882b65f82b8ba7a67e3ee2cb3c",
+    "src/clipboard.rs": "6aab46773932601a90a52fcb594ec1e6de4df771afcaed2a6f79ab4bbf470730",
+    "src/clipboard/agent.rs": "291e0b9f68dd619339709e4469acfbbdee2ff48207c6da7c4ae06851c8941ea8",
+    "src/bin/capture_studios.rs": "30a313695e5d5ac4ced82295fb477e477fc09d55864374ed5765acaf9deb2eb3"
+  },
+  "video": {
+    "file": "agent-attachments.mp4",
+    "sha256": "5dd311756b3d474e576636a5563825cc8c3548641046a117aa8817a47d0aaca1",
+    "width": 1600,
+    "height": 900,
+    "fps": 10,
+    "frames": 350,
+    "seconds": 35,
+    "renderer": "native WGPU framebuffer"
+  },
+  "errors": [],
+  "attachments": [
+    {
+      "id": "3d0ec0eb73e79566",
+      "name": "pasted-text.txt",
+      "kind": "Text",
+      "mime": "text/plain",
+      "bytes": 2700,
+      "sha256": "c346e3a7eb11ae84093d53941361cf9eb24e8b058119b38a236d5db5f7a4bce8",
+      "evidence_file": "references/01-pasted-text.txt",
+      "delivery": "Sent as embedded context"
+    },
+    {
+      "id": "c365b2893c9acb33",
+      "name": "pasted-image.png",
+      "kind": "Image",
+      "mime": "image/png",
+      "bytes": 1254,
+      "sha256": "f7aad27a3420c472193a2e83c34b7726d715eb7b845c97ff2c39b216103f1f8e",
+      "evidence_file": "references/02-pasted-image.png",
+      "delivery": "Sent as an image"
+    },
+    {
+      "id": "416c3692d3333a38",
+      "name": "pasted-vector.svg",
+      "kind": "Svg",
+      "mime": "image/svg+xml",
+      "bytes": 118,
+      "sha256": "3c631dc8e6f5ff65bd4a7cd3cfd539cc0f9c51f1c386367c223ec472d0fa7e53",
+      "evidence_file": "references/03-pasted-vector.svg",
+      "delivery": "Sent as embedded context"
+    },
+    {
+      "id": "68114d2508c5ef4f",
+      "name": "brand.pdf",
+      "kind": "File",
+      "mime": "application/pdf",
+      "bytes": 1046,
+      "sha256": "330a6d34c12b9fe6b920ad05c34d749d1d338e8c4cfb7bb4d4ec65bc78e69220",
+      "evidence_file": "references/04-brand.pdf",
+      "delivery": "Sent as embedded context"
+    },
+    {
+      "id": "340fa3653efd5b5a",
+      "name": "reference.mp4",
+      "kind": "Video",
+      "mime": "video/mp4",
+      "bytes": 284717,
+      "sha256": "7a90f7862d4238d4b1bcf32c5769e5b77b32278ae09245b8247aabf68d3653df",
+      "evidence_file": "references/05-reference.mp4",
+      "delivery": "Sent as a path; this agent cannot view this type or the inline limit was reached"
+    },
+    {
+      "id": "fbe0d0fa88378601",
+      "name": "reference.wav",
+      "kind": "Audio",
+      "mime": "audio/wav",
+      "bytes": 204,
+      "sha256": "60c0b6c740c791f5d9c1b7d688aa4e6719b93c8f4e7c4b7919ab86ad78b74068",
+      "evidence_file": "references/06-reference.wav",
+      "delivery": "Sent as audio"
+    },
+    {
+      "id": "01a5eb21c5ee5081",
+      "name": "reference.txt",
+      "kind": "Text",
+      "mime": "text/plain",
+      "bytes": 73,
+      "sha256": "50311f7b27c18ae74b0cc2eaa33b56c707f7830f7b116658e4df3136c57f5d55",
+      "evidence_file": "references/07-reference.txt",
+      "delivery": "Sent as embedded context"
+    },
+    {
+      "id": "2ae50d7509d26a78",
+      "name": "copied-objects.oma",
+      "kind": "Objects",
+      "mime": "application/json",
+      "bytes": 1303,
+      "sha256": "5d94519eab4975b54c6717749b75cc7dbc617de8ed1812869922f5220a8eb44b",
+      "evidence_file": "references/08-copied-objects.oma",
+      "delivery": "Sent as embedded context"
+    },
+    {
+      "id": "5101ede271b85fb3",
+      "name": "pasted-file",
+      "kind": "File",
+      "mime": "application/x-omadesign-qa",
+      "bytes": 5,
+      "sha256": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0",
+      "evidence_file": "references/09-pasted-file",
+      "delivery": "Sent as embedded context"
+    }
+  ],
+  "acp_block_counts": {
+    "text": 11,
+    "resource": 6,
+    "image": 2,
+    "resource_link": 1,
+    "audio": 1
+  },
+  "acp_image_dimensions": [
+    [
+      240,
+      160
+    ],
+    [
+      960,
+      640
+    ]
+  ],
+  "encoded_base64_bytes": 9452,
+  "saved_thread_metadata_matches_restored_conversation": true,
+  "native_history_restore_verified": true,
+  "canvas_project_encoding_unchanged": true,
+  "clipboard": "real Wayland clipboard MIME ownership; paste/key events replayed into egui",
+  "test_results": {
+    "attachment": {
+      "passed": 12,
+      "failed": 0
+    },
+    "agent_before_history_fix": {
+      "passed": 22,
+      "failed": 0
+    }
+  },
+  "limits": "Deterministic frame-based replay, not real-time performance evidence. Later typography-only inspector fixes are outside this recorded flow.",
+  "paid_provider_turns_run": false
+}

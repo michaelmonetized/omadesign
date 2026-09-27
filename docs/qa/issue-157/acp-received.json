@@ -1,0 +1,128 @@
+{
+  "counts": {
+    "text": 11,
+    "resource": 6,
+    "image": 2,
+    "resource_link": 1,
+    "audio": 1
+  },
+  "params": {
+    "prompt": [
+      {
+        "text": "Omadesign design harness instructions:\nYou are a designer working directly in the user's live Omadesign canvas. Use the omadesign MCP native design tools to create and refine editable artwork. The user watches each tool result appear immediately. Build in meaningful incremental steps: foundation, composition, typography, details, then inspect a canvas snapshot and refine. Never produce SVG code, scripts, terminal artwork or .oma files as a substitute for these tools. Do not use filesystem/shell tools for design changes. Keep narration concise and visual. Get current document context before editing; every mutation requires its current revision and returns the next revision. If a revision is stale, re-read context and adapt. Preserve existing work unless asked to replace it. Make native text with installed fonts. Use unlocked vector layers; create one when needed. Read-only tools work in all sessions. Inspect the snapshot before calling the design finished.\nCanvas: Attachment reference QA (960 \u00d7 640 pixels). Live editing: true.\n\nUser request:\nMatch the palette of these references: [\ud83d\udcce pasted-text.txt \u00b7 3d0ec0eb73e79566][\ud83d\udcce pasted-image.png \u00b7 c365b2893c9acb33][\ud83d\udcce pasted-vector.svg \u00b7 416c3692d3333a38][\ud83d\udcce brand.pdf \u00b7 68114d2508c5ef4f] [\ud83d\udcce reference.mp4 \u00b7 340fa3653efd5b5a] [\ud83d\udcce reference.wav \u00b7 fbe0d0fa88378601] [\ud83d\udcce reference.txt \u00b7 01a5eb21c5ee5081][\ud83d\udcce copied-objects.oma \u00b7 2ae50d7509d26a78][\ud83d\udcce pasted-file \u00b7 5101ede271b85fb3]",
+        "type": "text"
+      },
+      {
+        "resource": {
+          "mimeType": "text/plain",
+          "text": "Reference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\n",
+          "uri": "file:///home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/.omadesign/agent-attachments/18d9492695828e360000000000000013/18d949276c42ccd10000000000000014-pasted-text.txt"
+        },
+        "type": "resource"
+      },
+      {
+        "text": "[\ud83d\udcce pasted-text.txt \u00b7 3d0ec0eb73e79566]: /home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/.omadesign/agent-attachments/18d9492695828e360000000000000013/18d949276c42ccd10000000000000014-pasted-text.txt (text/plain, 2700 bytes). Sent as embedded context. Read-only access to this user attachment is allowed.",
+        "type": "text"
+      },
+      {
+        "data": "iVBORw0KGgoAAAANSUhEUgAAAPAAAACgCAYAAAAy2+FlAAAErUlEQVR4Ae3AA6AkWZbG8f937o3IzKdyS2Oubdu2bdu2bdu2bWmMnpZKr54yMyLu+Xa3anqmhztr1a++1uf9lLnq3+w3PvYVuOrfLn/wvbnq34zgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634p/BL1YBxvZ+FitAAAAAElFTkSuQmCC",
+        "mimeType": "image/png",
+        "type": "image"
+      },
+      {
+        "text": "[\ud83d\udcce pasted-image.png \u00b7 c365b2893c9acb33]: /home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/.omadesign/agent-attachments/18d9492695828e360000000000000013/18d94928f8c6b9190000000000000016-pasted-image.png (image/png, 1254 bytes, 240\u00d7160). Sent as an image. Read-only access to this user attachment is allowed.",
+        "type": "text"
+      },
+      {
+        "resource": {
+          "mimeType": "image/svg+xml",
+          "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"100\"><circle cx=\"50\" cy=\"50\" r=\"40\" fill=\"#FA9B44\"/></svg>",
+          "uri": "file:///home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/.omadesign/agent-attachments/18d9492695828e360000000000000013/18d9492dd4fbc155000000000000001c-pasted-vector.svg"
+        },
+        "type": "resource"
+      },
+      {
+        "text": "[\ud83d\udcce pasted-vector.svg \u00b7 416c3692d3333a38]: /home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/.omadesign/agent-attachments/18d9492695828e360000000000000013/18d9492dd4fbc155000000000000001c-pasted-vector.svg (image/svg+xml, 118 bytes). Sent as embedded context. Read-only access to this user attachment is allowed.",
+        "type": "text"
+      },
+      {
+        "resource": {
+          "blob": "JVBERi0xLjcKJbutwN4KMSAwIG9iago8PC9UeXBlL1BhZ2VzL0NvdW50IDEvS2lkc1s1IDAgUl0+PgplbmRvYmoKMiAwIG9iago8PC9UeXBlL09DRy9OYW1lKFByZXNlcnZlZCBhcnR3b3JrKT4+CmVuZG9iagozIDAgb2JqCjw8L1R5cGUvRXh0R1N0YXRlL2NhIDEvQ0EgMS9CTS9Ob3JtYWw+PgplbmRvYmoKNCAwIG9iago8PC9MZW5ndGggMjUyL0ZpbHRlci9GbGF0ZURlY29kZT4+c3RyZWFtCnjaVVFBTgMxDLznFf5AU9uxY++VBXEBob4BiXLYHgr/l3B2s92gXMaOM56Z3BMBxjkRnBCqIHze0vljhvMbMTw9z+mezq8Frr8JM4uhujNgVirGqoGqVzZR+Lkm1QpkCLeklTMTWSuzk5nDEk2PusSFSiuN82TYnlhGnoKjNWs2l2jGmlZOORBr1BYXXtYhR6BJOpKgGCeF1t3VRjohH1cKr0C1yxLuc8shXXhjXHWEMykYiFE6omlXNE7SxCNbk928lX8ryXsKmyzyPaRROz280cPvMbnnUUa6LbRj555s6cKG9A/14xc1d+0Hl/SdvtIlvbzP6fIHq+NseQplbmRzdHJlYW0gCmVuZG9iago1IDAgb2JqCjw8L1R5cGUvUGFnZS9QYXJlbnQgMSAwIFIvTWVkaWFCb3hbMCAwIDk2MCA2NDBdL1Jlc291cmNlczw8L1Byb3BlcnRpZXM8PC9MMTIgMiAwIFI+Pi9YT2JqZWN0PDw+Pi9FeHRHU3RhdGU8PC9HMyAzIDAgUj4+Pj4vQ29udGVudHMgNCAwIFI+PgplbmRvYmoKNiAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMSAwIFIvT0NQcm9wZXJ0aWVzPDwvT0NHc1syIDAgUl0vRDw8L05hbWUoT21hZGVzaWduIGxheWVycykvQmFzZVN0YXRlL09OL09GRltdL0xvY2tlZFtdL09yZGVyWzIgMCBSXT4+Pj4+PgplbmRvYmoKNyAwIG9iago8PC9UaXRsZShBdHRhY2htZW50IHJlZmVyZW5jZSBRQSkvUHJvZHVjZXIoT21hZGVzaWduKT4+CmVuZG9iago4IDAgb2JqCjw8L1Jvb3QgNiAwIFIvSW5mbyA3IDAgUi9UeXBlL1hSZWYvU2l6ZSA5L1dbMSA0IDJdL0luZGV4WzEgOF0vTGVuZ3RoIDU2Pj5zdHJlYW0KAQAAAA8AAAEAAABCAAABAAAAdwAAAQAAAK4AAAEAAAHuAAABAAACiAAAAQAAAxgAAAEAAANfAAAKZW5kc3RyZWFtIAplbmRvYmoKCnN0YXJ0eHJlZgo4NjMKJSVFT0Y=",
+          "mimeType": "application/pdf",
+          "uri": "file:///home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/brand.pdf"
+        },
+        "type": "resource"
+      },
+      {
+        "text": "[\ud83d\udcce brand.pdf \u00b7 68114d2508c5ef4f]: /home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/brand.pdf (application/pdf, 1046 bytes). Sent as embedded context. Read-only access to this user attachment is allowed.",
+        "type": "text"
+      },
+      {
+        "mimeType": "video/mp4",
+        "name": "reference.mp4",
+        "size": 284717,
+        "type": "resource_link",
+        "uri": "file:///home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/reference.mp4"
+      },
+      {
+        "text": "[\ud83d\udcce reference.mp4 \u00b7 340fa3653efd5b5a]: /home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/reference.mp4 (video/mp4, 284717 bytes). Sent as a path; this agent cannot view this type or the inline limit was reached. Read-only access to this user attachment is allowed.",
+        "type": "text"
+      },
+      {
+        "data": "UklGRsQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YaAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "mimeType": "audio/wav",
+        "type": "audio"
+      },
+      {
+        "text": "[\ud83d\udcce reference.wav \u00b7 fbe0d0fa88378601]: /home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/reference.wav (audio/wav, 204 bytes). Sent as audio. Read-only access to this user attachment is allowed.",
+        "type": "text"
+      },
+      {
+        "resource": {
+          "mimeType": "text/plain",
+          "text": "Brand palette: blue, cream, warm orange. Preserve the existing rectangle.",
+          "uri": "file:///home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/reference.txt"
+        },
+        "type": "resource"
+      },
+      {
+        "text": "[\ud83d\udcce reference.txt \u00b7 01a5eb21c5ee5081]: /home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/reference.txt (text/plain, 73 bytes). Sent as embedded context. Read-only access to this user attachment is allowed.",
+        "type": "text"
+      },
+      {
+        "resource": {
+          "mimeType": "application/json",
+          "text": "{\"version\":5,\"doc\":{\"text_wrap_above_only\":false,\"name\":\"Attachment reference QA\",\"width\":960.0,\"height\":640.0,\"dpi\":96.0,\"layers\":[{\"id\":12,\"name\":\"Preserved artwork\",\"visible\":true,\"locked\":false,\"opacity\":1.0,\"fill_opacity\":1.0,\"blend_interior\":false,\"blend\":\"Normal\",\"mask\":null,\"mask_origin\":{\"x\":0.0,\"y\":0.0},\"mask_size\":{\"x\":0.0,\"y\":0.0},\"kind\":{\"Vector\":{\"shapes\":[{\"id\":13,\"name\":\"Rectangle\",\"geom\":{\"Rect\":{\"origin\":{\"x\":180.0,\"y\":170.0},\"size\":{\"x\":400.0,\"y\":260.0},\"radius\":24.0}},\"style\":{\"fill\":{\"Solid\":{\"r\":63,\"g\":131,\"b\":175,\"a\":255}},\"stroke\":null},\"rotation\":0.0,\"opacity\":1.0,\"fill_opacity\":1.0,\"blend_interior\":false,\"blend\":\"Normal\",\"visible\":true,\"locked\":false,\"guide\":false,\"filters\":{\"enabled\":true,\"items\":[]},\"corners\":[0.0,0.0,0.0,0.0]}]}},\"parent\":null,\"is_group\":false,\"pass_through\":false,\"filters\":{\"enabled\":true,\"items\":[]}}],\"guides\":[],\"ruler\":{\"origin\":{\"x\":0.0,\"y\":0.0},\"unit\":\"Pixels\",\"guides_visible\":true,\"guides_locked\":true},\"grid\":{\"visible\":false,\"snap\":true,\"size\":8.0,\"subdivisions\":1},\"transparent\":false,\"artboards\":[{\"id\":9,\"name\":\"Artboard 1\",\"origin\":{\"x\":0.0,\"y\":0.0},\"size\":{\"x\":960.0,\"y\":640.0},\"rotation\":0.0}],\"artboardless\":false,\"show_bleed\":false,\"show_safe\":false,\"bleed\":36.0,\"motion\":{\"duration\":2.0,\"fps\":30.0,\"looped\":true,\"tracks\":[]}}}",
+          "uri": "file:///home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/.omadesign/agent-attachments/18d9492695828e360000000000000013/18d9492fbdaf14050000000000000022-copied-objects.oma"
+        },
+        "type": "resource"
+      },
+      {
+        "text": "[\ud83d\udcce copied-objects.oma \u00b7 2ae50d7509d26a78]: /home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/.omadesign/agent-attachments/18d9492695828e360000000000000013/18d9492fbdaf14050000000000000022-copied-objects.oma (application/json, 1303 bytes, 960\u00d7640). Sent as embedded context. Read-only access to this user attachment is allowed.",
+        "type": "text"
+      },
+      {
+        "text": "Copied Omadesign objects: {\"doc\":{\"artboardless\":false,\"artboards\":[{\"id\":9,\"name\":\"Artboard 1\",\"origin\":{\"x\":0.0,\"y\":0.0},\"rotation\":0.0,\"size\":{\"x\":960.0,\"y\":640.0}}],\"bleed\":36.0,\"dpi\":96.0,\"grid\":{\"size\":8.0,\"snap\":true,\"subdivisions\":1,\"visible\":false},\"guides\":[],\"height\":640.0,\"layers\":[{\"blend\":\"Normal\",\"blend_interior\":false,\"fill_opacity\":1.0,\"filters\":{\"enabled\":true,\"items\":[]},\"id\":12,\"is_group\":false,\"kind\":{\"Vector\":{\"shapes\":[{\"blend\":\"Normal\",\"blend_interior\":false,\"corners\":[0.0,0.0,0.0,0.0],\"fill_opacity\":1.0,\"filters\":{\"enabled\":true,\"items\":[]},\"geom\":{\"Rect\":{\"origin\":{\"x\":180.0,\"y\":170.0},\"radius\":24.0,\"size\":{\"x\":400.0,\"y\":260.0}}},\"guide\":false,\"id\":13,\"locked\":false,\"name\":\"Rectangle\",\"opacity\":1.0,\"rotation\":0.0,\"style\":{\"fill\":{\"Solid\":{\"a\":255,\"b\":175,\"g\":131,\"r\":63}},\"stroke\":null},\"visible\":true}]}},\"locked\":false,\"mask\":null,\"mask_origin\":{\"x\":0.0,\"y\":0.0},\"mask_size\":{\"x\":0.0,\"y\":0.0},\"name\":\"Preserved artwork\",\"opacity\":1.0,\"parent\":null,\"pass_through\":false,\"visible\":true}],\"motion\":{\"duration\":2.0,\"fps\":30.0,\"looped\":true,\"tracks\":[]},\"name\":\"Attachment reference QA\",\"ruler\":{\"guides_locked\":true,\"guides_visible\":true,\"origin\":{\"x\":0.0,\"y\":0.0},\"unit\":\"Pixels\"},\"show_bleed\":false,\"show_safe\":false,\"text_wrap_above_only\":false,\"transparent\":false,\"width\":960.0},\"version\":5}",
+        "type": "text"
+      },
+      {
+        "data": "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gAEAAEgQwAAAACQIYAAAABIEMAAAAAkCGAAAgAQBDAAAQIIABgAAIEEAAwAAkCCAAQAASBDAAAAAJAhgAAAAEgQwAAAACQIYAACABAEMAABAggAGAAAgQQADAACQIIABAABIEMAAAAAkCGAAAAASBDAAAAAJAhgAAIAEAQwAAECCAAYAACBBAAMAAJAggAEAAEgQwAAAACQIYAAAABIEMAAAAAkCGAAAgAQBDAAAQIIABgAAIEEAAwAAkCCAAQAASBDAAAAAJAhgAAAAEgQwAAAACQIYAACABAEMAABAggAGAAAgQQADAACQIIABAABIEMAAAAAkCGAAAAASBDAAAAAJAhgAAIAEAQwAAECCAAYAACBBAAMAAJAggAEAAEgQwAAAACQIYAAAABIEMAAAAAkCGAAAgAQBDAAAQIIABgAAIEEAAwAAkCCAAQAASBDAAAAAJAhgAAAAEgQwAAAACQIYAACABAEMAABAggAGAAAgQQADAACQIIABAABIEMAAAAAkCGAAAAASBDAAAAAJAhgAAIAEAQwAAECCAAYAACBBAAMAAJAggAEAAEgQwAAAACQIYAAAABIEMAAAAAkCGAAAgAQBDAAAQIIABgAAIEEAAwAAkCCAAQAASBDAAAAAJAhgAAAAEgQwAAAACQIYAACABAEMAABAggAGAAAgQQADAACQIIABAABIEMAAAAAkCGAAAAASBDAAAAAJAhgAAIAEAQwAAECCAAYAACBBAAMAAJAggAEAAEgQwAAAACQIYAAAABIEMAAAAAkCGAAAgAQBDAAAQIIABgAAIEEAAwAAkCCAAQAASBDAAAAAJAhgAAAAEgQwAAAACQIYAACABAEMAABAggAGAAAgQQADAACQIIABAABIEMAAAAAkCGAAAAASBDAAAAAJAhgAAIAEAQwAAECCAAYAACBBAAMAAJAggAEAAEgQwAAAACQIYAAAABIEMAAAAAkCGAAAgAQBDAAAQIIABgAAIEEAAwAAkCCAAQAASBDAAAAAJAhgAAAAEgQwAAAACQIYAACABAEMAABAggAGAAAgQQADAACQIIABAABIEMAAAAAkCGAAAAASBDAAAAAJAhgAAIAEAQwAAECCAAYAACBBAAMAAJAggAEAAEgQwAAAACQIYAAAABIEMAAAAAkCGAAAgAQBDAAAQIIABgAAIEEAAwAAkCCAAQAASBDAAAAAJAhgAAAAEgQwAAAACQIYAACABAEMAABAggAGAAAgQQADAACQIIABAABIEMAAAAAkCGAAAAASBDAAAAAJAhgAAIAEAQwAAECCAAYAACBBAAMAAJAggAEAAEgQwAAAACQIYAAAABIEMAAAAAkCGAAAgAQBDAAAQIIABgAAIEEAAwAAkCCAAQAASBDAAAAAJAhgAAAAEgQwAAAACQIYAACABAHMomxvbQ4AWIfZAdAhgFmU7bMeYgBYj9kB0CGAWZSL720NAFjH5fPnBgANGwMWRAADsC6zA6DDBphF+eSD9wcArMMGGKBDALMoZ06/65d8AE5szow5OwBoEMAszu6lnQEAJ3H96oUBQIcAZnF2P94ZZ/7k13wA3mzOCq/OALQIYBZnHmWbEQwAb3L92gXHnwFiBDCLNI+02QID8DpzRnhlBqBHALNI22c3V7/sA8CrzBkxZwUALQKYxfri0w99ERqA/zFnw5wRAPQIYBbtxmdXHIUG4HdzJnz9+bUBQJMAZtEubm+NL//y0QCA6cZfrzj6DBC2MWDhjr8IffO7uwOArnkqyLVHAG0CmAQRDNA249cVeQC88/yFARE//PzLuPn3u+Ppv54NAJZvvvM7jz3b/AIwCWByDp4cja++vT0e/Ho4AFiu+bXn+cEr7/wCcEwAk/XN9z+NW7cf2gYDLMzc+s57fl11BMDLBDBpcxt8687DsffjvhAGeMsdh+/upR1bXwBeSQDDC09/e7aK4L37+45GA7xl5lHn61cvrN7zPXPa3e8AvJ4AhpfMGL736PEqhOffuSU+ODwaAPzxtrc2V9vdy+fPrcJ3/hW9AJyUAAYAACDh1AAAAIAAAQwAAECCAAYAACBBAAMAAJAggAEAAEgQwAAAACQIYAAAABIEMAAAAAkCGAAAgAQBDAAAQIIABgAAIEEAAwAAkCCAAQAASBDAAAAAJAhgAAAAEgQwAAAACQIYAACABAEMAABAggAGAAAgQQADAACQIIABAABIEMAAAAAkCGAAAAASBDAAAAAJAhgAAIAEAQwAAECCAAYAACBBAAMAAJAggAEAAEgQwAAAACQIYAAAABIEMAAAAAkCGAAAgAQBDAAAQIIABgAAIEEAAwAAkCCAAQAASBDAAAAAJAhgAAAAEgQwAAAACQIYAACABAEMAABAggAGAAAgQQADAACQIIABAABIEMAAAAAkCGAAAAASBDAAAAAJAhgAAIAEAQwAAECCAAYAACBBAAMAAJAggAEAAEgQwAAAACQIYAAAABIEMAAAAAkCGAAAgAQBDAAAQIIABgAAIEEAAwAAkCCAAQAASBDAAAAAJAhgAAAAEgQwAAAACQIYAACABAEMAABAggAGAAAgQQADAACQIIABAABIEMAAAAAkCGAAAAASBDAAAAAJAhhgAABQIIABAABIEMAAAAAkCGAAAAASBDAAAAAJAhgAAIAEAQwAAECCAAYAACBBAAMAAJAggAEAAEgQwAAAACQIYAAAABIEMAAAAAkCGAAAgAQBDAAAQIIABgAAIEEAAwAAkCCAAQAASBDAAAAAJAhgAAAAEgQwAAAACQIYAACABAEMAABAggAGAAAgQQADAACQIIABAABIEMAAAAAkCGAAAAASBDAAAAAJAhgAAIAEAQwAAECCAAYAACBBAAMAAJAggAEAAEgQwAAAACQIYAAAABIEMAAAAAkCGAAAgAQBDAAAQIIABgAAIEEAAwAAkCCAAQAASBDAAAAAJAhgAAAAEgQwAAAACQIYAACABAEMAABAggAGAAAgQQADAACQIIABAABIEMAAAAAkCGAAAAASBDAAAAAJAhgAAIAEAQwAAECCAAYAACBBAAMAAJAggAEAAEgQwAAAACQIYAAAABIEMAAAAAkCGAAAgAQBDAAAQIIABgAAIEEAAwAAkCCAAQAASBDAAAAAJAhgAAAAEgQwAAAACQIYAACABAEMAABAggAGAAAgQQADAACQIIABAABIEMAAAAAkCGAAAAASBDAAAAAJAhgAAIAEAQwAAECCAAYAACBBAAMAAJAggAEAAEgQwAAAACQIYAAAABIEMAAAAAkCGAAAgAQBDAAAQIIABgAAIEEAAwAAkCCAAQAASBDAAAAAJAhgAAAAEgQwAAAACQIYAACABAEMAABAggAGAAAgQQADAACQIIABAABIEMAAAAAkCGAAAAASBDAAAAAJAhgAAIAEAQwAAECCAAYAACBBAAMAAJAggAEAAEgQwAAAACQIYAAAABIEMAAAAAkCGAAAgAQBDAAAQIIABgAAIEEAAwAAkCCAAQAASBDAAAAAJAhgAAAAEgQwAAAACQIYAACABAEMAABAggAGAAAgQQADAACQIIABAABIEMAAAAAkCGAAAAASBDAAAAAJAhgAAIAEAQwAAECCAAYAACBBAAMAAJAggAEAAEgQwAAAACQIYAAAABIEMAAAAAkCGAAAgAQBDAAAQIIABgAAIEEAAwAAkPBvBIBpK7frBUMAAAAASUVORK5CYII=",
+        "mimeType": "image/png",
+        "type": "image"
+      },
+      {
+        "resource": {
+          "mimeType": "application/x-omadesign-qa",
+          "text": "\u0001\u0002\u0003\u0004\u0005",
+          "uri": "file:///home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/.omadesign/agent-attachments/18d9492695828e360000000000000013/18d94930cea95ced0000000000000024-pasted-file"
+        },
+        "type": "resource"
+      },
+      {
+        "text": "[\ud83d\udcce pasted-file \u00b7 5101ede271b85fb3]: /home/michael/Documents/Omadesign-Issues-20260927/157-final-verified/.omadesign/agent-attachments/18d9492695828e360000000000000013/18d94930cea95ced0000000000000024-pasted-file (application/x-omadesign-qa, 5 bytes). Sent as embedded context. Read-only access to this user attachment is allowed.",
+        "type": "text"
+      }
+    ],
+    "sessionId": "attachment-native-qa"
+  }
+}
