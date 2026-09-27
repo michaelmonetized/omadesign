@@ -417,6 +417,112 @@ fn effects_document() -> Document {
 }
 
 #[test]
+fn pdf_object_and_effect_blends_match_layer_isolation_and_native_pixels() {
+    for (effect, separate) in [(false, false), (false, true), (true, false), (true, true)] {
+        let label = format!(
+            "{}-{}",
+            if effect { "effect" } else { "object" },
+            if separate {
+                "separate-layers"
+            } else {
+                "shared-layer"
+            }
+        );
+        let mut doc = Document::new(&label, 32., 32., 72.);
+        let rect = |origin, size, color| {
+            Shape::new(
+                Geom::Rect {
+                    origin,
+                    size,
+                    radius: 0.,
+                },
+                Style {
+                    fill: Fill::Solid(color),
+                    stroke: None,
+                },
+            )
+        };
+        let mut backdrop = Layer::vector("Red backdrop");
+        backdrop.kind.shapes_mut().unwrap().push(rect(
+            Pt::ZERO,
+            Pt::splat(32.),
+            Rgba::rgb(255, 0, 0),
+        ));
+        let mut foreground = Layer::vector("Blue independent appearance");
+        let mut shape = rect(Pt::splat(8.), Pt::splat(16.), Rgba::rgb(0, 0, 255));
+        if effect {
+            shape.fill_opacity = 0.;
+            shape.filters.items.push(crate::filter::Fx::Shadow {
+                dx: 0.,
+                dy: 0.,
+                blur: 0.,
+                spread: 0.,
+                color: Rgba::rgb(0, 0, 255),
+                blend: Blend::Multiply,
+                opacity: 1.,
+                knockout: false,
+            });
+        } else {
+            shape.blend = Blend::Multiply;
+        }
+        if separate {
+            foreground.kind.shapes_mut().unwrap().push(shape);
+        } else {
+            backdrop.kind.shapes_mut().unwrap().push(shape);
+        }
+        doc.layers = vec![backdrop, foreground];
+        let expected = crate::compositor::render_export(&doc, 1).unwrap();
+        // Ordinary layers are isolated; shape blends see other objects in their
+        // own layer, not artwork below a different ordinary layer.
+        assert_eq!(
+            expected.pixel(16, 16).unwrap().demultiply(),
+            tiny_skia::ColorU8::from_rgba(0, 0, if separate { 255 } else { 0 }, 255)
+        );
+        let (bytes, notes) = write(&doc).unwrap();
+        let (loaded, _) = read(&bytes, &format!("{label}.pdf")).unwrap();
+        let actual = crate::compositor::render_export(&loaded, 1).unwrap();
+        assert_eq!(
+            actual.data(),
+            expected.data(),
+            "{label}: PDF roundtrip changed native isolated-layer composition; {notes:?}"
+        );
+        let rgb = expected
+            .pixels()
+            .iter()
+            .flat_map(|p| {
+                let p = p.demultiply();
+                [p.red(), p.green(), p.blue()]
+            })
+            .collect::<Vec<_>>();
+        if let Some(folder) = std::env::var_os("OMA_EFFECT_REVIEW_QA") {
+            let folder = std::path::PathBuf::from(folder);
+            std::fs::create_dir_all(&folder).unwrap();
+            expected
+                .save_png(folder.join(format!("{label}-native.png")))
+                .unwrap();
+            crate::project::save_to(&doc, &folder.join(format!("{label}.oma"))).unwrap();
+            let path = folder.join(format!("{label}.pdf"));
+            std::fs::write(&path, &bytes).unwrap();
+            let prefix = folder.join(format!("{label}-poppler"));
+            let output = std::process::Command::new("pdftocairo")
+                .args(["-png", "-r", "72", "-singlefile"])
+                .arg(&path)
+                .arg(&prefix)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let actual = image::open(prefix.with_extension("png")).unwrap().to_rgb8();
+            assert_eq!(actual.dimensions(), (32, 32));
+            assert_eq!(actual.as_raw(), &rgb, "{label}: Poppler pixels differ");
+        }
+    }
+}
+
+#[test]
 fn pdf_effect_fallback_preserves_unaffected_vectors_and_hidden_layer_state() {
     let (bytes, notes) = write(&effects_document()).unwrap();
     assert!(

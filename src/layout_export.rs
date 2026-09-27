@@ -396,12 +396,19 @@ impl<'a> Html<'a> {
                         dy,
                         blur,
                         color,
+                        opacity,
                         ..
                     } => {
                         let _ = write!(
                             filters,
                             "drop-shadow({dx}px {dy}px {blur}px {}) ",
-                            color.css()
+                            crate::color::Rgba::new(
+                                color.r,
+                                color.g,
+                                color.b,
+                                (color.a as f32 * opacity.clamp(0., 1.)).round() as u8
+                            )
+                            .css()
                         );
                     }
                     Fx::Blur { std } => {
@@ -427,12 +434,19 @@ impl<'a> Html<'a> {
                         dy,
                         blur,
                         color,
+                        opacity,
                         ..
                     } => {
                         let _ = write!(
                             css,
                             "box-shadow:inset {dx}px {dy}px {blur}px {};",
-                            color.css()
+                            crate::color::Rgba::new(
+                                color.r,
+                                color.g,
+                                color.b,
+                                (color.a as f32 * opacity.clamp(0., 1.)).round() as u8
+                            )
+                            .css()
                         );
                     }
                     _ => {}
@@ -834,6 +848,42 @@ mod tests {
             Pt::new(-20., -10.)
         );
     }
+    #[test]
+    fn html_shadow_and_inner_shadow_multiply_effect_and_color_opacity() {
+        let (mut doc, frame, child) = scene();
+        let shape = doc.find_shape_mut(0, child).unwrap();
+        shape.filters.items = vec![
+            crate::filter::Fx::Shadow {
+                dx: 1.,
+                dy: 2.,
+                blur: 3.,
+                color: Rgba::new(10, 20, 30, 128),
+                blend: crate::color::Blend::Normal,
+                opacity: 0.,
+                knockout: true,
+                spread: 0.,
+            },
+            crate::filter::Fx::InnerShadow {
+                dx: 4.,
+                dy: 5.,
+                blur: 6.,
+                color: Rgba::new(40, 50, 60, 128),
+                blend: crate::color::Blend::Normal,
+                opacity: 0.5,
+                choke: 0.,
+            },
+        ];
+        let html = export_html(&doc, 0, frame).unwrap();
+        assert!(
+            html.contains("drop-shadow(1px 2px 3px rgba(10,20,30,0.000))"),
+            "{html}"
+        );
+        assert!(
+            html.contains("box-shadow:inset 4px 5px 6px rgba(40,50,60,0.251);"),
+            "{html}"
+        );
+    }
+
     #[test]
     fn html_preserves_containment_layout_typography_and_escapes_user_content() {
         let (mut doc, frame, child) = scene();

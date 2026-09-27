@@ -28,6 +28,49 @@ mod tests {
     }
 
     #[test]
+    fn legacy_clipboard_effects_keep_project_migration_appearance() {
+        let old = include_str!("../../tests/fixtures/legacy-effects-v6.oma");
+        let value: serde_json::Value = serde_json::from_str(old).unwrap();
+        let payload = format!(
+            "omadesign-shapes:{}",
+            value["doc"]["layers"][0]["kind"]["Vector"]["shapes"]
+        );
+        let expected = crate::project::decode(old).unwrap();
+        let mut target = Studio::new();
+        target.paste_clipboard(Some(&payload));
+        assert_eq!(target.selection.len(), 2);
+        for ((li, id), before) in target
+            .selection
+            .iter()
+            .zip(expected.layers[0].kind.shapes().unwrap())
+        {
+            assert_eq!(
+                target.doc.find_shape(*li, *id).unwrap().filters,
+                before.filters
+            );
+        }
+        let modern = expected.layers[0].kind.shapes().unwrap()[1].clone();
+        let mut independent = modern.clone();
+        independent.filters.legacy_composite = false;
+        if let crate::filter::Fx::Shadow {
+            blend,
+            opacity,
+            knockout,
+            ..
+        } = &mut independent.filters.items[0]
+        {
+            *blend = crate::color::Blend::Screen;
+            *opacity = 0.4;
+            *knockout = true;
+        }
+        let data = serde_json::to_string(&vec![independent.clone()]).unwrap();
+        assert_eq!(
+            crate::project::decode_clipboard_shapes(&data).unwrap()[0].filters,
+            independent.filters
+        );
+    }
+
+    #[test]
     fn clipboard_preserves_independent_appearance_fields() {
         let mut source = Studio::new();
         source.place_text(Pt::new(76., 125.));
@@ -734,7 +777,7 @@ impl Studio {
     pub fn paste_clipboard(&mut self, payload: Option<&str>) {
         let parsed = match payload {
             Some(text) if text.starts_with(Self::CLIP_PREFIX) => {
-                serde_json::from_str::<Vec<Shape>>(&text[Self::CLIP_PREFIX.len()..])
+                crate::project::decode_clipboard_shapes(&text[Self::CLIP_PREFIX.len()..])
                     .map(|shapes| (shapes, vec![]))
                     .map_err(|e| format!("Invalid copied objects: {e}"))
             }

@@ -84,6 +84,40 @@ pub fn decode(s: &str) -> Result<Document, String> {
     Ok(doc)
 }
 
+/// Versionless vector clipboard payloads predate independent effect appearance.
+/// Newer writers include explicit per-effect blend/opacity fields; preserve them.
+pub fn decode_clipboard_shapes(text: &str) -> Result<Vec<crate::document::Shape>, String> {
+    let raw: Vec<serde_json::Value> = serde_json::from_str(text).map_err(|e| e.to_string())?;
+    raw.into_iter()
+        .map(|value| {
+            let mut shape: crate::document::Shape =
+                serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
+            let filters = &value["filters"];
+            let old_effects = filters.get("legacy_composite").is_none()
+                && filters["items"].as_array().is_some_and(|items| {
+                    items.iter().any(|item| {
+                        [
+                            "Shadow",
+                            "InnerShadow",
+                            "OuterGlow",
+                            "InnerGlow",
+                            "ColorOverlay",
+                        ]
+                        .iter()
+                        .filter_map(|kind| item.get(*kind))
+                        .any(|effect| {
+                            effect.get("blend").is_none() || effect.get("opacity").is_none()
+                        })
+                    })
+                });
+            if old_effects {
+                shape.filters.migrate_legacy(shape.blend);
+            }
+            Ok(shape)
+        })
+        .collect()
+}
+
 fn compress_pixels(px: &Pixels) -> Result<Pixels, String> {
     let pm = px.to_pixmap().ok_or("pixmap")?;
     let png = pm.encode_png().map_err(|e| e.to_string())?;
