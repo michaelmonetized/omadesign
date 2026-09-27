@@ -929,11 +929,12 @@ impl Studio {
         self.end_deform(false);
         self.reset_snap_gesture();
         let center = self.selection.iter()
-            .filter_map(|&(layer, id)| self.flip_target(layer, id).map(Shape::world_bbox))
+            .filter_map(|&(layer, id)| self.flip_target(layer, id).map(|shape| self.live_pose(id).map_bounds(shape.world_bbox())))
             .reduce(|a, b| a.union(b)).unwrap().center();
         let skipped = self.selection.iter()
             .filter(|&&(layer, id)| self.flip_target(layer, id).is_none()).count();
         let mut commands = Vec::new();
+        let mut motion = self.doc.motion.clone();
         let mut seen = HashSet::new();
         for &(layer, id) in &self.selection {
             if !seen.insert((layer, id)) {
@@ -942,6 +943,17 @@ impl Studio {
             let Some(shape) = self.flip_target(layer, id) else {
                 continue;
             };
+            // Mirror animation offsets and rotations with the rest artwork.
+            // Key times, easing, scales and unrelated channels stay intact.
+            if self.is_motion() {
+                for track in motion.tracks.iter_mut().filter(|track| track.shape == id) {
+                    if track.prop == (if horizontal { Prop::X } else { Prop::Y })
+                        || matches!(track.prop, Prop::Rotation | Prop::GradientAngle)
+                    {
+                        for key in &mut track.keys { key.value = -key.value; }
+                    }
+                }
+            }
             let dashed = shape
                 .style
                 .stroke
@@ -1037,6 +1049,10 @@ impl Studio {
         if commands.is_empty() {
             return;
         }
+        if motion != self.doc.motion {
+            commands.push(Cmd::SetMotion { before: self.doc.motion.clone(), after: motion });
+        }
+        self.pose_drag.clear();
         self.commit(Cmd::Batch(commands));
         self.status = format!(
             "Flipped {}{}",
@@ -5576,3 +5592,42 @@ mod layout_persona_tests {
 
 #[cfg(test)]
 mod qa_edges_tests;
+
+#[cfg(test)]
+mod motion_flip_followup_tests {
+    use super::*;
+    fn reflected(p:Pt,c:Pt,h:bool)->Pt {if h {Pt::new(2.*c.x-p.x,p.y)}else{Pt::new(p.x,2.*c.y-p.y)}}
+    fn points(studio:&Studio,id:u64,t:f32)->Vec<Pt>{
+        let shape=studio.doc.find_shape(1,id).unwrap();let pose=studio.doc.motion.pose(id,t);
+        shape.world_contours(64).into_iter().flatten().map(|p|pose.map(shape.world_bbox().center(),p)).collect()
+    }
+    #[test]
+    fn motion_flip_reflects_posed_selection_and_all_keyframes_in_one_undo() {
+        for horizontal in [true,false] {
+            let mut studio=Studio::new();studio.persona=Persona::Motion;studio.playhead=0.7;
+            let shapes=vec![
+                Shape::new(Geom::Path{anchors:vec![Anchor::corner(Pt::new(30.,40.)),Anchor::corner(Pt::new(90.,45.)),Anchor::corner(Pt::new(48.,110.))],closed:true},Style::default()),
+                Shape::new(Geom::Rect{origin:Pt::new(210.,130.),size:Pt::new(75.,45.),radius:0.},Style::default())];
+            let ids:Vec<_>=shapes.iter().map(|s|s.id).collect();
+            *studio.doc.layers[1].kind.shapes_mut().unwrap()=shapes;
+            studio.selection=ids.iter().map(|&id|(1,id)).collect();
+            for (i,&id) in ids.iter().enumerate(){
+                studio.doc.find_shape_mut(1,id).unwrap().rotation=0.23*(i as f32+1.);
+                for (prop,a,b) in [(Prop::X,30.,140.),(Prop::Y,-20.,75.),(Prop::Rotation,0.4,1.1),(Prop::Scale,0.8,1.3),(Prop::Width,1.2,0.7),(Prop::Height,0.7,1.4),(Prop::GradientAngle,0.3,0.9)]{
+                    studio.doc.motion.set_key(id,prop,0.,a*(i as f32+1.),Ease::Linear);
+                    studio.doc.motion.set_key(id,prop,1.4,b*(i as f32+1.),Ease::EaseInOut);
+                }
+            }
+            let original=studio.doc.clone();
+            let axis=ids.iter().map(|&id|studio.live_pose(id).map_bounds(studio.doc.find_shape(1,id).unwrap().world_bbox())).reduce(|a,b|a.union(b)).unwrap().center();
+            let samples:Vec<_>=[0.,0.7,1.4].into_iter().flat_map(|t|ids.iter().map(move|&id|(t,id))).map(|(t,id)|(t,id,points(&studio,id,t))).collect();
+            let history=studio.history.len();studio.flip_selection(horizontal);assert_eq!(studio.history.len(),history+1);
+            for (t,id,before) in samples {
+                let after=points(&studio,id,t);
+                for p in before {let expected=reflected(p,axis,horizontal);assert!(after.iter().any(|q|(*q-expected).length()<0.003),"t={t} horizontal={horizontal} expected {expected:?}");}
+            }
+            let flipped=studio.doc.clone();studio.undo();assert_eq!(crate::project::encode(&studio.doc).unwrap(),crate::project::encode(&original).unwrap());
+            studio.redo();assert_eq!(crate::project::encode(&studio.doc).unwrap(),crate::project::encode(&flipped).unwrap());
+        }
+    }
+}
