@@ -62,22 +62,23 @@ pub fn show(ui: &mut Ui, studio: &mut Studio, font: &str) {
                         if tags.is_none_or(|tags| tags.iter().all(has))
                             && ui.selectable_label(label == name, name).clicked()
                         {
-                            for (tag, value) in [*b"onum", *b"lnum", *b"pnum", *b"tnum"]
-                                .into_iter()
-                                .zip(values)
-                            {
-                                studio.patch_feature(tag, value);
-                            }
+                            let features: Vec<_> = [*b"onum", *b"lnum", *b"pnum", *b"tnum"]
+                                .into_iter().zip(values).collect();
+                            studio.patch_features(&features);
+                            restore_edit_focus(ui, studio);
                         }
                     }
                 });
         }
         if has(b"sups") || has(b"subs") || has(b"ordn") {
-            let label = if studio.selection_feature(*b"sups") == Some(1) {
+            let current = [*b"sups", *b"subs", *b"ordn"].map(|tag| studio.selection_feature(tag));
+            let label = if current.iter().any(Option::is_none) {
+                "Mixed"
+            } else if current[0] == Some(1) {
                 "Superscript"
-            } else if studio.selection_feature(*b"subs") == Some(1) {
+            } else if current[1] == Some(1) {
                 "Subscript"
-            } else if studio.selection_feature(*b"ordn") == Some(1) {
+            } else if current[2] == Some(1) {
                 "Ordinal"
             } else {
                 "Normal"
@@ -94,9 +95,8 @@ pub fn show(ui: &mut Ui, studio: &mut Studio, font: &str) {
                         if tag.is_none_or(|t| has(&t))
                             && ui.selectable_label(name == label, name).clicked()
                         {
-                            for t in [*b"sups", *b"subs", *b"ordn"] {
-                                studio.patch_feature(t, u32::from(Some(t) == tag));
-                            }
+                            studio.patch_features(&[*b"sups", *b"subs", *b"ordn"].map(|t| (t, u32::from(Some(t) == tag))));
+                            restore_edit_focus(ui, studio);
                         }
                     }
                 });
@@ -119,6 +119,11 @@ pub fn show(ui: &mut Ui, studio: &mut Studio, font: &str) {
         }
     });
 }
+fn restore_edit_focus(ui: &mut Ui, studio: &Studio) {
+    if studio.type_edit.is_some() {
+        ui.memory_mut(|m| m.request_focus(egui::Id::new("studio-canvas")));
+    }
+}
 fn toggle(ui: &mut Ui, studio: &mut Studio, tag: [u8; 4], label: &str) {
     let value = studio.selection_feature(tag);
     let mut on = value.unwrap_or(0) > 0;
@@ -126,11 +131,12 @@ fn toggle(ui: &mut Ui, studio: &mut Studio, tag: [u8; 4], label: &str) {
         .add(egui::Checkbox::new(&mut on, label).indeterminate(value.is_none()))
         .changed()
     {
-        studio.patch_feature(tag, u32::from(on));
-        if studio.type_edit.is_some(){ui.memory_mut(|m|m.request_focus(egui::Id::new("studio-canvas")));}
         if tag == *b"liga" {
-            studio.patch_feature(*b"clig", u32::from(on));
+            studio.patch_features(&[(tag, u32::from(on)), (*b"clig", u32::from(on))]);
+        } else {
+            studio.patch_feature(tag, u32::from(on));
         }
+        restore_edit_focus(ui, studio);
     }
 }
 
@@ -161,8 +167,7 @@ pub fn alternates(ui: &mut Ui, studio: &mut Studio, anchor: egui::Pos2) {
                             ui.allocate_exact_size(egui::vec2(38., 48.), egui::Sense::click());
                         let key = egui::Id::new((
                             "glyph_thumbnail",
-                            &run.font,
-                            &choice.preview.content,
+                            serde_json::to_string(&choice.preview).unwrap_or_default(),
                             choice.tag,
                             choice.value,
                         ));

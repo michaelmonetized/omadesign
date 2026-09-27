@@ -95,6 +95,11 @@ pub fn font_features(path: &str) -> Vec<(Tag, Option<String>)> {
     value
 }
 
+// rustybuzz 0.20 Feature::new subtracts one from an exclusive Range end,
+// whereas its shaping mask uses an exclusive byte end. Construct it explicitly.
+fn byte_feature(tag: &[u8;4], value:u32, start:usize, end:usize)->rustybuzz::Feature {
+    rustybuzz::Feature{tag:Tag::from_bytes(tag),value,start:start as u32,end:end as u32}
+}
 pub(super) fn ranged_features(
     run: &TypeRun,
     mapping: &[(usize, usize, char)],
@@ -117,7 +122,7 @@ pub(super) fn ranged_features(
             .map_or(visible_len, |(byte, _, _)| *byte);
         if from < to {
             features.extend(span.features.iter().map(|(tag, value)| {
-                rustybuzz::Feature::new(Tag::from_bytes(tag), *value, from..to)
+                byte_feature(tag, *value, from, to)
             }));
         }
     }
@@ -149,7 +154,15 @@ pub fn glyph_alternates(run: &TypeRun, start: usize, end: usize) -> Vec<GlyphAlt
     sample.content = source.into();
     sample.wrap_width = None;
     sample.paragraphs.clear();
-    sample.spans.clear();
+    sample.spans = run.spans.iter().filter_map(|span| {
+        let lo = span.start.max(start);
+        let hi = span.end.min(end);
+        if lo >= hi { return None; }
+        let mut span = span.clone();
+        span.start = lo - start;
+        span.end = hi - start;
+        Some(span)
+    }).collect();
     sample.contours.clear();
     let initial = compose(&sample);
     let ids: Vec<_> = initial
@@ -169,8 +182,10 @@ pub fn glyph_alternates(run: &TypeRun, start: usize, end: usize) -> Vec<GlyphAlt
         }
         for value in 1..=if tag == *b"aalt" { 8 } else { 1 } {
             let mut preview = sample.clone();
-            preview.features.retain(|(t, _)| *t != tag);
-            preview.features.push((tag, value));
+            preview.set_character_style(0, source.chars().count(), |style| {
+                style.features.retain(|(t, _)| *t != tag);
+                style.features.push((tag, value));
+            });
             let ids: Vec<_> = compose(&preview)
                 .iter()
                 .flat_map(|l| l.glyphs.iter().map(|g| g.id))
@@ -199,7 +214,8 @@ pub fn glyph_alternates(run: &TypeRun, start: usize, end: usize) -> Vec<GlyphAlt
     #[test] fn range_substitution_preserves_neighbor_and_utf8_clusters() {
         let mut r=run("éabc");let plain=ids(&r);
         r.set_character_style(1,3,|s|s.features=vec![(*b"smcp",1)]);
-        let styled=ids(&r);assert_eq!(plain.len(),styled.len());assert_eq!(plain[0],styled[0]);assert_eq!(plain[3],styled[3]);assert_ne!(plain[1],styled[1]);
+        let styled=ids(&r);assert_eq!(plain.len(),styled.len());assert_eq!(plain[0],styled[0]);assert_eq!(plain[3],styled[3]);assert_ne!(plain[1],styled[1]);assert_ne!(plain[2],styled[2]);
+        let mut single=run("abc");let plain=ids(&single);single.set_character_style(1,2,|s|s.features=vec![(*b"smcp",1)]);let styled=ids(&single);assert_eq!(styled[0],plain[0]);assert_ne!(styled[1],plain[1]);assert_eq!(styled[2],plain[2]);
         for tag in [*b"ss01",*b"ss02",*b"ss03",*b"ss04",*b"ss05",*b"ss06",*b"ss07",*b"swsh",*b"smcp",*b"c2sc",*b"onum",*b"lnum",*b"tnum",*b"pnum",*b"frac",*b"ordn",*b"sups",*b"subs"] {let mut sample=run("abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789 1/2");sample.set_character_style(0,sample.content.chars().count(),|s|s.features=vec![(tag,1)]);assert!(!shape(&sample).is_empty());let encoded=serde_json::to_string(&sample).unwrap();assert_eq!(serde_json::from_str::<TypeRun>(&encoded).unwrap(),sample);}
     }
     #[test] fn ranged_ligatures_and_edit_inheritance() {
@@ -224,9 +240,9 @@ pub fn glyph_alternates(run: &TypeRun, start: usize, end: usize) -> Vec<GlyphAlt
         {let edit=studio.type_edit.as_mut().unwrap();edit.anchor=0;edit.caret=2;}
         studio.patch_feature(*b"liga",0);
         let ctx=egui::Context::default();
-        let _=ctx.run_ui(egui::RawInput{events:vec![Event::Copy],..Default::default()},|ui|studio.handle_shortcuts(ui.ctx()));
+        let mut output=ctx.run_ui(egui::RawInput{events:vec![Event::Copy],..Default::default()},|ui|studio.handle_shortcuts(ui.ctx()));output.textures_delta.clear();
         {let edit=studio.type_edit.as_mut().unwrap();edit.anchor=5;edit.caret=5;}
-        let _=ctx.run_ui(egui::RawInput{events:vec![Event::Paste("fi".into())],..Default::default()},|ui|studio.handle_shortcuts(ui.ctx()));
+        let mut output=ctx.run_ui(egui::RawInput{events:vec![Event::Paste("fi".into())],..Default::default()},|ui|studio.handle_shortcuts(ui.ctx()));output.textures_delta.clear();
         assert_eq!(feature_value(&studio.selected_type().unwrap(),5,*b"liga"),0);
         studio.patch_feature(*b"smcp",1);studio.type_insert("a");
         let run=studio.selected_type().unwrap();assert_eq!(feature_value(&run,7,*b"smcp"),1);assert_eq!(feature_value(&run,6,*b"smcp"),0);
@@ -234,5 +250,36 @@ pub fn glyph_alternates(run: &TypeRun, start: usize, end: usize) -> Vec<GlyphAlt
         assert_eq!(studio.selected_type().unwrap().spans,run.spans);
         let encoded=crate::project::encode(&studio.doc).unwrap();assert!(encoded.contains("\"version\":11"));
         let decoded=crate::project::decode(&encoded).unwrap();let restored=decoded.layers[1].kind.shapes().unwrap().iter().find_map(|s|if let crate::geom::Geom::Text(t)=&s.geom{Some(t)}else{None}).unwrap();assert_eq!(restored.spans,run.spans);
+    }
+}
+
+#[cfg(test)] mod grouped_feature_tests {
+    use super::*;
+    use crate::app::Studio;
+    #[test] fn exclusive_features_are_one_object_undo_action() {
+        let mut studio=Studio::new(); studio.show_welcome=false; studio.active_layer=Some(1);
+        studio.place_text(Pt::ZERO); studio.type_insert("123 ordinal"); studio.commit_type_edit();
+        let before=studio.selected_type().unwrap(); let count=studio.history.len();
+        studio.patch_features(&[(*b"onum",1),(*b"lnum",0),(*b"pnum",0),(*b"tnum",1)]);
+        assert_eq!(studio.history.len(),count+1);
+        let after=studio.selected_type().unwrap(); assert_eq!(feature_value(&after,0,*b"onum"),1);
+        studio.undo(); assert_eq!(studio.selected_type().unwrap(),before);
+        studio.redo(); assert_eq!(studio.selected_type().unwrap(),after);
+        studio.patch_features(&[(*b"sups",1),(*b"subs",0),(*b"ordn",0)]);
+        studio.undo(); assert_eq!(studio.selected_type().unwrap(),after);
+    }
+    #[test] fn alternate_previews_keep_other_range_features() {
+        let mut run=TypeRun{font:concat!(env!("CARGO_MANIFEST_DIR"),"/tests/assets/fonts/EBGaramond.ttf").into(),content:"xABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".into(),px:32.,..Default::default()};
+        run.set_character_style(0,run.content.chars().count(),|s|s.features=vec![(*b"liga",0),(*b"tnum",1)]);
+        let mut count=0;
+        for start in 1..run.content.chars().count() {
+            for choice in glyph_alternates(&run,start,start+1) {
+                assert_eq!(feature_value(&choice.preview,0,*b"liga"),0);
+                assert_eq!(feature_value(&choice.preview,0,*b"tnum"),1);
+                assert_eq!(feature_value(&choice.preview,0,choice.tag),choice.value);
+                count+=1;
+            }
+        }
+        assert!(count>0);
     }
 }

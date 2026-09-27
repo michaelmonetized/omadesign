@@ -2300,8 +2300,18 @@ impl Studio {
             self.patch_type(|r|r.set_character_style(0,r.content.chars().count(),|s|f(s)));
         } else {f(&mut self.text_character);}
     }
-    pub fn patch_feature(&mut self,tag:[u8;4],value:u32) {
-        self.patch_character(|s|{s.features.retain(|(t,_)|*t!=tag);s.features.push((tag,value));s.features.sort_by_key(|(t,_)|*t);});
+    pub fn patch_feature(&mut self, tag: [u8; 4], value: u32) {
+        self.patch_features(&[(tag, value)]);
+    }
+    /// A UI selection may set mutually exclusive tags; it remains one undo action.
+    pub fn patch_features(&mut self, features: &[([u8; 4], u32)]) {
+        self.patch_character(|s| {
+            for &(tag, value) in features {
+                s.features.retain(|(t, _)| *t != tag);
+                s.features.push((tag, value));
+            }
+            s.features.sort_by_key(|(t, _)| *t);
+        });
     }
     pub fn selection_feature(&self,tag:[u8;4])->Option<u32> {
         let run=self.selected_type().unwrap_or_else(||self.type_defaults());
