@@ -386,6 +386,10 @@ fn effects_document() -> Document {
         },
     );
     shape.filters.items.push(crate::filter::Fx::Shadow {
+        blend: crate::color::Blend::Normal,
+        opacity: 1.,
+        knockout: true,
+        spread: 0.,
         dx: 5.,
         dy: 4.,
         blur: 3.,

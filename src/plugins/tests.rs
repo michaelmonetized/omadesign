@@ -457,3 +457,42 @@ fn batch_translation_preserves_live_text_in_real_documents() {
         assert_eq!(after.font, before.font);
     }
 }
+
+#[test]
+fn independent_effect_plugins_accept_defaults_and_validate_new_ranges() {
+    let (doc, selection) = fixture();
+    let root = temp();
+    let id = selection[0].1;
+    let make = |opacity: &str| {
+        r#"oma.set_effects(0,ID,{{Shadow={dx=4,dy=6,blur=2,color={r=10,g=20,b=30,a=255},blend='Multiply',opacity=OPACITY,knockout=true,spread=2}},{InnerGlow={blur=4,color={r=255,g=255,b=255,a=255},blend='Screen',opacity=0.8,choke=1,source='Edge'}},{ColorOverlay={color={r=100,g=50,b=30,a=255}}}})"#.replace("ID",&id.to_string()).replace("OPACITY",opacity)
+    };
+    let plugin = script(
+        &root,
+        &format!(
+            "{}; oma.set_appearance(0,{id},{{blend='Overlay',opacity=0.9,fill_opacity=0.4,blend_interior=true}})",
+            make("0.6")
+        ),
+    );
+    let output = exec(&plugin, "test", doc.clone(), selection.clone()).unwrap();
+    let mut changed = doc.clone();
+    document::apply(&mut changed, &Cmd::Batch(output.commands));
+    let object = changed.find_shape(0, id).unwrap();
+    assert_eq!(object.fill_opacity, 0.4);
+    assert!(object.blend_interior);
+    assert_eq!(object.blend, crate::color::Blend::Overlay);
+    let stack = &object.filters;
+    assert_eq!(stack.items.len(), 3);
+    assert_eq!(
+        stack.items[0].appearance(),
+        Some((crate::color::Blend::Multiply, 0.6))
+    );
+    assert_eq!(
+        stack.items[2].appearance(),
+        Some((crate::color::Blend::Normal, 1.))
+    );
+    for opacity in ["-1", "1.01", "0/0"] {
+        let plugin = script(&root, &make(opacity));
+        assert!(exec(&plugin, "test", doc.clone(), selection.clone()).is_err());
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}

@@ -396,6 +396,7 @@ impl<'a> Html<'a> {
                         dy,
                         blur,
                         color,
+                        ..
                     } => {
                         let _ = write!(
                             filters,
@@ -426,6 +427,7 @@ impl<'a> Html<'a> {
                         dy,
                         blur,
                         color,
+                        ..
                     } => {
                         let _ = write!(
                             css,

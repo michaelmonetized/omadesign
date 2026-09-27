@@ -28,6 +28,40 @@ mod tests {
     }
 
     #[test]
+    fn clipboard_preserves_independent_appearance_fields() {
+        let mut source = Studio::new();
+        source.place_text(Pt::new(76., 125.));
+        source.commit_type_edit();
+        let (li, id) = source.selection[0];
+        let object = source.doc.find_shape_mut(li, id).unwrap();
+        object.fill_opacity = 0.25;
+        object.blend_interior = true;
+        object.blend = crate::color::Blend::Overlay;
+        object.filters.items.push(crate::filter::Fx::ColorOverlay {
+            color: crate::color::Rgba::WHITE,
+            blend: crate::color::Blend::Screen,
+            opacity: 0.8,
+        });
+        let expected = object.clone();
+        let payload = copy(&mut source);
+        let mut target = Studio::new();
+        target.paste_clipboard(Some(&payload));
+        let (li, id) = target.selection[0];
+        let actual = target.doc.find_shape(li, id).unwrap();
+        assert_eq!(actual.fill_opacity, expected.fill_opacity);
+        assert_eq!(actual.blend_interior, expected.blend_interior);
+        assert_eq!(actual.blend, expected.blend);
+        assert_eq!(actual.filters, expected.filters);
+        target.undo();
+        assert!(target.doc.find_shape(li, id).is_none());
+        target.redo();
+        assert_eq!(
+            target.doc.find_shape(li, id).unwrap().filters,
+            expected.filters
+        );
+    }
+
+    #[test]
     fn cross_window_rasters_and_shapes_keep_positions_with_one_undo() {
         let mut source = Studio::new();
         source.place_text(Pt::new(76., 125.));

@@ -505,12 +505,58 @@ pub(super) fn register(lua: &Lua, state: Shared) -> LuaResult<()> {
                 let within = |n: f32, limit: f32| n.is_finite() && n.abs() <= limit;
                 let valid = match fx {
                     Fx::Blur { std } => within(*std, 512.) && *std >= 0.,
-                    Fx::Shadow { dx, dy, blur, .. } | Fx::InnerShadow { dx, dy, blur, .. } => {
-                        within(*dx, 4096.)
+                    Fx::Shadow {
+                        dx,
+                        dy,
+                        blur,
+                        opacity,
+                        spread: extent,
+                        ..
+                    }
+                    | Fx::InnerShadow {
+                        dx,
+                        dy,
+                        blur,
+                        opacity,
+                        choke: extent,
+                        ..
+                    } => {
+                        within(*opacity, 1.)
+                            && *opacity >= 0.
+                            && within(*extent, 64.)
+                            && *extent >= 0.
+                            && within(*dx, 4096.)
                             && within(*dy, 4096.)
                             && within(*blur, 512.)
                             && *blur >= 0.
                     }
+                    Fx::OuterGlow {
+                        blur,
+                        spread,
+                        opacity,
+                        ..
+                    } => {
+                        within(*blur, 512.)
+                            && *blur >= 0.
+                            && within(*spread, 64.)
+                            && *spread >= 0.
+                            && within(*opacity, 1.)
+                            && *opacity >= 0.
+                    }
+                    Fx::InnerGlow {
+                        blur,
+                        choke,
+                        opacity,
+                        ..
+                    } => {
+                        within(*blur, 512.)
+                            && *blur >= 0.
+                            && within(*choke, 64.)
+                            && *choke >= 0.
+                            && within(*opacity, 1.)
+                            && *opacity >= 0.
+                    }
+                    Fx::ColorOverlay { opacity, .. } => within(*opacity, 1.) && *opacity >= 0.,
                     Fx::Offset { dx, dy } => within(*dx, 4096.) && within(*dy, 4096.),
                     Fx::Morphology { radius, .. } => within(*radius, 64.) && *radius >= 0.,
                     Fx::Turbulence { base, octaves, .. } => {
@@ -559,9 +605,58 @@ pub(super) fn register(lua: &Lua, state: Shared) -> LuaResult<()> {
                 before: shape.filters,
                 after: crate::filter::FilterStack {
                     enabled: true,
+                    legacy_composite: false,
                     items,
                 },
             })
+        })?,
+    )?;
+    let s = state.clone();
+    api.set(
+        "set_appearance",
+        lua.create_function(move |lua, (layer, id, t): (usize, u64, Table)| {
+            let mut s = s.borrow_mut();
+            let shape = s.shape(layer, id)?;
+            let opacity = num(&t, "opacity", shape.opacity)?;
+            let fill = num(&t, "fill_opacity", shape.fill_opacity)?;
+            if !(0.0..=1.0).contains(&opacity) || !(0.0..=1.0).contains(&fill) {
+                return Err(Error::runtime(
+                    "Object and fill opacity must be between 0 and 1",
+                ));
+            }
+            let blend = match t.get::<Value>("blend")? {
+                Value::Nil => shape.blend,
+                value => lua.from_value(value)?,
+            };
+            let interior = t
+                .get::<Option<bool>>("blend_interior")?
+                .unwrap_or(shape.blend_interior);
+            s.push(Cmd::Batch(vec![
+                Cmd::SetBlend {
+                    layer,
+                    id,
+                    before: shape.blend,
+                    after: blend,
+                },
+                Cmd::SetOpacity {
+                    layer,
+                    id,
+                    before: shape.opacity,
+                    after: opacity,
+                },
+                Cmd::SetFillOpacity {
+                    layer,
+                    id: Some(id),
+                    before: shape.fill_opacity,
+                    after: fill,
+                },
+                Cmd::SetBlendInterior {
+                    layer,
+                    id: Some(id),
+                    before: shape.blend_interior,
+                    after: interior,
+                },
+            ]))
         })?,
     )?;
     let s = state.clone();

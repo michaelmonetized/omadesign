@@ -1,0 +1,86 @@
+{
+  "issue": 153,
+  "capture_utc": "2026-09-27T19:47:23.479833+00:00",
+  "base_revision": "404189384ba8e9228cbecd6005400b01f31a00ee",
+  "capture": "real native WGPU viewport Screenshot events; actual egui pointer and keyboard input replay",
+  "native_resolution": [
+    1600,
+    900
+  ],
+  "frames": 230,
+  "playback_fps": 10,
+  "duration_seconds": 23,
+  "timing": "Replay time; waits for settled rendering before each captured frame. Not a realtime performance benchmark.",
+  "input_errors": [],
+  "assertions": [
+    "Object Overlay",
+    "Drop shadow Multiply at exactly 60%; Knockout toggled off and back on",
+    "Inner shadow Screen at exactly 80%",
+    "Fill opacity set to 0%; effects remain visible",
+    "Blend interior effects as group toggled; undo and redo through native keys",
+    "Ctrl+S writes .oma; reopened render is byte-identical to edited document"
+  ],
+  "sha256": {
+    "independent-effects.mp4": "cc55c98d58472da0b61036a6121101268b2c2bc83ffee2047afce1839f964459",
+    "independent-effects-errors.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "independent-effects-final.oma": "8a06b7b064baed35e883329d99bfb04b5a3431a03a4479795db4868d076cadba",
+    "independent-effects-reopened.png": "eda85cf3c3770ecdfb924e007913985168ba3808ab773f4b3c8d213d72df9c88",
+    "independent-effects-0080.png": "788208b309e43c531a979c3773e62d396c11ebb054b99430fbece102b2f97b39",
+    "independent-effects-0120.png": "9c967054f25fbf0449f3d347c0f0f8537bb5403e63944365443abd845d503d97",
+    "independent-effects-0220.png": "c5b88080fa8438bb5347d030910259dd83ad65c937a85c825580f5c2bb92e2fa"
+  },
+  "capture_binary_sha256": "1d3cd9c49a39e6acd7c7f725303efae5aec3b2a1fe1e4afa3970ed69a71de152",
+  "test_binary_sha256": "6f6d7aebc01945483e02f9db10ea29d60482c06c5670e9384259651c205e494b",
+  "tests": [
+    {
+      "filter": "compositor::appearance_tests",
+      "exit_code": 0,
+      "result": "ok. 13 passed; 0 failed; 0 ignored; 0 measured; 702 filtered out; finished in 0.25s"
+    },
+    {
+      "filter": "compositor::groups::tests",
+      "exit_code": 0,
+      "result": "ok. 1 passed; 0 failed; 0 ignored; 0 measured; 714 filtered out; finished in 0.00s"
+    },
+    {
+      "filter": "object_appearance",
+      "exit_code": 0,
+      "result": "ok. 2 passed; 0 failed; 0 ignored; 0 measured; 713 filtered out; finished in 6.63s"
+    },
+    {
+      "filter": "clipboard_preserves_independent_appearance_fields",
+      "exit_code": 0,
+      "result": "ok. 1 passed; 0 failed; 0 ignored; 0 measured; 714 filtered out; finished in 2.84s"
+    },
+    {
+      "filter": "independent_effect_plugins",
+      "exit_code": 0,
+      "result": "ok. 1 passed; 0 failed; 0 ignored; 0 measured; 714 filtered out; finished in 0.00s"
+    },
+    {
+      "filter": "ui::studios::expanded_keyframes",
+      "exit_code": 0,
+      "result": "ok. 1 passed; 0 failed; 0 ignored; 0 measured; 714 filtered out; finished in 4.38s"
+    },
+    {
+      "filter": "project::tests::save_as_keeps_portable_fonts",
+      "exit_code": 0,
+      "result": "ok. 1 passed; 0 failed; 0 ignored; 0 measured; 714 filtered out; finished in 1.76s"
+    },
+    {
+      "filter": "typography::tests::project_fonts_copy",
+      "exit_code": 0,
+      "result": "ok. 1 passed; 0 failed; 0 ignored; 0 measured; 714 filtered out; finished in 7.31s"
+    },
+    {
+      "filter": "svg::tests",
+      "exit_code": 0,
+      "result": "ok. 19 passed; 0 failed; 0 ignored; 0 measured; 696 filtered out; finished in 0.39s"
+    },
+    {
+      "filter": "filter::tests",
+      "exit_code": 0,
+      "result": "ok. 9 passed; 0 failed; 0 ignored; 0 measured; 706 filtered out; finished in 0.16s"
+    }
+  ]
+}

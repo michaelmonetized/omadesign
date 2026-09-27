@@ -42,7 +42,7 @@ pub(super) fn draw(
     let mut blended_descendants = HashSet::new();
     for shape in shapes
         .iter()
-        .filter(|s| s.blend != crate::color::Blend::Normal)
+        .filter(|s| s.blend != crate::color::Blend::Normal || s.filters.blends_backdrop())
     {
         let mut parent = shape.layout.parent;
         for _ in 0..64 {
@@ -126,7 +126,8 @@ impl Context<'_> {
             if alpha <= 0.0 {
                 continue;
             }
-            if alpha < 1.0
+            if shape.fill_opacity < 1.
+                || alpha < 1.0
                 || shape.filters.active()
                 || shape.blend != crate::color::Blend::Normal
                 || self.blended_descendants.contains(&shape.id)
@@ -144,6 +145,24 @@ impl Context<'_> {
                     None,
                     depth,
                 );
+                if shape.filters.independent() || shape.fill_opacity < 1. || shape.blend_interior {
+                    crate::filter::composite(
+                        pm,
+                        group,
+                        &shape.filters,
+                        Transform::identity(),
+                        if shape.blend == crate::color::Blend::Normal {
+                            blend
+                        } else {
+                            shape.blend.to_skia()
+                        },
+                        opacity * alpha,
+                        shape.fill_opacity,
+                        shape.blend_interior,
+                        mask,
+                    );
+                    continue;
+                }
                 if shape.filters.active() {
                     crate::filter::apply(&mut group, &shape.filters);
                 }

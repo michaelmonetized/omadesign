@@ -478,7 +478,11 @@ pub fn execute(
                 studio.canvas_gen
             ));
         }
-        if studio.op.is_some() || studio.type_edit.is_some() || studio.deformation.is_some() || studio.pixel_edit.is_some() {
+        if studio.op.is_some()
+            || studio.type_edit.is_some()
+            || studio.deformation.is_some()
+            || studio.pixel_edit.is_some()
+        {
             return Err(
                 "The designer is editing the canvas. Retry after the gesture finishes.".into(),
             );
@@ -714,6 +718,10 @@ pub fn execute(
             }
             if let Some(v) = args.get("shadow") {
                 items.push(crate::filter::Fx::Shadow {
+                    blend: crate::color::Blend::Normal,
+                    opacity: 1.,
+                    knockout: true,
+                    spread: 0.,
                     dx: number(v, "x", 0.0)?.clamp(-2048.0, 2048.0),
                     dy: number(v, "y", 4.0)?.clamp(-2048.0, 2048.0),
                     blur: number(v, "blur", 8.0)?.clamp(0.0, 128.0),
@@ -726,6 +734,7 @@ pub fn execute(
                 before: s.filters,
                 after: crate::filter::FilterStack {
                     enabled: true,
+                    legacy_composite: false,
                     items,
                 },
             });

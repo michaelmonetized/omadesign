@@ -5,7 +5,7 @@ use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub(crate) const VERSION: u32 = 6;
+pub(crate) const VERSION: u32 = 7;
 
 #[derive(Serialize, Deserialize)]
 struct File {
@@ -18,8 +18,19 @@ pub fn encode(doc: &Document) -> Result<String, String> {
     pack_rasters(&mut packed)?;
     serde_json::to_string(&File {
         // Older readers must not silently strip a mask or change stroke placement.
-        // Keep plain documents compatible with v5; v1-v6 remain readable here.
-        version: if doc
+        // Keep plain documents compatible with v5; v1-v7 remain readable here.
+        version: if doc.layers.iter().any(|l| {
+            l.fill_opacity != 1.
+                || l.blend_interior
+                || !l.filters.items.is_empty()
+                || l.kind.shapes().is_some_and(|ss| {
+                    ss.iter().any(|s| {
+                        s.fill_opacity != 1. || s.blend_interior || !s.filters.items.is_empty()
+                    })
+                })
+        }) {
+            7
+        } else if doc
             .layers
             .iter()
             .filter_map(|l| l.kind.shapes())
@@ -29,7 +40,8 @@ pub fn encode(doc: &Document) -> Result<String, String> {
                     || s.style.stroke.as_ref().is_some_and(|stroke| {
                         stroke.alignment != crate::document::StrokeAlignment::Center
                     })
-            }) {
+            })
+        {
             6
         } else {
             5
@@ -46,6 +58,9 @@ pub fn decode(s: &str) -> Result<Document, String> {
     }
     let mut doc = file.doc;
     for layer in &mut doc.layers {
+        if file.version < 7 {
+            layer.filters.migrate_legacy(layer.blend);
+        }
         if let Some(px) = layer.kind.pixels_mut() {
             *px = decompress_pixels(px)?;
         }
@@ -54,6 +69,9 @@ pub fn decode(s: &str) -> Result<Document, String> {
         }
         if let Some(shapes) = layer.kind.shapes_mut() {
             for s in shapes {
+                if file.version < 7 {
+                    s.filters.migrate_legacy(s.blend);
+                }
                 crate::text::fill_contours(&mut s.geom);
                 if let Some(mask) = s.mask.as_mut() {
                     *mask = decompress_pixels(mask)?;

@@ -331,13 +331,14 @@ fn draw_layer(
     // A regular layer is an isolated compositing container, including at 100%.
     // Without this, lowering opacity would change a child's blend backdrop.
     let blended_content = layer.kind.shapes().is_some_and(|shapes| {
-        shapes
-            .iter()
-            .any(|shape| shape.blend != crate::color::Blend::Normal)
+        shapes.iter().any(|shape| {
+            shape.blend != crate::color::Blend::Normal || shape.filters.blends_backdrop()
+        })
     });
     if blended_content
         || layer.mask.is_some()
         || filtered
+        || layer.fill_opacity < 1.0
         || layer.opacity < 1.0
         || layer.blend != crate::color::Blend::Normal
     {
@@ -376,6 +377,20 @@ fn draw_layer(
                     tiny_skia::Mask::from_pixmap(placed.as_ref(), tiny_skia::MaskType::Luminance);
                 temp.apply_mask(&m);
             });
+        }
+        if layer.filters.independent() || layer.fill_opacity < 1. || layer.blend_interior {
+            crate::filter::composite(
+                pm,
+                temp,
+                &layer.filters,
+                Transform::identity(),
+                layer.blend.to_skia(),
+                layer.opacity,
+                layer.fill_opacity,
+                layer.blend_interior,
+                None,
+            );
+            return;
         }
         if filtered {
             crate::filter::apply(&mut temp, &layer.filters);
@@ -754,7 +769,9 @@ fn draw_shape_masked(
     } else {
         shape.blend.to_skia()
     };
-    if !shape.filters.active() && (alpha < 1.0 || shape.blend != crate::color::Blend::Normal) {
+    if !shape.filters.active()
+        && (alpha * shape.fill_opacity < 1.0 || shape.blend != crate::color::Blend::Normal)
+    {
         // Composite the complete fill/image/stroke once, using a bounded temporary.
         let pad = shape
             .style
@@ -813,7 +830,7 @@ fn draw_shape_masked(
                 y as i32,
                 temp.as_ref(),
                 &PixmapPaint {
-                    opacity: (opacity * alpha).clamp(0.0, 1.0),
+                    opacity: (opacity * alpha * shape.fill_opacity).clamp(0.0, 1.0),
                     blend_mode: blend,
                     ..Default::default()
                 },
@@ -841,8 +858,22 @@ fn draw_shape_masked(
                 opaque_pose,
                 None,
             );
-            crate::filter::apply(&mut temp, &shape.filters);
             let xf = t.pre_concat(Transform::from_translate(b.min.x, b.min.y));
+            if shape.filters.independent() || shape.fill_opacity < 1. || shape.blend_interior {
+                crate::filter::composite(
+                    pm,
+                    temp,
+                    &shape.filters,
+                    xf,
+                    blend,
+                    opacity * alpha,
+                    shape.fill_opacity,
+                    shape.blend_interior,
+                    mask,
+                );
+                return;
+            }
+            crate::filter::apply(&mut temp, &shape.filters);
             pm.draw_pixmap(
                 0,
                 0,
