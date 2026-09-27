@@ -35,7 +35,7 @@ pub enum Event {
     Closed,
 }
 pub enum Command {
-    Prompt(String),
+    Prompt(Vec<Value>),
     Cancel,
     Permission { id: Value, option: Option<String> },
     Authenticate(String),
@@ -228,7 +228,7 @@ fn run(
     let mut permissions: HashMap<String, (Value, Vec<String>)> = HashMap::new();
     let mut startup = Some(Instant::now());
     let mut cancelling: Option<Instant> = None;
-    let mut queued_prompt: Option<String> = None;
+    let mut queued_prompt: Option<Vec<Value>> = None;
     let mut configurations = std::collections::VecDeque::new();
     loop {
         for command in commands.try_iter() {
@@ -333,7 +333,7 @@ fn run(
                 &mut pending,
                 &mut next,
                 "session/prompt",
-                json!({"sessionId":id,"prompt":[{"type":"text","text":text}]}),
+                json!({"sessionId":id,"prompt":text}),
                 Pending::Prompt,
             )?;
         }

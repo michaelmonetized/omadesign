@@ -379,7 +379,10 @@ for line in sys.stdin:
         value: "high".into(),
     })
     .unwrap();
-    c.send(runtime::Command::Prompt("Design".into())).unwrap();
+    c.send(runtime::Command::Prompt(vec![
+        json!({"type":"text","text":"Design"}),
+    ]))
+    .unwrap();
     assert!(
         matches!(wait(|e|matches!(e,runtime::Event::Update(v) if v["sessionUpdate"]=="agent_message_chunk")),runtime::Event::Update(v) if v["content"]["text"]=="Building live")
     );
@@ -396,8 +399,10 @@ for line in sys.stdin:
     assert!(
         matches!(wait(|e|matches!(e,runtime::Event::Complete(_))),runtime::Event::Complete(reason) if reason=="end_turn")
     );
-    c.send(runtime::Command::Prompt("Another design".into()))
-        .unwrap();
+    c.send(runtime::Command::Prompt(vec![
+        json!({"type":"text","text":"Another design"}),
+    ]))
+    .unwrap();
     wait(|e| matches!(e, runtime::Event::Permission { .. }));
     c.cancel();
     assert!(
@@ -408,4 +413,226 @@ for line in sys.stdin:
             .accepting
             .load(std::sync::atomic::Ordering::Acquire)
     );
+}
+
+#[test]
+fn attachment_content_blocks_cross_real_acp_wire_for_each_capability_combination() {
+    use std::time::{Duration, Instant};
+    let directory = std::env::temp_dir().join(format!(
+        "omadesign-acp-attachments-{}",
+        crate::project::new_swap_id()
+    ));
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut inputs = vec![];
+    for (name, data) in [
+        ("notes.txt", b"Reference notes".as_slice()),
+        ("audio.wav", b"RIFF audio"),
+        ("brand.pdf", b"%PDF reference"),
+        ("video.mp4", b"video"),
+    ] {
+        let path = directory.join(name);
+        std::fs::write(&path, data).unwrap();
+        inputs.push(path);
+    }
+    let image = crate::photo::RgbaImage::new(4, 4, vec![255; 64]).unwrap();
+    let path = directory.join("image.png");
+    std::fs::write(&path, image.encode_png().unwrap()).unwrap();
+    inputs.push(path);
+    let prepared = attachments::ingest(attachments::Input::Files(inputs), &directory).unwrap();
+    for capabilities in [
+        json!({}),
+        json!({"image":true}),
+        json!({"image":true,"audio":true,"embeddedContext":true}),
+    ] {
+        let script = r#"import sys,json,base64,urllib.parse,os
+cap=json.loads(sys.argv[1])
+def out(id,r): print(json.dumps({'jsonrpc':'2.0','id':id,'result':r}),flush=True)
+for line in sys.stdin:
+ m=json.loads(line);p=m.get('params',{});method=m.get('method')
+ if method=='initialize': out(m['id'],{'protocolVersion':1,'agentCapabilities':{'promptCapabilities':cap}})
+ elif method=='session/new': out(m['id'],{'sessionId':'attachments'})
+ elif method=='session/prompt':
+  blocks=p['prompt'];assert blocks[0]['type']=='text' and blocks[0]['text']=='Harness guidance and typed brief'
+  types=[b['type'] for b in blocks[1:] if b['type']!='text']
+  expected=['resource' if cap.get('embeddedContext') else 'resource_link','audio' if cap.get('audio') else 'resource_link','resource' if cap.get('embeddedContext') else 'resource_link','resource_link','image' if cap.get('image') else 'resource_link']
+  assert types==expected,(types,expected)
+  for b in blocks:
+   if b['type'] in ('image','audio'): assert base64.b64decode(b['data'])
+   if b['type']=='resource_link': assert os.path.isfile(urllib.parse.unquote(urllib.parse.urlparse(b['uri']).path))
+  out(m['id'],{'stopReason':'end_turn'})
+"#;
+        let c = runtime::Connection::start(
+            config::Profile {
+                name: "Attachment protocol fixture".into(),
+                command: "python3".into(),
+                args: vec![
+                    "-u".into(),
+                    "-c".into(),
+                    script.into(),
+                    capabilities.to_string(),
+                ],
+            },
+            directory.clone(),
+            None,
+            std::env::current_exe().unwrap(),
+            eframe::egui::Context::default(),
+        )
+        .unwrap();
+        let start = Instant::now();
+        loop {
+            match c.events.recv_timeout(Duration::from_secs(5)).unwrap() {
+                runtime::Event::Session { .. } => break,
+                runtime::Event::Error(e) => panic!("{e}"),
+                _ => {}
+            }
+            assert!(start.elapsed() < Duration::from_secs(5));
+        }
+        let turn = attachments::payload(
+            prepared.text.clone(),
+            prepared.attachments.clone(),
+            &capabilities,
+        )
+        .unwrap();
+        let mut blocks = vec![json!({"type":"text","text":"Harness guidance and typed brief"})];
+        blocks.extend(turn.blocks);
+        c.send(runtime::Command::Prompt(blocks)).unwrap();
+        loop {
+            match c.events.recv_timeout(Duration::from_secs(5)).unwrap() {
+                runtime::Event::Complete(reason) => {
+                    assert_eq!(reason, "end_turn");
+                    break;
+                }
+                runtime::Event::Error(e) => panic!("{e}"),
+                _ => {}
+            }
+            assert!(start.elapsed() < Duration::from_secs(10));
+        }
+    }
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn attachment_paste_refusal_preserves_selection_and_workers_keep_paste_order() {
+    use std::sync::mpsc;
+    let s = studio();
+    let mut workspace = Workspace::default();
+    workspace.new_thread(&s);
+    workspace.request = "keep this selection".into();
+    let id = workspace.thread.as_ref().unwrap().id.clone();
+    let (tx, rx) = mpsc::channel();
+    workspace.attachment_jobs.push(attachments::Job {
+        thread: id.clone(),
+        at: 5,
+        end: 19,
+        replaced: "this selection".into(),
+        rx,
+    });
+    tx.send(Err("File exceeds 100 MiB".into())).unwrap();
+    assert!(workspace.poll_attachments().is_none());
+    assert_eq!(workspace.request, "keep this selection");
+    assert!(workspace.error.contains("100 MiB"));
+    workspace.request = "abc tail".into();
+    let (first, rx) = mpsc::channel();
+    workspace.attachment_jobs.push(attachments::Job {
+        thread: id.clone(),
+        at: 3,
+        end: 3,
+        replaced: String::new(),
+        rx,
+    });
+    let (second, rx) = mpsc::channel();
+    workspace.attachment_jobs.push(attachments::Job {
+        thread: id,
+        at: 3,
+        end: 3,
+        replaced: String::new(),
+        rx,
+    });
+    second
+        .send(Ok(attachments::Prepared {
+            text: "B".into(),
+            attachments: vec![],
+        }))
+        .unwrap();
+    assert!(workspace.poll_attachments().is_none());
+    first
+        .send(Ok(attachments::Prepared {
+            text: "A".into(),
+            attachments: vec![],
+        }))
+        .unwrap();
+    let insert = workspace.poll_attachments().unwrap();
+    workspace.insert_attachment_result(insert);
+    let insert = workspace.poll_attachments().unwrap();
+    workspace.insert_attachment_result(insert);
+    assert_eq!(workspace.request, "abcAB tail");
+}
+
+#[test]
+fn attachment_limit_allows_short_inline_text_and_atomic_replacement_at_twenty_items() {
+    use std::sync::mpsc;
+    let s = studio();
+    let mut workspace = Workspace::default();
+    workspace.new_thread(&s);
+    workspace.attachments = (0..20)
+        .map(|i| attachments::Attachment {
+            id: format!("a{i}"),
+            kind: attachments::Kind::File,
+            mime: "application/octet-stream".into(),
+            name: format!("file{i}"),
+            size: 1,
+            source: "/tmp/missing".into(),
+            dimensions: None,
+            delivery: String::new(),
+            preview: None,
+            thumbnail: None,
+        })
+        .collect();
+    workspace.request = workspace
+        .attachments
+        .iter()
+        .map(attachments::Attachment::token)
+        .collect::<Vec<_>>()
+        .join(" ");
+    let id = workspace.thread.as_ref().unwrap().id.clone();
+    let (tx, rx) = mpsc::channel();
+    workspace.attachment_jobs.push(attachments::Job {
+        thread: id.clone(),
+        at: 0,
+        end: 0,
+        replaced: String::new(),
+        rx,
+    });
+    tx.send(Ok(attachments::Prepared {
+        text: "Typed brief ".into(),
+        attachments: vec![],
+    }))
+    .unwrap();
+    let insert = workspace.poll_attachments().unwrap();
+    workspace.insert_attachment_result(insert);
+    assert!(workspace.request.starts_with("Typed brief "));
+    assert_eq!(workspace.attachments.len(), 20);
+    let token = workspace.attachments[0].token();
+    let at = "Typed brief ".chars().count();
+    let end = at + token.chars().count();
+    let mut replacement = workspace.attachments[0].clone();
+    replacement.id = "replacement".into();
+    let (tx, rx) = mpsc::channel();
+    workspace.attachment_jobs.push(attachments::Job {
+        thread: id,
+        at,
+        end,
+        replaced: token.clone(),
+        rx,
+    });
+    tx.send(Ok(attachments::Prepared {
+        text: replacement.token(),
+        attachments: vec![replacement],
+    }))
+    .unwrap();
+    let insert = workspace.poll_attachments().unwrap();
+    workspace.insert_attachment_result(insert);
+    assert_eq!(workspace.attachments.len(), 20);
+    assert!(!workspace.request.contains(&token));
+    assert!(workspace.request.contains("replacement"));
 }

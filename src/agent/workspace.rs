@@ -1,5 +1,7 @@
 use super::{
-    Purpose, bridge,
+    Purpose,
+    attachments::{self, Attachment},
+    bridge,
     config::{self, Settings},
     runtime::{Command, Connection, Event},
     tools,
@@ -21,6 +23,8 @@ pub struct Entry {
     pub id: String,
     #[serde(default)]
     pub status: String,
+    #[serde(default)]
+    pub attachments: Vec<Attachment>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Thread {
@@ -55,6 +59,9 @@ pub struct Workspace {
     pub settings: Settings,
     pub purpose: Purpose,
     pub request: String,
+    pub attachments: Vec<Attachment>,
+    pub attachment_jobs: Vec<attachments::Job>,
+    turn_job: Option<attachments::TurnJob>,
     pub thread: Option<Thread>,
     pub history: Vec<Thread>,
     pub connection: Option<Connection>,
@@ -79,7 +86,7 @@ pub struct Workspace {
     writer: Option<mpsc::Sender<Thread>>,
     writer_thread: Option<std::thread::JoinHandle<()>>,
     save_error: Arc<Mutex<Option<String>>>,
-    pending_prompt: Option<String>,
+    pending_prompt: Option<(String, Vec<Attachment>)>,
     restoring: bool,
 }
 impl Default for Workspace {
@@ -94,6 +101,9 @@ impl Default for Workspace {
             settings,
             purpose: Purpose::Create,
             request: String::new(),
+            attachments: vec![],
+            attachment_jobs: vec![],
+            turn_job: None,
             thread: None,
             history: vec![],
             connection: None,
@@ -193,6 +203,129 @@ impl Workspace {
         self.history.sort_by_key(|t| std::cmp::Reverse(t.updated));
         self.history.truncate(50);
     }
+    pub fn attach(
+        &mut self,
+        studio: &Studio,
+        input: attachments::Input,
+        range: std::ops::Range<usize>,
+        ctx: &eframe::egui::Context,
+    ) {
+        if self.attachment_jobs.len() >= 4 {
+            self.error = "Wait for the current attachments to finish before pasting more".into();
+            return;
+        }
+        if self.thread.is_none() {
+            let request = std::mem::take(&mut self.request);
+            self.new_thread(studio);
+            self.request = request;
+        }
+        let thread = self.thread.as_ref().unwrap().id.clone();
+        let directory = self
+            .settings
+            .directory
+            .join(".omadesign")
+            .join("agent-attachments")
+            .join(&thread);
+        let replaced = self
+            .request
+            .chars()
+            .skip(range.start)
+            .take(range.end - range.start)
+            .collect();
+        self.focus_prompt = true;
+        self.attachment_jobs.push(attachments::spawn(
+            input,
+            directory,
+            thread,
+            range,
+            replaced,
+            ctx.clone(),
+        ));
+    }
+    pub fn poll_attachments(&mut self) -> Option<attachments::Insert> {
+        // Finish in paste order, even if a later small payload decodes sooner.
+        let result = match self.attachment_jobs.first()?.rx.try_recv() {
+            Ok(result) => result,
+            Err(mpsc::TryRecvError::Empty) => return None,
+            Err(_) => Err("Attachment worker stopped unexpectedly".into()),
+        };
+        let job = self.attachment_jobs.remove(0);
+        if self.thread.as_ref().map(|t| t.id.as_str()) != Some(job.thread.as_str()) {
+            return None;
+        }
+        match result {
+            Ok(prepared) => {
+                let current = self
+                    .request
+                    .chars()
+                    .skip(job.at)
+                    .take(job.end - job.at)
+                    .collect::<String>();
+                let end = if current == job.replaced {
+                    job.end
+                } else {
+                    job.at
+                };
+                let mut prospective = self.request.chars().take(job.at).collect::<String>();
+                prospective.push_str(&prepared.text);
+                prospective.extend(self.request.chars().skip(end));
+                let retained = self
+                    .attachments
+                    .iter()
+                    .filter(|a| prospective.contains(&a.token()))
+                    .count();
+                if retained + prepared.attachments.len() > attachments::MAX_ATTACHMENTS {
+                    self.error = "A prompt can contain at most 20 attachments".into();
+                    return None;
+                }
+                self.error.clear();
+                Some(attachments::Insert {
+                    at: job.at,
+                    end,
+                    text: prepared.text,
+                    attachments: prepared.attachments,
+                })
+            }
+            Err(e) => {
+                self.error = e;
+                None
+            }
+        }
+    }
+    pub fn insert_attachment_result(&mut self, insert: attachments::Insert) -> usize {
+        let len = self.request.chars().count();
+        let at = insert.at.min(len);
+        let end = insert.end.min(len).max(at);
+        let byte = |index| {
+            self.request
+                .char_indices()
+                .nth(index)
+                .map(|(i, _)| i)
+                .unwrap_or(self.request.len())
+        };
+        let start_byte = byte(at);
+        let end_byte = byte(end);
+        self.request
+            .replace_range(start_byte..end_byte, &insert.text);
+        attachments::reconcile(&self.request, &mut self.attachments);
+        self.attachments.extend(insert.attachments);
+        let added = insert.text.chars().count();
+        let delta = added as isize - (end - at) as isize;
+        for job in &mut self.attachment_jobs {
+            let shift = |position: usize| {
+                if position >= end {
+                    position.saturating_add_signed(delta)
+                } else if position >= at {
+                    at + added
+                } else {
+                    position
+                }
+            };
+            job.at = shift(job.at);
+            job.end = shift(job.end).max(job.at);
+        }
+        at + added
+    }
     pub fn note(&mut self, role: &str, text: impl Into<String>) {
         let Some(thread) = &mut self.thread else {
             return;
@@ -202,6 +335,7 @@ impl Workspace {
             text: text.into().chars().take(32_000).collect(),
             id: String::new(),
             status: String::new(),
+            attachments: vec![],
         });
         if thread.messages.len() > 400 {
             thread.messages.drain(..thread.messages.len() - 400);
@@ -244,6 +378,7 @@ impl Workspace {
         self.busy = false;
         self.permissions.clear();
         self.pending_prompt = None;
+        self.turn_job = None;
         self.persist(true);
     }
     pub fn new_thread(&mut self, studio: &Studio) {
@@ -254,6 +389,9 @@ impl Workspace {
             studio.path.clone(),
         ));
         self.owner = Some(studio.swap_id.clone());
+        self.attachments.clear();
+        self.attachment_jobs.clear();
+        self.request.clear();
         self.edits = 0;
         self.error.clear();
         self.status = "Ready for a new conversation".into();
@@ -312,8 +450,11 @@ impl Workspace {
         if request.is_empty() {
             return Err("Describe what you want to make or change".into());
         }
-        if request.len() > 32_768 {
+        if attachments::typed_len(&request, &self.attachments) > 32_768 {
             return Err("Keep the brief under 32 KB".into());
+        }
+        if !self.attachment_jobs.is_empty() {
+            return Err("Wait for attachments to finish preparing".into());
         }
         if self.busy || self.connecting {
             return Err("Wait for the current turn or stop it first".into());
@@ -322,7 +463,11 @@ impl Workspace {
             return Err("Start a new conversation for this document".into());
         }
         if !self.ready {
-            self.connect(studio, ctx, binary)?;
+            let draft = std::mem::take(&mut self.attachments);
+            let result = self.connect(studio, ctx, binary);
+            self.request = request.clone();
+            self.attachments = draft;
+            result?;
         }
         if self.thread.as_ref().is_some_and(|t| t.messages.is_empty()) {
             self.thread.as_mut().unwrap().title = request
@@ -333,7 +478,7 @@ impl Workspace {
                 .take(70)
                 .collect();
         }
-        self.note("user", request.clone());
+        let attachments = std::mem::take(&mut self.attachments);
         self.request.clear();
         self.error.clear();
         if self.purpose == Purpose::Create {
@@ -341,14 +486,40 @@ impl Workspace {
             studio.need_fit = true;
         }
         if self.ready {
-            self.start_turn(studio, &request)?;
+            self.start_turn(studio, request, attachments, ctx)?;
         } else {
-            self.pending_prompt = Some(request);
+            self.pending_prompt = Some((request, attachments));
         }
         self.persist(true);
         Ok(())
     }
-    fn start_turn(&mut self, studio: &Studio, request: &str) -> Result<(), String> {
+    fn start_turn(
+        &mut self,
+        _studio: &Studio,
+        request: String,
+        attachments: Vec<Attachment>,
+        ctx: &eframe::egui::Context,
+    ) -> Result<(), String> {
+        let (tx, rx) = mpsc::channel();
+        let capabilities = self.initialization["agentCapabilities"]["promptCapabilities"].clone();
+        let job = attachments::TurnJob {
+            rx,
+            request: request.clone(),
+            attachments: attachments.clone(),
+        };
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let result = attachments::payload(request, attachments, &capabilities);
+            let _ = tx.send(result);
+            ctx.request_repaint();
+        });
+        self.turn_job = Some(job);
+        self.busy = true;
+        self.status = "Preparing attachments…".into();
+        Ok(())
+    }
+    fn dispatch_turn(&mut self, studio: &Studio, turn: attachments::Turn) -> Result<(), String> {
+        let request = &turn.request;
         let guidance = if self.purpose == Purpose::Learn {
             "Help the user learn Omadesign. This is a read-only session. Use get_documentation and live canvas context. Do not change files or artwork."
         } else {
@@ -361,10 +532,19 @@ impl Workspace {
             studio.doc.height,
             self.settings.live_edits && self.purpose == Purpose::Create
         );
+        let mut blocks = vec![serde_json::json!({"type":"text","text":prompt})];
+        blocks.extend(turn.blocks);
         self.connection
             .as_ref()
             .ok_or("Agent is disconnected")?
-            .send(Command::Prompt(prompt))?;
+            .send(Command::Prompt(blocks))?;
+        self.note("user", turn.request.clone());
+        if let Some(entry) = self.thread.as_mut().and_then(|t| t.messages.last_mut()) {
+            // The brief limit excludes markers; retain all user references in history.
+            entry.text = turn.request;
+            entry.attachments = turn.attachments;
+        }
+        self.persist(true);
         self.busy = true;
         self.status = "Working on your design…".into();
         Ok(())
@@ -421,6 +601,15 @@ impl Workspace {
         }
     }
     pub fn stop(&mut self) {
+        if let Some(job) = self.turn_job.take() {
+            if self.request.is_empty() {
+                self.request = job.request;
+                self.attachments = job.attachments;
+            }
+            self.busy = false;
+            self.status = "Stopped preparing attachments".into();
+            return;
+        }
         if let Some(c) = &self.connection {
             c.cancel();
         }
@@ -438,6 +627,9 @@ impl Workspace {
         self.settings.favorites = favorites;
         self.purpose = thread.purpose;
         self.sync_fields();
+        self.request.clear();
+        self.attachments.clear();
+        self.attachment_jobs.clear();
         self.thread = Some(thread);
         self.owner = Some(studio.swap_id.clone());
         self.status = "Conversation loaded · Connect to continue".into();
@@ -445,6 +637,30 @@ impl Workspace {
         Ok(())
     }
     pub fn poll(&mut self, studio: &mut Studio, ctx: &eframe::egui::Context) {
+        if let Some(result) = self
+            .turn_job
+            .as_ref()
+            .and_then(|job| match job.rx.try_recv() {
+                Ok(r) => Some(r),
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    Some(Err("Attachment preparation worker stopped".into()))
+                }
+                Err(_) => None,
+            })
+        {
+            let job = self.turn_job.take().unwrap();
+            let result = result.and_then(|turn| self.dispatch_turn(studio, turn));
+            if let Err(e) = result {
+                self.error = e;
+                self.busy = false;
+                self.status = "Could not send attachments".into();
+                if self.request.is_empty() {
+                    self.request = job.request;
+                    self.attachments = job.attachments;
+                }
+            }
+        }
+
         if self.owner.as_deref() == Some(&studio.swap_id)
             && let Some(thread) = &mut self.thread
             && thread.document != studio.path
@@ -487,8 +703,8 @@ impl Workspace {
                     }
                     self.restoring = false;
                     self.dirty = true;
-                    if let Some(prompt) = self.pending_prompt.take() {
-                        if let Err(e) = self.start_turn(studio, &prompt) {
+                    if let Some((prompt, attachments)) = self.pending_prompt.take() {
+                        if let Err(e) = self.start_turn(studio, prompt, attachments, ctx) {
                             self.error = e;
                         }
                     }
@@ -650,6 +866,7 @@ impl Workspace {
                             .take(500)
                             .collect(),
                         status: value["status"].as_str().unwrap_or("pending").into(),
+                        attachments: vec![],
                     });
                 }
                 self.dirty = true;

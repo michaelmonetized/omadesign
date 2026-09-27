@@ -1,4 +1,5 @@
 //! In-app ACP client and native design-tool host.
+pub mod attachments;
 pub mod bridge;
 pub mod config;
 pub mod discovery;

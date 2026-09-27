@@ -179,6 +179,7 @@ fn body(ui: &mut egui::Ui, studio: &mut Studio, agent: &mut Workspace, height: f
                                 if matches!(entry.role.as_str(), "user" | "assistant") {
                                     ui.label(RichText::new(&entry.role).strong());
                                     ui.label(&entry.text);
+                                    super::agent_attachments::chips(ui, &entry.attachments, false);
                                 }
                             }
                         });
@@ -272,7 +273,7 @@ fn body(ui: &mut egui::Ui, studio: &mut Studio, agent: &mut Workspace, height: f
                 if let Some(thread)=&agent.thread{
                     for (i,entry) in thread.messages.iter().enumerate(){ui.push_id(i,|ui|{
                         match entry.role.as_str(){
-                            "user"=>{ui.add_space(8.0);ui.label(RichText::new("You").strong());ui.label(&entry.text);}
+                            "user"=>{ui.add_space(8.0);ui.label(RichText::new("You").strong());ui.label(&entry.text);super::agent_attachments::chips(ui,&entry.attachments,false);}
                             "assistant"=>{ui.add_space(8.0);ui.label(RichText::new(&agent.settings.profile.name).strong().color(super::theme::accent()));ui.add(egui::Label::new(&entry.text).wrap().selectable(true));}
                             "tool"=>{let icon=match entry.status.as_str(){"completed"=>"✓","failed"=>"!",_=>"·"};ui.small(format!("{icon} {}",tool_title(&entry.text)));}
                             "design"=>{ui.label(RichText::new(format!("✓ Canvas · {}",entry.text)).small().color(super::theme::accent()));}
@@ -307,7 +308,14 @@ pub(super) fn panel(ui: &mut egui::Ui, studio: &mut Studio) {
                     }
                 });
             });
-            let body_height = (ui.available_height() - 184.0).max(80.0);
+            let body_height = (ui.available_height()
+                - 220.0
+                - if agent.attachments.is_empty() && agent.attachment_jobs.is_empty() {
+                    0.
+                } else {
+                    124.
+                })
+            .max(80.0);
             egui::ScrollArea::vertical()
                 .id_salt("agent-body")
                 .max_height(body_height)
@@ -325,16 +333,7 @@ pub(super) fn panel(ui: &mut egui::Ui, studio: &mut Studio) {
                 }
             });
             super::agent_picker::picker(ui, studio, &mut agent);
-            let field = ui.add(
-                egui::TextEdit::multiline(&mut agent.request)
-                    .desired_rows(3)
-                    .desired_width(f32::INFINITY)
-                    .hint_text(if agent.purpose == Purpose::Learn {
-                        "Ask about your design or Omadesign…"
-                    } else {
-                        "What should we make or change?"
-                    }),
-            );
+            let field = super::agent_attachments::composer(ui, studio, &mut agent);
             if agent.focus_prompt {
                 field.request_focus();
                 agent.focus_prompt = false;
@@ -349,7 +348,7 @@ pub(super) fn panel(ui: &mut egui::Ui, studio: &mut Studio) {
                 } else {
                     if ui
                         .add_enabled(
-                            !agent.request.trim().is_empty(),
+                            !agent.request.trim().is_empty() && agent.attachment_jobs.is_empty(),
                             egui::Button::new("Send").fill(super::theme::accent_soft()),
                         )
                         .clicked()
@@ -593,5 +592,51 @@ mod tests {
             "Filtering a provider must keep the picker open"
         );
         assert!(s.agent.connection.is_none());
+    }
+    #[test]
+    fn twenty_attachment_chips_and_long_tokens_keep_composer_controls_visible() {
+        use crate::agent::attachments::{Attachment, Kind};
+        for size in [egui::vec2(960., 640.), egui::vec2(1600., 900.)] {
+            let ctx = egui::Context::default();
+            crate::ui::theme::apply(&ctx);
+            let mut studio = Studio::new();
+            studio.agent.visible = true;
+            studio.agent.loaded = true;
+            studio.agent.attachments = (0..20)
+                .map(|i| Attachment {
+                    id: format!("a{i}"),
+                    name: format!("{}-{i}.pdf", "long-filename".repeat(7)),
+                    kind: Kind::File,
+                    mime: "application/pdf".into(),
+                    size: 1234,
+                    source: "/tmp/missing-attachment.pdf".into(),
+                    dimensions: None,
+                    delivery: String::new(),
+                    preview: None,
+                    thumbnail: None,
+                })
+                .collect();
+            studio.agent.request = studio
+                .agent
+                .attachments
+                .iter()
+                .map(Attachment::token)
+                .collect::<Vec<_>>()
+                .join(" ");
+            for _ in 0..8 {
+                let labels = frame(&ctx, &mut studio, size, vec![]);
+                for wanted in ["Send", "Ctrl+Enter to send"] {
+                    let (_, rect, clip) =
+                        labels.iter().find(|(text, _, _)| text == wanted).unwrap();
+                    assert!(
+                        rect.min.x >= 0.
+                            && rect.max.x <= size.x
+                            && rect.max.y <= size.y
+                            && clip.contains(rect.center()),
+                        "{wanted}: {rect:?} clip={clip:?}"
+                    );
+                }
+            }
+        }
     }
 }
