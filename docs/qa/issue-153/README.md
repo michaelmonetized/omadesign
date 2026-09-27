@@ -2,7 +2,7 @@
 
 [Native end-to-end recording](independent-effects.mp4) · [machine-readable result](result.json) · [saved editable project](independent-effects-final.oma)
 
-The recording contains 230 actual native WGPU viewport frames at 1600×900. Only the
+The recording was rerun after integration on PR #161 and contains 230 actual native WGPU viewport frames at 1600×900. Only the
 initial gradient document and two default effects are seeded. Every recorded edit
 uses the real inspector through egui pointer/keyboard input. Each frame waits for
 render readiness; the 23-second, 10 fps playback is a deterministic input replay,
