@@ -262,7 +262,10 @@ pub fn frame_inspector(ui: &mut Ui, studio: &mut Studio) {
         return;
     };
     let before = frame.clone();
-    let linked = run.thread.as_ref().is_some_and(|thread| thread.next.is_some());
+    let linked = run
+        .thread
+        .as_ref()
+        .is_some_and(|thread| thread.next.is_some());
     egui::CollapsingHeader::new("Text frame")
         .default_open(true)
         .show(ui, |ui| {
@@ -294,13 +297,83 @@ pub fn frame_inspector(ui: &mut Ui, studio: &mut Studio) {
                 });
             }
             ui.horizontal(|ui| {
-                for (value, label) in [
-                    (VAlign::Top, "Top"),
-                    (VAlign::Center, "Center"),
-                    (VAlign::Bottom, "Bottom"),
-                    (VAlign::Justify, "Justify"),
+                for (value, label, glyph) in [
+                    (VAlign::Top, "Top", Some(super::icons::ph::ALIGN_TOP)),
+                    (
+                        VAlign::Center,
+                        "Center",
+                        Some(super::icons::ph::ALIGN_CENTER_V),
+                    ),
+                    (
+                        VAlign::Bottom,
+                        "Bottom",
+                        Some(super::icons::ph::ALIGN_BOTTOM),
+                    ),
+                    (VAlign::Justify, "Justify", None),
                 ] {
-                    ui.selectable_value(&mut frame.valign, value, label);
+                    let selected = frame.valign == value;
+                    let (rect, _) = ui.allocate_exact_size(egui::vec2(30., 28.), Sense::hover());
+                    let response =
+                        ui.interact(rect, egui::Id::new(("frame-valign", label)), Sense::click());
+                    response.widget_info(|| {
+                        egui::WidgetInfo::selected(
+                            egui::WidgetType::Button,
+                            ui.is_enabled(),
+                            selected,
+                            label,
+                        )
+                    });
+                    if selected || response.hovered() || response.has_focus() {
+                        ui.painter().rect_filled(
+                            rect.shrink(1.),
+                            6.,
+                            if selected {
+                                super::theme::accent_soft()
+                            } else {
+                                super::theme::bg_widget_hover()
+                            },
+                        );
+                    }
+                    let color = if selected {
+                        super::theme::accent()
+                    } else {
+                        super::theme::fg_weak()
+                    };
+                    if let Some(glyph) = glyph {
+                        ui.painter().text(
+                            rect.center(),
+                            egui::Align2::CENTER_CENTER,
+                            glyph,
+                            super::icons::font(18.),
+                            color,
+                        );
+                    } else {
+                        // Evenly spread baselines between the top and bottom of the frame.
+                        for y in [rect.top() + 5., rect.center().y, rect.bottom() - 5.] {
+                            ui.painter().line_segment(
+                                [
+                                    egui::pos2(rect.left() + 7., y),
+                                    egui::pos2(rect.right() - 7., y),
+                                ],
+                                Stroke::new(1.4, color),
+                            );
+                        }
+                        for x in [rect.left() + 4., rect.right() - 4.] {
+                            ui.painter().line_segment(
+                                [
+                                    egui::pos2(x, rect.top() + 4.),
+                                    egui::pos2(x, rect.bottom() - 4.),
+                                ],
+                                Stroke::new(0.8, color),
+                            );
+                        }
+                    }
+                    if response
+                        .on_hover_text(format!("Vertical alignment: {label}"))
+                        .clicked()
+                    {
+                        frame.valign = value;
+                    }
                 }
             });
             ui.add_enabled(
@@ -380,18 +453,96 @@ pub fn wrap_inspector(ui: &mut Ui, studio: &mut Studio) {
     egui::CollapsingHeader::new("Text wrap")
         .default_open(false)
         .show(ui, |ui| {
-            egui::ComboBox::from_id_salt("text-wrap-mode")
-                .selected_text(format!("{:?}", wrap.mode))
-                .show_ui(ui, |ui| {
-                    for (mode, label) in [
-                        (WrapMode::None, "None"),
-                        (WrapMode::BoundingBox, "Bounding box"),
-                        (WrapMode::ObjectShape, "Object shape"),
-                        (WrapMode::JumpObject, "Jump object"),
-                    ] {
-                        ui.selectable_value(&mut wrap.mode, mode, label);
+            ui.horizontal(|ui| {
+                for (mode, label) in [
+                    (WrapMode::None, "None"),
+                    (WrapMode::BoundingBox, "Bounding box"),
+                    (WrapMode::ObjectShape, "Object shape"),
+                    (WrapMode::JumpObject, "Jump object"),
+                ] {
+                    let selected = wrap.mode == mode;
+                    let (rect, _) = ui.allocate_exact_size(egui::vec2(30., 28.), Sense::hover());
+                    let response = ui.interact(
+                        rect,
+                        egui::Id::new(("text-wrap-mode", label)),
+                        Sense::click(),
+                    );
+                    response.widget_info(|| {
+                        egui::WidgetInfo::selected(
+                            egui::WidgetType::Button,
+                            ui.is_enabled(),
+                            selected,
+                            label,
+                        )
+                    });
+                    if selected || response.hovered() || response.has_focus() {
+                        ui.painter().rect_filled(
+                            rect.shrink(1.),
+                            6.,
+                            if selected {
+                                super::theme::accent_soft()
+                            } else {
+                                super::theme::bg_widget_hover()
+                            },
+                        );
                     }
-                });
+                    let color = if selected {
+                        super::theme::accent()
+                    } else {
+                        super::theme::fg_weak()
+                    };
+                    let center = rect.center();
+                    for offset in [-9.0_f32, -4.5, 0., 4.5, 9.] {
+                        let y = center.y + offset;
+                        if mode == WrapMode::None || offset.abs() > 6. {
+                            ui.painter().line_segment(
+                                [
+                                    egui::pos2(rect.left() + 5., y),
+                                    egui::pos2(rect.right() - 5., y),
+                                ],
+                                Stroke::new(1.2, color),
+                            );
+                        } else if mode != WrapMode::JumpObject {
+                            let gap = if mode == WrapMode::ObjectShape {
+                                (36. - offset * offset).sqrt() + 2.
+                            } else {
+                                8.
+                            };
+                            ui.painter().line_segment(
+                                [
+                                    egui::pos2(rect.left() + 5., y),
+                                    egui::pos2(center.x - gap, y),
+                                ],
+                                Stroke::new(1.2, color),
+                            );
+                            ui.painter().line_segment(
+                                [
+                                    egui::pos2(center.x + gap, y),
+                                    egui::pos2(rect.right() - 5., y),
+                                ],
+                                Stroke::new(1.2, color),
+                            );
+                        }
+                    }
+                    if mode == WrapMode::ObjectShape {
+                        ui.painter()
+                            .circle_stroke(center, 5., Stroke::new(1.1, color));
+                    } else if mode != WrapMode::None {
+                        ui.painter().rect_stroke(
+                            Rect::from_center_size(center, egui::vec2(10., 11.)),
+                            1.,
+                            Stroke::new(1.1, color),
+                            egui::StrokeKind::Inside,
+                        );
+                    }
+                    if response
+                        .on_hover_text(format!("Text wrap: {label}"))
+                        .clicked()
+                    {
+                        wrap.mode = mode;
+                    }
+                }
+            });
             if wrap.mode == WrapMode::ObjectShape {
                 let mut offset = wrap.offset[0];
                 ui.horizontal(|ui| {
