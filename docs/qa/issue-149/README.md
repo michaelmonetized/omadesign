@@ -18,3 +18,7 @@ Recorded on 2026-09-27 from the actual stacked PR source through the character-s
 Regression coverage includes straight and circular arc placement, reversed tangents, every supported primitive and the first compound contour, guide edits/deletion/undo, linked versus standalone copies, range tracking plus curve spacing, paragraph alignment, and save/load/export contour equality. The final combined geometry suite passed 26 tests; all 15 clipboard tests passed, including the path payload regression.
 
 Reproduce with `cargo build --locked --offline --bin capture_studios`, then `target/debug/capture_studios path-type /tmp/issue-149-qa --fps 10` in a graphical session. The harness uses isolated XDG profile directories. `SHA256SUMS` records the capture binary and evidence hashes. Existing accepted 0.5.0 human QA evidence is preserved.
+
+## Review regression
+
+Followup source `3527762d` makes rectangular guides follow independent corner radii. [Focused test output](review-regressions.txt) verifies unequal radii, rotation, live corner changes and reversed rectangle dimensions against the rendered guide contour. The original native recording remains applicable: its ellipse and open-curve workflows are unchanged.
