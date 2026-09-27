@@ -38,7 +38,7 @@ fn frame(
 ) -> Vec<(String, Pos2)> {
     s.last_input = std::time::Instant::now();
     s.dirty = false;
-    let output = ctx.run_ui(
+    let mut output = ctx.run_ui(
         egui::RawInput {
             screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(width, 1000.))),
             events,
@@ -46,6 +46,7 @@ fn frame(
         },
         |ui| crate::ui::run(ui, s),
     );
+    output.textures_delta.clear();
     fn visit(shape: &egui::Shape, labels: &mut Vec<(String, Pos2)>) {
         match shape {
             egui::Shape::Text(t) => {
@@ -210,4 +211,17 @@ fn inspector_single_layer_and_shift_align_are_live_and_arrange_menu_is_gone() {
             modifiers: Modifiers::NONE,
         }],
     );
+}
+
+#[test]
+fn ordering_shortcuts_work_in_every_drawing_persona_without_arrange_menu() {
+    for persona in [crate::tools::Persona::Design,crate::tools::Persona::Layout,crate::tools::Persona::Pixel,crate::tools::Persona::Motion] {
+        let (ctx,mut s)=fixture();s.persona=persona;
+        let id=s.selection[1].1;s.selection=vec![(0,id)];
+        for (key,shift,expected) in [(Key::CloseBracket,false,2),(Key::OpenBracket,true,0),(Key::OpenBracket,false,0),(Key::CloseBracket,true,2)] {
+            let modifiers=Modifiers {ctrl:true,command:true,shift,..Modifiers::NONE};
+            let mut output=ctx.run_ui(egui::RawInput {events:vec![Event::Key {key,physical_key:Some(key),pressed:true,repeat:false,modifiers}],..Default::default()},|ui|s.handle_shortcuts(ui.ctx()));
+            output.textures_delta.clear();assert_eq!(s.doc.layers[0].kind.shapes().unwrap()[expected].id,id,"{persona:?} {key:?} shift={shift}");
+        }
+    }
 }

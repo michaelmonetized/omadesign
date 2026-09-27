@@ -1,0 +1,41 @@
+{
+  "checks": [
+    "one Align row and no Arrange menu",
+    "single left",
+    "undo restores exact artwork",
+    "single center",
+    "undo restores exact artwork",
+    "single right",
+    "undo restores exact artwork",
+    "single top",
+    "undo restores exact artwork",
+    "single middle",
+    "undo restores exact artwork",
+    "single bottom",
+    "undo restores exact artwork",
+    "multiple align to selection",
+    "each object to its artboard",
+    "undo restores exact artwork",
+    "horizontal distribution",
+    "vertical distribution",
+    "group is one alignment unit",
+    "remember positions",
+    "selection moved together",
+    "undo restores exact artwork",
+    "selected layer enabled",
+    "remember positions",
+    "selection moved together",
+    "undo restores exact artwork",
+    "save reopen"
+  ],
+  "fps": 10,
+  "frames": 570,
+  "input": "actual egui pointer and keyboard events",
+  "issue": "155",
+  "renderer": "native WGPU",
+  "size": [
+    1600,
+    1000
+  ],
+  "wall_seconds": 155.632302554
+}

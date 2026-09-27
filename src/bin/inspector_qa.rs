@@ -20,6 +20,7 @@ const FPS: u32 = 10;
 const SIZE: [usize; 2] = [1600, 1000];
 enum Action {
     Click(&'static str),
+    ShiftClick(&'static str),
     Right(&'static str),
     ScrollLayer,
     World(Pt, PointerButton),
@@ -137,6 +138,59 @@ fn actions(issue: &str) -> VecDeque<Action> {
             Check("save reopen"),
         ]
         .into(),
+        "155" => {
+            let mut q = vec![Check("one Align row and no Arrange menu")];
+            for (glyph, check) in [
+                ("\u{E50E}", "single left"),
+                ("\u{E50A}", "single center"),
+                ("\u{E510}", "single right"),
+                ("\u{E512}", "single top"),
+                ("\u{E50C}", "single middle"),
+                ("\u{E506}", "single bottom"),
+            ] {
+                q.extend([
+                    Click(glyph),
+                    Check(check),
+                    Press(Key::Z, ctrl()),
+                    Check("undo restores exact artwork"),
+                ]);
+            }
+            q.extend([
+                Press(Key::A, ctrl()),
+                Click("\u{E50E}"),
+                Check("multiple align to selection"),
+                Press(Key::Z, ctrl()),
+                ShiftClick("\u{E50E}"),
+                Check("each object to its artboard"),
+                Press(Key::Z, ctrl()),
+                Check("undo restores exact artwork"),
+                Click("Distribute H"),
+                Check("horizontal distribution"),
+                Press(Key::Z, ctrl()),
+                Click("Distribute V"),
+                Check("vertical distribution"),
+                Press(Key::Z, ctrl()),
+                Press(Key::G, ctrl()),
+                Check("group is one alignment unit"),
+                Check("remember positions"),
+                Click("\u{E510}"),
+                Check("selection moved together"),
+                Press(Key::Z, ctrl()),
+                Check("undo restores exact artwork"),
+                Press(Key::Z, ctrl()),
+                Click("Artwork"),
+                Check("selected layer enabled"),
+                Check("remember positions"),
+                Click("\u{E506}"),
+                Check("selection moved together"),
+                Press(Key::Z, ctrl()),
+                Check("undo restores exact artwork"),
+                Press(Key::A, ctrl()),
+                Press(Key::S, ctrl()),
+                Check("save reopen"),
+            ]);
+            q.into()
+        }
         _ => panic!("unknown issue {issue}"),
     }
 }
@@ -152,6 +206,27 @@ impl Qa {
                     studio.doc.motion.set_key(id,prop,1.4,b*(i as f32+1.),Ease::EaseInOut);
                 }
             }
+        }
+        if issue == "155" {
+            studio.doc.width = 1000.;
+            studio.doc.artboards = vec![
+                omadesign::document::Artboard::new(0, Pt::ZERO, Pt::new(360., 520.)),
+                omadesign::document::Artboard::new(1, Pt::new(400., 0.), Pt::new(360., 520.)),
+            ];
+            let mut third = Shape::new(
+                Geom::Rect {
+                    origin: Pt::new(830., 340.),
+                    size: Pt::new(70., 70.),
+                    radius: 8.,
+                },
+                Style {
+                    fill: Fill::Solid(omadesign::color::Rgba::from_hex(0x89B4FA)),
+                    ..Style::default()
+                },
+            );
+            third.name = "Outside artboards".into();
+            studio.doc.layers[0].kind.shapes_mut().unwrap().push(third);
+            studio.selection.truncate(1);
         }
         studio.path = Some(output.join("result.oma"));
         let original = omadesign::project::encode(&studio.doc).unwrap();
@@ -214,6 +289,21 @@ impl Qa {
                             phase: egui::TouchPhase::Move,
                         },
                     ]);
+                }
+                Action::ShiftClick(s) => {
+                    let p = self.point(s);
+                    self.cursor = p;
+                    self.events.push(Event::PointerMoved(p));
+                    for pressed in [true, false] {
+                        self.events.push(Event::PointerButton {
+                            pos: p,
+                            button: PointerButton::Primary,
+                            pressed,
+                            modifiers: Modifiers::SHIFT,
+                        });
+                    }
+                    self.events
+                        .insert(0, Event::ModifiersChanged(Modifiers::SHIFT));
                 }
                 Action::Right(s) => self.pointer(self.point(s), PointerButton::Secondary),
                 Action::World(p, button) => {
@@ -314,6 +404,96 @@ impl Qa {
                     omadesign::project::encode(&saved).unwrap(),
                     omadesign::project::encode(&self.studio.doc).unwrap()
                 );
+            }
+            "one Align row and no Arrange menu" => {
+                for glyph in [
+                    "\u{E50E}", "\u{E50A}", "\u{E510}", "\u{E512}", "\u{E50C}", "\u{E506}",
+                ] {
+                    assert_eq!(self.labels.iter().filter(|(s, _)| s == glyph).count(), 1);
+                }
+                assert!(
+                    !self
+                        .labels
+                        .iter()
+                        .any(|(s, r)| s == "Arrange" && r.center().y < 50.)
+                );
+            }
+            "single left" | "single center" | "single right" | "single top" | "single middle"
+            | "single bottom" => {
+                let &(li, id) = self.studio.selection.first().unwrap();
+                let b = self.studio.doc.find_shape(li, id).unwrap().world_bbox();
+                let error = match name {
+                    "single left" => b.min.x,
+                    "single center" => b.center().x - 180.,
+                    "single right" => b.max.x - 360.,
+                    "single top" => b.min.y,
+                    "single middle" => b.center().y - 260.,
+                    _ => b.max.y - 520.,
+                };
+                assert!(error.abs() < 0.001, "{name}: {b:?}");
+                assert_eq!(self.studio.history.len(), 1);
+            }
+            "multiple align to selection" => {
+                for sh in self.studio.doc.layers[0].kind.shapes().unwrap() {
+                    assert_eq!(sh.world_bbox().min.x, 80.);
+                }
+            }
+            "each object to its artboard" => {
+                for (sh, x) in self.studio.doc.layers[0]
+                    .kind
+                    .shapes()
+                    .unwrap()
+                    .iter()
+                    .zip([0., 400., 0.])
+                {
+                    assert_eq!(sh.world_bbox().min.x, x);
+                }
+            }
+            "horizontal distribution" | "vertical distribution" => {
+                let mut centers: Vec<_> = self.studio.doc.layers[0]
+                    .kind
+                    .shapes()
+                    .unwrap()
+                    .iter()
+                    .map(|s| {
+                        if name == "horizontal distribution" {
+                            s.world_bbox().center().x
+                        } else {
+                            s.world_bbox().center().y
+                        }
+                    })
+                    .collect();
+                centers.sort_by(f32::total_cmp);
+                assert!(((centers[1] - centers[0]) - (centers[2] - centers[1])).abs() < 0.001);
+            }
+            "group is one alignment unit" => assert_eq!(self.studio.alignment_item_count(), 1),
+            "selected layer enabled" => {
+                assert!(self.studio.selection.is_empty());
+                assert!(self.studio.selected_layer.is_some());
+                assert!(self.studio.can_align_selection());
+            }
+            "remember positions" => {
+                self.original = omadesign::project::encode(&self.studio.doc).unwrap();
+                self.history = self.studio.history.len();
+            }
+            "selection moved together" => {
+                let before = omadesign::project::decode(&self.original).unwrap();
+                let mut delta = None;
+                for (li, layer) in self.studio.doc.layers.iter().enumerate() {
+                    if let Some(shapes) = layer.kind.shapes() {
+                        for sh in shapes {
+                            let d = sh.world_bbox().center()
+                                - before.find_shape(li, sh.id).unwrap().world_bbox().center();
+                            if let Some(expected) = delta {
+                                assert!((d - expected).length() < 0.001);
+                            } else {
+                                delta = Some(d);
+                            }
+                        }
+                    }
+                }
+                assert!(delta.unwrap().length() > 0.01);
+                assert_eq!(self.studio.history.len(), self.history + 1);
             }
             _ => panic!("unknown check {name}"),
         }
