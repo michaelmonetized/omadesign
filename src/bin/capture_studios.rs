@@ -55,6 +55,7 @@ enum ActionKind {
     ReopenSaved,
     VerifySpacing(&'static str),
     CheckPath(&'static str),
+    NativeClipboard(&'static str),
 }
 struct Action {
     start: u32,
@@ -221,9 +222,9 @@ fn schedule(scene: &str) -> Vec<Action> {
             event(24.,Click(Any("Object"))),event(24.5,Click(Any("Type"))),event(25.,Click(Any("Release text from path"))),
             event(25.5,CheckPath("released")),
             event(26.,Key(egui::Key::Z,ctrl())),event(26.5,CheckPath("restored")),
-            event(27.,Key(egui::Key::C,ctrl())),event(28.,Key(egui::Key::V,ctrl())),
+            event(27.,NativeClipboard("c")),event(28.,NativeClipboard("v")),
             event(29.5,CheckPath("paste-alone")),event(30.,Key(egui::Key::Z,ctrl())),
-            event(31.,Key(egui::Key::A,ctrl())),event(31.5,Key(egui::Key::C,ctrl())),event(32.5,Key(egui::Key::V,ctrl())),
+            event(31.,Key(egui::Key::A,ctrl())),event(31.5,NativeClipboard("c")),event(32.5,NativeClipboard("v")),
             event(34.,CheckPath("paste-together")),event(35.,Key(egui::Key::Z,ctrl())),
             event(36.,Click(FirstPathText)),
             event(37.,CheckPath("restored")),
@@ -1277,6 +1278,12 @@ impl Capture {
             }
             if self.frame == a.start {
                 match &a.kind {
+                    ActionKind::NativeClipboard(key) => {
+                        let focus=format!("hl.dsp.focus({{window=\"pid:{}\"}})",std::process::id());
+                        let _=Command::new("hyprctl").args(["dispatch",&focus]).output();
+                        let focused=Command::new("hyprctl").args(["-j","activewindow"]).output().ok().and_then(|output|serde_json::from_slice::<serde_json::Value>(&output.stdout).ok()).and_then(|window|window["pid"].as_u64()).is_some_and(|pid|pid==std::process::id() as u64);
+                        if focused {if let Err(error)=Command::new("wtype").args(["-M","ctrl","-k",key,"-m","ctrl"]).spawn(){self.errors.push(format!("native clipboard shortcut: {error}"));}} else {self.errors.push("native clipboard window did not acquire focus".into());}
+                    },
                     ActionKind::CheckPath(phase) => {
                         let texts:Vec<_>=self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter_map(|s|if let Geom::Text(t)=&s.geom{Some((s.id,t))}else{None}).collect();
                         let attached=texts.iter().filter(|(_,t)|t.on_path.is_some()).count();
@@ -1461,7 +1468,7 @@ impl eframe::App for Capture {
     fn raw_input_hook(&mut self, _: &egui::Context, input: &mut egui::RawInput) {
         input
             .events
-            .retain(|e| matches!(e, Event::Screenshot { .. }));
+            .retain(|e| matches!(e, Event::Screenshot { .. } | Event::Copy | Event::Cut | Event::Paste(_)));
         input.hovered_files.clear();
         input.dropped_files.clear();
         input.focused = true;
@@ -1613,6 +1620,7 @@ impl eframe::App for Capture {
                     fs::write(self.directory.join("path-type.oma"),&project).unwrap();
                     let restored=omadesign::project::decode(&project).unwrap();
                     let paths:Vec<_>=restored.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter_map(|s|if let Geom::Text(t)=&s.geom{t.on_path.as_ref().map(|on|(s.id,on.path_id,t.content.clone(),t.contours.len()))}else{None}).collect();
+                    fs::write(self.directory.join("path-type-errors.json"),serde_json::to_vec_pretty(&self.errors).unwrap()).unwrap();
                     assert!(paths.len()>=2,"two editable path text runs created by UI");
                     assert!(paths.iter().all(|p|p.3>0),"path contours survive save/load");
                     fs::write(self.directory.join("path-type-errors.json"),serde_json::to_vec_pretty(&self.errors).unwrap()).unwrap();
