@@ -1,0 +1,60 @@
+{
+  "installed_binary_sha256": "fd293af0d47e2bfda8550a1c2107177060b8e0a9d41785f299c9f5849f9091d8",
+  "outputs": {
+    "upscale-320-2x.png": {
+      "dimensions": [
+        640,
+        424
+      ],
+      "sha256": "9939d606ac6ece61718a71c9aa67ae6df92ef041fe1b7fc039d69e529b017b4e"
+    },
+    "upscale-320-4x.png": {
+      "dimensions": [
+        1280,
+        848
+      ],
+      "sha256": "0e405bb97c7468cb14665315affab31144bf16dee26564eaf4e5886410eae4b7"
+    },
+    "upscale-1024-2x.png": {
+      "dimensions": [
+        2048,
+        1356
+      ],
+      "sha256": "90247a9ac67c8577334aba850bef44afd20f9837e1404f08d4288a6181191ff2"
+    },
+    "upscale_qa-native/document-4x.png": {
+      "dimensions": [
+        1280,
+        848
+      ],
+      "sha256": "eddf8163bdf42df65cb47cbd39a28b151a9ec052d310c381a4b65a473321d7f6"
+    },
+    "upscale_qa-native/photo-copy.png": {
+      "dimensions": [
+        640,
+        424
+      ],
+      "sha256": "9939d606ac6ece61718a71c9aa67ae6df92ef041fe1b7fc039d69e529b017b4e"
+    },
+    "upscale_qa-native/photo-custom.png": {
+      "dimensions": [
+        800,
+        530
+      ],
+      "sha256": "865d7686b56c8151c19f97f70513c6cb6502af3cf93a0832c2e878aac9d218ab"
+    },
+    "installed-reopened.png": {
+      "dimensions": [
+        1440,
+        900
+      ],
+      "sha256": "50298b6ff8a699a43eda0c5ac035a293192901b6149a33bfb85a4148cdf49fd9"
+    }
+  },
+  "native_suites_passed": true,
+  "actual_installed_application_reopened_saved_oma": true,
+  "no_cancelled_export": true,
+  "isolated_profiles_have_no_downloaded_models": true,
+  "final_memory": "MemTotal:        5929656 kB\nMemFree:          228592 kB\nMemAvailable:     656612 kB\nBuffers:               8 kB\nCached:           770436 kB\nSwapCached:         3700 kB\nActive:           788604 kB\nInactive:        3169856 kB\nActive(anon):     666568 kB\nInactive(anon):  2528840 kB\nActive(file):     122036 kB\nInactive(file):   641016 kB\nUnevictable:       39676 kB\nMlocked:           39676 kB\nSwapTotal:       5928956 kB\nSwapFree:        2409624 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:              3340 kB\nWriteback:            56 kB\nAnonPages:       3222744 kB\nMapped:           252376 kB\nShmem:              4200 kB\nKReclaimable:      97952 kB\nSlab:             285020 kB\nSReclaimable:      97952 kB\nSUnreclaim:       187068 kB\nKernelStack:       17472 kB\nPageTables:        93608 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     8893784 kB\nCommitted_AS:   28815260 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:      123488 kB\nVmallocChunk:          0 kB\nPercpu:             3360 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:    157696 kB\nShmemHugePages:        0 kB\nShmemPmdMapped:        0 kB\nFileHugePages:         0 kB\nFilePmdMapped:         0 kB\nCmaTotal:              0 kB\nCmaFree:               0 kB\nUnaccepted:            0 kB\nBalloon:               0 kB\nGPUActive:        133496 kB\nGPUReclaim:            0 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:     5278080 kB\nDirectMap2M:      886784 kB\nDirectMap1G:           0 kB\n",
+  "final_pressure": "some avg10=2.76 avg60=5.38 avg300=7.55 total=905571313\nfull avg10=2.24 avg60=4.11 avg300=5.17 total=683982051\n"
+}

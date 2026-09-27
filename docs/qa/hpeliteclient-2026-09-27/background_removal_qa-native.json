@@ -1,0 +1,25 @@
+{
+  "cancel_preserves_document": true,
+  "elapsed_seconds": 10.938405758,
+  "frames": 235,
+  "inference_frames": 62,
+  "inference_seconds": 4.453727708,
+  "interaction": "real egui pointer and keyboard events",
+  "one_undo_step": true,
+  "pixels_preserved": true,
+  "renderer": "native WGPU",
+  "save_reopen": true,
+  "screenshots": [
+    "01-working",
+    "02-preview",
+    "03-matte",
+    "04-refined",
+    "05-applied",
+    "06-undo",
+    "07-redo-saved",
+    "08-credits"
+  ],
+  "ui_frame_max_ms": 478.039767,
+  "ui_frame_p95_ms": 161.250155,
+  "undo_redo": true
+}

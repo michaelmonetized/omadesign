@@ -1,0 +1,38 @@
+{
+  "name": "background_removal_qa-native",
+  "returncode": 0,
+  "wall_seconds": 23.708687352016568,
+  "peak_rss_KiB": 446996,
+  "user_seconds": 10.858059,
+  "system_seconds": 6.691609,
+  "major_page_faults": 225,
+  "before": {
+    "memory": {
+      "MemTotal_KiB": 5929656,
+      "MemAvailable_KiB": 1415112,
+      "SwapTotal_KiB": 5928956,
+      "SwapFree_KiB": 1370376
+    },
+    "pressure": {
+      "memory": "some avg10=16.73 avg60=16.97 avg300=14.77 total=868547245\nfull avg10=10.08 avg60=11.07 avg300=9.60 total=657898854",
+      "cpu": "some avg10=77.29 avg60=63.00 avg300=65.86 total=48774677337\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io": "some avg10=2.09 avg60=7.08 avg300=6.87 total=1444708631\nfull avg10=0.13 avg60=2.61 avg300=1.62 total=713770855"
+    }
+  },
+  "after": {
+    "memory": {
+      "MemTotal_KiB": 5929656,
+      "MemAvailable_KiB": 1353940,
+      "SwapTotal_KiB": 5928956,
+      "SwapFree_KiB": 1439604
+    },
+    "pressure": {
+      "memory": "some avg10=5.71 avg60=13.32 avg300=14.09 total=870125430\nfull avg10=4.00 avg60=8.90 avg300=9.21 total=659175648",
+      "cpu": "some avg10=56.16 avg60=59.39 avg300=64.74 total=48787217381\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io": "some avg10=10.33 avg60=9.52 avg300=7.52 total=1448431666\nfull avg10=1.89 avg60=2.74 avg300=1.74 total=714609452"
+    }
+  },
+  "network": "disabled with unshare -Urn",
+  "provider": "CPU",
+  "log": "background_removal_qa-native.log"
+}

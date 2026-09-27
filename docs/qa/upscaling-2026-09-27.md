@@ -5,6 +5,12 @@ on PR #142. This implements Photo upscaling, the still-export dialog, and the
 upscale-first/upscale-cutout items deferred by #144. CPU is the shipped provider;
 no ncnn/Vulkan subprocess, Upscayl code, or Upscayl-only models are included.
 
+Follow-up: the x86_64 package was subsequently installed and executed on
+[hpeliteclient](hpeliteclient-2026-09-27.md), a four-core Ryzen Embedded machine
+with 5.7 GiB RAM and an already loaded desktop. Both native workflow suites
+passed, but upscaling latency and UI frame-time spikes remain significant on
+that host. The field report records this performance boundary explicitly.
+
 ## Behavior and boundaries
 
 - General x4v3 is embedded (4,866,419 bytes) for fresh-install offline use. The

@@ -1,0 +1,38 @@
+{
+  "name": "installed-reopen",
+  "returncode": 0,
+  "wall_seconds": 17.97309690201655,
+  "peak_rss_KiB": 131384,
+  "user_seconds": 1.188203,
+  "system_seconds": 4.75182,
+  "major_page_faults": 273,
+  "before": {
+    "memory": {
+      "MemTotal_KiB": 5929656,
+      "MemAvailable_KiB": 862620,
+      "SwapTotal_KiB": 5928956,
+      "SwapFree_KiB": 2139964
+    },
+    "pressure": {
+      "memory": "some avg10=1.35 avg60=3.92 avg300=8.18 total=894630825\nfull avg10=1.10 avg60=2.55 avg300=5.32 total=675635272",
+      "cpu": "some avg10=9.00 avg60=40.77 avg300=65.81 total=49055967151\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io": "some avg10=11.61 avg60=5.39 avg300=4.68 total=1463265635\nfull avg10=8.31 avg60=3.16 avg300=1.36 total=718465292"
+    }
+  },
+  "after": {
+    "memory": {
+      "MemTotal_KiB": 5929656,
+      "MemAvailable_KiB": 949324,
+      "SwapTotal_KiB": 5928956,
+      "SwapFree_KiB": 2056672
+    },
+    "pressure": {
+      "memory": "some avg10=10.93 avg60=7.84 avg300=8.90 total=898493913\nfull avg10=7.26 avg60=5.25 avg300=5.83 total=678300352",
+      "cpu": "some avg10=53.29 avg60=47.39 avg300=65.87 total=49068327990\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "io": "some avg10=10.63 avg60=6.57 avg300=4.99 total=1465102121\nfull avg10=2.62 avg60=2.64 avg300=1.35 total=718690056"
+    }
+  },
+  "network": "disabled with unshare -Urn",
+  "provider": "CPU",
+  "log": "installed-reopen.log"
+}

@@ -1,0 +1,24 @@
+{
+  "host": "hpeliteclient",
+  "version": "0.6.0 / PR147 221834bdd8af5aee8554a0e835629cbe2f467558",
+  "binary_sha256": "fd293af0d47e2bfda8550a1c2107177060b8e0a9d41785f299c9f5849f9091d8",
+  "archive_sha256": "3c63e6e6d499ab142f57e00b2d69e8811813815b972f937e616de00fed0911e4",
+  "gpu": [
+    "04:00.0 VGA compatible controller: Advanced Micro Devices, Inc. [AMD/ATI] Picasso/Raven 2 [Radeon Vega Series / Radeon Vega Mobile Series] (rev 72)"
+  ],
+  "governor": "schedutil",
+  "cpu": "AMD Ryzen Embedded R2314 with Radeon Graphics",
+  "logical_cpus": 4,
+  "usable_memory_MiB": 5790,
+  "initial_available_memory_MiB": 622,
+  "initial_used_swap_MiB": 3457,
+  "os": "Arch Linux / Omarchy",
+  "installed_binary": "~/.local/bin/omadesign",
+  "saved_backup_and_qa": "~/.local/state/omadesign/qa/hpeliteclient-20260927/",
+  "execution": "local CPU inference; SSH over LAN; unshare -Urn network isolation",
+  "initial_cpu_weight": 50,
+  "normal_and_native_cpu_weight": 100,
+  "cgroup_memory_limit_MiB": 768,
+  "cgroup_swap_limit_MiB": 512,
+  "existing_apps_and_power_policy_preserved": true
+}

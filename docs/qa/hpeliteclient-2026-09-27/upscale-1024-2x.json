@@ -1,0 +1,17 @@
+{
+  "factor": 2.0,
+  "model": "realesr-general-x4v3.onnx",
+  "output": [
+    2048,
+    1356
+  ],
+  "runtime": "ONNX Runtime 1.28 CPU",
+  "seconds": 165.040083833,
+  "sha256": "74b0bf4bdad2868e256ef722980586b7ff1a8b2c9ba0b8e526498cd28acf5b80",
+  "source": [
+    1024,
+    678
+  ],
+  "tile": 192,
+  "tiles": 24
+}
