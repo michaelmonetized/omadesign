@@ -35,6 +35,12 @@ pub struct Palette {
     pub dark: bool,
 }
 
+/// Shared AI affordance colors, with enough contrast in either appearance.
+pub fn agent_gradient(dark: bool) -> [Color32; 2] {
+    if dark { [Color32::from_rgb(245,194,231),Color32::from_rgb(203,166,247)] }
+    else { [Color32::from_rgb(234,118,203),Color32::from_rgb(136,57,239)] }
+}
+
 struct LiveTheme {
     palette: Palette,
     font: String,

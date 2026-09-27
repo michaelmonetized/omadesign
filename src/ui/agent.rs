@@ -82,10 +82,7 @@ pub(super) fn tick(ctx: &egui::Context, studio: &mut Studio) {
 }
 
 pub(super) fn button(ui: &mut egui::Ui, studio: &mut Studio) {
-    if ui
-        .selectable_label(studio.agent.visible, "Agent")
-        .on_hover_text("Design live with your local AI agent")
-        .clicked()
+    if super::icons::sparkle_button(ui, studio.agent.visible).clicked()
     {
         if studio.agent.visible {
             studio.agent.visible = false;

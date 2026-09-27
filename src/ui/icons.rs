@@ -6,6 +6,9 @@ use eframe::egui::{
     FontFamily, FontId, Response, Sense, Stroke, Ui, Vec2, WidgetInfo, WidgetType, vec2,
 };
 
+mod gradient;
+pub use gradient::{sparkle_button, sparkle_texture};
+
 pub mod ph {
     pub const CURSOR: &str = "\u{E1DC}";
     pub const PATH: &str = "\u{E39C}";
@@ -239,7 +242,10 @@ pub fn svg_texture(
     key: &'static str,
     source: &[u8],
 ) -> Option<eframe::egui::TextureHandle> {
-    let id = eframe::egui::Id::new(("ui-svg", key));
+    svg_texture_id(ui, key, eframe::egui::Id::new(("ui-svg", key)), source)
+}
+
+fn svg_texture_id(ui: &Ui, key: &'static str, id: eframe::egui::Id, source: &[u8]) -> Option<eframe::egui::TextureHandle> {
     if let Some(texture) = ui
         .ctx()
         .data(|d| d.get_temp::<eframe::egui::TextureHandle>(id))

@@ -1944,6 +1944,16 @@ impl Studio {
         Pt::ZERO
     }
 
+    /// Fit the current artboard or reset the photo view.
+    pub fn fit_view(&mut self) {
+        if self.persona == Persona::Photo {
+            self.photo.view_scale = 1.0;
+            self.photo.view_offset = egui::Vec2::ZERO;
+        } else {
+            self.need_fit = true;
+        }
+    }
+
     /// Fit selected shapes, or every visible vector if nothing is selected.
     pub fn zoom_to_objects(&mut self, prefer_selection: bool) {
         let Some(rect) = self.canvas_rect else {
