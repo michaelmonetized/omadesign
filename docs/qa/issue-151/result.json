@@ -5,7 +5,7 @@
   "source": "office affine fi ffi 0123456789\nEditable typography and stylistic alternates new text",
   "spans": [
     {
-      "end": 32,
+      "end": 33,
       "features": [
         [
           [
@@ -21,7 +21,7 @@
       "start": 0
     },
     {
-      "end": 33,
+      "end": 34,
       "features": [
         [
           [
@@ -34,7 +34,7 @@
         ]
       ],
       "no_break": false,
-      "start": 32
+      "start": 33
     },
     {
       "end": 85,
@@ -50,8 +50,30 @@
         ]
       ],
       "no_break": false,
-      "start": 33
+      "start": 34
     }
   ],
-  "unresolved_input_targets": []
+  "unresolved_input_targets": [],
+  "capture_utc": "2026-09-27T20:30:58.154269+00:00",
+  "base_pr": 163,
+  "playback_fps": 10,
+  "product_revision": "cfa3b114",
+  "source_notes": "Final native Ctrl+S and visible lowercase override harness is committed with this evidence. Subsequent paragraph Word-mode audit does not affect this ASCII scenario.",
+  "native_save": "Ctrl+S writes opentype-final.oma, then load_from verifies the saved file",
+  "single_character_override": {
+    "index": 33,
+    "character": "d",
+    "smcp": 0,
+    "normal_glyph_verified": true,
+    "adjacent_index": 34,
+    "adjacent_small_cap_glyph_verified": true
+  },
+  "capture_binary_sha256": "2ffbf14fef77e9c87ead5300185b54c9fda656485d732d10b432cc769e75601e",
+  "artifact_sha256": {
+    "e2e.mp4": "8f32fc5a62534386b5e79cf8d85a306ef40b331d139d6e421c5fbe368ce7b044",
+    "export.html": "bb5728040a39a56d7cfb4eaba32e5cc9510828e8bbfc47da4c75847313577490",
+    "export.svg": "02599e06c1be998b68281b3c8047aeba3a25500e800ae36e655da3500c26b3a0",
+    "native.png": "83673e0c25a0e382ac5563cbed62e064fcfb9ba714a9b8f9a3da3a7acb6db0b4",
+    "saved.oma": "566dc8d14a6c7df39dcec163eb23b77900d9da88b38b46bd483eaf0f68ff5fbe"
+  }
 }

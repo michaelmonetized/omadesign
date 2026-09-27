@@ -131,11 +131,13 @@ fn schedule(scene: &str) -> Vec<Action> {
             event(6., Key(egui::Key::ArrowRight, Modifiers::NONE)),
             event(7., Type(" new text")),
             event(9., Key(egui::Key::Home, Modifiers::NONE)),
+            event(9.5, Key(egui::Key::ArrowRight, Modifiers::NONE)),
             event(10., Key(egui::Key::ArrowRight, Modifiers{shift:true,..Modifiers::NONE})),
             event(12., Click(Text("Small caps"))),
             event(14., Key(egui::Key::Escape, Modifiers::NONE)),
             event(16., Key(egui::Key::Z, ctrl())),
             event(18., Key(egui::Key::Z, Modifiers{shift:true,..ctrl()})),
+            event(19., Key(egui::Key::S, ctrl())),
         ],
         "paragraphs" => vec![
             event(1., Key(egui::Key::A, ctrl())),
@@ -942,7 +944,7 @@ fn seed(scene: &str) -> Studio {
 impl Capture {
     fn new(scene: String, directory: PathBuf, probe: bool, fps: u32) -> Self {
         let mut studio = seed(&scene);
-        if matches!(scene.as_str(), "independent-effects" | "paragraphs") {
+        if matches!(scene.as_str(), "independent-effects" | "paragraphs" | "opentype") {
             studio.path = Some(directory.join(format!("{scene}-final.oma")));
         }
         let seconds = match scene.as_str() {
@@ -1423,9 +1425,16 @@ impl eframe::App for Capture {
                     fs::write(self.directory.join("paragraphs-export.svg"),omadesign::svg::export(&restored).unwrap()).unwrap();
                 }
                 if self.scene=="opentype" {
-                    let saved=omadesign::project::encode(&self.studio.doc).unwrap();let restored=omadesign::project::decode(&saved).unwrap();
+                    let restored=omadesign::project::load_from(&self.directory.join("opentype-final.oma")).expect("Ctrl+S must save the edited OpenType document");
                     let run=restored.layers[1].kind.shapes().unwrap().iter().find_map(|s|if let Geom::Text(t)=&s.geom{Some(t)}else{None}).unwrap();
                     assert!(run.content.ends_with(" new text"));assert!(!run.spans.is_empty());
+                    assert_eq!(omadesign::text::feature_value(run, 33, *b"smcp"), 0);
+                    assert_eq!(omadesign::text::feature_value(run, 34, *b"smcp"), 1);
+                    let mut plain = run.clone(); plain.spans.clear(); plain.features.clear();
+                    let actual = omadesign::text::compose(run); let original = omadesign::text::compose(&plain);
+                    let glyph = |lines: &[omadesign::text::LayoutLine], at: usize| lines.iter().flat_map(|l| &l.glyphs).find(|g| g.cluster == at).unwrap().id;
+                    assert_eq!(glyph(&actual, 33), glyph(&original, 33), "selected lowercase glyph returns to normal");
+                    assert_ne!(glyph(&actual, 34), glyph(&original, 34), "adjacent lowercase glyph retains small caps");
                     fs::write(self.directory.join("opentype-result.json"),serde_json::to_vec_pretty(&serde_json::json!({"saved_and_reopened":true,"spans":run.spans,"source":run.content,"unresolved_input_targets":self.errors,"renderer":"native WGPU","recording_frames":self.frame})).unwrap()).unwrap();
                     fs::write(self.directory.join("opentype-export.svg"),omadesign::svg::export(&restored).unwrap()).unwrap();
                     fs::write(self.directory.join("opentype-export.html"),omadesign::text::paragraph_html(run)).unwrap();

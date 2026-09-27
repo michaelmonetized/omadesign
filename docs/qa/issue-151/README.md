@@ -6,7 +6,7 @@
 The replay selects editable text, opens the discovered OpenType feature panel,
 applies real small-cap substitutions, types new text inheriting the preceding
 range, selects one character, applies an independent override, displays the
-font's alternate-glyph thumbnails, commits, undoes, redoes, saves and reopens,
+font's alternate-glyph thumbnails, commits, undoes, redoes, presses Ctrl+S and reads the saved file,
 and exports HTML plus exact outlined SVG.
 
 `result.json` records three normalized, non-overlapping character ranges with
@@ -24,3 +24,5 @@ cargo build --bin capture_studios -j2
 DISPLAY=:0 target/debug/capture_studios opentype /tmp/opentype-qa --fps 10
 cargo test --lib text::
 ```
+
+Final integrated verification: **25 typography tests passed** (`tests.log`). The native assertion compares actual glyph IDs: selected lowercase **d** at character 33 returns to its normal glyph, while adjacent **i** at 34 retains small caps. Both settings persist in the Ctrl+S file. Playback is deterministic render-ready replay, not a realtime performance measurement.
