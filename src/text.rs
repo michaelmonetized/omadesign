@@ -554,7 +554,7 @@ pub fn selection_rects(run:&TypeRun,a:usize,b:usize)->Vec<(Pt,Pt)> {
     }
     rects
 }
-pub fn caret_height(run:&TypeRun,index:usize)->f32 {run.px*character_metrics(run,index.min(run.content.chars().count().saturating_sub(1))).vscale.unwrap()/100.}
+pub fn caret_height(run:&TypeRun,index:usize)->f32 {if let Some(layout)=&run.layout&&let Some((_,height))=layout.caret_heights.iter().min_by_key(|(i,_)|i.abs_diff(index)){return *height;}run.px*character_metrics(run,index.min(run.content.chars().count().saturating_sub(1))).vscale.unwrap()/100.}
 pub fn char_to_byte(s:&str,char_idx:usize)->usize {s.char_indices().nth(char_idx).map(|(i,_)|i).unwrap_or(s.len())}
 pub fn paragraph_spacing_css(run: &TypeRun, style: &crate::geom::ParagraphStyle) -> String {
     // CSS word spacing adds to the font's space advance; the inspector stores
