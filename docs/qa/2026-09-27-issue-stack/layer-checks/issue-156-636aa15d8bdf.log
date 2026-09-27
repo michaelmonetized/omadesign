@@ -1,0 +1,9 @@
+Issue: 156
+Branch: feat/issue-156-chrome-cleanup
+SHA: 636aa15d8bdf1646d69fa4bd421e528493e6b231
+Command: CARGO_TARGET_DIR=/home/michael/Projects/omadesign/target cargo check --all-targets --locked --offline -j2
+Started: 2026-09-27T21:50:40.327136+00:00
+
+    Blocking waiting for file lock on build directory
+    Checking omadesign v0.6.0 (/home/michael/Projects/omadesign/.worktrees/restacked-layer-audit)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 32.83s

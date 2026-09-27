@@ -1,0 +1,13 @@
+Issue: 154
+Branch: feat/issue-154-flip-controls
+SHA: df60d850a5fd3b908379e8256d2d5016086cfee5
+Command: CARGO_TARGET_DIR=/home/michael/Projects/omadesign/target cargo check --all-targets --locked --offline -j2
+Started: 2026-09-27T21:49:40.466141+00:00
+
+   Compiling winit v0.30.13 (/home/michael/Projects/omadesign/.worktrees/restacked-layer-audit/vendor/winit)
+   Compiling omadesign v0.6.0 (/home/michael/Projects/omadesign/.worktrees/restacked-layer-audit)
+    Checking accesskit_winit v0.32.2
+    Checking egui-winit v0.36.1 (/home/michael/Projects/omadesign/.worktrees/restacked-layer-audit/vendor/egui-winit)
+    Checking egui-wgpu v0.36.1
+    Checking eframe v0.36.1
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 31.75s

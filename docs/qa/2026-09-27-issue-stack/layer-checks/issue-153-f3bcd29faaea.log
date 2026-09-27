@@ -1,0 +1,8 @@
+Issue: 153
+Branch: feat/issue-153-independent-effects
+SHA: f3bcd29faaea7a0e97a04395c2ba7ea3f75ce84c
+Command: CARGO_TARGET_DIR=/home/michael/Projects/omadesign/target cargo check --all-targets --locked --offline -j2
+Started: 2026-09-27T21:51:13.334530+00:00
+
+    Checking omadesign v0.6.0 (/home/michael/Projects/omadesign/.worktrees/restacked-layer-audit)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.90s

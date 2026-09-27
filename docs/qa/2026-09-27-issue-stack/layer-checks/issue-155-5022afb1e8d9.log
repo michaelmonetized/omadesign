@@ -1,0 +1,9 @@
+Issue: 155
+Branch: feat/issue-155-align-controls
+SHA: 5022afb1e8d9f6b5e514255c41e4178e515fbdbb
+Command: CARGO_TARGET_DIR=/home/michael/Projects/omadesign/target cargo check --all-targets --locked --offline -j2
+Started: 2026-09-27T21:50:12.329687+00:00
+
+    Blocking waiting for file lock on build directory
+    Checking omadesign v0.6.0 (/home/michael/Projects/omadesign/.worktrees/restacked-layer-audit)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 27.83s
