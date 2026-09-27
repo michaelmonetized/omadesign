@@ -23,3 +23,13 @@ upstream roots. Copyright/license notices found in Rust dependencies are also
 preserved in the sibling rust notices directory. These attributions do not claim
 ownership of the upstream models. No Real-ESRGAN or ncnn component ships in #144;
 those belong to the subsequent #145 implementation.
+# Real-ESRGAN additions
+
+- Real-ESRGAN and its bundled General x4v3 / optional x4plus, x2plus and anime 6B
+  weights: Copyright (c) 2021, Xintao Wang, BSD-3-Clause. `RealESRGAN-LICENSE`.
+- BasicSR model architecture utilities used by the reproducible converter:
+  Apache-2.0, `BasicSR-LICENSE`. The pinned upstream root has no NOTICE file.
+- Source revisions, settings, weight and converted model hashes are recorded in
+  `assets/models/upscale-manifest.json`. Conversion is build-time only; the
+  deployed runtime is the same ONNX Runtime/ort already listed below.
+- No ncnn, Vulkan subprocess, Upscayl code, or Upscayl-only weights are shipped.

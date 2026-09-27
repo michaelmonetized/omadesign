@@ -1,0 +1,97 @@
+{
+  "license": "BSD-3-Clause",
+  "opset": 17,
+  "precision": "fp32",
+  "sources": {
+    "arch_util": {
+      "url": "https://raw.githubusercontent.com/XPixelGroup/BasicSR/8d56e3a045f9fb3e1d8872f92ee4a4f07f886b0a/basicsr/archs/arch_util.py",
+      "sha256": "be2cec6482fba5455cc1f03ff40da84a89e27feadf886018a4fa7b97b8a1bb55"
+    },
+    "rrdbnet_arch": {
+      "url": "https://raw.githubusercontent.com/XPixelGroup/BasicSR/8d56e3a045f9fb3e1d8872f92ee4a4f07f886b0a/basicsr/archs/rrdbnet_arch.py",
+      "sha256": "6aa8eb3f77e918b90eeff4ebfaf8745abe0c40eb8fcc03abbc1928693d70ab58"
+    },
+    "srvgg_arch": {
+      "url": "https://raw.githubusercontent.com/xinntao/Real-ESRGAN/a4abfb2979a7bbff3f69f58f58ae324608821e27/realesrgan/archs/srvgg_arch.py",
+      "sha256": "7419a75e789ca09295266563d74a6d7c08d6c24502af6b0a919b1811d0a0be59"
+    }
+  },
+  "models": [
+    {
+      "filename": "realesr-general-x4v3.onnx",
+      "architecture": "SRVGGNetCompact",
+      "settings": {
+        "num_in_ch": 3,
+        "num_out_ch": 3,
+        "num_feat": 64,
+        "num_conv": 32,
+        "upscale": 4,
+        "act_type": "prelu"
+      },
+      "weights": {
+        "url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesr-general-x4v3.pth",
+        "sha256": "8dc7edb9ac80ccdc30c3a5dca6616509367f05fbc184ad95b731f05bece96292"
+      },
+      "state_key": "params",
+      "size": 4866419,
+      "sha256": "74b0bf4bdad2868e256ef722980586b7ff1a8b2c9ba0b8e526498cd28acf5b80"
+    },
+    {
+      "filename": "RealESRGAN_x4plus.onnx",
+      "architecture": "RRDBNet",
+      "settings": {
+        "num_in_ch": 3,
+        "num_out_ch": 3,
+        "num_feat": 64,
+        "num_block": 23,
+        "num_grow_ch": 32,
+        "scale": 4
+      },
+      "weights": {
+        "url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth",
+        "sha256": "4fa0d38905f75ac06eb49a7951b426670021be3018265fd191d2125df9d682f1"
+      },
+      "state_key": "params_ema",
+      "size": 67051641,
+      "sha256": "43c406760a1e6ddb5521a99b2eee6b069a502b9543a2a859857a6ff4ffa76481"
+    },
+    {
+      "filename": "RealESRGAN_x2plus.onnx",
+      "architecture": "RRDBNet",
+      "settings": {
+        "num_in_ch": 3,
+        "num_out_ch": 3,
+        "num_feat": 64,
+        "num_block": 23,
+        "num_grow_ch": 32,
+        "scale": 2
+      },
+      "weights": {
+        "url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth",
+        "sha256": "49fafd45f8fd7aa8d31ab2a22d14d91b536c34494a5cfe31eb5d89c2fa266abb"
+      },
+      "state_key": "params_ema",
+      "size": 67075996,
+      "sha256": "ffa94b343026d70312435c5ce846f85ef705a5f1532a33519df32d8e060ccf3a"
+    },
+    {
+      "filename": "RealESRGAN_x4plus_anime_6B.onnx",
+      "architecture": "RRDBNet",
+      "settings": {
+        "num_in_ch": 3,
+        "num_out_ch": 3,
+        "num_feat": 64,
+        "num_block": 6,
+        "num_grow_ch": 32,
+        "scale": 4
+      },
+      "weights": {
+        "url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/RealESRGAN_x4plus_anime_6B.pth",
+        "sha256": "f872d837d3c90ed2e05227bed711af5671a6fd1c9f7d7e91c911a61f155e99da"
+      },
+      "state_key": "params_ema",
+      "size": 17939966,
+      "sha256": "719628b3df414426684930099720b8b37853f13b3b6a37f3adf94485dc7b25d1"
+    }
+  ]
+}
