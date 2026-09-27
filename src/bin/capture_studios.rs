@@ -205,6 +205,14 @@ fn schedule(scene: &str) -> Vec<Action> {
             event(0.7,Click(FirstPathText)),event(1.2,NativeClipboard("c")),event(1.8,Click(Any("Edit"))),event(2.2,Click(Any("Paste"))),event(3.2,CheckPath("paste-alone")),
             event(3.7,Key(egui::Key::Z,ctrl())),event(4.2,Key(egui::Key::A,ctrl())),event(4.7,NativeClipboard("c")),event(5.3,Click(Any("Edit"))),event(5.7,Click(Any("Paste"))),event(7.,CheckPath("paste-together")),event(7.5,Key(egui::Key::Z,ctrl())),
         ],
+        "area-valign" => vec![
+            event(0.7,Click(Text("Arrange"))),event(1.2,Click(Text("Align"))),
+            event(2.,Click(Text("Frame Center"))),event(3.,CheckArea("aligned-clear")),
+            event(4.,Click(Text("Frame Bottom"))),event(5.,CheckArea("aligned-clear")),
+            event(6.,Click(Text("Frame Justify"))),event(7.,CheckArea("aligned-clear")),
+            event(8.,Click(Text("Frame Top"))),event(9.,CheckArea("aligned-clear")),
+            event(10.,Key(egui::Key::S,ctrl())),event(11.2,ReopenSaved),event(12.2,CheckArea("aligned-clear")),
+        ],
         "area-invert" => vec![
             event(0.7,Click(World(230.,210.))),event(1.2,Click(Text("Arrange"))),event(1.7,Click(Text("Align"))),event(2.2,Click(Text("Text wrap"))),
             event(3.,Click(Text("Invert: flow inside object"))),event(4.,CheckArea("wrap-inside-visible")),
@@ -964,17 +972,17 @@ fn seed(scene: &str) -> Studio {
             *s.doc.layers[0].kind.shapes_mut().unwrap() = vec![bg, subject];
         }
 
-        "area-type" | "area-options" | "area-invert" => {
+        "area-type" | "area-options" | "area-invert" | "area-valign" => {
             use omadesign::{document::{Layer,Shape,Style,Fill},text_geometry::{TextWrap,WrapMode}};
             s.doc=Document::new("Area text and threaded stories · issue 150",960.,680.,96.);
             let mut circle=Shape::new(Geom::Ellipse{center:Pt::new(230.,210.),radii:Pt::splat(58.)},Style{fill:Fill::Solid(Rgba::from_hex(0xC5E2E4)),stroke:None});
             circle.text_wrap=TextWrap{mode:if scene=="area-options"{WrapMode::None}else{WrapMode::ObjectShape},offset:if scene=="area-options"{[0.;4]}else{[10.;4]},..Default::default()};
-            if scene=="area-invert" {circle.style.fill=Fill::None;circle.style.stroke=Some(omadesign::document::Stroke{width:2.,color:Rgba::from_hex(0x7295AD),..Default::default()});}
+            if scene=="area-invert" || scene=="area-valign" {circle.style.fill=Fill::None;circle.style.stroke=Some(omadesign::document::Stroke{width:2.,color:Rgba::from_hex(0x7295AD),..Default::default()});}
             let mut layer=Layer::vector("Wrap illustration");layer.kind.shapes_mut().unwrap().push(circle);s.doc.layers.push(layer);
             s.active_layer=Some(1);s.persona=Persona::Design;s.tool=Tool::Text;s.text_px=25.;s.style=Style{fill:Fill::Solid(Rgba::from_hex(0x18364A)),stroke:None};
-            if scene=="area-options" || scene=="area-invert" {
+            if scene=="area-options" || scene=="area-invert" || scene=="area-valign" {
                 s.place_area_text(omadesign::geom::Bounds::from_min_size(Pt::new(70.,100.),Pt::new(350.,250.)));
-                if scene=="area-invert" {s.type_insert("Type flows inside the circle. Hidden text stays editable.");} else {s.type_insert("Typography remains editable through hyphenation, transformation, internationalization, and collaboration. A circular illustration can push the words aside, make them jump below its bounds, or contain them inside its outline. Every character stays in the story when visible text is clipped or ends in an ellipsis.\nThe next paragraph retains its own settings, while auto height, insets and vertical alignment provide practical control over the frame.");}
+                if scene=="area-invert" {s.type_insert("Type flows inside the circle. Hidden text stays editable.");} else if scene=="area-valign" {s.type_insert("One two three four\nFive six seven eight");} else {s.type_insert("Typography remains editable through hyphenation, transformation, internationalization, and collaboration. A circular illustration can push the words aside, make them jump below its bounds, or contain them inside its outline. Every character stays in the story when visible text is clipped or ends in an ellipsis.\nThe next paragraph retains its own settings, while auto height, insets and vertical alignment provide practical control over the frame.");}
                 s.commit_type_edit();s.tool=Tool::Select;
             }
 
@@ -1166,7 +1174,7 @@ fn seed(scene: &str) -> Studio {
 impl Capture {
     fn new(scene: String, directory: PathBuf, probe: bool, fps: u32) -> Self {
         let mut studio = seed(&scene);
-        if matches!(scene.as_str(), "independent-effects" | "paragraphs" | "opentype" | "spacing" | "spacing-resize" | "path-type" | "area-type" | "area-options" | "area-invert") {
+        if matches!(scene.as_str(), "independent-effects" | "paragraphs" | "opentype" | "spacing" | "spacing-resize" | "path-type" | "area-type" | "area-options" | "area-invert" | "area-valign") {
             studio.path = Some(directory.join(format!("{scene}-final.oma")));
         }
         if scene == "spacing" { studio.load_startup_preferences(); }
@@ -1180,6 +1188,7 @@ impl Capture {
             "area-type" => 47,
             "area-options" => 70,
             "area-invert" => 12,
+            "area-valign" => 14,
             "welcome-browse" => 23,
             "welcome-vector" | "welcome-layout" => 9,
             "welcome-raster" => 8,
@@ -1393,6 +1402,7 @@ impl Capture {
                             "hyphenated"=>head.is_some_and(|t|omadesign::text::paragraph_style(t,0).hyphenate),
                             "hyphen-limits"=>head.is_some_and(|t|omadesign::text::paragraph_style(t,0).hyphen.is_some_and(|h|h.min_word_len!=6&&h.min_before==1&&h.min_after==1&&h.max_consecutive==0)),
                             "wrap-box"=>wrap.is_some_and(|w|w.mode==omadesign::text_geometry::WrapMode::BoundingBox&&w.offset[0]>0.&&w.offset[1]>0.),
+                            "aligned-clear"=>head.is_some_and(|t|t.layout.as_ref().is_some_and(|l|l.visible_end==t.content.chars().count())&&!t.contours.is_empty()&&t.contours.iter().flatten().all(|point|(*point-Pt::new(230.,210.)).length()>=58.-0.5)),
                             "wrap-inside-visible"=>wrap.is_some_and(|w|w.mode==omadesign::text_geometry::WrapMode::ObjectShape&&w.invert)&&head.is_some_and(|t|!t.contours.is_empty()&&t.contours.iter().flatten().all(|point|(*point-Pt::new(230.,210.)).length()<=58.+wrap.unwrap().offset[0]+0.5)),
                             "wrap-inside"=>wrap.is_some_and(|w|w.mode==omadesign::text_geometry::WrapMode::ObjectShape&&w.invert&&w.offset[0]>0.),
                             "wrap-jump"=>wrap.is_some_and(|w|w.mode==omadesign::text_geometry::WrapMode::JumpObject),
@@ -1784,7 +1794,7 @@ impl eframe::App for Capture {
                         Err(error) => self.errors.push(format!("Native save failed: {error}")),
                     }
                 }
-                if self.scene=="area-type" || self.scene=="area-options" || self.scene=="area-invert" {
+                if self.scene=="area-type" || self.scene=="area-options" || self.scene=="area-invert" || self.scene=="area-valign" {
                     let encoded=omadesign::project::encode(&self.studio.doc).unwrap();fs::write(self.directory.join(format!("{}.oma",self.scene)),&encoded).unwrap();let restored=omadesign::project::decode(&encoded).unwrap();
                     let frames:Vec<_>=restored.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter_map(|s|if let Geom::Text(t)=&s.geom{t.frame.as_ref().map(|f|serde_json::json!({"id":s.id,"frame":f,"thread":t.thread,"source_characters":t.content.chars().count(),"visible_range":t.layout.as_ref().map(|l|(l.visible_start,l.visible_end)),"overflow":t.layout.as_ref().is_some_and(|l|l.overflow)}))}else{None}).collect();
                     fs::write(self.directory.join(format!("{}-export.svg",self.scene)),omadesign::svg::export(&restored).unwrap()).unwrap();
