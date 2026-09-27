@@ -19,6 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let rich = RichText::from_run(&source, 0, source.content.chars().count());
     let ctx = eframe::egui::Context::default();
+    omadesign::ui::theme::apply(&ctx);
     let mut copied = omadesign::app::Studio::new();
     copied.show_welcome = false;
     copied.active_layer = Some(1);
