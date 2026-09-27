@@ -600,12 +600,26 @@ impl Workspace {
             }
         }
     }
+    fn restore_unsent(&mut self, mut request: String, mut attachments: Vec<Attachment>) {
+        // The composer stays editable while preparation runs. Preserve both the
+        // unsent turn and any next draft, including pending paste destinations.
+        if !request.is_empty() && !self.request.is_empty() {
+            request.push('\n');
+        }
+        let offset = request.chars().count();
+        for job in &mut self.attachment_jobs {
+            job.at += offset;
+            job.end += offset;
+        }
+        request.push_str(&self.request);
+        attachments.append(&mut self.attachments);
+        self.request = request;
+        self.attachments = attachments;
+        self.focus_prompt = true;
+    }
     pub fn stop(&mut self) {
         if let Some(job) = self.turn_job.take() {
-            if self.request.is_empty() {
-                self.request = job.request;
-                self.attachments = job.attachments;
-            }
+            self.restore_unsent(job.request, job.attachments);
             self.busy = false;
             self.status = "Stopped preparing attachments".into();
             return;
@@ -613,7 +627,9 @@ impl Workspace {
         if let Some(c) = &self.connection {
             c.cancel();
         }
-        self.pending_prompt = None;
+        if let Some((request, attachments)) = self.pending_prompt.take() {
+            self.restore_unsent(request, attachments);
+        }
         self.status = "Stopping…".into();
         self.permissions.clear();
     }
@@ -654,10 +670,7 @@ impl Workspace {
                 self.error = e;
                 self.busy = false;
                 self.status = "Could not send attachments".into();
-                if self.request.is_empty() {
-                    self.request = job.request;
-                    self.attachments = job.attachments;
-                }
+                self.restore_unsent(job.request, job.attachments);
             }
         }
 
@@ -916,6 +929,87 @@ impl Drop for Workspace {
         self.writer.take();
         if let Some(writer) = self.writer_thread.take() {
             let _ = writer.join();
+        }
+    }
+}
+
+#[cfg(test)]
+mod attachment_recovery_tests {
+    use super::*;
+
+    #[test]
+    fn attachment_failed_or_stopped_send_preserves_concurrent_draft_and_paste_position() {
+        for scenario in ["failed", "stopped", "connecting"] {
+            let mut studio = Studio::new();
+            let ctx = eframe::egui::Context::default();
+            let mut workspace = Workspace::default();
+            workspace.new_thread(&studio);
+            let attachment = |id: &str| Attachment {
+                id: id.into(),
+                kind: attachments::Kind::File,
+                mime: "application/pdf".into(),
+                name: format!("{id}.pdf"),
+                size: 1,
+                source: format!("/tmp/{id}.pdf").into(),
+                dimensions: None,
+                delivery: String::new(),
+                preview: None,
+                thumbnail: None,
+            };
+            let old = attachment("old");
+            let new = attachment("new");
+            let old_request = format!("Previous {}", old.token());
+            let next_request = format!("Next {}", new.token());
+            workspace.request = next_request.clone();
+            workspace.attachments = vec![new];
+            let (_paste_tx, paste_rx) = mpsc::channel();
+            workspace.attachment_jobs.push(attachments::Job {
+                thread: workspace.thread.as_ref().unwrap().id.clone(),
+                at: 2,
+                end: 4,
+                replaced: "xt".into(),
+                rx: paste_rx,
+            });
+            if scenario == "connecting" {
+                workspace.pending_prompt = Some((old_request.clone(), vec![old]));
+                workspace.stop();
+            } else {
+                let (tx, rx) = mpsc::channel();
+                workspace.turn_job = Some(attachments::TurnJob {
+                    rx,
+                    request: old_request.clone(),
+                    attachments: vec![old],
+                });
+                workspace.busy = true;
+                if scenario == "failed" {
+                    tx.send(Err("Attachment disappeared before send".into()))
+                        .unwrap();
+                    workspace.poll(&mut studio, &ctx);
+                    assert!(workspace.error.contains("disappeared"));
+                } else {
+                    workspace.stop();
+                }
+                assert!(!workspace.busy);
+            }
+            assert_eq!(workspace.request, format!("{old_request}\n{next_request}"));
+            assert_eq!(
+                workspace
+                    .attachments
+                    .iter()
+                    .map(|a| a.id.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["old", "new"]
+            );
+            assert_eq!(
+                workspace.attachment_jobs[0].at,
+                old_request.chars().count() + 3
+            );
+            assert_eq!(
+                workspace.attachment_jobs[0].end,
+                old_request.chars().count() + 5
+            );
+            assert!(workspace.pending_prompt.is_none());
+            assert!(workspace.turn_job.is_none());
         }
     }
 }
