@@ -183,6 +183,12 @@ mod tests {
         separated.manual_kern.insert(1, 100.);
         assert_eq!(glyph_count(&separated), 2);
         assert_eq!(glyph_count(&fi), 1);
+        let mut discretionary = run("ct ct");
+        discretionary.features.push((*b"dlig", 1));
+        assert_eq!(glyph_count(&discretionary), 3);
+        discretionary.manual_kern.insert(1, 100.);
+        assert_eq!(glyph_count(&discretionary), 4, "The manually kerned pair splits its discretionary ligature");
+        assert_eq!(compose(&discretionary)[0].glyphs.last().unwrap().cluster, 3, "The adjacent discretionary ligature remains intact");
         r.replace_text(0, 0, "é", None);
         assert_eq!(r.manual_kern.get(&2), Some(&100.));
         r.replace_text(0, 1, "", None);

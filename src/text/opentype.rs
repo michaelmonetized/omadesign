@@ -134,7 +134,7 @@ pub(super) fn ranged_features(
         let from = mapping.iter().find(|(_, ch, _)| *ch >= at - 1).map_or(visible_len, |(byte, _, _)| *byte);
         let to = mapping.iter().find(|(_, ch, _)| *ch >= at + 1).map_or(visible_len, |(byte, _, _)| *byte);
         if from < to {
-            for tag in [b"liga", b"clig"] {features.push(byte_feature(tag, 0, from, to));}
+            for tag in [b"liga", b"clig", b"dlig", b"hlig"] {features.push(byte_feature(tag, 0, from, to));}
         }
     }
     features
