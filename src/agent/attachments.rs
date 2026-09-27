@@ -256,7 +256,7 @@ fn native(content: ClipboardContent, dir: &Path) -> Result<Prepared, String> {
             let doc = if text.starts_with("omadesign-objects:") {
                 crate::project::decode(payload)?
             } else {
-                let shapes: Vec<crate::document::Shape> = serde_json::from_str(payload)
+                let shapes = crate::project::decode_clipboard_shapes(payload)
                     .map_err(|e| format!("Invalid copied objects: {e}"))?;
                 let mut doc = crate::document::Document::new("Copied objects", 1024., 768., 96.);
                 doc.artboards.clear();
@@ -583,6 +583,52 @@ mod tests {
                 .err()
                 .unwrap()
                 .contains("20 attachments")
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn attachment_legacy_object_preview_preserves_migrated_effect_appearance() {
+        let dir = dir();
+        let legacy = include_str!("../../tests/fixtures/legacy-effects-v6.oma");
+        let value: serde_json::Value = serde_json::from_str(legacy).unwrap();
+        let text = format!(
+            "omadesign-shapes:{}",
+            value["doc"]["layers"][0]["kind"]["Vector"]["shapes"]
+        );
+        let migrated = crate::project::decode(legacy).unwrap();
+        let mut expected = crate::document::Document::new("Copied objects", 1024., 768., 96.);
+        expected.artboards.clear();
+        expected.layers = vec![crate::document::Layer::vector("Objects")];
+        *expected.layers[0].kind.shapes_mut().unwrap() =
+            migrated.layers[0].kind.shapes().unwrap().to_vec();
+        let prepared = native(ClipboardContent::Text(text), &dir).unwrap();
+        let attachment = &prepared.attachments[0];
+        let saved =
+            crate::project::decode(&std::fs::read_to_string(&attachment.source).unwrap()).unwrap();
+        for (actual, original) in saved.layers[0]
+            .kind
+            .shapes()
+            .unwrap()
+            .iter()
+            .zip(expected.layers[0].kind.shapes().unwrap())
+        {
+            assert_eq!(actual.filters, original.filters);
+        }
+        let expected_preview = crate::compositor::render_view(
+            &expected,
+            crate::compositor::View {
+                scale: 1.,
+                offset: crate::geom::Pt::ZERO,
+            },
+            1024,
+            768,
+            crate::compositor::Draft::none(),
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read(attachment.preview.as_ref().unwrap()).unwrap(),
+            expected_preview.encode_png().unwrap(),
+            "The agent must see the same legacy effects as opening the source document"
         );
         std::fs::remove_dir_all(dir).unwrap();
     }
