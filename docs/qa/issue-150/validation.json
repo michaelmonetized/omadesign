@@ -33,5 +33,12 @@
     "after": 1,
     "consecutive": 0,
     "second_paragraph_uses_default_hyphenation_off": true
+  },
+  "inverted_wrap": {
+    "source_commit": "2f9a41c7",
+    "frames": 120,
+    "fps": 10,
+    "native_errors": 0,
+    "ctrl_s_and_app_reopen": true
   }
 }
