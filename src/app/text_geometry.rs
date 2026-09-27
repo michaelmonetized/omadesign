@@ -537,3 +537,23 @@ impl Studio {
         self.status = "area text inside shape — the frame remains editable".into();
     }
 }
+
+impl Studio {
+    /// Explicit Transform dimensions scale a threaded story's source typography once.
+    pub fn transform_shape_with_text_scale(&mut self, layer: usize, id: u64, destination: Bounds) {
+        let Some(shape) = self.doc.find_shape(layer, id).cloned() else { return; };
+        let bounds = shape.geom.bbox();
+        let mut after = shape.geom.clone();
+        after.map_into_with_text_scale(bounds, destination);
+        let mut commands = vec![Cmd::SetGeom { layer, id, before: shape.geom, after, rot_before: shape.rotation, rot_after: shape.rotation }];
+        let head = self.story_head((layer,id));
+        if head != (layer,id) && let Some(source) = self.doc.find_shape(head.0,head.1) {
+            let mut after = source.geom.clone();
+            if let Geom::Text(run) = &mut after {
+                crate::text_geometry::scale_typography(run,destination.width()/bounds.width().max(0.001),destination.height()/bounds.height().max(0.001));
+                commands.push(Cmd::SetGeom { layer:head.0,id:head.1,before:source.geom.clone(),after,rot_before:source.rotation,rot_after:source.rotation });
+            }
+        }
+        self.commit(Cmd::Batch(commands));
+    }
+}

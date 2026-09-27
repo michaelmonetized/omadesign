@@ -1702,3 +1702,33 @@ mod explicit_transform_tests {
         assert_eq!(scaled.px,40.);assert_eq!(scaled.frame.as_ref().unwrap().inset,[4.;4]);assert!((bounds.min-before.min).length()<0.001);assert!((bounds.size()-after.size()).length()<0.001);
     }
 }
+
+/// Scale source typography without changing any frame's bounds or thread links.
+pub fn scale_typography(run: &mut TypeRun, sx: f32, sy: f32) {
+    let top = run.origin.y - run.px * 0.85;
+    run.px *= sy;
+    run.origin.y = top + run.px * 0.85;
+    run.tracking *= sx;
+    run.leading *= sy;
+    run.scale_character_metrics(sy);
+    if (sx - sy).abs() > 0.001 && sy.abs() > 0.001 {
+        run.set_character_style(0, run.content.chars().count(), |span| span.hscale = Some(span.hscale.unwrap_or(100.) * sx / sy));
+    }
+    run.layout = None;
+}
+
+#[cfg(test)]
+mod threaded_transform_tests {
+    use super::*;
+    #[test]
+    fn follower_transform_scales_story_once_and_undo_restores_bounds_and_type() {
+        let mut studio=crate::app::Studio::new();studio.active_layer=Some(1);studio.text_px=20.;
+        studio.place_area_text(Bounds::from_min_size(Pt::new(10.,10.),Pt::new(140.,90.)));studio.type_insert(&"A long story continues across a frame. ".repeat(12));studio.commit_type_edit();let head=studio.selection[0];
+        studio.place_area_text(Bounds::from_min_size(Pt::new(200.,10.),Pt::new(140.,90.)));studio.type_insert("");studio.commit_type_edit();let tail=studio.selection[0];studio.thread_text_frames(head,tail).unwrap();
+        let before=studio.doc.find_shape(tail.0,tail.1).unwrap().geom.bbox();let source_before=studio.doc.find_shape(head.0,head.1).unwrap().geom.bbox();
+        studio.transform_shape_with_text_scale(tail.0,tail.1,Bounds::from_min_size(before.min,before.size()*2.));
+        let Geom::Text(head_run)=&studio.doc.find_shape(head.0,head.1).unwrap().geom else {panic!()};assert_eq!(head_run.px,40.);assert_eq!(head_run.frame.as_ref().unwrap().size,source_before.size());
+        let Geom::Text(tail_run)=&studio.doc.find_shape(tail.0,tail.1).unwrap().geom else {panic!()};assert_eq!(tail_run.layout.as_ref().unwrap().visible_run.as_ref().unwrap().px,40.);assert!(tail_run.content.is_empty());
+        studio.undo();let Geom::Text(head_run)=&studio.doc.find_shape(head.0,head.1).unwrap().geom else {panic!()};assert_eq!(head_run.px,20.);assert_eq!(studio.doc.find_shape(tail.0,tail.1).unwrap().geom.bbox(),before);
+    }
+}

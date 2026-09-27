@@ -1009,15 +1009,7 @@ impl Geom {
         if let Geom::Text(run) = self && run.frame.is_some() {
             let sx = dst.width() / src.width().max(0.001);
             let sy = dst.height() / src.height().max(0.001);
-            let top = run.origin.y - run.px * 0.85;
-            run.px *= sy;
-            run.origin.y = top + run.px * 0.85;
-            run.tracking *= sx;
-            run.leading *= sy;
-            run.scale_character_metrics(sy);
-            if (sx - sy).abs() > 0.001 && sy.abs() > 0.001 {
-                run.set_character_style(0, run.content.chars().count(), |span| span.hscale = Some(span.hscale.unwrap_or(100.) * sx / sy));
-            }
+            crate::text_geometry::scale_typography(run, sx, sy);
             if let Some(frame) = &mut run.frame {
                 for (i, value) in frame.inset.iter_mut().enumerate() { *value *= if i % 2 == 0 { sy } else { sx }; }
             }
