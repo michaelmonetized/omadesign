@@ -45,3 +45,7 @@ Normal wrapping: Katakana words stay intact, Anywhere explicitly permits overflo
 breaks, discretionary hyphens remain available, and runt avoidance only moves
 whole Unicode words. All 10 composer regressions pass. These two followups do not
 change the ASCII native scenario recorded above.
+
+## Review regressions
+
+Followup source `bdbe5507` fixes the last-word hyphenation rule with trailing punctuation or whitespace, keeps searching for a runt repair until both configured thresholds pass, and exports desired paragraph word/letter spacing with character tracking added. [Focused test output](review-regressions.txt) records 22 passing text tests, including the three new regressions. The original native recording remains applicable: these changes preserve its existing ASCII paragraph workflow.
