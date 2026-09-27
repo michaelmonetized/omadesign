@@ -302,7 +302,10 @@ pub fn frame_inspector(ui: &mut Ui, studio: &mut Studio) {
                     ui.selectable_value(&mut frame.valign, value, label);
                 }
             });
-            ui.checkbox(&mut frame.auto_height, "Auto height");
+            ui.add_enabled(
+                frame.contour.is_none(),
+                egui::Checkbox::new(&mut frame.auto_height, "Auto height"),
+            );
             egui::ComboBox::from_id_salt("frame-overflow")
                 .selected_text(format!("{:?}", frame.overflow))
                 .show_ui(ui, |ui| {

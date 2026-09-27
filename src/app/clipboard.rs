@@ -27,6 +27,26 @@ mod tests {
             .unwrap()
     }
 
+    fn story_clipboard_fixture()->(Studio,Vec<(usize,u64)>) {
+        let mut studio=Studio::new();studio.active_layer=Some(1);studio.text_px=20.;
+        studio.place_area_text(Bounds::from_min_size(Pt::new(0.,0.),Pt::new(160.,65.)));studio.type_insert(&"Every original word travels through the story frames with its styling intact. ".repeat(6));studio.commit_type_edit();let head=studio.selection[0];
+        let middle=studio.empty_thread_frame(head,Pt::new(220.,0.)).unwrap();studio.thread_text_frames(head,middle).unwrap();let tail=studio.empty_thread_frame(middle,Pt::new(440.,0.)).unwrap();studio.thread_text_frames(middle,tail).unwrap();
+        studio.selection=vec![head];studio.patch_type(|run|{run.font="/usr/share/fonts/gsfonts/NimbusSans-Regular.otf".into();run.set_character_style(0,run.content.chars().count(),|s|s.tracking=Some(20.));});(studio,vec![head,middle,tail])
+    }
+    fn story_run(studio:&Studio,id:(usize,u64))->TypeRun {let Geom::Text(run)=&studio.doc.find_shape(id.0,id.1).unwrap().geom else{panic!()};run.clone()}
+    #[test]
+    fn single_follower_copy_materializes_head_style_and_visible_source() {
+        let (mut source,ids)=story_clipboard_fixture();let original=story_run(&source,ids[1]);let expected=original.layout.as_ref().unwrap().visible_run.as_ref().unwrap();source.selection=vec![ids[1]];let payload=copy(&mut source);let mut target=Studio::new();target.paste_clipboard(Some(&payload));let pasted=story_run(&target,target.selection[0]);assert!(pasted.thread.is_none());assert_eq!(pasted.content,expected.content);assert_eq!(pasted.font,expected.font);assert_eq!(pasted.spans,expected.spans);assert!(!pasted.content.is_empty());
+    }
+    #[test]
+    fn partial_story_copy_materializes_all_selected_frames_without_duplicate_tail() {
+        let (mut source,ids)=story_clipboard_fixture();let expected:Vec<_>=ids[..2].iter().map(|&id|story_run(&source,id).layout.unwrap().visible_run.unwrap().content).collect();source.selection=ids[..2].to_vec();let payload=copy(&mut source);let mut target=Studio::new();target.paste_clipboard(Some(&payload));assert_eq!(target.selection.len(),2);for (index,&id) in target.selection.iter().enumerate(){let run=story_run(&target,id);assert!(run.thread.is_none());assert_eq!(run.content,expected[index]);}
+    }
+    #[test]
+    fn whole_story_copy_keeps_one_source_and_remaps_all_three_links() {
+        let (mut source,ids)=story_clipboard_fixture();let original=story_run(&source,ids[0]).content;source.selection=ids.clone();let payload=copy(&mut source);let mut target=Studio::new();target.paste_clipboard(Some(&payload));let selected=target.selection.clone();assert_eq!(selected.len(),3);let mapped:Vec<_>=selected.iter().map(|&id|story_run(&target,id)).collect();assert_eq!(mapped[0].content,original);assert!(mapped[1].content.is_empty()&&mapped[2].content.is_empty());for (i,run) in mapped.iter().enumerate(){let link=run.thread.as_ref().unwrap();assert_eq!(link.story,selected[0].1);assert_eq!(link.prev,if i==0{None}else{Some(selected[i-1].1)});assert_eq!(link.next,if i==2{None}else{Some(selected[i+1].1)});assert!(!ids.iter().any(|&(_,id)|id==selected[i].1));}
+    }
+
     #[test]
     fn legacy_clipboard_effects_keep_project_migration_appearance() {
         let old = include_str!("../../tests/fixtures/legacy-effects-v6.oma");
@@ -581,7 +601,7 @@ impl Studio {
             .collect();
         let copied: HashSet<_> = shapes.iter().map(|s| s.id).collect();
         let copied_ids: HashMap<_,_> = copied.iter().map(|id|(*id,*id)).collect();
-        for shape in &mut shapes { crate::text_geometry::remap_copy(shape, &copied_ids); }
+        for shape in &mut shapes { crate::text_geometry::remap_copy_in_document(&self.doc, shape, &copied_ids); }
         // A copied subtree no longer inherits frames that were not copied.
         // Bake their rotation into the root and translate its whole subtree,
         // preserving the same canvas position as ordinary position-preserving paste.

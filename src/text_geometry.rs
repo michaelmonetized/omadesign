@@ -165,6 +165,7 @@ pub struct TextGeometryLayout {
     pub visible_start: usize,
     pub visible_end: usize,
     pub visible_text: String,
+    pub visible_run: Option<Box<TypeRun>>,
     pub hyphen_tail: usize,
 }
 
@@ -248,9 +249,18 @@ pub fn layout_on_path(run: &TypeRun) -> TextGeometryLayout {
         for &(index, x) in &line.carets {
             let distance = (offset + x).clamp(0., span);
             if let Some((point, tangent)) = path_position(run, distance) {
-                let metrics=crate::text::character_metrics(run,index.min(run.content.chars().count().saturating_sub(1)));
-                result.carets.push((index, point-tangent.perp()*metrics.baseline_shift.unwrap(), tangent));
-                result.caret_heights.push((index,run.px*metrics.vscale.unwrap()/100.));
+                let metrics = crate::text::character_metrics(
+                    run,
+                    index.min(run.content.chars().count().saturating_sub(1)),
+                );
+                result.carets.push((
+                    index,
+                    point - tangent.perp() * metrics.baseline_shift.unwrap(),
+                    tangent,
+                ));
+                result
+                    .caret_heights
+                    .push((index, run.px * metrics.vscale.unwrap() / 100.));
             }
         }
         for pair in line.carets.windows(2) {
@@ -263,8 +273,10 @@ pub fn layout_on_path(run: &TypeRun) -> TextGeometryLayout {
                 path_position(run, (offset + x).min(span)),
                 path_position(run, (offset + y).min(span)),
             ) {
-                let metrics=crate::text::character_metrics(run,a);let height=run.px*metrics.vscale.unwrap()/100.;
-                let p=p-t.perp()*metrics.baseline_shift.unwrap();let q=q-u.perp()*metrics.baseline_shift.unwrap();
+                let metrics = crate::text::character_metrics(run, a);
+                let height = run.px * metrics.vscale.unwrap() / 100.;
+                let p = p - t.perp() * metrics.baseline_shift.unwrap();
+                let q = q - u.perp() * metrics.baseline_shift.unwrap();
                 result.selections.push((
                     a,
                     b,
@@ -434,6 +446,18 @@ pub fn reconcile_links(doc: &Document) -> Vec<Cmd> {
     commands
 }
 
+/// Copying a subset of a story materializes each selected frame independently.
+pub fn remap_copy_in_document(doc: &Document, shape: &mut Shape, ids: &HashMap<u64, u64>) {
+    let incomplete=match &shape.geom {Geom::Text(run)=>run.thread.as_ref().filter(|thread|doc.layers.iter().filter_map(|layer|layer.kind.shapes()).flatten().any(|other|matches!(&other.geom,Geom::Text(text) if text.thread.as_ref().is_some_and(|link|link.story==thread.story)&&!ids.contains_key(&other.id)))).map(|thread|thread.story),_=>None};
+    if let Some(story) = incomplete {
+        let mut detached = ids.clone();
+        detached.remove(&story);
+        remap_copy(shape, &detached);
+    } else {
+        remap_copy(shape, ids);
+    }
+}
+
 pub fn remap_copy(shape: &mut Shape, ids: &HashMap<u64, u64>) {
     if let Geom::Text(run) = &mut shape.geom {
         if let Some(on) = &mut run.on_path {
@@ -456,7 +480,19 @@ pub fn remap_copy(shape: &mut Shape, ids: &HashMap<u64, u64>) {
                     next: thread.next.and_then(|id| ids.get(&id).copied()),
                 });
             } else {
-                if let Some(layout) = &run.layout {
+                if let Some(visible) = run
+                    .layout
+                    .as_ref()
+                    .and_then(|layout| layout.visible_run.as_deref())
+                    .cloned()
+                {
+                    let origin = run.origin;
+                    let top = run.origin.y - run.px * 0.85;
+                    let frame = run.frame.clone();
+                    *run = visible;
+                    run.frame = frame;
+                    run.origin = Pt::new(origin.x, top + run.px * 0.85);
+                } else if let Some(layout) = &run.layout {
                     run.content = layout.visible_text.clone();
                 }
                 run.thread = None;

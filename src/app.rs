@@ -1804,7 +1804,7 @@ impl Studio {
                         let old = shape.id;
                         shape.id = shape_ids[&old];
                         crate::layout_components::remap_duplicate(shape, &shape_ids);
-                        crate::text_geometry::remap_copy(shape, &shape_ids);
+                        crate::text_geometry::remap_copy_in_document(&self.doc, shape, &shape_ids);
                         shape.layout.parent =
                             shape.layout.parent.and_then(|p| shape_ids.get(&p).copied());
                         shape.geom.translate(delta);
@@ -1879,7 +1879,7 @@ impl Studio {
             } else if let Some(mut shape) = self.doc.find_shape(li, id).cloned() {
                 shape.id = remap[&id];
                 crate::layout_components::remap_duplicate(&mut shape, &remap);
-                crate::text_geometry::remap_copy(&mut shape, &remap);
+                crate::text_geometry::remap_copy_in_document(&self.doc, &mut shape, &remap);
                 if let Some(parent) = shape.layout.parent {
                     shape.layout.parent = Some(*remap.get(&parent).unwrap_or(&parent));
                 }

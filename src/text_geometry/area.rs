@@ -328,7 +328,6 @@ struct PlacedLine {
     y: f32,
     width: f32,
     row: usize,
-    ascent: f32,
     descent: f32,
 }
 fn line_metrics(run: &TypeRun, line: &crate::text::LayoutLine) -> (f32, f32) {
@@ -417,7 +416,21 @@ fn layout_frame_continued(
     } else {
         frame.overflow
     };
-    let height_limit = !frame.auto_height && mode != Overflow::Visible;
+    let height_limit = frame.contour.is_some() || (!frame.auto_height && mode != Overflow::Visible);
+    let flow_bottom = obstacles
+        .iter()
+        .filter(|obstacle| obstacle.wrap.invert)
+        .map(|obstacle| obstacle.bounds.max.y + obstacle.wrap.offset[2])
+        .fold(f32::INFINITY, f32::min);
+    if inner.width() <= 0. || (height_limit && inner.height() <= 0.) {
+        return TextGeometryLayout {
+            overflow: start < total,
+            visible_start: start,
+            visible_end: start,
+            carets: vec![(start, frame_run.origin, Pt::new(1., 0.))],
+            ..Default::default()
+        };
+    }
     let mut horizontal_overflow = false;
     // Empty stories still expose an insertion caret.
     'rows: while index < total && row < 100000 {
@@ -435,6 +448,9 @@ fn layout_frame_continued(
         let line_height = first.height.max(ascent + descent);
         let y = previous_baseline.map_or(inner.min.y + ascent, |baseline| baseline + line_height);
         let row_top = y - ascent;
+        if row_top > flow_bottom {
+            break;
+        }
         if height_limit && y + descent > inner.max.y + 0.001 {
             break;
         }
@@ -461,7 +477,7 @@ fn layout_frame_continued(
             let Some(line) = composed.first().cloned() else {
                 break;
             };
-            let (ascent, descent) = line_metrics(&local, &line);
+            let (_ascent, descent) = line_metrics(&local, &line);
             let baseline = y;
             if height_limit && baseline + descent > inner.max.y + 0.001 {
                 break 'rows;
@@ -469,7 +485,9 @@ fn layout_frame_continued(
             let count = line.end.min(total - index);
             let newline = story.content.chars().nth(index + count) == Some('\n');
             let consumed = count + usize::from(newline);
-            if consumed==0{break 'rows;}
+            if consumed == 0 {
+                break 'rows;
+            }
             horizontal_overflow |= line.width > right - left + 0.01;
             let end = (index + consumed).min(total);
             consecutive = if line.hyphenated { consecutive + 1 } else { 0 };
@@ -482,7 +500,6 @@ fn layout_frame_continued(
                 y: baseline,
                 width: right - left,
                 row,
-                ascent,
                 descent,
             });
             index = end;
@@ -613,6 +630,7 @@ fn layout_frame_continued(
         hyphen_tail,
         ..Default::default()
     };
+    let mut emitted_line = false;
     for placed in placed {
         let dy = match align {
             VAlign::Top => 0.,
@@ -636,20 +654,30 @@ fn layout_frame_continued(
             }
         }
         for &(i, x) in &placed.line.carets {
-            let metrics=crate::text::character_metrics(story,(placed.start+i).min(total.saturating_sub(1)));
-            layout.caret_heights.push((placed.start+i,story.px*metrics.vscale.unwrap()/100.));
+            let metrics = crate::text::character_metrics(
+                story,
+                (placed.start + i).min(total.saturating_sub(1)),
+            );
+            layout
+                .caret_heights
+                .push((placed.start + i, story.px * metrics.vscale.unwrap() / 100.));
             layout.carets.push((
                 (placed.start + i).min(placed.end),
-                Pt::new(placed.x + x, placed.y + dy-metrics.baseline_shift.unwrap()),
+                Pt::new(
+                    placed.x + x,
+                    placed.y + dy - metrics.baseline_shift.unwrap(),
+                ),
                 Pt::new(1., 0.),
             ));
         }
         for pair in placed.line.carets.windows(2) {
             let (a, x) = pair[0];
             let (b, z) = pair[1];
-            let metrics=crate::text::character_metrics(story,placed.start+a);
-            let height=story.px*metrics.vscale.unwrap()/100.;let baseline=placed.y+dy-metrics.baseline_shift.unwrap();
-            let top=baseline-height*0.9;let bottom=baseline+height*0.2;
+            let metrics = crate::text::character_metrics(story, placed.start + a);
+            let height = story.px * metrics.vscale.unwrap() / 100.;
+            let baseline = placed.y + dy - metrics.baseline_shift.unwrap();
+            let top = baseline - height * 0.9;
+            let bottom = baseline + height * 0.2;
             layout.selections.push((
                 placed.start + a,
                 placed.start + b,
@@ -661,9 +689,10 @@ fn layout_frame_continued(
                 ],
             ));
         }
-        if !layout.visible_text.is_empty() {
+        if emitted_line {
             layout.visible_text.push('\n');
         }
+        emitted_line = true;
         layout
             .visible_text
             .push_str(&placed.line.text.replace('\u{ad}', ""));
@@ -686,6 +715,26 @@ fn layout_frame_continued(
             Pt::new(1., 0.),
         ));
     }
+    let mut visible = sliced_run(story, start);
+    visible.content = story
+        .content
+        .chars()
+        .skip(start)
+        .take(index - start)
+        .collect();
+    if overflow && mode == Overflow::Ellipsis {
+        visible.content = layout.visible_text.clone();
+    }
+    let count = visible.content.chars().count();
+    visible.spans.retain(|span| span.start < count);
+    for span in &mut visible.spans {
+        span.end = span.end.min(count);
+    }
+    visible
+        .paragraphs
+        .retain(|paragraph| paragraph.start < count);
+    visible.manual_kern.retain(|&index, _| index < count);
+    layout.visible_run = Some(Box::new(visible));
     layout
 }
 
@@ -931,7 +980,7 @@ pub fn reflow_areas(doc: &mut Document) {
         {
             if let Some(frame) = &mut t.frame {
                 t.wrap_width = Some((frame.size.x - frame.inset[1] - frame.inset[3]).max(1.));
-                if frame.auto_height {
+                if frame.auto_height && frame.contour.is_none() {
                     let bottom = layout
                         .contours
                         .iter()
@@ -1045,11 +1094,11 @@ pub fn reconcile_threads(before: &[(usize, Shape)], doc: &Document) -> Vec<Cmd> 
                 if shape.id == head
                     && let Some(original) = old.get(&thread.story)
                 {
-                    let top = after.origin.y-after.px*0.85;
-                        let origin = after.origin;
+                    let top = after.origin.y - after.px * 0.85;
+                    let origin = after.origin;
                     let frame = after.frame.clone();
                     after = (*original).clone();
-                    after.origin = Pt::new(origin.x,top+after.px*0.85);
+                    after.origin = Pt::new(origin.x, top + after.px * 0.85);
                     after.frame = frame;
                 }
             }
@@ -1223,7 +1272,7 @@ mod tests {
         assert_eq!(text.px, 20.);
         assert_eq!(text.frame.as_ref().unwrap().size, Pt::new(90., 120.));
         assert_eq!(text.wrap_width, Some(90.));
-        assert_eq!(frame_bounds(&text).unwrap().min,before.min);
+        assert_eq!(frame_bounds(&text).unwrap().min, before.min);
     }
     #[test]
     fn threads_reflow_delete_middle_and_undo_round_trip() {
@@ -1620,9 +1669,23 @@ mod range_metrics_tests {
     }
 }
 
-#[cfg(test)] mod frame_anchor_tests {
+#[cfg(test)]
+mod frame_anchor_tests {
     use super::*;
-    #[test] fn changing_font_size_keeps_frame_edges_fixed() {
-        let mut studio=crate::app::Studio::new();studio.active_layer=Some(1);studio.place_area_text(Bounds::from_min_size(Pt::new(20.,30.),Pt::new(200.,100.)));studio.type_insert("A stable frame");studio.commit_type_edit();let id=studio.selection[0];let before=studio.doc.find_shape(id.0,id.1).unwrap().geom.bbox();studio.patch_type(|run|run.px=38.);let after=studio.doc.find_shape(id.0,id.1).unwrap().geom.bbox();assert_eq!(before,after);
+    #[test]
+    fn changing_font_size_keeps_frame_edges_fixed() {
+        let mut studio = crate::app::Studio::new();
+        studio.active_layer = Some(1);
+        studio.place_area_text(Bounds::from_min_size(
+            Pt::new(20., 30.),
+            Pt::new(200., 100.),
+        ));
+        studio.type_insert("A stable frame");
+        studio.commit_type_edit();
+        let id = studio.selection[0];
+        let before = studio.doc.find_shape(id.0, id.1).unwrap().geom.bbox();
+        studio.patch_type(|run| run.px = 38.);
+        let after = studio.doc.find_shape(id.0, id.1).unwrap().geom.bbox();
+        assert_eq!(before, after);
     }
 }
