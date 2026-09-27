@@ -262,6 +262,7 @@ pub fn frame_inspector(ui: &mut Ui, studio: &mut Studio) {
         return;
     };
     let before = frame.clone();
+    let linked = run.thread.as_ref().is_some_and(|thread| thread.next.is_some());
     egui::CollapsingHeader::new("Text frame")
         .default_open(true)
         .show(ui, |ui| {
@@ -315,7 +316,9 @@ pub fn frame_inspector(ui: &mut Ui, studio: &mut Studio) {
                         Overflow::Ellipsis,
                         Overflow::Flow,
                     ] {
-                        ui.selectable_value(&mut frame.overflow, mode, format!("{mode:?}"));
+                        ui.add_enabled_ui(!linked || mode == Overflow::Flow, |ui| {
+                            ui.selectable_value(&mut frame.overflow, mode, format!("{mode:?}"));
+                        });
                     }
                 });
             if frame.overflow == Overflow::Flow {

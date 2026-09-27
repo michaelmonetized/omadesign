@@ -1689,3 +1689,16 @@ mod frame_anchor_tests {
         assert_eq!(before, after);
     }
 }
+
+#[cfg(test)]
+mod explicit_transform_tests {
+    use super::*;
+    #[test]
+    fn explicit_transform_scales_glyph_metrics_while_frame_resize_reflows() {
+        let run=TypeRun{content:"Area text".into(),px:20.,frame:Some(TextFrame{size:Pt::new(160.,80.),inset:[2.;4],..Default::default()}),..Default::default()};
+        let mut normal=Geom::Text(run.clone());let before=normal.bbox();let after=Bounds{min:before.min,max:before.min+before.size()*2.};
+        normal.map_into(before,after);let Geom::Text(resized)=normal else {unreachable!()};assert_eq!(resized.px,20.);
+        let mut scaled=Geom::Text(run);scaled.map_into_with_text_scale(before,after);let bounds=scaled.bbox();let Geom::Text(scaled)=scaled else {unreachable!()};
+        assert_eq!(scaled.px,40.);assert_eq!(scaled.frame.as_ref().unwrap().inset,[4.;4]);assert!((bounds.min-before.min).length()<0.001);assert!((bounds.size()-after.size()).length()<0.001);
+    }
+}

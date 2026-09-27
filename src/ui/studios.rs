@@ -1587,7 +1587,7 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
                 studio.set_layout_frame_bounds(layer, id, destination);
             } else {
                 edit_shape_geometry(studio, layer, id, |geometry| {
-                    geometry.map_into(bounds, destination)
+                    geometry.map_into_with_text_scale(bounds, destination)
                 });
             }
         }

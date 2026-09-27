@@ -1002,6 +1002,30 @@ impl Geom {
         }
     }
 
+    /// Explicit Transform sizing scales typography along with an area frame.
+    /// Canvas handles and Text frame dimensions continue to reflow at the same type size.
+    pub fn map_into_with_text_scale(&mut self, src: Bounds, dst: Bounds) {
+        self.map_into(src, dst);
+        if let Geom::Text(run) = self && run.frame.is_some() {
+            let sx = dst.width() / src.width().max(0.001);
+            let sy = dst.height() / src.height().max(0.001);
+            let top = run.origin.y - run.px * 0.85;
+            run.px *= sy;
+            run.origin.y = top + run.px * 0.85;
+            run.tracking *= sx;
+            run.leading *= sy;
+            run.scale_character_metrics(sy);
+            if (sx - sy).abs() > 0.001 && sy.abs() > 0.001 {
+                run.set_character_style(0, run.content.chars().count(), |span| span.hscale = Some(span.hscale.unwrap_or(100.) * sx / sy));
+            }
+            if let Some(frame) = &mut run.frame {
+                for (i, value) in frame.inset.iter_mut().enumerate() { *value *= if i % 2 == 0 { sy } else { sx }; }
+            }
+            run.layout = None;
+            run.contours = crate::text_geometry::shape_frame(run);
+        }
+    }
+
     pub fn map_into(&mut self, src: Bounds, dst: Bounds) {
         let sx = if src.width() < 1e-6 {
             1.0
