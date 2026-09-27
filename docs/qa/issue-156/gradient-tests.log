@@ -1,0 +1,11 @@
+    Blocking waiting for file lock on build directory
+   Compiling omadesign v0.6.0 (/home/michael/Projects/omadesign)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 10s
+     Running unittests src/lib.rs (target/debug/deps/omadesign-c58ab0ac9c063d1e)
+
+running 2 tests
+test ui::icons::gradient::tests::gradient_sparkle_has_alpha_and_distinct_colors_in_both_themes ... ok
+test ui::icons::gradient::tests::repeated_gradient_requests_share_a_texture_and_color_changes_do_not ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 713 filtered out; finished in 0.11s
+

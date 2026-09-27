@@ -1,0 +1,33 @@
+{
+  "checks": [
+    "zoom controls in status corner",
+    "actual size",
+    "fit view",
+    "zoom controls in status corner",
+    "actual size",
+    "fit view",
+    "zoom controls in status corner",
+    "actual size",
+    "fit view",
+    "zoom controls in status corner",
+    "actual size",
+    "fit view",
+    "zoom controls in status corner",
+    "actual size",
+    "fit view",
+    "agent open",
+    "agent closed",
+    "fit view",
+    "welcome sparkle and no fit"
+  ],
+  "fps": 10,
+  "frames": 420,
+  "input": "actual egui pointer and keyboard events",
+  "issue": "156",
+  "renderer": "native WGPU",
+  "size": [
+    1600,
+    1000
+  ],
+  "wall_seconds": 208.844648942
+}
