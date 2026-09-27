@@ -131,6 +131,7 @@ pub fn compose(run: &TypeRun) -> Arc<Vec<LayoutLine>> {
                 }
             }
             candidates.push((rest.len(), false));
+            for (at,hyphen) in &mut candidates {if *at==rest.len(){*hyphen=false;}}
             candidates.sort_unstable();
             candidates.dedup();
             candidates.retain(|(byte, _)| {
@@ -227,6 +228,9 @@ pub fn compose(run: &TypeRun) -> Arc<Vec<LayoutLine>> {
                         .filter(|i| *i > pa && *i < a)
                         .collect();
                     for split in opportunities.into_iter().rev() {
+                        let at=base+paragraph[..split].chars().count();
+                        if run.spans.iter().any(|s|s.no_break&&s.start<at&&at<s.end)||paragraph[..split].ends_with(['\u{a0}','\u{2011}','\u{2060}'])||paragraph[split..].starts_with(['\u{a0}','\u{2011}','\u{2060}']) {continue;}
+
                         if trim_width(&shape_line(
                             run,
                             face.as_ref(),
@@ -644,5 +648,38 @@ mod tests {
         }
         let off=metric(&sample);sample.paragraphs[0].hyphenate=true;let on=metric(&sample);
         eprintln!("justification stretch: off={off:?}, on={on:?}");assert!(on.0<off.0&&on.1<off.1);
+    }
+}
+
+#[cfg(test)] mod migration_regressions {
+    use super::*;
+    use crate::document::{Document,Shape,Style};
+    use crate::geom::{Geom,RuntRule};
+    #[test] fn new_wrap_semantics_roundtrip_and_legacy_point_stays_plain() {
+        for width in [None,Some(20.)] {
+            let mut document=Document::new("Roundtrip",400.,400.,96.);
+            let run=TypeRun{content:"unbreakableword".into(),px:24.,wrap_width:width,..Default::default()};
+            document.layers[1].kind.shapes_mut().unwrap().push(Shape::new(Geom::Text(run.clone()),Style::default()));
+            let json=crate::project::encode(&document).unwrap();
+            assert!(json.contains(if width.is_some(){"\"version\":8"}else{"\"version\":5"}));
+            let loaded=crate::project::decode(&json).unwrap();let Geom::Text(restored)=&loaded.layers[1].kind.shapes().unwrap()[0].geom else{panic!()};
+            assert!(restored.paragraphs.is_empty());assert_eq!(compose(&run).len(),compose(restored).len());
+            let legacy=json.replace("\"version\":8","\"version\":7").replace("\"version\":5","\"version\":7");
+            let loaded=crate::project::decode(&legacy).unwrap();let Geom::Text(restored)=&loaded.layers[1].kind.shapes().unwrap()[0].geom else{panic!()};
+            assert_eq!(!restored.paragraphs.is_empty(),width.is_some());
+            if width.is_some(){assert!(restored.paragraphs[0].overflow_wrap);}
+        }
+    }
+    #[test] fn trailing_discretionary_hyphen_is_invisible_without_break() {
+        let run=TypeRun{content:"word\u{ad}".into(),wrap_width:Some(500.),..Default::default()};
+        assert_eq!(compose(&run).len(),1);assert!(!compose(&run)[0].hyphenated);
+        let plain=TypeRun{content:"word".into(),..run.clone()};assert!((measure(&run).0-measure(&plain).0).abs()<0.01);assert_eq!(glyph_count(&run),glyph_count(&plain));
+    }
+    #[test] fn runt_rebalancing_preserves_no_break_ranges() {
+        let mut run=TypeRun{content:"one two three four".into(),px:24.,..Default::default()};
+        run.wrap_width=Some(measure(&TypeRun{content:"one two three".into(),..run.clone()}).0);
+        run.set_character_style(4,13,|s|s.no_break=true);
+        run.update_paragraphs(0,0,|p|p.runt=Some(RuntRule::default()));
+        assert!(compose(&run).iter().all(|line|line.start<=4||line.start>=13));
     }
 }

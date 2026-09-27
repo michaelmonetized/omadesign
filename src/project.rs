@@ -19,7 +19,7 @@ pub fn encode(doc: &Document) -> Result<String, String> {
     serde_json::to_string(&File {
         // Older readers must not silently strip a mask or change stroke placement.
         // Keep plain documents compatible with v5; v1-v8 remain readable here.
-        version: if doc.layers.iter().filter_map(|l| l.kind.shapes()).flatten().any(|s| matches!(&s.geom, crate::geom::Geom::Text(t) if !t.paragraphs.is_empty() || !t.spans.is_empty() || matches!(t.align, crate::geom::TextAlign::Justify{..}))) {
+        version: if doc.layers.iter().filter_map(|l| l.kind.shapes()).flatten().any(|s| matches!(&s.geom, crate::geom::Geom::Text(t) if t.wrap_width.is_some() || !t.paragraphs.is_empty() || !t.spans.is_empty() || matches!(t.align, crate::geom::TextAlign::Justify{..}))) {
             8
         } else if doc.layers.iter().any(|l| {
             l.fill_opacity != 1.
@@ -75,7 +75,7 @@ pub fn decode(s: &str) -> Result<Document, String> {
                     s.filters.migrate_legacy(s.blend);
                 }
                 if file.version < 8 {
-                    if let crate::geom::Geom::Text(t)=&mut s.geom {
+                    if let crate::geom::Geom::Text(t)=&mut s.geom && t.wrap_width.is_some() {
                         t.update_paragraphs(0,t.content.chars().count(),|p|p.overflow_wrap=true);
                     }
                 }
