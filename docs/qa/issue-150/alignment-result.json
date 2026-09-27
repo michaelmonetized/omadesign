@@ -1,0 +1,36 @@
+{
+  "frames": [
+    {
+      "frame": {
+        "auto_height": false,
+        "contour": null,
+        "inset": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "max_lines": null,
+        "overflow": "Clip",
+        "size": {
+          "x": 350.0,
+          "y": 250.0
+        },
+        "terminal_overflow": "Clip",
+        "valign": "Top"
+      },
+      "id": 14,
+      "overflow": false,
+      "source_characters": 39,
+      "thread": null,
+      "visible_range": [
+        0,
+        39
+      ]
+    }
+  ],
+  "recording_frames": 140,
+  "renderer": "native WGPU",
+  "saved_and_reopened": true,
+  "unresolved_input_targets": []
+}

@@ -20,7 +20,7 @@
     "ctrl_s_and_app_reopen": true
   },
   "focused_tests": {
-    "geometry": 27,
+    "geometry": 30,
     "clipboard": 15,
     "compact_inspector": 1,
     "failures": 0
@@ -39,6 +39,21 @@
     "frames": 120,
     "fps": 10,
     "native_errors": 0,
-    "ctrl_s_and_app_reopen": true
+    "ctrl_s_and_app_reopen": true,
+    "capture_binary_sha256": "2912dc0f5542e71dffa1e23ae9f8ff8aa15e39cf6a89e33242d56e629115e7d1"
+  },
+  "aligned_wrap": {
+    "source_commit": "c3c0c63e",
+    "harness_commit": "471a0353",
+    "frames": 140,
+    "fps": 10,
+    "native_errors": 0,
+    "ctrl_s_and_app_reopen": true,
+    "debug_dirty_layout_ms": {
+      "center": 56.6,
+      "bottom": 45.4,
+      "justify": 17.3
+    },
+    "capture_binary_sha256": "52321dcb09901f35db5fe9ce3480009942b734a6ba820d39edd99f4e5ef3a5f8"
   }
 }
