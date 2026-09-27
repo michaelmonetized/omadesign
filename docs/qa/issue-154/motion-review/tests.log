@@ -1,0 +1,6 @@
+
+running 1 test
+test app::motion_flip_followup_tests::motion_flip_reflects_posed_selection_and_all_keyframes_in_one_undo ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 706 filtered out; finished in 9.31s
+

@@ -1,0 +1,6 @@
+PASS: posed horizontal reflection
+PASS: undo restores exact artwork
+PASS: posed vertical reflection
+PASS: undo restores exact artwork
+PASS: posed horizontal reflection
+PASS: save reopen

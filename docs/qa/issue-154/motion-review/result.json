@@ -1,0 +1,20 @@
+{
+  "checks": [
+    "posed horizontal reflection",
+    "undo restores exact artwork",
+    "posed vertical reflection",
+    "undo restores exact artwork",
+    "posed horizontal reflection",
+    "save reopen"
+  ],
+  "fps": 10,
+  "frames": 120,
+  "input": "actual egui pointer and keyboard events",
+  "issue": "154-motion",
+  "renderer": "native WGPU",
+  "size": [
+    1600,
+    1000
+  ],
+  "wall_seconds": 32.164914952
+}

@@ -1,0 +1,27 @@
+{
+  "source_revision": "71b259d6917c6f9ec2fbbba2dd6e27ebe5487cb1",
+  "binary_sha256": "3a46b6f6e60f418ed7d18b711bc821afdfca4f3b0fe0d088a09bf5f09fb2a1a6",
+  "video": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "width": 1600,
+        "height": 1000,
+        "r_frame_rate": "10/1",
+        "nb_frames": "120"
+      }
+    ],
+    "format": {
+      "duration": "12.000000"
+    }
+  },
+  "files_sha256": {
+    "issue-154-motion.mp4": "cc541aae1ef0868dd14c8d5dd2f32ea202eed296ad45ced7f4f77f06d79990dc",
+    "result.json": "45e840e83af6630a93975de8cf99006b8e5bf99e4e5f9a6118bfafe636bdd599",
+    "saved.oma": "24532d424dc643fc7a54aa783e6b8ddb32edac3d394de865037b1344b12bffa8",
+    "native.png": "b55136f7ecbf80c43945172b192b33e977b8c6c4246db919b3d7e7695ef870e7",
+    "tests.log": "43d52a6d1617e13ccc1ebc3301b1d8b6fdb398f376dc3b469b205cc362ca2af0",
+    "native.log": "e374a3419d6d69f9bed488d385e416e60c1c030f01bc7ed8f0c981d62b25d7a2"
+  }
+}

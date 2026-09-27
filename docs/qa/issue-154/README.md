@@ -11,3 +11,5 @@ Local regression validation: `cargo test --lib --locked --offline flip -- --noca
 Reproduce: `cargo build --locked --offline --bin inspector_qa`, then `target/debug/inspector_qa 154 /tmp/issue-154-qa` in a graphical session. The harness isolates all XDG profile directories and leaves the installed application intact. `SHA256SUMS` records the capture executable and MP4.
 
 The accepted 0.5.0 human QA evidence remains unchanged. This is automated native acceptance of this PR, not a new human release signoff.
+
+Additional native acceptance: [motion followup](motion-review/README.md), 12 seconds, six passing assertions, plus focused regression coverage.
