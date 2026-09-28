@@ -1,0 +1,1 @@
+INTERACTION COMPLETE complex-same-layer {"frame_interval":{"max_ms":36.712301000000004,"p50_ms":16.151414,"p95_ms":16.781978},"frames":360,"input_to_ui":{"max_ms":21.241578,"p50_ms":0.70794,"p95_ms":1.31963},"ui":{"max_ms":21.223994,"p50_ms":0.6808355,"p95_ms":1.250588}}

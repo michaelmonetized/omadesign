@@ -1,0 +1,25 @@
+selected region 80,50 1440x900
+Setting codec option: crf=20
+Setting codec option: preset=ultrafast
+Setting codec option: threads=2
+Setting codec option: tune=zerolatency
+Framerate: 60
+Using video filter: fps=60
+[libx264 @ 0xffff2c002040] using SAR=1/1
+[libx264 @ 0xffff2c002040] using cpu capabilities: ARMv8 NEON DotProd
+[libx264 @ 0xffff2c002040] profile Constrained Baseline, level 4.2, 4:2:0, 8-bit
+[libx264 @ 0xffff2c002040] 264 - core 165 r3222M b35605a - H.264/MPEG-4 AVC codec - Copyleft 2003-2025 - http://www.videolan.org/x264.html - options: cabac=0 ref=1 deblock=0:0:0 analyse=0:0 me=dia subme=0 psy=1 psy_rd=1.00:0.00 mixed_ref=0 me_range=16 chroma_me=1 trellis=0 8x8dct=0 cqm=0 deadzone=21,11 fast_pskip=1 chroma_qp_offset=0 threads=2 lookahead_threads=2 sliced_threads=1 slices=2 nr=0 decimate=1 interlaced=0 bluray_compat=0 constrained_intra=0 bframes=0 weightp=0 keyint=250 keyint_min=25 scenecut=0 intra_refresh=0 rc=crf mbtree=0 crf=20.0 qcomp=0.60 qpmin=0 qpmax=69 qpstep=4 ip_ratio=1.40 aq=0
+Output #0, mp4, to '/home/michael/.local/state/omadesign/qa/performance-158/recorded-authoring-final/authoring-native.mp4':
+  Stream #0:0: Video: h264, yuv420p(pc), 1440x900 [SAR 1:1 DAR 8:5], q=2-31
+    Side data:
+      CPB properties: bitrate max/min/avg: 0/0/0 buffer size: 0 vbv_delay: N/A
+[Source @ 0xffff2c004f10] Changing video frame properties on the fly is not supported by all filters.
+[Source @ 0xffff2c004f10] filter context - w: 1440 h: 900 fmt: 119 csp: gbr range: unknown alpha: unspecified, incoming frame - w: 1440 h: 900 fmt: 119 csp: unknown range: unknown alpha: unspecified pts_time: 0
+[libx264 @ 0xffff2c002040] frame I:4     Avg QP:12.50  size:263534
+[libx264 @ 0xffff2c002040] frame P:925   Avg QP:14.80  size: 11004
+[libx264 @ 0xffff2c002040] mb I  I16..4: 100.0%  0.0%  0.0%
+[libx264 @ 0xffff2c002040] mb P  I16..4:  1.7%  0.0%  0.0%  P16..4:  9.7%  0.0%  0.0%  0.0%  0.0%    skip:88.6%
+[libx264 @ 0xffff2c002040] coded y,uvDC,uvAC intra: 29.4% 26.5% 20.4% inter: 4.4% 4.7% 3.1%
+[libx264 @ 0xffff2c002040] i16 v,h,dc,p: 56% 40%  3%  1%
+[libx264 @ 0xffff2c002040] i8c dc,h,v,p: 39% 36% 23%  2%
+[libx264 @ 0xffff2c002040] kb/s:5803.71

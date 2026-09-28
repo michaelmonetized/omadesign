@@ -1,0 +1,103 @@
+{
+  "purpose": "Separate recorded native behavior proof, not a timing run",
+  "excluded_from_benchmark": true,
+  "scenario": "complex-middle",
+  "started_utc": "2026-09-28T21:58:28Z",
+  "geometry": "80,50 1440x900",
+  "wayland_display": "wayland-1",
+  "recording_command": [
+    "wf-recorder",
+    "--no-dmabuf",
+    "--no-damage",
+    "-g",
+    "80,50 1440x900",
+    "-c",
+    "libx264",
+    "-x",
+    "yuv420p",
+    "-r",
+    "60",
+    "-p",
+    "crf=20",
+    "-p",
+    "preset=ultrafast",
+    "-p",
+    "threads=2",
+    "-f",
+    "/home/michael/.local/state/omadesign/qa/performance-158/recorded-complex-middle-final/complex-middle-native.mp4"
+  ],
+  "workload_command": [
+    "unshare",
+    "-Urn",
+    "/home/michael/.local/state/omadesign/qa/performance-158/final/bin/interaction_qa",
+    "/home/michael/.local/state/omadesign/qa/performance-158/recorded-complex-middle-final/workload",
+    "complex-middle"
+  ],
+  "executable": {
+    "path": "/home/michael/.local/state/omadesign/qa/performance-158/final/bin/interaction_qa",
+    "bytes": 60904448,
+    "sha256": "2d3f1467ac26dc9105f2737ed67c01798f82ae65accbb066572df929467b01c5"
+  },
+  "inputs": {},
+  "workload_exit_code": 0,
+  "recorder_exit_code": 0,
+  "wall_seconds": 10.047435612068512,
+  "probe_command": [
+    "ffprobe",
+    "-v",
+    "error",
+    "-show_format",
+    "-show_streams",
+    "-of",
+    "json",
+    "/home/michael/.local/state/omadesign/qa/performance-158/recorded-complex-middle-final/complex-middle-native.mp4"
+  ],
+  "video_verified": true,
+  "video_format": {
+    "codec_name": "h264",
+    "width": 1440,
+    "height": 900,
+    "pix_fmt": "yuvj420p",
+    "color_range": "pc"
+  },
+  "native_checks": {
+    "continuous_canvas_updates": true,
+    "continuous_object_motion": true,
+    "inactive_documents_unchanged": true,
+    "moves_and_undo_redo": 12,
+    "save_reopen_exact": true,
+    "tab_selection_and_history": true
+  },
+  "artifacts": {
+    "workload/interaction-result.json": {
+      "bytes": 99534,
+      "sha256": "381aed6d85ace25a1ca0027ab6125808b9791e487497a0604fdb4fdaaea7daa7"
+    },
+    "workload/interaction.oma": {
+      "bytes": 728049,
+      "sha256": "5288b92b2cdfbabb28654433024174c58e723f5e457f947dea4fb5cc64f48d41"
+    },
+    "workload/native-editor.png": {
+      "bytes": 717278,
+      "sha256": "4718127f958dec5b6d694a17a0a2187da0db17c0f8267777b2bd2acfc1d31a36"
+    },
+    "complex-middle-native.mp4": {
+      "bytes": 2454611,
+      "sha256": "30d962fcd2c9fb7a675aafe745480103e94bec4d0e54e4b3c8ca5cbabdac4f90"
+    },
+    "ffprobe.json": {
+      "bytes": 2259,
+      "sha256": "dfbe3e59f617601ee6175aab9d9682e5fcf1c148eafcd74b033770e1638cfd61"
+    },
+    "recorder.log": {
+      "bytes": 2182,
+      "sha256": "c8abaeb90ae66ed62107f536525378448eeddaadb3bc8bb70d7ebb930fadfb14"
+    },
+    "workload.log": {
+      "bytes": 277,
+      "sha256": "8ee9bd8bc2313f35b04b557daec071778063f31261b30ee542696ae3b5336a6f"
+    }
+  },
+  "errors": [],
+  "success": true
+}

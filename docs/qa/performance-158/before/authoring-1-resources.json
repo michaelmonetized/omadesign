@@ -1,0 +1,73 @@
+{
+  "name": "authoring-1",
+  "exit_code": 0,
+  "timed_out": false,
+  "wall_seconds": 13.014713756041601,
+  "peak_rss_KiB": 233728,
+  "major_page_faults": 22,
+  "user_seconds": 10.083332,
+  "system_seconds": 3.000006,
+  "before": {
+    "memory": {
+      "MemTotal_KiB": 15763184,
+      "MemAvailable_KiB": 4289488,
+      "SwapTotal_KiB": 41435616,
+      "SwapFree_KiB": 27405184
+    },
+    "loadavg": "2.08 2.39 3.03 7/1707 835981",
+    "pressure": {
+      "cpu": "some avg10=1.23 avg60=4.59 avg300=7.95 total=44804147977\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "memory": "some avg10=0.60 avg60=0.81 avg300=0.46 total=1024041287\nfull avg10=0.56 avg60=0.68 avg300=0.36 total=719721303",
+      "io": "some avg10=0.61 avg60=1.19 avg300=0.90 total=3248987035\nfull avg10=0.54 avg60=0.92 avg300=0.66 total=2099383514"
+    },
+    "cpu_policies": {
+      "policy6": {
+        "scaling_governor": "schedutil",
+        "scaling_cur_freq": "1296000",
+        "scaling_max_freq": "3036000"
+      },
+      "policy2": {
+        "scaling_governor": "schedutil",
+        "scaling_cur_freq": "2676000",
+        "scaling_max_freq": "3036000"
+      },
+      "policy0": {
+        "scaling_governor": "schedutil",
+        "scaling_cur_freq": "2064000",
+        "scaling_max_freq": "2064000"
+      }
+    }
+  },
+  "after": {
+    "memory": {
+      "MemTotal_KiB": 15763184,
+      "MemAvailable_KiB": 4527728,
+      "SwapTotal_KiB": 41435616,
+      "SwapFree_KiB": 27372608
+    },
+    "loadavg": "1.83 2.33 3.00 7/1684 839298",
+    "pressure": {
+      "cpu": "some avg10=0.30 avg60=3.63 avg300=7.57 total=44804225124\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "memory": "some avg10=1.05 avg60=0.80 avg300=0.47 total=1024188923\nfull avg10=1.04 avg60=0.70 avg300=0.38 total=719857667",
+      "io": "some avg10=1.05 avg60=1.10 avg300=0.89 total=3249155016\nfull avg10=1.03 avg60=0.89 avg300=0.66 total=2099535542"
+    },
+    "cpu_policies": {
+      "policy6": {
+        "scaling_governor": "schedutil",
+        "scaling_cur_freq": "1980000",
+        "scaling_max_freq": "3036000"
+      },
+      "policy2": {
+        "scaling_governor": "schedutil",
+        "scaling_cur_freq": "600000",
+        "scaling_max_freq": "3036000"
+      },
+      "policy0": {
+        "scaling_governor": "schedutil",
+        "scaling_cur_freq": "1704000",
+        "scaling_max_freq": "2064000"
+      }
+    }
+  },
+  "network": "disabled by unshare -Urn"
+}

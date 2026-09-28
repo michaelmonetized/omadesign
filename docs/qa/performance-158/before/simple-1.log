@@ -1,0 +1,1 @@
+INTERACTION COMPLETE simple {"frame_interval":{"max_ms":35.333336,"p50_ms":16.0994545,"p95_ms":17.00802},"frames":360,"input_to_ui":{"max_ms":24.839548,"p50_ms":5.676833500000001,"p95_ms":6.45244},"ui":{"max_ms":24.823798,"p50_ms":5.6594785000000005,"p95_ms":6.39819}}

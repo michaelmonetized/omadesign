@@ -1,0 +1,2 @@
+# Preserve raw tool transcripts, including their original trailing whitespace.
+*.log -whitespace

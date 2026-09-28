@@ -1,0 +1,177 @@
+{
+  "label": "cb121091",
+  "host": "m1pro16",
+  "architecture": "aarch64",
+  "kernel": "7.1.13-3-2-ARCH",
+  "started_utc": "2026-09-28T21:39:07Z",
+  "window": [
+    1440,
+    900
+  ],
+  "runs": [
+    {
+      "name": "complex-middle-1",
+      "exit_code": 0,
+      "timed_out": false,
+      "wall_seconds": 12.115419163019396,
+      "peak_rss_KiB": 117632,
+      "major_page_faults": 36,
+      "user_seconds": 9.297394,
+      "system_seconds": 2.239903,
+      "before": {
+        "memory": {
+          "MemTotal_KiB": 15763184,
+          "MemAvailable_KiB": 4143664,
+          "SwapTotal_KiB": 41435616,
+          "SwapFree_KiB": 27372272
+        },
+        "loadavg": "4.80 3.22 3.22 5/1695 872741",
+        "pressure": {
+          "cpu": "some avg10=21.14 avg60=11.68 avg300=7.83 total=44815446773\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+          "memory": "some avg10=0.28 avg60=0.31 avg300=0.35 total=1024665847\nfull avg10=0.22 avg60=0.23 avg300=0.28 total=720219693",
+          "io": "some avg10=0.59 avg60=0.80 avg300=0.77 total=3250268556\nfull avg10=0.39 avg60=0.56 avg300=0.56 total=2100355178"
+        },
+        "cpu_policies": {
+          "policy6": {
+            "scaling_governor": "schedutil",
+            "scaling_cur_freq": "2904000",
+            "scaling_max_freq": "3036000"
+          },
+          "policy2": {
+            "scaling_governor": "schedutil",
+            "scaling_cur_freq": "2208000",
+            "scaling_max_freq": "3036000"
+          },
+          "policy0": {
+            "scaling_governor": "schedutil",
+            "scaling_cur_freq": "2064000",
+            "scaling_max_freq": "2064000"
+          }
+        }
+      },
+      "after": {
+        "memory": {
+          "MemTotal_KiB": 15763184,
+          "MemAvailable_KiB": 4280352,
+          "SwapTotal_KiB": 41435616,
+          "SwapFree_KiB": 27364864
+        },
+        "loadavg": "4.75 3.26 3.24 6/1684 875317",
+        "pressure": {
+          "cpu": "some avg10=9.15 avg60=10.53 avg300=7.74 total=44815856784\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+          "memory": "some avg10=0.41 avg60=0.37 avg300=0.36 total=1024806880\nfull avg10=0.39 avg60=0.30 avg300=0.29 total=720348057",
+          "io": "some avg10=0.68 avg60=0.81 avg300=0.77 total=3250405152\nfull avg10=0.52 avg60=0.58 avg300=0.56 total=2100471473"
+        },
+        "cpu_policies": {
+          "policy6": {
+            "scaling_governor": "schedutil",
+            "scaling_cur_freq": "600000",
+            "scaling_max_freq": "3036000"
+          },
+          "policy2": {
+            "scaling_governor": "schedutil",
+            "scaling_cur_freq": "600000",
+            "scaling_max_freq": "3036000"
+          },
+          "policy0": {
+            "scaling_governor": "schedutil",
+            "scaling_cur_freq": "972000",
+            "scaling_max_freq": "2064000"
+          }
+        }
+      },
+      "network": "disabled by unshare -Urn"
+    },
+    {
+      "name": "authoring-1",
+      "exit_code": 0,
+      "timed_out": false,
+      "wall_seconds": 12.014829597086646,
+      "peak_rss_KiB": 235456,
+      "major_page_faults": 76,
+      "user_seconds": 8.059439,
+      "system_seconds": 3.631965,
+      "before": {
+        "memory": {
+          "MemTotal_KiB": 15763184,
+          "MemAvailable_KiB": 4281248,
+          "SwapTotal_KiB": 41435616,
+          "SwapFree_KiB": 27364864
+        },
+        "loadavg": "4.75 3.26 3.24 9/1684 875317",
+        "pressure": {
+          "cpu": "some avg10=9.15 avg60=10.53 avg300=7.74 total=44815859924\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+          "memory": "some avg10=0.41 avg60=0.37 avg300=0.36 total=1024806880\nfull avg10=0.39 avg60=0.30 avg300=0.29 total=720348057",
+          "io": "some avg10=0.68 avg60=0.81 avg300=0.77 total=3250405152\nfull avg10=0.52 avg60=0.58 avg300=0.56 total=2100471473"
+        },
+        "cpu_policies": {
+          "policy6": {
+            "scaling_governor": "schedutil",
+            "scaling_cur_freq": "600000",
+            "scaling_max_freq": "3036000"
+          },
+          "policy2": {
+            "scaling_governor": "schedutil",
+            "scaling_cur_freq": "600000",
+            "scaling_max_freq": "3036000"
+          },
+          "policy0": {
+            "scaling_governor": "schedutil",
+            "scaling_cur_freq": "2064000",
+            "scaling_max_freq": "2064000"
+          }
+        }
+      },
+      "after": {
+        "memory": {
+          "MemTotal_KiB": 15763184,
+          "MemAvailable_KiB": 4356208,
+          "SwapTotal_KiB": 41435616,
+          "SwapFree_KiB": 27358512
+        },
+        "loadavg": "4.15 3.20 3.22 3/1688 877688",
+        "pressure": {
+          "cpu": "some avg10=3.20 avg60=8.79 avg300=7.47 total=44816023988\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+          "memory": "some avg10=0.36 avg60=0.38 avg300=0.37 total=1024895410\nfull avg10=0.36 avg60=0.33 avg300=0.30 total=720433421",
+          "io": "some avg10=0.28 avg60=0.69 avg300=0.74 total=3250477722\nfull avg10=0.23 avg60=0.50 avg300=0.55 total=2100538158"
+        },
+        "cpu_policies": {
+          "policy6": {
+            "scaling_governor": "schedutil",
+            "scaling_cur_freq": "600000",
+            "scaling_max_freq": "3036000"
+          },
+          "policy2": {
+            "scaling_governor": "schedutil",
+            "scaling_cur_freq": "600000",
+            "scaling_max_freq": "3036000"
+          },
+          "policy0": {
+            "scaling_governor": "schedutil",
+            "scaling_cur_freq": "600000",
+            "scaling_max_freq": "2064000"
+          }
+        }
+      },
+      "network": "disabled by unshare -Urn"
+    }
+  ],
+  "artifacts": {
+    "/home/michael/.local/state/omadesign/qa/performance-158/optimized/bin/interaction_qa": {
+      "bytes": 60902032,
+      "sha256": "400c6d1cb689a063b2b143cdb56e95028422616d0a4e7f26e182803d2ffba3ac"
+    },
+    "/home/michael/.local/state/omadesign/qa/performance-158/optimized/bin/authoring_qa": {
+      "bytes": 60822808,
+      "sha256": "8e56861413fb1193d39a81079a3e14cf51696b43ff1b73f188c7e54424df2b0f"
+    },
+    "/home/michael/.local/state/omadesign/qa/fleet-benchmark-20260927/inputs/infographic-seed.oma": {
+      "bytes": 472296,
+      "sha256": "d75a60c1803b4718d171a897f2330b3faec80018a02d27ee6c5447b88eeef7a7"
+    },
+    "/home/michael/.local/state/omadesign/qa/fleet-benchmark-20260927/inputs/type-tasks.json": {
+      "bytes": 624,
+      "sha256": "e859dd9c2e990468c36c818616addfbb47c46f0951f6e6e4f5be4c5eb0b96efe"
+    }
+  }
+}

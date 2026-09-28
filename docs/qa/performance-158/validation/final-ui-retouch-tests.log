@@ -1,0 +1,20 @@
+
+running 15 tests
+test ui::retouch::tests::benchmark_retouch_region_publication ... ignored, manual CPU benchmark; run optimized with --nocapture
+test ui::retouch::tests::alt_subtracts_and_shift_adds_a_pixel_selection ... ok
+test ui::retouch::tests::marquee_wand_and_lasso_create_pixel_selections ... ok
+test ui::retouch::tests::eyedropper_samples_placed_raster_and_sets_brush_color ... ok
+test ui::retouch::tests::eraser_changes_destination_alpha_and_cancel_restores_the_stroke ... ok
+test ui::retouch::tests::brush_stays_inside_a_pixel_selection ... ok
+test ui::retouch::tests::feathered_fill_and_eraser_blend_with_original_pixels ... ok
+test ui::retouch::tests::feathered_selection_limits_entire_brush_stroke_without_fading_earlier_dabs ... ok
+test ui::retouch::tests::incremental_brush_preview_matches_full_feathering_and_keeps_all_dabs ... ok
+test ui::retouch::tests::alt_source_click_heals_with_local_colour_and_one_undo ... ok
+test ui::retouch::tests::smudge_live_stroke_has_one_undo ... ok
+test ui::retouch::tests::painting_a_placed_mask_uses_native_coordinates_and_undo_preserves_pixels ... ok
+test ui::retouch::tests::single_frame_brush_click_commits_and_idle_hold_does_not_dirty_canvas ... ok
+test ui::retouch::tests::queued_brush_samples_keep_corners_release_and_one_undo_step ... ok
+test ui::retouch::tests::dirty_region_publication_matches_full_buffer_for_every_retouch_tool ... ok
+
+test result: ok. 14 passed; 0 failed; 1 ignored; 0 measured; 851 filtered out; finished in 12.36s
+

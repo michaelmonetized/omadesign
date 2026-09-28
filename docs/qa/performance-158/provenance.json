@@ -1,0 +1,320 @@
+{
+  "baseline_commit": "caeda65307073e3c83dde2b4a0976d6e04555834",
+  "candidate_commit": "54d7051c5c878c741ea5f5a5bb5bb030e0f4a6a6",
+  "fixture_files": {
+    "infographic-seed.oma": {
+      "bytes": 472296,
+      "sha256": "d75a60c1803b4718d171a897f2330b3faec80018a02d27ee6c5447b88eeef7a7"
+    },
+    "type-tasks.json": {
+      "bytes": 624,
+      "sha256": "e859dd9c2e990468c36c818616addfbb47c46f0951f6e6e4f5be4c5eb0b96efe"
+    },
+    ".omabrand/.omatype": {
+      "bytes": 794,
+      "sha256": "ac6929ca4fec50b10dbbc167cc27d6364d29c5b0171c97b67050252245978cd9"
+    },
+    ".omabrand/fonts/2387344100d213108cead7abcdc1263c.ttf": {
+      "bytes": 2968744,
+      "sha256": "b7c0dcee217aa017207f21b0915b5159451fa8b7fb619af8afb6349352ca8770"
+    },
+    ".omabrand/fonts/2819ebc145fb746db9eb78bdeea2bc3a.ttf": {
+      "bytes": 646360,
+      "sha256": "5d4d9e0ded710a4603e10afebfce2c2d56fa0d216890e8915511d2a53a004c1c"
+    },
+    ".omabrand/fonts/64a2d3719cd24cfc90c61e80239af081.ttf": {
+      "bytes": 2968556,
+      "sha256": "7fdb146f5b2ab3a435a6e975899de7e0958a1e3c17f5fc86c5b2e28271452adc"
+    },
+    ".omabrand/fonts/Nerd-Fonts-OFL.txt": {
+      "bytes": 4301,
+      "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2"
+    },
+    ".omabrand/fonts/Noto-OFL.txt": {
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    ".omabrand/fonts/bb80be15ebaedfabdf34beb2e53006b2.ttf": {
+      "bytes": 2968648,
+      "sha256": "5f800630112c2094efeb09f65c0e7247e4e6c85d2b61384b6e89de95b9bd5aa3"
+    },
+    ".omabrand/fonts/c40328406c229b6198215f56453385f2.ttf": {
+      "bytes": 631484,
+      "sha256": "1df075a380fc7cb898acf64c1f7b3b4dd780de3caa860178bf929de35817a913"
+    },
+    ".omabrand/fonts/ff1bcc1d0e36c222e930ee514700e1e0.ttf": {
+      "bytes": 2968820,
+      "sha256": "704898874930bd2dbf9ebdcc0bbe5d9b7c2714fe537d0ca0f5cb0cbb49915bc8"
+    }
+  },
+  "lscpu": {
+    "lscpu": [
+      {
+        "field": "Architecture:",
+        "data": "aarch64"
+      },
+      {
+        "field": "CPU op-mode(s):",
+        "data": "64-bit"
+      },
+      {
+        "field": "Byte Order:",
+        "data": "Little Endian"
+      },
+      {
+        "field": "CPU(s):",
+        "data": "10"
+      },
+      {
+        "field": "On-line CPU(s) list:",
+        "data": "0-9"
+      },
+      {
+        "field": "Vendor ID:",
+        "data": "Apple"
+      },
+      {
+        "field": "Model name:",
+        "data": "Icestorm-M1-Pro"
+      },
+      {
+        "field": "Model:",
+        "data": "0"
+      },
+      {
+        "field": "Thread(s) per core:",
+        "data": "1"
+      },
+      {
+        "field": "Core(s) per socket:",
+        "data": "2"
+      },
+      {
+        "field": "Socket(s):",
+        "data": "1"
+      },
+      {
+        "field": "Stepping:",
+        "data": "0x2"
+      },
+      {
+        "field": "Frequency boost:",
+        "data": "disabled"
+      },
+      {
+        "field": "CPU(s) scaling MHz:",
+        "data": "100%"
+      },
+      {
+        "field": "CPU max MHz:",
+        "data": "2064.0000"
+      },
+      {
+        "field": "CPU min MHz:",
+        "data": "600.0000"
+      },
+      {
+        "field": "BogoMIPS:",
+        "data": "48.00"
+      },
+      {
+        "field": "Flags:",
+        "data": "fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 asimddp sha512 asimdfhm dit uscat ilrcpc flagm ssbs sb paca pacg dcpodp flagm2 frint"
+      },
+      {
+        "field": "Model name:",
+        "data": "Firestorm-M1-Pro"
+      },
+      {
+        "field": "Model:",
+        "data": "0"
+      },
+      {
+        "field": "Thread(s) per core:",
+        "data": "1"
+      },
+      {
+        "field": "Core(s) per socket:",
+        "data": "8"
+      },
+      {
+        "field": "Socket(s):",
+        "data": "1"
+      },
+      {
+        "field": "Stepping:",
+        "data": "0x2"
+      },
+      {
+        "field": "CPU(s) scaling MHz:",
+        "data": "78%"
+      },
+      {
+        "field": "CPU max MHz:",
+        "data": "3036.0000"
+      },
+      {
+        "field": "CPU min MHz:",
+        "data": "600.0000"
+      },
+      {
+        "field": "BogoMIPS:",
+        "data": "48.00"
+      },
+      {
+        "field": "Flags:",
+        "data": "fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 asimddp sha512 asimdfhm dit uscat ilrcpc flagm ssbs sb paca pacg dcpodp flagm2 frint"
+      },
+      {
+        "field": "L1d cache:",
+        "data": "1.1 MiB (10 instances)"
+      },
+      {
+        "field": "L1i cache:",
+        "data": "1.8 MiB (10 instances)"
+      },
+      {
+        "field": "L2 cache:",
+        "data": "28 MiB (3 instances)"
+      },
+      {
+        "field": "Vulnerability Gather data sampling:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Ghostwrite:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Indirect target selection:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Itlb multihit:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability L1tf:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Mds:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Meltdown:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Mmio stale data:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Old microcode:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Reg file data sampling:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Retbleed:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Spec rstack overflow:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Spec store bypass:",
+        "data": "Mitigation; Speculative Store Bypass disabled via prctl"
+      },
+      {
+        "field": "Vulnerability Spectre v1:",
+        "data": "Mitigation; __user pointer sanitization"
+      },
+      {
+        "field": "Vulnerability Spectre v2:",
+        "data": "Mitigation; CSV2, but not BHB"
+      },
+      {
+        "field": "Vulnerability Srbds:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Tsa:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Tsx async abort:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Vmscape:",
+        "data": "Not affected"
+      }
+    ]
+  },
+  "hostname": "m1pro16",
+  "preserved_executables": {
+    "baseline/bin/authoring_qa": {
+      "bytes": 60757568,
+      "sha256": "d2393d67d291acfc488c629d0e7724f18e955d1ef0e14b5dfc3e7ae63e2c61d8"
+    },
+    "baseline/bin/canvas_profile": {
+      "bytes": 5034120,
+      "sha256": "1e256590f6dd1c90db37a84f305008d0a70adfc2b095b155fb3376807c110cef"
+    },
+    "baseline/bin/interaction_qa": {
+      "bytes": 60829640,
+      "sha256": "a17bd7bbb3b86613a7b08549f30e0fbfd1bc1eff8dec4c89b40562947a2e195d"
+    },
+    "optimized/bin/authoring_qa": {
+      "bytes": 60822808,
+      "sha256": "8e56861413fb1193d39a81079a3e14cf51696b43ff1b73f188c7e54424df2b0f"
+    },
+    "optimized/bin/canvas_profile": {
+      "bytes": 5036776,
+      "sha256": "9b7611721c65854d3f910430d0b8921152d5f4ac011bb3df1676622773d360bc"
+    },
+    "optimized/bin/interaction_qa": {
+      "bytes": 60902032,
+      "sha256": "400c6d1cb689a063b2b143cdb56e95028422616d0a4e7f26e182803d2ffba3ac"
+    },
+    "optimized/bin/omadesign": {
+      "bytes": 61059952,
+      "sha256": "457f0e858007bcd13c0a66fb13f19b4e4207e670825756ba8ec9e09ce98958b5"
+    },
+    "final/bin/omadesign": {
+      "bytes": 61061528,
+      "sha256": "610091f7926d7246b466bda566ac087ff6266cc9c4e5d92fa06c10668925f205"
+    },
+    "final/bin/authoring_qa": {
+      "bytes": 60825480,
+      "sha256": "b09f7d98ec133c945d3abe71434f1448040ddbd5769ae5b458dae90ba2fc40c5"
+    },
+    "final/bin/interaction_qa": {
+      "bytes": 60904448,
+      "sha256": "2d3f1467ac26dc9105f2737ed67c01798f82ae65accbb066572df929467b01c5"
+    },
+    "final/bin/canvas_profile": {
+      "bytes": 5039264,
+      "sha256": "6da5d1ea716812db1a0a33ad9ed537f819131a19813df49e0b64543f49a0266e"
+    }
+  },
+  "intermediate_commit": "cb1210910ce1fcd3abe657806dc724f742154402",
+  "executable_groups": {
+    "baseline/bin": {
+      "stage": "before",
+      "production_commit": "caeda65307073e3c83dde2b4a0976d6e04555834"
+    },
+    "optimized/bin": {
+      "stage": "intermediate, before transformed object-mask caching",
+      "production_commit": "cb1210910ce1fcd3abe657806dc724f742154402"
+    },
+    "final/bin": {
+      "stage": "after",
+      "production_commit": "54d7051c5c878c741ea5f5a5bb5bb030e0f4a6a6"
+    }
+  }
+}
