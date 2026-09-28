@@ -1,5 +1,7 @@
 # September 27 issue stack verification
 
+This is the original 821-test baseline. [Current readiness fixes and 833-test evidence](../2026-09-27-readiness-fixes/README.md) supersede the validation below.
+
 The ten issue PRs are stacked on existing [PR #147](https://github.com/michaelmonetized/omadesign/pull/147). Issues #144 and #145 are covered by existing PRs #146 and #147; #158 is excluded. Each row links the issue-specific native recording, editable artifacts, assertions, source/binary provenance and reproduction instructions.
 
 | Stack order | Issue | PR | Native QA |

@@ -1,0 +1,9 @@
+   Compiling omadesign v0.6.0 (/home/michael/Projects/omadesign/.worktrees/readiness-restack)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 45.32s
+     Running unittests src/lib.rs (/home/michael/Projects/omadesign/target/debug/deps/omadesign-eeb97c2698df9278)
+
+running 1 test
+test agent::workspace::attachment_recovery_tests::readiness_startup_exit_or_rejection_restores_unsent_draft_and_attachments ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 837 filtered out; finished in 5.84s
+
