@@ -25,6 +25,7 @@ enum Target {
     PathStartHandle,
     FrameOut(usize),
     FrameText(usize),
+    FrameCaret(usize, usize),
     Text(&'static str),
     FieldNth(&'static str, usize),
     Any(&'static str),
@@ -59,6 +60,7 @@ enum ActionKind {
     CheckPath(&'static str),
     NativeClipboard(&'static str),
     CheckArea(&'static str),
+    CheckIntegrity(&'static str),
     Reveal(&'static str),
 }
 struct Action {
@@ -204,6 +206,20 @@ fn schedule(scene: &str) -> Vec<Action> {
         "path-clipboard" => vec![
             event(0.7,Click(FirstPathText)),event(1.2,NativeClipboard("c")),event(1.8,Click(Any("Edit"))),event(2.2,Click(Any("Paste"))),event(3.2,CheckPath("paste-alone")),
             event(3.7,Key(egui::Key::Z,ctrl())),event(4.2,Key(egui::Key::A,ctrl())),event(4.7,NativeClipboard("c")),event(5.3,Click(Any("Edit"))),event(5.7,Click(Any("Paste"))),event(7.,CheckPath("paste-together")),event(7.5,Key(egui::Key::Z,ctrl())),
+        ],
+        "area-integrity" => vec![
+            event(0.6,CheckIntegrity("baseline")),event(1.,Click(FrameText(0))),
+            event(2.,Click(FrameOut(0))),event(2.6,Click(FrameText(2))),event(3.5,CheckIntegrity("rejected")),
+            event(5.,Click(FrameText(0))),event(5.5,Click(FrameOut(0))),event(6.1,Click(FrameText(1))),event(7.,CheckIntegrity("merged")),
+            event(8.,Key(egui::Key::T,Modifiers::NONE)),event(8.5,Click(FrameCaret(1,2))),
+            drag(9.2,1.,Drag(FrameCaret(1,2),FrameCaret(1,7))),event(10.5,CheckIntegrity("forward")),
+            event(11.,Click(FrameCaret(1,7))),event(11.6,CheckIntegrity("collapsed")),
+            drag(12.,1.,Drag(FrameCaret(1,7),FrameCaret(1,2))),event(13.4,CheckIntegrity("backward")),
+            drag(14.,0.7,Type("EDITED")),event(15.2,Key(egui::Key::Escape,Modifiers::NONE)),event(15.8,CheckIntegrity("replacement")),
+            event(16.5,Key(egui::Key::Z,ctrl())),event(17.2,CheckIntegrity("merged")),
+            event(18.,Key(egui::Key::Z,Modifiers{shift:true,..ctrl()})),event(18.8,CheckIntegrity("replacement")),
+            event(19.5,Key(egui::Key::Z,ctrl())),event(20.2,CheckIntegrity("merged")),
+            event(21.,Key(egui::Key::S,ctrl())),event(22.2,ReopenSaved),event(23.2,CheckIntegrity("reopened")),
         ],
         "area-valign" => vec![
             event(0.7,Click(Text("Arrange"))),event(1.2,Click(Text("Align"))),
@@ -731,6 +747,13 @@ impl Encoder {
         assert!(self.child.wait().unwrap().success());
     }
 }
+fn integrity_text(index: usize) -> String {
+    match index {
+        0 => "Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. ".repeat(2),
+        1 => "Styled target retains its own tracking, line height, features and paragraph alignment.\noffice 123 remains editable after threading.".into(),
+        _ => "Different size stays safe. Match settings or choose an empty frame.".into(),
+    }
+}
 struct Capture {
     studio: Studio,
     scene: String,
@@ -752,6 +775,9 @@ struct Capture {
     ready_since: Instant,
     spacing_reference: Option<Geom>,
     spacing_resized: Option<Geom>,
+    integrity_checks: Vec<serde_json::Value>,
+    integrity_baseline: Option<(String, usize)>,
+    integrity_selection: Option<(usize,usize,String)>,
     path_delete_snapshot: Option<(u64, Vec<(u64, Option<u64>)>, serde_json::Value)>,
 }
 
@@ -972,6 +998,21 @@ fn seed(scene: &str) -> Studio {
             *s.doc.layers[0].kind.shapes_mut().unwrap() = vec![bg, subject];
         }
 
+        "area-integrity" => {
+            use omadesign::{document::{Shape,Style,Fill}, geom::{TypeRun,TextAlign,CharSpan,Leading}, text_geometry::TextFrame};
+            s.doc=Document::new("Safe threading and precise follower selection",960.,680.,96.);
+            let font=fs::canonicalize("tests/assets/fonts/EBGaramond.ttf").unwrap().to_string_lossy().into_owned();
+            for index in 0..3 {
+                let mut run=TypeRun{origin:if index==0{Pt::new(70.,120.)}else if index==1{Pt::new(470.,140.)}else{Pt::new(70.,490.)},content:integrity_text(index),font:font.clone(),px:if index==2{34.}else{24.},frame:Some(TextFrame{size:if index==1{Pt::new(350.,380.)}else{Pt::new(330.,160.)},..Default::default()}),..Default::default()};
+                if index==0 {run.features=vec![(*b"dlig",1)];}
+                if index==1 {run.tracking=1.2;run.leading=34.;run.align=TextAlign::End;run.liga=false;run.tnum=true;run.spans=vec![CharSpan{start:0,end:6,tracking:Some(80.),leading:Some(Leading::Fixed(38.)),baseline_shift:Some(2.),..Default::default()}];}
+                let mut shape=Shape::new(Geom::Text(run),Style{fill:Fill::Solid(Rgba::from_hex(0x18364A)),stroke:None});
+                shape.name=["Source story", "Compatible styled target", "Different size: retain both stories"][index].into();
+                if index==1 {shape.rotation=0.18;}
+                s.doc.layers[1].kind.shapes_mut().unwrap().push(shape);
+            }
+            s.persona=Persona::Design;s.tool=Tool::Select;s.active_layer=Some(1);s.mark();
+        }
         "area-type" | "area-options" | "area-invert" | "area-valign" => {
             use omadesign::{document::{Layer,Shape,Style,Fill},text_geometry::{TextWrap,WrapMode}};
             s.doc=Document::new("Area text and threaded stories · issue 150",960.,680.,96.);
@@ -1174,7 +1215,7 @@ fn seed(scene: &str) -> Studio {
 impl Capture {
     fn new(scene: String, directory: PathBuf, probe: bool, fps: u32) -> Self {
         let mut studio = seed(&scene);
-        if matches!(scene.as_str(), "independent-effects" | "paragraphs" | "opentype" | "spacing" | "spacing-resize" | "path-type" | "area-type" | "area-options" | "area-invert" | "area-valign") {
+        if matches!(scene.as_str(), "independent-effects" | "paragraphs" | "opentype" | "spacing" | "spacing-resize" | "path-type" | "area-type" | "area-options" | "area-invert" | "area-valign" | "area-integrity") {
             studio.path = Some(directory.join(format!("{scene}-final.oma")));
         }
         if scene == "spacing" { studio.load_startup_preferences(); }
@@ -1189,6 +1230,7 @@ impl Capture {
             "area-options" => 70,
             "area-invert" => 12,
             "area-valign" => 14,
+            "area-integrity" => 25,
             "welcome-browse" => 23,
             "welcome-vector" | "welcome-layout" => 9,
             "welcome-raster" => 8,
@@ -1230,6 +1272,9 @@ impl Capture {
             errors: vec![],
             fps,
             ready_since: Instant::now(),
+            integrity_checks: vec![],
+            integrity_baseline: None,
+            integrity_selection: None,
             path_delete_snapshot: None,
         }
     }
@@ -1287,6 +1332,11 @@ impl Capture {
                 .map(|(_, r)| *r)
         };
         match t {
+            Target::FrameCaret(index, offset) => {
+                let shape=self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter(|s|matches!(&s.geom,Geom::Text(t) if t.frame.is_some())).nth(*index)?;
+                let Geom::Text(run)=&shape.geom else{return None;};let start=run.layout.as_ref()?.visible_start;
+                let p=shape.world_point(omadesign::text::caret_pt(run,start+offset));Some(self.world(p.x,p.y))
+            },
             Target::FrameOut(index) | Target::FrameText(index) => {
                 let run=self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter_map(|s|if let Geom::Text(t)=&s.geom{t.frame.as_ref().map(|_|t)}else{None}).nth(*index)?;
                 let p=if matches!(t,Target::FrameOut(_)){omadesign::text_geometry::frame_bounds(run)?.max-Pt::new(0.,12./self.studio.view.scale)}else{{ let bounds=omadesign::text_geometry::frame_bounds(run)?;let inset=12./self.studio.view.scale;let input=bounds.min+Pt::new(0.,inset);let output=bounds.max-Pt::new(0.,inset);run.contours.iter().flatten().find(|p|(**p-input).length()>24./self.studio.view.scale&&(**p-output).length()>24./self.studio.view.scale).copied().unwrap_or(bounds.center()) }};Some(self.world(p.x,p.y))
@@ -1378,6 +1428,31 @@ impl Capture {
             },
         ]);
     }
+    fn check_integrity(&mut self, phase: &str) {
+        let texts:Vec<_>=self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter_map(|s|if let Geom::Text(t)=&s.geom{Some((s.id,t))}else{None}).collect();
+        let encoded=omadesign::project::encode(&self.studio.doc).unwrap();
+        let merged=format!("{}\n{}",integrity_text(0),integrity_text(1));
+        let correct_merge=texts.len()==3&&texts[0].1.content==merged&&texts[1].1.content.is_empty()&&texts[2].1.content==integrity_text(2)
+            &&texts[0].1.thread.as_ref().is_some_and(|t|t.next==Some(texts[1].0))&&texts[1].1.thread.as_ref().is_some_and(|t|t.prev==Some(texts[0].0)&&t.story==texts[0].0)
+            &&{let offset=integrity_text(0).chars().count()+1;let style=omadesign::text::character_metrics(texts[0].1,offset+8);style.tracking==Some(50.)&&style.leading==Some(omadesign::geom::Leading::Fixed(34.))&&omadesign::text::feature_value(texts[0].1,offset+8,*b"liga")==0&&omadesign::text::feature_value(texts[0].1,offset+8,*b"dlig")==0&&omadesign::text::paragraph_style(texts[0].1,offset+8).align==omadesign::geom::TextAlign::End};
+        let passed=match phase {
+            "baseline"=>{self.integrity_baseline=Some((encoded.clone(),self.studio.history.len()));texts.len()==3},
+            "rejected"=>self.integrity_baseline.as_ref().is_some_and(|(doc,history)|doc==&encoded&&*history==self.studio.history.len())&&self.studio.status.contains("Cannot merge populated"),
+            "merged"=>correct_merge,
+            "reopened"=>correct_merge&&self.studio.tab_count()>1&&self.studio.history.len()==0,
+            "forward" | "backward" | "collapsed"=>{
+                let start=texts[1].1.layout.as_ref().unwrap().visible_start+2;let end=start+5;
+                if phase=="forward"{self.integrity_selection=Some((start,end,merged.clone()));}
+                self.studio.type_edit.as_ref().is_some_and(|edit| edit.id==texts[0].0&&if phase=="collapsed" {edit.anchor==end&&edit.caret==end} else if phase=="forward"{edit.anchor==start&&edit.caret==end}else{edit.anchor==end&&edit.caret==start})
+            },
+            "replacement"=>self.integrity_selection.as_ref().is_some_and(|(start,end,original)|texts[0].1.content==format!("{}EDITED{}",original.chars().take(*start).collect::<String>(),original.chars().skip(*end).collect::<String>())&&texts[1].1.content.is_empty()),
+            _=>false,
+        };
+        let detail=serde_json::json!({"phase":phase,"passed":passed,"frame":self.frame,"status":self.studio.status,"source":texts.first().map(|(_,t)|&t.content),"selection":self.studio.type_edit.as_ref().map(|e|(e.anchor,e.caret)),"history":self.studio.history.len()});
+        self.integrity_checks.push(detail);
+        fs::write(self.directory.join("integrity-checks.json"),serde_json::to_vec_pretty(&self.integrity_checks).unwrap()).unwrap();
+        if !passed {self.errors.push(format!("text integrity phase {phase} failed"));}
+    }
     fn step(&mut self) {
         let mut actions = std::mem::take(&mut self.actions);
         for a in &mut actions {
@@ -1386,6 +1461,7 @@ impl Capture {
             }
             if self.frame == a.start {
                 match &a.kind {
+                    ActionKind::CheckIntegrity(phase) => { self.check_integrity(phase); },
                     ActionKind::CheckArea(phase) => {
                         let frames:Vec<_>=self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter_map(|s|if let Geom::Text(t)=&s.geom{t.frame.as_ref().map(|_|(s.id,t))}else{None}).collect();
                         let count=frames.len();let head=frames.iter().find(|(_,t)|t.thread.as_ref().is_none_or(|t|t.prev.is_none())).map(|(_,t)|*t);
@@ -1793,6 +1869,15 @@ impl eframe::App for Capture {
                         }
                         Err(error) => self.errors.push(format!("Native save failed: {error}")),
                     }
+                }
+                if self.scene=="area-integrity" {
+                    let saved=omadesign::project::load_from(&self.directory.join("area-integrity-final.oma")).unwrap();
+                    let live=omadesign::compositor::export_png(&self.studio.doc,1).unwrap();let reopened=omadesign::compositor::export_png(&saved,1).unwrap();
+                    if live!=reopened{self.errors.push("Saved/reopened text appearance differs".into());}
+                    fs::write(self.directory.join("area-integrity-export.png"),live).unwrap();
+                    fs::write(self.directory.join("area-integrity-export.svg"),omadesign::svg::export(&saved).unwrap()).unwrap();
+                    fs::write(self.directory.join("area-integrity-result.json"),serde_json::to_vec_pretty(&serde_json::json!({"checks":self.integrity_checks,"errors":self.errors,"saved_by_ctrl_s":true,"reopened_by_application":self.studio.tab_count()>1,"recording_frames":self.frame,"renderer":"native WGPU"})).unwrap()).unwrap();
+                    assert!(self.errors.is_empty(),"text integrity recording failed: {:?}",self.errors);
                 }
                 if self.scene=="area-type" || self.scene=="area-options" || self.scene=="area-invert" || self.scene=="area-valign" {
                     let encoded=omadesign::project::encode(&self.studio.doc).unwrap();fs::write(self.directory.join(format!("{}.oma",self.scene)),&encoded).unwrap();let restored=omadesign::project::decode(&encoded).unwrap();
