@@ -3,6 +3,7 @@
 #[cfg(test)]
 mod appearance_tests;
 mod effects_cache;
+mod mask_cache;
 mod frames;
 mod groups;
 pub(crate) mod interaction;
@@ -683,28 +684,18 @@ fn object_mask(
     t: Transform,
     pose: Pose,
     parent: Option<&tiny_skia::Mask>,
-) -> Option<tiny_skia::Mask> {
+) -> Option<std::sync::Arc<tiny_skia::Mask>> {
     let pixels = shape.mask.as_ref()?;
-    let mut placed = Pixmap::new(pm.width(), pm.height())?;
     let transform = t
         .pre_concat(pose.to_skia(shape.world_bbox().center()))
         .pre_concat(shape_mask_transform(shape));
-    pixels.with_pm(|source| {
-        placed.draw_pixmap(
-            0,
-            0,
-            source.as_ref(),
-            &PixmapPaint {
-                quality: tiny_skia::FilterQuality::Bilinear,
-                ..Default::default()
-            },
-            transform,
-            None,
-        )
-    })?;
-    let mut mask = tiny_skia::Mask::from_pixmap(placed.as_ref(), tiny_skia::MaskType::Luminance);
+    let mut mask = pixels.with_pm(|source| {
+        mask_cache::render(shape.id, source, pm.width(), pm.height(), transform)
+    })??;
     if let Some(parent) = parent {
-        for (a, b) in mask.data_mut().iter_mut().zip(parent.data()) {
+        // A parent's coverage can change independently. Keep the reusable own
+        // mask immutable, and combine the current parent only for this draw.
+        for (a, b) in std::sync::Arc::make_mut(&mut mask).data_mut().iter_mut().zip(parent.data()) {
             *a = ((u16::from(*a) * u16::from(*b) + 127) / 255) as u8;
         }
     }
@@ -873,7 +864,7 @@ fn draw_shape_masked(
         return;
     }
     let own_mask = object_mask(pm, shape, t, pose, mask);
-    let mask = own_mask.as_ref().or(mask);
+    let mask = own_mask.as_deref().or(mask);
     let blend = if shape.blend == crate::color::Blend::Normal {
         blend
     } else {

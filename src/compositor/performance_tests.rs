@@ -106,7 +106,7 @@ fn reference_filtered(pm: &mut Pixmap, shape: &Shape, t: Transform, pose: Pose) 
             alpha,
             shape.fill_opacity,
             shape.blend_interior,
-            mask.as_ref(),
+            mask.as_deref(),
         );
     } else {
         crate::filter::apply(&mut content, &shape.filters);
@@ -120,7 +120,7 @@ fn reference_filtered(pm: &mut Pixmap, shape: &Shape, t: Transform, pose: Pose) 
                 quality: tiny_skia::FilterQuality::Bilinear,
             },
             transform,
-            mask.as_ref(),
+            mask.as_deref(),
         );
     }
 }
