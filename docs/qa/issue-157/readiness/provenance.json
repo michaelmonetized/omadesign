@@ -1,0 +1,38 @@
+{
+  "recorded_source": "c832f3240d77a268134943fa2148410ac46505d3",
+  "files": {
+    "src/agent/attachments.rs": "5a2d837f3f82761d779e182174188e2d1ab0095762be43235b36de0a57d894f3",
+    "src/agent/workspace.rs": "573584a522f975162912bd3f782b42a087e43acf33298c322aebfc9a7a7f15e0",
+    "src/ui/agent_attachments.rs": "da3b3bd8824fd124acafbe3174e5536f1e1013736f6e34e610b9c957c2e755b9",
+    "src/bin/capture_studios.rs": "a06f5b21e06b43bce6ad707aac77296b2d125671a5e850fc78823641670eb09a"
+  },
+  "stable_test_binary_sha256": "193d24bacfc46b5e56a5928e498d8583f90308ee3d39f02bdce5b64296afa98f",
+  "initial_failing_test_binary_sha256": "014cf5c5fce85360139da490531d601389f69e9fdbd9f7087e4cf2b0810d98bd",
+  "native_cache_migration_setup": {
+    "existing_cache_mode": "0755",
+    "existing_thread_mode": "0755",
+    "existing_payload_mode": "0644",
+    "payload": "Synthetic prior clipboard note for cache migration QA."
+  },
+  "qa_files": {
+    "startup-agent.py": "4115d7ceb9f668eb4a7e3071ab44c777992eb8502ec8f2b27833b65c10897fcc",
+    "verify.py": "57dfaac80e959bb7d4ed95ae5d1ab251f411abd754a646eb1ead05ef525e75af",
+    "README.md": "f9e7968ebe94685d6a351a024d4c422813672f7d3a284224168e94de4f5a5d6d",
+    "red-tests.log": "bbd833040f07e27e5bc4250c534ea6e73b7733ef2bdc97474b658bbea698c67e",
+    "final-agent-tests.log": "42bbe951244031780693cd8f31891e53411184ac3643b46e386d93425bd086a9",
+    "final-composer-tests.log": "8095f6711ce61008fb8230d5122143e86402595bdaea1e30770dcdcafd999a03",
+    "final-status-tests.log": "9b1e8e0bd4807b88349202e7c05f5b0c81c1716bec3ea9b43f757e98c334ad07",
+    "agent-recovery.mp4": "36ea1c0cfaad6b883d3f6384a5e70542236304cada02cb3e748c995680bd168f",
+    "verification.json": "07dcbf375a3e6ea0d2a1bc1f67d17cb32efc730e35242cefd5d7cbf47ad40e70",
+    "agent-recovery-errors.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "restored-draft.json": "68884c8772ae3b12401c94ed572e0035a535eef784403c642d76bb50b833f1d7",
+    "conversation.json": "59eb6edd8f9a5e99c4370a5718e85b96406c4ebc34b3e4946f2d52d31b8ad542",
+    "acp-received.json": "859df4e293e38de27b628e4ef49b3a8cdc0c6d31185570096b5ac7c2ae4d53cc",
+    "restored-draft.png": "9b4e2f6017db154e376199c4df7ae4903d988cabe7e4db67e4f5d3785b9b9484",
+    "retry-delivered.png": "b79d7a86979c71a76f45285eac265f5525b900c7fcfecd3f958491059195be6c",
+    "attachment-reference.oma": "5d94519eab4975b54c6717749b75cc7dbc617de8ed1812869922f5220a8eb44b",
+    "capture.json": "1b40547ded99a13ddc90fcdbf1455f2903624128e15e0bf7d0c986ef16d5f3ac",
+    "native.log": "33dff969e6bb74ede7764d8d2698bffcb7b5fef07c0d1cc1eb3f70ba72a7f832",
+    "final-all-targets.log": "5710226598955476bbbb7dbb9a28c880599ceb2f0f28659a393f91e02fec9e45"
+  }
+}

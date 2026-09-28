@@ -1,0 +1,10 @@
+
+running 5 tests
+test ui::agent_attachments::drop_tests::attachment_panel_consumes_file_drop_before_canvas_import ... ok
+test ui::agent_attachments::layout_tests::attachment_panel_keeps_full_native_canvas_bounds_finite ... ok
+test ui::agent_attachments::tests::attachment_backspace_through_native_textedit_removes_token_and_chip ... ok
+test ui::agent_attachments::tests::attachment_tokens_delete_atomically_at_unicode_boundaries_and_selections ... ok
+test ui::agent_attachments::tests::readiness_pending_paste_tracks_unicode_edits_before_its_selection ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 826 filtered out; finished in 7.99s
+

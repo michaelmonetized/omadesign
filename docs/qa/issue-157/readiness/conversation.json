@@ -1,0 +1,65 @@
+{
+  "id": "18d955d0e648f9780000000000000013",
+  "title": "Priority: Match the palette of these references: [📎 pasted-text.txt · ",
+  "settings": {
+    "profile": {
+      "name": "Attachment QA provider",
+      "command": "python3",
+      "args": [
+        "-u",
+        "/home/michael/Projects/omadesign/.worktrees/readiness-agent/docs/qa/issue-157/readiness/startup-agent.py",
+        "/home/michael/Projects/omadesign/target/qa/readiness-agent/native-final/acp-received.json"
+      ]
+    },
+    "directory": "/home/michael/Projects/omadesign/target/qa/readiness-agent/native-final",
+    "live_edits": true,
+    "selections": {},
+    "favorites": []
+  },
+  "purpose": "Create",
+  "session_id": "attachment-native-qa",
+  "document": "/home/michael/Projects/omadesign/target/qa/readiness-agent/native-final/attachment-reference.oma",
+  "messages": [
+    {
+      "role": "user",
+      "text": "Priority: Match the palette of these references: [📎 pasted-text.txt · 3d07727e5de6d46c][📎 pasted-image.png · 4b01673ed0dd0d49]\nNext notes typed while connecting.",
+      "id": "",
+      "status": "",
+      "attachments": [
+        {
+          "id": "3d07727e5de6d46c",
+          "kind": "Text",
+          "mime": "text/plain",
+          "name": "pasted-text.txt",
+          "size": 2700,
+          "source": "/home/michael/Projects/omadesign/target/qa/readiness-agent/native-final/.omadesign/agent-attachments/18d955d0e648f9780000000000000013/18d955d15b83e6140000000000000015-pasted-text.txt",
+          "dimensions": null,
+          "delivery": "Sent as embedded context",
+          "preview": null
+        },
+        {
+          "id": "4b01673ed0dd0d49",
+          "kind": "Image",
+          "mime": "image/png",
+          "name": "pasted-image.png",
+          "size": 1254,
+          "source": "/home/michael/Projects/omadesign/target/qa/readiness-agent/native-final/.omadesign/agent-attachments/18d955d0e648f9780000000000000013/18d955d2dbc694660000000000000017-pasted-image.png",
+          "dimensions": [
+            240,
+            160
+          ],
+          "delivery": "Sent as an image",
+          "preview": null
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "text": "References received: native images, audio, embedded files and a video path. Attachment delivery verified.",
+      "id": "",
+      "status": "",
+      "attachments": []
+    }
+  ],
+  "updated": 1790556709
+}
