@@ -1,0 +1,15 @@
+
+running 10 tests
+test text::metrics::tests::shifted_scaled_glyphs_caret_selection_and_hits_agree ... ok
+test text::metrics::tests::line_uses_largest_leading_and_cache_includes_ranges ... ok
+test text::metrics::tests::legacy_defaults_and_em_tracking_keep_physical_spacing ... ok
+test text::metrics::tests::optical_kerning_keeps_tracking_additive ... ok
+test text::metrics::tests::manual_pair_moves_caret_splits_ligature_and_survives_edits ... ok
+test text::metrics::tests::metric_ranges_inside_ligatures_split_only_the_affected_cluster ... ok
+test text::metrics::tests::metrics_none_and_optical_are_distinct_and_repeatable ... ok
+test text::metrics::tests::nonuniform_resize_preserves_spacing_after_recompose_and_save_reopen ... ok
+test text::metrics::tests::clipboard_keeps_spacing_styles_and_internal_pair_positions ... ok
+test text::metrics::tests::keyboard_increments_reset_defaults_history_and_roundtrip ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 765 filtered out; finished in 5.81s
+
