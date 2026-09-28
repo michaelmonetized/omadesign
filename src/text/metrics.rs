@@ -264,6 +264,47 @@ mod tests {
         }
     }
     #[test]
+    fn nonuniform_resize_preserves_spacing_after_recompose_and_save_reopen() {
+        use crate::document::{Document, Shape, Style};
+        let mut original = run("AVATAR AV");
+        original.origin = Pt::new(37., 83.);
+        original.tracking = 2.;
+        original.set_character_style(0, 3, |s| s.tracking = Some(100.));
+        original.set_character_style(4, 8, |s| s.tracking = Some(-40.));
+        original.set_character_style(2, 5, |s| s.hscale = Some(125.));
+        original.manual_kern.insert(1, -80.);
+        original.manual_kern.insert(7, 120.);
+        original.contours = shape(&original);
+        for (sx, sy) in [(2., 1.), (0.6, 1.5), (1.25, 1.25)] {
+            let mut geometry = Geom::Text(original.clone());
+            let source = geometry.bbox();
+            let target = Bounds::from_min_size(Pt::new(91., 117.), Pt::new(source.width() * sx, source.height() * sy));
+            geometry.map_into(source, target);
+            let Geom::Text(transformed) = &geometry else { unreachable!() };
+            let compare = |actual: &[Vec<Pt>], label: &str| {
+                assert_eq!(transformed.contours.len(), actual.len());
+                let mut max_error = 0_f32;
+                for (mapped, fresh) in transformed.contours.iter().zip(actual) {
+                    assert_eq!(mapped.len(), fresh.len());
+                    for (a, b) in mapped.iter().zip(fresh) {
+                        max_error = max_error.max((*a - *b).length());
+                    }
+                }
+                assert!(max_error < 0.001, "{label}: sx={sx} sy={sy}, contour drift={max_error}px");
+            };
+            compare(&shape(transformed), "recompose");
+            let mut doc = Document::new("Spacing transform", 800., 600., 96.);
+            let art = Shape::new(geometry.clone(), Style::default());
+            let id = art.id;
+            doc.layers[1].kind.shapes_mut().unwrap().push(art);
+            let restored = crate::project::decode(&crate::project::encode(&doc).unwrap()).unwrap();
+            let Geom::Text(reopened) = &restored.find_shape(1, id).unwrap().geom else { unreachable!() };
+            compare(&reopened.contours, "save/reopen");
+            assert_eq!(reopened.spans, transformed.spans);
+            assert_eq!(reopened.manual_kern, transformed.manual_kern);
+        }
+    }
+    #[test]
     fn shifted_scaled_glyphs_caret_selection_and_hits_agree() {
         let mut r = run("ABC");
         let unscaled = compose(&r)[0].glyphs[1].advance;

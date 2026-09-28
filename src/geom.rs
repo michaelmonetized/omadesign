@@ -1044,7 +1044,7 @@ impl Geom {
                 t.tracking *= sx;
                 t.leading *= sy;
                 t.scale_character_metrics(sy);
-                if (sx-sy).abs()>0.001 && sy.abs()>0.001 {t.set_character_style(0,t.content.chars().count(),|s|s.hscale=Some(s.hscale.unwrap_or(100.)*sx/sy));}
+                if (sx-sy).abs()>0.001 && sy.abs()>0.001 {t.scale_character_widths(sx/sy);}
                 for c in &mut t.contours {
                     for p in c {
                         *p = src.map_pt(*p, dst);

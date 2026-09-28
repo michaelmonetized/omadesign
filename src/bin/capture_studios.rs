@@ -51,6 +51,7 @@ enum ActionKind {
     Type(&'static str),
     Expect(&'static str),
     ReopenSaved,
+    VerifySpacing(&'static str),
 }
 struct Action {
     start: u32,
@@ -124,6 +125,21 @@ fn schedule(scene: &str) -> Vec<Action> {
                 ),
             ),
             event(21., Key(egui::Key::S, ctrl())),
+        ],
+        "spacing-resize" => vec![
+            event(1., Expect("W")),
+            event(2., Click(Field("W"))),
+            event(2.2, Key(egui::Key::A, ctrl())),
+            drag(2.4, 0.2, Type("600")),
+            event(2.8, Key(egui::Key::Enter, Modifiers::NONE)),
+            event(4., VerifySpacing("resized")),
+            event(5., Key(egui::Key::Z, ctrl())),
+            event(6., VerifySpacing("undo")),
+            event(7., Key(egui::Key::Z, Modifiers { shift: true, ..ctrl() })),
+            event(8., VerifySpacing("redo")),
+            event(9., Key(egui::Key::S, ctrl())),
+            event(11., ReopenSaved),
+            event(14., VerifySpacing("reopened")),
         ],
         "spacing" => vec![
             event(1., Key(egui::Key::A, ctrl())),
@@ -606,6 +622,8 @@ struct Capture {
     errors: Vec<String>,
     fps: u32,
     ready_since: Instant,
+    spacing_reference: Option<Geom>,
+    spacing_resized: Option<Geom>,
 }
 
 fn prepare_kit() -> PathBuf {
@@ -825,7 +843,7 @@ fn seed(scene: &str) -> Studio {
             *s.doc.layers[0].kind.shapes_mut().unwrap() = vec![bg, subject];
         }
 
-        "paragraphs" | "opentype" | "spacing" => {
+        "paragraphs" | "opentype" | "spacing" | "spacing-resize" => {
             use omadesign::{geom::{TypeRun,ParagraphStyle},document::{Shape,Style,Fill}};
             s.doc=Document::new("Paragraph composition · issue 148",960.,680.,96.);
             let mut run=TypeRun{origin:Pt::new(90.,130.),content:"Thoughtful typography gives every idea room to breathe. Paragraph composition balances word spacing, line endings, and the rhythm of language.\nEach paragraph carries its own alignment and line breaking choices.".into(),font:"/usr/share/fonts/gsfonts/NimbusRoman-Regular.otf".into(),px:30.,wrap_width:Some(710.),paragraphs:vec![ParagraphStyle{word_spacing:[80.,100.,250.],letter_spacing:[0.,0.,8.],..Default::default()}],..Default::default()};
@@ -838,12 +856,22 @@ fn seed(scene: &str) -> Studio {
                 run.font=fs::canonicalize("tests/assets/fonts/EBGaramond.ttf").unwrap().to_string_lossy().into_owned();
                 run.content="AVATAR Wa typography\nSpacing gives each word room to breathe.".into();run.px=44.;run.paragraphs.clear();
             }
+            if scene=="spacing-resize" {
+                s.doc.name="Spacing survives nonuniform resize".into();
+                run.font=fs::canonicalize("tests/assets/fonts/EBGaramond.ttf").unwrap().to_string_lossy().into_owned();
+                run.content="AVATAR AV".into(); run.origin=Pt::new(90.,220.); run.px=64.; run.wrap_width=None; run.paragraphs.clear();
+                run.tracking=2.;
+                run.set_character_style(0,3,|style|style.tracking=Some(100.));
+                run.set_character_style(4,8,|style|style.tracking=Some(-40.));
+                run.set_character_style(2,5,|style|style.hscale=Some(125.));
+                run.manual_kern.insert(1,-80.); run.manual_kern.insert(7,120.);
+            }
             run.contours=omadesign::text::shape(&run);
             let shape=Shape::new(Geom::Text(run),Style{fill:Fill::Solid(Rgba::from_hex(0x24344A)),stroke:None});
             let id=shape.id;
             s.doc.layers[1].kind.shapes_mut().unwrap().push(shape);
             s.active_layer=Some(1);s.selection=vec![(1,id)];s.persona=Persona::Design;s.tool=Tool::Text;
-            s.begin_type_edit((1,id),Pt::new(90.,130.));
+            if scene=="spacing-resize" {s.tool=Tool::Select;} else {s.begin_type_edit((1,id),Pt::new(90.,130.));}
         }
         scene if scene.starts_with("welcome-") => {
             s.show_welcome = true;
@@ -985,7 +1013,7 @@ fn seed(scene: &str) -> Studio {
 impl Capture {
     fn new(scene: String, directory: PathBuf, probe: bool, fps: u32) -> Self {
         let mut studio = seed(&scene);
-        if matches!(scene.as_str(), "independent-effects" | "paragraphs" | "opentype" | "spacing") {
+        if matches!(scene.as_str(), "independent-effects" | "paragraphs" | "opentype" | "spacing" | "spacing-resize") {
             studio.path = Some(directory.join(format!("{scene}-final.oma")));
         }
         if scene == "spacing" { studio.load_startup_preferences(); }
@@ -993,6 +1021,7 @@ impl Capture {
             "paragraphs" => 30,
             "opentype" => 20,
             "spacing" => 48,
+            "spacing-resize" => 17,
             "welcome-browse" => 23,
             "welcome-vector" | "welcome-layout" => 9,
             "welcome-raster" => 8,
@@ -1012,7 +1041,10 @@ impl Capture {
             action.start = action.start * fps / FPS;
             action.end = action.end * fps / FPS;
         }
+        let spacing_reference = (scene=="spacing-resize").then(|| studio.doc.layers[1].kind.shapes().unwrap()[0].geom.clone());
         Self {
+            spacing_reference,
+            spacing_resized: None,
             studio,
             actions,
             scene,
@@ -1032,6 +1064,43 @@ impl Capture {
             fps,
             ready_since: Instant::now(),
         }
+    }
+    fn verify_spacing(&mut self, stage: &str) {
+        let current=self.studio.doc.layers[1].kind.shapes().unwrap()[0].geom.clone();
+        let Geom::Text(run)=&current else {panic!("expected live type")};
+        let initial=self.spacing_reference.as_ref().unwrap();
+        let Geom::Text(original)=initial else {unreachable!()};
+        let compare=|a:&[Vec<Pt>],b:&[Vec<Pt>]| {
+            assert_eq!(a.len(),b.len());
+            let mut error=0_f32;
+            for (a,b) in a.iter().zip(b) {assert_eq!(a.len(),b.len());for (a,b) in a.iter().zip(b) {error=error.max((*a-*b).length());}}
+            assert!(error<0.001,"{stage}: contour drift {error}px"); error
+        };
+        let fresh=omadesign::text::shape(run);
+        let recompose_error=compare(&run.contours,&fresh);
+        if stage=="undo" {
+            compare(&run.contours,&original.contours);
+            assert_eq!(run.spans,original.spans);assert_eq!(run.manual_kern,original.manual_kern);
+        } else {
+            assert!((current.bbox().width()-600.).abs()<0.01,"native Width field did not resize text");
+            let sx=current.bbox().width()/initial.bbox().width();
+            assert!((current.bbox().height()-initial.bbox().height()).abs()<0.001);
+            assert!((run.character_style(0).tracking.unwrap()-100.*sx).abs()<0.01);
+            assert!((run.manual_kern[&1]+80.*sx).abs()<0.01);
+            assert!((run.manual_kern[&7]-120.*sx).abs()<0.01);
+            if stage=="resized" {self.spacing_resized=Some(current.clone());}
+            let Geom::Text(resized)=self.spacing_resized.as_ref().unwrap() else {unreachable!()};
+            compare(&resized.contours,&run.contours);
+            if stage=="reopened" {
+                assert!(self.studio.tab_count()>1);assert_eq!(self.studio.history.len(),0);
+                let saved=omadesign::project::load_from(&self.directory.join("spacing-resize-final.oma")).unwrap();
+                let Geom::Text(disk)=&saved.layers[1].kind.shapes().unwrap()[0].geom else {unreachable!()};
+                compare(&resized.contours,&disk.contours);
+                assert_eq!(disk.spans,run.spans);assert_eq!(disk.manual_kern,run.manual_kern);
+            }
+        }
+        assert!(self.errors.is_empty(),"{:?}",self.errors);
+        fs::write(self.directory.join(format!("spacing-resize-{stage}.json")),serde_json::to_vec_pretty(&serde_json::json!({"stage":stage,"max_recompose_contour_error_px":recompose_error,"bounds":current.bbox(),"spans":run.spans,"manual_kern":run.manual_kern,"unresolved_input_targets":self.errors})).unwrap()).unwrap();
     }
     fn world(&self, x: f32, y: f32) -> Pos2 {
         let r = self.studio.canvas_rect.unwrap();
@@ -1222,8 +1291,9 @@ impl Capture {
                         }
                     }
                     ActionKind::ReopenSaved => {
-                        self.studio.open_path(self.directory.join("spacing-final.oma"));
+                        self.studio.open_path(self.directory.join(format!("{}-final.oma",self.scene)));
                     }
+                    ActionKind::VerifySpacing(stage) => self.verify_spacing(stage),
                     ActionKind::Type(_) => {}
                     ActionKind::Drag(from, to) => a.points = self.target(from).zip(self.target(to)),
                     ActionKind::Delta(t, dx) => {
@@ -1512,6 +1582,11 @@ impl eframe::App for Capture {
                     frame.layout=omadesign::layout::FrameLayout::frame();let frame_id=frame.id;
                     let shapes=export.layers[1].kind.shapes_mut().unwrap();for shape in shapes.iter_mut(){shape.layout.parent=Some(frame_id);}shapes.insert(0,frame);
                     fs::write(self.directory.join("spacing-export.html"),omadesign::layout_export::export_html(&export,1,frame_id).unwrap()).unwrap();
+                }
+                if self.scene=="spacing-resize" {
+                    assert!(self.directory.join("spacing-resize-reopened.json").is_file());
+                    assert!(self.errors.is_empty());
+                    fs::write(self.directory.join("spacing-resize-result.json"),serde_json::to_vec_pretty(&serde_json::json!({"saved_by_ctrl_s":true,"reopened_by_application":true,"undo_redo_verified":true,"renderer":"native WGPU","recording_frames":self.frame,"fps":self.fps,"unresolved_input_targets":self.errors})).unwrap()).unwrap();
                 }
                 self.encoder.take().unwrap().finish();
                 fs::write(

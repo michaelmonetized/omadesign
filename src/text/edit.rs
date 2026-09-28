@@ -209,6 +209,20 @@ impl TypeRun {
             }
         }
     }
+    /// Font size already follows the vertical scale. Apply the remaining
+    /// horizontal ratio to glyph widths and explicit em spacing. Inherited
+    /// tracking stays unset because run-level pixel tracking is scaled separately.
+    pub fn scale_character_widths(&mut self, ratio: f32) {
+        self.set_character_style(0, self.content.chars().count(), |span| {
+            span.hscale = Some(span.hscale.unwrap_or(100.) * ratio);
+            if let Some(tracking) = &mut span.tracking {
+                *tracking *= ratio;
+            }
+        });
+        for amount in self.manual_kern.values_mut() {
+            *amount *= ratio;
+        }
+    }
     pub fn scale_character_metrics(&mut self,ratio:f32) {
         for span in &mut self.spans {
             if let Some(crate::geom::Leading::Fixed(value))=&mut span.leading {*value*=ratio.abs();}
