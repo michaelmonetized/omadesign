@@ -1,6 +1,11 @@
 //! Appearance effects are composited against the real backdrop, independently of content.
 use super::*;
 use tiny_skia::{Mask, PixmapPaint, Transform};
+mod cache;
+
+pub(crate) fn reset_appearance_admission() {
+    cache::reset_admission();
+}
 
 impl Fx {
     pub fn appearance(&self) -> Option<(Blend, f32)> {
@@ -86,7 +91,7 @@ pub fn effect_pixels(source: &Pixmap, fx: &Fx) -> Option<Pixmap> {
             ..
         } => {
             morphology(&mut out, false, spread.max(0.));
-            blur(&mut out, sigma);
+            super::blur_alpha(&mut out, sigma);
             tint_alpha(&mut out, color);
             let mut inverse = source.clone();
             invert_alpha(&mut inverse);
@@ -103,7 +108,7 @@ pub fn effect_pixels(source: &Pixmap, fx: &Fx) -> Option<Pixmap> {
             invert_alpha(&mut out);
             morphology(&mut out, false, choke.max(0.));
             offset(&mut out, dx, dy);
-            blur(&mut out, sigma);
+            super::blur_alpha(&mut out, sigma);
             tint_alpha(&mut out, color);
             clip_to_alpha(&mut out, source);
         }
@@ -118,7 +123,7 @@ pub fn effect_pixels(source: &Pixmap, fx: &Fx) -> Option<Pixmap> {
                 invert_alpha(&mut out);
             }
             morphology(&mut out, origin == GlowSource::Center, choke.max(0.));
-            blur(&mut out, sigma);
+            super::blur_alpha(&mut out, sigma);
             tint_alpha(&mut out, color);
             clip_to_alpha(&mut out, source);
         }
@@ -236,15 +241,7 @@ pub fn composite(
             mask,
         );
     };
-    let effects: Vec<_> = if stack.active() {
-        stack
-            .items
-            .iter()
-            .filter_map(|fx| Some((fx, effect_pixels(&content, fx)?)))
-            .collect()
-    } else {
-        vec![]
-    };
+    let effects = cache::render(&content, stack);
     for (fx, pixels) in effects.iter().filter(|(fx, _)| fx.outer()) {
         let (mode, alpha) = fx.appearance().unwrap();
         draw(dst, pixels, mode.to_skia(), alpha, transform, mask);

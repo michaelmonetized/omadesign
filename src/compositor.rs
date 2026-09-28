@@ -2,7 +2,8 @@
 
 #[cfg(test)]
 mod appearance_tests;
-mod cache_admission;
+mod bounded_blit;
+pub(crate) mod cache_admission;
 mod effects_cache;
 mod mask_cache;
 mod frames;
@@ -11,6 +12,14 @@ pub(crate) mod interaction;
 #[cfg(test)]
 mod performance_tests;
 mod surface_cache;
+
+/// Give a newly active or edited document an immediate chance to populate the
+/// bounded effect caches without discarding exact pixels that remain useful.
+pub(crate) fn reset_effect_admission() {
+    effects_cache::reset_admission();
+    surface_cache::reset_admission();
+    crate::filter::reset_appearance_admission();
+}
 
 use crate::color::Rgba;
 use crate::document::{Document, Fill, Layer, LayerKind, Shape};
@@ -415,23 +424,19 @@ fn draw_layer(
             return;
         }
         let cached;
-        let pixels = if filtered {
+        let (pixels, coverage) = if filtered {
             cached = surface_cache::render(layer.id, temp, &layer.filters);
-            cached.as_ref()
+            (cached.as_ref(), surface_cache::bounds(layer.id, &cached))
         } else {
-            &temp
+            (&temp, bounded_blit::bounds(temp.as_ref()))
         };
-        pm.draw_pixmap(
-            0,
-            0,
+        bounded_blit::draw(
+            pm,
             pixels.as_ref(),
-            &PixmapPaint {
-                opacity: layer.opacity.clamp(0.0, 1.0),
-                blend_mode: layer.blend.to_skia(),
-                ..Default::default()
-            },
+            coverage,
+            layer.opacity,
+            layer.blend,
             placement,
-            None,
         );
     } else {
         draw_content(
@@ -920,22 +925,28 @@ fn draw_shape_masked(
         if right <= x || bottom <= y {
             return;
         }
-        if let Some(mut temp) = Pixmap::new((right - x) as u32, (bottom - y) as u32) {
+        let size = [(right - x) as u32, (bottom - y) as u32];
+        let local = Transform::from_translate(-x, -y).pre_concat(t);
+        let temp = effects_cache::render_screen(shape, pose, local, size, || {
+            let mut temp = Pixmap::new(size[0], size[1])?;
             let mut opaque_pose = pose;
             opaque_pose.opacity = Some(1.0);
             draw_shape_inner(
                 &mut temp,
                 shape,
-                Transform::from_translate(-x, -y).pre_concat(t),
+                local,
                 1.0,
                 tiny_skia::BlendMode::SourceOver,
                 opaque_pose,
                 None,
             );
+            Some(temp)
+        });
+        if let Some(temp) = temp {
             pm.draw_pixmap(
                 x as i32,
                 y as i32,
-                temp.as_ref(),
+                temp.as_ref().as_ref(),
                 &PixmapPaint {
                     opacity: (opacity * alpha * shape.fill_opacity).clamp(0.0, 1.0),
                     blend_mode: blend,

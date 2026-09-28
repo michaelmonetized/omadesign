@@ -887,6 +887,7 @@ impl Studio {
     }
 
     pub fn mark(&mut self) {
+        crate::compositor::reset_effect_admission();
         self.interaction_render.clear();
         crate::text_geometry::reflow(&mut self.doc);
         self.mark_interaction();

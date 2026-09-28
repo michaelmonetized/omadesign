@@ -4,7 +4,7 @@ const WIDTH: usize = 512;
 const ROWS: usize = 4;
 const AGE_AFTER: usize = 1024;
 
-pub(super) struct Admission {
+pub(crate) struct Admission {
     counters: [u8; WIDTH * ROWS],
     requests: usize,
 }
@@ -28,7 +28,7 @@ impl Admission {
         std::array::from_fn(|row| row * WIDTH + ((hash >> (row * 13)) as usize & (WIDTH - 1)))
     }
 
-    pub(super) fn record(&mut self, key: u64) {
+    pub(crate) fn record(&mut self, key: u64) {
         if self.requests == AGE_AFTER {
             for count in &mut self.counters {
                 *count /= 2;
@@ -41,7 +41,7 @@ impl Admission {
         }
     }
 
-    pub(super) fn frequency(&self, key: u64) -> u8 {
+    pub(crate) fn frequency(&self, key: u64) -> u8 {
         Self::positions(key)
             .into_iter()
             .map(|i| self.counters[i])

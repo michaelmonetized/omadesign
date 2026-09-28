@@ -132,6 +132,7 @@ impl Studio {
     }
 
     fn activate_tab(&mut self) {
+        crate::compositor::reset_effect_admission();
         self.interaction_render.clear();
         self.pixel_sel_cache.clear();
         if !self.show_welcome

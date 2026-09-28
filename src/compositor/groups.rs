@@ -169,23 +169,19 @@ impl Context<'_, '_> {
                     continue;
                 }
                 let cached;
-                let pixels = if layer.filters.active() {
+                let (pixels, coverage) = if layer.filters.active() {
                     cached = surface_cache::render(layer.id, temp, &layer.filters);
-                    cached.as_ref()
+                    (cached.as_ref(), surface_cache::bounds(layer.id, &cached))
                 } else {
-                    &temp
+                    (&temp, bounded_blit::bounds(temp.as_ref()))
                 };
-                pm.draw_pixmap(
-                    0,
-                    0,
+                bounded_blit::draw(
+                    pm,
                     pixels.as_ref(),
-                    &PixmapPaint {
-                        opacity: layer.opacity.clamp(0.0, 1.0),
-                        blend_mode: layer.blend.to_skia(),
-                        ..Default::default()
-                    },
+                    coverage,
+                    layer.opacity,
+                    layer.blend,
                     Transform::identity(),
-                    None,
                 );
             }
         }
