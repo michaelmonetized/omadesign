@@ -1870,7 +1870,7 @@ pub fn scale_typography(run: &mut TypeRun, sx: f32, sy: f32) {
     run.leading *= sy;
     run.scale_character_metrics(sy);
     if (sx - sy).abs() > 0.001 && sy.abs() > 0.001 {
-        run.set_character_style(0, run.content.chars().count(), |span| span.hscale = Some(span.hscale.unwrap_or(100.) * sx / sy));
+        run.scale_character_widths(sx / sy);
     }
     run.layout = None;
 }
@@ -1878,6 +1878,63 @@ pub fn scale_typography(run: &mut TypeRun, sx: f32, sy: f32) {
 #[cfg(test)]
 mod threaded_transform_tests {
     use super::*;
+    #[test]
+    fn follower_nonuniform_transform_preserves_rendered_tracking_and_pair_spacing() {
+        let mut studio = crate::app::Studio::new();
+        studio.active_layer = Some(1);
+        studio.text_px = 24.;
+        studio.place_area_text(Bounds::from_min_size(Pt::new(10., 10.), Pt::new(140., 90.)));
+        studio.type_insert(&"AVATAR AV continues through frames. ".repeat(8));
+        studio.commit_type_edit();
+        let head = studio.selection[0];
+        if let Geom::Text(run) = &mut studio.doc.find_shape_mut(head.0, head.1).unwrap().geom {
+            run.tracking = 2.;
+            run.set_character_style(0, 3, |span| span.tracking = Some(100.));
+            run.set_character_style(4, 8, |span| span.tracking = Some(-40.));
+            run.set_character_style(2, 5, |span| span.hscale = Some(125.));
+            run.manual_kern.insert(1, -80.);
+            run.manual_kern.insert(7, 120.);
+        }
+        studio.place_area_text(Bounds::from_min_size(Pt::new(200., 10.), Pt::new(140., 90.)));
+        studio.commit_type_edit();
+        let tail = studio.selection[0];
+        studio.thread_text_frames(head, tail).unwrap();
+        let Geom::Text(original) = &studio.doc.find_shape(head.0, head.1).unwrap().geom else { panic!() };
+        let mut original = original.clone();
+        original.frame = None;
+        original.layout = None;
+        original.wrap_width = None;
+        let before = crate::text::compose(&original);
+        let bounds = studio.doc.find_shape(tail.0, tail.1).unwrap().geom.bbox();
+        studio.transform_shape_with_text_scale(tail.0, tail.1, Bounds::from_min_size(bounds.min, Pt::new(bounds.width() * 2., bounds.height() * 1.5)));
+        let Geom::Text(transformed) = &studio.doc.find_shape(head.0, head.1).unwrap().geom else { panic!() };
+        let mut transformed = transformed.clone();
+        transformed.frame = None;
+        transformed.layout = None;
+        transformed.wrap_width = None;
+        let after = crate::text::compose(&transformed);
+        assert_eq!(before.len(), after.len());
+        for (before, after) in before.iter().zip(after.iter()) {
+            assert_eq!(before.glyphs.len(), after.glyphs.len());
+            for (a, b) in before.glyphs.iter().zip(&after.glyphs) {
+                assert_eq!(a.id, b.id);
+                assert!((b.x - a.x * 2.).abs() < 0.01, "glyph {} spacing drift: {}", a.cluster, b.x - a.x * 2.);
+                assert!((b.advance - a.advance * 2.).abs() < 0.01);
+            }
+        }
+        let reopened = crate::project::decode(&crate::project::encode(&studio.doc).unwrap()).unwrap();
+        for target in [head, tail] {
+            let Geom::Text(saved) = &studio.doc.find_shape(target.0, target.1).unwrap().geom else { panic!() };
+            let Geom::Text(loaded) = &reopened.find_shape(target.0, target.1).unwrap().geom else { panic!() };
+            assert_eq!(saved.spans, loaded.spans);
+            assert_eq!(saved.manual_kern, loaded.manual_kern);
+            assert_eq!(saved.contours.len(), loaded.contours.len());
+            for (a, b) in saved.contours.iter().zip(&loaded.contours) {
+                assert_eq!(a.len(), b.len());
+                for (a, b) in a.iter().zip(b) { assert!((*a - *b).length() < 0.001); }
+            }
+        }
+    }
     #[test]
     fn follower_transform_scales_story_once_and_undo_restores_bounds_and_type() {
         let mut studio=crate::app::Studio::new();studio.active_layer=Some(1);studio.text_px=20.;
