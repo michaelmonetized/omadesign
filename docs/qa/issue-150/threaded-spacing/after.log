@@ -1,0 +1,3 @@
+Excerpt from the complete integrated regression run at 5af45677; not a separate test invocation.
+test text_geometry::area::threaded_transform_tests::follower_nonuniform_transform_preserves_rendered_tracking_and_pair_spacing ... ok
+test text_geometry::area::threaded_transform_tests::follower_transform_scales_story_once_and_undo_restores_bounds_and_type ... ok

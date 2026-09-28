@@ -1,0 +1,27 @@
+   Compiling winit v0.30.13 (/home/michael/Projects/omadesign/.worktrees/readiness-integration/vendor/winit)
+   Compiling omadesign v0.6.0 (/home/michael/Projects/omadesign/.worktrees/readiness-integration)
+   Compiling accesskit_winit v0.32.2
+   Compiling egui-winit v0.36.1 (/home/michael/Projects/omadesign/.worktrees/readiness-integration/vendor/egui-winit)
+   Compiling egui-wgpu v0.36.1
+   Compiling eframe v0.36.1
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 17s
+     Running unittests src/lib.rs (/home/michael/Projects/omadesign/target/debug/deps/omadesign-eeb97c2698df9278)
+
+running 1 test
+test text_geometry::area::threaded_transform_tests::follower_nonuniform_transform_preserves_rendered_tracking_and_pair_spacing ... FAILED
+
+failures:
+
+---- text_geometry::area::threaded_transform_tests::follower_nonuniform_transform_preserves_rendered_tracking_and_pair_spacing stdout ----
+
+thread 'text_geometry::area::threaded_transform_tests::follower_nonuniform_transform_preserves_rendered_tracking_and_pair_spacing' (443762) panicked at src/text_geometry/area.rs:1922:17:
+assertion failed: (b.advance - a.advance * 2.).abs() < 0.01
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    text_geometry::area::threaded_transform_tests::follower_nonuniform_transform_preserves_rendered_tracking_and_pair_spacing
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 827 filtered out; finished in 5.05s
+
+error: test failed, to rerun pass `--lib`

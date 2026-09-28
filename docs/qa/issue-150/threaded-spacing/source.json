@@ -1,0 +1,8 @@
+{
+  "tested_revision": "5af45677",
+  "source_files_sha256": {
+    "src/text_geometry/area.rs": "caac9bc1866ae221add0025cd2591716938faa0fe34cf11247590a44326c57fd",
+    "src/text/edit.rs": "9c5ffb30f17ad48e88b011f5ddc95adf90245f32a30e91bc52f88ca823ab9901"
+  },
+  "verification": "Matching successful lines extracted from the integrated full-suite log; complete receipt is published on PR168."
+}
