@@ -1466,7 +1466,9 @@ mod tests {
         assert_eq!(text(&studio, ids[0]).thread.unwrap().next, Some(ids[1].1));
         let encoded = crate::project::encode(&studio.doc).unwrap();
         let restored = crate::project::decode(&encoded).unwrap();
-        assert!(encoded.contains("\"version\":10"));
+        // These populated placeholder targets now retain explicit inherited
+        // character metrics, which are correctly gated by existing version 12.
+        assert!(encoded.contains("\"version\":12"));
         assert!(
             matches!(&restored.find_shape(ids[0].0,ids[0].1).unwrap().geom,Geom::Text(t) if t.content==source)
         );
