@@ -280,6 +280,8 @@ pub enum Op {
 pub struct TypeEdit {
     pub layer: usize,
     pub id: u64,
+    /// Pointer geometry follows the active frame; edits still target the story head.
+    pub frame: (usize, u64),
     pub caret: usize,
     pub anchor: usize,
     pub before: Geom,
@@ -2106,6 +2108,7 @@ impl Studio {
         self.type_edit = Some(TypeEdit {
             layer: li,
             id,
+            frame: (li, id),
             caret: n,
             anchor: 0,
             before: geom,
@@ -2116,20 +2119,12 @@ impl Studio {
 
     pub fn begin_type_edit(&mut self, hit: (usize, u64), world: Pt) {
         let frame_hit = hit;
-        let frame_caret = self.doc.find_shape(hit.0,hit.1).and_then(|s|if let Geom::Text(t)=&s.geom{crate::text_geometry::hit_char(t,world)}else{None});
+        let Some(frame_caret) = self.type_frame_caret(frame_hit, world) else { return; };
         let hit = self.story_head(hit);
         self.selected_layer = None;
         if self.editing_text(hit.0, hit.1) {
-            let caret = self
-                .doc
-                .find_shape(hit.0, hit.1)
-                .and_then(|s| match &s.geom {
-                    Geom::Text(run) => Some(frame_caret.unwrap_or_else(||crate::text::hit_char(run, world))),
-                    _ => None,
-                });
-            if let (Some(c), Some(e)) = (caret, self.type_edit.as_mut()) {
-                e.pointer_caret(c,false);
-            }
+            self.type_pointer_caret(frame_hit, world, false);
+            self.selection = vec![frame_hit];
             return;
         }
         self.commit_type_edit();
@@ -2139,7 +2134,7 @@ impl Studio {
         let Geom::Text(run) = &s.geom else {
             return;
         };
-        let caret = frame_caret.unwrap_or_else(||crate::text::hit_char(run, world));
+        let caret = frame_caret;
         let defaults = run.clone();
         let before = s.geom.clone();
         self.sync_type_defaults(&defaults);
@@ -2148,12 +2143,30 @@ impl Studio {
         self.type_edit = Some(TypeEdit {
             layer: hit.0,
             id: hit.1,
+            frame: frame_hit,
             caret,
             anchor: caret,
             before,
             pending_style: None,
         });
         self.status = "type — click or Esc to finish, Enter for a new line".into();
+    }
+
+    fn type_frame_caret(&self, frame: (usize, u64), world: Pt) -> Option<usize> {
+        let point = self.doc.layout_hit_point(frame.0, frame.1, world)?;
+        let shape = self.doc.find_shape(frame.0, frame.1)?;
+        let Geom::Text(run) = &shape.geom else { return None; };
+        Some(crate::text::hit_char(run, shape.local_point(point)))
+    }
+
+    /// Hit-test a story frame in its unrotated layout coordinates.
+    pub fn type_pointer_caret(&mut self, frame: (usize, u64), world: Pt, extend: bool) -> bool {
+        if !self.editing_text(frame.0, frame.1) { return false; }
+        let Some(caret) = self.type_frame_caret(frame, world) else { return false; };
+        let edit = self.type_edit.as_mut().unwrap();
+        edit.frame = frame;
+        edit.pointer_caret(caret, extend);
+        true
     }
 
     pub fn editing_text(&self, layer: usize, id: u64) -> bool {

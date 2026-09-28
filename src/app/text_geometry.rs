@@ -187,7 +187,6 @@ impl Studio {
         from: (usize, u64),
         to: (usize, u64),
     ) -> Result<(), String> {
-        self.commit_type_edit();
         if from == to {
             return Err("A frame cannot flow into itself".into());
         }
@@ -213,7 +212,21 @@ impl Studio {
         if b.thread.as_ref().is_some_and(|t| t.story == story) {
             return Err("A story cannot loop back into itself".into());
         }
+        let head = self.doc.layers.iter().filter_map(|l| l.kind.shapes()).flatten()
+            .find(|s| s.id == story).ok_or("Source story missing")?;
+        let Geom::Text(head_run) = &head.geom else { return Err("Source story missing".into()); };
+        // Fonts, sizes and paint belong to the whole run/shape. Range attributes
+        // can preserve spacing and features, but cannot encode these differences.
+        // Validate before ending an edit session or adding anything to history.
+        if !b.content.is_empty() && (head_run.font != b.font || head_run.px != b.px
+            || head.style != target.style || head.opacity != target.opacity
+            || head.fill_opacity != target.fill_opacity || head.blend != target.blend
+            || head.blend_interior != target.blend_interior || head.filters != target.filters)
+        {
+            return Err("Cannot merge populated frames with different fonts, sizes or appearance. Match those settings, or thread into an empty frame.".into());
+        }
         let target_story = b.thread.as_ref().map_or(target.id, |t| t.story);
+        self.commit_type_edit();
         let mut changes = vec![];
         for (layer, l) in self.doc.layers.iter().enumerate() {
             for shape in l.kind.shapes().unwrap_or(&[]) {
@@ -224,27 +237,7 @@ impl Studio {
                 let mut changed = false;
                 if shape.id == story {
                     if !b.content.is_empty() {
-                        if !after.content.ends_with('\n') {
-                            after.content.push('\n');
-                        }
-                        let offset = after.content.chars().count();
-                        after.content.push_str(&b.content);
-                        after.manual_kern.extend(
-                            b.manual_kern
-                                .iter()
-                                .map(|(&index, &value)| (index + offset, value)),
-                        );
-                        after
-                            .paragraphs
-                            .extend(b.paragraphs.iter().cloned().map(|mut p| {
-                                p.start += offset;
-                                p
-                            }));
-                        after.spans.extend(b.spans.iter().cloned().map(|mut s| {
-                            s.start += offset;
-                            s.end += offset;
-                            s
-                        }));
+                        append_story(&mut after, b);
                     }
                     changed = true;
                 }
@@ -555,5 +548,146 @@ impl Studio {
             }
         }
         self.commit(Cmd::Batch(commands));
+    }
+}
+
+/// Preserve effective inherited attributes before moving text under another run.
+/// Font/size/paint compatibility is checked before this helper is called.
+fn append_story(head: &mut crate::geom::TypeRun, target: &crate::geom::TypeRun) {
+    use std::collections::BTreeSet;
+    if !head.content.is_empty() && !head.content.ends_with('\n') { head.content.push('\n'); }
+    let offset = head.content.chars().count();
+    let tags: BTreeSet<_> = [*b"kern", *b"liga", *b"clig", *b"tnum", *b"smcp", *b"c2sc", *b"calt"]
+        .into_iter().chain(head.features.iter().map(|(tag,_)| *tag))
+        .chain(target.features.iter().map(|(tag,_)| *tag))
+        .chain(head.spans.iter().chain(&target.spans).flat_map(|span| span.features.iter().map(|(tag,_)| *tag)))
+        .collect();
+    let spans = target.character_style_runs(0, target.content.chars().count()).into_iter().map(|span| {
+        let mut effective = crate::text::character_metrics(target, span.start);
+        effective.features = tags.iter().map(|tag| {
+            let value = if tag == b"kern" && !span.features.iter().any(|(t,_)| t == tag) && span.kerning.is_some() {
+                u32::from(span.kerning == Some(crate::geom::KernMode::Metrics))
+            } else { crate::text::feature_value(target, span.start, *tag) };
+            (*tag, value)
+        }).collect();
+        effective.start = offset + span.start;
+        effective.end = offset + span.end;
+        effective
+    });
+    head.spans.extend(spans);
+    head.manual_kern.extend(target.manual_kern.iter().map(|(&i,&value)| (offset+i,value)));
+    head.paragraphs.retain(|p| p.start < offset);
+    head.paragraphs.extend(std::iter::once(0).chain(target.content.chars().enumerate()
+        .filter_map(|(i,c)| (c=='\n').then_some(i+1))).map(|start| {
+            let mut style = crate::text::paragraph_style(target,start);
+            style.start = offset + start;
+            style
+        }));
+    head.content.push_str(&target.content);
+}
+
+#[cfg(test)]
+mod readiness_tests {
+    use super::*;
+    use crate::geom::{CharSpan, KernMode, Leading, ParagraphStyle, TextAlign, TypeRun};
+    use crate::text_geometry::TextFrame;
+
+    fn fixture(a: TypeRun, b: TypeRun) -> (Studio, (usize,u64), (usize,u64)) {
+        let mut studio = Studio::new();
+        let mut ids = Vec::new();
+        for (index, mut run) in [a,b].into_iter().enumerate() {
+            run.origin = Pt::new(40. + index as f32 * 330., 60.);
+            run.frame = Some(TextFrame { size: Pt::new(280., 100.), ..Default::default() });
+            let shape = Shape::new(Geom::Text(run), Style::default());
+            ids.push((1,shape.id));
+            studio.doc.layers[1].kind.shapes_mut().unwrap().push(shape);
+        }
+        studio.active_layer = Some(1);studio.mark();studio.history.clear();
+        (studio, ids[0], ids[1])
+    }
+    fn run(content: &str) -> TypeRun {
+        TypeRun {content: content.into(), px: 22., font: concat!(env!("CARGO_MANIFEST_DIR"),"/tests/assets/fonts/EBGaramond.ttf").into(), ..Default::default()}
+    }
+    fn text(studio: &Studio, hit: (usize,u64)) -> &TypeRun {
+        let Geom::Text(run) = &studio.doc.find_shape(hit.0,hit.1).unwrap().geom else { panic!() };run
+    }
+    #[test]
+    fn populated_merge_preserves_inherited_and_explicit_styles() {
+        let mut a = run("Source paragraph");a.features=vec![(*b"dlig",1),(*b"ss01",1)];a.tracking=4.;a.leading=39.;a.align=TextAlign::Center;
+        let mut b = run("office 123\nTarget defaults\nEnd");b.liga=false;b.tnum=true;b.kern=false;b.tracking=1.5;b.leading=31.;b.align=TextAlign::End;
+        b.features=vec![(*b"smcp",1)];
+        b.spans=vec![CharSpan{start:0,end:6,tracking:Some(75.),kerning:Some(KernMode::Optical),leading:Some(Leading::Auto(170.)),baseline_shift:Some(3.),features:vec![(*b"liga",1)],no_break:true,..Default::default()}];
+        b.paragraphs=vec![ParagraphStyle{start:11,align:TextAlign::Start,word_spacing:[70.,125.,160.],..Default::default()}];b.manual_kern.insert(2,-40.);
+        let original_a=a.clone();let original_b=b.clone();let offset=a.content.chars().count()+1;
+        let (mut studio,head,target)=fixture(a,b);
+        let before=crate::project::encode(&studio.doc).unwrap();
+        studio.thread_text_frames(head,target).unwrap();
+        let merged=text(&studio,head);
+        assert_eq!(merged.content,format!("{}\n{}",original_a.content,original_b.content));
+        assert!(text(&studio,target).content.is_empty());
+        assert_eq!(merged.manual_kern.get(&(offset+2)),Some(&-40.));
+        for index in 0..original_b.content.chars().count() {
+            let old=crate::text::character_metrics(&original_b,index);let new=crate::text::character_metrics(merged,offset+index);
+            assert_eq!((new.no_break,new.tracking,new.leading,new.baseline_shift,new.hscale,new.vscale,new.kerning),(old.no_break,old.tracking,old.leading,old.baseline_shift,old.hscale,old.vscale,old.kerning));
+            for tag in [*b"liga",*b"clig",*b"tnum",*b"smcp",*b"dlig",*b"ss01"] {assert_eq!(crate::text::feature_value(merged,offset+index,tag),crate::text::feature_value(&original_b,index,tag));}
+            let mut expected=crate::text::paragraph_style(&original_b,index);expected.start+=offset;assert_eq!(crate::text::paragraph_style(merged,offset+index),expected);
+        }
+        // Compare shaped glyph positions/features with the original target, not just serialized attributes.
+        let mut original=original_b.clone();original.frame=None;original.wrap_width=Some(280.);
+        let mut suffix=original.clone();
+        suffix.content=original.content.clone();suffix.spans=merged.spans.iter().filter(|s|s.end>offset).cloned().map(|mut s|{s.start-=offset;s.end-=offset;s}).collect();
+        suffix.features=merged.features.clone();suffix.kern=merged.kern;suffix.liga=merged.liga;suffix.tnum=merged.tnum;suffix.smcp=merged.smcp;suffix.tracking=merged.tracking;suffix.leading=merged.leading;suffix.align=merged.align;
+        suffix.paragraphs=merged.paragraphs.iter().filter(|p|p.start>=offset).cloned().map(|mut p|{p.start-=offset;p}).collect();
+        let old=crate::text::compose(&original);let new=crate::text::compose(&suffix);
+        assert_eq!(old.len(),new.len());for (old,new) in old.iter().zip(new.iter()) {assert_eq!(old.glyphs.iter().map(|g|(g.id,g.cluster,g.x,g.y,g.advance)).collect::<Vec<_>>(),new.glyphs.iter().map(|g|(g.id,g.cluster,g.x,g.y,g.advance)).collect::<Vec<_>>());}
+        let encoded=crate::project::encode(&studio.doc).unwrap();let reopened=crate::project::decode(&encoded).unwrap();assert_eq!(crate::project::encode(&reopened).unwrap(),encoded);
+        assert_eq!(studio.history.len(),1);studio.undo();assert_eq!(crate::project::encode(&studio.doc).unwrap(),before);studio.redo();assert_eq!(crate::project::encode(&studio.doc).unwrap(),encoded);
+    }
+    #[test]
+    fn populated_merge_rejects_unrepresentable_defaults_without_mutating_edit_or_history() {
+        for mismatch in 0..3 {
+            let (mut studio,head,target)=fixture(run("Source"),run("Target"));
+            let shape=studio.doc.find_shape_mut(target.0,target.1).unwrap();
+            match mismatch {0=>if let Geom::Text(t)=&mut shape.geom {t.font="different-font.ttf".into();},1=>if let Geom::Text(t)=&mut shape.geom {t.px=31.;},_=>shape.style.fill=crate::document::Fill::Solid(crate::color::Rgba::from_hex(0xff0033))}
+            studio.begin_type_edit(head,Pt::new(50.,60.));studio.type_insert("Editing");
+            let before=crate::project::encode(&studio.doc).unwrap();let history=studio.history.len();let caret=studio.type_edit.as_ref().unwrap().caret;
+            let error=studio.thread_text_frames(head,target).unwrap_err();assert!(error.contains("empty frame"));
+            assert_eq!(crate::project::encode(&studio.doc).unwrap(),before);assert_eq!(studio.history.len(),history);assert_eq!(studio.type_edit.as_ref().unwrap().caret,caret);
+        }
+    }
+    #[test]
+    fn empty_frames_thread_and_empty_head_does_not_invent_a_paragraph() {
+        let (mut studio,head,target)=fixture(run(""),run("Target"));studio.thread_text_frames(head,target).unwrap();assert_eq!(text(&studio,head).content,"Target");
+        let mut empty=run("");empty.px=90.;empty.font="another-font".into();let (mut studio,head,target)=fixture(run("Source"),empty);studio.thread_text_frames(head,target).unwrap();assert_eq!(text(&studio,head).content,"Source");
+    }
+    #[test]
+    fn follower_source_validation_uses_the_actual_head_defaults() {
+        let (mut studio,head,follower)=fixture(run("Source"),run(""));studio.thread_text_frames(head,follower).unwrap();
+        let target=studio.empty_thread_frame(follower,Pt::new(40.,240.)).unwrap();
+        if let Geom::Text(t)=&mut studio.doc.find_shape_mut(follower.0,follower.1).unwrap().geom {t.font="stale-follower-default".into();t.px=99.;}
+        if let Geom::Text(t)=&mut studio.doc.find_shape_mut(target.0,target.1).unwrap().geom {t.content="Target".into();}
+        studio.thread_text_frames(follower,target).unwrap();assert_eq!(text(&studio,head).content,"Source\nTarget");
+    }
+    #[test]
+    fn follower_pointer_selection_stays_in_active_frame_and_undo_restores_story() {
+        for (rotation,parent_rotation) in [(0.,0.),(0.63,0.),(0.37,0.48)] {
+            let original="Every word remains in the story when editing a following frame. ".repeat(4);
+            let (mut studio,head,follower)=fixture(run(&original),run(""));studio.thread_text_frames(head,follower).unwrap();
+            studio.doc.find_shape_mut(follower.0,follower.1).unwrap().rotation=rotation;
+            let parent = if parent_rotation != 0. {
+                let mut outer = Shape::new(Geom::Rect{origin:Pt::new(320.,10.),size:Pt::new(390.,220.),radius:0.},Style::default());
+                outer.layout.frame=true;outer.rotation=parent_rotation;let id=outer.id;
+                studio.doc.find_shape_mut(follower.0,follower.1).unwrap().layout.parent=Some(id);
+                studio.doc.layers[1].kind.shapes_mut().unwrap().push(outer);Some(id)
+            } else {None};studio.mark();
+            let shape=studio.doc.find_shape(follower.0,follower.1).unwrap();let Geom::Text(t)=&shape.geom else {panic!()};let layout=t.layout.as_ref().unwrap();let start=layout.visible_start+2;let end=start+5;
+            let point=|index| {let point=shape.world_point(crate::text::caret_pt(t,index));parent.map_or(point,|id|studio.doc.find_shape(1,id).unwrap().world_point(point))};let (a,b)=(point(start),point(end));
+            studio.begin_type_edit(follower,a);assert_eq!(studio.type_edit.as_ref().unwrap().caret,start);assert_eq!(studio.type_edit.as_ref().unwrap().frame,follower);
+            assert!(studio.type_pointer_caret(follower,b,true));assert_eq!((studio.type_edit.as_ref().unwrap().anchor,studio.type_edit.as_ref().unwrap().caret),(start,end));
+            studio.begin_type_edit(follower,b);assert_eq!((studio.type_edit.as_ref().unwrap().anchor,studio.type_edit.as_ref().unwrap().caret),(end,end));
+            assert!(studio.type_pointer_caret(follower,a,true));assert_eq!((studio.type_edit.as_ref().unwrap().anchor,studio.type_edit.as_ref().unwrap().caret),(end,start));
+            studio.type_insert("EDITED");studio.commit_type_edit();let expected=format!("{}EDITED{}",original.chars().take(start).collect::<String>(),original.chars().skip(end).collect::<String>());assert_eq!(text(&studio,head).content,expected);assert!(text(&studio,follower).content.is_empty());
+            studio.undo();assert_eq!(text(&studio,head).content,original);
+        }
     }
 }
