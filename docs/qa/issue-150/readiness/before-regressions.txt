@@ -1,0 +1,46 @@
+   Compiling winit v0.30.13 (/tmp/omadesign-readiness-text-before/vendor/winit)
+   Compiling omadesign v0.6.0 (/tmp/omadesign-readiness-text-before)
+   Compiling accesskit_winit v0.32.2
+   Compiling egui-winit v0.36.1 (/tmp/omadesign-readiness-text-before/vendor/egui-winit)
+   Compiling egui-wgpu v0.36.1
+   Compiling eframe v0.36.1
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 11s
+     Running unittests src/lib.rs (/home/michael/Projects/omadesign/target/debug/deps/omadesign-eeb97c2698df9278)
+
+running 5 tests
+
+thread 'app::text_geometry::readiness_tests::empty_frames_thread_and_empty_head_does_not_invent_a_paragraph' (463404) panicked at src/app/text_geometry.rs:632:117:
+assertion `left == right` failed
+  left: "\nTarget"
+ right: "Target"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test app::text_geometry::readiness_tests::empty_frames_thread_and_empty_head_does_not_invent_a_paragraph ... FAILED
+test app::text_geometry::readiness_tests::follower_source_validation_uses_the_actual_head_defaults ... ok
+
+thread 'app::text_geometry::readiness_tests::populated_merge_preserves_inherited_and_explicit_styles' (463406) panicked at src/app/text_geometry.rs:604:81:
+assertion `left == right` failed
+  left: 1
+ right: 0
+test app::text_geometry::readiness_tests::populated_merge_preserves_inherited_and_explicit_styles ... FAILED
+
+thread 'app::text_geometry::readiness_tests::populated_merge_rejects_unrepresentable_defaults_without_mutating_edit_or_history' (463407) panicked at src/app/text_geometry.rs:626:62:
+called `Result::unwrap_err()` on an `Ok` value: ()
+test app::text_geometry::readiness_tests::populated_merge_rejects_unrepresentable_defaults_without_mutating_edit_or_history ... FAILED
+
+thread 'app::text_geometry::readiness_tests::rotated_follower_click_uses_its_visible_story_range' (463408) panicked at src/app/text_geometry.rs:650:48:
+assertion `left == right` failed
+  left: 103
+ right: 98
+test app::text_geometry::readiness_tests::rotated_follower_click_uses_its_visible_story_range ... FAILED
+
+failures:
+
+failures:
+    app::text_geometry::readiness_tests::empty_frames_thread_and_empty_head_does_not_invent_a_paragraph
+    app::text_geometry::readiness_tests::populated_merge_preserves_inherited_and_explicit_styles
+    app::text_geometry::readiness_tests::populated_merge_rejects_unrepresentable_defaults_without_mutating_edit_or_history
+    app::text_geometry::readiness_tests::rotated_follower_click_uses_its_visible_story_range
+
+test result: FAILED. 1 passed; 4 failed; 0 ignored; 0 measured; 811 filtered out; finished in 6.08s
+
+error: test failed, to rerun pass `--lib`

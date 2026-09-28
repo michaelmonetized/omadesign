@@ -1,0 +1,117 @@
+{
+  "checks": [
+    {
+      "frame": 6,
+      "history": 0,
+      "passed": true,
+      "phase": "baseline",
+      "selection": null,
+      "source": "Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. ",
+      "status": "Native studio recording"
+    },
+    {
+      "frame": 35,
+      "history": 0,
+      "passed": true,
+      "phase": "rejected",
+      "selection": null,
+      "source": "Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. ",
+      "status": "Cannot merge populated frames with different fonts, sizes or appearance. Match those settings, or thread into an empty frame."
+    },
+    {
+      "frame": 70,
+      "history": 1,
+      "passed": true,
+      "phase": "merged",
+      "selection": null,
+      "source": "Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. \nStyled target retains its own tracking, line height, features and paragraph alignment.\noffice 123 remains editable after threading.",
+      "status": "text frames threaded into one story"
+    },
+    {
+      "frame": 105,
+      "history": 1,
+      "passed": true,
+      "phase": "forward",
+      "selection": [
+        179,
+        184
+      ],
+      "source": "Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. \nStyled target retains its own tracking, line height, features and paragraph alignment.\noffice 123 remains editable after threading.",
+      "status": "type — click or Esc to finish, Enter for a new line"
+    },
+    {
+      "frame": 116,
+      "history": 1,
+      "passed": true,
+      "phase": "collapsed",
+      "selection": [
+        184,
+        184
+      ],
+      "source": "Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. \nStyled target retains its own tracking, line height, features and paragraph alignment.\noffice 123 remains editable after threading.",
+      "status": "type — click or Esc to finish, Enter for a new line"
+    },
+    {
+      "frame": 134,
+      "history": 1,
+      "passed": true,
+      "phase": "backward",
+      "selection": [
+        184,
+        179
+      ],
+      "source": "Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. \nStyled target retains its own tracking, line height, features and paragraph alignment.\noffice 123 remains editable after threading.",
+      "status": "type — click or Esc to finish, Enter for a new line"
+    },
+    {
+      "frame": 158,
+      "history": 2,
+      "passed": true,
+      "phase": "replacement",
+      "selection": null,
+      "source": "Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. Every word remains in its stEDITEDhen editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. \nStyled target retains its own tracking, line height, features and paragraph alignment.\noffice 123 remains editable after threading.",
+      "status": "type committed"
+    },
+    {
+      "frame": 172,
+      "history": 1,
+      "passed": true,
+      "phase": "merged",
+      "selection": null,
+      "source": "Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. \nStyled target retains its own tracking, line height, features and paragraph alignment.\noffice 123 remains editable after threading.",
+      "status": "undo"
+    },
+    {
+      "frame": 188,
+      "history": 2,
+      "passed": true,
+      "phase": "replacement",
+      "selection": null,
+      "source": "Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. Every word remains in its stEDITEDhen editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. \nStyled target retains its own tracking, line height, features and paragraph alignment.\noffice 123 remains editable after threading.",
+      "status": "redo"
+    },
+    {
+      "frame": 202,
+      "history": 1,
+      "passed": true,
+      "phase": "merged",
+      "selection": null,
+      "source": "Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. \nStyled target retains its own tracking, line height, features and paragraph alignment.\noffice 123 remains editable after threading.",
+      "status": "undo"
+    },
+    {
+      "frame": 232,
+      "history": 0,
+      "passed": true,
+      "phase": "reopened",
+      "selection": null,
+      "source": "Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. \nStyled target retains its own tracking, line height, features and paragraph alignment.\noffice 123 remains editable after threading.",
+      "status": "opened /tmp/readiness-text-native-final/area-integrity-final.oma"
+    }
+  ],
+  "errors": [],
+  "recording_frames": 250,
+  "renderer": "native WGPU",
+  "reopened_by_application": true,
+  "saved_by_ctrl_s": true
+}

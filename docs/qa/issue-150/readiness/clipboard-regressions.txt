@@ -1,0 +1,26 @@
+
+running 21 tests
+test app::clipboard::tests::delayed_paste_does_not_modify_another_tab ... ok
+test app::clipboard::tests::external_text_replaces_stale_internal_clipboard_and_centers_after_pan_zoom ... ok
+test app::clipboard::tests::invalid_internal_payload_never_reuses_stale_objects ... ok
+test app::clipboard::tests::legacy_clipboard_effects_keep_project_migration_appearance ... ok
+test app::clipboard::tests::cross_window_rasters_and_shapes_keep_positions_with_one_undo ... ok
+test app::clipboard::tests::clipboard_preserves_independent_appearance_fields ... ok
+test app::clipboard::tests::internal_vector_payload_does_not_repeat_a_previously_copied_bitmap ... ok
+test app::clipboard::tests::copied_subtree_retains_canvas_positions_outside_rotated_ancestors ... ok
+test app::clipboard::tests::copied_instance_keeps_local_definition_and_detaches_when_it_is_missing ... ok
+test app::clipboard::tests::copied_component_definition_and_instance_remap_and_still_synchronize ... ok
+test app::clipboard::tests::copied_frame_preserves_descendants_positions_and_remaps_parent_ids ... ok
+test app::clipboard_insert::tests::invalid_file_in_multi_paste_and_invalid_pixels_leave_document_unchanged ... ok
+test app::clipboard::tests::partial_story_copy_materializes_all_selected_frames_without_duplicate_tail ... ok
+test app::clipboard_insert::tests::text_paste_is_a_new_editable_layer_centered_on_its_shaped_glyphs ... ok
+test app::clipboard::tests::mixed_raster_and_token_bound_gradient_artwork_survives_cross_window_paste ... ok
+test app::clipboard_insert::tests::image_paste_preserves_native_size_center_camera_document_and_atomic_history ... ok
+test app::clipboard_insert::tests::copied_image_and_svg_files_are_new_layers_in_one_undo ... ok
+test app::clipboard_insert::tests::svg_doctype_css_hierarchy_and_clips_survive_centered_vector_paste ... ok
+test app::clipboard::tests::path_text_copy_payload_keeps_links_only_with_guide_and_remaps_on_paste ... ok
+test app::clipboard::tests::single_follower_copy_materializes_head_style_and_visible_source ... ok
+test app::clipboard::tests::whole_story_copy_keeps_one_source_and_remaps_all_three_links ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 795 filtered out; finished in 14.29s
+

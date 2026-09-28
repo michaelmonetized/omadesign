@@ -1,0 +1,41 @@
+
+running 24 tests
+test text_geometry::area::range_metrics_tests::story_slice_preserves_range_metrics_features_and_reindexes_pair_boundaries ... ok
+test text_geometry::area::shape_frame_tests::nested_group_uses_visible_alpha_and_respects_locked_ancestors ... ok
+test text_geometry::area::range_metrics_tests::area_uses_current_line_leading_and_stops_at_last_full_styled_line ... ok
+test text_geometry::area::tests::ellipsis_respects_graphemes_and_word_boundary ... ok
+test text_geometry::area::explicit_transform_tests::explicit_transform_scales_glyph_metrics_while_frame_resize_reflows ... ok
+test text_geometry::area::regression_tests::numeric_keep_with_next_requires_requested_following_lines ... ok
+test text_geometry::area::tests::rectangle_circle_offset_and_invert_compute_distinct_free_spans ... ok
+test text_geometry::area::regression_tests::consecutive_hyphen_limit_crosses_frame_boundary ... ok
+test text_geometry::area::tests::tapered_frame_alignment_finds_baselines_between_top_scan_rows ... ok
+test text_geometry::area::regression_tests::widow_minimum_moves_lines_even_when_paragraph_starts_frame ... ok
+test text_geometry::area::tests::frame_resize_rewraps_and_keeps_font_size ... ok
+test text_geometry::area::tests::vertical_alignment_uses_visible_lines ... ok
+wrapped Center alignment: 60.787564ms
+wrapped Bottom alignment: 46.973438ms
+wrapped Justify alignment: 17.653055ms
+test text_geometry::area::tests::vertical_alignment_reflows_around_obstacles_at_final_baselines ... ok
+test text_geometry::area::tests::visible_clip_ellipsis_and_max_lines_never_truncate_source ... ok
+test text_geometry::area::tests::words_skip_narrow_obstacle_intervals_without_losing_characters ... ok
+test text_geometry::area::tests::moving_obstacle_reflows_live_area_text ... ok
+test text_geometry::area::frame_anchor_tests::changing_font_size_keeps_frame_edges_fixed ... ok
+test text_geometry::area::regression_tests::converting_middle_frame_preserves_all_three_stories ... ok
+test text_geometry::area::regression_tests::removing_story_head_promotes_style_and_updates_every_follower ... ok
+test text_geometry::area::tests::typed_story_from_second_frame_edits_head ... ok
+
+thread 'text_geometry::area::tests::threads_reflow_delete_middle_and_undo_round_trip' (496684) panicked at src/text_geometry/area.rs:1469:9:
+assertion failed: encoded.contains("\"version\":10")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test text_geometry::area::tests::threads_reflow_delete_middle_and_undo_round_trip ... FAILED
+test text_geometry::area::shape_frame_tests::arbitrary_closed_outline_constrains_every_glyph_and_roundtrips ... ok
+test text_geometry::area::threaded_transform_tests::follower_transform_scales_story_once_and_undo_restores_bounds_and_type ... ok
+test text_geometry::area::tests::aligned_closed_frames_and_line_limits_preserve_vertical_semantics ... ok
+
+failures:
+
+failures:
+    text_geometry::area::tests::threads_reflow_delete_middle_and_undo_round_trip
+
+test result: FAILED. 23 passed; 1 failed; 0 ignored; 0 measured; 792 filtered out; finished in 7.91s
+
