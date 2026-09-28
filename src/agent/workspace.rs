@@ -144,7 +144,22 @@ impl Workspace {
         let (tx, rx) = mpsc::channel::<Thread>();
         self.writer = Some(tx);
         let errors = self.save_error.clone();
+        let mut projects = self
+            .history
+            .iter()
+            .map(|t| t.settings.directory.clone())
+            .collect::<Vec<_>>();
+        projects.push(self.settings.directory.clone());
+        projects.sort();
+        projects.dedup();
         self.writer_thread = Some(std::thread::spawn(move || {
+            // Upgrade existing caches when the Agent panel opens, without
+            // waiting for another paste or blocking the native UI on disk I/O.
+            for project in projects {
+                if let Err(e) = attachments::secure_existing_cache(&project) {
+                    *errors.lock().unwrap() = Some(format!("Attachment privacy: {e}"));
+                }
+            }
             while let Ok(mut thread) = rx.recv() {
                 // Preserve each conversation, coalescing only consecutive saves of the same one.
                 let mut queued = vec![];
@@ -292,6 +307,47 @@ impl Workspace {
             }
         }
     }
+    pub fn rebase_attachment_jobs(&mut self, before: &str) {
+        if self.attachment_jobs.is_empty() || before == self.request {
+            return;
+        }
+        let old: Vec<_> = before.chars().collect();
+        let new: Vec<_> = self.request.chars().collect();
+        let start = old.iter().zip(&new).take_while(|(a, b)| a == b).count();
+        let suffix = old[start..]
+            .iter()
+            .rev()
+            .zip(new[start..].iter().rev())
+            .take_while(|(a, b)| a == b)
+            .count();
+        let end = old.len() - suffix;
+        let added = new.len() - suffix - start;
+        self.rebase_attachment_edit(start..end, added);
+    }
+    pub fn rebase_attachment_edit(&mut self, range: std::ops::Range<usize>, added: usize) {
+        let (start, end) = (range.start, range.end);
+        if start == end && added == 0 {
+            return;
+        }
+        let delta = added as isize - (end - start) as isize;
+        let count = self.attachment_jobs.len();
+        self.attachment_jobs.retain_mut(|job| {
+            if end <= job.at {
+                job.at = job.at.saturating_add_signed(delta);
+                job.end = job.end.saturating_add_signed(delta);
+                true
+            } else if start >= job.end {
+                true
+            } else {
+                // The user replaced the pending destination. Keep their edit;
+                // a later worker completion must not overwrite unrelated text.
+                false
+            }
+        });
+        if self.attachment_jobs.len() != count {
+            self.error = "Paste cancelled because its destination was edited; paste again at the new cursor position".into();
+        }
+    }
     pub fn insert_attachment_result(&mut self, insert: attachments::Insert) -> usize {
         let len = self.request.chars().count();
         let at = insert.at.min(len);
@@ -377,8 +433,12 @@ impl Workspace {
         self.connecting = false;
         self.busy = false;
         self.permissions.clear();
-        self.pending_prompt = None;
-        self.turn_job = None;
+        if let Some((request, attachments)) = self.pending_prompt.take() {
+            self.restore_unsent(request, attachments);
+        }
+        if let Some(job) = self.turn_job.take() {
+            self.restore_unsent(job.request, job.attachments);
+        }
         self.persist(true);
     }
     pub fn new_thread(&mut self, studio: &Studio) {
@@ -682,7 +742,7 @@ impl Workspace {
             self.dirty = true;
         }
         if let Some(error) = self.save_error.lock().unwrap().take() {
-            self.error = format!("Conversation save failed: {error}");
+            self.error = format!("Agent data: {error}");
         }
         if self.connection.is_some() && self.owner.as_deref() != Some(&studio.swap_id) {
             self.note(
@@ -753,6 +813,11 @@ impl Workspace {
                 Event::Error(error) => {
                     self.error = error;
                     self.connecting = false;
+                    if !self.ready
+                        && let Some((request, attachments)) = self.pending_prompt.take()
+                    {
+                        self.restore_unsent(request, attachments);
+                    }
                 }
                 Event::Closed => {
                     self.connection = None;
@@ -760,7 +825,12 @@ impl Workspace {
                     self.connecting = false;
                     self.busy = false;
                     self.permissions.clear();
-                    self.pending_prompt = None;
+                    if let Some((request, attachments)) = self.pending_prompt.take() {
+                        self.restore_unsent(request, attachments);
+                    }
+                    if let Some(job) = self.turn_job.take() {
+                        self.restore_unsent(job.request, job.attachments);
+                    }
                     self.persist(true);
                 }
             }
@@ -938,8 +1008,119 @@ mod attachment_recovery_tests {
     use super::*;
 
     #[test]
+    fn readiness_pending_paste_handles_deletion_suffix_and_destination_edits() {
+        for (after, expected) in [
+            ("replace tail", Some((0, 7))),
+            ("你好 replace tail with suffix", Some((3, 10))),
+            ("你好 changed tail", None),
+        ] {
+            let mut workspace = Workspace::default();
+            let (_tx, rx) = mpsc::channel();
+            workspace.attachment_jobs.push(attachments::Job {
+                thread: "thread".into(),
+                at: 3,
+                end: 10,
+                replaced: "replace".into(),
+                rx,
+            });
+            workspace.request = after.into();
+            workspace.rebase_attachment_jobs("你好 replace tail");
+            assert_eq!(
+                workspace.attachment_jobs.first().map(|j| (j.at, j.end)),
+                expected
+            );
+            assert_eq!(workspace.request, after);
+            if expected.is_none() {
+                assert!(workspace.error.contains("destination was edited"));
+            }
+        }
+    }
+
+    #[test]
+    fn readiness_startup_exit_or_rejection_restores_unsent_draft_and_attachments() {
+        for (script, exits) in [
+            ("exit 17", true),
+            (
+                r#"printf '%s\n' '{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"Rejected startup"}}'; while read ignored; do :; done"#,
+                false,
+            ),
+        ] {
+            let mut studio = Studio::new();
+            let ctx = eframe::egui::Context::default();
+            let mut workspace = Workspace::default();
+            workspace.loaded = true;
+            workspace.settings.profile = config::Profile {
+                name: "Startup failure regression".into(),
+                command: "/bin/sh".into(),
+                args: vec!["-c".into(), script.into()],
+            };
+            workspace.config_args =
+                serde_json::to_string(&workspace.settings.profile.args).unwrap();
+            workspace.config_directory = std::env::temp_dir().display().to_string();
+            let attachment = Attachment {
+                id: "private".into(),
+                kind: attachments::Kind::Text,
+                mime: "text/plain".into(),
+                name: "brief.txt".into(),
+                size: 10,
+                source: "/tmp/unsent-private-brief.txt".into(),
+                dimensions: None,
+                delivery: String::new(),
+                preview: None,
+                thumbnail: None,
+            };
+            let draft = format!("Keep my unsent brief {}", attachment.token());
+            workspace.request = draft.clone();
+            workspace.attachments.push(attachment);
+            workspace
+                .send_prompt(&mut studio, &ctx, std::env::current_exe().unwrap())
+                .unwrap();
+            assert!(workspace.connecting);
+            workspace.request = "New notes typed while connecting".into();
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while (if exits {
+                workspace.connection.is_some()
+            } else {
+                workspace.error.is_empty()
+            }) && Instant::now() < deadline
+            {
+                workspace.poll(&mut studio, &ctx);
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            if exits {
+                assert!(workspace.connection.is_none(), "ACP fixture did not exit");
+            }
+            assert!(!workspace.error.is_empty());
+            assert_eq!(
+                workspace.request,
+                format!("{draft}\nNew notes typed while connecting")
+            );
+            assert_eq!(workspace.attachments.len(), 1);
+            assert_eq!(workspace.attachments[0].id, "private");
+            assert!(
+                workspace
+                    .thread
+                    .as_ref()
+                    .unwrap()
+                    .messages
+                    .iter()
+                    .all(|e| e.role != "user")
+            );
+            assert!(workspace.pending_prompt.is_none());
+            workspace.disconnect();
+        }
+    }
+
+    #[test]
     fn attachment_failed_or_stopped_send_preserves_concurrent_draft_and_paste_position() {
-        for scenario in ["failed", "stopped", "connecting"] {
+        for scenario in [
+            "failed",
+            "stopped",
+            "connecting",
+            "disconnect-connecting",
+            "disconnect-preparing",
+            "document-change",
+        ] {
             let mut studio = Studio::new();
             let ctx = eframe::egui::Context::default();
             let mut workspace = Workspace::default();
@@ -970,9 +1151,28 @@ mod attachment_recovery_tests {
                 replaced: "xt".into(),
                 rx: paste_rx,
             });
-            if scenario == "connecting" {
+            if matches!(
+                scenario,
+                "connecting" | "disconnect-connecting" | "document-change"
+            ) {
                 workspace.pending_prompt = Some((old_request.clone(), vec![old]));
-                workspace.stop();
+                if scenario == "connecting" {
+                    workspace.stop();
+                } else if scenario == "document-change" {
+                    let (commands, _receiver) = mpsc::channel();
+                    let (_sender, events) = mpsc::channel();
+                    workspace.connection = Some(Connection {
+                        bridge: bridge::Bridge::start(ctx.clone()).unwrap(),
+                        commands,
+                        events,
+                        worker: None,
+                    });
+                    workspace.owner = Some("previous-document".into());
+                    workspace.poll(&mut studio, &ctx);
+                    assert!(workspace.connection.is_none());
+                } else {
+                    workspace.disconnect();
+                }
             } else {
                 let (tx, rx) = mpsc::channel();
                 workspace.turn_job = Some(attachments::TurnJob {
@@ -986,6 +1186,8 @@ mod attachment_recovery_tests {
                         .unwrap();
                     workspace.poll(&mut studio, &ctx);
                     assert!(workspace.error.contains("disappeared"));
+                } else if scenario == "disconnect-preparing" {
+                    workspace.disconnect();
                 } else {
                     workspace.stop();
                 }

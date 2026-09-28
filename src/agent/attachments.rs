@@ -4,7 +4,7 @@ use base64::Engine;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
-    io::Read,
+    io::{Read, Write},
     path::{Path, PathBuf},
     sync::mpsc,
 };
@@ -105,7 +105,7 @@ pub fn spawn(
     let (tx, rx) = mpsc::channel();
     let owner = thread.clone();
     std::thread::spawn(move || {
-        let result = ingest(input, &directory);
+        let result = secure_cache(&directory).and_then(|()| ingest(input, &directory));
         let _ = tx.send(result);
         ctx.request_repaint();
     });
@@ -116,6 +116,91 @@ pub fn spawn(
         replaced,
         rx,
     }
+}
+// Only this application-owned cache is hardened. Files attached by reference
+// retain their original permissions and are never copied or traversed here.
+fn private_directory(path: &Path) -> Result<(), String> {
+    use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+    if !path.exists() {
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(path)
+            .map_err(|e| format!("Could not create private attachment cache: {e}"))?;
+    }
+    let metadata = std::fs::symlink_metadata(path).map_err(|e| e.to_string())?;
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Err("Attachment cache must be a private directory, not a symbolic link".into());
+    }
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
+        .map_err(|e| format!("Could not protect attachment cache: {e}"))
+}
+fn secure_cache(directory: &Path) -> Result<(), String> {
+    let cache = directory.parent().ok_or("Invalid attachment cache path")?;
+    secure_cache_root(cache)?;
+    private_directory(directory)
+}
+pub(super) fn secure_existing_cache(project: &Path) -> Result<(), String> {
+    let cache = project.join(".omadesign/agent-attachments");
+    match std::fs::symlink_metadata(&cache) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.to_string()),
+        Ok(_) => secure_cache_root(&cache),
+    }
+}
+fn secure_cache_root(cache: &Path) -> Result<(), String> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    if let Some(container) = cache.parent()
+        && std::fs::symlink_metadata(container).is_ok_and(|m| m.file_type().is_symlink())
+    {
+        return Err("Attachment cache parent must not be a symbolic link".into());
+    }
+    private_directory(cache)?;
+    fn harden(path: &Path) -> Result<(), String> {
+        for entry in std::fs::read_dir(path).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let path = entry.path();
+            let meta = std::fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
+            if meta.file_type().is_symlink() || (meta.is_file() && meta.nlink() != 1) {
+                return Err(
+                    "Attachment cache contains a linked file; choose another project folder".into(),
+                );
+            }
+            if meta.is_dir() {
+                private_directory(&path)?;
+                harden(&path)?;
+            } else if meta.is_file() {
+                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+                    .map_err(|e| e.to_string())?;
+            } else {
+                return Err("Attachment cache contains a non-regular file".into());
+            }
+        }
+        Ok(())
+    }
+    harden(cache)?;
+    // A cache-local rule applies in any chosen project, including a repository
+    // initialized after the first paste. It also ignores the rule file itself.
+    let ignore = cache.join(".gitignore");
+    if std::fs::read(&ignore).ok().as_deref() != Some(b"*\n") {
+        let temporary = cache.join(format!("{}-ignore", identity()));
+        private_write(&temporary, b"*\n")?;
+        std::fs::rename(&temporary, &ignore).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+fn private_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    use std::os::unix::fs::OpenOptionsExt;
+    // Restrictive mode applies before the first payload byte is written. Unique
+    // creation refuses collisions and symbolic links instead of following them.
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(path)
+        .map_err(|e| format!("Could not save private attachment: {e}"))?;
+    file.write_all(bytes)
+        .map_err(|e| format!("Could not save private attachment: {e}"))
 }
 fn read_bounded(path: &Path, limit: u64) -> Result<Vec<u8>, String> {
     let file = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -186,9 +271,9 @@ fn stored(
     if bytes.len() as u64 > MAX_FILE {
         return Err("Attachment exceeds 100 MiB".into());
     }
-    std::fs::create_dir_all(dir).map_err(|e| format!("Could not save attachment: {e}"))?;
+    private_directory(dir)?;
     let path = dir.join(format!("{}-{name}", identity()));
-    std::fs::write(&path, bytes).map_err(|e| format!("Could not save attachment: {e}"))?;
+    private_write(&path, bytes)?;
     let mut a = metadata(path, mime.into(), kind)?;
     a.name = name.into();
     Ok(a)
@@ -285,7 +370,7 @@ fn native(content: ClipboardContent, dir: &Path) -> Result<Prepared, String> {
                 ) && let Ok(png) = pm.encode_png()
                 {
                     let preview = dir.join(format!("{}-objects.png", a.id));
-                    std::fs::write(&preview, png).map_err(|e| e.to_string())?;
+                    private_write(&preview, &png)?;
                     a.preview = Some(preview);
                     a.dimensions = Some([pm.width(), pm.height()]);
                 }
@@ -514,6 +599,128 @@ pub fn payload(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn readiness_cache_refuses_links_without_touching_external_data() {
+        use std::os::unix::fs::{PermissionsExt, symlink};
+        for linked in ["container", "cache", "directory", "file", "hardlink"] {
+            let project = dir();
+            let outside = dir();
+            let source = outside.join("keep.txt");
+            std::fs::write(&source, "keep this user data").unwrap();
+            std::fs::set_permissions(&source, std::fs::Permissions::from_mode(0o644)).unwrap();
+            let cache = project.join(".omadesign/agent-attachments");
+            let thread = cache.join("thread");
+            match linked {
+                "container" => symlink(&outside, project.join(".omadesign")).unwrap(),
+                "cache" => {
+                    std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
+                    symlink(&outside, &cache).unwrap();
+                }
+                "directory" => {
+                    std::fs::create_dir_all(&cache).unwrap();
+                    symlink(&outside, &thread).unwrap();
+                }
+                _ => {
+                    std::fs::create_dir_all(&thread).unwrap();
+                    if linked == "file" {
+                        symlink(&source, thread.join("link")).unwrap();
+                    } else {
+                        std::fs::hard_link(&source, thread.join("link")).unwrap();
+                    }
+                }
+            }
+            assert!(secure_cache(&thread).is_err(), "accepted {linked}");
+            assert_eq!(
+                std::fs::read_to_string(&source).unwrap(),
+                "keep this user data"
+            );
+            assert_eq!(
+                std::fs::metadata(&source).unwrap().permissions().mode() & 0o777,
+                0o644
+            );
+            std::fs::remove_dir_all(project).unwrap();
+            std::fs::remove_dir_all(outside).unwrap();
+        }
+    }
+    #[test]
+    fn readiness_cache_is_private_and_git_add_excludes_every_payload() {
+        use std::os::unix::fs::PermissionsExt;
+        let project = dir();
+        let cache = project.join(".omadesign/agent-attachments");
+        let thread = cache.join("existing-thread");
+        std::fs::create_dir_all(&thread).unwrap();
+        std::fs::set_permissions(&cache, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::set_permissions(&thread, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let old = thread.join("old-secret.txt");
+        std::fs::write(&old, "old private clipboard").unwrap();
+        std::fs::set_permissions(&old, std::fs::Permissions::from_mode(0o644)).unwrap();
+        secure_existing_cache(&project).unwrap();
+        assert_eq!(
+            std::fs::metadata(&old).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        let external = project.join("reference.txt");
+        std::fs::write(&external, "user-owned reference").unwrap();
+        std::fs::set_permissions(&external, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let doc = crate::document::Document::new("Private native artwork", 8., 8., 96.);
+        for input in [
+            Input::Native(ClipboardContent::Text("secret ".repeat(400))),
+            Input::Native(ClipboardContent::Image {
+                name: "private.png".into(),
+                image: crate::photo::RgbaImage::new(8, 8, vec![255; 8 * 8 * 4]).unwrap(),
+            }),
+            Input::Native(ClipboardContent::Text(format!(
+                "omadesign-objects:{}",
+                crate::project::encode(&doc).unwrap()
+            ))),
+            Input::Files(vec![external.clone()]),
+        ] {
+            let job = spawn(
+                input,
+                thread.clone(),
+                "existing-thread".into(),
+                0..0,
+                String::new(),
+                eframe::egui::Context::default(),
+            );
+            job.rx
+                .recv_timeout(std::time::Duration::from_secs(10))
+                .unwrap()
+                .unwrap();
+        }
+        assert_eq!(
+            std::fs::metadata(&cache).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        assert_eq!(
+            std::fs::metadata(&thread).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        for file in std::fs::read_dir(&thread).unwrap() {
+            assert_eq!(
+                file.unwrap().metadata().unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        assert_eq!(
+            std::fs::metadata(&external).unwrap().permissions().mode() & 0o777,
+            0o644
+        );
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&project)
+                .output()
+                .unwrap()
+        };
+        assert!(git(&["init", "--quiet"]).status.success());
+        assert!(git(&["add", "."]).status.success());
+        assert_eq!(
+            String::from_utf8(git(&["ls-files"]).stdout).unwrap(),
+            "reference.txt\n"
+        );
+        std::fs::remove_dir_all(project).unwrap();
+    }
     fn dir() -> PathBuf {
         let p = std::env::temp_dir().join(format!("omadesign-attachments-{}", identity()));
         std::fs::create_dir_all(&p).unwrap();

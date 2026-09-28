@@ -96,6 +96,39 @@ pub(super) fn chips(ui: &mut egui::Ui, items: &[Attachment], editable: bool) -> 
     });
     remove
 }
+// Record the exact edits rather than diffing strings: repeated characters can
+// make a prefix/suffix diff move a pending paste to the wrong identical word.
+struct PromptBuffer<'a> {
+    text: &'a mut String,
+    edits: Vec<(std::ops::Range<usize>, usize)>,
+}
+impl egui::TextBuffer for PromptBuffer<'_> {
+    fn is_mutable(&self) -> bool {
+        true
+    }
+    fn as_str(&self) -> &str {
+        self.text
+    }
+    fn type_id(&self) -> std::any::TypeId {
+        std::any::TypeId::of::<PromptBuffer<'static>>()
+    }
+    fn insert_text(&mut self, text: &str, at: egui::text::CharIndex) -> usize {
+        let added = egui::TextBuffer::insert_text(self.text, text, at);
+        self.edits.push((at.0..at.0, added));
+        added
+    }
+    fn delete_char_range(&mut self, range: std::ops::Range<egui::text::CharIndex>) {
+        egui::TextBuffer::delete_char_range(self.text, range.clone());
+        self.edits.push((range.start.0..range.end.0, 0));
+    }
+    fn replace_with(&mut self, text: &str) {
+        if self.text != text {
+            self.edits
+                .push((0..self.text.chars().count(), text.chars().count()));
+            *self.text = text.to_owned();
+        }
+    }
+}
 pub(super) fn composer(
     ui: &mut egui::Ui,
     studio: &Studio,
@@ -172,6 +205,7 @@ pub(super) fn composer(
                         .retain(|e| !matches!(e,egui::Event::Key{key:k,pressed:true,..} if *k==key))
                 });
                 erase(&mut agent.request, expanded.clone());
+                agent.rebase_attachment_edit(expanded.clone(), 0);
                 attachments::reconcile(&agent.request, &mut agent.attachments);
                 set_cursor(ui.ctx(), id, expanded.start);
             }
@@ -182,7 +216,9 @@ pub(super) fn composer(
         .max_height(116.)
         .show(ui, |ui| {
             if let Some(id) = chips(ui, &agent.attachments, true) {
+                let before = agent.request.clone();
                 attachments::remove(&mut agent.request, &mut agent.attachments, &id);
+                agent.rebase_attachment_jobs(&before);
             }
             if !agent.attachment_jobs.is_empty() {
                 ui.horizontal(|ui| {
@@ -226,12 +262,16 @@ pub(super) fn composer(
         job.append(&text[at..], 0., normal);
         ui.fonts_mut(|f| f.layout_job(job))
     };
+    let mut buffer = PromptBuffer {
+        text: &mut agent.request,
+        edits: vec![],
+    };
     let field = egui::ScrollArea::vertical()
         .id_salt("agent-prompt-scroll")
         .max_height(90.)
         .auto_shrink([false, true])
         .show(ui, |ui| {
-            egui::TextEdit::multiline(&mut agent.request)
+            egui::TextEdit::multiline(&mut buffer)
                 .id(id)
                 .desired_rows(3)
                 .desired_width(f32::INFINITY)
@@ -242,6 +282,9 @@ pub(super) fn composer(
                 .response
         })
         .inner;
+    for (range, added) in buffer.edits {
+        agent.rebase_attachment_edit(range, added);
+    }
     attachments::reconcile(&agent.request, &mut agent.attachments);
     field
 }
@@ -325,6 +368,61 @@ mod tests {
         assert!(items.is_empty());
         assert_eq!(value, "你好  end");
     }
+    #[test]
+    fn readiness_pending_paste_tracks_unicode_edits_before_its_selection() {
+        for (before, range, prefix, expected) in [
+            ("你好 replace tail", 3..10, "前缀 ", "前缀 你好 PASTED tail"),
+            ("aaa tail", 1..2, "a", "aaPASTEDa tail"),
+        ] {
+            let ctx = egui::Context::default();
+            crate::ui::theme::apply(&ctx);
+            let studio = Studio::new();
+            let mut workspace = Workspace::default();
+            workspace.new_thread(&studio);
+            workspace.request = before.into();
+            let (tx, rx) = std::sync::mpsc::channel();
+            workspace.attachment_jobs.push(attachments::Job {
+                thread: workspace.thread.as_ref().unwrap().id.clone(),
+                at: range.start,
+                end: range.end,
+                replaced: before
+                    .chars()
+                    .skip(range.start)
+                    .take(range.end - range.start)
+                    .collect(),
+                rx,
+            });
+            let render = |workspace: &mut Workspace, events| {
+                let mut result = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(640., 400.),
+                        )),
+                        events,
+                        ..Default::default()
+                    },
+                    |ui| {
+                        composer(ui, &studio, workspace).request_focus();
+                    },
+                );
+                result.textures_delta.clear();
+            };
+            render(&mut workspace, vec![]);
+            render(&mut workspace, vec![]);
+            set_cursor(&ctx, field_id(), 0);
+            render(&mut workspace, vec![egui::Event::Text(prefix.into())]);
+            assert_eq!(workspace.request, format!("{prefix}{before}"));
+            tx.send(Ok(attachments::Prepared {
+                text: "PASTED".into(),
+                attachments: vec![],
+            }))
+            .unwrap();
+            render(&mut workspace, vec![]);
+            assert_eq!(workspace.request, expected);
+        }
+    }
+
     #[test]
     fn attachment_backspace_through_native_textedit_removes_token_and_chip() {
         let ctx = egui::Context::default();

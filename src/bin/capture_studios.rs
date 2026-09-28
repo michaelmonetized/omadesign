@@ -67,6 +67,7 @@ enum ActionKind {
     Reveal(&'static str),
     Clipboard(&'static str),
     AttachmentCount(usize),
+    AgentRecovery(&'static str),
 }
 struct Action {
     start: u32,
@@ -98,6 +99,24 @@ fn schedule(scene: &str) -> Vec<Action> {
     use ActionKind::*;
     use Target::*;
     match scene {
+        "agent-recovery" => vec![
+            event(0.5, Click(Any("Describe a design · paste images, files or text…"))),
+            event(1., Clipboard("short")),
+            event(2., Clipboard("long")),
+            event(3.5, AttachmentCount(1)),
+            event(4., Clipboard("image")),
+            event(5.5, AttachmentCount(2)),
+            event(6., Click(Any("Send"))),
+            event(6.5, Click(Any("Describe a design · paste images, files or text…"))),
+            event(7., Type("Next notes typed while connecting.")),
+            event(8., AgentRecovery("release-failure")),
+            event(9.5, AgentRecovery("restored")),
+            event(10., Click(Prompt)),
+            event(10.5, Key(egui::Key::Home, ctrl())),
+            event(11., Type("Priority: ")),
+            event(12., Click(Any("Send"))),
+            event(14., Expect("Attachment delivery verified.")),
+        ],
         "agent-attachments" => vec![
             event(
                 0.5,
@@ -1176,7 +1195,7 @@ fn seed(scene: &str) -> Studio {
             }
             s.photo.select_image(0);
         }
-        "agent-attachments" => {
+        "agent-attachments" | "agent-recovery" => {
             s.doc = Document::new("Attachment reference QA", 960., 640., 96.);
             s.doc.layers = vec![Layer::vector("Preserved artwork")];
             s.doc.layers[0]
@@ -1317,7 +1336,7 @@ impl Capture {
             studio.path = Some(directory.join(format!("{scene}-final.oma")));
         }
         if scene == "spacing" { studio.load_startup_preferences(); }
-        if scene == "agent-attachments" {
+        if matches!(scene.as_str(), "agent-attachments" | "agent-recovery") {
             studio.path = Some(directory.join("attachment-reference.oma"));
             studio.agent.settings.directory = directory.clone();
             studio.agent.settings.profile = omadesign::agent::config::Profile {
@@ -1327,7 +1346,7 @@ impl Capture {
                     "-u".into(),
                     std::env::current_dir()
                         .unwrap()
-                        .join("docs/qa/issue-157/fake-agent.py")
+                        .join(if scene == "agent-recovery" { "docs/qa/issue-157/readiness/startup-agent.py" } else { "docs/qa/issue-157/fake-agent.py" })
                         .display()
                         .to_string(),
                     directory.join("acp-received.json").display().to_string(),
@@ -1379,6 +1398,7 @@ impl Capture {
             "area-valign" => 14,
             "area-integrity" => 25,
             "agent-attachments" => 35,
+            "agent-recovery" => 16,
             "welcome-browse" => 23,
             "welcome-vector" | "welcome-layout" => 9,
             "welcome-raster" => 8,
@@ -1803,6 +1823,21 @@ impl Capture {
                             ));
                         }
                     }
+                    ActionKind::AgentRecovery(stage) => {
+                        if *stage == "release-failure" {
+                            fs::write(self.directory.join("release-startup-failure"), b"fail now").unwrap();
+                        } else {
+                            let agent = &self.studio.agent;
+                            if agent.connecting || agent.connection.is_some() || agent.attachments.len() != 2
+                                || !agent.request.starts_with("Match the palette")
+                                || !agent.request.ends_with("Next notes typed while connecting.")
+                                || agent.error.is_empty()
+                                || agent.thread.as_ref().is_some_and(|t| t.messages.iter().any(|e| e.role == "user")) {
+                                self.errors.push(format!("Startup recovery failed: {:?}, {} attachments, {}", agent.request, agent.attachments.len(), agent.error));
+                            }
+                            fs::write(self.directory.join("restored-draft.json"), serde_json::to_vec_pretty(&serde_json::json!({"request": agent.request, "attachments":agent.attachments, "error":agent.error,"connecting":agent.connecting,"ready":agent.ready})).unwrap()).unwrap();
+                        }
+                    }
                     ActionKind::Clipboard(kind) => {
                         let (mime,bytes)=match *kind {
                             "short"=>("UTF8_STRING",b"Match the palette of these references: ".to_vec()),
@@ -2075,7 +2110,7 @@ impl eframe::App for Capture {
                     )
                     .unwrap();
                 }
-                if self.scene == "agent-attachments" {
+                if matches!(self.scene.as_str(), "agent-attachments" | "agent-recovery") {
                     if omadesign::project::encode(&self.studio.doc).unwrap()
                         != self.initial_document
                     {
@@ -2095,11 +2130,14 @@ impl eframe::App for Capture {
                             {
                                 self.errors.push("Attachment IDs collided".into());
                             }
-                            if entry.attachments.len() != 9 {
+                            let expected = if self.scene == "agent-recovery" { 2 } else { 9 };
+                            if entry.attachments.len() != expected {
                                 self.errors.push(format!(
-                                    "Sent {} attachments, expected 9",
-                                    entry.attachments.len()
+                                    "Sent {} attachments, expected {expected}", entry.attachments.len()
                                 ));
+                            }
+                            if self.scene == "agent-recovery" && (!entry.text.starts_with("Priority: Match the palette") || !entry.text.ends_with("Next notes typed while connecting.")) {
+                                self.errors.push("Retry did not send the entire recovered and edited draft".into());
                             }
                             if entry
                                 .attachments
