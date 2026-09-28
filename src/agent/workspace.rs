@@ -813,10 +813,14 @@ impl Workspace {
                 Event::Error(error) => {
                     self.error = error;
                     self.connecting = false;
+                    if !self.ready {
+                        self.status = "Connection failed".into();
+                    }
                     if !self.ready
                         && let Some((request, attachments)) = self.pending_prompt.take()
                     {
                         self.restore_unsent(request, attachments);
+                        self.status = "Connection failed · draft restored".into();
                     }
                 }
                 Event::Closed => {
@@ -827,9 +831,11 @@ impl Workspace {
                     self.permissions.clear();
                     if let Some((request, attachments)) = self.pending_prompt.take() {
                         self.restore_unsent(request, attachments);
+                        self.status = "Disconnected · draft restored".into();
                     }
                     if let Some(job) = self.turn_job.take() {
                         self.restore_unsent(job.request, job.attachments);
+                        self.status = "Disconnected · draft restored".into();
                     }
                     self.persist(true);
                 }
@@ -1091,6 +1097,7 @@ mod attachment_recovery_tests {
                 assert!(workspace.connection.is_none(), "ACP fixture did not exit");
             }
             assert!(!workspace.error.is_empty());
+            assert!(workspace.status.contains("draft restored"));
             assert_eq!(
                 workspace.request,
                 format!("{draft}\nNew notes typed while connecting")
