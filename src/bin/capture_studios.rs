@@ -127,19 +127,21 @@ fn schedule(scene: &str) -> Vec<Action> {
             event(21., Key(egui::Key::S, ctrl())),
         ],
         "spacing-resize" => vec![
-            event(1., Expect("W")),
-            event(2., Click(Field("W"))),
-            event(2.2, Key(egui::Key::A, ctrl())),
-            drag(2.4, 0.2, Type("600")),
-            event(2.8, Key(egui::Key::Enter, Modifiers::NONE)),
-            event(4., VerifySpacing("resized")),
-            event(5., Key(egui::Key::Z, ctrl())),
-            event(6., VerifySpacing("undo")),
-            event(7., Key(egui::Key::Z, Modifiers { shift: true, ..ctrl() })),
-            event(8., VerifySpacing("redo")),
-            event(9., Key(egui::Key::S, ctrl())),
-            event(11., ReopenSaved),
-            event(14., VerifySpacing("reopened")),
+            event(0.5, ScrollAt(At(1480.,560.), -650.)),
+            event(1.2, Click(Text("Layout"))),
+            event(2., Expect("W")),
+            event(3., Click(Field("W"))),
+            event(3.2, Key(egui::Key::A, ctrl())),
+            event(3.4, Type("600")),
+            event(3.8, Key(egui::Key::Enter, Modifiers::NONE)),
+            event(5., VerifySpacing("resized")),
+            event(6., Key(egui::Key::Z, ctrl())),
+            event(7., VerifySpacing("undo")),
+            event(8., Key(egui::Key::Z, Modifiers { shift: true, ..ctrl() })),
+            event(9., VerifySpacing("redo")),
+            event(10., Key(egui::Key::S, ctrl())),
+            event(12., ReopenSaved),
+            event(15., VerifySpacing("reopened")),
         ],
         "spacing" => vec![
             event(1., Key(egui::Key::A, ctrl())),
@@ -1021,7 +1023,7 @@ impl Capture {
             "paragraphs" => 30,
             "opentype" => 20,
             "spacing" => 48,
-            "spacing-resize" => 17,
+            "spacing-resize" => 18,
             "welcome-browse" => 23,
             "welcome-vector" | "welcome-layout" => 9,
             "welcome-raster" => 8,
@@ -1066,6 +1068,7 @@ impl Capture {
         }
     }
     fn verify_spacing(&mut self, stage: &str) {
+        assert!(self.errors.is_empty(),"{:?}",self.errors);
         let current=self.studio.doc.layers[1].kind.shapes().unwrap()[0].geom.clone();
         let Geom::Text(run)=&current else {panic!("expected live type")};
         let initial=self.spacing_reference.as_ref().unwrap();
