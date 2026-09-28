@@ -350,42 +350,68 @@ fn blur(pm: &mut Pixmap, sigma: f32) {
 }
 
 fn box_blur(pm: &mut Pixmap, radius: i32) {
-    let r = radius.max(1);
-    let n = 2 * r + 1;
-    let w = pm.width() as i32;
-    let h = pm.height() as i32;
-    let src = pm.data().to_vec();
-    let mut tmp = vec![0u8; src.len()];
-    // Horizontal.
-    for y in 0..h {
-        for c in 0..4 {
-            let mut acc = 0i32;
-            for k in -r..=r {
-                acc += sample(&src, w, h, k, y, c) as i32;
+    let r = radius.max(1) as usize;
+    let n = (2 * r + 1) as i32;
+    let w = pm.width() as usize;
+    let h = pm.height() as usize;
+    let stride = w * 4;
+    let mut tmp = vec![0u8; pm.data().len()];
+    // Keep the original zero padding and integer rounding at each pass, but
+    // visit adjacent RGBA pixels together instead of rescanning each channel.
+    for (src, dst) in pm
+        .data()
+        .chunks_exact(stride)
+        .zip(tmp.chunks_exact_mut(stride))
+    {
+        let mut acc = [0i32; 4];
+        for pixel in src[..(r + 1).min(w) * 4].chunks_exact(4) {
+            for c in 0..4 {
+                acc[c] += pixel[c] as i32;
             }
-            for x in 0..w {
-                tmp[idx(w, x, y, c)] = (acc / n) as u8;
-                acc += sample(&src, w, h, x + r + 1, y, c) as i32;
-                acc -= sample(&src, w, h, x - r, y, c) as i32;
+        }
+        for (x, pixel) in dst.chunks_exact_mut(4).enumerate() {
+            for c in 0..4 {
+                pixel[c] = (acc[c] / n) as u8;
+            }
+            if x + r + 1 < w {
+                let entering = &src[(x + r + 1) * 4..][..4];
+                for c in 0..4 {
+                    acc[c] += entering[c] as i32;
+                }
+            }
+            if x >= r {
+                let leaving = &src[(x - r) * 4..][..4];
+                for c in 0..4 {
+                    acc[c] -= leaving[c] as i32;
+                }
             }
         }
     }
-    // Vertical.
-    let mut out = vec![0u8; src.len()];
-    for x in 0..w {
-        for c in 0..4 {
-            let mut acc = 0i32;
-            for k in -r..=r {
-                acc += sample(&tmp, w, h, x, k, c) as i32;
+    // A row of column sums makes the vertical pass contiguous too. Its input
+    // is now entirely in tmp, so write directly back without another pixmap.
+    let mut sums = vec![0i32; stride];
+    for row in tmp[..(r + 1).min(h) * stride].chunks_exact(stride) {
+        for (sum, value) in sums.iter_mut().zip(row) {
+            *sum += *value as i32;
+        }
+    }
+    for (y, row) in pm.data_mut().chunks_exact_mut(stride).enumerate() {
+        for (value, sum) in row.iter_mut().zip(&sums) {
+            *value = (sum / n) as u8;
+        }
+        if y + r + 1 < h {
+            let entering = &tmp[(y + r + 1) * stride..][..stride];
+            for (sum, value) in sums.iter_mut().zip(entering) {
+                *sum += *value as i32;
             }
-            for y in 0..h {
-                out[idx(w, x, y, c)] = (acc / n) as u8;
-                acc += sample(&tmp, w, h, x, y + r + 1, c) as i32;
-                acc -= sample(&tmp, w, h, x, y - r, c) as i32;
+        }
+        if y >= r {
+            let leaving = &tmp[(y - r) * stride..][..stride];
+            for (sum, value) in sums.iter_mut().zip(leaving) {
+                *sum -= *value as i32;
             }
         }
     }
-    pm.data_mut().copy_from_slice(&out);
 }
 
 fn sample(data: &[u8], w: i32, h: i32, x: i32, y: i32, c: i32) -> u8 {
@@ -1076,6 +1102,68 @@ mod tests {
             px[3] = a;
         }
         pm
+    }
+
+    #[test]
+    fn box_blur_matches_separable_reference_at_edges_and_large_radii() {
+        // Deliberately direct scalar oracle: both passes divide independently,
+        // including transparent samples beyond every edge of the pixmap.
+        fn reference(pm: &Pixmap, radius: i32) -> Pixmap {
+            let r = radius.max(1);
+            let n = 2 * r + 1;
+            let w = pm.width() as i32;
+            let h = pm.height() as i32;
+            let mut tmp = vec![0; pm.data().len()];
+            let mut out = pm.clone();
+            for y in 0..h {
+                for x in 0..w {
+                    for c in 0..4 {
+                        let sum: i32 = (-r..=r)
+                            .map(|k| sample(pm.data(), w, h, x + k, y, c) as i32)
+                            .sum();
+                        tmp[idx(w, x, y, c)] = (sum / n) as u8;
+                    }
+                }
+            }
+            for y in 0..h {
+                for x in 0..w {
+                    for c in 0..4 {
+                        let sum: i32 = (-r..=r)
+                            .map(|k| sample(&tmp, w, h, x, y + k, c) as i32)
+                            .sum();
+                        out.data_mut()[idx(w, x, y, c)] = (sum / n) as u8;
+                    }
+                }
+            }
+            out
+        }
+        let mut state = 0x719eaf31_u32;
+        for (w, h) in [(1, 1), (1, 17), (53, 2), (2, 53), (71, 37)] {
+            let mut source = Pixmap::new(w, h).unwrap();
+            for pixel in source.data_mut().chunks_exact_mut(4) {
+                state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+                let alpha = (state >> 24) as u8;
+                pixel.copy_from_slice(&[
+                    (state as u8).min(alpha),
+                    ((state >> 8) as u8).min(alpha),
+                    ((state >> 16) as u8).min(alpha),
+                    alpha,
+                ]);
+            }
+            for radius in [-1, 0, 1, 2, 6, 20, 100] {
+                let expected = reference(&source, radius);
+                let mut actual = source.clone();
+                box_blur(&mut actual, radius);
+                assert_eq!(actual.data(), expected.data(), "{w}x{h}, radius {radius}");
+                box_blur(&mut actual, (radius - 1).max(1));
+                let expected_twice = reference(&expected, (radius - 1).max(1));
+                assert_eq!(
+                    actual.data(),
+                    expected_twice.data(),
+                    "second pass {w}x{h}, radius {radius}"
+                );
+            }
+        }
     }
 
     #[test]

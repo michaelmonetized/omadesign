@@ -2,6 +2,7 @@
 
 #[cfg(test)]
 mod appearance_tests;
+mod cache_admission;
 mod effects_cache;
 mod mask_cache;
 mod frames;
@@ -9,6 +10,7 @@ mod groups;
 pub(crate) mod interaction;
 #[cfg(test)]
 mod performance_tests;
+mod surface_cache;
 
 use crate::color::Rgba;
 use crate::document::{Document, Fill, Layer, LayerKind, Shape};
@@ -412,13 +414,17 @@ fn draw_layer(
             );
             return;
         }
-        if filtered {
-            crate::filter::apply(&mut temp, &layer.filters);
-        }
+        let cached;
+        let pixels = if filtered {
+            cached = surface_cache::render(layer.id, temp, &layer.filters);
+            cached.as_ref()
+        } else {
+            &temp
+        };
         pm.draw_pixmap(
             0,
             0,
-            temp.as_ref(),
+            pixels.as_ref(),
             &PixmapPaint {
                 opacity: layer.opacity.clamp(0.0, 1.0),
                 blend_mode: layer.blend.to_skia(),

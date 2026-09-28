@@ -305,6 +305,43 @@ fn effect_cache_invalidates_paint_geometry_filter_pose_and_image_edits() {
     ));
 }
 
+#[test]
+fn cached_native_effects_match_fresh_frames_through_translation_and_opacity() {
+    effects_cache::clear();
+    let mut shape = shape();
+    shape.filters = FilterStack {
+        enabled: true,
+        legacy_composite: true,
+        items: vec![
+            Fx::Blur { std: 1.1 },
+            Fx::Shadow {
+                blend: Blend::Normal,
+                opacity: 1.,
+                knockout: false,
+                spread: 0.,
+                dx: 2.25,
+                dy: -1.5,
+                blur: 1.7,
+                color: Rgba::new(41, 63, 97, 173),
+            },
+        ],
+    };
+    for step in 0..24 {
+        let pose = Pose {
+            dx: step as f32 * 0.37,
+            dy: -(step as f32) * 0.29,
+            opacity: Some(0.1 + step as f32 * 0.035),
+            ..Pose::identity()
+        };
+        compare_filtered(
+            &shape,
+            Transform::from_row(0.91, 0.03, -0.07, 1.17, 4.25, -2.5),
+            pose,
+        );
+    }
+    effects_cache::clear();
+}
+
 fn reference_layer(
     pm: &mut Pixmap,
     layer: &Layer,
@@ -376,6 +413,153 @@ fn reference_layer(
             None,
         );
     }
+}
+
+#[test]
+fn cached_nested_group_filters_match_fresh_compositing() {
+    surface_cache::clear();
+    let mut doc = Document::new("nested filtered groups", 121., 97., 72.);
+    let mut outer = Layer::group("outer");
+    outer.pass_through = false;
+    outer.opacity = 0.61;
+    outer.blend = Blend::Overlay;
+    outer.filters = FilterStack {
+        legacy_composite: true,
+        enabled: true,
+        items: vec![Fx::InnerShadow {
+            blend: Blend::Normal,
+            opacity: 1.,
+            choke: 0.,
+            dx: 2.25,
+            dy: 1.5,
+            blur: 1.7,
+            color: Rgba::new(42, 11, 84, 181),
+        }],
+    };
+    outer.mask = Some(
+        Pixels::from_rgba(
+            2,
+            2,
+            vec![
+                255, 255, 255, 255, 93, 93, 93, 255, 173, 173, 173, 255, 0, 0, 0, 255,
+            ],
+        )
+        .unwrap(),
+    );
+    outer.mask_size = Pt::new(121., 97.);
+    let mut inner = Layer::group("inner");
+    inner.parent = Some(outer.id);
+    inner.pass_through = false;
+    inner.opacity = 0.72;
+    inner.filters = FilterStack {
+        legacy_composite: true,
+        enabled: true,
+        items: vec![Fx::Blur { std: 1.3 }],
+    };
+    let mut first = Layer::vector("first");
+    first.parent = Some(inner.id);
+    first.kind.shapes_mut().unwrap().push(shape());
+    let mut second = Layer::vector("second");
+    second.parent = Some(outer.id);
+    let mut second_shape = shape();
+    second_shape.geom.translate(Pt::new(21., 11.));
+    second.kind.shapes_mut().unwrap().push(second_shape);
+    second.blend = Blend::Multiply;
+    doc.layers = vec![first, inner, second, outer];
+    for step in 0..8 {
+        let transform = Transform::from_row(0.97, 0.03, -0.02, 1.03, step as f32 * 0.25, -1.25);
+        doc.layers[3].opacity = 0.25 + step as f32 * 0.08;
+        if step == 4 {
+            doc.layers[1].filters.items[0] = Fx::Blur { std: 2.1 };
+        }
+        let id = doc.layers[0].kind.shapes().unwrap()[0].id;
+        let overrides = HashMap::from([(
+            id,
+            Pose {
+                dx: step as f32 * 0.35,
+                opacity: Some(0.4 + step as f32 * 0.05),
+                ..Pose::identity()
+            },
+        )]);
+        // Recreate the original nested rendering independently of either cache.
+        let mut inner_pixels = Pixmap::new(121, 97).unwrap();
+        reference_layer(
+            &mut inner_pixels,
+            &doc.layers[0],
+            transform,
+            &doc,
+            &overrides,
+        );
+        crate::filter::apply(&mut inner_pixels, &doc.layers[1].filters);
+        let mut outer_pixels = Pixmap::new(121, 97).unwrap();
+        outer_pixels.draw_pixmap(
+            0,
+            0,
+            inner_pixels.as_ref(),
+            &PixmapPaint {
+                opacity: doc.layers[1].opacity,
+                blend_mode: doc.layers[1].blend.to_skia(),
+                ..Default::default()
+            },
+            Transform::identity(),
+            None,
+        );
+        reference_layer(
+            &mut outer_pixels,
+            &doc.layers[2],
+            transform,
+            &doc,
+            &overrides,
+        );
+        let outer = &doc.layers[3];
+        let mut placed = Pixmap::new(121, 97).unwrap();
+        outer
+            .mask
+            .as_ref()
+            .unwrap()
+            .with_pm(|mask| {
+                placed.draw_pixmap(
+                    0,
+                    0,
+                    mask.as_ref(),
+                    &PixmapPaint::default(),
+                    transform.pre_concat(layer_pixel_transform(outer)),
+                    None,
+                )
+            })
+            .unwrap();
+        outer_pixels.apply_mask(&tiny_skia::Mask::from_pixmap(
+            placed.as_ref(),
+            tiny_skia::MaskType::Luminance,
+        ));
+        crate::filter::apply(&mut outer_pixels, &outer.filters);
+        let mut expected = backdrop();
+        expected.draw_pixmap(
+            0,
+            0,
+            outer_pixels.as_ref(),
+            &PixmapPaint {
+                opacity: outer.opacity,
+                blend_mode: outer.blend.to_skia(),
+                ..Default::default()
+            },
+            Transform::identity(),
+            None,
+        );
+        for _ in 0..2 {
+            let mut actual = backdrop();
+            groups::draw(
+                &mut actual,
+                &doc,
+                transform,
+                &Draft::none(),
+                None,
+                Some(&overrides),
+            );
+            assert_pixels_equal(&actual, &expected, "cached nested group filter pixels");
+        }
+    }
+    surface_cache::clear();
 }
 
 #[test]

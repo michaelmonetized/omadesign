@@ -35,6 +35,8 @@ pub(super) struct Cache {
     visible: Vec<String>,
     needs_initial: bool,
     interacting: bool,
+    playing: bool,
+    playback_stopped: bool,
 }
 
 type Rendered = (String, Revision, egui::ColorImage);
@@ -44,6 +46,9 @@ pub(super) fn begin(ctx: &egui::Context, studio: &Studio) -> Cache {
         .data_mut(|d| d.remove_temp::<Cache>(egui::Id::new(CACHE)))
         .unwrap_or_default();
     cache.pending = false;
+    let playing = studio.is_motion() && studio.playing;
+    cache.playback_stopped = cache.playing && !playing;
+    cache.playing = playing;
     // Snapshotting vectors and pixel proxies is UI-thread work. It must not
     // compete with a drag or stroke, even when the stale tab is inactive.
     let (down, released) =
@@ -110,10 +115,15 @@ impl Cache {
         self.pending |= changed;
         if changed
             && !self.interacting
+            // Playback already renders the full canvas. A second posed render
+            // for a tiny tab competes for CPU, including native-size effects.
+            // Keep the last preview and refresh once playback pauses.
+            && !self.playing
             && (cached.is_none() || !self.needs_initial)
             && !super::super::jobs::is_running::<Rendered>(ctx, JOB)
         {
             let wait = cached
+                .filter(|_| !self.playback_stopped)
                 .map(|preview| REFRESH.saturating_sub(preview.updated.elapsed()))
                 .unwrap_or_default();
             if wait.is_zero() {
@@ -136,6 +146,7 @@ impl Cache {
         // stale rows remaining in view get another scheduling opportunity.
         if self.pending
             && !self.interacting
+            && !self.playing
             && !super::super::jobs::is_running::<Rendered>(ctx, JOB)
         {
             ctx.request_repaint_after(REFRESH);
@@ -512,5 +523,72 @@ mod tests {
         studio.new_tab();
         studio.close_tab(0);
         assert!(begin(&ctx, &studio).images.is_empty());
+    }
+
+    #[test]
+    fn playing_keeps_the_cached_thumbnail_and_pause_refreshes_immediately() {
+        let ctx = egui::Context::default();
+        let mut studio = Studio::new();
+        studio.doc = Document::new("Motion preview", 8.0, 8.0, 72.0);
+        studio.persona = crate::tools::Persona::Motion;
+        let (_, id, edited, _) = studio.tab_preview_source(0).unwrap();
+        let id = id.to_owned();
+        let texture = ctx.load_texture(
+            "paused-preview",
+            egui::ColorImage::new([1, 1], vec![egui::Color32::RED]),
+            egui::TextureOptions::LINEAR,
+        );
+        let texture_id = texture.id();
+        let mut cache = Cache::default();
+        cache.images.insert(id.clone(), Preview {
+            revision: Revision {
+                edited,
+                motion: Some(0.0f32.to_bits()),
+                dark: ctx.theme() == egui::Theme::Dark,
+            },
+            texture,
+            // Even an updated texture inside the ordinary refresh interval
+            // must immediately become eligible after playback stops.
+            updated: Instant::now() + REFRESH,
+        });
+        cache.store(&ctx);
+        studio.playing = true;
+        for playhead in [0.25, 0.5, 0.75] {
+            studio.playhead = playhead;
+            let mut cache = begin(&ctx, &studio);
+            assert_eq!(cache.image(&ctx, &studio, 0).unwrap().id(), texture_id);
+            assert!(!super::super::super::jobs::is_running::<Rendered>(&ctx, JOB));
+            cache.store(&ctx);
+        }
+        studio.playing = false;
+        let mut cache = begin(&ctx, &studio);
+        assert_eq!(cache.image(&ctx, &studio, 0).unwrap().id(), texture_id);
+        assert!(super::super::super::jobs::is_running::<Rendered>(&ctx, JOB));
+        cache.store(&ctx);
+    }
+
+    #[test]
+    fn playing_defers_cold_previews_for_active_and_inactive_tabs() {
+        let ctx = egui::Context::default();
+        let mut studio = Studio::new();
+        studio.doc = Document::new("Inactive preview", 8.0, 8.0, 72.0);
+        studio.show_welcome = false;
+        studio.new_tab();
+        studio.doc = Document::new("Playing preview", 8.0, 8.0, 72.0);
+        studio.persona = crate::tools::Persona::Motion;
+        studio.playing = true;
+        let mut cache = begin(&ctx, &studio);
+        for i in 0..studio.tab_count() {
+            assert!(cache.image(&ctx, &studio, i).is_none());
+        }
+        assert!(!super::super::super::jobs::is_running::<Rendered>(&ctx, JOB));
+        cache.store(&ctx);
+        assert!(!ready(&ctx));
+
+        studio.playing = false;
+        let mut cache = begin(&ctx, &studio);
+        assert!(cache.image(&ctx, &studio, studio.active_tab).is_none());
+        assert!(super::super::super::jobs::is_running::<Rendered>(&ctx, JOB));
+        cache.store(&ctx);
     }
 }

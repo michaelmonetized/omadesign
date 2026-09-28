@@ -168,13 +168,17 @@ impl Context<'_, '_> {
                     );
                     continue;
                 }
-                if layer.filters.active() {
-                    crate::filter::apply(&mut temp, &layer.filters);
-                }
+                let cached;
+                let pixels = if layer.filters.active() {
+                    cached = surface_cache::render(layer.id, temp, &layer.filters);
+                    cached.as_ref()
+                } else {
+                    &temp
+                };
                 pm.draw_pixmap(
                     0,
                     0,
-                    temp.as_ref(),
+                    pixels.as_ref(),
                     &PixmapPaint {
                         opacity: layer.opacity.clamp(0.0, 1.0),
                         blend_mode: layer.blend.to_skia(),

@@ -226,9 +226,7 @@ fn main() -> eframe::Result {
                     );
                 }
             }
-            for p in &open {
-                studio.open_path(p.clone());
-            }
+            studio.open_paths(open);
             Ok(Box::new(studio))
         }),
     );

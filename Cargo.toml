@@ -74,6 +74,8 @@ tar = "0.4"
 # winit 0.30 only emits PinchGesture on macOS/iOS. This tree adds Wayland
 # zwp_pointer_gestures_v1 so a trackpad pinch zooms the canvas.
 [patch.crates-io]
+# Wait for Wayland frame callbacks instead of polling occluded windows.
+eframe = { path = "vendor/eframe" }
 # Retain native clipboard key presses for modifier-aware application shortcuts.
 egui-winit = { path = "vendor/egui-winit" }
 winit = { path = "vendor/winit" }

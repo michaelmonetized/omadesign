@@ -1,0 +1,28 @@
+--- a/src/native/run.rs
++++ b/src/native/run.rs
+@@ -1,5 +1,6 @@
+ use std::time::{Duration, Instant};
+ 
++use raw_window_handle::{HasDisplayHandle as _, RawDisplayHandle};
+ use winit::{
+     application::ApplicationHandler,
+     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+@@ -206,7 +207,17 @@
+                         invisible_window_ids.push(*window_id);
+                     } else {
+                         log::trace!("request_redraw for {window_id:?}");
+-                        event_loop.set_control_flow(ControlFlow::Poll);
++                        // Wayland queues and wakes redraws itself. Polling while
++                        // an occluded surface awaits its compositor frame callback
++                        // would spin without delivering another redraw event.
++                        let is_wayland = window.display_handle().is_ok_and(|handle| {
++                            matches!(handle.as_raw(), RawDisplayHandle::Wayland(_))
++                        });
++                        event_loop.set_control_flow(if is_wayland {
++                            ControlFlow::Wait
++                        } else {
++                            ControlFlow::Poll
++                        });
+                         window.request_redraw();
+                     }
+                 } else {

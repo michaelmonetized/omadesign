@@ -1,0 +1,40 @@
+{
+  "crate": "eframe",
+  "version": "0.36.1",
+  "registry_source": "registry+https://github.com/rust-lang/crates.io-index",
+  "crate_archive_url": "https://static.crates.io/crates/eframe/eframe-0.36.1.crate",
+  "crate_archive_sha256": "2afc0cbcdb6896b7bfb1dbbebaf7b9af9635ff38fd01e89bdd0174c1717b1857",
+  "upstream_repository": "https://github.com/emilk/egui",
+  "upstream_commit": "4c1f2fae95475a40e524884ebb298bcb1714b08e",
+  "upstream_package_path": "crates/eframe",
+  "copied_unchanged": [
+    "Cargo.toml",
+    "Cargo.toml.orig",
+    "README.md",
+    ".cargo_vcs_info.json",
+    "data/",
+    "src/ except the recorded patch"
+  ],
+  "omitted_registry_files": [
+    ".cargo-ok",
+    "Cargo.lock"
+  ],
+  "licenses": {
+    "LICENSE-APACHE": {
+      "url": "https://raw.githubusercontent.com/emilk/egui/4c1f2fae95475a40e524884ebb298bcb1714b08e/LICENSE-APACHE",
+      "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+    },
+    "LICENSE-MIT": {
+      "url": "https://raw.githubusercontent.com/emilk/egui/4c1f2fae95475a40e524884ebb298bcb1714b08e/LICENSE-MIT",
+      "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+    }
+  },
+  "local_patch": "omadesign-wayland-wait.patch",
+  "patch_sha256": "51fe7351be65a8a62bbad757f476a166c67fb88da2d05beb9005d24af29caf04",
+  "patched_files": {
+    "src/native/run.rs": {
+      "upstream_sha256": "9a02f304277811fb8071cb1caeed3aace45ac53654938b10d0823525d888d987",
+      "local_sha256": "58e63327e70969df7ac3d2a33f9def31267b1cb6549493315b36dac6a65a82db"
+    }
+  }
+}
