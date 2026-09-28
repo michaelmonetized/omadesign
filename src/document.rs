@@ -270,6 +270,31 @@ impl PartialEq for Shape {
 }
 
 impl Shape {
+    /// Copy vector state while choosing mask storage before any pixel buffer is
+    /// cloned. Thumbnail snapshots use a bounded mask proxy here.
+    pub(crate) fn clone_with_mask(&self, mask: Option<Pixels>) -> Self {
+        Self {
+            id: self.id,
+            name: self.name.clone(),
+            geom: self.geom.clone(),
+            style: self.style.clone(),
+            rotation: self.rotation,
+            opacity: self.opacity,
+            fill_opacity: self.fill_opacity,
+            blend_interior: self.blend_interior,
+            blend: self.blend,
+            visible: self.visible,
+            locked: self.locked,
+            guide: self.guide,
+            filters: self.filters.clone(),
+            corners: self.corners,
+            mask,
+            layout: self.layout.clone(),
+            text_wrap: self.text_wrap.clone(),
+            cached_path: self.cached_path.clone(),
+        }
+    }
+
     pub fn new(geom: Geom, style: Style) -> Self {
         let name = geom.kind_name().to_string();
         Self {
@@ -1197,6 +1222,13 @@ impl Document {
     /// Editing layout needs vector state only. Preserve layer indices without
     /// copying image buffers or mask data into temporary solver documents.
     pub fn layout_snapshot(&self) -> Self {
+        self.layout_snapshot_with_shapes(Shape::clone)
+    }
+
+    pub(crate) fn layout_snapshot_with_shapes(
+        &self,
+        mut clone_shape: impl FnMut(&Shape) -> Shape,
+    ) -> Self {
         let mut copy = Self::new(&self.name, 1.0, 1.0, self.dpi);
         copy.width = self.width;
         copy.height = self.height;
@@ -1218,7 +1250,7 @@ impl Document {
                 out.opacity = layer.opacity;
                 out.blend = layer.blend;
                 out.text_wrap = layer.text_wrap.clone();                if let Some(shapes) = layer.kind.shapes() {
-                    out.kind.shapes_mut().unwrap().extend_from_slice(shapes);
+                    out.kind.shapes_mut().unwrap().extend(shapes.iter().map(&mut clone_shape));
                 }
                 out
             })

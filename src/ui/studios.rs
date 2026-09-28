@@ -2,6 +2,8 @@
 mod gradient_editor;
 #[path = "object_appearance.rs"]
 mod object_appearance;
+#[path = "layer_rows.rs"]
+mod layer_rows;
 
 use super::layer_drag;
 
@@ -2486,8 +2488,22 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                 }
                 let objects_unlocked = studio.layer_unlocked(i);
                 let objects_editable = studio.doc.layer_editable(i);
-                if let Some(shapes) = studio.doc.layers[i].kind.shapes().map(|s| s.to_vec()) {
-                    for (index, shape) in shapes.iter().enumerate().rev() {
+                if let Some(shapes) = studio.doc.layers[i].kind.shapes() {
+                    let count = shapes.len();
+                    let spacing = ui.spacing().item_spacing.y;
+                    let pitch = layer_rows::HEIGHT + spacing;
+                    let rename = studio.shape_rename.as_ref()
+                        .filter(|(layer, _, _)| *layer == i).map(|(_, id, _)| *id);
+                    let visible = layer_rows::snapshot(shapes, ui.cursor().top(), ui.clip_rect(), spacing, rename);
+                    let mut next_row = 0;
+                    for shape in visible {
+                        let index = shape.index;
+                        let skipped = shape.visual_index - next_row;
+                        if skipped > 0 {
+                            ui.add_space(skipped as f32 * pitch);
+                            ui.skip_ahead_auto_ids(skipped);
+                        }
+                        next_row = shape.visual_index + 1;
                         ui.push_id(shape.id, |ui| {
                             Frame::new()
                                 .fill(if studio.selection.contains(&(i, shape.id)) {
@@ -2499,6 +2515,7 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                 .inner_margin(Margin::symmetric(3, 1))
                                 .show(ui, |ui| {
                                     ui.horizontal(|ui| {
+                                        ui.set_min_height(layer_rows::HEIGHT - 2.0);
                                         if !objects_unlocked {
                                             ui.disable();
                                         }
@@ -2506,7 +2523,7 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                         ui.add_space(indent + 24.0);
                                         object_icon(
                                             ui,
-                                            geometry_icon(&shape.geom),
+                                            shape.icon,
                                             if studio.selection.contains(&(i, shape.id)) {
                                                 accent()
                                             } else {
@@ -2533,7 +2550,7 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                                 }
                                             }
                                         } else {
-                                            if matches!(&shape.geom, Geom::Text(t) if t.layout.as_ref().is_some_and(|l|l.overflow)) { ui.colored_label(eframe::egui::Color32::from_rgb(240,55,75), "+").on_hover_text("Text overflows its frame"); }
+                                            if shape.overflow { ui.colored_label(eframe::egui::Color32::from_rgb(240,55,75), "+").on_hover_text("Text overflows its frame"); }
                                             let name_width = (ui.available_width() - 50.0).max(42.0);
                                             let guide_name;
                                             let name = if shape.guide {
@@ -2542,11 +2559,11 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                             } else {
                                                 &shape.name
                                             };
-                                            if shape.filters.active() { ui.label(RichText::new("fx").small().color(accent())); }
+                                            if shape.effects { ui.label(RichText::new("fx").small().color(accent())); }
                                             let response = object_name(
                                                 ui,
                                                 name,
-                                                name_width - if shape.filters.active() { 24. } else { 0. },
+                                                name_width - if shape.effects { 24. } else { 0. },
                                                 studio.selection.contains(&(i, shape.id))
                                                     && shape.visible,
                                                 true,
@@ -2576,7 +2593,7 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                                     if ui.add_enabled(objects_editable && !shape.locked && studio.pixel_sel.is_some(), eframe::egui::Button::new("Mask from selection")).clicked() {
                                                         selection_mask_item=Some((i,shape.id)); ui.close();
                                                     }
-                                                    if shape.mask.is_some() && ui.button("Remove object mask").clicked() { remove_mask_item=Some((i,shape.id)); ui.close(); }
+                                                    if shape.masked && ui.button("Remove object mask").clicked() { remove_mask_item=Some((i,shape.id)); ui.close(); }
                                                     ui.separator();
                                                     if ui.button("Rename").clicked() {
                                                         start_shape_rename = Some((i, shape.id));
@@ -2589,10 +2606,7 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                                             objects_editable
                                                                 && shape.visible
                                                                 && !shape.locked
-                                                                && !matches!(
-                                                                    shape.geom,
-                                                                    Geom::Text(_)
-                                                                )
+                                                                && !shape.text
                                                                 && (!shape.guide
                                                                     || studio
                                                                         .doc
@@ -2606,7 +2620,7 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                                     ui.separator();
                                                     if ui
                                                         .add_enabled(
-                                                            index + 1 < shapes.len(),
+                                                            index + 1 < count,
                                                             eframe::egui::Button::new("Move up"),
                                                         )
                                                         .clicked()
@@ -2654,6 +2668,10 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                     });
                                 });
                         });
+                    }
+                    if next_row < count {
+                        ui.add_space((count - next_row) as f32 * pitch - spacing);
+                        ui.skip_ahead_auto_ids(count - next_row);
                     }
                 }
             }

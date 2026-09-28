@@ -220,8 +220,10 @@ pub enum Op {
         layer: usize,
         erase: bool,
         buf: Pixmap,
+        preview: Option<Pixmap>,
         last: Option<Pt>,
         before: Vec<u8>,
+        selection_generation: u64,
     },
     Retouch {
         layer: usize,
@@ -233,21 +235,23 @@ pub enum Op {
         offset: Pt,
         last: Pt,
         before: Vec<u8>,
+        selection_generation: u64,
     },
     Smudge {
         layer: usize,
         last: Option<Pt>,
         buf: Pixmap,
-        original: Option<Pixmap>,
+        published: bool,
         before: Vec<u8>,
+        selection_generation: u64,
     },
     Clone {
         layer: usize,
         last: Option<Pt>,
         offset: Pt,
         buf: Pixmap,
-        original: Option<Pixmap>,
         before: Vec<u8>,
+        selection_generation: u64,
     },
     Marquee {
         start: Pt,
@@ -331,6 +335,7 @@ pub struct Studio {
     pub(crate) pixel_path: Option<pixel_edit::SelectionPath>,
     pub pixel_sel_space: Option<masking::SelectionSpace>,
     pub pixel_sel_gen: u64,
+    pixel_sel_cache: masking::SelectionCache,
     pub paint_mask: bool,
     pub pending_item_mask: Option<masking::ItemMask>,
     pub snap: SnapSettings,
@@ -406,6 +411,7 @@ pub struct Studio {
     pub custom_dpi: f32,
     pub canvas_gen: u64,
     pub canvas_key: Option<(u32, u32, u32, u32, u32, u64, u8, u32)>,
+    pub(crate) interaction_render: crate::compositor::interaction::Cache,
     pub layer_rename: Option<(usize, String)>,
     pub section_open: SectionOpen,
     pub paste_nudge: u32,
@@ -573,6 +579,7 @@ impl Studio {
             pixel_path: None,
             pixel_sel_space: None,
             pixel_sel_gen: 0,
+            pixel_sel_cache: Default::default(),
             paint_mask: false,
             pending_item_mask: None,
             snap: SnapSettings::default(),
@@ -647,6 +654,7 @@ impl Studio {
             custom_dpi: 72.0,
             canvas_gen: 1,
             canvas_key: None,
+            interaction_render: Default::default(),
             layer_rename: None,
             section_open: SectionOpen::default(),
             paste_nudge: 0,
@@ -879,7 +887,14 @@ impl Studio {
     }
 
     pub fn mark(&mut self) {
+        self.interaction_render.clear();
         crate::text_geometry::reflow(&mut self.doc);
+        self.mark_interaction();
+    }
+
+    /// Only the current gesture's objects changed. Other edits use `mark` so
+    /// the cached backdrop cannot survive a change to unrelated artwork.
+    pub(crate) fn mark_interaction(&mut self) {
         self.canvas_gen = self.canvas_gen.wrapping_add(1);
         self.last_input = Instant::now();
     }

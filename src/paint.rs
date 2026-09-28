@@ -30,6 +30,42 @@ impl Default for Brush {
     }
 }
 
+/// Conservative affected pixels for a dab or a straight brush segment.
+/// Includes the antialias fringe and rounded destination coordinates used by
+/// clone, heal and smudge. Bounds are exclusive at the right/bottom edge.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct PixelRegion {
+    pub x0: usize,
+    pub y0: usize,
+    pub x1: usize,
+    pub y1: usize,
+}
+
+impl PixelRegion {
+    pub fn full(w: u32, h: u32) -> Self {
+        Self {
+            x0: 0,
+            y0: 0,
+            x1: w as usize,
+            y1: h as usize,
+        }
+    }
+
+    pub fn stroke(w: u32, h: u32, from: Pt, to: Pt, brush: &Brush) -> Self {
+        let radius = (brush.size * 0.5).max(1.0).ceil() + 2.0;
+        Self {
+            x0: (from.x.min(to.x) - radius).floor().clamp(0.0, w as f32) as usize,
+            y0: (from.y.min(to.y) - radius).floor().clamp(0.0, h as f32) as usize,
+            x1: (from.x.max(to.x) + radius).ceil().clamp(0.0, w as f32) as usize,
+            y1: (from.y.max(to.y) + radius).ceil().clamp(0.0, h as f32) as usize,
+        }
+    }
+
+    pub fn rows(self, width: u32) -> impl Iterator<Item = std::ops::Range<usize>> {
+        (self.y0..self.y1).map(move |y| y * width as usize + self.x0..y * width as usize + self.x1)
+    }
+}
+
 fn stamp_path(cx: f32, cy: f32, r: f32) -> Option<tiny_skia::Path> {
     let mut pb = PathBuilder::new();
     pb.push_circle(cx, cy, r.max(0.5));
@@ -310,6 +346,49 @@ pub fn clip_overlay(pm: &mut Pixmap, mask: &[u8]) {
     for (i, pixel) in pm.pixels_mut().iter_mut().enumerate() {
         if mask[i] == 0 {
             *pixel = tiny_skia::ColorU8::from_rgba(0, 0, 0, 0).premultiply();
+        }
+    }
+}
+
+/// Reclip only newly painted pixels; previous dabs have already been clipped.
+pub(crate) fn clip_overlay_region(pm: &mut Pixmap, mask: &[u8], region: PixelRegion) {
+    if mask.len() != pm.width() as usize * pm.height() as usize {
+        return;
+    }
+    let width = pm.width();
+    let pixels = pm.pixels_mut();
+    for row in region.rows(width) {
+        for (pixel, &coverage) in pixels[row.clone()].iter_mut().zip(&mask[row]) {
+            if coverage == 0 {
+                *pixel = tiny_skia::ColorU8::from_rgba(0, 0, 0, 0).premultiply();
+            }
+        }
+    }
+}
+
+/// Refresh the displayed soft-selection overlay from the unattenuated stroke.
+pub(crate) fn feather_overlay_region(
+    output: &mut Pixmap,
+    source: &Pixmap,
+    mask: &[u8],
+    region: PixelRegion,
+) {
+    if output.width() != source.width()
+        || output.height() != source.height()
+        || mask.len() != source.width() as usize * source.height() as usize
+    {
+        return;
+    }
+    for row in region.rows(source.width()) {
+        let bytes = row.start * 4..row.end * 4;
+        for ((out, src), &coverage) in output.data_mut()[bytes.clone()]
+            .chunks_exact_mut(4)
+            .zip(source.data()[bytes].chunks_exact(4))
+            .zip(&mask[row])
+        {
+            for (channel, &value) in out.iter_mut().zip(src) {
+                *channel = ((value as u32 * coverage as u32 + 127) / 255) as u8;
+            }
         }
     }
 }

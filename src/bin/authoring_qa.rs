@@ -87,6 +87,8 @@ fn key(key: Key, ctrl: bool, shift: bool) -> Vec<Event> {
     ]
 }
 fn click(actions: &mut VecDeque<Action>, phase: &'static str, p: Pt) {
+    // Establish canvas hover before the first press, as a native pointer does.
+    actions.push_back(Action::Point("pointer-hover", p, None));
     actions.push_back(Action::Point(
         phase,
         p,
@@ -225,6 +227,7 @@ impl Qa {
                 }
             }
             Some(Action::Text(t)) => {
+                ctx.memory_mut(|memory| memory.request_focus(egui::Id::new("studio-canvas")));
                 self.studio.persona = Persona::Design;
                 self.studio.selection.clear();
                 self.studio.text_px = t.size;
@@ -382,6 +385,9 @@ impl eframe::App for Qa {
         let key = self.studio.canvas_key;
         eframe::App::ui(&mut self.studio, ui, frame);
         let now = Instant::now();
+        if self.phase == "type-setup" {
+            assert_eq!(self.studio.tool, omadesign::tools::Tool::Text, "typing workload must target the canvas");
+        }
         self.samples.push(Sample {
             phase: self.phase.into(),
             ui_ms: start.elapsed().as_secs_f64() * 1000.,

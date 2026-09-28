@@ -132,6 +132,8 @@ impl Studio {
     }
 
     fn activate_tab(&mut self) {
+        self.interaction_render.clear();
+        self.pixel_sel_cache.clear();
         if !self.show_welcome
             && let Some(persona) = self.doc.workspace
         {

@@ -35,6 +35,17 @@ impl Studio {
             }
         }
 
+        // Preparing a recovery document still clones its pixels on the UI
+        // thread. An idle, inactive tab must not interrupt a live canvas drag.
+        // Releasing the pointer schedules a frame and resumes pending recovery.
+        let (down, released) = ctx.input(|input| (input.pointer.any_down(), input.pointer.any_released()));
+        if released {
+            ctx.request_repaint();
+        }
+        if down || released {
+            return;
+        }
+
         // A successful snapshot covers exactly this revision. Pointer motion,
         // repainting and tab switching must not repeatedly compress the file.
         let Some(source) = self.pending_recovery() else {
@@ -84,6 +95,31 @@ impl Studio {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inactive_document_recovery_does_not_clone_during_a_pointer_gesture() {
+        let ctx = egui::Context::default();
+        let mut studio = Studio::new();
+        studio.doc = Document::new("Pending recovery", 8.0, 8.0, 72.0);
+        studio.show_welcome = false;
+        studio.dirty = true;
+        studio.last_input = Instant::now() - IDLE_DELAY - Duration::from_secs(1);
+        studio.new_tab();
+        assert!(studio.pending_recovery().is_some());
+        ctx.begin_pass(egui::RawInput {
+            events: vec![egui::Event::PointerButton {
+                pos: egui::pos2(20.0, 20.0),
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            ..Default::default()
+        });
+        studio.tick_swap(&ctx);
+        assert!(studio.recovery_job.is_none());
+        assert!(studio.pending_recovery().is_some(), "the snapshot must remain pending");
+        ctx.end_pass().textures_delta.clear();
+    }
 
     #[test]
     fn manual_save_rejects_older_recovery_after_another_edit() {
