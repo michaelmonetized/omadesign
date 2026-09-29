@@ -1,0 +1,58 @@
+{
+  "passed": true,
+  "source_commit": "c832f3240d77a268134943fa2148410ac46505d3",
+  "recorded_binary_sha256": "1cbfb2ccf9a85d30c04f5467fc18a73f3beb5287e7456016aae77e407a6dcb00",
+  "movie_sha256": "36ea1c0cfaad6b883d3f6384a5e70542236304cada02cb3e748c995680bd168f",
+  "native_video": {
+    "width": 1600,
+    "height": 900,
+    "r_frame_rate": "10/1",
+    "duration": "16.000000",
+    "nb_read_frames": "160"
+  },
+  "startup_failure_restored_unsent_and_concurrent_drafts": true,
+  "retry_sent_one_turn_with_same_two_attachments": true,
+  "native_clipboard_types": [
+    "text/plain;charset=utf-8",
+    "image/png"
+  ],
+  "cache_permissions": [
+    {
+      "path": ".omadesign/agent-attachments",
+      "mode": "0o700"
+    },
+    {
+      "path": ".omadesign/agent-attachments/.gitignore",
+      "mode": "0o600"
+    },
+    {
+      "path": ".omadesign/agent-attachments/18d955d0e648f9780000000000000013",
+      "mode": "0o700"
+    },
+    {
+      "path": ".omadesign/agent-attachments/18d955d0e648f9780000000000000013/18d955d15b83e6140000000000000015-pasted-text.txt",
+      "mode": "0o600"
+    },
+    {
+      "path": ".omadesign/agent-attachments/18d955d0e648f9780000000000000013/18d955d2dbc694660000000000000017-pasted-image.png",
+      "mode": "0o600"
+    },
+    {
+      "path": ".omadesign/agent-attachments/old-thread",
+      "mode": "0o700"
+    },
+    {
+      "path": ".omadesign/agent-attachments/old-thread/previous-private-note.txt",
+      "mode": "0o600"
+    }
+  ],
+  "git_add_dot_excludes_entire_private_cache": true,
+  "git_check_ignore": ".omadesign/agent-attachments/.gitignore:1:*\t/home/michael/Projects/omadesign/target/qa/readiness-agent/native-final/.omadesign/agent-attachments/18d955d0e648f9780000000000000013/18d955d15b83e6140000000000000015-pasted-text.txt\n",
+  "external_reference_mode_unchanged": "0o644",
+  "acp_payload_counts": {
+    "text": 3,
+    "resource": 1,
+    "image": 1
+  },
+  "scope": "Native WGPU framebuffer with real clipboard MIME reads and UI input; local ACP process fixture, no third-party provider service"
+}

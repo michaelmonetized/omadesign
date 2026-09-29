@@ -1,0 +1,10 @@
+
+running 5 tests
+test agent::attachments::tests::readiness_cache_is_private_and_git_add_excludes_every_payload ... ok
+test agent::attachments::tests::readiness_cache_refuses_links_without_touching_external_data ... ok
+test agent::workspace::attachment_recovery_tests::readiness_pending_paste_handles_deletion_suffix_and_destination_edits ... ok
+test agent::workspace::attachment_recovery_tests::readiness_startup_exit_or_rejection_restores_unsent_draft_and_attachments ... ok
+test ui::agent_attachments::tests::readiness_pending_paste_tracks_unicode_edits_before_its_selection ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 826 filtered out; finished in 5.55s
+

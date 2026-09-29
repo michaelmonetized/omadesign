@@ -1,0 +1,7 @@
+    Checking winit v0.30.13 (/home/michael/Projects/omadesign/.worktrees/readiness-restack/vendor/winit)
+   Compiling omadesign v0.6.0 (/home/michael/Projects/omadesign/.worktrees/readiness-restack)
+    Checking accesskit_winit v0.32.2
+    Checking egui-winit v0.36.1 (/home/michael/Projects/omadesign/.worktrees/readiness-restack/vendor/egui-winit)
+    Checking egui-wgpu v0.36.1
+    Checking eframe v0.36.1
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 34.63s

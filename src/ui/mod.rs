@@ -1,4 +1,5 @@
 mod agent;
+mod agent_attachments;
 mod agent_picker;
 pub(crate) mod anim_export;
 mod browsers;

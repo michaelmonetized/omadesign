@@ -1,0 +1,7 @@
+   Compiling winit v0.30.13 (/home/michael/Projects/omadesign/.worktrees/final-stack-tests/vendor/winit)
+   Compiling omadesign v0.6.0 (/home/michael/Projects/omadesign/.worktrees/final-stack-tests)
+   Compiling accesskit_winit v0.32.2
+   Compiling egui-winit v0.36.1 (/home/michael/Projects/omadesign/.worktrees/final-stack-tests/vendor/egui-winit)
+   Compiling egui-wgpu v0.36.1
+   Compiling eframe v0.36.1
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 11s

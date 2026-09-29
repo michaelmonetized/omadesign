@@ -27,6 +27,9 @@ enum Target {
     FrameText(usize),
     FrameCaret(usize, usize),
     Text(&'static str),
+    AttachmentRemove(&'static str),
+    AttachmentHistory,
+    Prompt,
     FieldNth(&'static str, usize),
     Any(&'static str),
     Prefix(&'static str),
@@ -62,6 +65,9 @@ enum ActionKind {
     CheckArea(&'static str),
     CheckIntegrity(&'static str),
     Reveal(&'static str),
+    Clipboard(&'static str),
+    AttachmentCount(usize),
+    AgentRecovery(&'static str),
 }
 struct Action {
     start: u32,
@@ -93,6 +99,62 @@ fn schedule(scene: &str) -> Vec<Action> {
     use ActionKind::*;
     use Target::*;
     match scene {
+        "agent-recovery" => vec![
+            event(0.5, Click(Any("Describe a design · paste images, files or text…"))),
+            event(1., Clipboard("short")),
+            event(2., Clipboard("long")),
+            event(3.5, AttachmentCount(1)),
+            event(4., Clipboard("image")),
+            event(5.5, AttachmentCount(2)),
+            event(6., Click(Any("Send"))),
+            event(6.5, Click(Any("Describe a design · paste images, files or text…"))),
+            event(7., Type("Next notes typed while connecting.")),
+            event(8., AgentRecovery("release-failure")),
+            event(9.5, AgentRecovery("restored")),
+            event(10., Click(Prompt)),
+            event(10.5, Key(egui::Key::Home, ctrl())),
+            event(11., Type("Priority: ")),
+            event(12., Click(Any("Send"))),
+            event(14., Expect("Attachment delivery verified.")),
+        ],
+        "agent-attachments" => vec![
+            event(
+                0.5,
+                Click(Any("Describe a design · paste images, files or text…")),
+            ),
+            event(1., Clipboard("short")),
+            event(2., Expect("Match the palette of these references: ")),
+            event(2.5, Clipboard("long")),
+            event(4., AttachmentCount(1)),
+            event(4.5, Clipboard("image")),
+            event(6., AttachmentCount(2)),
+            event(6.5, Clipboard("svg")),
+            event(8., AttachmentCount(3)),
+            event(8.5, Key(egui::Key::Backspace, Modifiers::NONE)),
+            event(9.5, AttachmentCount(2)),
+            event(10., Clipboard("svg")),
+            event(11.5, Click(AttachmentRemove("pasted-vector.svg"))),
+            event(12.5, AttachmentCount(2)),
+            event(13., Click(Prompt)),
+            event(13.5, Key(egui::Key::End, ctrl())),
+            event(14., Clipboard("svg")),
+            event(15.5, Clipboard("files")),
+            event(17., AttachmentCount(7)),
+            event(17.5, Clipboard("objects")),
+            event(19., AttachmentCount(8)),
+            event(19.5, Clipboard("unknown")),
+            event(21., AttachmentCount(9)),
+            event(21.2, ScrollAt(At(1400., 630.), -105.)),
+            event(23., ScrollAt(At(1400., 630.), -900.)),
+            event(25., Click(Any("Send"))),
+            event(27., Expect("Attachment delivery verified.")),
+            event(28., Click(Any("New"))),
+            event(29., Click(Any("History"))),
+            event(30., Click(AttachmentHistory)),
+            event(31., Expect("Continue in saved document")),
+            event(32., Click(Any("Continue in saved document"))),
+            event(33., Expect("Conversation loaded · Connect to continue")),
+        ],
         "independent-effects" => vec![
             event(0.5, Scroll(-1200.)),
             event(1.5, Expect("Object blend")),
@@ -542,33 +604,61 @@ Typography stays readable with deliberate hyphenation, useful overflow controls,
             event(39.2, Click(Any("Normal"))),
         ],
         "agent-picker" => vec![
-            event(1.,Click(Any("6 Astra ▾"))),
-            event(2.,Expect("Search models…")),
-            event(3.,Click(Any("Claude"))),
-            event(4.,Expect("Claude")),
-            event(5.,Click(Any("Codex"))),
-            event(5.6,Click(Any("6 Sol"))),
-            event(6.6,Click(Any("Ultra"))),
-            event(7.2,Click(Any("High"))),
-            event(8.,Click(Any("6 Sol ▾"))),
+            event(1., Click(Any("6 Astra ▾"))),
+            event(2., Expect("Search models…")),
+            event(3., Click(Any("Claude"))),
+            event(4., Expect("Claude")),
+            event(5., Click(Any("Codex"))),
+            event(5.6, Click(Any("6 Sol"))),
+            event(6.6, Click(Any("Ultra"))),
+            event(7.2, Click(Any("High"))),
+            event(8., Click(Any("6 Sol ▾"))),
         ],
         "pixel-selection" => vec![
-            drag(0.5,0.7,Drag(World(180.,180.),World(480.,430.))),
-            event(1.5,Click(Any("Select"))),event(1.8,Click(Any("Move / resize selection"))),
-            drag(2.2,0.7,Drag(World(330.,305.),World(390.,345.))),
-            drag(3.2,0.7,Drag(World(540.,470.),World(620.,500.))),
-            event(4.1,Key(egui::Key::Enter,Modifiers::NONE)),
-            event(4.5,Click(Any("Select"))),event(4.8,Hover(Any("Reshape"))),event(5.2,Click(Any("Distort"))),
-            drag(5.6,0.7,Drag(World(240.,220.),World(280.,170.))),event(6.5,Key(egui::Key::Enter,Modifiers::NONE)),
-            event(6.8,Click(Any("Select"))),event(7.1,Click(Any("Feather…"))),event(8.,Click(Any("Apply"))),
-            event(8.4,Click(Any("Select"))),event(8.7,Click(Any("New Bézier selection"))),
-            event(9.2,Click(World(200.,200.))),drag(9.6,0.5,Drag(World(550.,200.),World(600.,260.))),
-            event(10.4,Click(World(550.,520.))),event(10.8,Click(World(200.,520.))),event(11.2,Click(World(200.,200.))),
-            event(11.8,ModifiedClick(World(200.,360.),Modifiers{shift:true,..Modifiers::NONE})),
-            event(12.3,ModifiedClick(World(200.,360.),ctrl())),
-            drag(12.8,0.7,Drag(World(200.,360.),World(150.,340.))),
-            event(14.,ModifiedClick(World(150.,340.),Modifiers{alt:true,..Modifiers::NONE})),
-            event(14.6,Key(egui::Key::Enter,Modifiers::NONE)),
+            drag(0.5, 0.7, Drag(World(180., 180.), World(480., 430.))),
+            event(1.5, Click(Any("Select"))),
+            event(1.8, Click(Any("Move / resize selection"))),
+            drag(2.2, 0.7, Drag(World(330., 305.), World(390., 345.))),
+            drag(3.2, 0.7, Drag(World(540., 470.), World(620., 500.))),
+            event(4.1, Key(egui::Key::Enter, Modifiers::NONE)),
+            event(4.5, Click(Any("Select"))),
+            event(4.8, Hover(Any("Reshape"))),
+            event(5.2, Click(Any("Distort"))),
+            drag(5.6, 0.7, Drag(World(240., 220.), World(280., 170.))),
+            event(6.5, Key(egui::Key::Enter, Modifiers::NONE)),
+            event(6.8, Click(Any("Select"))),
+            event(7.1, Click(Any("Feather…"))),
+            event(8., Click(Any("Apply"))),
+            event(8.4, Click(Any("Select"))),
+            event(8.7, Click(Any("New Bézier selection"))),
+            event(9.2, Click(World(200., 200.))),
+            drag(9.6, 0.5, Drag(World(550., 200.), World(600., 260.))),
+            event(10.4, Click(World(550., 520.))),
+            event(10.8, Click(World(200., 520.))),
+            event(11.2, Click(World(200., 200.))),
+            event(
+                11.8,
+                ModifiedClick(
+                    World(200., 360.),
+                    Modifiers {
+                        shift: true,
+                        ..Modifiers::NONE
+                    },
+                ),
+            ),
+            event(12.3, ModifiedClick(World(200., 360.), ctrl())),
+            drag(12.8, 0.7, Drag(World(200., 360.), World(150., 340.))),
+            event(
+                14.,
+                ModifiedClick(
+                    World(150., 340.),
+                    Modifiers {
+                        alt: true,
+                        ..Modifiers::NONE
+                    },
+                ),
+            ),
+            event(14.6, Key(egui::Key::Enter, Modifiers::NONE)),
         ],
         "pixel" => vec![
             drag(1., 1.2, Delta(Field("Size"), 14.)),
@@ -779,6 +869,8 @@ struct Capture {
     integrity_baseline: Option<(String, usize)>,
     integrity_selection: Option<(usize,usize,String)>,
     path_delete_snapshot: Option<(u64, Vec<(u64, Option<u64>)>, serde_json::Value)>,
+    clipboard_owner: Option<x11_clipboard::Clipboard>,
+    initial_document: String,
 }
 
 fn prepare_kit() -> PathBuf {
@@ -1103,9 +1195,34 @@ fn seed(scene: &str) -> Studio {
             }
             s.photo.select_image(0);
         }
+        "agent-attachments" | "agent-recovery" => {
+            s.doc = Document::new("Attachment reference QA", 960., 640., 96.);
+            s.doc.layers = vec![Layer::vector("Preserved artwork")];
+            s.doc.layers[0]
+                .kind
+                .shapes_mut()
+                .unwrap()
+                .push(omadesign::document::Shape::new(
+                    Geom::Rect {
+                        origin: Pt::new(180., 170.),
+                        size: Pt::new(400., 260.),
+                        radius: 24.,
+                    },
+                    omadesign::document::Style {
+                        fill: omadesign::document::Fill::Solid(Rgba::rgb(63, 131, 175)),
+                        stroke: None,
+                    },
+                ));
+            s.agent.load();
+            s.agent.visible = true;
+            s.agent.focus_prompt = true;
+        }
         "agent-picker" => {
-            s.doc=Document::new("Agent providers",960.,640.,96.);
-            s.persona=Persona::Design;s.tool=Tool::Select;s.agent.load();s.agent.visible=true;
+            s.doc = Document::new("Agent providers", 960., 640., 96.);
+            s.persona = Persona::Design;
+            s.tool = Tool::Select;
+            s.agent.load();
+            s.agent.visible = true;
         }
         "pixel" | "pixel-selection" => {
             let img =
@@ -1219,6 +1336,55 @@ impl Capture {
             studio.path = Some(directory.join(format!("{scene}-final.oma")));
         }
         if scene == "spacing" { studio.load_startup_preferences(); }
+        if matches!(scene.as_str(), "agent-attachments" | "agent-recovery") {
+            studio.path = Some(directory.join("attachment-reference.oma"));
+            studio.agent.settings.directory = directory.clone();
+            studio.agent.settings.profile = omadesign::agent::config::Profile {
+                name: "Attachment QA provider".into(),
+                command: "python3".into(),
+                args: vec![
+                    "-u".into(),
+                    std::env::current_dir()
+                        .unwrap()
+                        .join(if scene == "agent-recovery" { "docs/qa/issue-157/readiness/startup-agent.py" } else { "docs/qa/issue-157/fake-agent.py" })
+                        .display()
+                        .to_string(),
+                    directory.join("acp-received.json").display().to_string(),
+                ],
+            };
+            studio.agent.sync_fields();
+            fs::write(
+                directory.join("brand.pdf"),
+                omadesign::formats::pdf::write(&studio.doc).unwrap().0,
+            )
+            .unwrap();
+            fs::write(
+                directory.join("reference.txt"),
+                b"Brand palette: blue, cream, warm orange. Preserve the existing rectangle.",
+            )
+            .unwrap();
+            fs::copy(
+                "docs/qa/issue-153/independent-effects.mp4",
+                directory.join("reference.mp4"),
+            )
+            .unwrap();
+            let mut wav = Vec::new();
+            wav.extend_from_slice(b"RIFF");
+            wav.extend_from_slice(&196u32.to_le_bytes());
+            wav.extend_from_slice(b"WAVEfmt ");
+            wav.extend_from_slice(&16u32.to_le_bytes());
+            wav.extend_from_slice(&1u16.to_le_bytes());
+            wav.extend_from_slice(&1u16.to_le_bytes());
+            wav.extend_from_slice(&8000u32.to_le_bytes());
+            wav.extend_from_slice(&16000u32.to_le_bytes());
+            wav.extend_from_slice(&2u16.to_le_bytes());
+            wav.extend_from_slice(&16u16.to_le_bytes());
+            wav.extend_from_slice(b"data");
+            wav.extend_from_slice(&160u32.to_le_bytes());
+            wav.extend_from_slice(&[0; 160]);
+            fs::write(directory.join("reference.wav"), wav).unwrap();
+        }
+        let initial_document = omadesign::project::encode(&studio.doc).unwrap();
         let seconds = match scene.as_str() {
             "paragraphs" => 30,
             "opentype" => 20,
@@ -1231,6 +1397,8 @@ impl Capture {
             "area-invert" => 12,
             "area-valign" => 14,
             "area-integrity" => 25,
+            "agent-attachments" => 35,
+            "agent-recovery" => 16,
             "welcome-browse" => 23,
             "welcome-vector" | "welcome-layout" => 9,
             "welcome-raster" => 8,
@@ -1276,6 +1444,8 @@ impl Capture {
             integrity_baseline: None,
             integrity_selection: None,
             path_delete_snapshot: None,
+            clipboard_owner: None,
+            initial_document,
         }
     }
     fn verify_spacing(&mut self, stage: &str) {
@@ -1346,6 +1516,27 @@ impl Capture {
                 if matches!(t,Target::PathStartHandle){let (p,tangent)=omadesign::text_geometry::path_position(run,0.)?;Some(self.world(p.x,p.y)-egui::vec2(tangent.x,tangent.y)*6.)}
                 else {let p=run.contours.first()?.first()?;Some(self.world(p.x,p.y))}
             },
+            Target::Prompt => self
+                .labels
+                .iter()
+                .find(|(text, _)| text.starts_with("Match the palette"))
+                .map(|(_, r)| r.center()),
+            Target::AttachmentRemove(name) => {
+                let label = self
+                    .labels
+                    .iter()
+                    .find(|(text, _)| text.contains(name) && text.contains("KB"))?
+                    .1;
+                self.labels
+                    .iter()
+                    .filter(|(text, r)| {
+                        text == "×"
+                            && r.left() > label.right()
+                            && (r.center().y - label.center().y).abs() < 15.
+                    })
+                    .min_by(|(_, a), (_, b)| a.left().total_cmp(&b.left()))
+                    .map(|(_, r)| r.center())
+            }
             Target::Text(s) => label(s, true).map(|r| r.center()),
 
             Target::FieldNth(s, n) => {
@@ -1364,6 +1555,13 @@ impl Capture {
                     })
                     .min_by(|(_, a), (_, b)| a.left().total_cmp(&b.left()))
                     .map(|(_, r)| r.center())
+            }
+            Target::AttachmentHistory => {
+                let title = &self.studio.agent.history.iter().find(|thread| {
+                    thread.messages.iter().any(|entry| entry.role == "user" && entry.attachments.len() == 9)
+                })?.title;
+                self.labels.iter().find(|(text, _)| text == title)
+                    .map(|(_, rect)| rect.center())
             }
             Target::Any(s) => label(s, false).map(|r| r.center()),
             Target::Prefix(s) => self.labels.iter().find(|(text,_)|text.starts_with(s)).map(|(_,r)|r.center()),
@@ -1614,6 +1812,79 @@ impl Capture {
                         if !path.exists(){self.errors.push(format!("native saved file missing: {}",path.display()));}else{self.studio.open_path(path);}
                     }
                     ActionKind::VerifySpacing(stage) => self.verify_spacing(stage),
+                    ActionKind::AttachmentCount(count) => {
+                        if self.studio.agent.attachments.len() != *count {
+                            self.errors.push(format!(
+                                "frame {}: expected {} attachments, got {}; {}",
+                                self.frame,
+                                count,
+                                self.studio.agent.attachments.len(),
+                                self.studio.agent.error
+                            ));
+                        }
+                    }
+                    ActionKind::AgentRecovery(stage) => {
+                        if *stage == "release-failure" {
+                            fs::write(self.directory.join("release-startup-failure"), b"fail now").unwrap();
+                        } else {
+                            let agent = &self.studio.agent;
+                            if agent.connecting || agent.connection.is_some() || agent.attachments.len() != 2
+                                || !agent.request.starts_with("Match the palette")
+                                || !agent.request.ends_with("Next notes typed while connecting.")
+                                || agent.error.is_empty()
+                                || agent.thread.as_ref().is_some_and(|t| t.messages.iter().any(|e| e.role == "user")) {
+                                self.errors.push(format!("Startup recovery failed: {:?}, {} attachments, {}", agent.request, agent.attachments.len(), agent.error));
+                            }
+                            fs::write(self.directory.join("restored-draft.json"), serde_json::to_vec_pretty(&serde_json::json!({"request": agent.request, "attachments":agent.attachments, "error":agent.error,"connecting":agent.connecting,"ready":agent.ready})).unwrap()).unwrap();
+                        }
+                    }
+                    ActionKind::Clipboard(kind) => {
+                        let (mime,bytes)=match *kind {
+                            "short"=>("UTF8_STRING",b"Match the palette of these references: ".to_vec()),
+                            "long"=>("UTF8_STRING","Reference log: keep original artwork intact.\n".repeat(60).into_bytes()),
+                            "svg"=>("image/svg+xml",br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><circle cx="50" cy="50" r="40" fill="#FA9B44"/></svg>"##.to_vec()),
+                            "image"=>{let mut pixels=vec![0;240*160*4];for (i,p) in pixels.chunks_exact_mut(4).enumerate(){p.copy_from_slice(if i%240<80{&[63,131,175,255]}else if i%240<160{&[252,245,228,255]}else{&[250,155,68,255]});}("image/png",omadesign::photo::RgbaImage::new(240,160,pixels).unwrap().encode_png().unwrap())},
+                            "files"=>("text/uri-list",["brand.pdf","reference.mp4","reference.wav","reference.txt"].iter().map(|name|url::Url::from_file_path(self.directory.join(name)).unwrap().to_string()).collect::<Vec<_>>().join("\n").into_bytes()),
+                            "objects"=>("UTF8_STRING",format!("omadesign-objects:{}",self.initial_document).into_bytes()),
+                            "unknown"=>("application/x-omadesign-qa",vec![1,2,3,4,5]),
+                            _=>unreachable!(),
+                        };
+                        if std::env::var_os("WAYLAND_DISPLAY").is_some() {
+                            use wl_clipboard_rs::copy::{MimeType, Options, Source};
+                            let mime = if mime == "UTF8_STRING" {
+                                "text/plain;charset=utf-8"
+                            } else {
+                                mime
+                            };
+                            Options::new()
+                                .copy(
+                                    Source::Bytes(bytes.clone().into_boxed_slice()),
+                                    MimeType::Specific(mime.into()),
+                                )
+                                .unwrap();
+                        } else {
+                            let owner = x11_clipboard::Clipboard::new().unwrap();
+                            let atom = owner.setter.get_atom(mime).unwrap();
+                            owner
+                                .store(owner.setter.atoms.clipboard, atom, bytes.clone())
+                                .unwrap();
+                            self.clipboard_owner = Some(owner);
+                        }
+                        self.events.push(Event::ModifiersChanged(ctrl()));
+                        for pressed in [true, false] {
+                            self.events.push(Event::Key {
+                                key: Key::V,
+                                physical_key: None,
+                                pressed,
+                                repeat: false,
+                                modifiers: ctrl(),
+                            });
+                        }
+                        if *kind == "short" {
+                            self.events
+                                .push(Event::Paste(String::from_utf8(bytes).unwrap()));
+                        }
+                    }
                     ActionKind::Type(_) | ActionKind::Reveal(_) => {}
                     ActionKind::Drag(from, to) => a.points = self.target(from).zip(self.target(to)),
                     ActionKind::Delta(t, dx) => {
@@ -1720,6 +1991,16 @@ impl Capture {
 }
 impl eframe::App for Capture {
     fn raw_input_hook(&mut self, _: &egui::Context, input: &mut egui::RawInput) {
+        if self.warm == 0 {
+            eprintln!(
+                "Capture initial screen_rect={:?}, viewport={:?}",
+                input.screen_rect,
+                input
+                    .viewports
+                    .get(&egui::ViewportId::ROOT)
+                    .map(|v| v.inner_rect)
+            );
+        }
         input
             .events
             .retain(|e| matches!(e, Event::Screenshot { .. } | Event::Copy | Event::Cut | Event::Paste(_)));
@@ -1812,15 +2093,84 @@ impl eframe::App for Capture {
             self.ready_since = Instant::now();
             self.pending = false;
             self.stepped = false;
-            if self.scene=="pixel-selection" && self.frame.is_multiple_of(30) {
-                let value=serde_json::json!({"frame":self.frame,"path":self.studio.pixel_selection_path()});
-                fs::write(self.directory.join(format!("selection-state-{}.json",self.frame)),serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+            if self.scene == "pixel-selection" && self.frame.is_multiple_of(30) {
+                let value = serde_json::json!({"frame":self.frame,"path":self.studio.pixel_selection_path()});
+                fs::write(
+                    self.directory
+                        .join(format!("selection-state-{}.json", self.frame)),
+                    serde_json::to_vec_pretty(&value).unwrap(),
+                )
+                .unwrap();
             }
             if self.frame >= self.total {
                 if matches!(self.scene.as_str(), "graphics" | "chroma") {
                     omadesign::project::save_to(
                         &self.studio.doc,
                         &self.directory.join(format!("{}-final.oma", self.scene)),
+                    )
+                    .unwrap();
+                }
+                if matches!(self.scene.as_str(), "agent-attachments" | "agent-recovery") {
+                    if omadesign::project::encode(&self.studio.doc).unwrap()
+                        != self.initial_document
+                    {
+                        self.errors
+                            .push("Chat paste modified canvas artwork".into());
+                    }
+                    let agent = &self.studio.agent;
+                    if let Some(thread) = &agent.thread {
+                        if let Some(entry) = thread.messages.iter().find(|e| e.role == "user") {
+                            if entry
+                                .attachments
+                                .iter()
+                                .map(|a| &a.id)
+                                .collect::<std::collections::HashSet<_>>()
+                                .len()
+                                != entry.attachments.len()
+                            {
+                                self.errors.push("Attachment IDs collided".into());
+                            }
+                            let expected = if self.scene == "agent-recovery" { 2 } else { 9 };
+                            if entry.attachments.len() != expected {
+                                self.errors.push(format!(
+                                    "Sent {} attachments, expected {expected}", entry.attachments.len()
+                                ));
+                            }
+                            if self.scene == "agent-recovery" && (!entry.text.starts_with("Priority: Match the palette") || !entry.text.ends_with("Next notes typed while connecting.")) {
+                                self.errors.push("Retry did not send the entire recovered and edited draft".into());
+                            }
+                            if entry
+                                .attachments
+                                .iter()
+                                .any(|a| !entry.text.contains(&a.token()))
+                            {
+                                self.errors
+                                    .push("Missing inline attachment marker in sent prompt".into());
+                            }
+                            if entry.attachments.iter().any(|a| !a.available()) {
+                                self.errors
+                                    .push("Missing persistent attachment file".into());
+                            }
+                        } else {
+                            self.errors.push("No sent user entry".into());
+                        }
+                        fs::write(
+                            self.directory.join("conversation.json"),
+                            serde_json::to_vec_pretty(thread).unwrap(),
+                        )
+                        .unwrap();
+                    } else {
+                        self.errors.push("No attachment conversation".into());
+                    }
+                    if !agent.error.is_empty() {
+                        self.errors.push(agent.error.clone());
+                    }
+                    if !self.directory.join("acp-received.json").is_file() {
+                        self.errors.push("ACP provider received no payload".into());
+                    }
+                    omadesign::project::save_to(
+                        &self.studio.doc,
+                        &self.directory.join("attachment-reference.oma"),
                     )
                     .unwrap();
                 }
@@ -1984,7 +2334,15 @@ impl eframe::App for Capture {
         if self.stepped
             && !self.pending
             && (live_interaction || omadesign::ui::scene_ready(&ctx, &self.studio))
-            && (self.scene!="agent-picker" || (!self.studio.agent.connecting && !self.studio.agent.discovery.providers.iter().any(|p|p.status==omadesign::agent::discovery::Status::Checking)))
+            && (self.scene != "agent-picker"
+                || (!self.studio.agent.connecting
+                    && !self
+                        .studio
+                        .agent
+                        .discovery
+                        .providers
+                        .iter()
+                        .any(|p| p.status == omadesign::agent::discovery::Status::Checking)))
         {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
             self.pending = true;
@@ -2006,7 +2364,13 @@ impl eframe::App for Capture {
 }
 fn main() -> eframe::Result {
     let args: Vec<_> = std::env::args().skip(1).collect();
-    if let Some(result)=omadesign::agent::cli(&args) {if let Err(e)=result{eprintln!("{e}");std::process::exit(2);}return Ok(());}
+    if let Some(result) = omadesign::agent::cli(&args) {
+        if let Err(e) = result {
+            eprintln!("{e}");
+            std::process::exit(2);
+        }
+        return Ok(());
+    }
     let scene = args
         .first()
         .expect("SCENE OUTPUT_DIR [--probe] [--fps 30|60]")

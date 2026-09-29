@@ -1,0 +1,14 @@
+Issue: 150
+Branch: feat/issue-150-area-text
+SHA: 2622a7c2ab5e15f1c4a2e45e1c2ad33a5a4a3c9d
+Command: CARGO_TARGET_DIR=/home/michael/Projects/omadesign/target cargo check --all-targets --locked --offline -j2
+Started: 2026-09-27T22:03:03.881104+00:00
+
+    Blocking waiting for file lock on build directory
+    Checking winit v0.30.13 (/home/michael/Projects/omadesign/.worktrees/restacked-layer-audit/vendor/winit)
+    Checking accesskit_winit v0.32.2
+    Checking egui-wgpu v0.36.1
+    Checking egui-winit v0.36.1 (/home/michael/Projects/omadesign/.worktrees/restacked-layer-audit/vendor/egui-winit)
+    Checking eframe v0.36.1
+    Checking omadesign v0.6.0 (/home/michael/Projects/omadesign/.worktrees/restacked-layer-audit)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 05s

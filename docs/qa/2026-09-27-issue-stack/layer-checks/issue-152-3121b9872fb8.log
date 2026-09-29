@@ -1,0 +1,8 @@
+Issue: 152
+Branch: feat/issue-152-character-spacing
+SHA: 3121b9872fb8b47da1f46d4fa6d526f95f2da50d
+Command: CARGO_TARGET_DIR=/home/michael/Projects/omadesign/target cargo check --all-targets --locked --offline -j2
+Started: 2026-09-27T21:52:20.385583+00:00
+
+    Checking omadesign v0.6.0 (/home/michael/Projects/omadesign/.worktrees/restacked-layer-audit)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.78s

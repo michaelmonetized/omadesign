@@ -1,0 +1,33 @@
+{
+  "attachments": [
+    {
+      "delivery": "",
+      "dimensions": null,
+      "id": "3d07727e5de6d46c",
+      "kind": "Text",
+      "mime": "text/plain",
+      "name": "pasted-text.txt",
+      "preview": null,
+      "size": 2700,
+      "source": "/home/michael/Projects/omadesign/target/qa/readiness-agent/native-final/.omadesign/agent-attachments/18d955d0e648f9780000000000000013/18d955d15b83e6140000000000000015-pasted-text.txt"
+    },
+    {
+      "delivery": "",
+      "dimensions": [
+        240,
+        160
+      ],
+      "id": "4b01673ed0dd0d49",
+      "kind": "Image",
+      "mime": "image/png",
+      "name": "pasted-image.png",
+      "preview": null,
+      "size": 1254,
+      "source": "/home/michael/Projects/omadesign/target/qa/readiness-agent/native-final/.omadesign/agent-attachments/18d955d0e648f9780000000000000013/18d955d2dbc694660000000000000017-pasted-image.png"
+    }
+  ],
+  "connecting": false,
+  "error": "Attachment QA provider exited. Intentional ACP startup failure for recovery QA\n",
+  "ready": false,
+  "request": "Match the palette of these references: [📎 pasted-text.txt · 3d07727e5de6d46c][📎 pasted-image.png · 4b01673ed0dd0d49]\nNext notes typed while connecting."
+}

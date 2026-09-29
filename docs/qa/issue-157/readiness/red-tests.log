@@ -1,0 +1,31 @@
+
+running 3 tests
+test agent::attachments::tests::readiness_cache_is_private_and_git_add_excludes_every_payload ... 
+thread 'agent::attachments::tests::readiness_cache_is_private_and_git_add_excludes_every_payload' (369549) panicked at src/agent/attachments.rs:542:9:
+assertion `left == right` failed
+  left: 493
+ right: 448
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+test agent::workspace::attachment_recovery_tests::readiness_startup_exit_restores_unsent_draft_and_attachments ... 
+thread 'agent::workspace::attachment_recovery_tests::readiness_startup_exit_restores_unsent_draft_and_attachments' (369554) panicked at src/agent/workspace.rs:972:9:
+assertion `left == right` failed
+  left: "New notes typed while connecting"
+ right: "Keep my unsent brief [📎 brief.txt · private]\nNew notes typed while connecting"
+FAILED
+test ui::agent_attachments::tests::readiness_pending_paste_tracks_unicode_edits_before_its_selection ... 
+thread 'ui::agent_attachments::tests::readiness_pending_paste_tracks_unicode_edits_before_its_selection' (370535) panicked at src/ui/agent_attachments.rs:355:9:
+assertion `left == right` failed
+  left: "前缀 PASTED你好 replace tail"
+ right: "前缀 你好 PASTED tail"
+FAILED
+
+failures:
+
+failures:
+    agent::attachments::tests::readiness_cache_is_private_and_git_add_excludes_every_payload
+    agent::workspace::attachment_recovery_tests::readiness_startup_exit_restores_unsent_draft_and_attachments
+    ui::agent_attachments::tests::readiness_pending_paste_tracks_unicode_edits_before_its_selection
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 826 filtered out; finished in 5.90s
+

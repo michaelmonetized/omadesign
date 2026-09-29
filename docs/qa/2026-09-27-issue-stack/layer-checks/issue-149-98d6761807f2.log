@@ -1,0 +1,8 @@
+Issue: 149
+Branch: feat/issue-149-text-on-path
+SHA: 98d6761807f290e6c93dc8b787d30e56556570ba
+Command: CARGO_TARGET_DIR=/home/michael/Projects/omadesign/target cargo check --all-targets --locked --offline -j2
+Started: 2026-09-27T21:52:29.248334+00:00
+
+    Checking omadesign v0.6.0 (/home/michael/Projects/omadesign/.worktrees/restacked-layer-audit)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.95s

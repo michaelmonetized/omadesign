@@ -1,0 +1,6 @@
+
+running 1 test
+test formats::pdf::tests::poppler_renders_exported_pages_layers_and_soft_alpha ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 837 filtered out; finished in 0.01s
+

@@ -1,0 +1,37 @@
+{
+  "counts": {
+    "text": 3,
+    "resource": 1,
+    "image": 1
+  },
+  "params": {
+    "prompt": [
+      {
+        "text": "Omadesign design harness instructions:\nYou are a designer working directly in the user's live Omadesign canvas. Use the omadesign MCP native design tools to create and refine editable artwork. The user watches each tool result appear immediately. Build in meaningful incremental steps: foundation, composition, typography, details, then inspect a canvas snapshot and refine. Never produce SVG code, scripts, terminal artwork or .oma files as a substitute for these tools. Do not use filesystem/shell tools for design changes. Keep narration concise and visual. Get current document context before editing; every mutation requires its current revision and returns the next revision. If a revision is stale, re-read context and adapt. Preserve existing work unless asked to replace it. Make native text with installed fonts. Use unlocked vector layers; create one when needed. Read-only tools work in all sessions. Inspect the snapshot before calling the design finished.\nCanvas: Attachment reference QA (960 \u00d7 640 pixels). Live editing: true.\n\nUser request:\nPriority: Match the palette of these references: [\ud83d\udcce pasted-text.txt \u00b7 3d07727e5de6d46c][\ud83d\udcce pasted-image.png \u00b7 4b01673ed0dd0d49]\nNext notes typed while connecting.",
+        "type": "text"
+      },
+      {
+        "resource": {
+          "mimeType": "text/plain",
+          "text": "Reference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\nReference log: keep original artwork intact.\n",
+          "uri": "file:///home/michael/Projects/omadesign/target/qa/readiness-agent/native-final/.omadesign/agent-attachments/18d955d0e648f9780000000000000013/18d955d15b83e6140000000000000015-pasted-text.txt"
+        },
+        "type": "resource"
+      },
+      {
+        "text": "[\ud83d\udcce pasted-text.txt \u00b7 3d07727e5de6d46c]: /home/michael/Projects/omadesign/target/qa/readiness-agent/native-final/.omadesign/agent-attachments/18d955d0e648f9780000000000000013/18d955d15b83e6140000000000000015-pasted-text.txt (text/plain, 2700 bytes). Sent as embedded context. Read-only access to this user attachment is allowed.",
+        "type": "text"
+      },
+      {
+        "data": "iVBORw0KGgoAAAANSUhEUgAAAPAAAACgCAYAAAAy2+FlAAAErUlEQVR4Ae3AA6AkWZbG8f937o3IzKdyS2Oubdu2bdu2bdu2bWmMnpZKr54yMyLu+Xa3anqmhztr1a++1uf9lLnq3+w3PvYVuOrfLn/wvbnq34zgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634rgqquu+t+K4KqrrvrfiuCqq67634p/BL1YBxvZ+FitAAAAAElFTkSuQmCC",
+        "mimeType": "image/png",
+        "type": "image"
+      },
+      {
+        "text": "[\ud83d\udcce pasted-image.png \u00b7 4b01673ed0dd0d49]: /home/michael/Projects/omadesign/target/qa/readiness-agent/native-final/.omadesign/agent-attachments/18d955d0e648f9780000000000000013/18d955d2dbc694660000000000000017-pasted-image.png (image/png, 1254 bytes, 240\u00d7160). Sent as an image. Read-only access to this user attachment is allowed.",
+        "type": "text"
+      }
+    ],
+    "sessionId": "attachment-native-qa"
+  }
+}

@@ -1,0 +1,18 @@
+
+running 13 tests
+test agent::attachments::tests::attachment_images_svg_objects_and_history_roundtrip ... ok
+test agent::attachments::tests::attachment_ingest_preserves_short_text_and_external_paths_and_bounds_resources ... ok
+test agent::attachments::tests::attachment_payload_enforces_typed_and_inline_caps_and_removal ... ok
+test agent::tests::attachment_content_blocks_cross_real_acp_wire_for_each_capability_combination ... ok
+test agent::tests::attachment_limit_allows_short_inline_text_and_atomic_replacement_at_twenty_items ... ok
+test agent::tests::attachment_paste_refusal_preserves_selection_and_workers_keep_paste_order ... ok
+test agent::workspace::attachment_recovery_tests::attachment_failed_or_stopped_send_preserves_concurrent_draft_and_paste_position ... ok
+test ui::agent::tests::attachment_history_titles_and_restored_tokens_stay_inside_panel ... ok
+test ui::agent::tests::twenty_attachment_chips_and_long_tokens_keep_composer_controls_visible ... ok
+test ui::agent_attachments::drop_tests::attachment_panel_consumes_file_drop_before_canvas_import ... ok
+test ui::agent_attachments::layout_tests::attachment_panel_keeps_full_native_canvas_bounds_finite ... ok
+test ui::agent_attachments::tests::attachment_backspace_through_native_textedit_removes_token_and_chip ... ok
+test ui::agent_attachments::tests::attachment_tokens_delete_atomically_at_unicode_boundaries_and_selections ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 783 filtered out; finished in 16.02s
+
