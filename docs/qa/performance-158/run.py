@@ -40,6 +40,7 @@ def main():
     scenarios = ['simple', 'complex', 'complex-middle', 'complex-same-layer', 'many-tabs']
     parser.add_argument('--scenarios', nargs='+', choices=scenarios, default=scenarios)
     args = parser.parse_args()
+    args.bin_dir = args.bin_dir.resolve()
     if args.rounds < 1:
         parser.error('--rounds must be a positive integer')
     if not math.isfinite(args.timeout) or args.timeout <= 0:

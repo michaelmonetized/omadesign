@@ -89,7 +89,7 @@ thread_local! {
 }
 
 pub(super) fn reset_admission() {
-    CACHE.with_borrow_mut(|cache| cache.admission = Default::default());
+    CACHE.with_borrow_mut(|cache| cache.admission.reset());
 }
 
 pub(super) fn render(
