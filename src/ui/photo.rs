@@ -8,23 +8,8 @@ use eframe::egui::{
     Rect, RichText, ScrollArea, Sense, Slider, Stroke, TextureOptions, Ui, pos2, vec2,
 };
 
-pub(crate) fn poll_jobs(ctx: &eframe::egui::Context, studio: &mut Studio) {
-    if let Some(result) = super::jobs::poll::<std::path::PathBuf>(ctx, "photo-export") {
-        studio.photo.status = match result {
-            Ok(path) => format!(
-                "Exported {}",
-                path.file_name().unwrap_or_default().to_string_lossy()
-            ),
-            Err(error) => {
-                studio.photo.report_write_error(error.clone());
-                format!("Export failed: {error}")
-            }
-        };
-    }
-}
-
 pub(crate) fn is_exporting(ctx: &eframe::egui::Context) -> bool {
-    super::jobs::is_running::<std::path::PathBuf>(ctx, "photo-export")
+    super::export_dialog::busy(ctx)
 }
 
 pub(crate) fn copy_adjustments(studio: &mut Studio) {
@@ -41,7 +26,6 @@ pub(crate) fn preset_library(ctx: &eframe::egui::Context, studio: &mut Studio) {
 
 pub fn show(ui: &mut Ui, studio: &mut Studio) {
     studio.photo.poll(ui.ctx());
-    poll_jobs(ui.ctx(), studio);
     let before = studio.photo.selected().map(|image| {
         (
             studio.photo.selected,
@@ -672,6 +656,9 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
             }
         });
     });
+    if ui.button("AI upscale photo…").clicked() {
+        super::export_dialog::open(ui.ctx(), studio, crate::export::Format::Png, true);
+    }
     if ui
         .add_sized(
             [ui.available_width(), 28.0],
@@ -883,24 +870,8 @@ fn handle_drops(ui: &mut Ui, studio: &mut Studio) {
 }
 
 pub(crate) fn export_developed(ctx: &eframe::egui::Context, studio: &mut Studio, extension: &str) {
-    if is_exporting(ctx) {
-        return;
-    }
-    let Some(img) = studio.photo.selected().cloned() else {
-        return;
-    };
-    let extension = extension.to_owned();
-    studio.request_file_dialog(
-        move || crate::project::dialog_export(&extension.to_ascii_uppercase(), &extension),
-        move |ctx, studio, path| {
-            studio.photo.status = "Exporting full-resolution photo…".into();
-            studio.photo.clear_save_error();
-            super::jobs::start(ctx, "photo-export", move || {
-                img.export_to(&path)?;
-                Ok(path)
-            });
-        },
-    );
+    let format = match extension { "jpg" | "jpeg" => crate::export::Format::Jpeg, "tif" | "tiff" => crate::export::Format::Tiff, _ => crate::export::Format::Png };
+    super::export_dialog::open(ctx, studio, format, false);
 }
 
 #[cfg(test)]

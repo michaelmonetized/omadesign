@@ -1,0 +1,29 @@
+{
+  "cancel_export_no_partial": true,
+  "cancel_preserves_document": true,
+  "document_export_4x": true,
+  "elapsed_seconds": 10.034890961,
+  "frames": 1080,
+  "inference_frames": 276,
+  "inference_seconds": 2.5992853350000003,
+  "interaction": "real egui pointer and keyboard events; save destinations supplied through the native host callback",
+  "one_undo_step_each": true,
+  "photo_copy_2x_persisted_and_opened": true,
+  "photo_custom_2_5x": true,
+  "renderer": "native WGPU",
+  "save_reopen": true,
+  "screenshots": [
+    "01-upscale-first-preview",
+    "02-upscale-cutout-preview",
+    "03-export-dialog",
+    "04-photo-upscale-dialog",
+    "05-photo-copy-opened",
+    "06-photo-custom-scale",
+    "07-credits"
+  ],
+  "ui_frame_max_ms": 35.891887999999994,
+  "ui_frame_p95_ms": 0.751381,
+  "undo_redo": true,
+  "upscale_cutout": true,
+  "upscale_first": true
+}

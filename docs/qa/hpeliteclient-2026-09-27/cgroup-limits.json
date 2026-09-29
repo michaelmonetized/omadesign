@@ -1,0 +1,47 @@
+{
+  "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/omadesign-potato-small.service": {
+    "cpu.max": "max 100000",
+    "cpu.weight": "50",
+    "cpu.stat": "usage_usec 92326618\nuser_usec 86065783\nsystem_usec 6260834\nnice_usec 0\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0",
+    "memory.max": "805306368",
+    "memory.swap.max": "536870912",
+    "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0"
+  },
+  "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice": {
+    "cpu.max": "max 100000",
+    "cpu.weight": "100",
+    "cpu.stat": "usage_usec 446150054286\nuser_usec 353264552530\nsystem_usec 92885501755\nnice_usec 65576000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0",
+    "memory.max": "max",
+    "memory.swap.max": "max",
+    "memory.events": "low 0\nhigh 0\nmax 7476\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 12909"
+  },
+  "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service": {
+    "cpu.max": "max 100000",
+    "cpu.weight": "100",
+    "cpu.stat": "usage_usec 577260870362\nuser_usec 445888111928\nsystem_usec 131372758434\nnice_usec 65582000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0",
+    "memory.max": "max",
+    "memory.swap.max": "max",
+    "memory.events": "low 0\nhigh 0\nmax 7476\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 13362"
+  },
+  "/sys/fs/cgroup/user.slice/user-1000.slice": {
+    "cpu.max": "max 100000",
+    "cpu.weight": "100",
+    "cpu.stat": "usage_usec 577522729150\nuser_usec 446042590608\nsystem_usec 131480138542\nnice_usec 65609000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0",
+    "memory.max": "max",
+    "memory.swap.max": "max",
+    "memory.events": "low 0\nhigh 0\nmax 7476\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 13437"
+  },
+  "/sys/fs/cgroup/user.slice": {
+    "cpu.max": "max 100000",
+    "cpu.weight": "100",
+    "cpu.stat": "usage_usec 577522734244\nuser_usec 446042595458\nsystem_usec 131480138785\nnice_usec 65610000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0",
+    "cpuset.cpus.effective": "0-3",
+    "memory.max": "max",
+    "memory.swap.max": "max",
+    "memory.events": "low 0\nhigh 0\nmax 7476\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 13437"
+  },
+  "/sys/fs/cgroup": {
+    "cpu.stat": "usage_usec 616960964283\nuser_usec 448091309369\nsystem_usec 168869654913\nnice_usec 102171000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0",
+    "cpuset.cpus.effective": "0-3"
+  }
+}

@@ -28,6 +28,8 @@ pub mod layout_tokens;
 pub mod motion;
 pub mod ml;
 pub mod background_removal;
+pub mod upscale;
+pub mod export;
 pub mod motion_presets;
 pub mod paint;
 pub mod palette;

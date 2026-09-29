@@ -1,0 +1,75 @@
+{
+  "success": true,
+  "state": {
+    "memory": {
+      "MemTotal_KiB": 7963864,
+      "MemAvailable_KiB": 3681288,
+      "SwapTotal_KiB": 15929476,
+      "SwapFree_KiB": 14522824
+    },
+    "loadavg": "2.85 0.95 0.50 4/840 515280",
+    "pressure": {
+      "cpu": "some avg10=0.06 avg60=0.19 avg300=0.06 total=607469171\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "memory": "some avg10=0.09 avg60=0.33 avg300=0.13 total=3361305\nfull avg10=0.09 avg60=0.33 avg300=0.13 total=3316729",
+      "io": "some avg10=2.61 avg60=2.00 avg300=1.20 total=1711836424\nfull avg10=2.52 avg60=1.89 avg300=1.15 total=1655683405"
+    },
+    "cpu_policies": {
+      "policy6": {
+        "affected_cpus": "6",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3700000",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy4": {
+        "affected_cpus": "4",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3700258",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy2": {
+        "affected_cpus": "2",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3699467",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy0": {
+        "affected_cpus": "0",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3701359",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy7": {
+        "affected_cpus": "7",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3699773",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy5": {
+        "affected_cpus": "5",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3700037",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy3": {
+        "affected_cpus": "3",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3699969",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy1": {
+        "affected_cpus": "1",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3701138",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      }
+    }
+  }
+}

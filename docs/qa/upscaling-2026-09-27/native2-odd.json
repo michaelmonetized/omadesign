@@ -1,0 +1,17 @@
+{
+  "factor": 2.0,
+  "model": "RealESRGAN_x2plus.onnx",
+  "output": [
+    170,
+    196
+  ],
+  "runtime": "ONNX Runtime 1.28 CPU",
+  "seconds": 3.59410823,
+  "sha256": "ffa94b343026d70312435c5ce846f85ef705a5f1532a33519df32d8e060ccf3a",
+  "source": [
+    85,
+    98
+  ],
+  "tile": 192,
+  "tiles": 1
+}

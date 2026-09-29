@@ -1,0 +1,20 @@
+{
+  "network": "unshare -Urn; no external network interfaces",
+  "model_cache": "empty isolated profile; no .onnx files",
+  "runtime": "installed share/omadesign/lib/libonnxruntime.so.1",
+  "runtime_verified": "LD_DEBUG=libs init path",
+  "runtime_sha256": "f1ec1a08eb99bd6e5401340f0a2b101381bf4694415480291dc13bcaa30f9ec7",
+  "native_harness": "native-result.json; application UI and pipelines, colocated with archive installation",
+  "actual_application": "archive-installed omadesign reopened saved upscaled-cutout.oma and rendered native WGPU capture",
+  "actual_application_binary_sha256": "41ac716b7eed0800fe6b8dc5136c9174e44c9fc3285ee7eb4cd43784684b22ee",
+  "actual_desktop_chooser": "separate normal desktop-session check in desktop-chooser.json; portal needs session DBus",
+  "tests": {
+    "library_passed": 700,
+    "failed": 0,
+    "existing_ignored": 5,
+    "all_targets_offline_check": "passed",
+    "feature_rustfmt": "passed",
+    "diff_check": "passed",
+    "shell_syntax": "passed"
+  }
+}

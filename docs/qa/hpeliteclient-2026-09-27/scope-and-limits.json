@@ -1,0 +1,20 @@
+{
+  "memory_events_during_final_upscale": {
+    "low": 0,
+    "high": 0,
+    "max": 3184,
+    "oom": 0,
+    "oom_kill": 0,
+    "oom_group_kill": 0,
+    "sock_throttled": 0
+  },
+  "memory_peak_including_accumulated_file_cache_bytes": 805306368,
+  "interpretation": "File-cache reclaim reached the 768 MiB cgroup ceiling. No cgroup OOM or kill occurred. Per-process RSS is recorded separately.",
+  "stopped_benchmark": {
+    "name": "upscale-320-5x",
+    "signal": "SIGTERM",
+    "reason": "Stopped after 117 seconds to prioritize native workflow QA; not a completed 5x result."
+  },
+  "thread_experiments": "One/two CPU affinity limits are QA-only experiments. Production app settings were not changed. Variable concurrent desktop load prevents a controlled speedup claim.",
+  "large_limit": "No 2048- or 6000-pixel input benchmark was run on this host."
+}

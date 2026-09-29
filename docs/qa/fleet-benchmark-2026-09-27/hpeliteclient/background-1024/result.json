@@ -1,0 +1,19 @@
+{
+  "edge_tiles": 10,
+  "height": 678,
+  "inference_calls": 11,
+  "inference_seconds": 30.957304258,
+  "model": "u2netp.onnx",
+  "refinement_seconds": 0.314010087,
+  "runtime": "ONNX Runtime 1.28 CPU",
+  "settings": {
+    "contrast": 1,
+    "epsilon": 0.0001,
+    "radius": 12,
+    "shift": 0
+  },
+  "sha256": "309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8",
+  "skipped_tiles": 2,
+  "tiles": 12,
+  "width": 1024
+}

@@ -1,0 +1,92 @@
+{
+  "cancel_preserves_existing_destination_and_no_partial": true,
+  "cutout_2_and_4_mask_alignment_and_alpha": true,
+  "developed_crop_rotation_exposure": true,
+  "photo_exports": [
+    {
+      "dimensions": [
+        68,
+        78
+      ],
+      "file": "photo-2.png"
+    },
+    {
+      "dimensions": [
+        68,
+        78
+      ],
+      "file": "photo-2.jpg"
+    },
+    {
+      "dimensions": [
+        68,
+        78
+      ],
+      "file": "photo-2.tif"
+    },
+    {
+      "dimensions": [
+        136,
+        156
+      ],
+      "file": "photo-4.png"
+    },
+    {
+      "dimensions": [
+        136,
+        156
+      ],
+      "file": "photo-4.jpg"
+    },
+    {
+      "dimensions": [
+        136,
+        156
+      ],
+      "file": "photo-4.tif"
+    },
+    {
+      "dimensions": [
+        170,
+        195
+      ],
+      "file": "photo-5.png"
+    },
+    {
+      "dimensions": [
+        170,
+        195
+      ],
+      "file": "photo-5.jpg"
+    },
+    {
+      "dimensions": [
+        170,
+        195
+      ],
+      "file": "photo-5.tif"
+    },
+    {
+      "dimensions": [
+        85,
+        98
+      ],
+      "file": "photo-2.5.png"
+    },
+    {
+      "dimensions": [
+        85,
+        98
+      ],
+      "file": "photo-2.5.jpg"
+    },
+    {
+      "dimensions": [
+        85,
+        98
+      ],
+      "file": "photo-2.5.tif"
+    }
+  ],
+  "upscale_first_2_keep_original_and_4_full_size": true
+}

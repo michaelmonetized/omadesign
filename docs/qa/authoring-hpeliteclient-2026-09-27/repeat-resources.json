@@ -1,0 +1,36 @@
+{
+  "returncode": 0,
+  "wall_seconds": 66.03468674910255,
+  "peak_rss_KiB": 173020,
+  "user_seconds": 38.932851,
+  "system_seconds": 10.226442,
+  "major_page_faults": 5705,
+  "before": {
+    "memory": {
+      "MemTotal_KiB": 5929656,
+      "MemAvailable_KiB": 1090020,
+      "SwapTotal_KiB": 5928956,
+      "SwapFree_KiB": 2046820
+    },
+    "pressure": {
+      "cpu": "some avg10=10.26 avg60=23.43 avg300=16.17 total=49258716947\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "memory": "some avg10=1.96 avg60=6.02 avg300=4.92 total=961488611\nfull avg10=1.40 avg60=4.16 avg300=3.77 total=728946580",
+      "io": "some avg10=2.75 avg60=2.39 avg300=1.95 total=1521906896\nfull avg10=1.54 avg60=0.70 avg300=0.51 total=750120546"
+    }
+  },
+  "after": {
+    "memory": {
+      "MemTotal_KiB": 5929656,
+      "MemAvailable_KiB": 1839528,
+      "SwapTotal_KiB": 5928956,
+      "SwapFree_KiB": 1180572
+    },
+    "pressure": {
+      "cpu": "some avg10=32.73 avg60=28.68 avg300=19.56 total=49282279697\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "memory": "some avg10=25.13 avg60=11.20 avg300=6.49 total=971159946\nfull avg10=18.41 avg60=8.04 avg300=4.86 total=735927342",
+      "io": "some avg10=3.65 avg60=3.59 avg300=2.51 total=1525466290\nfull avg10=0.18 avg60=0.67 avg300=0.58 total=750949557"
+    }
+  },
+  "limits": "default user-session limits; no per-test memory or CPU ceiling",
+  "network": "disabled with unshare -Urn"
+}

@@ -1,0 +1,40 @@
+{
+  "success": true,
+  "state": {
+    "memory": {
+      "MemTotal_KiB": 15763184,
+      "MemAvailable_KiB": 4769264,
+      "SwapTotal_KiB": 41435616,
+      "SwapFree_KiB": 31050304
+    },
+    "loadavg": "3.33 2.06 1.78 7/1630 3780330",
+    "pressure": {
+      "cpu": "some avg10=0.17 avg60=0.32 avg300=0.30 total=39679668382\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "memory": "some avg10=0.12 avg60=0.30 avg300=0.13 total=627473742\nfull avg10=0.12 avg60=0.26 avg300=0.10 total=424109029",
+      "io": "some avg10=0.10 avg60=0.60 avg300=0.29 total=1910172483\nfull avg10=0.09 avg60=0.51 avg300=0.25 total=1217033246"
+    },
+    "cpu_policies": {
+      "policy6": {
+        "affected_cpus": "6 7 8 9",
+        "scaling_governor": "schedutil",
+        "scaling_cur_freq": "2448000",
+        "scaling_min_freq": "600000",
+        "scaling_max_freq": "3036000"
+      },
+      "policy2": {
+        "affected_cpus": "2 3 4 5",
+        "scaling_governor": "schedutil",
+        "scaling_cur_freq": "3036000",
+        "scaling_min_freq": "600000",
+        "scaling_max_freq": "3036000"
+      },
+      "policy0": {
+        "affected_cpus": "0 1",
+        "scaling_governor": "schedutil",
+        "scaling_cur_freq": "1704000",
+        "scaling_min_freq": "600000",
+        "scaling_max_freq": "2064000"
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "captured_utc": "2026-09-27T18:45:07Z",
+  "cards": [
+    {
+      "card": "card1",
+      "driver": "amdgpu",
+      "mem_info_vram_total_bytes": 2147483648,
+      "mem_info_vis_vram_total_bytes": 2147483648,
+      "mem_info_gtt_total_bytes": 3035983872
+    }
+  ]
+}

@@ -1,0 +1,193 @@
+{
+  "host": "intelpro",
+  "architecture": "x86_64",
+  "kernel": "7.2.6-arch2-Watanare-T2-4-t2",
+  "lscpu": {
+    "returncode": 0,
+    "output": "{\n   \"lscpu\": [\n      {\n         \"field\": \"Architecture:\",\n         \"data\": \"x86_64\"\n      },{\n         \"field\": \"CPU op-mode(s):\",\n         \"data\": \"32-bit, 64-bit\"\n      },{\n         \"field\": \"Address sizes:\",\n         \"data\": \"39 bits physical, 48 bits virtual\"\n      },{\n         \"field\": \"Byte Order:\",\n         \"data\": \"Little Endian\"\n      },{\n         \"field\": \"CPU(s):\",\n         \"data\": \"8\"\n      },{\n         \"field\": \"On-line CPU(s) list:\",\n         \"data\": \"0-7\"\n      },{\n         \"field\": \"Vendor ID:\",\n         \"data\": \"GenuineIntel\"\n      },{\n         \"field\": \"Model name:\",\n         \"data\": \"Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz\"\n      },{\n         \"field\": \"CPU family:\",\n         \"data\": \"6\"\n      },{\n         \"field\": \"Model:\",\n         \"data\": \"142\"\n      },{\n         \"field\": \"Thread(s) per core:\",\n         \"data\": \"2\"\n      },{\n         \"field\": \"Core(s) per socket:\",\n         \"data\": \"4\"\n      },{\n         \"field\": \"Socket(s):\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"Stepping:\",\n         \"data\": \"10\"\n      },{\n         \"field\": \"Microcode version:\",\n         \"data\": \"0xf6\"\n      },{\n         \"field\": \"CPU(s) scaling MHz:\",\n         \"data\": \"95%\"\n      },{\n         \"field\": \"CPU max MHz:\",\n         \"data\": \"3900.0000\"\n      },{\n         \"field\": \"CPU min MHz:\",\n         \"data\": \"400.0000\"\n      },{\n         \"field\": \"BogoMIPS:\",\n         \"data\": \"2799.89\"\n      },{\n         \"field\": \"Flags:\",\n         \"data\": \"fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb pti ssbd ibrs ibpb stibp tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid mpx rdseed adx smap clflushopt intel_pt xsaveopt xsavec xgetbv1 xsaves dtherm ida arat pln pts hwp hwp_act_window hwp_epp vnmi md_clear flush_l1d arch_capabilities\"\n      },{\n         \"field\": \"Virtualization:\",\n         \"data\": \"VT-x\"\n      },{\n         \"field\": \"L1d cache:\",\n         \"data\": \"128 KiB (4 instances)\"\n      },{\n         \"field\": \"L1i cache:\",\n         \"data\": \"128 KiB (4 instances)\"\n      },{\n         \"field\": \"L2 cache:\",\n         \"data\": \"1 MiB (4 instances)\"\n      },{\n         \"field\": \"L3 cache:\",\n         \"data\": \"6 MiB (1 instance)\"\n      },{\n         \"field\": \"NUMA node(s):\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"NUMA node0 CPU(s):\",\n         \"data\": \"0-7\"\n      },{\n         \"field\": \"Vulnerability Gather data sampling:\",\n         \"data\": \"Mitigation; Microcode\"\n      },{\n         \"field\": \"Vulnerability Ghostwrite:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Indirect target selection:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Itlb multihit:\",\n         \"data\": \"KVM: Mitigation: Split huge pages\"\n      },{\n         \"field\": \"Vulnerability L1tf:\",\n         \"data\": \"Mitigation; PTE Inversion; VMX conditional cache flushes, SMT vulnerable\"\n      },{\n         \"field\": \"Vulnerability Mds:\",\n         \"data\": \"Mitigation; Clear CPU buffers; SMT vulnerable\"\n      },{\n         \"field\": \"Vulnerability Meltdown:\",\n         \"data\": \"Mitigation; PTI\"\n      },{\n         \"field\": \"Vulnerability Mmio stale data:\",\n         \"data\": \"Mitigation; Clear CPU buffers; SMT vulnerable\"\n      },{\n         \"field\": \"Vulnerability Old microcode:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Reg file data sampling:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Retbleed:\",\n         \"data\": \"Mitigation; IBRS\"\n      },{\n         \"field\": \"Vulnerability Spec rstack overflow:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Spec store bypass:\",\n         \"data\": \"Mitigation; Speculative Store Bypass disabled via prctl\"\n      },{\n         \"field\": \"Vulnerability Spectre v1:\",\n         \"data\": \"Mitigation; usercopy/swapgs barriers and __user pointer sanitization\"\n      },{\n         \"field\": \"Vulnerability Spectre v2:\",\n         \"data\": \"Mitigation; IBRS; IBPB conditional; STIBP conditional; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected\"\n      },{\n         \"field\": \"Vulnerability Srbds:\",\n         \"data\": \"Mitigation; Microcode\"\n      },{\n         \"field\": \"Vulnerability Tsa:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Tsx async abort:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Vmscape:\",\n         \"data\": \"Mitigation; IBPB before exit to userspace\"\n      }\n   ]\n}"
+  },
+  "cpu_topology": {
+    "returncode": 0,
+    "output": "# The following is the parsable format, which can be fed to other\n# programs. Each different item in every column has an unique ID\n# starting usually from zero.\n# CPU,Core,Socket,Online\n0,0,0,Y\n1,1,0,Y\n2,2,0,Y\n3,3,0,Y\n4,0,0,Y\n5,1,0,Y\n6,2,0,Y\n7,3,0,Y"
+  },
+  "model": "MacBookPro15,4",
+  "vendor": "Apple Inc.",
+  "os_release": "NAME=\"Omarchy\"\nPRETTY_NAME=\"Omarchy\"\nID=omarchy\nID_LIKE=arch\nBUILD_ID=\"4.0.4\"\nVERSION_ID=\"4.0.4\"\nANSI_COLOR=\"38;2;158;206;106\"\nHOME_URL=\"https://omarchy.org/\"\nDOCUMENTATION_URL=\"https://learn.omacom.io/2/the-omarchy-manual\"\nSUPPORT_URL=\"https://discord.gg/tXFUdasqhY\"\nBUG_REPORT_URL=\"https://github.com/basecamp/omarchy/issues\"\nLOGO=omarchy",
+  "graphics": [
+    "00:02.0 VGA compatible controller [0300]: Intel Corporation Coffee Lake-U GT3 [Iris Plus Graphics 645] [8086:3ea6] (rev 01)",
+    "\tKernel driver in use: i915"
+  ],
+  "graphics_packages": {
+    "returncode": 1,
+    "output": "mesa 1:26.2.2-1\nvulkan-intel 1:26.2.2-1\nvulkan-asahi 1:26.2.2-1"
+  },
+  "power_profile": {
+    "returncode": 0,
+    "output": "performance"
+  },
+  "state": {
+    "memory": {
+      "MemTotal_KiB": 7963864,
+      "MemAvailable_KiB": 3314796,
+      "SwapTotal_KiB": 15929476,
+      "SwapFree_KiB": 14902080
+    },
+    "loadavg": "0.02 0.15 0.23 1/830 511521",
+    "pressure": {
+      "cpu": "some avg10=0.00 avg60=0.00 avg300=0.00 total=606939784\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=2565834\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=2525715",
+      "io": "some avg10=0.26 avg60=0.92 avg300=0.84 total=1709368029\nfull avg10=0.22 avg60=0.88 avg300=0.82 total=1653394336"
+    },
+    "cpu_policies": {
+      "policy6": {
+        "affected_cpus": "6",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3700947",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy4": {
+        "affected_cpus": "4",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3697521",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy2": {
+        "affected_cpus": "2",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3700125",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy0": {
+        "affected_cpus": "0",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3701678",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy7": {
+        "affected_cpus": "7",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "400000",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy5": {
+        "affected_cpus": "5",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3705957",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy3": {
+        "affected_cpus": "3",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3701635",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      },
+      "policy1": {
+        "affected_cpus": "1",
+        "scaling_governor": "powersave",
+        "scaling_cur_freq": "3700004",
+        "scaling_min_freq": "400000",
+        "scaling_max_freq": "3900000"
+      }
+    }
+  },
+  "captured_utc": "2026-09-27T18:41:52Z",
+  "monitors": [
+    {
+      "name": "DP-1",
+      "width": 1920,
+      "height": 1080,
+      "refreshRate": 60.0,
+      "scale": 1,
+      "transform": 0
+    }
+  ],
+  "artifacts": {
+    "bin/authoring_qa": {
+      "bytes": 53440144,
+      "sha256": "f8d71ab3dd26c6cdff1955b2ffa11003c1817e46eee0afab293a11ffa153d9a7"
+    },
+    "bin/background_removal_qa": {
+      "bytes": 53669848,
+      "sha256": "1e235dc0a19873ab71bef61909b763ca7295ae0d4cb7bf0cd7434610899defc9"
+    },
+    "bin/canvas_profile": {
+      "bytes": 5661592,
+      "sha256": "287fe87f5762ad9f2af1706040b15779b3f19008fe3a9807f3d5eb96afad9859"
+    },
+    "bin/omadesign": {
+      "bytes": 53691472,
+      "sha256": "fd293af0d47e2bfda8550a1c2107177060b8e0a9d41785f299c9f5849f9091d8"
+    },
+    "bin/upscale_qa": {
+      "bytes": 53697368,
+      "sha256": "8d65544c5440418bba32512bbb10bbbb3358181c38b6388b2339b51ddd01a37e"
+    },
+    "lib/libonnxruntime.so.1.28.0": {
+      "bytes": 24268848,
+      "sha256": "1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab"
+    },
+    "lib/libonnxruntime_providers_shared.so": {
+      "bytes": 14632,
+      "sha256": "086ec1d5388f64153d9c63470d126693db9a182c8ce236d3a1119068471b8a0d"
+    },
+    "inputs/.omabrand/.omatype": {
+      "bytes": 794,
+      "sha256": "ac6929ca4fec50b10dbbc167cc27d6364d29c5b0171c97b67050252245978cd9"
+    },
+    "inputs/.omabrand/fonts/2387344100d213108cead7abcdc1263c.ttf": {
+      "bytes": 2968744,
+      "sha256": "b7c0dcee217aa017207f21b0915b5159451fa8b7fb619af8afb6349352ca8770"
+    },
+    "inputs/.omabrand/fonts/2819ebc145fb746db9eb78bdeea2bc3a.ttf": {
+      "bytes": 646360,
+      "sha256": "5d4d9e0ded710a4603e10afebfce2c2d56fa0d216890e8915511d2a53a004c1c"
+    },
+    "inputs/.omabrand/fonts/64a2d3719cd24cfc90c61e80239af081.ttf": {
+      "bytes": 2968556,
+      "sha256": "7fdb146f5b2ab3a435a6e975899de7e0958a1e3c17f5fc86c5b2e28271452adc"
+    },
+    "inputs/.omabrand/fonts/Nerd-Fonts-OFL.txt": {
+      "bytes": 4301,
+      "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2"
+    },
+    "inputs/.omabrand/fonts/Noto-OFL.txt": {
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    "inputs/.omabrand/fonts/bb80be15ebaedfabdf34beb2e53006b2.ttf": {
+      "bytes": 2968648,
+      "sha256": "5f800630112c2094efeb09f65c0e7247e4e6c85d2b61384b6e89de95b9bd5aa3"
+    },
+    "inputs/.omabrand/fonts/c40328406c229b6198215f56453385f2.ttf": {
+      "bytes": 631484,
+      "sha256": "1df075a380fc7cb898acf64c1f7b3b4dd780de3caa860178bf929de35817a913"
+    },
+    "inputs/.omabrand/fonts/ff1bcc1d0e36c222e930ee514700e1e0.ttf": {
+      "bytes": 2968820,
+      "sha256": "704898874930bd2dbf9ebdcc0bbe5d9b7c2714fe537d0ca0f5cb0cbb49915bc8"
+    },
+    "inputs/cat-1024.png": {
+      "bytes": 1057041,
+      "sha256": "41888dafdc59123b25129b260a2d91a03306ee67bdfd495cc1bb0e1f0f1eac8e"
+    },
+    "inputs/cat-320.png": {
+      "bytes": 116328,
+      "sha256": "be014031f03404af7f6a4c222caf34c806a55cc943cc33736556e021bc9610ff"
+    },
+    "inputs/infographic-seed.oma": {
+      "bytes": 472296,
+      "sha256": "d75a60c1803b4718d171a897f2330b3faec80018a02d27ee6c5447b88eeef7a7"
+    },
+    "inputs/type-tasks.json": {
+      "bytes": 624,
+      "sha256": "e859dd9c2e990468c36c818616addfbb47c46f0951f6e6e4f5be4c5eb0b96efe"
+    }
+  }
+}

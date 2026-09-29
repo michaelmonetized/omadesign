@@ -114,7 +114,7 @@ pub fn data_dir() -> Result<PathBuf, String> {
         .ok_or_else(|| "No user data directory is available".into())
 }
 
-fn verify(bytes: &[u8], size: u64, sha: &str) -> Result<(), String> {
+pub(crate) fn verify(bytes: &[u8], size: u64, sha: &str) -> Result<(), String> {
     if bytes.len() as u64 != size || format!("{:x}", Sha256::digest(bytes)) != sha {
         Err("Model verification failed (size or SHA-256). The model was rejected.".into())
     } else {
@@ -122,7 +122,7 @@ fn verify(bytes: &[u8], size: u64, sha: &str) -> Result<(), String> {
     }
 }
 
-fn install_verified(
+pub(crate) fn install_verified(
     mut source: impl Read,
     path: &Path,
     size: u64,

@@ -1,0 +1,100 @@
+{
+  "name": "package-reopen",
+  "returncode": 0,
+  "timed_out": false,
+  "wall_seconds": 11.717488161986694,
+  "peak_rss_KiB": 150320,
+  "user_seconds": 1.161799,
+  "system_seconds": 3.86575,
+  "major_page_faults": 183,
+  "before": {
+    "memory": {
+      "MemTotal_KiB": 5929656,
+      "MemAvailable_KiB": 890408,
+      "SwapTotal_KiB": 5928956,
+      "SwapFree_KiB": 1963148
+    },
+    "loadavg": "13.05 10.60 6.28 13/1098 2549744",
+    "pressure": {
+      "cpu": "some avg10=86.94 avg60=84.69 avg300=66.01 total=49881182946\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "memory": "some avg10=16.63 avg60=9.83 avg300=12.14 total=1109244379\nfull avg10=10.41 avg60=6.45 avg300=7.94 total=835485338",
+      "io": "some avg10=1.24 avg60=1.91 avg300=2.68 total=1579275935\nfull avg10=0.00 avg60=0.07 avg300=0.20 total=770777689"
+    },
+    "cpu_policies": {
+      "policy2": {
+        "affected_cpus": "2",
+        "scaling_governor": "schedutil",
+        "scaling_cur_freq": "1397115",
+        "scaling_min_freq": "1400000",
+        "scaling_max_freq": "2100000"
+      },
+      "policy0": {
+        "affected_cpus": "0",
+        "scaling_governor": "schedutil",
+        "scaling_cur_freq": "1397279",
+        "scaling_min_freq": "1400000",
+        "scaling_max_freq": "2100000"
+      },
+      "policy3": {
+        "affected_cpus": "3",
+        "scaling_governor": "schedutil",
+        "scaling_cur_freq": "1397093",
+        "scaling_min_freq": "1400000",
+        "scaling_max_freq": "2100000"
+      },
+      "policy1": {
+        "affected_cpus": "1",
+        "scaling_governor": "schedutil",
+        "scaling_cur_freq": "1397049",
+        "scaling_min_freq": "1400000",
+        "scaling_max_freq": "2100000"
+      }
+    }
+  },
+  "after": {
+    "memory": {
+      "MemTotal_KiB": 5929656,
+      "MemAvailable_KiB": 937504,
+      "SwapTotal_KiB": 5928956,
+      "SwapFree_KiB": 1963496
+    },
+    "loadavg": "12.41 10.55 6.31 3/1094 2551737",
+    "pressure": {
+      "cpu": "some avg10=55.00 avg60=78.06 avg300=65.33 total=49886786308\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+      "memory": "some avg10=10.89 avg60=9.91 avg300=12.08 total=1110488985\nfull avg10=7.62 avg60=6.68 avg300=7.94 total=836467364",
+      "io": "some avg10=7.33 avg60=3.37 avg300=2.98 total=1580516860\nfull avg10=1.62 avg60=0.41 avg300=0.27 total=771058599"
+    },
+    "cpu_policies": {
+      "policy2": {
+        "affected_cpus": "2",
+        "scaling_governor": "schedutil",
+        "scaling_cur_freq": "1396865",
+        "scaling_min_freq": "1400000",
+        "scaling_max_freq": "2100000"
+      },
+      "policy0": {
+        "affected_cpus": "0",
+        "scaling_governor": "schedutil",
+        "scaling_cur_freq": "1397258",
+        "scaling_min_freq": "1400000",
+        "scaling_max_freq": "2100000"
+      },
+      "policy3": {
+        "affected_cpus": "3",
+        "scaling_governor": "schedutil",
+        "scaling_cur_freq": "1397177",
+        "scaling_min_freq": "1400000",
+        "scaling_max_freq": "2100000"
+      },
+      "policy1": {
+        "affected_cpus": "1",
+        "scaling_governor": "schedutil",
+        "scaling_cur_freq": "1397136",
+        "scaling_min_freq": "1400000",
+        "scaling_max_freq": "2100000"
+      }
+    }
+  },
+  "network": "disabled with unshare -Urn",
+  "limits": "default user-session limits, no per-test CPU or memory ceiling"
+}

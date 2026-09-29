@@ -1,0 +1,506 @@
+[
+  {
+    "convert_ms": 4.746619,
+    "layer": "Paper-1",
+    "render_ms": 5.0799069999999995,
+    "round": 0
+  },
+  {
+    "convert_ms": 5.564821,
+    "layer": "Paper-1",
+    "render_ms": 3.780631,
+    "round": 1
+  },
+  {
+    "convert_ms": 5.610358000000001,
+    "layer": "Paper-1",
+    "render_ms": 3.6364069999999997,
+    "round": 2
+  },
+  {
+    "convert_ms": 5.600999,
+    "layer": "Paper-1",
+    "render_ms": 3.610216,
+    "round": 3
+  },
+  {
+    "convert_ms": 5.474864,
+    "layer": "Coastal landscape-2",
+    "render_ms": 28.304341,
+    "round": 0
+  },
+  {
+    "convert_ms": 5.701223,
+    "layer": "Coastal landscape-2",
+    "render_ms": 19.340368,
+    "round": 1
+  },
+  {
+    "convert_ms": 5.505455,
+    "layer": "Coastal landscape-2",
+    "render_ms": 19.007779,
+    "round": 2
+  },
+  {
+    "convert_ms": 5.470045,
+    "layer": "Coastal landscape-2",
+    "render_ms": 18.869141,
+    "round": 3
+  },
+  {
+    "convert_ms": 7.094226,
+    "layer": "Newsletter banner-212",
+    "render_ms": 5.470255,
+    "round": 0
+  },
+  {
+    "convert_ms": 6.171889,
+    "layer": "Newsletter banner-212",
+    "render_ms": 6.713725999999999,
+    "round": 1
+  },
+  {
+    "convert_ms": 6.167071,
+    "layer": "Newsletter banner-212",
+    "render_ms": 6.780146,
+    "round": 2
+  },
+  {
+    "convert_ms": 7.840421,
+    "layer": "Newsletter banner-212",
+    "render_ms": 7.895736,
+    "round": 3
+  },
+  {
+    "convert_ms": 7.689702,
+    "layer": "Anti-spam mascot-227",
+    "render_ms": 14.953434999999999,
+    "round": 0
+  },
+  {
+    "convert_ms": 5.562517000000001,
+    "layer": "Anti-spam mascot-227",
+    "render_ms": 14.856563999999999,
+    "round": 1
+  },
+  {
+    "convert_ms": 7.040029,
+    "layer": "Anti-spam mascot-227",
+    "render_ms": 10.175807,
+    "round": 2
+  },
+  {
+    "convert_ms": 5.8258909999999995,
+    "layer": "Anti-spam mascot-227",
+    "render_ms": 10.893923999999998,
+    "round": 3
+  },
+  {
+    "convert_ms": 5.460407,
+    "layer": "Search telescope-276",
+    "render_ms": 5.392241,
+    "round": 0
+  },
+  {
+    "convert_ms": 4.664345,
+    "layer": "Search telescope-276",
+    "render_ms": 5.207717,
+    "round": 1
+  },
+  {
+    "convert_ms": 5.18041,
+    "layer": "Search telescope-276",
+    "render_ms": 6.482827,
+    "round": 2
+  },
+  {
+    "convert_ms": 4.622091,
+    "layer": "Search telescope-276",
+    "render_ms": 4.9722100000000005,
+    "round": 3
+  },
+  {
+    "convert_ms": 5.177475,
+    "layer": "Spam paper character-295",
+    "render_ms": 3.29404,
+    "round": 0
+  },
+  {
+    "convert_ms": 6.172867999999999,
+    "layer": "Spam paper character-295",
+    "render_ms": 4.8008169999999994,
+    "round": 1
+  },
+  {
+    "convert_ms": 5.189908,
+    "layer": "Spam paper character-295",
+    "render_ms": 4.514533999999999,
+    "round": 2
+  },
+  {
+    "convert_ms": 5.300608,
+    "layer": "Spam paper character-295",
+    "render_ms": 4.368214,
+    "round": 3
+  },
+  {
+    "convert_ms": 5.092198,
+    "layer": "Spam paper character-302",
+    "render_ms": 2.825678,
+    "round": 0
+  },
+  {
+    "convert_ms": 4.449789,
+    "layer": "Spam paper character-302",
+    "render_ms": 2.821208,
+    "round": 1
+  },
+  {
+    "convert_ms": 5.028084000000001,
+    "layer": "Spam paper character-302",
+    "render_ms": 4.320651,
+    "round": 2
+  },
+  {
+    "convert_ms": 5.030528,
+    "layer": "Spam paper character-302",
+    "render_ms": 4.619436,
+    "round": 3
+  },
+  {
+    "convert_ms": 4.951537,
+    "layer": "Spam paper character-309",
+    "render_ms": 2.840415,
+    "round": 0
+  },
+  {
+    "convert_ms": 4.2326500000000005,
+    "layer": "Spam paper character-309",
+    "render_ms": 2.8420910000000004,
+    "round": 1
+  },
+  {
+    "convert_ms": 4.7656160000000005,
+    "layer": "Spam paper character-309",
+    "render_ms": 4.1971,
+    "round": 2
+  },
+  {
+    "convert_ms": 4.985829,
+    "layer": "Spam paper character-309",
+    "render_ms": 4.123137,
+    "round": 3
+  },
+  {
+    "convert_ms": 4.680967,
+    "layer": "Spam paper character-316",
+    "render_ms": 2.809684,
+    "round": 0
+  },
+  {
+    "convert_ms": 4.910749,
+    "layer": "Spam paper character-316",
+    "render_ms": 4.01565,
+    "round": 1
+  },
+  {
+    "convert_ms": 4.616224000000001,
+    "layer": "Spam paper character-316",
+    "render_ms": 4.139062,
+    "round": 2
+  },
+  {
+    "convert_ms": 4.057486,
+    "layer": "Spam paper character-316",
+    "render_ms": 2.4606820000000003,
+    "round": 3
+  },
+  {
+    "convert_ms": 4.419199000000001,
+    "layer": "Sunlight accents",
+    "render_ms": 2.268616,
+    "round": 0
+  },
+  {
+    "convert_ms": 3.877292,
+    "layer": "Sunlight accents",
+    "render_ms": 1.966967,
+    "round": 1
+  },
+  {
+    "convert_ms": 4.268898,
+    "layer": "Sunlight accents",
+    "render_ms": 3.3804350000000003,
+    "round": 2
+  },
+  {
+    "convert_ms": 4.332384,
+    "layer": "Sunlight accents",
+    "render_ms": 3.318205,
+    "round": 3
+  },
+  {
+    "convert_ms": 3.477167,
+    "layer": "Update card 1-329",
+    "render_ms": 7.554767,
+    "round": 0
+  },
+  {
+    "convert_ms": 3.427648,
+    "layer": "Update card 1-329",
+    "render_ms": 6.456707,
+    "round": 1
+  },
+  {
+    "convert_ms": 3.874918,
+    "layer": "Update card 1-329",
+    "render_ms": 7.669727,
+    "round": 2
+  },
+  {
+    "convert_ms": 4.0197009999999995,
+    "layer": "Update card 1-329",
+    "render_ms": 7.55323,
+    "round": 3
+  },
+  {
+    "convert_ms": 3.7386559999999998,
+    "layer": "Update card 2-370",
+    "render_ms": 7.492677,
+    "round": 0
+  },
+  {
+    "convert_ms": 3.8578770000000002,
+    "layer": "Update card 2-370",
+    "render_ms": 7.696547,
+    "round": 1
+  },
+  {
+    "convert_ms": 5.114617999999999,
+    "layer": "Update card 2-370",
+    "render_ms": 8.780987,
+    "round": 2
+  },
+  {
+    "convert_ms": 3.593942,
+    "layer": "Update card 2-370",
+    "render_ms": 9.008184,
+    "round": 3
+  },
+  {
+    "convert_ms": 3.5459609999999997,
+    "layer": "Update card 3-411",
+    "render_ms": 6.25123,
+    "round": 0
+  },
+  {
+    "convert_ms": 3.57774,
+    "layer": "Update card 3-411",
+    "render_ms": 6.461526,
+    "round": 1
+  },
+  {
+    "convert_ms": 3.5375099999999997,
+    "layer": "Update card 3-411",
+    "render_ms": 6.514117,
+    "round": 2
+  },
+  {
+    "convert_ms": 3.141784,
+    "layer": "Update card 3-411",
+    "render_ms": 5.616225,
+    "round": 3
+  },
+  {
+    "convert_ms": 3.5257769999999997,
+    "layer": "Update card 4-447",
+    "render_ms": 6.783359,
+    "round": 0
+  },
+  {
+    "convert_ms": 3.693049,
+    "layer": "Update card 4-447",
+    "render_ms": 6.964320000000001,
+    "round": 1
+  },
+  {
+    "convert_ms": 3.5127859999999997,
+    "layer": "Update card 4-447",
+    "render_ms": 6.894616999999999,
+    "round": 2
+  },
+  {
+    "convert_ms": 3.13445,
+    "layer": "Update card 4-447",
+    "render_ms": 5.909842,
+    "round": 3
+  },
+  {
+    "convert_ms": 3.501401,
+    "layer": "Update card 5-480",
+    "render_ms": 6.714633999999999,
+    "round": 0
+  },
+  {
+    "convert_ms": 4.723781,
+    "layer": "Update card 5-480",
+    "render_ms": 6.705834,
+    "round": 1
+  },
+  {
+    "convert_ms": 4.473117,
+    "layer": "Update card 5-480",
+    "render_ms": 9.524178,
+    "round": 2
+  },
+  {
+    "convert_ms": 3.404041,
+    "layer": "Update card 5-480",
+    "render_ms": 7.01719,
+    "round": 3
+  },
+  {
+    "convert_ms": 3.39112,
+    "layer": "Update card 6-523",
+    "render_ms": 6.592759,
+    "round": 0
+  },
+  {
+    "convert_ms": 3.388397,
+    "layer": "Update card 6-523",
+    "render_ms": 6.73433,
+    "round": 1
+  },
+  {
+    "convert_ms": 3.386441,
+    "layer": "Update card 6-523",
+    "render_ms": 6.729161,
+    "round": 2
+  },
+  {
+    "convert_ms": 3.409978,
+    "layer": "Update card 6-523",
+    "render_ms": 6.759124,
+    "round": 3
+  },
+  {
+    "convert_ms": 3.428276,
+    "layer": "Footer subscribe and links-565",
+    "render_ms": 4.975841,
+    "round": 0
+  },
+  {
+    "convert_ms": 3.5215170000000002,
+    "layer": "Footer subscribe and links-565",
+    "render_ms": 5.263452,
+    "round": 1
+  },
+  {
+    "convert_ms": 3.429045,
+    "layer": "Footer subscribe and links-565",
+    "render_ms": 5.486947,
+    "round": 2
+  },
+  {
+    "convert_ms": 3.473744,
+    "layer": "Footer subscribe and links-565",
+    "render_ms": 5.4141010000000005,
+    "round": 3
+  },
+  {
+    "convert_ms": 3.4667600000000003,
+    "layer": "Type — weekly headline",
+    "render_ms": 4.354455,
+    "round": 0
+  },
+  {
+    "convert_ms": 3.128933,
+    "layer": "Type — weekly headline",
+    "render_ms": 4.284124,
+    "round": 1
+  },
+  {
+    "convert_ms": 3.449579,
+    "layer": "Type — weekly headline",
+    "render_ms": 5.1950069999999995,
+    "round": 2
+  },
+  {
+    "convert_ms": 3.217144,
+    "layer": "Type — weekly headline",
+    "render_ms": 4.341115,
+    "round": 3
+  },
+  {
+    "convert_ms": 3.4751410000000003,
+    "layer": "Pen — sunlight rays",
+    "render_ms": 1.827283,
+    "round": 0
+  },
+  {
+    "convert_ms": 3.587447,
+    "layer": "Pen — sunlight rays",
+    "render_ms": 2.9777240000000003,
+    "round": 1
+  },
+  {
+    "convert_ms": 3.5747359999999997,
+    "layer": "Pen — sunlight rays",
+    "render_ms": 2.9882709999999997,
+    "round": 2
+  },
+  {
+    "convert_ms": 3.551548,
+    "layer": "Pen — sunlight rays",
+    "render_ms": 3.0397440000000002,
+    "round": 3
+  },
+  {
+    "convert_ms": 4.176497,
+    "layer": "Brush — sea glints",
+    "render_ms": 33.042229,
+    "round": 0
+  },
+  {
+    "convert_ms": 3.632915,
+    "layer": "Brush — sea glints",
+    "render_ms": 20.786241,
+    "round": 1
+  },
+  {
+    "convert_ms": 3.621042,
+    "layer": "Brush — sea glints",
+    "render_ms": 25.047317,
+    "round": 2
+  },
+  {
+    "convert_ms": 3.336365,
+    "layer": "Brush — sea glints",
+    "render_ms": 19.389746,
+    "round": 3
+  },
+  {
+    "convert_ms": 4.526616,
+    "layer": "ALL",
+    "render_ms": 83.75175399999999,
+    "round": 0
+  },
+  {
+    "convert_ms": 2.494696,
+    "layer": "ALL",
+    "render_ms": 127.28198299999998,
+    "round": 1
+  },
+  {
+    "convert_ms": 2.409558,
+    "layer": "ALL",
+    "render_ms": 104.75764799999999,
+    "round": 2
+  },
+  {
+    "convert_ms": 2.234044,
+    "layer": "ALL",
+    "render_ms": 95.327059,
+    "round": 3
+  }
+]

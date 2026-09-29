@@ -1,0 +1,150 @@
+{
+  "authoring-2/infographic.png": {
+    "dimensions": [
+      1200,
+      900
+    ],
+    "reference": "m1pro16",
+    "comparison": {
+      "intelpro": {
+        "max_channel_difference": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "mean_channel_difference": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "hpeliteclient": {
+        "max_channel_difference": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "mean_channel_difference": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    }
+  },
+  "upscale-320-2x.png": {
+    "dimensions": [
+      640,
+      424
+    ],
+    "reference": "m1pro16",
+    "comparison": {
+      "intelpro": {
+        "max_channel_difference": [
+          1,
+          1,
+          1,
+          0
+        ],
+        "mean_channel_difference": [
+          1.1055424528301886e-05,
+          1.474056603773585e-05,
+          7.370283018867925e-06,
+          0.0
+        ]
+      },
+      "hpeliteclient": {
+        "max_channel_difference": [
+          1,
+          1,
+          1,
+          0
+        ],
+        "mean_channel_difference": [
+          1.1055424528301886e-05,
+          1.474056603773585e-05,
+          7.370283018867925e-06,
+          0.0
+        ]
+      }
+    }
+  },
+  "upscale-320-4x.png": {
+    "dimensions": [
+      1280,
+      848
+    ],
+    "reference": "m1pro16",
+    "comparison": {
+      "intelpro": {
+        "max_channel_difference": [
+          1,
+          1,
+          1,
+          0
+        ],
+        "mean_channel_difference": [
+          1.566185141509434e-05,
+          1.3819280660377359e-05,
+          1.566185141509434e-05,
+          0.0
+        ]
+      },
+      "hpeliteclient": {
+        "max_channel_difference": [
+          1,
+          1,
+          1,
+          0
+        ],
+        "mean_channel_difference": [
+          1.566185141509434e-05,
+          1.3819280660377359e-05,
+          1.566185141509434e-05,
+          0.0
+        ]
+      }
+    }
+  },
+  "upscale-1024-2x.png": {
+    "dimensions": [
+      2048,
+      1356
+    ],
+    "reference": "m1pro16",
+    "comparison": {
+      "intelpro": {
+        "max_channel_difference": [
+          1,
+          1,
+          1,
+          0
+        ],
+        "mean_channel_difference": [
+          1.2243040191740413e-05,
+          9.362324852507375e-06,
+          1.1162771939528023e-05,
+          0.0
+        ]
+      },
+      "hpeliteclient": {
+        "max_channel_difference": [
+          1,
+          1,
+          1,
+          0
+        ],
+        "mean_channel_difference": [
+          1.2243040191740413e-05,
+          9.362324852507375e-06,
+          1.1162771939528023e-05,
+          0.0
+        ]
+      }
+    }
+  }
+}

@@ -9,6 +9,7 @@ mod credits;
 mod cloud;
 mod color_picker;
 mod deform;
+pub(crate) mod export_dialog;
 mod guides;
 mod icons;
 mod jobs;
@@ -55,6 +56,12 @@ pub fn preview_raster_chroma(ctx: &eframe::egui::Context, studio: &mut Studio) {
 
 pub fn preview_background_removal(ctx: &eframe::egui::Context, studio: &mut Studio) {
     background_removal::open(ctx, studio);
+}
+
+/// Save an open still-export preview to a destination supplied by the native host.
+/// Uses the same source validation and background job as the file chooser.
+pub fn save_export_preview(ctx: &eframe::egui::Context, studio: &Studio, path: std::path::PathBuf) -> Result<(), String> {
+    export_dialog::save_to(ctx, studio, path)
 }
 
 pub fn present_layout(ctx: &eframe::egui::Context, studio: &mut Studio) {
@@ -104,6 +111,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         && !studio.updates.freezing
         && !pixel_selection::is_open(&ctx)
         && !background_removal::is_open(&ctx)
+        && !export_dialog::is_open(&ctx)
         && !plugins::is_open(&ctx)
         && !welcome::modal_open(&ctx)
         && !studio.show_templates
@@ -116,6 +124,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         && !layout_preview::is_open(&ctx)
         && !raster::is_open(&ctx)
         && !background_removal::is_open(&ctx)
+        && !export_dialog::is_open(&ctx)
         && !pixel_selection::is_open(&ctx)
         && !plugins::is_open(&ctx)
         && !welcome::modal_open(&ctx)
@@ -127,7 +136,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     layout::poll_image(&ctx, studio);
 
     // Keep the canvas visible for previews while preventing edits behind the dialog.
-    if pixel_selection::is_open(&ctx) || background_removal::is_open(&ctx) {
+    if pixel_selection::is_open(&ctx) || background_removal::is_open(&ctx) || export_dialog::is_open(&ctx) {
         ui.disable();
     }
 
@@ -174,6 +183,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         layout_preview::show(ui, studio);
         raster::show(ui, studio);
         background_removal::show(&ctx, studio);
+        export_dialog::show(&ctx, studio);
         anim_export::show(ui, studio);
         pixel_selection::show(&ctx, studio);
 
@@ -186,7 +196,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     if !studio.updates.freezing {
         studio.tick_swap(&ctx);
     }
-    studio.poll_updates(&ctx, jobs::any_running(&ctx) || raster::is_open(&ctx) || background_removal::is_open(&ctx));
+    studio.poll_updates(&ctx, jobs::any_running(&ctx) || raster::is_open(&ctx) || background_removal::is_open(&ctx) || export_dialog::is_open(&ctx));
     studio.remember_current_mode();
     crate::telemetry::activity(
         studio.persona,
@@ -213,6 +223,7 @@ pub fn scene_ready(ctx: &eframe::egui::Context, studio: &Studio) -> bool {
         && library::ready(ctx, studio)
         && raster::ready(ctx)
         && background_removal::ready(ctx)
+        && !export_dialog::busy(ctx)
         && pixel_selection::ready(ctx)
         && (studio.persona != Persona::Photo || photo_detail::ready(ctx))
         && (!(studio.show_templates

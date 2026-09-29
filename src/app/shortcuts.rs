@@ -351,7 +351,7 @@ impl Studio {
                 if self.persona == Persona::Photo {
                     crate::ui::photo::export_developed(ctx, self, "png");
                 } else {
-                    self.export_png();
+                    crate::ui::export_dialog::open(ctx, self, crate::export::Format::Png, false);
                 }
             }
             Shortcut::Undo => self.undo(),

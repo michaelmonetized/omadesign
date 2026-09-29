@@ -2,9 +2,10 @@ use super::jobs;
 use crate::{
     app::Studio,
     background_removal::{self as removal, RawMask, Settings, Source},
-    document::Pixels,
+    document::{Cmd, Pixels},
     ml::{Progress, models::Model},
     tools::Persona,
+    upscale::cutout::{self, Workflow},
 };
 use eframe::egui::{self, Color32, ColorImage, Context, Id, TextureHandle, TextureOptions};
 use std::{
@@ -33,6 +34,8 @@ struct Owner {
 struct Cache {
     owner: Owner,
     model: Model,
+    workflow: Workflow,
+    prepared: Source,
     source: Source,
     raw: Arc<RawMask>,
 }
@@ -43,8 +46,11 @@ struct Session {
     source: Source,
     model: Model,
     settings: Settings,
-    raw: Option<(Model, Arc<RawMask>)>,
-    rendered: Option<(Model, Settings)>,
+    workflow: Workflow,
+    prepared: Option<(Workflow, Source)>,
+    result_source: Option<Source>,
+    raw: Option<(Model, Workflow, Arc<RawMask>)>,
+    rendered: Option<(Model, Settings, Workflow)>,
     mask: Option<Arc<Vec<u8>>>,
     original: TextureHandle,
     preview: TextureHandle,
@@ -60,6 +66,9 @@ enum Output {
     Rendered {
         model: Model,
         settings: Settings,
+        workflow: Workflow,
+        prepared: Source,
+        result_source: Source,
         raw: Arc<RawMask>,
         mask: Arc<Vec<u8>>,
         preview: Vec<u8>,
@@ -84,7 +93,7 @@ pub(super) fn is_open(ctx: &Context) -> bool {
 pub(super) fn ready(ctx: &Context) -> bool {
     ctx.data(|d| {
         d.get_temp::<Session>(id())
-            .is_none_or(|s| !s.busy && s.rendered == Some((s.model, s.settings)))
+            .is_none_or(|s| !s.busy && s.rendered == Some((s.model, s.settings, s.workflow)))
     })
 }
 
@@ -177,9 +186,13 @@ pub(super) fn open(ctx: &Context, studio: &mut Studio) {
     // Bound cache retention to one layer. Comparing source data also covers
     // operations that replace a Pixels value and restart its version counter.
     let cached = ctx.data(|d| d.get_temp::<Cache>(cache_id())).filter(|c| {
-        c.owner == owner && c.source.rgba == source.rgba && c.source.selection == source.selection
+        c.owner == owner
+            && c.source.rgba == source.rgba
+            && c.source.selection == source.selection
+            && c.source.existing_mask == source.existing_mask
     });
     let model = cached.as_ref().map_or(Model::U2NetP, |c| c.model);
+    let workflow = cached.as_ref().map_or(Workflow::default(), |c| c.workflow);
     let original = ctx.load_texture(
         "remove-background-original",
         image(
@@ -212,7 +225,10 @@ pub(super) fn open(ctx: &Context, studio: &mut Studio) {
                 source,
                 model,
                 settings: Settings::default(),
-                raw: cached.map(|c| (c.model, c.raw)),
+                workflow,
+                prepared: cached.as_ref().map(|c| (c.workflow, c.prepared.clone())),
+                result_source: None,
+                raw: cached.map(|c| (c.model, c.workflow, c.raw)),
                 rendered: None,
                 mask: None,
                 original,
@@ -258,16 +274,41 @@ fn commit(studio: &mut Studio, s: &Session) -> Result<(), String> {
     {
         return Err("The source pixels or mask changed. Open Remove Background again.".into());
     }
-    if s.rendered != Some((s.model, s.settings)) {
+    if s.rendered != Some((s.model, s.settings, s.workflow)) {
         return Err("Wait for the current preview to finish".into());
     }
     let mask = s.mask.as_ref().ok_or("No mask is ready")?;
-    let pixels = Pixels::from_rgba(s.source.w, s.source.h, mask.as_ref().clone())
+    let result = s.result_source.as_ref().unwrap_or(&s.source);
+    let pixels = Pixels::from_rgba(result.w, result.h, mask.as_ref().clone())
         .ok_or("Invalid mask dimensions")?;
-    studio.replace_layer_mask(i, Some(pixels));
+    if result.w != s.source.w || result.h != s.source.h || result.rgba != s.source.rgba {
+        let after = Pixels::from_rgba(result.w, result.h, result.rgba.as_ref().clone())
+            .ok_or("Invalid upscaled pixels")?;
+        let kind = &studio.doc.layers[i].kind;
+        let original_size = match kind {
+            crate::document::LayerKind::Raster { size, .. } => *size,
+            _ => unreachable!(),
+        };
+        let display_size = kind.raster_xform().ok_or("Select a pixel layer")?.1;
+        studio.commit(Cmd::UpscaleLayer {
+            index: i,
+            before: (
+                kind.pixels().unwrap().clone(),
+                studio.doc.layers[i].mask.clone(),
+                original_size,
+            ),
+            after: (after, Some(pixels), display_size),
+        });
+    } else {
+        studio.replace_layer_mask(i, Some(pixels));
+    }
     studio.paint_mask = true;
-    studio.status =
-        "Background removed · editable layer mask · Undo restores the previous mask".into();
+    studio.status = if s.workflow.cutout_only {
+        "Cutout upscaled · pixels and mask aligned · one undo step"
+    } else {
+        "Background removed · editable layer mask · one undo step"
+    }
+    .into();
     Ok(())
 }
 
@@ -275,26 +316,62 @@ fn start(ctx: &Context, s: &mut Session) {
     let source = s.source.clone();
     let model = s.model;
     let settings = s.settings;
+    let workflow = s.workflow;
+    let prepared = s
+        .prepared
+        .as_ref()
+        .filter(|(w, _)| *w == workflow)
+        .map(|(_, p)| p.clone());
     let raw = s
         .raw
         .as_ref()
-        .filter(|(m, _)| *m == model)
-        .map(|(_, r)| r.clone());
+        .filter(|(m, w, _)| *m == model && *w == workflow)
+        .map(|(_, _, r)| r.clone());
     s.busy = true;
     s.error = None;
     jobs::start_with_progress(ctx, JOB, 1, move |progress| {
+        workflow.dimensions(&source)?;
+        let prepared = if let Some(source) = prepared {
+            source
+        } else {
+            cutout::prepare(&source, workflow, progress.as_ref())?
+        };
         let raw = if let Some(raw) = raw {
             raw
+        } else if workflow.cutout_only {
+            Arc::new(RawMask {
+                region: source.region()?,
+                rough: vec![],
+                values: vec![],
+                stats: Default::default(),
+            })
         } else {
-            Arc::new(removal::infer(&source, model, progress.as_ref())?)
+            Arc::new(removal::infer(&prepared, model, progress.as_ref())?)
         };
-        let mask = Arc::new(removal::refine(&source, &raw, settings, progress.as_ref())?);
+        let mask = if workflow.cutout_only {
+            source
+                .existing_mask
+                .clone()
+                .ok_or("Add a mask before upscaling a cutout")?
+        } else {
+            Arc::new(removal::refine(
+                &prepared,
+                &raw,
+                settings,
+                progress.as_ref(),
+            )?)
+        };
+        let (result_source, mask) =
+            cutout::finish(&source, &prepared, mask, workflow, progress.as_ref())?;
         progress.check()?;
-        let preview = thumbnail(&source, Some(&mask), false);
-        let matte = thumbnail(&source, Some(&mask), true);
+        let preview = thumbnail(&result_source, Some(&mask), false);
+        let matte = thumbnail(&result_source, Some(&mask), true);
         Ok(Output::Rendered {
             model,
             settings,
+            workflow,
+            prepared,
+            result_source,
             raw,
             mask,
             preview,
@@ -326,6 +403,9 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
             Ok(Output::Rendered {
                 model,
                 settings,
+                workflow,
+                prepared,
+                result_source,
                 raw,
                 mask,
                 preview,
@@ -339,26 +419,30 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
                         Cache {
                             owner: s.owner.clone(),
                             model,
+                            workflow,
+                            prepared: prepared.clone(),
                             source: s.source.clone(),
                             raw: raw.clone(),
                         },
                     )
                 });
-                s.raw = Some((model, raw));
-                if model == s.model && settings == s.settings {
+                s.prepared = Some((workflow, prepared));
+                s.raw = Some((model, workflow, raw));
+                if model == s.model && settings == s.settings && workflow == s.workflow {
                     s.preview
-                        .set(image(&s.source, &preview), TextureOptions::LINEAR);
+                        .set(image(&result_source, &preview), TextureOptions::LINEAR);
                     s.matte
-                        .set(image(&s.source, &matte), TextureOptions::LINEAR);
+                        .set(image(&result_source, &matte), TextureOptions::LINEAR);
+                    s.result_source = Some(result_source);
                     s.mask = Some(mask);
-                    s.rendered = Some((model, settings));
+                    s.rendered = Some((model, settings, workflow));
                 }
             }
         }
     }
     let mut cancel = false;
     let mut apply = false;
-    let before = (s.model, s.settings);
+    let before = (s.model, s.settings, s.workflow);
     let response = egui::Modal::new(Id::new("remove-background-modal")).show(ctx, |ui| {
         let width = (ctx.content_rect().width() - 70.).clamp(560., 960.);
         ui.set_width(width);
@@ -377,7 +461,9 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
                             }
                         });
                         preview(ui, &s);
-                        ui.small(if s.source.selection.is_some() {
+                        ui.small(if s.workflow.cutout_only || s.workflow.before > 1 && !s.workflow.keep_original {
+                            "Pixels and mask resize together; canvas placement is preserved."
+                        } else if s.source.selection.is_some() {
                             "Only the pixel selection is affected; feathering is preserved."
                         } else {
                             "Original pixels are preserved. Paint the mask after applying."
@@ -386,6 +472,45 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
                     ui.add_space(12.);
                     ui.vertical(|ui| {
                         ui.set_width(292.);
+                        ui.horizontal(|ui| {
+                            ui.selectable_value(&mut s.workflow.cutout_only, false, "Remove Background");
+                            if ui.add_enabled(s.source.existing_mask.is_some(), egui::Button::new("Upscale cutout").selected(s.workflow.cutout_only)).clicked() {
+                                s.workflow.cutout_only = true;
+                                if s.workflow.after == 1 { s.workflow.after = 2; }
+                            }
+                        });
+                        if s.workflow.cutout_only {
+                            ui.horizontal(|ui| {
+                                ui.label("Upscale cutout");
+                                ui.selectable_value(&mut s.workflow.after, 2, "×2");
+                                ui.selectable_value(&mut s.workflow.after, 4, "×4");
+                            });
+                            ui.small("RGB and mask resize together. Placement on the canvas stays the same.");
+                        } else {
+                            egui::ComboBox::from_id_salt("upscale-before")
+                                .selected_text(match s.workflow.before { 2 => "Upscale ×2 before removal", 4 => "Upscale ×4 before removal", _ => "Original resolution" })
+                                .show_ui(ui, |ui| { for (factor, label) in [(1, "Original resolution"), (2, "Upscale ×2 before removal"), (4, "Upscale ×4 before removal")] { ui.selectable_value(&mut s.workflow.before, factor, label); } });
+                            if s.source.region().is_ok_and(|r| r.w.min(r.h) < 512) {
+                                ui.small("Small subject: try upscaling before removal for finer edges.");
+                            }
+                            if s.workflow.before > 1 { ui.checkbox(&mut s.workflow.keep_original, "Keep original pixel dimensions"); }
+                        }
+                        if s.workflow.uses_ai() {
+                            super::export_dialog::model_choice(ui, &mut s.workflow.model);
+                            if !s.workflow.model.present() && ui.add_enabled(!s.busy, egui::Button::new("Download upscaling model")).clicked() {
+                                let model = s.workflow.model;
+                                s.busy = true;
+                                s.downloading = true;
+                                s.error = None;
+                                jobs::start_with_progress(ctx, JOB, 1, move |progress| { model.download(progress.as_ref())?; Ok(Output::Downloaded) });
+                            }
+                        }
+                        match s.workflow.dimensions(&s.source) {
+                            Ok((w,h)) => { ui.small(format!("Result: {w} × {h} px")); }
+                            Err(e) => { ui.colored_label(Color32::LIGHT_RED, e); }
+                        }
+                        ui.separator();
+                        ui.add_enabled_ui(!s.workflow.cutout_only, |ui| {
                         egui::ComboBox::from_id_salt("removal-model")
                             .selected_text(s.model.label())
                             .show_ui(ui, |ui| {
@@ -441,8 +566,8 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
                         if ui.button("Reset matte").clicked() {
                             s.settings = Settings::default();
                         }
-                        if let Some((model, raw)) = &s.raw
-                            && *model == s.model
+                        if let Some((model, workflow, raw)) = &s.raw
+                            && *model == s.model && *workflow == s.workflow
                         {
                             ui.small(format!(
                                 "{} edge tiles · {} tiles skipped",
@@ -451,6 +576,7 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
                             ));
                             ui.small("Matte controls reuse the cached subject mask.");
                         }
+                        });
                     });
                 });
             });
@@ -470,6 +596,21 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
             ui.colored_label(Color32::LIGHT_RED, error);
             if ui.button("Try again").clicked() {
                 s.error = None;
+            }
+            if s.workflow.uses_ai()
+                && s.workflow.model != crate::upscale::models::Model::General
+                && ui.add_enabled(!s.busy, egui::Button::new("Download verified upscaling model again")).clicked()
+            {
+                let model = s.workflow.model;
+                s.error = None;
+                s.busy = true;
+                s.downloading = true;
+                s.prepared = None;
+                s.raw = None;
+                jobs::start_with_progress(ctx, JOB, 1, move |progress| {
+                    model.download(progress.as_ref())?;
+                    Ok(Output::Downloaded)
+                });
             }
             if s.model != Model::U2NetP
                 && ui
@@ -493,8 +634,8 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
             }
             if ui
                 .add_enabled(
-                    !s.busy && s.rendered == Some((s.model, s.settings)),
-                    egui::Button::new("Apply mask"),
+                    !s.busy && s.rendered == Some((s.model, s.settings, s.workflow)) && s.workflow.dimensions(&s.source).is_ok(),
+                    egui::Button::new(if s.workflow.cutout_only { "Apply upscaled cutout" } else { "Apply mask" }),
                 )
                 .clicked()
             {
@@ -507,10 +648,10 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
         close(ctx);
         return;
     }
-    if before != (s.model, s.settings) {
+    if before != (s.model, s.settings, s.workflow) {
         s.changed_at = Instant::now();
         s.error = None;
-        if before.0 != s.model && s.busy {
+        if (before.0 != s.model || before.2 != s.workflow) && s.busy {
             jobs::cancel::<Output>(ctx, JOB);
             s.busy = false;
             s.downloading = false;
@@ -527,14 +668,18 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
     }
     if !s.busy
         && s.error.is_none()
-        && s.model.present()
-        && s.rendered != Some((s.model, s.settings))
+        && (s.workflow.cutout_only || s.model.present())
+        && (!s.workflow.uses_ai() || s.workflow.model.present())
+        && s.rendered != Some((s.model, s.settings, s.workflow))
         && s.changed_at.elapsed() >= Duration::from_millis(120)
     {
         start(ctx, &mut s);
     }
     if s.busy
-        || (s.error.is_none() && s.model.present() && s.rendered != Some((s.model, s.settings)))
+        || (s.error.is_none()
+            && (s.workflow.cutout_only || s.model.present())
+            && (!s.workflow.uses_ai() || s.workflow.model.present())
+            && s.rendered != Some((s.model, s.settings, s.workflow)))
     {
         ctx.request_repaint_after(Duration::from_millis(33));
     }
@@ -590,7 +735,7 @@ mod tests {
         open(ctx, studio);
         let mut s = ctx.data(|d| d.get_temp::<Session>(id())).unwrap();
         s.mask = Some(Arc::new(vec![20; 16]));
-        s.rendered = Some((s.model, s.settings));
+        s.rendered = Some((s.model, s.settings, s.workflow));
         s
     }
     #[test]
@@ -621,6 +766,49 @@ mod tests {
         let doc: Document =
             serde_json::from_str(&serde_json::to_string(&studio.doc).unwrap()).unwrap();
         assert_eq!(doc.layers[0].mask.as_ref().unwrap().data, vec![20; 16]);
+    }
+    #[test]
+    fn upscaled_pixels_and_mask_share_one_undo_step_and_keep_placement() {
+        let ctx = Context::default();
+        let mut studio = studio();
+        studio.doc.layers[0].mask = Pixels::from_rgba(4, 1, vec![128; 16]);
+        let before_transform = studio.doc.layers[0].kind.raster_xform();
+        let mut s = completed(&ctx, &mut studio);
+        s.workflow.cutout_only = true;
+        s.workflow.after = 2;
+        s.result_source = Some(Source {
+            w: 8,
+            h: 2,
+            rgba: Arc::new(vec![220; 64]),
+            selection: None,
+            existing_mask: None,
+        });
+        s.mask = Some(Arc::new(vec![100; 64]));
+        s.rendered = Some((s.model, s.settings, s.workflow));
+        commit(&mut studio, &s).unwrap();
+        assert_eq!(studio.history.len(), 1);
+        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().w, 8);
+        assert_eq!(studio.doc.layers[0].mask.as_ref().unwrap().w, 8);
+        assert_eq!(studio.doc.layers[0].kind.raster_xform(), before_transform);
+        studio.undo();
+        assert_eq!(
+            studio.doc.layers[0].kind.pixels().unwrap().data,
+            vec![255; 16]
+        );
+        assert_eq!(
+            studio.doc.layers[0].mask.as_ref().unwrap().data,
+            vec![128; 16]
+        );
+        studio.redo();
+        assert_eq!(studio.doc.layers[0].kind.raster_xform(), before_transform);
+        assert_eq!(
+            studio.doc.layers[0].kind.pixels().unwrap().data,
+            vec![220; 64]
+        );
+        let doc: Document =
+            serde_json::from_str(&serde_json::to_string(&studio.doc).unwrap()).unwrap();
+        assert_eq!(doc.layers[0].mask.as_ref().unwrap().data, vec![100; 64]);
+        assert_eq!(doc.layers[0].kind.pixels().unwrap().w, 8);
     }
     #[test]
     fn stale_context_pixels_mask_selection_and_locked_layers_reject_commit() {
@@ -680,7 +868,7 @@ mod tests {
             stats: Default::default(),
         });
         s.model = Model::IsNet;
-        s.raw = Some((s.model, raw.clone()));
+        s.raw = Some((s.model, s.workflow, raw.clone()));
         s.settings.contrast = 1.8;
         start(&ctx, &mut s);
         let deadline = Instant::now() + Duration::from_secs(3);

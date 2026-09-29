@@ -99,52 +99,67 @@ impl Inference {
         n: usize,
         progress: &dyn Progress,
     ) -> Result<Vec<f32>, String> {
-        progress.check()?;
-        let tensor =
-            Tensor::from_array(([n, 3, self.size, self.size], input)).map_err(|e| e.to_string())?;
-        let options = RunOptions::new().map_err(|e| e.to_string())?;
-        let finished = AtomicBool::new(false);
-        let result = std::thread::scope(|scope| {
-            // ORT checks termination between operators; cancellation also works
-            // during a single large HQ inference, not just between tiles.
-            scope.spawn(|| {
-                while !finished.load(Ordering::Acquire) {
-                    if progress.cancelled() {
-                        let _ = options.terminate();
-                        break;
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(20));
-                }
-            });
-            // Also stop the cancellation watcher if ORT's wrapper panics.
-            struct Finish<'a>(&'a AtomicBool);
-            impl Drop for Finish<'_> {
-                fn drop(&mut self) {
-                    self.0.store(true, Ordering::Release);
-                }
-            }
-            let _finish = Finish(&finished);
-            let result = self
-                .session
-                .run_with_options(ort::inputs![tensor], &options)
-                .map_err(|e| e.to_string())
-                .and_then(|outputs| {
-                    let (shape, values) = outputs[0]
-                        .try_extract_tensor::<f32>()
-                        .map_err(|e| e.to_string())?;
-                    if shape.as_ref() != [n as i64, 1, self.size as i64, self.size as i64]
-                        || values.iter().any(|v| !v.is_finite())
-                    {
-                        return Err("Model returned invalid mask probabilities".into());
-                    }
-                    // All three pinned models already end in sigmoid. Never stretch
-                    // a tile's range: probabilities must retain a common scale.
-                    Ok(values.iter().map(|p| p.clamp(0., 1.)).collect())
-                });
-            finished.store(true, Ordering::Release);
-            result
-        });
-        progress.check()?;
-        result
+        let values = run_tensor(
+            &mut self.session,
+            input,
+            [n, 3, self.size, self.size],
+            [n, 1, self.size, self.size],
+            progress,
+        )?;
+        // Pinned removal models end in sigmoid; retain their common scale.
+        Ok(values.into_iter().map(|v| v.clamp(0., 1.)).collect())
     }
+}
+
+/// Shared cancellation and shape validation for both matting and super resolution.
+pub(crate) fn run_tensor(
+    session: &mut Session,
+    input: Vec<f32>,
+    shape: [usize; 4],
+    expected: [usize; 4],
+    progress: &dyn Progress,
+) -> Result<Vec<f32>, String> {
+    progress.check()?;
+    let tensor = Tensor::from_array((shape, input)).map_err(|e| e.to_string())?;
+    let options = RunOptions::new().map_err(|e| e.to_string())?;
+    let finished = AtomicBool::new(false);
+    let result = std::thread::scope(|scope| {
+        // ORT checks termination between operators; cancellation also works
+        // during a single large HQ inference, not just between tiles.
+        scope.spawn(|| {
+            while !finished.load(Ordering::Acquire) {
+                if progress.cancelled() {
+                    let _ = options.terminate();
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+        });
+        // Also stop the cancellation watcher if ORT's wrapper panics.
+        struct Finish<'a>(&'a AtomicBool);
+        impl Drop for Finish<'_> {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Release);
+            }
+        }
+        let _finish = Finish(&finished);
+        let result = session
+            .run_with_options(ort::inputs![tensor], &options)
+            .map_err(|e| e.to_string())
+            .and_then(|outputs| {
+                let (shape, values) = outputs[0]
+                    .try_extract_tensor::<f32>()
+                    .map_err(|e| e.to_string())?;
+                if shape.as_ref() != expected.map(|v| v as i64)
+                    || values.iter().any(|v| !v.is_finite())
+                {
+                    return Err("Model returned invalid image data".into());
+                }
+                Ok(values.to_vec())
+            });
+        finished.store(true, Ordering::Release);
+        result
+    });
+    progress.check()?;
+    result
 }
