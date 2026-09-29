@@ -1,0 +1,179 @@
+{
+  "source_commit": "b84c01c99fe249e69b493519b496322ccce4d4d9",
+  "archive_sha256": "a9f01e18525b7bd8432353d4e91ea19dec9a6c8d91096bfe2531a26584d31952",
+  "hosts": {
+    "hpeliteclient": {
+      "success": true,
+      "steps": 13,
+      "receipt": {
+        "bytes": 19270,
+        "sha256": "46a1e693fc28526e33b9f03443e9cc790bef4b56c5f1596f1cd6a906bdae5c7c"
+      },
+      "verification": {
+        "bytes": 10774,
+        "sha256": "8793765d167754e1ab4373b18830cb44fb7887a664344284663437c207c4365d"
+      },
+      "installed_binary": {
+        "bytes": 55986728,
+        "sha256": "d30757395c6487d6d07b31aea5d0ad924fcf39c74330ddd897baa806779d279d"
+      },
+      "installed_runtime": {
+        "libonnxruntime.so": {
+          "bytes": 24268848,
+          "sha256": "1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab"
+        },
+        "libonnxruntime.so.1": {
+          "bytes": 24268848,
+          "sha256": "1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab"
+        },
+        "libonnxruntime.so.1.28.0": {
+          "bytes": 24268848,
+          "sha256": "1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab"
+        },
+        "libonnxruntime_providers_shared.so": {
+          "bytes": 14632,
+          "sha256": "086ec1d5388f64153d9c63470d126693db9a182c8ce236d3a1119068471b8a0d"
+        }
+      },
+      "existing_install_unchanged": true,
+      "cleanup_verified": true,
+      "supplemental_helper_scope": "Retained benchmark helper source8ee01b4; real-model inference verifies exact installed runtime auto-discovery, not current shipped UI code. ORT overrides and LD_LIBRARY_PATH are unset."
+    },
+    "intelpro": {
+      "success": true,
+      "steps": 13,
+      "receipt": {
+        "bytes": 19131,
+        "sha256": "7ab29321844addcc30bba6f6ea42d17db3408fce56d0969d4b7f9607aeae4c3c"
+      },
+      "verification": {
+        "bytes": 10767,
+        "sha256": "21e3f53f01e5750bed82d2e32cde2ec67aeffc6b5d94d651e98514297f0ccf39"
+      },
+      "installed_binary": {
+        "bytes": 55986728,
+        "sha256": "d30757395c6487d6d07b31aea5d0ad924fcf39c74330ddd897baa806779d279d"
+      },
+      "installed_runtime": {
+        "libonnxruntime.so": {
+          "bytes": 24268848,
+          "sha256": "1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab"
+        },
+        "libonnxruntime.so.1": {
+          "bytes": 24268848,
+          "sha256": "1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab"
+        },
+        "libonnxruntime.so.1.28.0": {
+          "bytes": 24268848,
+          "sha256": "1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab"
+        },
+        "libonnxruntime_providers_shared.so": {
+          "bytes": 14632,
+          "sha256": "086ec1d5388f64153d9c63470d126693db9a182c8ce236d3a1119068471b8a0d"
+        }
+      },
+      "existing_install_unchanged": true,
+      "cleanup_verified": true,
+      "supplemental_helper_scope": "Retained benchmark helper source8ee01b4; real-model inference verifies exact installed runtime auto-discovery, not current shipped UI code. ORT overrides and LD_LIBRARY_PATH are unset."
+    }
+  },
+  "converted_png_comparisons": {
+    "hpeliteclient_vs_intelpro": {
+      "size": [
+        1200,
+        900
+      ],
+      "decoded_rgba_equal": true,
+      "different_pixels": 0,
+      "different_channels_rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "max_absolute_channel_delta_rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sum_absolute_channel_delta": 0,
+      "rgb_difference_bounds": null,
+      "left": {
+        "bytes": 293135,
+        "sha256": "3cdce7cb10fc90dff5db55b2fc50ad0f7ba28eebc51ec5deab0071c4d3fe08df"
+      },
+      "right": {
+        "bytes": 293135,
+        "sha256": "3cdce7cb10fc90dff5db55b2fc50ad0f7ba28eebc51ec5deab0071c4d3fe08df"
+      },
+      "left_rgba_sha256": "e9b7a94cd914ba8822ece25ee5475d54a5d7054f74b63059b668bc8da019206b",
+      "right_rgba_sha256": "e9b7a94cd914ba8822ece25ee5475d54a5d7054f74b63059b668bc8da019206b"
+    },
+    "hpeliteclient_vs_arm": {
+      "size": [
+        1200,
+        900
+      ],
+      "decoded_rgba_equal": true,
+      "different_pixels": 0,
+      "different_channels_rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "max_absolute_channel_delta_rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sum_absolute_channel_delta": 0,
+      "rgb_difference_bounds": null,
+      "left": {
+        "bytes": 293135,
+        "sha256": "3cdce7cb10fc90dff5db55b2fc50ad0f7ba28eebc51ec5deab0071c4d3fe08df"
+      },
+      "right": {
+        "bytes": 293135,
+        "sha256": "3cdce7cb10fc90dff5db55b2fc50ad0f7ba28eebc51ec5deab0071c4d3fe08df"
+      },
+      "left_rgba_sha256": "e9b7a94cd914ba8822ece25ee5475d54a5d7054f74b63059b668bc8da019206b",
+      "right_rgba_sha256": "e9b7a94cd914ba8822ece25ee5475d54a5d7054f74b63059b668bc8da019206b"
+    },
+    "intelpro_vs_arm": {
+      "size": [
+        1200,
+        900
+      ],
+      "decoded_rgba_equal": true,
+      "different_pixels": 0,
+      "different_channels_rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "max_absolute_channel_delta_rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sum_absolute_channel_delta": 0,
+      "rgb_difference_bounds": null,
+      "left": {
+        "bytes": 293135,
+        "sha256": "3cdce7cb10fc90dff5db55b2fc50ad0f7ba28eebc51ec5deab0071c4d3fe08df"
+      },
+      "right": {
+        "bytes": 293135,
+        "sha256": "3cdce7cb10fc90dff5db55b2fc50ad0f7ba28eebc51ec5deab0071c4d3fe08df"
+      },
+      "left_rgba_sha256": "e9b7a94cd914ba8822ece25ee5475d54a5d7054f74b63059b668bc8da019206b",
+      "right_rgba_sha256": "e9b7a94cd914ba8822ece25ee5475d54a5d7054f74b63059b668bc8da019206b"
+    }
+  },
+  "audit_utc": "2026-09-29T11:24:29Z"
+}

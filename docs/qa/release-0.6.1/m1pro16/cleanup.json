@@ -1,0 +1,19 @@
+{
+  "sway_pid": 3713181,
+  "sway_socket_peer": [
+    3713181,
+    1001,
+    1001
+  ],
+  "application_pid": 3713363,
+  "wayvnc_pid": 3713362,
+  "scope": "task-only Sway, installed package smoke process and virtual input helpers",
+  "application_close": "[\n  {\n    \"success\": true\n  }\n]\n",
+  "sway_exit_code": 1,
+  "processes_gone": {
+    "3713181": true,
+    "3713363": true,
+    "3713362": true
+  },
+  "socket_gone": true
+}

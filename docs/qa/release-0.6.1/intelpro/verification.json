@@ -1,0 +1,319 @@
+{
+  "host": "intelpro",
+  "remote_output": "/home/michael/.local/state/omadesign/qa/release-0.6.1/archive-smoke-20260929T111934Z",
+  "receipt": {
+    "bytes": 19131,
+    "sha256": "7ab29321844addcc30bba6f6ea42d17db3408fce56d0969d4b7f9607aeae4c3c"
+  },
+  "collection_matches_remote": true,
+  "collected_files": 54,
+  "inventory": {
+    "install.stdout": {
+      "bytes": 541,
+      "sha256": "e8e6d158d1eca0597b24a562026e597d19dde0f255432662345c50db2dc83c1b"
+    },
+    "install.stderr": {
+      "bytes": 442,
+      "sha256": "afd2b67dcf09d652d4e963b8fca279b0ac6e3755ba0232ff79e26efae9278833"
+    },
+    "install.receipt.json": {
+      "bytes": 503,
+      "sha256": "08a9937dced169ae18c37a5ac0cc851ea9cae6d7836dc8f4e5c58078b8abefd7"
+    },
+    "version.stdout": {
+      "bytes": 16,
+      "sha256": "055b053d93dcccdae69d83405e5dc70de1c974f439911484129ba282bf7a7ff1"
+    },
+    "version.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "version.receipt.json": {
+      "bytes": 397,
+      "sha256": "299447e7c243eaa997f3aa675bbd482b488f550e2b2b143ab1e5f8ba0acc5683"
+    },
+    "inspect-seed.stdout": {
+      "bytes": 3435,
+      "sha256": "daa66b77d8a45b1d4da93679ea4c3f6eb0f748696b40da57a7be23467a6a2e3e"
+    },
+    "inspect-seed.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "inspect-seed.receipt.json": {
+      "bytes": 633,
+      "sha256": "235463a84b9094e58156105e7d88f67c90c28085dad4834edd43750227f767b6"
+    },
+    "convert-png.stdout": {
+      "bytes": 122,
+      "sha256": "8db08fcdc3c5a1e8f53478b4cadcfbf651888e41ccd4a184d41823289a1c9152"
+    },
+    "convert-png.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "converted.png": {
+      "bytes": 293135,
+      "sha256": "3cdce7cb10fc90dff5db55b2fc50ad0f7ba28eebc51ec5deab0071c4d3fe08df"
+    },
+    "convert-png.receipt.json": {
+      "bytes": 755,
+      "sha256": "133bd298e98a8150e1e2cc83002258bddb26c1c0591f2d4759a95e9b7e1372ab"
+    },
+    "inspect-png.stdout": {
+      "bytes": 293,
+      "sha256": "644ae19a358aed6a1b57a6a30627cd7a740f57628f1755f15a1d0bd062bd9ffe"
+    },
+    "inspect-png.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "inspect-png.receipt.json": {
+      "bytes": 507,
+      "sha256": "33e93b1dd5b6d0bde5fb3fff8466974cf79487f337e242a8716f184d47754e3f"
+    },
+    "convert-oma.stdout": {
+      "bytes": 122,
+      "sha256": "9184fdcb33164d84bb8510c199b2e3a479955522b1f8d9d97b2d1c24d528033a"
+    },
+    "convert-oma.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "roundtrip.oma": {
+      "bytes": 496926,
+      "sha256": "5715f0010de9153496e6aa5d6796d8ddde6a6977dcdbf3d995e331381770f8c0"
+    },
+    "convert-oma.receipt.json": {
+      "bytes": 754,
+      "sha256": "8f7ca6f0f5931fad10756b794462f6650850fb1b22396e6e94a17b92aaff5359"
+    },
+    "inspect-roundtrip.stdout": {
+      "bytes": 3435,
+      "sha256": "daa66b77d8a45b1d4da93679ea4c3f6eb0f748696b40da57a7be23467a6a2e3e"
+    },
+    "inspect-roundtrip.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "inspect-roundtrip.receipt.json": {
+      "bytes": 625,
+      "sha256": "63b3bd78cd34b9f2bec439660d90e883589ee2abf69f143f9ef99c4488671388"
+    },
+    "sway-headless.conf": {
+      "bytes": 523,
+      "sha256": "a0bf3be5168104ef713d34b913a09c01c0ed16338dc83706550f31d82f95ddc0"
+    },
+    "sway-headless.log": {
+      "bytes": 58200,
+      "sha256": "a96bf6f07337693de933f908ca474a2f1f642e43acf35a612344a79fe3d96380"
+    },
+    "shot-file.stdout": {
+      "bytes": 109,
+      "sha256": "27f2829fa29c6d600a2a82abe518149a9a5dbd59f6d33f2bf7fe4005784ffc56"
+    },
+    "shot-file.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "native-editor.png": {
+      "bytes": 554112,
+      "sha256": "6dfa2ac6ef85a5257d5b0edb12becb3b71cbc58b6f1edd5dcec70e7dd7d4c3da"
+    },
+    "shot-file.receipt.json": {
+      "bytes": 899,
+      "sha256": "069c3d5155ada2d4273a308c50a0889f72309a50de40e162747cfd30559e3029"
+    },
+    "inspect-screenshot.stdout": {
+      "bytes": 297,
+      "sha256": "a20426f51bbde56ee47019181574567416114eae860231b702ab5d6fabbd6dd8"
+    },
+    "inspect-screenshot.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "inspect-screenshot.receipt.json": {
+      "bytes": 517,
+      "sha256": "c306939f78d112ad56442fefbc6fcc3d2c10ef47cc76ab14c42f466bb4ac12c0"
+    },
+    "runtime-background.stdout": {
+      "bytes": 352,
+      "sha256": "ef78e669fdddc0756efa584b6ad352027d22bf157b689476c3c55239b8bda5b2"
+    },
+    "runtime-background.stderr": {
+      "bytes": 406,
+      "sha256": "01b0127a5faadefa70b66940d91a61f0ffba6cd6eb1fd97d185aafbe3dba6a60"
+    },
+    "runtime-background.receipt.json": {
+      "bytes": 907,
+      "sha256": "c860a8edc02ced7c912b061754627246618632f842bf05b8865b89612a259542"
+    },
+    "runtime-upscale.stdout": {
+      "bytes": 241,
+      "sha256": "3a844b3866284a178c2a7387106e86993c494e003c22ae134e8a36309afc3ef5"
+    },
+    "runtime-upscale.stderr": {
+      "bytes": 101,
+      "sha256": "57d7d8e6d51fc3ca074c13f745fe6e69a9c330404e27060e271f8ba09cd89ff1"
+    },
+    "upscaled.png": {
+      "bytes": 413392,
+      "sha256": "9939d606ac6ece61718a71c9aa67ae6df92ef041fe1b7fc039d69e529b017b4e"
+    },
+    "upscaled.json": {
+      "bytes": 303,
+      "sha256": "282334a70de5501862a871fbc169b60ff2997ab842a981a462a710bad5c0b931"
+    },
+    "runtime-upscale.receipt.json": {
+      "bytes": 893,
+      "sha256": "b05e46d94116c872bdd621c833b9aa6910fa18844125ec01883204cfa83419ab"
+    },
+    "inspect-background.stdout": {
+      "bytes": 302,
+      "sha256": "aa398d45c0ca3e83600abcf3ef9ee3f6957f59ce58734c3399744d7ca8d8daab"
+    },
+    "inspect-background.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "inspect-background.receipt.json": {
+      "bytes": 535,
+      "sha256": "06ec50bb991fb52aea57676ac7136cbcc53d36e8fef7a158e9ea35dc7a7a1c3c"
+    },
+    "inspect-upscaled.stdout": {
+      "bytes": 291,
+      "sha256": "43620f3bf5273e681ab817b00c36e4fec4db52f71559afe8a70b90837cfbdb5d"
+    },
+    "inspect-upscaled.stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "inspect-upscaled.receipt.json": {
+      "bytes": 511,
+      "sha256": "16083d4c914f673a1d1cb90670988ef28ecc1854953350e1fe94aaf694a64a1e"
+    },
+    "receipt.json": {
+      "bytes": 19131,
+      "sha256": "7ab29321844addcc30bba6f6ea42d17db3408fce56d0969d4b7f9607aeae4c3c"
+    },
+    "background/global-mask.png": {
+      "bytes": 18165,
+      "sha256": "464b9e8372a22d02700ecf0bad5c14f10a39cb6a5733ba1a9d7bb8bd5c2330ba"
+    },
+    "background/global-cutout.png": {
+      "bytes": 140022,
+      "sha256": "126ff4e9448129af0e64c0658bd57fb973ec326e27915f69d50ea00a97e763f1"
+    },
+    "background/global-guided-mask.png": {
+      "bytes": 45476,
+      "sha256": "55b907f3daedb0d00a6f3281fd54649af9720be1a022de57477ada85f22309db"
+    },
+    "background/global-guided-cutout.png": {
+      "bytes": 144262,
+      "sha256": "09cc8755b5c0c10ecb13174d1165c39357c84032bf6d9fef309ab2f313ffc9f7"
+    },
+    "background/tiled-guided-mask.png": {
+      "bytes": 45476,
+      "sha256": "55b907f3daedb0d00a6f3281fd54649af9720be1a022de57477ada85f22309db"
+    },
+    "background/tiled-guided-cutout.png": {
+      "bytes": 144262,
+      "sha256": "09cc8755b5c0c10ecb13174d1165c39357c84032bf6d9fef309ab2f313ffc9f7"
+    },
+    "background/result.json": {
+      "bytes": 427,
+      "sha256": "3d3537465f3c995db6acaba29fb480ceb3c0f0dd3a8f6b1df3939b6b1e80647b"
+    }
+  },
+  "existing_install_current": {
+    "/home/michael/.local/bin/omadesign": {
+      "bytes": 25159888,
+      "sha256": "01db7f23c562f0845addff897e2f1cb8e8b0fc8170e764386361b0bca1565ec6"
+    },
+    "/home/michael/.local/share/applications/omadesign.desktop": {
+      "bytes": 420,
+      "sha256": "b4535ead46d350d337d9a644dbf86cba2dd1be1032bad550b5f9d84b91c79d98"
+    }
+  },
+  "existing_install_unchanged": true,
+  "private_compositor_pid_absent": true,
+  "private_socket_absent": true,
+  "remaining_task_processes": [],
+  "runtime_entries": [],
+  "decoded_pngs": {
+    "converted.png": {
+      "size": [
+        1200,
+        900
+      ],
+      "mode": "RGBA",
+      "rgba_sha256": "e9b7a94cd914ba8822ece25ee5475d54a5d7054f74b63059b668bc8da019206b"
+    },
+    "native-editor.png": {
+      "size": [
+        1440,
+        900
+      ],
+      "mode": "RGBA",
+      "rgba_sha256": "38acca4ef42be88c545b09102ad82c53e80a3f6af4c06eff2f95257546cd9a0a"
+    },
+    "upscaled.png": {
+      "size": [
+        640,
+        424
+      ],
+      "mode": "RGBA",
+      "rgba_sha256": "eb2e593a8dbae45be44871efcf409ee0ccff704e60d093c02c0c540986e451e6"
+    },
+    "background/global-cutout.png": {
+      "size": [
+        320,
+        212
+      ],
+      "mode": "RGBA",
+      "rgba_sha256": "e04092f965aca64f2cad39455a8e613b39164a2228a7f31089c41492c9bb7904"
+    },
+    "background/global-guided-cutout.png": {
+      "size": [
+        320,
+        212
+      ],
+      "mode": "RGBA",
+      "rgba_sha256": "e3d2943d4d260929c7b354b1e62e03e29c79b7726a83fd969a10c9d153e60835"
+    },
+    "background/global-guided-mask.png": {
+      "size": [
+        320,
+        212
+      ],
+      "mode": "RGBA",
+      "rgba_sha256": "4f0f00ee931e92b0e7c4c26b5ad532e157db6fe83c90933d7eccb12e0959a6ca"
+    },
+    "background/global-mask.png": {
+      "size": [
+        320,
+        212
+      ],
+      "mode": "RGBA",
+      "rgba_sha256": "d77912d4432f5717e949e0655dbf1ba1d56f31a093fe5ea62a455bf5e7f3e7f7"
+    },
+    "background/tiled-guided-cutout.png": {
+      "size": [
+        320,
+        212
+      ],
+      "mode": "RGBA",
+      "rgba_sha256": "e3d2943d4d260929c7b354b1e62e03e29c79b7726a83fd969a10c9d153e60835"
+    },
+    "background/tiled-guided-mask.png": {
+      "size": [
+        320,
+        212
+      ],
+      "mode": "RGBA",
+      "rgba_sha256": "4f0f00ee931e92b0e7c4c26b5ad532e157db6fe83c90933d7eccb12e0959a6ca"
+    }
+  },
+  "visual_native_screenshot_review": "1440x900 native editor shows complete fixture and controls; no blank or error surface.",
+  "cleanup_note": "Sway logged exit and shut down with status0. swaymsg returned1 after IPC disconnected; driver recorded cleanup fallback. Subsequent independent check confirms no compositor PID, socket, or owned workload remains."
+}

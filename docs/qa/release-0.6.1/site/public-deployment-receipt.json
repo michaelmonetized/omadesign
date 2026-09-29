@@ -1,0 +1,212 @@
+{
+  "verified_at": "2026-09-29T11:36:33.660443+00:00",
+  "status": "READY_PROMOTED_VERIFIED",
+  "domain": "https://omadesign.app",
+  "release_page": "https://omadesign.app/updates/0.6.1",
+  "deployment_id": "dpl_6HLLuNf5dXsvDTLtWzmFobResir4",
+  "immutable_url": "https://omadesign-jgyvghqtu-hustle-launch.vercel.app",
+  "target": "production",
+  "release_revision": "b84c01c99fe249e69b493519b496322ccce4d4d9",
+  "prebuilt_source_revision": "7fe6cd360f1a41bb1c9bfe46c3c2ce9cc5f2fd52",
+  "identical_source_tree": "942ab8312c724e4a8430330980c5f56d303a555b",
+  "prebuilt_files_verified": 276,
+  "promotion_without_rebuild": true,
+  "promotion_command": [
+    "vercel@59.5.0",
+    "promote",
+    "dpl_6HLLuNf5dXsvDTLtWzmFobResir4",
+    "--yes"
+  ],
+  "production_alias_verified_by": "vercel inspect https://omadesign.app resolved the promoted deployment ID; public pages independently returned0.6.1 content.",
+  "public_browser": {
+    "viewports": [
+      {
+        "width": 1440,
+        "height": 1000
+      },
+      {
+        "width": 390,
+        "height": 844
+      }
+    ],
+    "routes": [
+      "/updates/0.6.1",
+      "/updates",
+      "/"
+    ],
+    "passed_checks": 6,
+    "horizontal_overflow": false,
+    "page_errors": [],
+    "install_link_dom_checks": 2,
+    "release_page_screenshots_visually_reviewed": true,
+    "supplementary_install_capture_limit": "The animated home-page captures show adjacent hero content; they are not evidence of a visible install section. Download hrefs/version were checked in the DOM and public targets independently returned HTTP200."
+  },
+  "public_links": {
+    "scope": "Unauthenticated public HEAD checks; archive bytes and installation verified separately by root.",
+    "checks": [
+      {
+        "url": "https://github.com/michaelmonetized/omadesign/releases/tag/v0.6.1",
+        "status": 200,
+        "final_host": "github.com",
+        "content_type": "text/html; charset=utf-8",
+        "content_length": null
+      },
+      {
+        "url": "https://github.com/michaelmonetized/omadesign/blob/v0.6.1/docs/agent-harness.md",
+        "status": 200,
+        "final_host": "github.com",
+        "content_type": "text/html; charset=utf-8",
+        "content_length": null
+      },
+      {
+        "url": "https://github.com/michaelmonetized/omadesign/blob/v0.6.1/docs/MANUAL.md",
+        "status": 200,
+        "final_host": "github.com",
+        "content_type": "text/html; charset=utf-8",
+        "content_length": null
+      },
+      {
+        "url": "https://github.com/michaelmonetized/omadesign/blob/v0.6.1/docs/qa/fleet-performance-0.6.1/README.md",
+        "status": 200,
+        "final_host": "github.com",
+        "content_type": "text/html; charset=utf-8",
+        "content_length": null
+      },
+      {
+        "url": "https://github.com/michaelmonetized/omadesign/blob/v0.6.1/docs/qa/performance-158/motion.md",
+        "status": 200,
+        "final_host": "github.com",
+        "content_type": "text/html; charset=utf-8",
+        "content_length": null
+      },
+      {
+        "url": "https://github.com/michaelmonetized/omadesign/releases/download/v0.6.1/omadesign-0.6.1-x86_64-unknown-linux-gnu.tar.gz",
+        "status": 200,
+        "final_host": "release-assets.githubusercontent.com",
+        "content_type": "application/octet-stream",
+        "content_length": "38791631"
+      },
+      {
+        "url": "https://github.com/michaelmonetized/omadesign/releases/download/v0.6.1/omadesign-0.6.1-aarch64-unknown-linux-gnu.tar.gz",
+        "status": 200,
+        "final_host": "release-assets.githubusercontent.com",
+        "content_type": "application/octet-stream",
+        "content_length": "36492779"
+      }
+    ],
+    "installer": {
+      "url": "https://omadesign.app/install",
+      "status": 200,
+      "sha256": "5cf18da3a512052bc06bbede604ad69ecd8cd408c49164d62e6a721b1fba55ad",
+      "bytes": 2179,
+      "source_bytes_identical": true
+    }
+  },
+  "source_archive": {
+    "url": "https://github.com/michaelmonetized/omadesign/archive/refs/tags/v0.6.1.zip",
+    "status": 200
+  },
+  "observability": {
+    "deployment_error_entries_since_1h": 0,
+    "drains": "Not inspected; no monitoring settings changed."
+  },
+  "cleanup": {
+    "timestamp": "2026-09-29T11:34:05.058492+00:00",
+    "task_preview_server_pid": 3644630,
+    "identity_verified_before_stop": true,
+    "task_preview_server_stopped": true,
+    "browser_closed_by_script_finally": true,
+    "user_browsers_and_native_windows_untouched": true
+  },
+  "scope": "Public release, home, updates, download-link, installer and responsive layout verification. Native archive bytes/install validation is recorded separately; authenticated cloud/agent workflows were not exercised here.",
+  "evidence": {
+    "live-browser-validation.json": {
+      "bytes": 7078,
+      "sha256": "b2a1b80d09b3ee53186f28754ffc84d344119f6aedd5f9bc9c1f4db31bc56226"
+    },
+    "live-install-browser-validation.json": {
+      "bytes": 2149,
+      "sha256": "c38db07f6d52e406bd63b7cb09e4340ed382a2b91990e1c75d185f386ac3c8df"
+    },
+    "public-links-validation.json": {
+      "bytes": 2207,
+      "sha256": "bcc35d26a4b88bce595f5577c3104435e7c19646bba4b095c32c5cce2f9e19f2"
+    },
+    "live-domain-inspect.json": {
+      "bytes": 2898,
+      "sha256": "f93952f1a7ae641ba36a7ba629921a96e01e284208d04f2c98c82b06026ee00a"
+    },
+    "live-error-scan.jsonl": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "promote.stderr": {
+      "bytes": 427,
+      "sha256": "bf2c035a660316160184690b6be393b5be5b26322743d078c371ac67913fa1e5"
+    },
+    "cleanup.json": {
+      "bytes": 270,
+      "sha256": "7184d2704320c9e8607b852284f68a70bf287c47f4225fc69095e90135f8dc47"
+    },
+    "prebuilt-manifest-7fe6cd36.json": {
+      "bytes": 45479,
+      "sha256": "a23c1161f95d372a1f4b8256526aa37cd4cb8e34137379ebf42f42a25b936f29"
+    },
+    "live-footer-1440.png": {
+      "bytes": 192194,
+      "sha256": "712e39cb5ab3332a83c798f287868d17d9798f758268107b3102955b6ed632d9"
+    },
+    "live-footer-390.png": {
+      "bytes": 84824,
+      "sha256": "05fae89a6ad9250865b731ba89c5c785ed38563fee79ddd2bdd78e1bfbfe7f12"
+    },
+    "live-home-1440.png": {
+      "bytes": 1005466,
+      "sha256": "d5fd12d7bd381e4847f2184e46dc5d664efb67231688cdc4a8c3c86a2c5bff7d"
+    },
+    "live-home-390.png": {
+      "bytes": 241662,
+      "sha256": "433988a40feed45b29aefc656663af0dc4239d3fb0143a264b1ff7e23c3c9e45"
+    },
+    "live-home-top-1440.png": {
+      "bytes": 988085,
+      "sha256": "e237605f774b1b05feeeffc37bb96c8122160629c4d72713cf91709671088eef"
+    },
+    "live-home-top-390.png": {
+      "bytes": 240168,
+      "sha256": "27830740edf18515219da80e10df67ed93f3d8d6d391e4767e983afb3370bca0"
+    },
+    "live-install-1440.png": {
+      "bytes": 160445,
+      "sha256": "c4ec753505f6dd71d8b79b80ba48f698c7a907f0d6bce3d0733be99045cc28f5"
+    },
+    "live-install-390.png": {
+      "bytes": 65335,
+      "sha256": "e9b4cd45fa4bbf01d26707b08386fe2c27342eeb5384f6c19d849c3357c4082e"
+    },
+    "live-performance-1440.png": {
+      "bytes": 229622,
+      "sha256": "dca7b0835f463894e5b72ad6e0319ba4eb28a97c83a95f81aa1b1e92c99dc981"
+    },
+    "live-performance-390.png": {
+      "bytes": 104255,
+      "sha256": "ec0f9c29fbcbc29ddae38909965622d1803ea5af0f9d06b32bb48f287f114c4f"
+    },
+    "live-updates-0.6.1-1440.png": {
+      "bytes": 165128,
+      "sha256": "c47613f74f6befaa0282fcc0ab3da951096401389d1dd0217fc89b604543bb3e"
+    },
+    "live-updates-0.6.1-390.png": {
+      "bytes": 81027,
+      "sha256": "73c7b6adceccdb3575ae81faa925e1e478582474e9739dd0362aea7c01aba8d6"
+    },
+    "live-updates-1440.png": {
+      "bytes": 158127,
+      "sha256": "6e067ae13755c48703f5f4e9abe04f39648bc88a9354a769f14edff6210766ff"
+    },
+    "live-updates-390.png": {
+      "bytes": 78821,
+      "sha256": "2759499f0c02cf7760a468b263dcf8cc890e4df74a1ddab0693a357377035ce4"
+    }
+  }
+}

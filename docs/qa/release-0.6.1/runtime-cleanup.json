@@ -1,0 +1,12 @@
+{
+  "hpeliteclient": {
+    "runtime_directory": "/run/user/1000/oma061-smoke-3663084",
+    "empty_directory_removed": true,
+    "private_compositor_exit": 0
+  },
+  "intelpro": {
+    "runtime_directory": "/run/user/1000/oma061-smoke-3862369",
+    "empty_directory_removed": true,
+    "private_compositor_exit": 0
+  }
+}
