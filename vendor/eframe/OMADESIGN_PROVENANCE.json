@@ -30,11 +30,13 @@
     }
   },
   "local_patch": "omadesign-wayland-wait.patch",
-  "patch_sha256": "51fe7351be65a8a62bbad757f476a166c67fb88da2d05beb9005d24af29caf04",
+  "patch_sha256": "dd29c4c2ef46eeeab34c8a5dfef98641724955a21c9acc5079905120d94b0b24",
   "patched_files": {
     "src/native/run.rs": {
       "upstream_sha256": "9a02f304277811fb8071cb1caeed3aace45ac53654938b10d0823525d888d987",
-      "local_sha256": "58e63327e70969df7ac3d2a33f9def31267b1cb6549493315b36dac6a65a82db"
+      "local_sha256": "ce6003c02f174dfc256125cf1ddabe58e07a223b8ab0f66d08877a60a407d086"
     }
-  }
+  },
+  "local_patch_description": "Preserve upstream visible Poll; demote to Wait only when all outstanding Wayland redraw requests remain undelivered for at least 100 ms, without resetting first timestamps on repeated requests.",
+  "patch_apply_command": "git apply --unidiff-zero omadesign-wayland-wait.patch"
 }
