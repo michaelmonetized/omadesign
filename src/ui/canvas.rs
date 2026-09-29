@@ -19,6 +19,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         Sense::click_and_drag(),
     );
     studio.canvas_rect = Some(rect);
+    let text_geometry_input = super::text_geometry::brackets(ui, rect, studio);
     if studio.type_edit.is_some()
         && (resp.clicked() || ui.ctx().memory(|memory| memory.focused().is_none()))
     {
@@ -95,7 +96,8 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     } else {
         super::deform::input(studio, &resp, rect, space_pan || studio.tool == Tool::Hand)
     };
-    if !plugin_input
+    if !text_geometry_input
+        && !plugin_input
         && !brand_input
         && !guide_input
         && !deform_input
@@ -123,7 +125,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     }
 
     let panning = (space_pan && studio.type_edit.is_none()) || studio.tool == Tool::Hand;
-    if plugin_input || guide_input || deform_input || brand_input {
+    if text_geometry_input || plugin_input || guide_input || deform_input || brand_input {
         // Ruler and guide drags own this gesture.
     } else if panning && resp.dragged_by(PointerButton::Primary)
         || resp.dragged_by(PointerButton::Middle)
@@ -134,7 +136,8 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     } else {
         handle_pointer(studio, &resp, space_pan);
     }
-    if !plugin_input
+    if !text_geometry_input
+        && !plugin_input
         && !brand_input
         && !guide_input
         && !deform_input
@@ -485,7 +488,8 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
         }
         studio.commit_type_edit();
         if studio.tool == Tool::Text {
-            studio.place_text(pick);
+            if let Some(guide) = studio.text_path_target(pick, slack) { studio.place_text_on_path(pick,guide); }
+            else { studio.place_text(pick); }
         }
         return;
     }
@@ -498,7 +502,11 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
             studio.begin_type_edit(hit, pick);
             return;
         }
-        studio.place_text(pick);
+        if let Some(guide) = studio.text_path_target(pick, slack) {
+            studio.place_text_on_path(pick, guide);
+        } else {
+            studio.place_text(pick);
+        }
         return;
     }
 
@@ -3132,9 +3140,13 @@ fn draw_type_caret(
     anchor: usize,
 ) {
     let v = studio.view;
+    if let Some(quads) = crate::text_geometry::selection_quads(run, caret, anchor) {
+        for quad in quads { p.add(eframe::egui::Shape::convex_polygon(quad.into_iter().map(|point| win(rect,v,point)).collect(), select_fill(), Stroke::NONE)); }
+    } else {
     for (a, b) in crate::text::selection_rects(run, caret, anchor) {
         let r = Rect::from_min_max(win(rect, v, a), win(rect, v, b));
         p.rect_filled(r, 0.0, select_fill());
+    }
     }
     let phase = (p.ctx().input(|i| i.time) * 2.0).fract();
     let on = phase < 0.5;
@@ -3144,8 +3156,9 @@ fn draw_type_caret(
     if on {
         let c = crate::text::caret_pt(run, caret);
         let height=crate::text::caret_height(run,caret);
-        let top = win(rect, v, Pt::new(c.x, c.y - height * 0.9));
-        let bot = win(rect, v, Pt::new(c.x, c.y + height * 0.2));
+        let tangent = crate::text_geometry::caret_frame(run, caret).map(|(_,t)|t).unwrap_or(Pt::new(1.,0.));
+        let top = win(rect, v, c - tangent.perp() * height * 0.9);
+        let bot = win(rect, v, c + tangent.perp() * height * 0.2);
         p.line_segment([top, bot], Stroke::new(1.5, select()));
     }
 }
@@ -3326,6 +3339,7 @@ fn context_menu(resp: &eframe::egui::Response, studio: &mut Studio) {
         }
     }
     resp.context_menu(|ui| {
+        super::text_geometry::menu(ui, studio);
         if ui.button("Cut                    Ctrl+X").clicked() {
             studio.cut_selection(ui.ctx());
             ui.close();

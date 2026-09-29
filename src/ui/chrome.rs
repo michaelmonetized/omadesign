@@ -434,6 +434,7 @@ fn edit_menu(ui: &mut Ui, studio: &mut Studio) {
 
 fn object_menu(ui: &mut Ui, studio: &mut Studio) {
     ui.menu_button("Object", |ui| {
+        ui.menu_button("Type", |ui| super::text_geometry::menu(ui, studio));
         if ui
             .add_enabled(
                 !studio.selection.is_empty(),

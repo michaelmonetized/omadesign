@@ -681,6 +681,10 @@ pub struct TypeRun {
     pub smcp: bool,
     #[serde(skip)]
     pub contours: Vec<Vec<Pt>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_path: Option<crate::text_geometry::TextOnPath>,
+    #[serde(skip)]
+    pub layout: Option<crate::text_geometry::TextGeometryLayout>,
 }
 
 impl Default for TypeRun {
@@ -703,6 +707,8 @@ impl Default for TypeRun {
             tnum: false,
             smcp: false,
             contours: vec![],
+            on_path: None,
+            layout: None,
         }
     }
 }
@@ -870,7 +876,7 @@ impl Geom {
 
     pub fn bbox(&self) -> Bounds {
         match self {
-            Geom::Text(run) if run.wrap_width.is_some() => {
+            Geom::Text(run) if run.on_path.is_none() && run.wrap_width.is_some() => {
                 let (width, height) = crate::text::measure(run);
                 return Bounds::from_min_size(
                     Pt::new(run.origin.x, run.origin.y - run.px * 0.85),

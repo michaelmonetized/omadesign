@@ -1,0 +1,9 @@
+Source: 3527762d
+Command: CARGO_TARGET_DIR=/home/michael/Projects/omadesign/target cargo test --lib independent_rectangle_corners_and_rotation_match_the_visible_guide -j 2
+
+Recorded tool output:
+
+running 1 test
+test text_geometry::rounded_guide_regression::independent_rectangle_corners_and_rotation_match_the_visible_guide ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 760 filtered out; finished in 0.00s

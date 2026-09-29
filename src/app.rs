@@ -32,6 +32,7 @@ mod snapping;
 pub mod startup;
 mod tabs;
 mod typography;
+mod text_geometry;
 pub mod updates;
 
 pub use key_hints::{KeyHint, KeyHints};
@@ -876,6 +877,7 @@ impl Studio {
     }
 
     pub fn mark(&mut self) {
+        crate::text_geometry::reflow(&mut self.doc);
         self.canvas_gen = self.canvas_gen.wrapping_add(1);
         self.last_input = Instant::now();
     }
@@ -1439,6 +1441,10 @@ impl Studio {
         self.apply_with_layer_selection(&cmd);
         let mut changes = vec![cmd];
         changes.extend(self.reconcile_layout());
+        for change in crate::text_geometry::reconcile_links(&self.doc) {
+            crate::document::apply(&mut self.doc, &change);
+            changes.push(change);
+        }
         self.history.push(if changes.len() == 1 {
             changes.remove(0)
         } else {
@@ -1796,6 +1802,7 @@ impl Studio {
                         let old = shape.id;
                         shape.id = shape_ids[&old];
                         crate::layout_components::remap_duplicate(shape, &shape_ids);
+                        crate::text_geometry::remap_copy(shape, &shape_ids);
                         shape.layout.parent =
                             shape.layout.parent.and_then(|p| shape_ids.get(&p).copied());
                         shape.geom.translate(delta);
@@ -1870,6 +1877,7 @@ impl Studio {
             } else if let Some(mut shape) = self.doc.find_shape(li, id).cloned() {
                 shape.id = remap[&id];
                 crate::layout_components::remap_duplicate(&mut shape, &remap);
+                crate::text_geometry::remap_copy(&mut shape, &remap);
                 if let Some(parent) = shape.layout.parent {
                     shape.layout.parent = Some(*remap.get(&parent).unwrap_or(&parent));
                 }

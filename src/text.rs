@@ -498,6 +498,7 @@ fn fallback_block(content: &str, px: f32, origin: Pt) -> Vec<Vec<Pt>> {
 
 /// Shape `run` into closed contours in world space.
 pub fn shape(run: &TypeRun) -> Vec<Vec<Pt>> {
+    if run.on_path.is_some() { return crate::text_geometry::shape_on_path(run); }
     let Some(path) = resolve_path(run) else {
         return fallback_block(&run.content, run.px, run.origin);
     };
@@ -525,11 +526,13 @@ pub fn measure(run:&TypeRun)->(f32,f32) {
     let lines=compose(run);(run.wrap_width.unwrap_or_else(||lines.iter().map(|l|l.width).fold(0.,f32::max)),lines.iter().map(|l|l.height).sum())
 }
 pub fn caret_pt(run:&TypeRun,char_idx:usize)->Pt {
+    if let Some((point,_)) = crate::text_geometry::caret_frame(run,char_idx) { return point; }
     let lines=compose(run);let idx=char_idx.min(run.content.chars().count());
     let line=&lines[lines.iter().rposition(|l|l.start<=idx).unwrap_or(0)];
     Pt::new(run.origin.x+line.caret_x(idx),run.origin.y+line.baseline-character_metrics(run,idx.min(run.content.chars().count().saturating_sub(1))).baseline_shift.unwrap())
 }
 pub fn hit_char(run:&TypeRun,p:Pt)->usize {
+    if let Some(index) = crate::text_geometry::hit_char(run,p) { return index; }
     let lines=compose(run);
     lines.iter().flat_map(|line|line.carets.iter().map(move |(index,x)| {
         let style=character_metrics(run,(*index).min(run.content.chars().count().saturating_sub(1)));
@@ -551,7 +554,7 @@ pub fn selection_rects(run:&TypeRun,a:usize,b:usize)->Vec<(Pt,Pt)> {
     }
     rects
 }
-pub fn caret_height(run:&TypeRun,index:usize)->f32 {run.px*character_metrics(run,index.min(run.content.chars().count().saturating_sub(1))).vscale.unwrap()/100.}
+pub fn caret_height(run:&TypeRun,index:usize)->f32 {if let Some(layout)=&run.layout&&let Some((_,height))=layout.caret_heights.iter().min_by_key(|(i,_)|i.abs_diff(index)){return *height;}run.px*character_metrics(run,index.min(run.content.chars().count().saturating_sub(1))).vscale.unwrap()/100.}
 pub fn char_to_byte(s:&str,char_idx:usize)->usize {s.char_indices().nth(char_idx).map(|(i,_)|i).unwrap_or(s.len())}
 pub fn paragraph_spacing_css(run: &TypeRun, style: &crate::geom::ParagraphStyle) -> String {
     // CSS word spacing adds to the font's space advance; the inspector stores

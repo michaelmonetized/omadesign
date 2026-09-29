@@ -1,0 +1,10 @@
+{
+  "source_revision": "00be01fcc3e4526a4cdd1dca4af1f02af0981fc4",
+  "capture_binary_sha256": "891789b447edf8817c445c2d02cac0f907cb9b03991f876e166fff5535e61334",
+  "geometry_tests_passed": 26,
+  "clipboard_tests_passed": 15,
+  "native_recording_frames": 600,
+  "native_errors": [],
+  "saved_by_ctrl_s": true,
+  "reopened_in_application": true
+}

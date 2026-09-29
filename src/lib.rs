@@ -47,6 +47,7 @@ pub mod snap;
 pub mod svg;
 pub mod templates;
 pub mod text;
+pub mod text_geometry;
 pub mod tools;
 pub mod trace;
 pub mod typography;
