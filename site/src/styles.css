@@ -958,6 +958,7 @@ details[open] > summary .disclosure-plus {
 }
 .footer-bottom > div {
   display: flex;
+  flex-wrap: wrap;
   gap: 20px;
 }
 .site-footer a:hover {

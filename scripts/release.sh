@@ -86,9 +86,14 @@ package() {
   install -Dm755 "$bin" "$stage/omadesign"
   case "$triple" in
     aarch64-*) strip_bin="aarch64-linux-gnu-strip" ;;
-    *) strip_bin="strip" ;;
+    *) strip_bin="x86_64-linux-gnu-strip" ;;
   esac
-  "$strip_bin" "$stage/omadesign" 2>/dev/null || strip "$stage/omadesign" 2>/dev/null || true
+  if ! "$strip_bin" "$stage/omadesign" 2>/dev/null \
+    && ! llvm-strip "$stage/omadesign" 2>/dev/null \
+    && ! strip "$stage/omadesign" 2>/dev/null; then
+    echo "could not strip $triple; install LLVM or matching binutils" >&2
+    exit 1
+  fi
   install -Dm644 omadesign.desktop "$stage/omadesign.desktop"
   install -Dm644 assets/omadesign.svg "$stage/omadesign.svg"
   install -Dm644 omadesign-mime.xml "$stage/omadesign-mime.xml"

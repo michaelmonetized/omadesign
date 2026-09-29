@@ -24,7 +24,7 @@ export const Route = createRootRoute({
       {
         name: "description",
         content:
-          "Design, layout, paint, develop and animate in one native Linux studio. Editable gradients, responsive prototypes, photo batches and file workflows for AI agents. Free and open source.",
+          "Design, layout, paint, develop and animate in one native Linux studio. Offline AI cutouts and upscaling, live canvas agents, editable typography and faster brushing. Free and open source.",
       },
       { name: "theme-color", content: "#1e1e2e" },
       {
