@@ -64,7 +64,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
 
         }
     });
-    if run.on_path.is_none() {
+    if run.frame.is_none() && run.on_path.is_none() {
     let mut wrap = run.wrap_width.is_some();
     let mut width = run.wrap_width.unwrap_or(320.);
     let mut changed = ui.checkbox(&mut wrap, "Wrap text to width").changed();

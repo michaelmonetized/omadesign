@@ -23,6 +23,8 @@ pub fn encode(doc: &Document) -> Result<String, String> {
             12
         } else if doc.layers.iter().filter_map(|l| l.kind.shapes()).flatten().any(|s| matches!(&s.geom, crate::geom::Geom::Text(t) if !t.features.is_empty() || t.spans.iter().any(|s| !s.features.is_empty()))) {
             11
+        } else if doc.layers.iter().any(|l| !l.text_wrap.is_none() || l.kind.shapes().unwrap_or(&[]).iter().any(|s| !s.text_wrap.is_none() || matches!(&s.geom,crate::geom::Geom::Text(t) if t.frame.is_some() || t.thread.is_some()))) {
+            10
         } else if doc.layers.iter().filter_map(|l| l.kind.shapes()).flatten().any(|s| matches!(&s.geom, crate::geom::Geom::Text(t) if t.on_path.is_some())) {
             9
         } else if doc.layers.iter().filter_map(|l| l.kind.shapes()).flatten().any(|s| matches!(&s.geom, crate::geom::Geom::Text(t) if t.wrap_width.is_some() || !t.paragraphs.is_empty() || !t.spans.is_empty() || matches!(t.align, crate::geom::TextAlign::Justify{..}))) {
@@ -663,6 +665,67 @@ mod tests {
     use super::*;
     use crate::document::{Cmd, Shape, Style, apply};
     use crate::geom::{Geom, Pt};
+
+    #[test]
+    fn stacked_typography_versions_preserve_combined_appearance_and_ranges() {
+        use crate::geom::{CharSpan, Leading, TypeRun};
+        use crate::text_geometry::{TextFrame, TextOnPath};
+        let mut doc = Document::new("Combined typography", 640., 480., 96.);
+        let guide = Shape::new(
+            Geom::Ellipse { center: Pt::new(160., 160.), radii: Pt::splat(100.) },
+            Style::default(),
+        );
+        let guide_id = guide.id;
+        let text = Shape::new(Geom::Text(TypeRun {
+            content: "AV typography".into(), px: 24., ..Default::default()
+        }), Style::default());
+        let id = text.id;
+        doc.layers[1].kind.shapes_mut().unwrap().extend([guide, text]);
+        let check = |doc: &Document, expected: u32| {
+            let encoded = encode(doc).unwrap();
+            let file: serde_json::Value = serde_json::from_str(&encoded).unwrap();
+            assert_eq!(file["version"], expected);
+            decode(&encoded).expect("every emitted version must reopen");
+        };
+        check(&doc, 5);
+        doc.find_shape_mut(1, id).unwrap().style.stroke = Some(crate::document::Stroke {
+            alignment: crate::document::StrokeAlignment::Outside, ..Default::default()
+        });
+        check(&doc, 6);
+        doc.find_shape_mut(1, id).unwrap().fill_opacity = 0.4;
+        check(&doc, 7);
+        fn run(doc: &mut Document, id: u64) -> &mut TypeRun {
+            match &mut doc.find_shape_mut(1, id).unwrap().geom {
+                Geom::Text(run) => run,
+                _ => unreachable!(),
+            }
+        }
+        run(&mut doc, id).wrap_width = Some(260.);
+        check(&doc, 8);
+        run(&mut doc, id).on_path = Some(TextOnPath { path_id: guide_id, ..Default::default() });
+        check(&doc, 9);
+        run(&mut doc, id).on_path = None;
+        run(&mut doc, id).frame = Some(TextFrame::default());
+        check(&doc, 10);
+        run(&mut doc, id).features.push((*b"smcp", 1));
+        check(&doc, 11);
+        run(&mut doc, id).manual_kern.insert(1, -30.);
+        run(&mut doc, id).spans.push(CharSpan {
+            start: 0, end: 2, leading: Some(Leading::Fixed(45.)),
+            tracking: Some(80.), baseline_shift: Some(3.), ..Default::default()
+        });
+        check(&doc, 12);
+        let restored = decode(&encode(&doc).unwrap()).unwrap();
+        let shape = restored.find_shape(1, id).unwrap();
+        assert_eq!(shape.fill_opacity, 0.4);
+        let Geom::Text(actual) = &shape.geom else { unreachable!() };
+        let Geom::Text(expected) = &doc.find_shape(1, id).unwrap().geom else { unreachable!() };
+        assert_eq!(actual.content, expected.content);
+        assert_eq!(actual.frame, expected.frame);
+        assert_eq!(actual.features, expected.features);
+        assert_eq!(actual.spans, expected.spans);
+        assert_eq!(actual.manual_kern, expected.manual_kern);
+    }
 
     #[test]
     fn roundtrip_vector() {

@@ -499,6 +499,7 @@ fn fallback_block(content: &str, px: f32, origin: Pt) -> Vec<Vec<Pt>> {
 /// Shape `run` into closed contours in world space.
 pub fn shape(run: &TypeRun) -> Vec<Vec<Pt>> {
     if run.on_path.is_some() { return crate::text_geometry::shape_on_path(run); }
+    if run.frame.is_some() { return crate::text_geometry::shape_frame(run); }
     let Some(path) = resolve_path(run) else {
         return fallback_block(&run.content, run.px, run.origin);
     };

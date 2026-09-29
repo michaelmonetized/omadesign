@@ -230,6 +230,8 @@ pub struct Shape {
     pub mask: Option<Pixels>,
     #[serde(default, skip_serializing_if = "FrameLayout::is_empty")]
     pub layout: FrameLayout,
+    #[serde(default, skip_serializing_if = "crate::text_geometry::TextWrap::is_none")]
+    pub text_wrap: crate::text_geometry::TextWrap,
     #[serde(skip)]
     cached_path: RefCell<Option<Arc<CachedPath>>>,
 }
@@ -263,6 +265,7 @@ impl PartialEq for Shape {
             && self.mask.as_ref().map(|p| (p.w, p.h, &p.data))
                 == other.mask.as_ref().map(|p| (p.w, p.h, &p.data))
             && self.layout == other.layout
+            && self.text_wrap == other.text_wrap
     }
 }
 
@@ -286,6 +289,7 @@ impl Shape {
             corners: [0.0; 4],
             mask: None,
             layout: FrameLayout::default(),
+            text_wrap: Default::default(),
             cached_path: RefCell::new(None),
         }
     }
@@ -770,6 +774,8 @@ pub struct Layer {
     pub is_group: bool,
     #[serde(default)]
     pub pass_through: bool,
+    #[serde(default, skip_serializing_if = "crate::text_geometry::TextWrap::is_none")]
+    pub text_wrap: crate::text_geometry::TextWrap,
     #[serde(default)]
     pub filters: crate::filter::FilterStack,
 }
@@ -795,6 +801,7 @@ impl Layer {
             parent: None,
             is_group: false,
             pass_through: false,
+            text_wrap: Default::default(),
             mask: None,
             mask_origin: Pt::ZERO,
             mask_size: Pt::ZERO,
@@ -816,6 +823,7 @@ impl Layer {
             parent: None,
             is_group: false,
             pass_through: false,
+            text_wrap: Default::default(),
             mask: None,
             mask_origin: Pt::ZERO,
             mask_size: Pt::ZERO,
@@ -843,6 +851,7 @@ impl Layer {
             parent: None,
             is_group: false,
             pass_through: false,
+            text_wrap: Default::default(),
             mask: None,
             mask_origin: Pt::ZERO,
             mask_size: Pt::ZERO,
@@ -1143,6 +1152,8 @@ fn deserialize_artboards<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<Artboard
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Document {
+    #[serde(default)]
+    pub text_wrap_above_only: bool,
     pub name: String,
     /// Last editing workspace, used by the file browser and when reopening.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1193,6 +1204,7 @@ impl Document {
         copy.artboardless = self.artboardless;
         copy.workspace = self.workspace;
         copy.layout_tokens = self.layout_tokens.clone();
+        copy.text_wrap_above_only = self.text_wrap_above_only;
         copy.layers = self
             .layers
             .iter()
@@ -1205,7 +1217,7 @@ impl Document {
                 out.locked = layer.locked;
                 out.opacity = layer.opacity;
                 out.blend = layer.blend;
-                if let Some(shapes) = layer.kind.shapes() {
+                out.text_wrap = layer.text_wrap.clone();                if let Some(shapes) = layer.kind.shapes() {
                     out.kind.shapes_mut().unwrap().extend_from_slice(shapes);
                 }
                 out
@@ -1304,6 +1316,7 @@ impl Document {
         let w = total_w.round().max(1.0) as u32;
         let h = page_h.round().max(1.0) as u32;
         let mut doc = Self {
+            text_wrap_above_only: false,
             name: name.into(),
             workspace: None,
             width: total_w,
@@ -1612,6 +1625,8 @@ pub enum Cmd {
         before: bool,
         after: bool,
     },
+    SetTextWrap { layer:usize, id:Option<u64>, before:crate::text_geometry::TextWrap, after:crate::text_geometry::TextWrap },
+    SetTextWrapAbove {before:bool,after:bool},
     SetShapeGuide {
         layer: usize,
         id: u64,
@@ -2080,6 +2095,8 @@ fn invert_cmd(cmd: Cmd) -> Cmd {
             before: after,
             after: before,
         },
+        Cmd::SetTextWrap {layer,id,before,after} => Cmd::SetTextWrap {layer,id,before:after,after:before},
+        Cmd::SetTextWrapAbove {before,after} => Cmd::SetTextWrapAbove {before:after,after:before},
         Cmd::SetShapeGuide {
             layer,
             id,
@@ -2386,6 +2403,8 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
                 layer.pass_through = *after;
             }
         }
+        Cmd::SetTextWrap {layer,id,after,..} => { if let Some(id)=id {if let Some(s)=doc.find_shape_mut(*layer,*id){s.text_wrap=after.clone();}}else if let Some(l)=doc.layers.get_mut(*layer){l.text_wrap=after.clone();} },
+        Cmd::SetTextWrapAbove {after,..} => doc.text_wrap_above_only=*after,
         Cmd::SetShapeGuide {
             layer, id, after, ..
         } => {

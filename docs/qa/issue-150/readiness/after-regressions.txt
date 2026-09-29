@@ -1,0 +1,10 @@
+
+running 5 tests
+test app::text_geometry::readiness_tests::follower_source_validation_uses_the_actual_head_defaults ... ok
+test app::text_geometry::readiness_tests::populated_merge_preserves_inherited_and_explicit_styles ... ok
+test app::text_geometry::readiness_tests::empty_frames_thread_and_empty_head_does_not_invent_a_paragraph ... ok
+test app::text_geometry::readiness_tests::follower_pointer_selection_stays_in_active_frame_and_undo_restores_story ... ok
+test app::text_geometry::readiness_tests::populated_merge_rejects_unrepresentable_defaults_without_mutating_edit_or_history ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 811 filtered out; finished in 11.29s
+

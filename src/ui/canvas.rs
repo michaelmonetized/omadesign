@@ -19,7 +19,8 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         Sense::click_and_drag(),
     );
     studio.canvas_rect = Some(rect);
-    let text_geometry_input = super::text_geometry::brackets(ui, rect, studio);
+    let text_geometry_input = super::text_geometry::brackets(ui, rect, studio) | super::text_geometry::frame_ports(ui,rect,studio);
+    let text_geometry_input = text_geometry_input || super::text_geometry::area_input(studio,&resp,rect);
     if studio.type_edit.is_some()
         && (resp.clicked() || ui.ctx().memory(|memory| memory.focused().is_none()))
     {
@@ -560,30 +561,16 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
             if let Some(hit) = hit_shape(studio, pick, slack)
                 && studio.editing_text(hit.0, hit.1)
             {
-                let caret = studio
-                    .doc
-                    .find_shape(hit.0, hit.1)
-                    .and_then(|s| match &s.geom {
-                        Geom::Text(run) => Some(crate::text::hit_char(run, pick)),
-                        _ => None,
-                    });
-                if let (Some(c), Some(e)) = (caret, studio.type_edit.as_mut()) {
-                    e.pointer_caret(c,false);
-                }
+                studio.type_pointer_caret(hit, pick, false);
                 return;
             }
         }
         if resp.dragged_by(PointerButton::Primary) {
-            if let Some(edit) = studio.type_edit.as_ref() {
-                let (li, id) = (edit.layer, edit.id);
-                if let Some(shape) = studio.doc.find_shape(li, id)
-                    && let Geom::Text(run) = &shape.geom
-                {
-                    let new_caret = crate::text::hit_char(run, pick);
-                    if let Some(e) = studio.type_edit.as_mut() {
-                        e.pointer_caret(new_caret,true);
-                    }
-                }
+            if let Some(active) = studio.type_edit.as_ref().map(|edit| edit.frame) {
+                let slack = 8.0 / studio.view.scale.max(0.01);
+                let frame = hit_shape(studio, pick, slack)
+                    .filter(|hit| studio.editing_text(hit.0, hit.1)).unwrap_or(active);
+                studio.type_pointer_caret(frame, pick, true);
             }
             return;
         }
@@ -3127,7 +3114,12 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio, pen_pre
         && let Some(s) = studio.doc.find_shape(edit.layer, edit.id)
         && let Geom::Text(run) = &s.geom
     {
-        draw_type_caret(p, rect, studio, run, edit.caret, edit.anchor);
+        draw_type_caret(p, rect, studio, edit.layer, s, edit.caret, edit.anchor);
+        if run.thread.is_some() {
+            for (layer_index, layer) in studio.doc.layers.iter().enumerate() { for shape in layer.kind.shapes().unwrap_or(&[]) {
+                if shape.id != edit.id && let Geom::Text(other)=&shape.geom && other.thread.as_ref().is_some_and(|t|t.story==edit.id) { draw_type_caret(p,rect,studio,layer_index,shape,edit.caret,edit.anchor); }
+            }}
+        }
     }
 }
 
@@ -3135,21 +3127,35 @@ fn draw_type_caret(
     p: &eframe::egui::Painter,
     rect: Rect,
     studio: &Studio,
-    run: &crate::geom::TypeRun,
+    layer: usize,
+    shape: &crate::document::Shape,
     caret: usize,
     anchor: usize,
 ) {
+    let Geom::Text(run) = &shape.geom else { return; };
     let v = studio.view;
+    let screen = |point| {
+        let mut point = shape.world_point(point);
+        let mut parent = shape.layout.parent;
+        let mut visited = std::collections::HashSet::new();
+        while let Some(id) = parent {
+            if !visited.insert(id) || visited.len() > 64 { break; }
+            let Some(frame) = studio.doc.find_shape(layer, id) else { break; };
+            point = frame.world_point(point);
+            parent = frame.layout.parent;
+        }
+        win(rect, v, point)
+    };
     if let Some(quads) = crate::text_geometry::selection_quads(run, caret, anchor) {
-        for quad in quads { p.add(eframe::egui::Shape::convex_polygon(quad.into_iter().map(|point| win(rect,v,point)).collect(), select_fill(), Stroke::NONE)); }
+        for quad in quads { p.add(eframe::egui::Shape::convex_polygon(quad.into_iter().map(|point| screen(point)).collect(), select_fill(), Stroke::NONE)); }
     } else {
     for (a, b) in crate::text::selection_rects(run, caret, anchor) {
-        let r = Rect::from_min_max(win(rect, v, a), win(rect, v, b));
-        p.rect_filled(r, 0.0, select_fill());
+        let points = [a, Pt::new(b.x, a.y), b, Pt::new(a.x, b.y)].into_iter().map(screen).collect();
+        p.add(eframe::egui::Shape::convex_polygon(points, select_fill(), Stroke::NONE));
     }
     }
     let phase = (p.ctx().input(|i| i.time) * 2.0).fract();
-    let on = phase < 0.5;
+    let on = phase < 0.5 && run.layout.as_ref().is_none_or(|l| run.frame.is_none() || (caret>=l.visible_start&&caret<=l.visible_end));
     let next = if on { 0.5 - phase } else { 1.0 - phase };
     p.ctx()
         .request_repaint_after(std::time::Duration::from_secs_f64(next * 0.5 + 0.001));
@@ -3157,8 +3163,8 @@ fn draw_type_caret(
         let c = crate::text::caret_pt(run, caret);
         let height=crate::text::caret_height(run,caret);
         let tangent = crate::text_geometry::caret_frame(run, caret).map(|(_,t)|t).unwrap_or(Pt::new(1.,0.));
-        let top = win(rect, v, c - tangent.perp() * height * 0.9);
-        let bot = win(rect, v, c + tangent.perp() * height * 0.2);
+        let top = screen(c - tangent.perp() * height * 0.9);
+        let bot = screen(c + tangent.perp() * height * 0.2);
         p.line_segment([top, bot], Stroke::new(1.5, select()));
     }
 }

@@ -280,6 +280,8 @@ pub enum Op {
 pub struct TypeEdit {
     pub layer: usize,
     pub id: u64,
+    /// Pointer geometry follows the active frame; edits still target the story head.
+    pub frame: (usize, u64),
     pub caret: usize,
     pub anchor: usize,
     pub before: Geom,
@@ -1438,8 +1440,10 @@ impl Studio {
         crate::telemetry::count("feature.edit");
         self.end_pixel_stroke(false);
         self.end_deform(false);
+        let text_frames_before = crate::text_geometry::frame_snapshot(&self.doc);
         self.apply_with_layer_selection(&cmd);
         let mut changes = vec![cmd];
+        for change in crate::text_geometry::reconcile_threads(&text_frames_before, &self.doc) { crate::document::apply(&mut self.doc, &change); changes.push(change); }
         changes.extend(self.reconcile_layout());
         for change in crate::text_geometry::reconcile_links(&self.doc) {
             crate::document::apply(&mut self.doc, &change);
@@ -1802,7 +1806,7 @@ impl Studio {
                         let old = shape.id;
                         shape.id = shape_ids[&old];
                         crate::layout_components::remap_duplicate(shape, &shape_ids);
-                        crate::text_geometry::remap_copy(shape, &shape_ids);
+                        crate::text_geometry::remap_copy_in_document(&self.doc, shape, &shape_ids);
                         shape.layout.parent =
                             shape.layout.parent.and_then(|p| shape_ids.get(&p).copied());
                         shape.geom.translate(delta);
@@ -1877,7 +1881,7 @@ impl Studio {
             } else if let Some(mut shape) = self.doc.find_shape(li, id).cloned() {
                 shape.id = remap[&id];
                 crate::layout_components::remap_duplicate(&mut shape, &remap);
-                crate::text_geometry::remap_copy(&mut shape, &remap);
+                crate::text_geometry::remap_copy_in_document(&self.doc, &mut shape, &remap);
                 if let Some(parent) = shape.layout.parent {
                     shape.layout.parent = Some(*remap.get(&parent).unwrap_or(&parent));
                 }
@@ -2104,6 +2108,7 @@ impl Studio {
         self.type_edit = Some(TypeEdit {
             layer: li,
             id,
+            frame: (li, id),
             caret: n,
             anchor: 0,
             before: geom,
@@ -2113,18 +2118,13 @@ impl Studio {
     }
 
     pub fn begin_type_edit(&mut self, hit: (usize, u64), world: Pt) {
+        let frame_hit = hit;
+        let Some(frame_caret) = self.type_frame_caret(frame_hit, world) else { return; };
+        let hit = self.story_head(hit);
         self.selected_layer = None;
         if self.editing_text(hit.0, hit.1) {
-            let caret = self
-                .doc
-                .find_shape(hit.0, hit.1)
-                .and_then(|s| match &s.geom {
-                    Geom::Text(run) => Some(crate::text::hit_char(run, world)),
-                    _ => None,
-                });
-            if let (Some(c), Some(e)) = (caret, self.type_edit.as_mut()) {
-                e.pointer_caret(c,false);
-            }
+            self.type_pointer_caret(frame_hit, world, false);
+            self.selection = vec![frame_hit];
             return;
         }
         self.commit_type_edit();
@@ -2134,15 +2134,16 @@ impl Studio {
         let Geom::Text(run) = &s.geom else {
             return;
         };
-        let caret = crate::text::hit_char(run, world);
+        let caret = frame_caret;
         let defaults = run.clone();
         let before = s.geom.clone();
         self.sync_type_defaults(&defaults);
-        self.selection = vec![hit];
+        self.selection = vec![frame_hit];
         self.active_layer = Some(hit.0);
         self.type_edit = Some(TypeEdit {
             layer: hit.0,
             id: hit.1,
+            frame: frame_hit,
             caret,
             anchor: caret,
             before,
@@ -2151,10 +2152,27 @@ impl Studio {
         self.status = "type — click or Esc to finish, Enter for a new line".into();
     }
 
+    fn type_frame_caret(&self, frame: (usize, u64), world: Pt) -> Option<usize> {
+        let point = self.doc.layout_hit_point(frame.0, frame.1, world)?;
+        let shape = self.doc.find_shape(frame.0, frame.1)?;
+        let Geom::Text(run) = &shape.geom else { return None; };
+        Some(crate::text::hit_char(run, shape.local_point(point)))
+    }
+
+    /// Hit-test a story frame in its unrotated layout coordinates.
+    pub fn type_pointer_caret(&mut self, frame: (usize, u64), world: Pt, extend: bool) -> bool {
+        if !self.editing_text(frame.0, frame.1) { return false; }
+        let Some(caret) = self.type_frame_caret(frame, world) else { return false; };
+        let edit = self.type_edit.as_mut().unwrap();
+        edit.frame = frame;
+        edit.pointer_caret(caret, extend);
+        true
+    }
+
     pub fn editing_text(&self, layer: usize, id: u64) -> bool {
         self.type_edit
             .as_ref()
-            .is_some_and(|e| e.layer == layer && e.id == id)
+            .is_some_and(|e| (e.layer,e.id) == self.story_head((layer,id)))
     }
 
     pub fn commit_type_edit(&mut self) {
@@ -2362,7 +2380,9 @@ impl Studio {
         if self.type_edit.is_some() {
             let mut snap = None;
             if let Some(run) = self.live_type_mut() {
+                let size_before=run.px;
                 f(run);
+                if run.frame.is_some(){run.origin.y+=(run.px-size_before)*0.85;}
                 snap = Some(run.clone());
             }
             if let Some(r) = &snap {
@@ -2371,7 +2391,7 @@ impl Studio {
             self.reshape_live_type();
             return;
         }
-        if let Some((li, id)) = self.primary()
+        if let Some((li, id)) = self.primary().map(|hit|self.story_head(hit))
             && let Some(s) = self.doc.find_shape(li, id)
             && matches!(s.geom, Geom::Text(_))
         {
@@ -2379,7 +2399,9 @@ impl Studio {
             let before = s.geom.clone();
             let rot = s.rotation;
             if let Geom::Text(run) = &mut after {
+                let size_before=run.px;
                 f(run);
+                if run.frame.is_some(){run.origin.y+=(run.px-size_before)*0.85;}
             }
             let defaults = match &after {
                 Geom::Text(run) => Some(run.clone()),
@@ -2405,18 +2427,14 @@ impl Studio {
     }
 
     pub fn selected_type(&self) -> Option<TypeRun> {
-        if let Some(e) = &self.type_edit
-            && let Some(s) = self.doc.find_shape(e.layer, e.id)
-            && let Geom::Text(run) = &s.geom
-        {
-            return Some(run.clone());
+        let hit=self.primary().or_else(||self.type_edit.as_ref().map(|e|(e.layer,e.id)))?;
+        let shape=self.doc.find_shape(hit.0,hit.1)?;
+        let Geom::Text(frame)=&shape.geom else{return None};
+        let head=self.story_head(hit);
+        if head!=hit && let Some(source)=self.doc.find_shape(head.0,head.1) && let Geom::Text(story)=&source.geom {
+            let mut combined=story.clone();combined.origin=frame.origin;combined.frame=frame.frame.clone();combined.thread=frame.thread.clone();combined.layout=frame.layout.clone();combined.contours=frame.contours.clone();return Some(combined);
         }
-        let (li, id) = self.primary()?;
-        let s = self.doc.find_shape(li, id)?;
-        match &s.geom {
-            Geom::Text(run) => Some(run.clone()),
-            _ => None,
-        }
+        Some(frame.clone())
     }
 
     pub fn set_tool(&mut self, t: Tool) {

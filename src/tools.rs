@@ -156,7 +156,7 @@ impl Tool {
             Tool::Star => "Drag a star. Points and inner radius live in Transform.",
             Tool::Line => "Drag a straight line. Shift snaps to 45°.",
             Tool::Text => {
-                "Click for point text or click a path outline to type on it. Esc finishes."
+                "Click for point text, drag for a text box, or click a path outline. Esc finishes."
             }
             Tool::Gradient => {
                 "Drag across a selected shape to place its active fill or stroke gradient."

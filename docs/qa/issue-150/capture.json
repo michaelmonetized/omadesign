@@ -1,0 +1,12 @@
+{
+  "catalog": null,
+  "fps": 10,
+  "interaction": "real egui pointer and keyboard events",
+  "profile": "/tmp/omadesign-recording-2137050",
+  "renderer": "native WGPU",
+  "scene": "area-type",
+  "size": [
+    1600,
+    900
+  ]
+}

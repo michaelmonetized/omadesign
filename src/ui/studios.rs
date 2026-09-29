@@ -58,6 +58,7 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                 .auto_shrink([false, true])
                 .show(ui, |ui| {
                     super::selection::arrange_panel(ui, studio);
+                    super::text_geometry::wrap_inspector(ui, studio);
                     section_gap(ui);
                     if motion {
                         motion_studio(ui, studio);
@@ -929,6 +930,7 @@ fn apply_stroke(studio: &mut Studio, stroke: Option<DocStroke>) {
 
 fn character_studio(ui: &mut Ui, studio: &mut Studio) {
     heading(ui, "Typography");
+    super::text_geometry::frame_inspector(ui, studio);
     super::text_geometry::path_inspector(ui, studio);
     let live = studio.selected_type();
     let font = live
@@ -1584,9 +1586,7 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
             if layout_frame {
                 studio.set_layout_frame_bounds(layer, id, destination);
             } else {
-                edit_shape_geometry(studio, layer, id, |geometry| {
-                    geometry.map_into(bounds, destination)
-                });
+                studio.transform_shape_with_text_scale(layer, id, destination);
             }
         }
     }
@@ -2533,6 +2533,8 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                                 }
                                             }
                                         } else {
+                                            if matches!(&shape.geom, Geom::Text(t) if t.layout.as_ref().is_some_and(|l|l.overflow)) { ui.colored_label(eframe::egui::Color32::from_rgb(240,55,75), "+").on_hover_text("Text overflows its frame"); }
+                                            let name_width = (ui.available_width() - 50.0).max(42.0);
                                             let guide_name;
                                             let name = if shape.guide {
                                                 guide_name = format!("Guide · {}", shape.name);
@@ -3078,6 +3080,21 @@ fn expanded_keyframes_and_effects_respect_the_resized_panel() {
                 (width - target_width).abs() <= 1.0,
                 "Trace grew {target_width}px panel to {width}px"
             );
+        }
+    }
+}
+
+#[test]
+fn area_text_inspector_keeps_compact_width_while_typing() {
+    let ctx=eframe::egui::Context::default();crate::ui::theme::apply(&ctx);
+    let mut studio=Studio::new();studio.active_layer=Some(1);studio.persona=Persona::Design;studio.text_px=25.;
+    studio.place_area_text(crate::geom::Bounds::from_min_size(crate::geom::Pt::new(70.,100.),crate::geom::Pt::new(350.,250.)));
+    studio.type_insert(&"Editable area text wraps and retains hidden source. ".repeat(12));
+    for editing in [true,false] {
+        if !editing {studio.commit_type_edit();}
+        for _ in 0..8 {
+            let mut width=0.;let mut output=ctx.run_ui(eframe::egui::RawInput{screen_rect:Some(eframe::egui::Rect::from_min_size(eframe::egui::Pos2::ZERO,vec2(960.,640.))),..Default::default()},|ui|{right_panel(ui,&mut studio);width=960.-ui.available_width();});
+            output.textures_delta.clear();assert!(width<=304.,"area inspector grew to {width}px while editing={editing}");
         }
     }
 }

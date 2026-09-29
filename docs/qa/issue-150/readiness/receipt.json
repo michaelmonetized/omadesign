@@ -1,0 +1,37 @@
+{
+  "source_commit": "ccb06e808d0c630fb60c138710a0be02783f3578",
+  "production_fix_commit": "a78af9fd53c55ce6ae7c35e1e9c15a76d616a990",
+  "test_only_followup": "1c7237c7d5334f52ed283b4f9af48d5e422747a1",
+  "recording_binary_sha256": "44bdd68491c5a66df8fb93f6b575dff0e6cc8bf9cfeeeb615e7c3f04745bff21",
+  "regression_binary_sha256": "6be7022f8f79e6737797eb6bc32292e319e8cfcf04010ed366d65fd9fb8c8ce3",
+  "capture": {
+    "width": 1600,
+    "height": 900,
+    "r_frame_rate": "10/1",
+    "duration": "25.000000",
+    "nb_frames": "250"
+  },
+  "passed_native_checkpoints": 11,
+  "native_errors": [],
+  "focus_tests": {
+    "readiness": {
+      "passed": 5,
+      "failed": 0
+    },
+    "clipboard": {
+      "passed": 21,
+      "failed": 0
+    },
+    "area_before_test_expectation_correction": {
+      "passed": 23,
+      "failed": 1,
+      "failure": "Version10 assertion changed to12 because populated targets gain preserved explicit metrics."
+    }
+  },
+  "before_base": "df325889",
+  "before_regressions": {
+    "passed": 1,
+    "failed": 4
+  },
+  "validation_note": "The test-only 1c7237c7 assertion change does not affect the native binary. Its integrated rerun is recorded by the parent agent full-suite receipt. No subsequent production edits occurred after this exact-source build."
+}

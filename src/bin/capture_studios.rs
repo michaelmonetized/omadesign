@@ -23,6 +23,9 @@ const SIZE: [u32; 2] = [1600, 900];
 enum Target {
     FirstPathText,
     PathStartHandle,
+    FrameOut(usize),
+    FrameText(usize),
+    FrameCaret(usize, usize),
     Text(&'static str),
     FieldNth(&'static str, usize),
     Any(&'static str),
@@ -56,6 +59,9 @@ enum ActionKind {
     VerifySpacing(&'static str),
     CheckPath(&'static str),
     NativeClipboard(&'static str),
+    CheckArea(&'static str),
+    CheckIntegrity(&'static str),
+    Reveal(&'static str),
 }
 struct Action {
     start: u32,
@@ -200,6 +206,88 @@ fn schedule(scene: &str) -> Vec<Action> {
         "path-clipboard" => vec![
             event(0.7,Click(FirstPathText)),event(1.2,NativeClipboard("c")),event(1.8,Click(Any("Edit"))),event(2.2,Click(Any("Paste"))),event(3.2,CheckPath("paste-alone")),
             event(3.7,Key(egui::Key::Z,ctrl())),event(4.2,Key(egui::Key::A,ctrl())),event(4.7,NativeClipboard("c")),event(5.3,Click(Any("Edit"))),event(5.7,Click(Any("Paste"))),event(7.,CheckPath("paste-together")),event(7.5,Key(egui::Key::Z,ctrl())),
+        ],
+        "area-integrity" => vec![
+            event(0.6,CheckIntegrity("baseline")),event(1.,Click(FrameText(0))),
+            event(2.,Click(FrameOut(0))),event(2.6,Click(FrameText(2))),event(3.5,CheckIntegrity("rejected")),
+            event(5.,Click(FrameText(0))),event(5.5,Click(FrameOut(0))),event(6.1,Click(FrameText(1))),event(7.,CheckIntegrity("merged")),
+            event(8.,Key(egui::Key::T,Modifiers::NONE)),event(8.5,Click(FrameCaret(1,2))),
+            drag(9.2,1.,Drag(FrameCaret(1,2),FrameCaret(1,7))),event(10.5,CheckIntegrity("forward")),
+            event(11.,Click(FrameCaret(1,7))),event(11.6,CheckIntegrity("collapsed")),
+            drag(12.,1.,Drag(FrameCaret(1,7),FrameCaret(1,2))),event(13.4,CheckIntegrity("backward")),
+            drag(14.,0.7,Type("EDITED")),event(15.2,Key(egui::Key::Escape,Modifiers::NONE)),event(15.8,CheckIntegrity("replacement")),
+            event(16.5,Key(egui::Key::Z,ctrl())),event(17.2,CheckIntegrity("merged")),
+            event(18.,Key(egui::Key::Z,Modifiers{shift:true,..ctrl()})),event(18.8,CheckIntegrity("replacement")),
+            event(19.5,Key(egui::Key::Z,ctrl())),event(20.2,CheckIntegrity("merged")),
+            event(21.,Key(egui::Key::S,ctrl())),event(22.2,ReopenSaved),event(23.2,CheckIntegrity("reopened")),
+        ],
+        "area-valign" => vec![
+            event(0.7,Click(Text("Arrange"))),event(1.2,Click(Text("Align"))),
+            event(2.,Click(Text("Frame Center"))),event(3.,CheckArea("aligned-clear")),
+            event(4.,Click(Text("Frame Bottom"))),event(5.,CheckArea("aligned-clear")),
+            event(6.,Click(Text("Frame Justify"))),event(7.,CheckArea("aligned-clear")),
+            event(8.,Click(Text("Frame Top"))),event(9.,CheckArea("aligned-clear")),
+            event(10.,Key(egui::Key::S,ctrl())),event(11.2,ReopenSaved),event(12.2,CheckArea("aligned-clear")),
+        ],
+        "area-invert" => vec![
+            event(0.7,Click(World(230.,210.))),event(1.2,Click(Text("Arrange"))),event(1.7,Click(Text("Align"))),event(2.2,Click(Text("Text wrap"))),
+            event(3.,Click(Text("Invert: flow inside object"))),event(4.,CheckArea("wrap-inside-visible")),
+            drag(5.,0.8,Delta(Field("Offset"),10.)),event(6.2,CheckArea("wrap-inside-visible")),
+            event(7.,Key(egui::Key::S,ctrl())),event(8.2,ReopenSaved),event(9.2,CheckArea("wrap-inside-visible")),
+        ],
+        "area-options" => vec![
+            event(0.7,Click(Text("Arrange"))),event(1.1,Click(Text("Align"))),
+            event(2.,Click(Text("Frame Center"))),event(3.,CheckArea("valign-center")),
+            event(4.,Click(Text("Frame Bottom"))),event(5.,CheckArea("valign-bottom")),
+            event(6.,Click(Text("Frame Justify"))),event(7.,CheckArea("valign-justify")),event(8.,Click(Text("Frame Top"))),
+            drag(9.,0.8,Delta(Field("Inset top"),16.)),drag(10.,0.8,Delta(Field("Inset right"),16.)),drag(11.,0.8,Delta(Field("Inset bottom"),16.)),drag(12.,0.8,Delta(Field("Inset left"),16.)),event(13.,CheckArea("insets")),
+            event(14.,Click(Text("Clip"))),event(14.5,Click(Any("Visible"))),event(15.5,CheckArea("visible")),event(16.,Click(Text("Visible"))),event(16.5,Click(Any("Clip"))),
+            event(17.,Click(Text("Auto height"))),event(18.,CheckArea("auto-height")),event(19.,Click(Text("Auto height"))),
+            event(20.,Click(Text("Limit lines"))),event(21.,Click(Text("Clip"))),event(21.5,Click(Any("Ellipsis"))),event(22.5,CheckArea("ellipsis")),event(23.,Click(Text("Limit lines"))),
+            event(24.,Click(Any("Object"))),event(24.5,Click(Any("Type"))),event(25.,Click(Any("Convert to point text"))),event(25.5,CheckArea("point")),
+            event(26.,Click(Any("Object"))),event(26.5,Click(Any("Type"))),event(27.,Click(Any("Convert to area text"))),event(27.5,CheckArea("area")),event(27.7,Key(egui::Key::Z,ctrl())),event(27.9,Key(egui::Key::Z,ctrl())),
+            event(28.,Key(egui::Key::T,Modifiers::NONE)),event(28.2,Click(FrameText(0))),event(28.4,Key(egui::Key::Home,ctrl())),event(28.6,Click(Text("Text frame"))),drag(29.,1.5,Reveal("Line breaking")),event(31.,Click(Text("Line breaking"))),
+            drag(31.5,1.5,Reveal("Hyphenate")),event(33.5,Click(Text("Hyphenate"))),event(34.,CheckArea("hyphenated")),event(34.5,Click(Text("Hyphenation settings"))),
+            drag(35.,1.5,Reveal("Consecutive lines")),drag(37.,0.8,Delta(Field("Minimum word length"),80.)),drag(38.,0.8,Delta(Field("Before hyphen"),-80.)),drag(39.,0.8,Delta(Field("After hyphen"),-80.)),
+            drag(40.,1.2,Reveal("Consecutive lines")),drag(41.5,0.8,Delta(Field("Consecutive lines"),-100.)),event(42.5,CheckArea("hyphen-limits")),
+            event(42.8,Key(egui::Key::Escape,Modifiers::NONE)),event(43.,Key(egui::Key::V,Modifiers::NONE)),event(43.5,Click(World(230.,210.))),event(44.,Scroll(3000.)),
+            event(45.,Click(Text("Text wrap"))),event(46.,Click(Text("Wrap None"))),event(46.5,Click(Text("Wrap Bounding box"))),
+            drag(47.,0.8,Delta(Field("Top"),16.)),drag(48.,0.8,Delta(Field("Right"),16.)),event(49.,CheckArea("wrap-box")),
+            event(50.,Click(Text("Wrap Bounding box"))),event(50.5,Click(Text("Wrap Object shape"))),drag(51.,0.8,Delta(Field("Offset"),10.)),
+            event(52.,Click(Text("Invert: flow inside object"))),event(53.,CheckArea("wrap-inside")),event(54.,Click(Text("Invert: flow inside object"))),
+            event(55.,Click(Text("Wrap Object shape"))),event(55.5,Click(Text("Wrap Jump object"))),event(56.5,CheckArea("wrap-jump")),
+            event(57.,Click(Text("Wrap Jump object"))),event(57.5,Click(Text("Wrap None"))),event(58.5,CheckArea("wrap-none")),
+            event(59.,Click(Text("Wrap None"))),event(59.5,Click(Text("Wrap Object shape"))),event(60.5,Click(Text("Ignore on locked layers"))),event(61.5,Click(Text("Wrap affects text above only"))),event(62.5,CheckArea("wrap-options")),event(62.8,Click(Text("Wrap affects text above only"))),
+            drag(63.,1.5,Drag(World(230.,210.),World(330.,280.))),event(65.,Key(egui::Key::Z,ctrl())),
+            event(66.,Key(egui::Key::S,ctrl())),event(67.2,ReopenSaved),event(68.2,CheckArea("hyphen-limits")),
+        ],
+        "area-type" => vec![
+            event(0.7,Key(egui::Key::T,Modifiers::NONE)),
+            drag(1.1,1.3,Drag(World(70.,100.),World(420.,350.))),
+            drag(2.8,5.,Type("A single story can travel through several frames. Every word remains editable as the layout changes. A circular illustration pushes the lines to either side of its actual outline. Move the illustration and the paragraph immediately finds new space.
+Typography stays readable with deliberate hyphenation, useful overflow controls, and frames that resize without stretching the letters. This final paragraph continues in another frame, keeping the original text and all of its paragraph settings intact.")),
+            event(8.,Key(egui::Key::Escape,Modifiers::NONE)),event(8.4,CheckArea("created")),
+            event(8.8,Click(Text("Arrange"))),event(9.1,Click(Text("Align"))),
+            event(9.5,Click(FrameOut(0))),event(10.1,Click(World(520.,100.))),event(11.,CheckArea("two")),
+            event(11.5,Click(FrameOut(1))),event(12.1,Click(World(520.,390.))),event(13.,CheckArea("three")),
+            event(13.5,Click(Any("View"))),event(14.,Click(Any("Show text threads"))),event(14.4,Key(egui::Key::Escape,Modifiers::NONE)),event(14.7,Key(egui::Key::V,Modifiers::NONE)),
+            event(15.,Click(FrameText(1))),event(15.5,Key(egui::Key::Delete,Modifiers::NONE)),event(16.2,CheckArea("middle-deleted")),
+            event(17.,Key(egui::Key::Z,ctrl())),event(17.6,CheckArea("three")),
+            event(18.,Key(egui::Key::V,Modifiers::NONE)),event(18.5,Click(World(230.,210.))),
+            drag(19.,1.4,Drag(World(230.,210.),World(285.,245.))),
+            event(21.,Click(FrameText(0))),drag(21.5,1.2,Delta(Field("Width"),-60.)),
+            event(23.,CheckArea("resized")),
+            event(23.5,Click(FrameText(2))),event(24.,Click(Any("Clip"))),event(24.5,Click(Any("Ellipsis"))),
+            event(25.,Click(Any("Limit lines"))),event(25.5,Click(Text("Frame Bottom"))),event(26.5,CheckArea("ellipsis")),
+            event(27.,Key(egui::Key::T,Modifiers::NONE)),event(27.5,Click(FrameText(1))),event(28.,Key(egui::Key::A,ctrl())),
+            drag(28.5,3.,Type("Editing a threaded frame edits its entire story. Selection crosses frame boundaries, and undo restores every original word. The text remains editable while the frame size, wrapping obstacle, and overflow preferences stay independent.")),
+            event(32.,Key(egui::Key::Escape,Modifiers::NONE)),event(32.5,CheckArea("edited")),
+            event(33.,Key(egui::Key::Z,ctrl())),event(34.,CheckArea("story-restored")),
+            event(35.,Key(egui::Key::V,Modifiers::NONE)),event(35.5,Click(World(285.,245.))),
+            event(36.,Click(Any("Object"))),event(36.5,Click(Any("Type"))),event(37.,Click(Any("Text inside shape"))),
+            drag(37.5,3.,Type("A closed outline becomes an editable text frame. Words follow its interior while every hidden word stays in the original story.")),
+            event(41.,Key(egui::Key::Escape,Modifiers::NONE)),event(42.,CheckArea("shape-frame")),
+            event(43.,Key(egui::Key::S,ctrl())),event(44.2,ReopenSaved),event(45.2,CheckArea("shape-frame")),
         ],
         "path-type" => vec![
             event(0.7, Key(egui::Key::T, Modifiers::NONE)),
@@ -659,6 +747,13 @@ impl Encoder {
         assert!(self.child.wait().unwrap().success());
     }
 }
+fn integrity_text(index: usize) -> String {
+    match index {
+        0 => "Every word remains in its story when editing a following frame. The first frame stays untouched, while selection follows the rotated target precisely. ".repeat(2),
+        1 => "Styled target retains its own tracking, line height, features and paragraph alignment.\noffice 123 remains editable after threading.".into(),
+        _ => "Different size stays safe. Match settings or choose an empty frame.".into(),
+    }
+}
 struct Capture {
     studio: Studio,
     scene: String,
@@ -680,6 +775,9 @@ struct Capture {
     ready_since: Instant,
     spacing_reference: Option<Geom>,
     spacing_resized: Option<Geom>,
+    integrity_checks: Vec<serde_json::Value>,
+    integrity_baseline: Option<(String, usize)>,
+    integrity_selection: Option<(usize,usize,String)>,
     path_delete_snapshot: Option<(u64, Vec<(u64, Option<u64>)>, serde_json::Value)>,
 }
 
@@ -900,6 +998,36 @@ fn seed(scene: &str) -> Studio {
             *s.doc.layers[0].kind.shapes_mut().unwrap() = vec![bg, subject];
         }
 
+        "area-integrity" => {
+            use omadesign::{document::{Shape,Style,Fill}, geom::{TypeRun,TextAlign,CharSpan,Leading}, text_geometry::TextFrame};
+            s.doc=Document::new("Safe threading and precise follower selection",960.,680.,96.);
+            let font=fs::canonicalize("tests/assets/fonts/EBGaramond.ttf").unwrap().to_string_lossy().into_owned();
+            for index in 0..3 {
+                let mut run=TypeRun{origin:if index==0{Pt::new(70.,120.)}else if index==1{Pt::new(470.,140.)}else{Pt::new(70.,490.)},content:integrity_text(index),font:font.clone(),px:if index==2{34.}else{24.},frame:Some(TextFrame{size:if index==1{Pt::new(350.,380.)}else{Pt::new(330.,160.)},..Default::default()}),..Default::default()};
+                if index==0 {run.features=vec![(*b"dlig",1)];}
+                if index==1 {run.tracking=1.2;run.leading=34.;run.align=TextAlign::End;run.liga=false;run.tnum=true;run.spans=vec![CharSpan{start:0,end:6,tracking:Some(80.),leading:Some(Leading::Fixed(38.)),baseline_shift:Some(2.),..Default::default()}];}
+                let mut shape=Shape::new(Geom::Text(run),Style{fill:Fill::Solid(Rgba::from_hex(0x18364A)),stroke:None});
+                shape.name=["Source story", "Compatible styled target", "Different size: retain both stories"][index].into();
+                if index==1 {shape.rotation=0.18;}
+                s.doc.layers[1].kind.shapes_mut().unwrap().push(shape);
+            }
+            s.persona=Persona::Design;s.tool=Tool::Select;s.active_layer=Some(1);s.mark();
+        }
+        "area-type" | "area-options" | "area-invert" | "area-valign" => {
+            use omadesign::{document::{Layer,Shape,Style,Fill},text_geometry::{TextWrap,WrapMode}};
+            s.doc=Document::new("Area text and threaded stories · issue 150",960.,680.,96.);
+            let mut circle=Shape::new(Geom::Ellipse{center:Pt::new(230.,210.),radii:Pt::splat(58.)},Style{fill:Fill::Solid(Rgba::from_hex(0xC5E2E4)),stroke:None});
+            circle.text_wrap=TextWrap{mode:if scene=="area-options"{WrapMode::None}else{WrapMode::ObjectShape},offset:if scene=="area-options"{[0.;4]}else{[10.;4]},..Default::default()};
+            if scene=="area-invert" || scene=="area-valign" {circle.style.fill=Fill::None;circle.style.stroke=Some(omadesign::document::Stroke{width:2.,color:Rgba::from_hex(0x7295AD),..Default::default()});}
+            let mut layer=Layer::vector("Wrap illustration");layer.kind.shapes_mut().unwrap().push(circle);s.doc.layers.push(layer);
+            s.active_layer=Some(1);s.persona=Persona::Design;s.tool=Tool::Text;s.text_px=25.;s.style=Style{fill:Fill::Solid(Rgba::from_hex(0x18364A)),stroke:None};
+            if scene=="area-options" || scene=="area-invert" || scene=="area-valign" {
+                s.place_area_text(omadesign::geom::Bounds::from_min_size(Pt::new(70.,100.),Pt::new(350.,250.)));
+                if scene=="area-invert" {s.type_insert("Type flows inside the circle. Hidden text stays editable.");} else if scene=="area-valign" {s.type_insert("One two three four\nFive six seven eight");} else {s.type_insert("Typography remains editable through hyphenation, transformation, internationalization, and collaboration. A circular illustration can push the words aside, make them jump below its bounds, or contain them inside its outline. Every character stays in the story when visible text is clipped or ends in an ellipsis.\nThe next paragraph retains its own settings, while auto height, insets and vertical alignment provide practical control over the frame.");}
+                s.commit_type_edit();s.tool=Tool::Select;
+            }
+
+        }
         "path-type" | "path-clipboard" => {
             use omadesign::{geom::Anchor,document::{Shape,Style,Fill,Stroke}};
             s.doc=Document::new("Live type on paths · issue 149",960.,680.,96.);
@@ -1087,7 +1215,7 @@ fn seed(scene: &str) -> Studio {
 impl Capture {
     fn new(scene: String, directory: PathBuf, probe: bool, fps: u32) -> Self {
         let mut studio = seed(&scene);
-        if matches!(scene.as_str(), "independent-effects" | "paragraphs" | "opentype" | "spacing" | "spacing-resize" | "path-type") {
+        if matches!(scene.as_str(), "independent-effects" | "paragraphs" | "opentype" | "spacing" | "spacing-resize" | "path-type" | "area-type" | "area-options" | "area-invert" | "area-valign" | "area-integrity") {
             studio.path = Some(directory.join(format!("{scene}-final.oma")));
         }
         if scene == "spacing" { studio.load_startup_preferences(); }
@@ -1098,6 +1226,11 @@ impl Capture {
             "spacing-resize" => 18,
             "path-type" => 60,
             "path-clipboard" => 9,
+            "area-type" => 47,
+            "area-options" => 70,
+            "area-invert" => 12,
+            "area-valign" => 14,
+            "area-integrity" => 25,
             "welcome-browse" => 23,
             "welcome-vector" | "welcome-layout" => 9,
             "welcome-raster" => 8,
@@ -1139,6 +1272,9 @@ impl Capture {
             errors: vec![],
             fps,
             ready_since: Instant::now(),
+            integrity_checks: vec![],
+            integrity_baseline: None,
+            integrity_selection: None,
             path_delete_snapshot: None,
         }
     }
@@ -1196,6 +1332,15 @@ impl Capture {
                 .map(|(_, r)| *r)
         };
         match t {
+            Target::FrameCaret(index, offset) => {
+                let shape=self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter(|s|matches!(&s.geom,Geom::Text(t) if t.frame.is_some())).nth(*index)?;
+                let Geom::Text(run)=&shape.geom else{return None;};let start=run.layout.as_ref()?.visible_start;
+                let p=shape.world_point(omadesign::text::caret_pt(run,start+offset));Some(self.world(p.x,p.y))
+            },
+            Target::FrameOut(index) | Target::FrameText(index) => {
+                let run=self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter_map(|s|if let Geom::Text(t)=&s.geom{t.frame.as_ref().map(|_|t)}else{None}).nth(*index)?;
+                let p=if matches!(t,Target::FrameOut(_)){omadesign::text_geometry::frame_bounds(run)?.max-Pt::new(0.,12./self.studio.view.scale)}else{{ let bounds=omadesign::text_geometry::frame_bounds(run)?;let inset=12./self.studio.view.scale;let input=bounds.min+Pt::new(0.,inset);let output=bounds.max-Pt::new(0.,inset);run.contours.iter().flatten().find(|p|(**p-input).length()>24./self.studio.view.scale&&(**p-output).length()>24./self.studio.view.scale).copied().unwrap_or(bounds.center()) }};Some(self.world(p.x,p.y))
+            },
             Target::FirstPathText | Target::PathStartHandle => {
                 let run=self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().find_map(|s|if let Geom::Text(t)=&s.geom {t.on_path.as_ref().map(|_|t)}else{None})?;
                 if matches!(t,Target::PathStartHandle){let (p,tangent)=omadesign::text_geometry::path_position(run,0.)?;Some(self.world(p.x,p.y)-egui::vec2(tangent.x,tangent.y)*6.)}
@@ -1283,6 +1428,31 @@ impl Capture {
             },
         ]);
     }
+    fn check_integrity(&mut self, phase: &str) {
+        let texts:Vec<_>=self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter_map(|s|if let Geom::Text(t)=&s.geom{Some((s.id,t))}else{None}).collect();
+        let encoded=omadesign::project::encode(&self.studio.doc).unwrap();
+        let merged=format!("{}\n{}",integrity_text(0),integrity_text(1));
+        let correct_merge=texts.len()==3&&texts[0].1.content==merged&&texts[1].1.content.is_empty()&&texts[2].1.content==integrity_text(2)
+            &&texts[0].1.thread.as_ref().is_some_and(|t|t.next==Some(texts[1].0))&&texts[1].1.thread.as_ref().is_some_and(|t|t.prev==Some(texts[0].0)&&t.story==texts[0].0)
+            &&{let offset=integrity_text(0).chars().count()+1;let style=omadesign::text::character_metrics(texts[0].1,offset+8);style.tracking==Some(50.)&&style.leading==Some(omadesign::geom::Leading::Fixed(34.))&&omadesign::text::feature_value(texts[0].1,offset+8,*b"liga")==0&&omadesign::text::feature_value(texts[0].1,offset+8,*b"dlig")==0&&omadesign::text::paragraph_style(texts[0].1,offset+8).align==omadesign::geom::TextAlign::End};
+        let passed=match phase {
+            "baseline"=>{self.integrity_baseline=Some((encoded.clone(),self.studio.history.len()));texts.len()==3},
+            "rejected"=>self.integrity_baseline.as_ref().is_some_and(|(doc,history)|doc==&encoded&&*history==self.studio.history.len())&&self.studio.status.contains("Cannot merge populated"),
+            "merged"=>correct_merge,
+            "reopened"=>correct_merge&&self.studio.tab_count()>1&&self.studio.history.len()==0,
+            "forward" | "backward" | "collapsed"=>{
+                let start=texts[1].1.layout.as_ref().unwrap().visible_start+2;let end=start+5;
+                if phase=="forward"{self.integrity_selection=Some((start,end,merged.clone()));}
+                self.studio.type_edit.as_ref().is_some_and(|edit| edit.id==texts[0].0&&if phase=="collapsed" {edit.anchor==end&&edit.caret==end} else if phase=="forward"{edit.anchor==start&&edit.caret==end}else{edit.anchor==end&&edit.caret==start})
+            },
+            "replacement"=>self.integrity_selection.as_ref().is_some_and(|(start,end,original)|texts[0].1.content==format!("{}EDITED{}",original.chars().take(*start).collect::<String>(),original.chars().skip(*end).collect::<String>())&&texts[1].1.content.is_empty()),
+            _=>false,
+        };
+        let detail=serde_json::json!({"phase":phase,"passed":passed,"frame":self.frame,"status":self.studio.status,"source":texts.first().map(|(_,t)|&t.content),"selection":self.studio.type_edit.as_ref().map(|e|(e.anchor,e.caret)),"history":self.studio.history.len()});
+        self.integrity_checks.push(detail);
+        fs::write(self.directory.join("integrity-checks.json"),serde_json::to_vec_pretty(&self.integrity_checks).unwrap()).unwrap();
+        if !passed {self.errors.push(format!("text integrity phase {phase} failed"));}
+    }
     fn step(&mut self) {
         let mut actions = std::mem::take(&mut self.actions);
         for a in &mut actions {
@@ -1291,6 +1461,41 @@ impl Capture {
             }
             if self.frame == a.start {
                 match &a.kind {
+                    ActionKind::CheckIntegrity(phase) => { self.check_integrity(phase); },
+                    ActionKind::CheckArea(phase) => {
+                        let frames:Vec<_>=self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter_map(|s|if let Geom::Text(t)=&s.geom{t.frame.as_ref().map(|_|(s.id,t))}else{None}).collect();
+                        let count=frames.len();let head=frames.iter().find(|(_,t)|t.thread.as_ref().is_none_or(|t|t.prev.is_none())).map(|(_,t)|*t);
+                        let wrap=self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().find(|s|matches!(s.geom,Geom::Ellipse{..})).map(|s|&s.text_wrap);
+                        let passed=match *phase{
+                            "valign-center"=>head.is_some_and(|t|t.frame.as_ref().unwrap().valign==omadesign::text_geometry::VAlign::Center),
+                            "valign-bottom"=>head.is_some_and(|t|t.frame.as_ref().unwrap().valign==omadesign::text_geometry::VAlign::Bottom),
+                            "valign-justify"=>head.is_some_and(|t|t.frame.as_ref().unwrap().valign==omadesign::text_geometry::VAlign::Justify),
+                            "insets"=>head.is_some_and(|t|t.frame.as_ref().unwrap().inset.iter().all(|v|*v>0.)),
+                            "visible"=>head.is_some_and(|t|t.frame.as_ref().unwrap().overflow==omadesign::text_geometry::Overflow::Visible && t.layout.as_ref().is_some_and(|l|l.overflow)),
+                            "auto-height"=>head.is_some_and(|t|t.frame.as_ref().is_some_and(|f|f.auto_height&&f.size.y>250.)),
+                            "point"=>count==0 && self.studio.selected_type().is_some_and(|t|t.frame.is_none()),
+                            "area"=>count==1,
+                            "hyphenated"=>head.is_some_and(|t|omadesign::text::paragraph_style(t,0).hyphenate),
+                            "hyphen-limits"=>head.is_some_and(|t|omadesign::text::paragraph_style(t,0).hyphen.is_some_and(|h|h.min_word_len!=6&&h.min_before==1&&h.min_after==1&&h.max_consecutive==0)),
+                            "wrap-box"=>wrap.is_some_and(|w|w.mode==omadesign::text_geometry::WrapMode::BoundingBox&&w.offset[0]>0.&&w.offset[1]>0.),
+                            "aligned-clear"=>head.is_some_and(|t|t.layout.as_ref().is_some_and(|l|l.visible_end==t.content.chars().count())&&!t.contours.is_empty()&&t.contours.iter().flatten().all(|point|(*point-Pt::new(230.,210.)).length()>=58.-0.5)),
+                            "wrap-inside-visible"=>wrap.is_some_and(|w|w.mode==omadesign::text_geometry::WrapMode::ObjectShape&&w.invert)&&head.is_some_and(|t|!t.contours.is_empty()&&t.contours.iter().flatten().all(|point|(*point-Pt::new(230.,210.)).length()<=58.+wrap.unwrap().offset[0]+0.5)),
+                            "wrap-inside"=>wrap.is_some_and(|w|w.mode==omadesign::text_geometry::WrapMode::ObjectShape&&w.invert&&w.offset[0]>0.),
+                            "wrap-jump"=>wrap.is_some_and(|w|w.mode==omadesign::text_geometry::WrapMode::JumpObject),
+                            "wrap-none"=>wrap.is_some_and(|w|w.mode==omadesign::text_geometry::WrapMode::None),
+                            "wrap-options"=>wrap.is_some_and(|w|w.ignore_locked) && self.studio.doc.text_wrap_above_only,
+
+                            "shape-frame"=>frames.iter().any(|(_,t)|t.frame.as_ref().is_some_and(|f|f.contour.is_some())&&!t.contours.is_empty()),
+                            "created"=>count==1&&head.is_some_and(|t|t.layout.as_ref().is_some_and(|l|l.overflow)),
+                            "two"=>count==2&&frames.iter().all(|(_,t)|t.thread.is_some()),
+                            "three"=>count==3&&frames.iter().all(|(_,t)|t.thread.is_some()),
+                            "middle-deleted"=>count==2&&frames.iter().all(|(_,t)|t.thread.is_some()),
+                            "resized"=>head.is_some_and(|t|t.frame.as_ref().unwrap().size.x<345.&&t.px==25.),
+                            "ellipsis"=>frames.iter().any(|(_,t)|t.frame.as_ref().is_some_and(|f|f.overflow==omadesign::text_geometry::Overflow::Ellipsis&&f.max_lines==Some(1))),
+                            "edited"=>head.is_some_and(|t|t.content.starts_with("Editing a threaded")),
+                            "story-restored"=>head.is_some_and(|t|t.content.starts_with("A single story")),_=>false};
+                        if !passed{self.errors.push(format!("area lifecycle {phase} failed: {count} frames"));}
+                    },
                     ActionKind::NativeClipboard(key) => {
                         let focus=format!("hl.dsp.focus({{window=\"pid:{}\"}})",std::process::id());
                         let _=Command::new("hyprctl").args(["dispatch",&focus]).output();
@@ -1409,7 +1614,7 @@ impl Capture {
                         if !path.exists(){self.errors.push(format!("native saved file missing: {}",path.display()));}else{self.studio.open_path(path);}
                     }
                     ActionKind::VerifySpacing(stage) => self.verify_spacing(stage),
-                    ActionKind::Type(_) => {}
+                    ActionKind::Type(_) | ActionKind::Reveal(_) => {}
                     ActionKind::Drag(from, to) => a.points = self.target(from).zip(self.target(to)),
                     ActionKind::Delta(t, dx) => {
                         a.points = self.target(t).map(|p| (p, p + egui::vec2(*dx, 0.)))
@@ -1432,6 +1637,13 @@ impl Capture {
                         self.errors
                             .push(format!("frame {}: {:?} target missing", self.frame, a.kind));
                     }
+                }
+            }
+            if let ActionKind::Reveal(label) = &a.kind {
+                let shown=self.labels.iter().any(|(text,r)|text==label&&r.left()>1100.&&r.top()>80.&&r.bottom()<650.);
+                if !shown {
+                    let p=egui::pos2(1440.,520.);self.cursor=p;self.events.extend([Event::PointerMoved(p),Event::MouseWheel{unit:egui::MouseWheelUnit::Point,delta:egui::vec2(0.,-60.),modifiers:Modifiers::NONE,phase:egui::TouchPhase::Move}]);
+                    if self.frame==a.end {self.errors.push(format!("inspector label {label} not revealed"));}
                 }
             }
             if let ActionKind::Type(text) = &a.kind {
@@ -1491,6 +1703,16 @@ impl Capture {
                 }
             }
         });
+        for label in ["None", "Bounding box", "Object shape", "Jump object"] {
+            if let Some(response)=ctx.read_response(egui::Id::new(("text-wrap-mode",label))) {
+                if response.rect.top()>0. && response.rect.bottom()<700. {self.labels.push((format!("Wrap {label}"),response.rect));}
+            }
+        }
+        for label in ["Top", "Center", "Bottom", "Justify"] {
+            if let Some(response)=ctx.read_response(egui::Id::new(("frame-valign",label))) {
+                if response.rect.top()>0. && response.rect.bottom()<700. {self.labels.push((format!("Frame {label}"),response.rect));}
+            }
+        }
         if let Some(response) = ctx.read_response(egui::Id::new("studio-agent-toggle")) {
             self.labels.push(("Agent".into(), response.rect));
         }
@@ -1647,6 +1869,22 @@ impl eframe::App for Capture {
                         }
                         Err(error) => self.errors.push(format!("Native save failed: {error}")),
                     }
+                }
+                if self.scene=="area-integrity" {
+                    let saved=omadesign::project::load_from(&self.directory.join("area-integrity-final.oma")).unwrap();
+                    let live=omadesign::compositor::export_png(&self.studio.doc,1).unwrap();let reopened=omadesign::compositor::export_png(&saved,1).unwrap();
+                    if live!=reopened{self.errors.push("Saved/reopened text appearance differs".into());}
+                    fs::write(self.directory.join("area-integrity-export.png"),live).unwrap();
+                    fs::write(self.directory.join("area-integrity-export.svg"),omadesign::svg::export(&saved).unwrap()).unwrap();
+                    fs::write(self.directory.join("area-integrity-result.json"),serde_json::to_vec_pretty(&serde_json::json!({"checks":self.integrity_checks,"errors":self.errors,"saved_by_ctrl_s":true,"reopened_by_application":self.studio.tab_count()>1,"recording_frames":self.frame,"renderer":"native WGPU"})).unwrap()).unwrap();
+                    assert!(self.errors.is_empty(),"text integrity recording failed: {:?}",self.errors);
+                }
+                if self.scene=="area-type" || self.scene=="area-options" || self.scene=="area-invert" || self.scene=="area-valign" {
+                    let encoded=omadesign::project::encode(&self.studio.doc).unwrap();fs::write(self.directory.join(format!("{}.oma",self.scene)),&encoded).unwrap();let restored=omadesign::project::decode(&encoded).unwrap();
+                    let frames:Vec<_>=restored.layers.iter().filter_map(|l|l.kind.shapes()).flatten().filter_map(|s|if let Geom::Text(t)=&s.geom{t.frame.as_ref().map(|f|serde_json::json!({"id":s.id,"frame":f,"thread":t.thread,"source_characters":t.content.chars().count(),"visible_range":t.layout.as_ref().map(|l|(l.visible_start,l.visible_end)),"overflow":t.layout.as_ref().is_some_and(|l|l.overflow)}))}else{None}).collect();
+                    fs::write(self.directory.join(format!("{}-export.svg",self.scene)),omadesign::svg::export(&restored).unwrap()).unwrap();
+                    fs::write(self.directory.join(format!("{}-result.json",self.scene)),serde_json::to_vec_pretty(&serde_json::json!({"saved_and_reopened":true,"frames":frames,"unresolved_input_targets":self.errors,"renderer":"native WGPU","recording_frames":self.frame})).unwrap()).unwrap();
+                    assert!(self.errors.is_empty(),"all area text native assertions and UI targets pass");
                 }
                 if self.scene=="path-type" || self.scene=="path-clipboard" {
                     let project=omadesign::project::encode(&self.studio.doc).unwrap();
