@@ -1,0 +1,11 @@
+
+running 6 tests
+test app::alignment::tests::selected_vector_and_pixel_layers_align_as_one_unit ... ok
+test app::alignment::tests::parent_alignment_preserves_hidden_and_locked_group_descendants ... ok
+test app::alignment::tests::selected_visible_layer_carries_locked_objects_but_individual_selection_does_not ... ok
+test app::alignment::tests::shift_multi_aligns_each_to_its_artboard ... ok
+test app::alignment::tests::single_group_aligns_to_artboard_as_unit ... ok
+test app::alignment::tests::single_object_aligns_to_artboard_and_document_fallback ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 709 filtered out; finished in 20.11s
+

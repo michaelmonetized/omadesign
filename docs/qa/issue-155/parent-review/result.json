@@ -1,0 +1,20 @@
+{
+  "checks": [
+    "group is one alignment unit",
+    "remember positions",
+    "selection moved together",
+    "undo restores exact artwork",
+    "selection moved together",
+    "save reopen"
+  ],
+  "fps": 10,
+  "frames": 100,
+  "input": "actual egui pointer and keyboard events",
+  "issue": "155-parent",
+  "renderer": "native WGPU",
+  "size": [
+    1600,
+    1000
+  ],
+  "wall_seconds": 26.910826453
+}

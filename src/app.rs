@@ -25,6 +25,7 @@ mod placement;
 mod recovery;
 mod restart;
 pub(crate) mod selection;
+mod alignment;
 mod shortcuts;
 mod snapping;
 pub mod startup;
@@ -3234,21 +3235,6 @@ impl Studio {
         self.selected_layer = None;
         self.selection = new_ids;
         self.status = "compound released".into();
-    }
-
-    pub fn align_sel(&mut self, how: Align) {
-        crate::telemetry::count("feature.align");
-        let ids = self.selection.clone();
-        let deltas = align::align_items(&self.doc, &ids, how, self.individual_object);
-        self.apply_deltas(&deltas);
-        self.status = "aligned".into();
-    }
-
-    pub fn distribute_sel(&mut self, how: Distribute) {
-        let ids = self.selection.clone();
-        let deltas = align::distribute_items(&self.doc, &ids, how, self.individual_object);
-        self.apply_deltas(&deltas);
-        self.status = "distributed".into();
     }
 
     fn apply_deltas(&mut self, deltas: &[(usize, u64, Pt)]) {

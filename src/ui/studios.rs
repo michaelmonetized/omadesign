@@ -1748,32 +1748,6 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
     }
     if studio.selection.len() >= 2 {
         ui.add_space(4.0);
-        ui.horizontal(|ui| {
-            for (icon, tip, alignment) in [
-                (ph::ALIGN_LEFT, "Align left", crate::align::Align::Left),
-                (
-                    ph::ALIGN_CENTER_H,
-                    "Align centre",
-                    crate::align::Align::CenterX,
-                ),
-                (ph::ALIGN_RIGHT, "Align right", crate::align::Align::Right),
-                (ph::ALIGN_TOP, "Align top", crate::align::Align::Top),
-                (
-                    ph::ALIGN_CENTER_V,
-                    "Align middle",
-                    crate::align::Align::CenterY,
-                ),
-                (
-                    ph::ALIGN_BOTTOM,
-                    "Align bottom",
-                    crate::align::Align::Bottom,
-                ),
-            ] {
-                if icons::tiny_icon(ui, icon, tip, false) {
-                    studio.align_sel(alignment);
-                }
-            }
-        });
         if ui
             .small_button("Group")
             .on_hover_text("Ctrl+G · create an editable layer group")
