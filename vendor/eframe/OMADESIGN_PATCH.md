@@ -42,17 +42,34 @@ canaries showed increased visible UI time for simple drags and brushing; the
 current guard restores upstream visible polling instead of applying that broad
 change. This is a scheduling observation, not proof of a CPU-frequency cause.
 
-Before considering the current guard validated, repeat that identical hidden/visible
-workload and verify that hidden CPU/read activity stops and playback resumes
-without additional input. Also verify visible motion, brush/drag behavior,
-delayed repaints and worker-triggered repaints. Do not impose sleeps or alter
-motion timestamps to hide the problem.
-
 Four unit tests in `native::run::redraw_poll_guard_tests` cover the exact timeout
 boundary, repeated requests, delivery/removal and long-paint reset, one active
 window beside a stalled window, explicit waits/deadlines, and other backends.
-Run them with `cargo test -p eframe --lib redraw_poll_guard_tests`; native QA is
-still required to verify actual callback/wakeup behavior.
+All four [passed](../../docs/qa/performance-158/motion-validation/guard-tests.log).
+Cargo rejects `cargo test -p eframe --lib` because this dependency has
+dev-dependencies and is not a workspace member. The exact, unmodified guard and
+test module were therefore compiled separately with the real `winit` and
+`ahash` types; the [source receipt](../../docs/qa/performance-158/motion-validation/guard-tests-source.json)
+records that scope and source hash. This tests the scheduling decision and does
+not substitute for native event-loop validation.
+
+A separate native WGPU [wakeup probe](../../docs/qa/performance-158/motion-validation/wakeup-result.json)
+linked the exact patched eframe dependency used by application revision
+`b6bad21b`. After a 683.39 ms native-callback idle interval, its delayed-repaint
+check completed 16.12 ms after the requested deadline. After a separate
+700.22 ms idle interval, a worker repaint reached UI in 0.0819 ms. Both checks
+passed without synthetic input, changed timestamps or watchdog repaints.
+[Provenance](../../docs/qa/performance-158/motion-validation/wakeup-provenance.json)
+pins the probe binary and tested dependency; this probe was not rerun against
+the final `35c39093` application binary. The guard source is identical there.
+
+The final `35c39093` native Motion comparison repeated visible playback and the
+hidden/resume protocol. Its strict hidden observation interval recorded zero
+CPU-counter increments and zero read calls, and normal playback/document checks
+passed after the window returned. Visible rendering still consumes CPU.
+The [Motion report](../../docs/qa/performance-158/motion.md) gives the paired
+measurements, interaction results and limits; no sleep or altered motion clock
+was introduced to obtain them.
 
 The patch is kept separately as `omadesign-wayland-wait.patch` for review and an
 upstream submission. Apply it to the pinned upstream crate with

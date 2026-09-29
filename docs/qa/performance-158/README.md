@@ -2,6 +2,8 @@
 
 The native M1 Pro comparison reduces median brush UI work from **28.70 to 9.29 ms**, dragging beneath foreground artwork from **45.21 to 8.61 ms**, and moving on a simple canvas with 24 open tabs from **5.72 to 0.67 ms**. All 24 benchmark processes passed their behavior checks, and all four exported infographics have identical RGBA pixels.
 
+The later [motion follow-up](motion.md) covers the two reported real documents, cold playback and periodic UI hitches, hidden-window scheduling, and another comparison against the interaction build below. Its results and cache budgets are separate; this page retains the original `54d7051c` measurements and evidence.
+
 Compared production source: `caeda653` → `54d7051c`, above the current feature stack. Both sides use identical QA harnesses, original authoring inputs, a fixed 1440 × 900 native WGPU window, and a separate GPU-backed headless Wayland display. This is a local as-used comparison on m1pro16, with synthetic egui pointer and keyboard events; it does not measure operating-system input delivery, physical mouse-to-photon latency or performance on the other fleet hosts. [Methodology, source scope and reproduction](methodology.md).
 
 ## Interaction results

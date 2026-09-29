@@ -1,0 +1,138 @@
+{
+  "source_commit": "35c39093b8e8361a7970909bede8d5114e26022c",
+  "started_utc": "2026-09-29T00:52:03.218675+00:00",
+  "steps": [
+    {
+      "name": "check-all-targets",
+      "command": [
+        "cargo",
+        "check",
+        "--locked",
+        "--all-targets",
+        "-j",
+        "2"
+      ],
+      "exit_code": 0,
+      "seconds": 9.79079850600101
+    },
+    {
+      "name": "library-tests",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--lib",
+        "-j",
+        "2"
+      ],
+      "exit_code": 0,
+      "seconds": 156.5428718449548
+    },
+    {
+      "name": "release-binaries",
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--release",
+        "--lib",
+        "--bin",
+        "omadesign",
+        "--bin",
+        "motion_qa",
+        "--bin",
+        "interaction_qa",
+        "--bin",
+        "authoring_qa",
+        "-j",
+        "2"
+      ],
+      "exit_code": 0,
+      "seconds": 592.4708721210482
+    }
+  ],
+  "tracked_production_source_clean": true,
+  "library_tests": {
+    "passed": 902,
+    "failed": 0,
+    "ignored": 7,
+    "measured": 0,
+    "filtered_out": 0
+  },
+  "binaries": {
+    "omadesign": {
+      "bytes": 61209920,
+      "sha256": "4babe72b0a919508d4cf8bc53bbb71c167eabd6704217ce6a153fdc43a0522eb"
+    },
+    "motion_qa": {
+      "bytes": 60902504,
+      "sha256": "007bd97b9c16d530f8adb0d5c51e150fc62ff19b5adeff827c6a03607105a636"
+    },
+    "interaction_qa": {
+      "bytes": 60919488,
+      "sha256": "db01beb41fe4cb1fdf583d804c2dfe2d90ed7ec546cde0ffa210e6ac7d93cb2a"
+    },
+    "authoring_qa": {
+      "bytes": 60907160,
+      "sha256": "f95de4cac50d0028e5939d41b9886d92d8cc57e3fbd78521595ff5629372424c"
+    }
+  },
+  "cpu_profiler": {
+    "source_commit": "35c39093b8e8361a7970909bede8d5114e26022c",
+    "library_sha256": "37f335be8dd0bb185b7ffadd328fa89e1b905811d076d05bef65594cc1c76e7d",
+    "library_unchanged_during_compile": true,
+    "exit_code": 0,
+    "seconds": 22.921947748982348,
+    "binary_sha256": "c35e45efaa26996ce75416dff00a43400d808c8fbab3d440c75410d3039c26d5",
+    "command": [
+      "rustc",
+      "--edition=2024",
+      "-C",
+      "opt-level=3",
+      "-C",
+      "lto=thin",
+      "-C",
+      "codegen-units=1",
+      "-C",
+      "strip=debuginfo",
+      "-L",
+      "dependency=[target]/release/deps",
+      "-L",
+      "native=[target]/release/build/omadesign-e62b8d18047eb604/out",
+      "-L",
+      "native=[target]/release/build/mozjpeg-sys-d77d8aecde5431f2/out",
+      "-L",
+      "native=[target]/release/build/libz-sys-80466549ce76142b/out/lib",
+      "-L",
+      "native=[target]/release/build/mlua-sys-431f77617285a8fd/out/lib",
+      "-L",
+      "native=[target]/release/build/ring-3fed50a5f66b561c/out",
+      "--extern",
+      "omadesign=[target]/release/deps/libomadesign-e6bea1b7f7100630.rlib",
+      "--extern",
+      "serde_json=[target]/release/deps/libserde_json-27e3e9d5957ff292.rlib",
+      "[motion-artifacts]/motion_profile.rs",
+      "-o",
+      "[motion-artifacts]/candidate-motion-profile"
+    ]
+  },
+  "logs": {
+    "check-all-targets.log": {
+      "sha256": "d9877bfe6a6c680cda39d9ff20fc2a9d0a8a7cf29424ca659af530035ed6590b",
+      "original_log_sha256": "1c9054975814fc314b7b5c80a5b13eadebd0219e7de30c3598fb850de6eacf23",
+      "path_sanitization": "Local workspace and Cargo target prefixes replaced; all other log text retained."
+    },
+    "library-tests.log": {
+      "sha256": "64c0eb25f660c2f5e774f3e0d4a747ca17144033fbc2b6b665d7259eac2e2d88",
+      "original_log_sha256": "c16a3b0994a6496ee7e59957424fa30533a6f8daaf770063f741467699686684",
+      "path_sanitization": "Local workspace and Cargo target prefixes replaced; all other log text retained."
+    },
+    "release-build.log": {
+      "sha256": "ebdee4e8a7a4c1e9b4f6ddf2cfd682c01376cb551762448165d3f09c19e4f565",
+      "original_log_sha256": "fa7fd9b21dcc68235951ad556927ceaf49a6be4815fe18db80b7f6b46f390e5e",
+      "path_sanitization": "Local workspace and Cargo target prefixes replaced; all other log text retained."
+    }
+  },
+  "original_build_receipt_sha256": "5bd8919a4afc5aae2cf30ae5c97a12ace319a9a1aaa4b2b238962b97d215e494",
+  "original_profiler_receipt_sha256": "49116ceabcc1204ef71c46f8815cb70e7484cdf5a10baa3b259e714d4f462e1c"
+}

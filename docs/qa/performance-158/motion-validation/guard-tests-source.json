@@ -1,0 +1,26 @@
+{
+  "production_file": "vendor/eframe/src/native/run.rs",
+  "source_sha256": "ce6003c02f174dfc256125cf1ddabe58e07a223b8ab0f66d08877a60a407d086",
+  "extraction": "Exact RedrawPollGuard implementation and complete redraw_poll_guard_tests module; unmodified, using real winit/ahash types. Full vendor package cargo test unavailable because it is not a workspace member.",
+  "command": [
+    "rustc",
+    "--edition=2024",
+    "-C",
+    "opt-level=3",
+    "-C",
+    "codegen-units=1",
+    "--test",
+    "[motion-artifacts]/bounded-poll-build/redraw_guard_tests.rs",
+    "-L",
+    "dependency=[target]/release/deps",
+    "--extern",
+    "winit=[target]/release/deps/libwinit-240a3f2f89abe3a6.rlib",
+    "--extern",
+    "ahash=[target]/release/deps/libahash-4f9bb12a478ca6bf.rlib",
+    "-o",
+    "[motion-artifacts]/bounded-poll-build/redraw-guard-tests"
+  ],
+  "application_source_commit_at_test": "b6bad21b403745022de3ed8ad4d012ac5b253f70",
+  "command_path_note": "Local absolute paths replaced with artifact/build prefixes; exact arguments otherwise retained.",
+  "standalone_test_source_sha256": "51f489b08df54a38000426da93cf2e8c4480c608572478d4e29eeed2a12046d4"
+}
