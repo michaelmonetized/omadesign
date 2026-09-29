@@ -1,0 +1,161 @@
+{
+  "architecture": "x86_64",
+  "side": "candidate",
+  "product_source": "8ee01b4ea08e0dac9891694b82dd3f4f377a5cf2",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: aarch64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+  "link_method": "Compile corrected QA entry points against pinned production rlib. Baseline may use the separately recorded rebuild of the exact original product source; native static archive objects are bundled in those rlibs.",
+  "externs": {
+    "omadesign": {
+      "path": "<CANDIDATE_TARGET>/x86_64-unknown-linux-gnu/release/deps/libomadesign-a9c5bf4984877628.rlib",
+      "bytes": 68363466,
+      "sha256": "8d3c9327a4e7ff2b9dfafc90e5312f8efdf1258e019727995e02598117ad18f4"
+    },
+    "eframe": {
+      "path": "<CANDIDATE_TARGET>/x86_64-unknown-linux-gnu/release/deps/libeframe-7628c6bd58ab06e3.rlib",
+      "bytes": 2811284,
+      "sha256": "f23b87355190b6a31e1aa62ba3d78d8af32201f4de69c345c2cd911da5d0a695"
+    },
+    "image": {
+      "path": "<CANDIDATE_TARGET>/x86_64-unknown-linux-gnu/release/deps/libimage-421f7866fd7640e3.rlib",
+      "bytes": 6391570,
+      "sha256": "9a35e22e9010c5ae4800a9d5fb384f8b365a63aa0ada502bfd7819946f674937"
+    },
+    "serde_json": {
+      "path": "<CANDIDATE_TARGET>/x86_64-unknown-linux-gnu/release/deps/libserde_json-654e11ca1c539840.rlib",
+      "bytes": 1932218,
+      "sha256": "67509d245ca384a93cad5245997a48f8d87b4d59c4a8b75aa22ac74e6e16fe2d"
+    }
+  },
+  "embedded_dependency_crate_hashes": {
+    "eframe": "53b76994a34c11124439703a01013e39",
+    "image": "5279dfa90619187b590a2406663c26cd",
+    "serde_json": "432f8b73d3ee631965ebc62c79c16d24"
+  },
+  "harness_sources": {
+    "src/bin/background_removal_qa/native.rs": {
+      "bytes": 17344,
+      "sha256": "ef45748b158fe4f9c49d3bee9b2ac670c68185b55e9ed0d6913b31b1ed4a55bc"
+    },
+    "src/bin/background_removal_qa.rs": {
+      "bytes": 3636,
+      "sha256": "7cc50ed98ff37b357c2ea3151bb25b99ab4ceecfa7a348e2a717f132b72217bd"
+    },
+    "src/bin/upscale_qa/native.rs": {
+      "bytes": 22104,
+      "sha256": "3693e664be2bb853abf82b41070f22b77dd8ef9903e1bcc4d3790626b44daa64"
+    },
+    "src/bin/upscale_qa/pipelines.rs": {
+      "bytes": 4935,
+      "sha256": "b13fb7b0732f96b7af0179f3ca50976f0670ccad09eb5d09b8edef6075f8a2a4"
+    },
+    "src/bin/upscale_qa.rs": {
+      "bytes": 3279,
+      "sha256": "9f719f7200e1f33df680c1d5b554b2c1fd2902b1f2742193a34dcc3204cbab02"
+    }
+  },
+  "steps": [
+    {
+      "binary": "background_removal_qa",
+      "command": [
+        "rustc",
+        "--edition=2024",
+        "--crate-name",
+        "background_removal_qa",
+        "--crate-type",
+        "bin",
+        "<BUILD_ROOT>/native-harness-source-final-v2/src/bin/background_removal_qa.rs",
+        "-C",
+        "opt-level=3",
+        "-C",
+        "codegen-units=1",
+        "-C",
+        "lto=off",
+        "-C",
+        "embed-bitcode=no",
+        "-C",
+        "debug-assertions=off",
+        "-L",
+        "dependency=<CANDIDATE_TARGET>/x86_64-unknown-linux-gnu/release/deps",
+        "-o",
+        "<BUILD_ROOT>/native-harness-final/x86_64/candidate/background_removal_qa",
+        "-L",
+        "dependency=<CANDIDATE_TARGET>/release/deps",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "-C",
+        "linker=<WORKTREE>/scripts/zig-cc-x86_64",
+        "--extern",
+        "omadesign=<CANDIDATE_TARGET>/x86_64-unknown-linux-gnu/release/deps/libomadesign-a9c5bf4984877628.rlib",
+        "--extern",
+        "eframe=<CANDIDATE_TARGET>/x86_64-unknown-linux-gnu/release/deps/libeframe-7628c6bd58ab06e3.rlib",
+        "--extern",
+        "image=<CANDIDATE_TARGET>/x86_64-unknown-linux-gnu/release/deps/libimage-421f7866fd7640e3.rlib",
+        "--extern",
+        "serde_json=<CANDIDATE_TARGET>/x86_64-unknown-linux-gnu/release/deps/libserde_json-654e11ca1c539840.rlib"
+      ],
+      "exit_code": 0,
+      "seconds": 8.673411139054224,
+      "log": {
+        "bytes": 160,
+        "sha256": "f3d1fb4060a61a4fb2c780f945b5672c41d4cbf2c9e915ba6ae595ccabde0079"
+      }
+    },
+    {
+      "binary": "upscale_qa",
+      "command": [
+        "rustc",
+        "--edition=2024",
+        "--crate-name",
+        "upscale_qa",
+        "--crate-type",
+        "bin",
+        "<BUILD_ROOT>/native-harness-source-final-v2/src/bin/upscale_qa.rs",
+        "-C",
+        "opt-level=3",
+        "-C",
+        "codegen-units=1",
+        "-C",
+        "lto=off",
+        "-C",
+        "embed-bitcode=no",
+        "-C",
+        "debug-assertions=off",
+        "-L",
+        "dependency=<CANDIDATE_TARGET>/x86_64-unknown-linux-gnu/release/deps",
+        "-o",
+        "<BUILD_ROOT>/native-harness-final/x86_64/candidate/upscale_qa",
+        "-L",
+        "dependency=<CANDIDATE_TARGET>/release/deps",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "-C",
+        "linker=<WORKTREE>/scripts/zig-cc-x86_64",
+        "--extern",
+        "omadesign=<CANDIDATE_TARGET>/x86_64-unknown-linux-gnu/release/deps/libomadesign-a9c5bf4984877628.rlib",
+        "--extern",
+        "eframe=<CANDIDATE_TARGET>/x86_64-unknown-linux-gnu/release/deps/libeframe-7628c6bd58ab06e3.rlib",
+        "--extern",
+        "image=<CANDIDATE_TARGET>/x86_64-unknown-linux-gnu/release/deps/libimage-421f7866fd7640e3.rlib",
+        "--extern",
+        "serde_json=<CANDIDATE_TARGET>/x86_64-unknown-linux-gnu/release/deps/libserde_json-654e11ca1c539840.rlib"
+      ],
+      "exit_code": 0,
+      "seconds": 8.430561447050422,
+      "log": {
+        "bytes": 160,
+        "sha256": "f3d1fb4060a61a4fb2c780f945b5672c41d4cbf2c9e915ba6ae595ccabde0079"
+      }
+    }
+  ],
+  "artifacts": {
+    "background_removal_qa": {
+      "bytes": 77107192,
+      "sha256": "2d0cdf146300de22aec5ccb01676ff84cf35ccde19623962f8ad8b1f1f84dd15"
+    },
+    "upscale_qa": {
+      "bytes": 77137536,
+      "sha256": "ff0f491ddcca349eafbbb2ca0cc861a52de163d8b3ea108dc8c785a351d4fe96"
+    }
+  },
+  "success": true
+}

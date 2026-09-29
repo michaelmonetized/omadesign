@@ -1,0 +1,9 @@
+   Compiling omadesign v0.6.0 (${REPOSITORY})
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 31.50s
+     Running unittests src/lib.rs (${TARGET}/debug/deps/omadesign-41dd6c6f5a68cf14)
+
+running 2 tests
+test ui::studios::font_picker_tests::font_search_click_keeps_focus_filters_and_selects_with_undo ... ok
+test ui::studios::font_picker_tests::font_search_escape_and_outside_click_dismiss_without_changing_type ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 909 filtered out; finished in 10.31s

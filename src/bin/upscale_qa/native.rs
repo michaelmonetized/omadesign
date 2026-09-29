@@ -19,7 +19,7 @@ struct Capture {
     started: Instant,
     labels: Vec<(String, Rect)>,
     events: Vec<Event>,
-    release: Option<egui::Pos2>,
+    pending_click: Option<(Option<String>, egui::Pos2)>,
     pending_shot: Option<String>,
     shots: Vec<String>,
     ui_ms: Vec<f64>,
@@ -47,19 +47,53 @@ impl Capture {
             .center()
     }
     fn click_at(&mut self, pos: egui::Pos2) {
-        self.events.extend([
-            Event::PointerMoved(pos),
-            Event::PointerButton {
-                pos,
-                button: PointerButton::Primary,
-                pressed: true,
-                modifiers: Modifiers::NONE,
-            },
-        ]);
-        self.release = Some(pos);
+        assert!(self.pending_click.is_none() && self.events.is_empty());
+        // Let egui resolve hover and settle layout before the semantic click.
+        self.events.push(Event::PointerMoved(pos));
+        self.pending_click = Some((None, pos));
     }
     fn click(&mut self, label: &str) {
         self.click_at(self.find(label));
+        self.pending_click.as_mut().unwrap().0 = Some(label.into());
+    }
+    fn assert_modal(&self, ctx: &egui::Context, id: &str, controls: &[&str]) {
+        assert_eq!(
+            ctx.memory(|m| m.top_modal_layer()),
+            Some(egui::LayerId::new(
+                egui::Order::Foreground,
+                egui::Id::new(id)
+            )),
+            "Expected modal {id} at stage {}",
+            self.stage,
+        );
+        for control in controls {
+            assert!(
+                self.labels.iter().any(|(label, _)| label == control),
+                "Missing modal control {control} at stage {}",
+                self.stage
+            );
+        }
+    }
+    fn assert_no_modal(&self, ctx: &egui::Context) {
+        assert!(
+            ctx.memory(|m| m.top_modal_layer()).is_none(),
+            "Previous dialog did not close at stage {}",
+            self.stage
+        );
+    }
+    fn cancel(&mut self) {
+        // The footer moves when inference finishes. Exercise the actual Escape
+        // cancellation path, without asserting coverage of the Cancel button.
+        assert!(self.pending_click.is_none() && self.events.is_empty());
+        for pressed in [true, false] {
+            self.events.push(Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed,
+                repeat: false,
+                modifiers: Modifiers::NONE,
+            });
+        }
     }
     fn key(&mut self, key: egui::Key, shift: bool) {
         let modifiers = Modifiers {
@@ -121,10 +155,27 @@ impl Capture {
     }
     fn step(&mut self, ctx: &egui::Context) {
         if self.pending_shot.is_some()
-            || self.release.is_some()
+            || self.pending_click.is_some()
             || self.frames - self.stage_frame < 8
         {
             return;
+        }
+        match self.stage {
+            1..=4 | 8 | 9 | 11 => self.assert_modal(
+                ctx,
+                "remove-background-modal",
+                &["Refine matte", "Radius", "Cancel"],
+            ),
+            12 | 13 => self.assert_modal(
+                ctx,
+                "remove-background-modal",
+                &["Upscale cutout", "Apply upscaled cutout", "Cancel"],
+            ),
+            17..=20 | 80 | 82..=84 | 23 | 24 | 91..=94 => {
+                self.assert_modal(ctx, "still-export-modal", &["Cancel"])
+            }
+            0 | 5..=7 | 10 | 14..=16 | 22 | 26 | 81 | 90 => self.assert_no_modal(ctx),
+            _ => {}
         }
         let ready = omadesign::ui::scene_ready(ctx, &self.studio);
         match self.stage {
@@ -177,7 +228,7 @@ impl Capture {
                 self.next(9);
             }
             9 => {
-                self.click("Cancel");
+                self.cancel();
                 self.next(10);
             }
             10 => {
@@ -261,7 +312,7 @@ impl Capture {
                 self.next(80);
             }
             80 => {
-                self.click("Cancel");
+                self.cancel();
                 self.next(81);
             }
             81 => {
@@ -286,7 +337,11 @@ impl Capture {
                 .unwrap();
                 self.next(21);
             }
-            21 if self.output.join("document-4x.png").exists() && ready => {
+            21 if self.output.join("document-4x.png").exists()
+                && ready
+                && ctx.memory(|m| m.top_modal_layer()).is_none() =>
+            {
+                self.assert_no_modal(ctx);
                 let img = image::open(self.output.join("document-4x.png")).unwrap();
                 assert_eq!(img.width(), (self.studio.doc.width * 4.) as u32);
                 assert_eq!(img.height(), (self.studio.doc.height * 4.) as u32);
@@ -320,7 +375,11 @@ impl Capture {
                 .unwrap();
                 self.next(25);
             }
-            25 if self.studio.photo.images.len() == 2 && ready => {
+            25 if self.studio.photo.images.len() == 2
+                && ready
+                && ctx.memory(|m| m.top_modal_layer()).is_none() =>
+            {
+                self.assert_no_modal(ctx);
                 assert_eq!(self.studio.photo.images[0].full.data, self.original);
                 assert_eq!(
                     self.studio.photo.images[1].full.data.len(),
@@ -376,7 +435,11 @@ impl Capture {
                 .unwrap();
                 self.next(95);
             }
-            95 if self.studio.photo.images.len() == 3 && ready => {
+            95 if self.studio.photo.images.len() == 3
+                && ready
+                && ctx.memory(|m| m.top_modal_layer()).is_none() =>
+            {
+                self.assert_no_modal(ctx);
                 assert_eq!(self.studio.photo.images[2].dimensions(), (800, 530));
                 assert_eq!(self.studio.photo.images[0].full.data, self.original);
                 self.studio.show_preferences = true;
@@ -393,7 +456,7 @@ impl Capture {
             29 => {
                 self.ui_ms.sort_by(f64::total_cmp);
                 assert!(!self.output.join("cancelled-native.png").exists());
-                let report = serde_json::json!({"renderer":"native WGPU", "interaction":"real egui pointer and keyboard events; save destinations supplied through the native host callback", "frames":self.frames,"inference_frames":self.inference_frames,"inference_seconds":self.inference_seconds,"ui_frame_p95_ms":self.ui_ms[self.ui_ms.len()*95/100],"ui_frame_max_ms":self.ui_ms.last(),"cancel_preserves_document":true, "cancel_export_no_partial":true,"upscale_first":true,"upscale_cutout":true,"one_undo_step_each":true,"undo_redo":true,"save_reopen":true,"document_export_4x":true,"photo_copy_2x_persisted_and_opened":true,"photo_custom_2_5x":true,"screenshots":self.shots,"elapsed_seconds":self.started.elapsed().as_secs_f64()});
+                let report = serde_json::json!({"renderer":"native WGPU","qa_input_protocol":"hover-atomic-buttons-held-sliders-escape-cancel-v2","cancel_input":"Escape key","cancel_button_covered":false, "interaction":"real egui pointer and keyboard events; save destinations supplied through the native host callback", "frames":self.frames,"inference_frames":self.inference_frames,"inference_seconds":self.inference_seconds,"ui_frame_p95_ms":self.ui_ms[self.ui_ms.len()*95/100],"ui_frame_max_ms":self.ui_ms.last(),"cancel_preserves_document":true, "cancel_export_no_partial":true,"upscale_first":true,"upscale_cutout":true,"one_undo_step_each":true,"undo_redo":true,"save_reopen":true,"document_export_4x":true,"photo_copy_2x_persisted_and_opened":true,"photo_custom_2_5x":true,"screenshots":self.shots,"elapsed_seconds":self.started.elapsed().as_secs_f64()});
                 std::fs::write(
                     self.output.join("native-result.json"),
                     serde_json::to_vec_pretty(&report).unwrap(),
@@ -418,14 +481,20 @@ impl eframe::App for Capture {
         input.focused = true;
         input.events.push(Event::ModifiersChanged(Modifiers::NONE));
         if self.events.is_empty()
-            && let Some(pos) = self.release.take()
+            && let Some((label, pos)) = self.pending_click.take()
         {
-            input.events.push(Event::PointerButton {
-                pos,
-                button: PointerButton::Primary,
-                pressed: false,
-                modifiers: Modifiers::NONE,
-            });
+            // Refresh semantic targets after the hover pass. Keep press/release
+            // in one batch: inference completion can move the dialog footer.
+            let pos = label.as_deref().map_or(pos, |label| self.find(label));
+            input.events.push(Event::PointerMoved(pos));
+            for pressed in [true, false] {
+                input.events.push(Event::PointerButton {
+                    pos,
+                    button: PointerButton::Primary,
+                    pressed,
+                    modifiers: Modifiers::NONE,
+                });
+            }
         }
         input.events.append(&mut self.events);
     }
@@ -525,7 +594,7 @@ pub fn run(input: PathBuf, output: PathBuf) -> eframe::Result {
                 started: Instant::now(),
                 labels: vec![],
                 events: vec![],
-                release: None,
+                pending_click: None,
                 pending_shot: None,
                 shots: vec![],
                 ui_ms: vec![],

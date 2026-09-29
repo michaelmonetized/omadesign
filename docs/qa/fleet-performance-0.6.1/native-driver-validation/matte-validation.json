@@ -1,0 +1,75 @@
+{
+  "notes": [
+    "Diagnostic only; timings excluded because parent builds ran concurrently.",
+    "The v2 protocol asserts Radius >12 and records the actual value; no claim of Cancel button coverage."
+  ],
+  "files": {
+    "v2b_candidate": {
+      "path": "<BUILD_ROOT>/native-harness-corrected-v2b/aarch64/validation-candidate-background-1/native-cutout.oma",
+      "size": [
+        320,
+        212
+      ],
+      "sha256_rgba": "876ae2ce53706bb5d67386d594d166b6bc976c3fd03f7b775284609571ce6fb2"
+    },
+    "v2b_baseline": {
+      "path": "<BUILD_ROOT>/native-harness-corrected-v2b/aarch64/validation-baseline-background-1/native-cutout.oma",
+      "size": [
+        320,
+        212
+      ],
+      "sha256_rgba": "876ae2ce53706bb5d67386d594d166b6bc976c3fd03f7b775284609571ce6fb2"
+    },
+    "v1_candidate_radius12": {
+      "path": "<BUILD_ROOT>/native-harness-corrected/aarch64/validation-candidate-background-escape-1/native-cutout.oma",
+      "size": [
+        320,
+        212
+      ],
+      "sha256_rgba": "fe38ad2d4295cea9abd7a914c77512eed8813b234e8f1783cf7cfddbc72149c8"
+    },
+    "intel_candidate_original": {
+      "path": "<BUILD_ROOT>/collected/intelpro/runs/candidate/background_removal_qa-native-1/native-cutout.oma",
+      "size": [
+        320,
+        212
+      ],
+      "sha256_rgba": "724846338506c07bb67bb5a3aca1b635b74e20d777a59a5c6b226733cf460d2d"
+    },
+    "hp_candidate_original": {
+      "path": "<BUILD_ROOT>/collected/hpeliteclient-failed-20260929T032810Z/runs/candidate/background_removal_qa-native-1/native-cutout.oma",
+      "size": [
+        320,
+        212
+      ],
+      "sha256_rgba": "724846338506c07bb67bb5a3aca1b635b74e20d777a59a5c6b226733cf460d2d"
+    }
+  },
+  "comparisons": {
+    "v2b_candidate": {
+      "equal": true,
+      "different_pixels": 0,
+      "max_channel_delta": 0
+    },
+    "v2b_baseline": {
+      "equal": true,
+      "different_pixels": 0,
+      "max_channel_delta": 0
+    },
+    "v1_candidate_radius12": {
+      "equal": false,
+      "different_pixels": 62474,
+      "max_channel_delta": 175
+    },
+    "intel_candidate_original": {
+      "equal": false,
+      "different_pixels": 8,
+      "max_channel_delta": 1
+    },
+    "hp_candidate_original": {
+      "equal": false,
+      "different_pixels": 8,
+      "max_channel_delta": 1
+    }
+  }
+}

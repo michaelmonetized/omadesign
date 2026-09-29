@@ -1,0 +1,41 @@
+{
+  "scope": "Final native QA source validation; production code remains at 8ee01b4ea08e0dac9891694b82dd3f4f377a5cf2. The 906-test library run is separately recorded in this directory. Initial check used exact measured native source; final check also validates formatting-only normalization.",
+  "commands": [
+    {
+      "command": "CARGO_TARGET_DIR=<shared-target> cargo check --locked --offline --all-targets -j 2",
+      "exit_code": 0,
+      "duration_seconds": 1.42
+    },
+    {
+      "command": "python3 -m unittest discover -s docs/qa/fleet-performance-0.6.1 -p 'test_*.py' -v",
+      "exit_code": 0,
+      "tests_passed": 7,
+      "duration_seconds": 0.27
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    },
+    {
+      "command": "CARGO_TARGET_DIR=<shared-target> cargo check --locked --offline --all-targets -j 2",
+      "exit_code": 0,
+      "duration_seconds": 1.51,
+      "source_scope": "formatted native QA source; see native-driver-validation/source-format-proof.json"
+    },
+    {
+      "command": "rustfmt --edition 2024 --check src/bin/background_removal_qa/native.rs src/bin/upscale_qa/native.rs",
+      "exit_code": 0
+    }
+  ],
+  "sources": {
+    "src/bin/background_removal_qa/native.rs": {
+      "bytes": 17344,
+      "sha256": "ef45748b158fe4f9c49d3bee9b2ac670c68185b55e9ed0d6913b31b1ed4a55bc"
+    },
+    "src/bin/upscale_qa/native.rs": {
+      "bytes": 22104,
+      "sha256": "3693e664be2bb853abf82b41070f22b77dd8ef9903e1bcc4d3790626b44daa64"
+    }
+  },
+  "excluded": "An initial all-target check was stopped after using the unintended worktree target directory; it did not finish and is not counted as validation."
+}

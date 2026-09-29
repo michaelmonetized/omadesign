@@ -1,0 +1,32 @@
+{
+  "cancel_button_covered": false,
+  "cancel_export_no_partial": true,
+  "cancel_input": "Escape key",
+  "cancel_preserves_document": true,
+  "document_export_4x": true,
+  "elapsed_seconds": 12.24595575,
+  "frames": 744,
+  "inference_frames": 166,
+  "inference_seconds": 2.72833823,
+  "interaction": "real egui pointer and keyboard events; save destinations supplied through the native host callback",
+  "one_undo_step_each": true,
+  "photo_copy_2x_persisted_and_opened": true,
+  "photo_custom_2_5x": true,
+  "qa_input_protocol": "hover-atomic-buttons-held-sliders-escape-cancel-v2",
+  "renderer": "native WGPU",
+  "save_reopen": true,
+  "screenshots": [
+    "01-upscale-first-preview",
+    "02-upscale-cutout-preview",
+    "03-export-dialog",
+    "04-photo-upscale-dialog",
+    "05-photo-copy-opened",
+    "06-photo-custom-scale",
+    "07-credits"
+  ],
+  "ui_frame_max_ms": 71.04896500000001,
+  "ui_frame_p95_ms": 8.407952,
+  "undo_redo": true,
+  "upscale_cutout": true,
+  "upscale_first": true
+}

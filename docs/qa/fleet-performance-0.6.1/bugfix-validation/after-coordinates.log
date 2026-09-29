@@ -1,0 +1,7 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.54s
+     Running unittests src/lib.rs (${TARGET}/debug/deps/omadesign-41dd6c6f5a68cf14)
+
+running 1 test
+test app::layer_groups::tests::new_layers_preserve_pixel_selection_coordinates_and_history ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 912 filtered out; finished in 7.00s

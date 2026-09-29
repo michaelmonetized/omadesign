@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "setup_scope": "Task-only private GPU Wayland compositors; no system package installation, desktop configuration or power-profile changes.",
+  "compositor_environment": {
+    "WLR_BACKENDS": "headless",
+    "WLR_RENDERER": "gles2",
+    "WLR_RENDER_DRM_DEVICE": "/dev/dri/renderD128",
+    "XDG_RUNTIME_DIR": "private task directory, owner-only mode 0700"
+  },
+  "host_displays": [
+    {
+      "host": "m1pro16",
+      "version": "sway version 1.12",
+      "executable_sha256": "059061d0a4344a31279cedb08014f2083c55ca78ae539b6958df7aeac5b781e6",
+      "config_sha256": "a0bf3be5168104ef713d34b913a09c01c0ed16338dc83706550f31d82f95ddc0",
+      "renderer_log": [
+        "Opening DRM render node '/dev/dri/renderD128' from WLR_RENDER_DRM_DEVICE",
+        "EGL vendor: Mesa Project",
+        "Using OpenGL ES 3.2 Mesa 26.2.3-arch1.1",
+        "GL vendor: Mesa",
+        "GL renderer: Apple M1 Pro (G13S C0)"
+      ],
+      "outputs": [
+        {
+          "name": "HEADLESS-1",
+          "active": true,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1600,
+            "height": 1000
+          },
+          "scale": 1.0,
+          "current_mode": {
+            "width": 1600,
+            "height": 1000,
+            "refresh": 60000
+          }
+        }
+      ],
+      "window_rule": "All task windows floating, borderless, 1440x900; no user desktop configuration imported.",
+      "package_source": "Already installed system Sway; unchanged."
+    },
+    {
+      "host": "hpeliteclient",
+      "version": "sway version 1.12",
+      "executable_sha256": "7ba78b7531a3b3cb1852b3b1e464b4458cce1749c6c0fe3c6fb4b16ece9d5b9c",
+      "config_sha256": "a0bf3be5168104ef713d34b913a09c01c0ed16338dc83706550f31d82f95ddc0",
+      "renderer_log": [
+        "Opening DRM render node '/dev/dri/renderD128' from WLR_RENDER_DRM_DEVICE",
+        "EGL vendor: Mesa Project",
+        "Using OpenGL ES 3.2 Mesa 26.2.3-arch1.1",
+        "GL vendor: AMD",
+        "GL renderer: AMD Radeon Graphics (radeonsi, raven, ACO, DRM 3.64, 7.2.3-arch1-3)"
+      ],
+      "outputs": [
+        {
+          "name": "HEADLESS-1",
+          "active": true,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1600,
+            "height": 1000
+          },
+          "scale": 1.0,
+          "current_mode": {
+            "width": 1600,
+            "height": 1000,
+            "refresh": 60000
+          }
+        }
+      ],
+      "window_rule": "All task windows floating, borderless, 1440x900; no user desktop configuration imported.",
+      "extracted_packages": [
+        {
+          "archive": "libliftoff-0.5.0-1-x86_64.pkg.tar.zst",
+          "sha256": "59cf08c21500673a14287b83b89b6db5389134cc24c97d9222c7cddefa639ccf",
+          "signature_valid": true,
+          "signing_key_fingerprint": "95220BE99CE6FF778AE0DC670F65C7D881506130"
+        },
+        {
+          "archive": "wlroots0.20-0.20.2-1-x86_64.pkg.tar.zst",
+          "sha256": "8b1da3fbf29cc45908d8de771bd22a5813b298a9049462df5b8952f23c3ffb8f",
+          "signature_valid": true,
+          "signing_key_fingerprint": "262A58EC6C51F7EA395B2E2DFDC3040B92ACA748"
+        },
+        {
+          "archive": "sway-1:1.12-4-x86_64.pkg.tar.zst",
+          "sha256": "5704cfc9eba9804116c665cb4450352bf5a240c1a8300b36aca3218116648443",
+          "signature_valid": true,
+          "signing_key_fingerprint": "35BAE1BF9A6B317021E690C26E7CE0B0A36DA2AE"
+        }
+      ]
+    },
+    {
+      "host": "intelpro",
+      "version": "sway version 1.12",
+      "executable_sha256": "7ba78b7531a3b3cb1852b3b1e464b4458cce1749c6c0fe3c6fb4b16ece9d5b9c",
+      "config_sha256": "a0bf3be5168104ef713d34b913a09c01c0ed16338dc83706550f31d82f95ddc0",
+      "renderer_log": [
+        "Opening DRM render node '/dev/dri/renderD128' from WLR_RENDER_DRM_DEVICE",
+        "EGL vendor: Mesa Project",
+        "Using OpenGL ES 3.2 Mesa 26.2.3-arch1.1",
+        "GL vendor: Intel",
+        "GL renderer: Mesa Intel(R) Iris(R) Plus Graphics 645 (CFL GT3)"
+      ],
+      "outputs": [
+        {
+          "name": "HEADLESS-1",
+          "active": true,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1600,
+            "height": 1000
+          },
+          "scale": 1.0,
+          "current_mode": {
+            "width": 1600,
+            "height": 1000,
+            "refresh": 60000
+          }
+        }
+      ],
+      "window_rule": "All task windows floating, borderless, 1440x900; no user desktop configuration imported.",
+      "extracted_packages": [
+        {
+          "archive": "libliftoff-0.5.0-1-x86_64.pkg.tar.zst",
+          "sha256": "59cf08c21500673a14287b83b89b6db5389134cc24c97d9222c7cddefa639ccf",
+          "signature_valid": true,
+          "signing_key_fingerprint": "95220BE99CE6FF778AE0DC670F65C7D881506130"
+        },
+        {
+          "archive": "sway-1:1.12-4-x86_64.pkg.tar.zst",
+          "sha256": "5704cfc9eba9804116c665cb4450352bf5a240c1a8300b36aca3218116648443",
+          "signature_valid": true,
+          "signing_key_fingerprint": "35BAE1BF9A6B317021E690C26E7CE0B0A36DA2AE"
+        },
+        {
+          "archive": "wlroots0.20-0.20.2-1-x86_64.pkg.tar.zst",
+          "sha256": "8b1da3fbf29cc45908d8de771bd22a5813b298a9049462df5b8952f23c3ffb8f",
+          "signature_valid": true,
+          "signing_key_fingerprint": "262A58EC6C51F7EA395B2E2DFDC3040B92ACA748"
+        }
+      ]
+    }
+  ]
+}

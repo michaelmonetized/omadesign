@@ -1,0 +1,8 @@
+   Compiling omadesign v0.6.0 (${REPOSITORY})
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 26.93s
+     Running unittests src/lib.rs (${TARGET}/debug/deps/omadesign-41dd6c6f5a68cf14)
+
+running 1 test
+test ui::retouch::tests::new_pixel_layer_keeps_brush_clipped_and_undoable ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 912 filtered out; finished in 7.51s

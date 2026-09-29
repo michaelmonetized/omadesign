@@ -1,0 +1,102 @@
+{
+  "archived_utc": "2026-09-29T03:09:36.300796+00:00",
+  "before_production_reference": "28844960cb32fc9f77c5daa849017ec9672b0a0f",
+  "after_production_reference": "8ee01b4ea08e0dac9891694b82dd3f4f377a5cf2",
+  "scope": "Focused regression tests added to the working tree; each before run retained the corresponding old production behavior. The pixel before run also included the independent font-popup fix. These are not pristine whole-commit performance comparisons.",
+  "package_version_at_test": "0.6.0",
+  "log_sanitization": "Repository/target absolute paths and panic thread process IDs replaced; extra blank lines at end of published logs removed. Assertions, fixture arrays, outcomes and elapsed test durations retained. Test durations are not benchmark measurements.",
+  "logs": {
+    "font-before.log": {
+      "raw_sha256": "4a1616eb102b2aca10527372557909c5f529e829bd116ebf0e3ae9ae8e30ad65",
+      "published_sha256": "6ae7d578aa3bf1c40c7dee9da562be25a52945237aaa61519d426c2f52836791",
+      "raw_bytes": 1186,
+      "published_bytes": 1108
+    },
+    "font-after.log": {
+      "raw_sha256": "56e30c1943285ddf42242fa629b910918fbe54b7a854cf54b05b343bc4716a2a",
+      "published_sha256": "3cc49cf636ce68e50434fdaed0f47beeab99d218280fae1f53532e7aac5a120b",
+      "raw_bytes": 611,
+      "published_bytes": 534
+    },
+    "before-brush.log": {
+      "raw_sha256": "88117a07a0d037e3d5fa2af009bd1157d25d04e4b16914c0e6e2ebec7fe3dc8c",
+      "published_sha256": "bd131e9a0f7d5c52da827cec41f8b52035a4260ebff368cd5d3aebc31ce8206d",
+      "raw_bytes": 1846,
+      "published_bytes": 1768
+    },
+    "before-coordinates.log": {
+      "raw_sha256": "2ffe2f2853215dace98626ecdd05c3a62da16b608eac581dcc8a820fa401ebee",
+      "published_sha256": "136764a5bfaaa2ba0f073c363809ec2710f18e97dab3e887e9067df200bae81a",
+      "raw_bytes": 1054,
+      "published_bytes": 1022
+    },
+    "after-brush.log": {
+      "raw_sha256": "de6e2a216051de7299140d7632aefd22e22fd5b742362855b52d97d9a8f8c69a",
+      "published_sha256": "9605bf16dc0f734100fd2e1532c666c8d55005e8f35d9a935f3867e4e26db3fa",
+      "raw_bytes": 475,
+      "published_bytes": 398
+    },
+    "after-coordinates.log": {
+      "raw_sha256": "fda89b81554f948ffbbd501be588c62cbde68df13704944129b184a183a03f1e",
+      "published_sha256": "0b85e5ea7ced0effacba01483f86562a4a0496e28a3a2f47967b8870ead0d819",
+      "raw_bytes": 399,
+      "published_bytes": 368
+    },
+    "after-layer-groups.log": {
+      "raw_sha256": "afee78cf2531b0b930ab3553ac61553abd531a43621478bbe1bbd0f3ef1d877a",
+      "published_sha256": "398c36f03fe86f98223b9e9b6c5e5a1cffa886a5b92609ff52c919275651710b",
+      "raw_bytes": 759,
+      "published_bytes": 728
+    }
+  },
+  "production_file_sha256": {
+    "src/app.rs": {
+      "before": "a62209dd00b91895f6da88b128b1eb9350c1be76ea1120002bc3f57df322c932",
+      "after": "d89164af8f6180ece4b00c1c5655bb63e0889cb3cca26ed670cf395cee75faf5"
+    },
+    "src/app/selection.rs": {
+      "before": "55a0e6d3cd53c8f4df1ed5fac3e3508d9c24102e59ca7ab669578ea1884a9eed",
+      "after": "bb59cb710e54159637c15032251030d1415798e7e0bd60012f9b29c1c21c2d80"
+    },
+    "src/ui/studios.rs": {
+      "before": "95794790c59a4df190c36a86b89c932230701d1425634a52ddcb326b468e4006",
+      "after": "c3223d49c5257960e17197b3d838f1d3687592d7e1f8b0a82a1879c4c30db331"
+    }
+  },
+  "regression_test_file_sha256_at_after_commit": {
+    "src/ui/font_picker_tests.rs": "234b709b883e2d6e216597256066c2408cc79d2acb0bda9c64c208248e6608b5",
+    "src/app/layer_groups.rs": "00ef26c8d322a357b6cc1f92abc275cdd8fd773afaaaec3bfcb622bbc51ed12c",
+    "src/ui/retouch.rs": "64279547feb05634ad90f0920242e602702c005ad3bbeaf5cc7e0931eb89e694"
+  },
+  "checks": {
+    "font_before": {
+      "passed": 1,
+      "failed": 1
+    },
+    "font_after": {
+      "passed": 2,
+      "failed": 0
+    },
+    "pixel_before_brush": {
+      "passed": 0,
+      "failed": 1
+    },
+    "pixel_before_coordinates": {
+      "passed": 0,
+      "failed": 1
+    },
+    "pixel_after_brush": {
+      "passed": 1,
+      "failed": 0
+    },
+    "pixel_after_coordinates": {
+      "passed": 1,
+      "failed": 0
+    },
+    "existing_and_new_layer_group_suite_after": {
+      "passed": 5,
+      "failed": 0
+    }
+  },
+  "native_live_user_documents_touched": false
+}

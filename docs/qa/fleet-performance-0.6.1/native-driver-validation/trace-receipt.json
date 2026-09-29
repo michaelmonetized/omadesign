@@ -1,0 +1,39 @@
+{
+  "scope": "Diagnostic instrumentation only, excluded from performance matrix",
+  "command": [
+    "unshare",
+    "-Urn",
+    "<TRACE_ROOT>/background_removal_qa-trace",
+    "<ORIGINAL_FLEET>/inputs/cat-320.png",
+    "<TRACE_ROOT>/output",
+    "--native"
+  ],
+  "display": {
+    "XDG_RUNTIME_DIR": "<PRIVATE_DISPLAY_RUNTIME>",
+    "WAYLAND_DISPLAY": "wayland-1",
+    "SWAYSOCK": "<PRIVATE_DISPLAY_RUNTIME>/sway-ipc.1001.2161441.sock",
+    "WINIT_UNIX_BACKEND": "wayland"
+  },
+  "ort": "<BUILD_ROOT>/candidate/aarch64/lib/libonnxruntime.so.1.28.0",
+  "started_utc": "2026-09-29T03:48:52.700261+00:00",
+  "exit_code": 101,
+  "finished_utc": "2026-09-29T03:49:01.309964+00:00",
+  "artifacts": {
+    "background_removal_qa-trace": {
+      "bytes": 59887528,
+      "sha256": "2f5038aef8cf52f17b013667701337ef535651d5d52c69f27fbf9e5f1d20f93b"
+    },
+    "native-original.rs": {
+      "bytes": 13652,
+      "sha256": "d41b58968a524ffd77d19ab72667f21dc12c8a236e759aee93e39b69de2af8a0"
+    },
+    "native-trace.rs": {
+      "bytes": 15760,
+      "sha256": "37dde5a6dd3bff3416f0204417bf6ef6e743e34fa26d2b4ab268cec5504c0ac3"
+    },
+    "trace.log": {
+      "bytes": 168000,
+      "sha256": "c29b2a01a1a3b20dda16479ec70a2047025055a055c6f0dd4ae386f25b3c05f2"
+    }
+  }
+}

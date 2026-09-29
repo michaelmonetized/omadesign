@@ -1,0 +1,278 @@
+{
+  "schema_version": 1,
+  "included_in_final_statistics": false,
+  "scope": "Initial runner-validation attempts retained without modifying their failed receipts. All completed authoring processes exited 0 and reported successful native functional assertions.",
+  "explanations": {
+    "geometry_gate": "The assumed candidate end-state canvas 1020x771 differed from the actual 1014.71875x771, consistently observed on all three hosts. Strict native window 1440x900 and export 1200x900 were preserved; only the exact expected canvas width was corrected before fresh complete runs.",
+    "asahi_collector": "The kernel exposes actual Asahi render-node descriptors without drm-driver fdinfo fields. The old collector returned an empty list. The corrected collector derives the driver from the actual open character-device descriptor through sysfs and labels that evidence source explicitly."
+  },
+  "attempts": [
+    {
+      "host": "m1pro16",
+      "attempt": "paired-final-20260929T032809Z",
+      "source_revisions": {
+        "baseline": "221834bdd8af5aee8554a0e835629cbe2f467558",
+        "candidate": "8ee01b4ea08e0dac9891694b82dd3f4f377a5cf2"
+      },
+      "runner": {
+        "bytes": 23048,
+        "sha256": "75a04566353266808a8cb9300becb397ce6bd5840b62af12c9f30bb1485abc8e"
+      },
+      "success": false,
+      "errors": [
+        "baseline/authoring-1 failed; retained receipt describes the failure"
+      ],
+      "manifest_identity": {
+        "bytes": 8109,
+        "sha256": "136c3347482e96505d77a86659d237ef3fbbd8a86d9901e90b97c6cac8d5a645"
+      },
+      "runs": [
+        {
+          "side": "baseline",
+          "case": "authoring",
+          "repetition": 1,
+          "process_exit_code": 0,
+          "timed_out": false,
+          "passed_runner_gate": false,
+          "errors": [
+            "native process lacked the expected hardware DRM handle"
+          ],
+          "receipt_identity": {
+            "bytes": 3543,
+            "sha256": "cedd8cf722b0c303ad3ab7962c67aa573c5ac2f60fc59188774d20c7c8ff0725"
+          },
+          "authoring_result_identity": {
+            "bytes": 91831,
+            "sha256": "a64db2c82793433e4454f92b096c813328dc73612da7b0313388924eccbbbb2e"
+          },
+          "renderer": "native WGPU",
+          "canvas_size": [
+            1020.0,
+            770.0
+          ],
+          "functional_assertions": {
+            "layers": 20,
+            "vector_shapes": 576,
+            "typed_objects": 5,
+            "pen_paths": 3,
+            "brush_strokes": 3,
+            "undo_redo": true,
+            "save_reopen_exact": true
+          },
+          "measured_phase_counts": {
+            "typing": 83,
+            "brush-drag": 90,
+            "pan": 40,
+            "zoom": 60,
+            "pen-commit": 3,
+            "save": 1
+          }
+        }
+      ]
+    },
+    {
+      "host": "hpeliteclient",
+      "attempt": "paired-final-20260929032201Z",
+      "source_revisions": {
+        "baseline": "221834bdd8af5aee8554a0e835629cbe2f467558",
+        "candidate": "8ee01b4ea08e0dac9891694b82dd3f4f377a5cf2"
+      },
+      "runner": {
+        "bytes": 22860,
+        "sha256": "f21d253ea4bf1c624bc83f0795708bb03e03abe764fc622e8672f6b613c9f845"
+      },
+      "success": false,
+      "errors": [
+        "candidate/authoring-1 failed; retained receipt describes the failure"
+      ],
+      "manifest_identity": {
+        "bytes": 8336,
+        "sha256": "78c6aa2f4ba27b8523bd677badb8a1af85b3878497fba7c03850b93259b76a97"
+      },
+      "runs": [
+        {
+          "side": "baseline",
+          "case": "authoring",
+          "repetition": 1,
+          "process_exit_code": 0,
+          "timed_out": false,
+          "passed_runner_gate": true,
+          "errors": [],
+          "receipt_identity": {
+            "bytes": 8263,
+            "sha256": "232e97d293754edac3fe8387270fffe4ed39043c3e0119891875dfd0e3e9aa1e"
+          },
+          "authoring_result_identity": {
+            "bytes": 91473,
+            "sha256": "06c62a2c630417a0031391ef66f0f0e7fbb9f677aeaac7fff3960157988901ec"
+          },
+          "renderer": "native WGPU",
+          "canvas_size": [
+            1020.0,
+            770.0
+          ],
+          "functional_assertions": {
+            "layers": 20,
+            "vector_shapes": 576,
+            "typed_objects": 5,
+            "pen_paths": 3,
+            "brush_strokes": 3,
+            "undo_redo": true,
+            "save_reopen_exact": true
+          },
+          "measured_phase_counts": {
+            "typing": 83,
+            "brush-drag": 90,
+            "pan": 40,
+            "zoom": 60,
+            "pen-commit": 3,
+            "save": 1
+          }
+        },
+        {
+          "side": "candidate",
+          "case": "authoring",
+          "repetition": 1,
+          "process_exit_code": 0,
+          "timed_out": false,
+          "passed_runner_gate": false,
+          "errors": [
+            "authoring canvas geometry changed"
+          ],
+          "receipt_identity": {
+            "bytes": 7665,
+            "sha256": "244b6bfa662e659a34db7b44ab981e4cf4f44ca00ef86fe24208abfff1ad41d5"
+          },
+          "authoring_result_identity": {
+            "bytes": 93342,
+            "sha256": "230539a8297d4dd70cc15410072ffeb75d232cc480b9e35c4f10daa408823e32"
+          },
+          "renderer": "native WGPU",
+          "canvas_size": [
+            1014.71875,
+            771.0
+          ],
+          "functional_assertions": {
+            "layers": 20,
+            "vector_shapes": 576,
+            "typed_objects": 5,
+            "pen_paths": 3,
+            "brush_strokes": 3,
+            "undo_redo": true,
+            "save_reopen_exact": true
+          },
+          "measured_phase_counts": {
+            "typing": 83,
+            "brush-drag": 90,
+            "pan": 40,
+            "zoom": 60,
+            "pen-commit": 3,
+            "save": 1
+          }
+        }
+      ]
+    },
+    {
+      "host": "intelpro",
+      "attempt": "paired-final-20260929032201Z",
+      "source_revisions": {
+        "baseline": "221834bdd8af5aee8554a0e835629cbe2f467558",
+        "candidate": "8ee01b4ea08e0dac9891694b82dd3f4f377a5cf2"
+      },
+      "runner": {
+        "bytes": 22860,
+        "sha256": "f21d253ea4bf1c624bc83f0795708bb03e03abe764fc622e8672f6b613c9f845"
+      },
+      "success": false,
+      "errors": [
+        "candidate/authoring-1 failed; retained receipt describes the failure"
+      ],
+      "manifest_identity": {
+        "bytes": 9052,
+        "sha256": "30eb0588d83c7e15d7ec1f8f339d07443b562af42c8d2a39f839ddfd7461b22e"
+      },
+      "runs": [
+        {
+          "side": "baseline",
+          "case": "authoring",
+          "repetition": 1,
+          "process_exit_code": 0,
+          "timed_out": false,
+          "passed_runner_gate": true,
+          "errors": [],
+          "receipt_identity": {
+            "bytes": 10032,
+            "sha256": "b0b6fb3b23f449f00a724df7ebfe0aca65bf9ed29e481379286edbd3e97e1ef6"
+          },
+          "authoring_result_identity": {
+            "bytes": 91648,
+            "sha256": "4d5d1a5aa634b55a7d2ee3131a2d686ce65c0e84c61a1e8c26107af6e9f83a60"
+          },
+          "renderer": "native WGPU",
+          "canvas_size": [
+            1020.0,
+            770.0
+          ],
+          "functional_assertions": {
+            "layers": 20,
+            "vector_shapes": 576,
+            "typed_objects": 5,
+            "pen_paths": 3,
+            "brush_strokes": 3,
+            "undo_redo": true,
+            "save_reopen_exact": true
+          },
+          "measured_phase_counts": {
+            "typing": 83,
+            "brush-drag": 90,
+            "pan": 40,
+            "zoom": 60,
+            "pen-commit": 3,
+            "save": 1
+          }
+        },
+        {
+          "side": "candidate",
+          "case": "authoring",
+          "repetition": 1,
+          "process_exit_code": 0,
+          "timed_out": false,
+          "passed_runner_gate": false,
+          "errors": [
+            "authoring canvas geometry changed"
+          ],
+          "receipt_identity": {
+            "bytes": 9413,
+            "sha256": "a4a652e7d22f9bf2d51aa0fc649f3c8717fb928b14210f3ce8b2bd8de118cb73"
+          },
+          "authoring_result_identity": {
+            "bytes": 93810,
+            "sha256": "b871973a9d3ede09f168ac628062bff4941d21033d9a3fbf409eab421e020be8"
+          },
+          "renderer": "native WGPU",
+          "canvas_size": [
+            1014.71875,
+            771.0
+          ],
+          "functional_assertions": {
+            "layers": 20,
+            "vector_shapes": 576,
+            "typed_objects": 5,
+            "pen_paths": 3,
+            "brush_strokes": 3,
+            "undo_redo": true,
+            "save_reopen_exact": true
+          },
+          "measured_phase_counts": {
+            "typing": 83,
+            "brush-drag": 90,
+            "pan": 40,
+            "zoom": 60,
+            "pen-commit": 3,
+            "save": 1
+          }
+        }
+      ]
+    }
+  ]
+}

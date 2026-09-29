@@ -1,0 +1,35 @@
+{
+  "scope": "Formatting-only normalization after the measured native helpers were frozen. Production library source remains 8ee01b4e. Benchmark receipts continue to pin the original measured sources and binaries; they are not relabeled as builds of the formatted files.",
+  "rustfmt": "rustfmt 1.9.0-stable (88d9e12ae1 2026-08-18)",
+  "command": [
+    "rustfmt",
+    "--edition",
+    "2024",
+    "--emit",
+    "stdout"
+  ],
+  "files": {
+    "src/bin/background_removal_qa/native.rs": {
+      "measured_source": {
+        "bytes": 17344,
+        "sha256": "ef45748b158fe4f9c49d3bee9b2ac670c68185b55e9ed0d6913b31b1ed4a55bc"
+      },
+      "committed_formatted_source": {
+        "bytes": 17891,
+        "sha256": "f058a5bc88d2298cf328614768eb7f818908144b04d1facd53452ed352e7ccc7"
+      },
+      "rustfmt_of_measured_source_exactly_matches": true
+    },
+    "src/bin/upscale_qa/native.rs": {
+      "measured_source": {
+        "bytes": 22104,
+        "sha256": "3693e664be2bb853abf82b41070f22b77dd8ef9903e1bcc4d3790626b44daa64"
+      },
+      "committed_formatted_source": {
+        "bytes": 22438,
+        "sha256": "f14fe520fe18796ab41ed18eee5e8769c1d70e60642f1e38bd6b4be596ba3af5"
+      },
+      "rustfmt_of_measured_source_exactly_matches": true
+    }
+  }
+}

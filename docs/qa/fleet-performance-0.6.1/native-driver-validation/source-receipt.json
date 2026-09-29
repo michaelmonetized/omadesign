@@ -1,0 +1,30 @@
+{
+  "protocol": "hover-atomic-buttons-held-sliders-escape-cancel-v2",
+  "files": {
+    "src/bin/background_removal_qa.rs": {
+      "original_sha256": "7cc50ed98ff37b357c2ea3151bb25b99ab4ceecfa7a348e2a717f132b72217bd",
+      "corrected_sha256": "7cc50ed98ff37b357c2ea3151bb25b99ab4ceecfa7a348e2a717f132b72217bd",
+      "bytes": 3636
+    },
+    "src/bin/background_removal_qa/native.rs": {
+      "original_sha256": "d41b58968a524ffd77d19ab72667f21dc12c8a236e759aee93e39b69de2af8a0",
+      "corrected_sha256": "ef45748b158fe4f9c49d3bee9b2ac670c68185b55e9ed0d6913b31b1ed4a55bc",
+      "bytes": 17344
+    },
+    "src/bin/upscale_qa.rs": {
+      "original_sha256": "9f719f7200e1f33df680c1d5b554b2c1fd2902b1f2742193a34dcc3204cbab02",
+      "corrected_sha256": "9f719f7200e1f33df680c1d5b554b2c1fd2902b1f2742193a34dcc3204cbab02",
+      "bytes": 3279
+    },
+    "src/bin/upscale_qa/native.rs": {
+      "original_sha256": "441e0262dfe4e9c4454b13b83c3f2e7e271b9ceb230862ba7343beaf85478aae",
+      "corrected_sha256": "3693e664be2bb853abf82b41070f22b77dd8ef9903e1bcc4d3790626b44daa64",
+      "bytes": 22104
+    },
+    "src/bin/upscale_qa/pipelines.rs": {
+      "original_sha256": "b13fb7b0732f96b7af0179f3ca50976f0670ccad09eb5d09b8edef6075f8a2a4",
+      "corrected_sha256": "b13fb7b0732f96b7af0179f3ca50976f0670ccad09eb5d09b8edef6075f8a2a4",
+      "bytes": 4935
+    }
+  }
+}
