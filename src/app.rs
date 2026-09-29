@@ -1618,7 +1618,9 @@ impl Studio {
         let (index, parent) = self.new_layer_parent();
         layer.parent = parent;
         let id = layer.id;
-        self.deselect_all();
+        // Pixel selections belong to the document, not the previous layer.
+        self.selected_objects(vec![]);
+        self.paint_mask = false;
         self.commit(Cmd::AddLayer { index, layer });
         self.active_layer = Some(index);
         self.selected_layer = Some(id);

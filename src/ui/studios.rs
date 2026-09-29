@@ -945,7 +945,10 @@ fn character_studio(ui: &mut Ui, studio: &mut Studio) {
         vec2(ui.available_width(), 28.0),
         eframe::egui::Button::new(RichText::new(&label).size(12.0)).truncate(),
     );
-    eframe::egui::Popup::menu(&font_button).show(|ui| {
+    // The search field and scrollbar need clicks without dismissing the picker.
+    let font_popup = eframe::egui::Popup::menu(&font_button)
+        .close_behavior(eframe::egui::PopupCloseBehavior::CloseOnClickOutside);
+    font_popup.show(|ui| {
         ui.set_width(260.0);
         ui.add(
             eframe::egui::TextEdit::singleline(&mut studio.font_query)
@@ -968,6 +971,7 @@ fn character_studio(ui: &mut Ui, studio: &mut Studio) {
                             && ui.selectable_label(face.id == font, name).clicked()
                         {
                             chosen = face.id.clone();
+                            ui.close();
                         }
                     }
                 }
@@ -977,6 +981,7 @@ fn character_studio(ui: &mut Ui, studio: &mut Studio) {
                         let name = crate::text::label_for(p);
                         if ui.selectable_label(*p == font, &name).clicked() {
                             chosen = p.clone();
+                            ui.close();
                         }
                     }
                 }
@@ -986,6 +991,7 @@ fn character_studio(ui: &mut Ui, studio: &mut Studio) {
                         let name = crate::text::label_for(p);
                         if ui.selectable_label(*p == font, &name).clicked() {
                             chosen = p.clone();
+                            ui.close();
                         }
                     }
                 }
@@ -1002,6 +1008,7 @@ fn character_studio(ui: &mut Ui, studio: &mut Studio) {
                     }
                     if resp.clicked() {
                         chosen = path;
+                        ui.close();
                     }
                 }
             });
@@ -1038,6 +1045,10 @@ fn character_studio(ui: &mut Ui, studio: &mut Studio) {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "font_picker_tests.rs"]
+mod font_picker_tests;
 
 struct DownloadedFont {
     path: std::path::PathBuf,

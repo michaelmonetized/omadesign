@@ -469,4 +469,117 @@ mod tests {
         assert_eq!(studio.selection, vec![(4, object)]);
         assert_eq!(studio.active_layer, Some(4));
     }
+
+    #[test]
+    fn new_layers_preserve_pixel_selection_coordinates_and_history() {
+        use crate::app::masking::{SelectionSpace, resample};
+        use crate::document::Pixels;
+        use crate::geom::Anchor;
+
+        for raster in [false, true] {
+            for in_group in [false, true] {
+                for origin in [Pt::new(7.0, 4.0), Pt::new(-5.0, -3.0)] {
+                    let mut studio = Studio::new();
+                    studio.doc = Document::new("Selection", 32.0, 24.0, 96.0);
+                    let mut source = Layer::placed_raster(
+                        "Source",
+                        Pixels::new(8, 6),
+                        origin,
+                        Pt::new(16.0, 9.0),
+                    );
+                    if let LayerKind::Raster {
+                        rotation, shear, ..
+                    } = &mut source.kind
+                    {
+                        *rotation = 0.37;
+                        *shear = 1.25;
+                    }
+                    studio.doc.layers = vec![source];
+                    studio.active_layer = Some(0);
+                    let values: Vec<_> = (0..48).map(|i| [0, 64, 128, 255][i % 4]).collect();
+                    studio.set_pixel_sel(Some(values.clone()));
+                    let space = studio.pixel_sel_space.unwrap();
+                    let address = studio.pixel_sel.as_ref().unwrap().as_ptr();
+                    let generation = studio.pixel_sel_gen;
+                    let anchors = vec![Anchor::corner(Pt::new(2.0, 1.0)); 3];
+                    studio.pixel_path = Some(pixel_edit::SelectionPath {
+                        anchors: anchors.clone(),
+                        space,
+                        generation,
+                    });
+                    let parent = if in_group {
+                        studio.add_layer_group();
+                        studio.selected_layer
+                    } else {
+                        studio.selection = vec![(0, RASTER_ID)];
+                        None
+                    };
+                    let layers_before = studio.doc.layers.len();
+                    studio.history.clear();
+                    studio.paint_mask = true;
+                    studio.add_layer(raster);
+                    assert_eq!(studio.pixel_sel.as_deref(), Some(values.as_slice()));
+
+                    let index = studio.active_layer.unwrap();
+                    let added_id = studio.doc.layers[index].id;
+                    assert_eq!(studio.doc.layers[index].parent, parent);
+                    assert_eq!(studio.doc.layers[index].kind.pixels().is_some(), raster);
+                    assert!(
+                        studio.selection.is_empty(),
+                        "object selection belongs to the old layer"
+                    );
+                    assert!(
+                        !studio.paint_mask,
+                        "a new layer edits its pixels, not the old mask"
+                    );
+                    let target = SelectionSpace {
+                        w: 32,
+                        h: 24,
+                        transform: tiny_skia::Transform::identity(),
+                    };
+                    let mapped = resample(&values, space, target).unwrap();
+                    assert!(mapped.iter().any(|v| *v > 0));
+                    assert_eq!(
+                        studio.pixel_sel_mask(index).as_deref(),
+                        Some(mapped.as_slice())
+                    );
+                    for redo in [false, true] {
+                        if redo {
+                            studio.redo();
+                        } else {
+                            studio.undo();
+                        }
+                        assert_eq!(studio.doc.layers.len(), layers_before + usize::from(redo));
+                        assert_eq!(studio.pixel_sel.as_deref(), Some(values.as_slice()));
+                        assert_eq!(
+                            studio.pixel_sel.as_ref().unwrap().as_ptr(),
+                            address,
+                            "layer operations must not clone or resample the source selection"
+                        );
+                        assert_eq!(studio.pixel_sel_space, Some(space));
+                        assert_eq!(studio.pixel_sel_gen, generation);
+                        assert_eq!(studio.pixel_selection_path(), Some(anchors.as_slice()));
+                    }
+                    let index = studio
+                        .doc
+                        .layers
+                        .iter()
+                        .position(|layer| layer.id == added_id)
+                        .unwrap();
+                    studio.activate_layer_tree(index);
+                    assert_eq!(
+                        studio.pixel_sel_mask(index).as_deref(),
+                        Some(mapped.as_slice())
+                    );
+                    studio.activate_layer_tree(0);
+                    assert_eq!(studio.pixel_sel_mask(0).as_deref(), Some(values.as_slice()));
+                    studio.deselect_all();
+                    assert!(
+                        studio.pixel_sel.is_none(),
+                        "explicit deselection still clears coverage"
+                    );
+                }
+            }
+        }
+    }
 }

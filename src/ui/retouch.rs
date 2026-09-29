@@ -1303,6 +1303,73 @@ mod tests {
     }
 
     #[test]
+    fn new_pixel_layer_keeps_brush_clipped_and_undoable() {
+        let mut studio = studio(16, 16);
+        studio.tool = Tool::Brush;
+        studio.brush.color = Rgba::rgb(255, 0, 0);
+        studio.brush.size = 8.0;
+        commit_marquee(
+            &mut studio,
+            Pt::ZERO,
+            Pt::new(6.0, 16.0),
+            false,
+            paint::PixelCombine::Replace,
+        );
+        let selection = studio.pixel_sel.clone();
+        let original = studio.doc.layers[0].kind.pixels().unwrap().data.clone();
+        start_brush(&mut studio, Pt::new(3.0, 8.0));
+        brush_drag(&mut studio, Pt::new(12.0, 8.0));
+        // Adding a layer must also finish any outstanding stroke with its
+        // original selection, before switching the paint target.
+        studio.add_layer(true);
+        assert_eq!(studio.pixel_sel, selection);
+        assert_eq!(rgba(&studio, 12, 8, false), [160, 170, 180, 255]);
+        assert!(rgba(&studio, 3, 8, false)[0] > 200);
+        let source_after = studio.doc.layers[0].kind.pixels().unwrap().data.clone();
+        start_brush(&mut studio, Pt::new(3.0, 8.0));
+        brush_drag(&mut studio, Pt::new(12.0, 8.0));
+        assert!(studio.end_pixel_stroke(false));
+        let painted = studio.doc.layers[1].kind.pixels().unwrap().data.clone();
+        assert!(painted[(8 * 16 + 3) * 4 + 3] > 0);
+        for y in 0..16 {
+            for x in 6..16 {
+                assert_eq!(
+                    painted[(y * 16 + x) * 4 + 3],
+                    0,
+                    "new-layer brush escaped the selection at {x},{y}"
+                );
+            }
+        }
+        studio.undo();
+        assert!(
+            studio.doc.layers[1]
+                .kind
+                .pixels()
+                .unwrap()
+                .data
+                .iter()
+                .all(|v| *v == 0)
+        );
+        studio.undo();
+        assert_eq!(studio.doc.layers.len(), 1);
+        assert_eq!(
+            studio.doc.layers[0].kind.pixels().unwrap().data,
+            source_after
+        );
+        studio.undo();
+        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data, original);
+        for _ in 0..3 {
+            studio.redo();
+        }
+        assert_eq!(
+            studio.doc.layers[0].kind.pixels().unwrap().data,
+            source_after
+        );
+        assert_eq!(studio.doc.layers[1].kind.pixels().unwrap().data, painted);
+        assert_eq!(studio.pixel_sel, selection);
+    }
+
+    #[test]
     fn feathered_selection_limits_entire_brush_stroke_without_fading_earlier_dabs() {
         let mut studio = studio(32, 16);
         studio.tool = Tool::Brush;
