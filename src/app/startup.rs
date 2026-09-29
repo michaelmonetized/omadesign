@@ -35,6 +35,9 @@ pub struct Preferences {
     pub guides_locked_by_default: bool,
     pub show_rulers: bool,
     pub show_key_hud: bool,
+    pub tracking_step: u16,
+    pub leading_step: u16,
+    pub baseline_step: u16,
     #[serde(flatten)]
     pub extra: std::collections::BTreeMap<String, serde_json::Value>,
 }
@@ -53,6 +56,9 @@ impl Default for Preferences {
             guides_locked_by_default: true,
             show_rulers: true,
             show_key_hud: true,
+            tracking_step: 20,
+            leading_step: 2,
+            baseline_step: 2,
             extra: Default::default(),
         }
     }

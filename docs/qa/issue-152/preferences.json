@@ -1,0 +1,16 @@
+{
+  "start_tab": "welcome",
+  "start_page": "remember_last",
+  "last_mode": "design",
+  "last_page": "new",
+  "ui_font": "",
+  "ui_font_size": 13,
+  "anonymous_usage": false,
+  "check_updates": true,
+  "guides_locked_by_default": true,
+  "show_rulers": true,
+  "show_key_hud": true,
+  "tracking_step": 21,
+  "leading_step": 2,
+  "baseline_step": 2
+}

@@ -5,7 +5,7 @@ use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub(crate) const VERSION: u32 = 11;
+pub(crate) const VERSION: u32 = 12;
 
 #[derive(Serialize, Deserialize)]
 struct File {
@@ -18,8 +18,10 @@ pub fn encode(doc: &Document) -> Result<String, String> {
     pack_rasters(&mut packed)?;
     serde_json::to_string(&File {
         // Older readers must not silently strip a mask or change stroke placement.
-        // Keep plain documents compatible with v5; v1-v11 remain readable here.
-        version: if doc.layers.iter().filter_map(|l| l.kind.shapes()).flatten().any(|s| matches!(&s.geom, crate::geom::Geom::Text(t) if !t.features.is_empty() || t.spans.iter().any(|s| !s.features.is_empty()))) {
+        // Keep plain documents compatible with v5; v1-v12 remain readable here.
+        version: if doc.layers.iter().filter_map(|l| l.kind.shapes()).flatten().any(|s| matches!(&s.geom, crate::geom::Geom::Text(t) if !t.manual_kern.is_empty() || t.spans.iter().any(|s| s.tracking.is_some() || s.kerning.is_some() || s.leading.is_some() || s.baseline_shift.is_some() || s.hscale.is_some() || s.vscale.is_some()))) {
+            12
+        } else if doc.layers.iter().filter_map(|l| l.kind.shapes()).flatten().any(|s| matches!(&s.geom, crate::geom::Geom::Text(t) if !t.features.is_empty() || t.spans.iter().any(|s| !s.features.is_empty()))) {
             11
         } else if doc.layers.iter().filter_map(|l| l.kind.shapes()).flatten().any(|s| matches!(&s.geom, crate::geom::Geom::Text(t) if t.wrap_width.is_some() || !t.paragraphs.is_empty() || !t.spans.is_empty() || matches!(t.align, crate::geom::TextAlign::Justify{..}))) {
             8

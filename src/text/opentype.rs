@@ -121,9 +121,34 @@ pub(super) fn ranged_features(
             .find(|(_, ch, _)| *ch >= span.end)
             .map_or(visible_len, |(byte, _, _)| *byte);
         if from < to {
+            if let Some(mode)=span.kerning {features.push(byte_feature(b"kern",u32::from(mode==crate::geom::KernMode::Metrics),from,to));}
             features.extend(span.features.iter().map(|(tag, value)| {
                 byte_feature(tag, *value, from, to)
             }));
+        }
+    }
+    // A glyph cannot carry different metrics for two characters. Preserve
+    // ligatures inside uniform ranges, but split a cluster across an actual
+    // metric change or an explicitly edited pair.
+    let count = run.content.chars().count();
+    let mut boundaries = std::collections::BTreeSet::new();
+    let metrics = |at| {
+        let s = super::character_metrics(run, at);
+        (s.tracking, s.kerning, s.baseline_shift, s.hscale, s.vscale)
+    };
+    for at in run.spans.iter().flat_map(|span| [span.start, span.end]) {
+        if at > 0 && at < count && metrics(at - 1) != metrics(at) {
+            boundaries.insert(at);
+        }
+    }
+    boundaries.extend(run.manual_kern.iter().filter_map(|(&at, &amount)| {
+        (amount != 0. && at > 0 && at < count).then_some(at)
+    }));
+    for at in boundaries {
+        let from = mapping.iter().find(|(_, ch, _)| *ch >= at - 1).map_or(visible_len, |(byte, _, _)| *byte);
+        let to = mapping.iter().find(|(_, ch, _)| *ch >= at + 1).map_or(visible_len, |(byte, _, _)| *byte);
+        if from < to {
+            for tag in [b"liga", b"clig", b"dlig", b"hlig"] {features.push(byte_feature(tag, 0, from, to));}
         }
     }
     features
@@ -163,6 +188,7 @@ pub fn glyph_alternates(run: &TypeRun, start: usize, end: usize) -> Vec<GlyphAlt
         span.end = hi - start;
         Some(span)
     }).collect();
+    sample.manual_kern = run.manual_kern.range((start + 1)..end).map(|(&i, &value)| (i - start, value)).collect();
     sample.contours.clear();
     let initial = compose(&sample);
     let ids: Vec<_> = initial
@@ -261,7 +287,7 @@ pub fn glyph_alternates(run: &TypeRun, start: usize, end: usize) -> Vec<GlyphAlt
         let run=studio.selected_type().unwrap();assert_eq!(feature_value(&run,7,*b"smcp"),1);assert_eq!(feature_value(&run,6,*b"smcp"),0);
         studio.commit_type_edit();studio.undo();studio.redo();
         assert_eq!(studio.selected_type().unwrap().spans,run.spans);
-        let encoded=crate::project::encode(&studio.doc).unwrap();assert!(encoded.contains("\"version\":11"));
+        let encoded=crate::project::encode(&studio.doc).unwrap();assert!(encoded.contains("\"version\":12"));
         let decoded=crate::project::decode(&encoded).unwrap();let restored=decoded.layers[1].kind.shapes().unwrap().iter().find_map(|s|if let crate::geom::Geom::Text(t)=&s.geom{Some(t)}else{None}).unwrap();assert_eq!(restored.spans,run.spans);
     }
 }

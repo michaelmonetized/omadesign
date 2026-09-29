@@ -83,9 +83,9 @@ pub fn compose(run: &TypeRun) -> Arc<Vec<LayoutLine>> {
     let face = bytes
         .as_ref()
         .and_then(|b| rustybuzz::Face::from_slice(b, 0));
-    let mut lines = Vec::new();
+    let mut lines:Vec<LayoutLine> = Vec::new();
     let mut base = 0;
-    let mut baseline = 0.;
+
     for paragraph in run.content.split('\n') {
         let style = paragraph_style(run, base);
         let measure = run
@@ -303,7 +303,9 @@ pub fn compose(run: &TypeRun) -> Arc<Vec<LayoutLine>> {
                     _ => 0.,
                 };
             }
-            let height = run.line_height();
+            let height=(start..end).map(|i|super::character_metrics(run,i).leading.unwrap().pixels(run.px)).fold(0.,f32::max).max(if start==end{run.line_height()}else{1.});
+            let baseline=lines.last().map_or(0.,|previous|previous.baseline+height);
+
             for glyph in &mut glyphs {
                 glyph.x += offset;
                 glyph.y += baseline;
@@ -332,7 +334,7 @@ pub fn compose(run: &TypeRun) -> Arc<Vec<LayoutLine>> {
                 glyphs,
                 carets,
             });
-            baseline += height;
+
         }
         base += paragraph.chars().count() + 1;
     }
@@ -418,33 +420,26 @@ fn shape_line(
     buffer.set_direction(rustybuzz::Direction::LeftToRight);
     let shaped = rustybuzz::shape(face, &super::opentype::ranged_features(run,&mapping,visible.len()), buffer);
     let mut pen = 0.;
-    let mut result: Vec<_> = shaped
-        .glyph_infos()
-        .iter()
-        .zip(shaped.glyph_positions())
-        .map(|(info, pos)| {
-            let (_, cluster, c) = mapping
-                .iter()
-                .rev()
-                .find(|(byte, _, _)| *byte <= info.cluster as usize)
-                .copied()
-                .unwrap_or((0, start, ' '));
-            let advance = pos.x_advance as f32 * scale + run.tracking;
-            let glyph = LayoutGlyph {
-                id: info.glyph_id as u16,
-                cluster,
-                x: pen + pos.x_offset as f32 * scale,
-                y: -pos.y_offset as f32 * scale,
-                advance,
-                is_space: c == ' ' || c == '\t',
-                hscale: 1.,
-                vscale: 1.,
-            };
-            pen += advance;
-            glyph
-        })
-        .collect();
+    let mut result:Vec<LayoutGlyph>=Vec::new();
+    let mut previous_cluster=None;
+    let mut previous_untracked_advance = 0.;
+    for (info,pos) in shaped.glyph_infos().iter().zip(shaped.glyph_positions()) {
+        let (_,cluster,c)=mapping.iter().rev().find(|(byte,_,_)|*byte<=info.cluster as usize).copied().unwrap_or((0,start,' '));
+        let metrics=super::character_metrics(run,cluster);
+        let hscale=metrics.hscale.unwrap().clamp(1.,1000.)/100.;
+        let vscale=metrics.vscale.unwrap().clamp(1.,1000.)/100.;
+        if previous_cluster!=Some(cluster) {
+            if previous_cluster.is_some() {pen+=run.manual_kern.get(&cluster).copied().unwrap_or(0.)*run.px/1000.;}
+            if metrics.kerning==Some(crate::geom::KernMode::Optical) && c!=' ' && let Some(left)=result.last().filter(|g|!g.is_space) {pen+=super::metrics::optical_adjustment(run,left,previous_untracked_advance,info.glyph_id as u16,hscale);}
+        }
+        let untracked_advance = pos.x_advance as f32 * scale * hscale;
+        let advance=untracked_advance+metrics.tracking.unwrap()*run.px/1000.;
+        result.push(LayoutGlyph{id:info.glyph_id as u16,cluster,x:pen+pos.x_offset as f32*scale*hscale,y:-pos.y_offset as f32*scale*vscale-metrics.baseline_shift.unwrap(),advance,is_space:c==' '||c=='\t',hscale,vscale});
+        pen+=advance;previous_cluster=Some(cluster);
+        previous_untracked_advance = untracked_advance;
+    }
     let style = paragraph_style(run, start);
+    if matches!(style.align,TextAlign::Justify{..}) && run.wrap_width.is_some() && style.break_mode!=BreakMode::KeepAll && let Some(last)=result.last_mut() {last.advance-=super::character_metrics(run,last.cluster).tracking.unwrap()*run.px/1000.;}
     let n = result.len();
     let mut added = 0.;
     for (i, g) in result.iter_mut().enumerate() {
@@ -520,7 +515,7 @@ fn justify_glyphs(glyphs: &mut [LayoutGlyph], target: f32, style: &ParagraphStyl
         glyph.x = pen + offset;
         pen += glyph.advance;
     }
-    glyphs[..count].iter().map(|g| g.advance).sum()
+    glyphs[count-1].x+glyphs[count-1].advance
 }
 
 pub fn glyph_contours(run: &TypeRun, glyph: &LayoutGlyph) -> Vec<Vec<Pt>> {

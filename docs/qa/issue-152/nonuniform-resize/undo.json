@@ -1,0 +1,81 @@
+{
+  "bounds": {
+    "max": {
+      "x": 460.6080017089844,
+      "y": 221.343994140625
+    },
+    "min": {
+      "x": 89.87200164794922,
+      "y": 175.58399963378906
+    }
+  },
+  "manual_kern": {
+    "1": -80.0,
+    "7": 120.0
+  },
+  "max_recompose_contour_error_px": 0.0,
+  "spans": [
+    {
+      "baseline_shift": null,
+      "end": 2,
+      "features": [],
+      "hscale": null,
+      "kerning": null,
+      "leading": null,
+      "no_break": false,
+      "start": 0,
+      "tracking": 100.0,
+      "vscale": null
+    },
+    {
+      "baseline_shift": null,
+      "end": 3,
+      "features": [],
+      "hscale": 125.0,
+      "kerning": null,
+      "leading": null,
+      "no_break": false,
+      "start": 2,
+      "tracking": 100.0,
+      "vscale": null
+    },
+    {
+      "baseline_shift": null,
+      "end": 4,
+      "features": [],
+      "hscale": 125.0,
+      "kerning": null,
+      "leading": null,
+      "no_break": false,
+      "start": 3,
+      "tracking": null,
+      "vscale": null
+    },
+    {
+      "baseline_shift": null,
+      "end": 5,
+      "features": [],
+      "hscale": 125.0,
+      "kerning": null,
+      "leading": null,
+      "no_break": false,
+      "start": 4,
+      "tracking": -40.0,
+      "vscale": null
+    },
+    {
+      "baseline_shift": null,
+      "end": 8,
+      "features": [],
+      "hscale": null,
+      "kerning": null,
+      "leading": null,
+      "no_break": false,
+      "start": 5,
+      "tracking": -40.0,
+      "vscale": null
+    }
+  ],
+  "stage": "undo",
+  "unresolved_input_targets": []
+}

@@ -95,6 +95,7 @@ impl Studio {
             hints.context = "Control focused";
         } else if focus == ShortcutFocus::Text {
             hints.context = "Editing text";
+            hints.keys.extend([("Alt+← / →", "Kerning / tracking"),("Ctrl+Alt+← / →", "Spacing ×5"),("Alt+↑ / ↓", "Leading"),("Alt+Shift+↑ / ↓", "Baseline shift"),("Ctrl+Alt+Q", "Reset spacing")].map(|(keys,label)|KeyHint{keys,label,active:mods.alt}));
             hints.keys.extend([("Ctrl+Shift+L / C / R", "Paragraph alignment"),("Ctrl+Shift+J", "Justify"),("Ctrl+Shift+F", "Justify all"),("Ctrl+Shift+-", "Discretionary hyphen")].map(|(keys,label)|KeyHint{keys,label,active:command&&mods.shift}));
             hints.gestures = vec![
                 KeyHint {

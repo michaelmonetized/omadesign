@@ -421,6 +421,7 @@ fn write_shape(
         && !run.content.contains('\u{ad}')
         && run.spans.is_empty()
         && run.features.is_empty()
+        && run.manual_kern.is_empty()
     {
         let family = crate::text::label_for(&run.font);
         body.push_str(&format!("  <text id=\"oma-{}\" font-family=\"{}\" font-size=\"{:.2}\" {fill_attr}{stroke_attr} opacity=\"{:.3}\"{extra} xml:space=\"preserve\">",shape.id,xml_escape(&family),run.px,shape.opacity));

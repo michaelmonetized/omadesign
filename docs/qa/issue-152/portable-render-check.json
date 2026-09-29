@@ -1,0 +1,74 @@
+[
+  {
+    "convert_ms": 60.547711,
+    "layer": "Background",
+    "render_ms": 22.294161,
+    "round": 0
+  },
+  {
+    "convert_ms": 60.748634,
+    "layer": "Background",
+    "render_ms": 5.429619,
+    "round": 1
+  },
+  {
+    "convert_ms": 59.799898,
+    "layer": "Background",
+    "render_ms": 5.223322,
+    "round": 2
+  },
+  {
+    "convert_ms": 59.647393,
+    "layer": "Background",
+    "render_ms": 5.22203,
+    "round": 3
+  },
+  {
+    "convert_ms": 59.963111,
+    "layer": "Layer 1",
+    "render_ms": 22.405748,
+    "round": 0
+  },
+  {
+    "convert_ms": 60.39854,
+    "layer": "Layer 1",
+    "render_ms": 22.153031,
+    "round": 1
+  },
+  {
+    "convert_ms": 59.805065,
+    "layer": "Layer 1",
+    "render_ms": 21.914941,
+    "round": 2
+  },
+  {
+    "convert_ms": 59.638935,
+    "layer": "Layer 1",
+    "render_ms": 21.876565,
+    "round": 3
+  },
+  {
+    "convert_ms": 59.527765,
+    "layer": "ALL",
+    "render_ms": 39.151661,
+    "round": 0
+  },
+  {
+    "convert_ms": 60.874636,
+    "layer": "ALL",
+    "render_ms": 21.998902,
+    "round": 1
+  },
+  {
+    "convert_ms": 60.593835999999996,
+    "layer": "ALL",
+    "render_ms": 22.349912,
+    "round": 2
+  },
+  {
+    "convert_ms": 60.272492,
+    "layer": "ALL",
+    "render_ms": 22.238242,
+    "round": 3
+  }
+]

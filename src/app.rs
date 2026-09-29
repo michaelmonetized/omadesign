@@ -2297,6 +2297,17 @@ impl Studio {
         }
     }
 
+    pub fn selected_character_metrics(&self)->Vec<crate::geom::CharSpan> {
+        let mut run=self.selected_type().unwrap_or_else(||self.type_defaults());
+        let (a,b)=self.type_edit.as_ref().map(|e|(e.caret.min(e.anchor),e.caret.max(e.anchor))).unwrap_or((0,run.content.chars().count()));
+        if a==b {
+            let inherited=if self.selected_type().is_some(){run.character_style(a.saturating_sub(1))}else{self.text_character.clone()};
+            let style=self.type_edit.as_ref().and_then(|e|e.pending_style.clone()).unwrap_or(inherited);
+            run.content="x".into();run.spans=vec![crate::geom::CharSpan{start:0,end:1,..style}];
+            vec![crate::text::character_metrics(&run,0)]
+        } else {(a..b).map(|i|crate::text::character_metrics(&run,i)).collect()}
+    }
+
     pub fn patch_character(&mut self, mut f:impl FnMut(&mut crate::geom::CharSpan)) {
         if let Some(edit)=self.type_edit.clone() {
             let (a,b)=(edit.caret.min(edit.anchor),edit.caret.max(edit.anchor));

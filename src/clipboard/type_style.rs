@@ -15,6 +15,8 @@ const COMMON: [[u8; 4]; 7] = [
 pub struct RichText {
     pub text: String,
     pub spans: Vec<CharSpan>,
+    #[serde(default)]
+    pub manual_kern: BTreeMap<usize, f32>,
 }
 impl RichText {
     pub fn from_run(run: &TypeRun, start: usize, end: usize) -> Self {
@@ -45,6 +47,7 @@ impl RichText {
                 defaults.entry(tag).or_insert(0);
             }
         }
+        let base = crate::text::character_metrics(run, usize::MAX);
         let spans = run
             .character_style_runs(start, end)
             .into_iter()
@@ -52,6 +55,12 @@ impl RichText {
                 let mut features = defaults.clone();
                 features.extend(span.features.iter().copied());
                 let mut style = span.clone();
+                style.tracking = style.tracking.or(base.tracking);
+                style.kerning = style.kerning.or(base.kerning);
+                style.leading = style.leading.or(base.leading);
+                style.baseline_shift = style.baseline_shift.or(base.baseline_shift);
+                style.hscale = style.hscale.or(base.hscale);
+                style.vscale = style.vscale.or(base.vscale);
                 style.features = features.into_iter().collect();
                 style.start = span.start - start;
                 style.end = span.end - start;
@@ -63,6 +72,11 @@ impl RichText {
                 ..crate::text::char_to_byte(&run.content, end)]
                 .into(),
             spans,
+            manual_kern: run
+                .manual_kern
+                .range((start + 1)..end.max(start + 1))
+                .map(|(&at, &value)| (at - start, value))
+                .collect(),
         }
     }
     pub fn apply_styles(&self, run: &mut TypeRun, start: usize) {
@@ -89,6 +103,12 @@ impl RichText {
             })
             .collect();
         run.replace_character_styles(start, end, spans);
+        run.manual_kern.retain(|at, _| *at <= start || *at >= end);
+        run.manual_kern.extend(
+            self.manual_kern
+                .iter()
+                .map(|(&at, &value)| (start + at, value)),
+        );
     }
     fn decode(bytes: &[u8]) -> Option<Self> {
         if bytes.len() > super::MAX_TEXT_BYTES {
@@ -103,7 +123,12 @@ impl RichText {
             }
             end = span.end;
         }
-        if end != count {
+        if end != count
+            || rich
+                .manual_kern
+                .iter()
+                .any(|(&at, &value)| at == 0 || at >= count || !value.is_finite())
+        {
             return None;
         }
         Some(rich)
@@ -345,6 +370,10 @@ mod tests {
                 );
             }
         }
+        assert_eq!(
+            crate::text::character_metrics(&source, 0).tracking,
+            crate::text::character_metrics(&target, 0).tracking
+        );
         let font = concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/tests/assets/fonts/EBGaramond.ttf"
@@ -358,6 +387,57 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(ids(&source), ids(&target));
+    }
+    #[test]
+    fn clipboard_materializes_metrics_and_reindexes_manual_pairs_once() {
+        let mut source = TypeRun {
+            content: "zAVz".into(),
+            px: 20.,
+            tracking: 2.,
+            leading: 30.,
+            kern: false,
+            ..Default::default()
+        };
+        source.manual_kern.insert(1, 20.);
+        source.manual_kern.insert(2, -50.);
+        source.manual_kern.insert(3, 70.);
+        source.set_character_style(2, 3, |s| {
+            s.hscale = Some(125.);
+            s.baseline_shift = Some(4.);
+        });
+        let rich = RichText::from_run(&source, 1, 3);
+        assert_eq!(rich.manual_kern, BTreeMap::from([(1, -50.)]));
+        let mut target = TypeRun {
+            content: "xAVy".into(),
+            tracking: 8.,
+            leading: 80.,
+            kern: true,
+            ..Default::default()
+        };
+        rich.apply_styles(&mut target, 1);
+        assert_eq!(target.manual_kern, BTreeMap::from([(2, -50.)]));
+        for (from, to) in [(1, 1), (2, 2)] {
+            let a = crate::text::character_metrics(&source, from);
+            let b = crate::text::character_metrics(&target, to);
+            assert_eq!(
+                (
+                    a.tracking,
+                    a.kerning,
+                    a.leading,
+                    a.baseline_shift,
+                    a.hscale,
+                    a.vscale
+                ),
+                (
+                    b.tracking,
+                    b.kerning,
+                    b.leading,
+                    b.baseline_shift,
+                    b.hscale,
+                    b.vscale
+                )
+            );
+        }
     }
     #[test]
     fn uniform_large_clipboard_uses_one_interval_and_batch_overlay_preserves_neighbors() {

@@ -666,6 +666,8 @@ pub struct TypeRun {
     pub spans: Vec<CharSpan>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub features: Vec<([u8; 4], u32)>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub manual_kern: std::collections::BTreeMap<usize,f32>,
     /// Installed font path or portable `omatype:` content ID. Empty picks system sans.
     #[serde(default)]
     pub font: String,
@@ -694,6 +696,7 @@ impl Default for TypeRun {
             paragraphs: vec![],
             spans: vec![],
             features: vec![],
+            manual_kern: Default::default(),
             font: String::new(),
             kern: true,
             liga: true,
@@ -759,7 +762,17 @@ impl Default for ParagraphStyle { fn default() -> Self { Self { start: 0, align:
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct CharSpan { pub start: usize, pub end: usize, pub no_break: bool, pub features: Vec<([u8;4],u32)> }
+pub struct CharSpan {
+    pub start: usize, pub end: usize, pub no_break: bool, pub features: Vec<([u8;4],u32)>,
+    pub tracking: Option<f32>, pub kerning: Option<KernMode>, pub leading: Option<Leading>,
+    pub baseline_shift: Option<f32>, pub hscale: Option<f32>, pub vscale: Option<f32>,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum KernMode { #[default] Metrics, Optical, None }
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub enum Leading { Auto(f32), Fixed(f32) }
+impl Leading { pub fn pixels(self,px:f32)->f32 {match self{Self::Auto(percent)=>px*percent/100.,Self::Fixed(value)=>value}.max(1.)} }
+
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PathContour {
@@ -1030,6 +1043,8 @@ impl Geom {
                 t.px *= sy;
                 t.tracking *= sx;
                 t.leading *= sy;
+                t.scale_character_metrics(sy);
+                if (sx-sy).abs()>0.001 && sy.abs()>0.001 {t.scale_character_widths(sx/sy);}
                 for c in &mut t.contours {
                     for p in c {
                         *p = src.map_pt(*p, dst);
@@ -1102,6 +1117,7 @@ impl Geom {
             }
             Geom::Text(t) => {
                 t.origin = fp(t.origin);
+                if !horizontal {for span in &mut t.spans {if let Some(shift)=&mut span.baseline_shift {*shift = -*shift;}}}
                 for contour in &mut t.contours {
                     for p in contour {
                         *p = fp(*p);

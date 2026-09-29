@@ -53,6 +53,7 @@ fn size_text(run: &mut crate::geom::TypeRun, size: f32) -> bool {
         run.leading *= ratio;
     }
     run.tracking *= ratio;
+    run.scale_character_metrics(ratio);
     run.px = size;
     true
 }
@@ -1493,5 +1494,15 @@ mod tests {
         assert_eq!(layout.stack.unwrap().flow, StackFlow::Stack);
         assert!(!layout.clip);
         assert!(FrameLayout::frame().clip);
+    }
+}
+
+#[cfg(test)] mod character_scaling_tests {
+    use super::*;
+    #[test] fn responsive_font_size_scales_absolute_metrics_only() {
+        let mut run=crate::geom::TypeRun{content:"Scale".into(),px:20.,tracking:1.,leading:28.,..Default::default()};
+        run.set_character_style(0,5,|s|{s.tracking=Some(75.);s.leading=Some(crate::geom::Leading::Fixed(30.));s.baseline_shift=Some(3.);s.hscale=Some(120.);});run.manual_kern.insert(1,20.);
+        assert!(size_text(&mut run,40.));let style=run.character_style(2);
+        assert_eq!(style.leading,Some(crate::geom::Leading::Fixed(60.)));assert_eq!(style.baseline_shift,Some(6.));assert_eq!(style.tracking,Some(75.));assert_eq!(style.hscale,Some(120.));assert_eq!(run.manual_kern.get(&1),Some(&20.));assert_eq!(run.tracking,2.);assert_eq!(run.leading,56.);
     }
 }

@@ -134,7 +134,9 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
             ] {
                 ui.horizontal(|ui| {
                     ui.label(label);
-                    ui.add(egui::DragValue::new(v).range(1..=30));
+                    let minimum = usize::from(label != "Consecutive lines");
+                    ui.add(egui::DragValue::new(v).range(minimum..=30))
+                        .on_hover_text(if minimum == 0 { "0 allows unlimited consecutive hyphenated lines" } else { label });
                 });
             }
             ui.add(

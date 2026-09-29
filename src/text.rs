@@ -513,6 +513,8 @@ fn buzz_shape(_bytes: &[u8], run: &TypeRun) -> Option<Vec<Vec<Pt>>> {
 
 mod composer;
 mod edit;
+mod metrics;
+pub use metrics::character_metrics;
 mod opentype;
 pub use opentype::{font_features, feature_value, feature_css, glyph_alternates};
 pub mod hyphenation;
@@ -525,20 +527,31 @@ pub fn measure(run:&TypeRun)->(f32,f32) {
 pub fn caret_pt(run:&TypeRun,char_idx:usize)->Pt {
     let lines=compose(run);let idx=char_idx.min(run.content.chars().count());
     let line=&lines[lines.iter().rposition(|l|l.start<=idx).unwrap_or(0)];
-    Pt::new(run.origin.x+line.caret_x(idx),run.origin.y+line.baseline)
+    Pt::new(run.origin.x+line.caret_x(idx),run.origin.y+line.baseline-character_metrics(run,idx.min(run.content.chars().count().saturating_sub(1))).baseline_shift.unwrap())
 }
 pub fn hit_char(run:&TypeRun,p:Pt)->usize {
     let lines=compose(run);
-    let line=lines.iter().min_by(|a,b|(a.baseline-(p.y-run.origin.y)).abs().total_cmp(&(b.baseline-(p.y-run.origin.y)).abs())).unwrap();
-    line.carets.iter().min_by(|(_,a),(_,b)|(run.origin.x+a-p.x).abs().total_cmp(&(run.origin.x+b-p.x).abs())).map_or(line.start,|(i,_)|*i)
+    lines.iter().flat_map(|line|line.carets.iter().map(move |(index,x)| {
+        let style=character_metrics(run,(*index).min(run.content.chars().count().saturating_sub(1)));
+        let y=run.origin.y+line.baseline-style.baseline_shift.unwrap();let height=run.px*style.vscale.unwrap()/100.;
+        let dy=if p.y<y-height*0.9 {y-height*0.9-p.y}else if p.y>y+height*0.25{p.y-y-height*0.25}else{0.};
+        let dx=run.origin.x+x-p.x;(*index,dx*dx+dy*dy)
+    })).min_by(|(_,a),(_,b)|a.total_cmp(b)).map_or(0,|(index,_)|index)
 }
 pub fn selection_rects(run:&TypeRun,a:usize,b:usize)->Vec<(Pt,Pt)> {
-    let lo=a.min(b);let hi=a.max(b);
-    compose(run).iter().filter_map(|l| {
-        let a=lo.max(l.start);let b=hi.min(l.end);if a>=b{return None;}
-        Some((Pt::new(run.origin.x+l.caret_x(a),run.origin.y+l.baseline-run.px*0.9),Pt::new(run.origin.x+l.caret_x(b),run.origin.y+l.baseline+run.px*0.25)))
-    }).collect()
+    let lo=a.min(b);let hi=a.max(b);let mut rects=Vec::new();
+    for line in compose(run).iter() {
+        let mut from=lo.max(line.start);let end=hi.min(line.end);
+        while from<end {
+            let style=character_metrics(run,from);let mut to=from+1;
+            while to<end {let next=character_metrics(run,to);if next.baseline_shift!=style.baseline_shift||next.vscale!=style.vscale{break;}to+=1;}
+            let y=run.origin.y+line.baseline-style.baseline_shift.unwrap();let px=run.px*style.vscale.unwrap()/100.;
+            rects.push((Pt::new(run.origin.x+line.caret_x(from),y-px*0.9),Pt::new(run.origin.x+line.caret_x(to),y+px*0.25)));from=to;
+        }
+    }
+    rects
 }
+pub fn caret_height(run:&TypeRun,index:usize)->f32 {run.px*character_metrics(run,index.min(run.content.chars().count().saturating_sub(1))).vscale.unwrap()/100.}
 pub fn char_to_byte(s:&str,char_idx:usize)->usize {s.char_indices().nth(char_idx).map(|(i,_)|i).unwrap_or(s.len())}
 pub fn paragraph_spacing_css(run: &TypeRun, style: &crate::geom::ParagraphStyle) -> String {
     // CSS word spacing adds to the font's space advance; the inspector stores
@@ -550,6 +563,16 @@ pub fn paragraph_spacing_css(run: &TypeRun, style: &crate::geom::ParagraphStyle)
     let px = run.px.max(1.);
     format!("--oma-paragraph-letter-spacing:{}em;letter-spacing:calc({}em + var(--oma-paragraph-letter-spacing));word-spacing:{}em;", style.letter_spacing[1] / 100., (space - base_space) / px, space * (style.word_spacing[1] / 100. - 1.) / px)
 }
+pub fn character_css(run:&TypeRun,style:&crate::geom::CharSpan)->String {
+    use std::fmt::Write;
+    let mut css=String::new();
+    if let Some(value)=style.tracking{let _=write!(css,"letter-spacing:calc({}em + var(--oma-paragraph-letter-spacing, 0em));",value/1000.);}
+    if let Some(value)=style.leading{let _=write!(css,"line-height:{}px;",value.pixels(run.px));}
+    if let Some(mode)=style.kerning{let _=write!(css,"font-kerning:{};",if mode==crate::geom::KernMode::Metrics{"normal"}else{"none"});}
+    if let Some(value)=style.baseline_shift{let _=write!(css,"position:relative;top:{}px;",-value);}
+    if style.hscale.is_some()||style.vscale.is_some(){let _=write!(css,"display:inline-block;transform-origin:left baseline;transform:scale({},{});",style.hscale.unwrap_or(100.)/100.,style.vscale.unwrap_or(100.)/100.);}
+    css
+}
 pub fn styled_html(run:&TypeRun,start:usize,text:&str)->String {
     let escape=|s:&str|s.replace('&',"&amp;").replace('<',"&lt;").replace('>',"&gt;");
     let mut out=String::new();let mut from=0;let chars:Vec<_>=text.chars().collect();
@@ -558,7 +581,8 @@ pub fn styled_html(run:&TypeRun,start:usize,text:&str)->String {
         while to<chars.len()&&run.character_style(start+to)==style {to+=1;}
         let mut features=vec![(*b"kern",u32::from(run.kern)),(*b"liga",u32::from(run.liga)),(*b"clig",u32::from(run.liga)),(*b"tnum",u32::from(run.tnum)),(*b"smcp",u32::from(run.smcp)),(*b"c2sc",u32::from(run.smcp))];
         for &(tag,value) in run.features.iter().chain(&style.features) {features.retain(|(t,_)|*t!=tag);features.push((tag,value));}
-        out.push_str(&format!("<span style=\"font-feature-settings:{};{}\">{}</span>",feature_css(&features),if style.no_break{"white-space:pre;"}else{""},escape(&chars[from..to].iter().collect::<String>())));
+        if let Some(mode)=style.kerning {features.retain(|(tag,_)|*tag!=*b"kern");features.push((*b"kern",u32::from(mode==crate::geom::KernMode::Metrics)));}
+        out.push_str(&format!("<span style=\"font-feature-settings:{};{}\">{}</span>",feature_css(&features),format!("{}{}",if style.no_break{"white-space:pre;"}else{""},character_css(run,&style)),escape(&chars[from..to].iter().collect::<String>())));
         from=to;
     }
     out
