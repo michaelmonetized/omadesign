@@ -25,6 +25,13 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         resp.request_focus();
     }
 
+    if studio.type_edit.is_some() {
+        ui.ctx().memory_mut(|memory| memory.set_focus_lock_filter(
+            eframe::egui::Id::new("studio-canvas"),
+            eframe::egui::EventFilter {horizontal_arrows:true,vertical_arrows:true,tab:true,escape:true},
+        ));
+    }
+
     if studio.need_fit {
         studio.view.fit(
             studio.doc.size(),

@@ -5,7 +5,7 @@ use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub(crate) const VERSION: u32 = 7;
+pub(crate) const VERSION: u32 = 8;
 
 #[derive(Serialize, Deserialize)]
 struct File {
@@ -18,8 +18,10 @@ pub fn encode(doc: &Document) -> Result<String, String> {
     pack_rasters(&mut packed)?;
     serde_json::to_string(&File {
         // Older readers must not silently strip a mask or change stroke placement.
-        // Keep plain documents compatible with v5; v1-v7 remain readable here.
-        version: if doc.layers.iter().any(|l| {
+        // Keep plain documents compatible with v5; v1-v8 remain readable here.
+        version: if doc.layers.iter().filter_map(|l| l.kind.shapes()).flatten().any(|s| matches!(&s.geom, crate::geom::Geom::Text(t) if t.wrap_width.is_some() || !t.paragraphs.is_empty() || !t.spans.is_empty() || matches!(t.align, crate::geom::TextAlign::Justify{..}))) {
+            8
+        } else if doc.layers.iter().any(|l| {
             l.fill_opacity != 1.
                 || l.blend_interior
                 || !l.filters.items.is_empty()
@@ -71,6 +73,11 @@ pub fn decode(s: &str) -> Result<Document, String> {
             for s in shapes {
                 if file.version < 7 {
                     s.filters.migrate_legacy(s.blend);
+                }
+                if file.version < 8 {
+                    if let crate::geom::Geom::Text(t)=&mut s.geom && t.wrap_width.is_some() {
+                        t.update_paragraphs(0,t.content.chars().count(),|p|p.overflow_wrap=true);
+                    }
                 }
                 crate::text::fill_contours(&mut s.geom);
                 if let Some(mask) = s.mask.as_mut() {
@@ -696,7 +703,9 @@ mod tests {
             gallery_id: String::new(),
         });
         let encoded = encode(&doc).unwrap();
-        assert!(encoded.contains("\"version\":5"));
+        // The template contains wrapped paragraphs. Version 8 preserves the new
+        // Unicode wrapping defaults instead of applying the legacy migration.
+        assert!(encoded.contains("\"version\":8"));
         let back = decode(&encoded).unwrap();
         let frames: Vec<_> = back.layers[0]
             .kind

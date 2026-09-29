@@ -163,6 +163,7 @@ fn main() {
             contours: vec![],
             wrap_width: None,
             align: Default::default(),
+            ..TypeRun::default()
         };
         omadesign::text::fill_contours(&mut Geom::Text(run.clone()));
         let mut g = Geom::Text(run);

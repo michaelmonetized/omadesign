@@ -660,6 +660,10 @@ pub struct TypeRun {
     pub wrap_width: Option<f32>,
     #[serde(default)]
     pub align: TextAlign,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub paragraphs: Vec<ParagraphStyle>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub spans: Vec<CharSpan>,
     /// Installed font path or portable `omatype:` content ID. Empty picks system sans.
     #[serde(default)]
     pub font: String,
@@ -685,6 +689,8 @@ impl Default for TypeRun {
             leading: 0.0,
             wrap_width: None,
             align: TextAlign::Start,
+            paragraphs: vec![],
+            spans: vec![],
             font: String::new(),
             kern: true,
             liga: true,
@@ -711,7 +717,46 @@ pub enum TextAlign {
     Start,
     Center,
     End,
+    Justify { last: LastLine },
 }
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LastLine { #[default] Start, Center, End, Justify }
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BreakMode { #[default] Normal, Word, BreakAll, KeepAll }
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HyphenSettings {
+    pub language: String, pub min_word_len: usize, pub min_before: usize, pub min_after: usize,
+    pub max_consecutive: usize, pub zone: f32, pub capitalized: bool, pub last_word: bool,
+}
+fn system_text_language()->String {
+    ["LC_ALL","LC_CTYPE","LANG"].into_iter().find_map(|key|std::env::var(key).ok().filter(|value|!value.is_empty())).map(|value|value.split('.').next().unwrap_or("en-US").replace('_',"-")).filter(|value|value!="C"&&value!="POSIX").unwrap_or_else(||"en-US".into())
+}
+impl Default for HyphenSettings { fn default() -> Self { Self { language: system_text_language(), min_word_len: 6, min_before: 3, min_after: 3, max_consecutive: 2, zone: 0.0, capitalized: false, last_word: false } } }
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct RuntRule { pub words: usize, pub characters: usize }
+impl Default for RuntRule { fn default() -> Self { Self { words: 1, characters: 6 } } }
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum KeepTogether { #[default] None, All, Edges { first: u8, last: u8 } }
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ParagraphStyle {
+    pub start: usize, pub align: TextAlign, pub word_spacing: [f32; 3], pub letter_spacing: [f32; 3],
+    pub break_mode: BreakMode, pub overflow_wrap: bool, pub hyphenate: bool, pub hyphen: Option<HyphenSettings>,
+    pub min_start_lines: u8, pub min_end_lines: u8, pub allow_orphans: bool, pub runt: Option<RuntRule>,
+    pub keep_with_next: u8, pub keep_together: KeepTogether,
+}
+impl Default for ParagraphStyle { fn default() -> Self { Self { start: 0, align: TextAlign::Start, word_spacing: [80.,100.,133.], letter_spacing: [0.,0.,0.], break_mode: BreakMode::Normal, overflow_wrap: false, hyphenate: false, hyphen: None, min_start_lines: 2, min_end_lines: 2, allow_orphans: true, runt: None, keep_with_next: 0, keep_together: KeepTogether::None } } }
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CharSpan { pub start: usize, pub end: usize, pub no_break: bool }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PathContour {

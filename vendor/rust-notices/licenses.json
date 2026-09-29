@@ -1,7 +1,7 @@
 {
   "format": 1,
   "generator": "cargo-about 0.9.2 / scripts/update-third-party.py",
-  "cargo_lock_sha256": "e886ad6770ce65c086ce50f5f9f6d3dee884476235b7d35350dfa8222d910b32",
+  "cargo_lock_sha256": "541a220ddd6771dd451a85918f770e2d4bc14bda63afcd959f4f990b390018a5",
   "components": [
     {
       "name": "ab_glyph",
@@ -522,6 +522,24 @@
       ]
     },
     {
+      "name": "bincode",
+      "version": "1.3.3",
+      "license": "MIT",
+      "authors": [
+        "Ty Overby <ty@pre-alpha.com>",
+        "Francesco Mazzoli <f@mazzo.li>",
+        "David Tolnay <dtolnay@gmail.com>",
+        "Zoey Riordan <zoey@dos.cafe>"
+      ],
+      "copyright": [
+        "Copyright (c) 2014 Ty Overby"
+      ],
+      "repository": "https://github.com/servo/bincode",
+      "notices": [
+        17
+      ]
+    },
+    {
       "name": "bit-set",
       "version": "0.10.0",
       "license": "Apache-2.0 OR MIT",
@@ -533,7 +551,7 @@
       ],
       "repository": "https://github.com/contain-rs/bit-set",
       "notices": [
-        17
+        18
       ]
     },
     {
@@ -548,7 +566,7 @@
       ],
       "repository": "https://github.com/contain-rs/bit-vec",
       "notices": [
-        18
+        19
       ]
     },
     {
@@ -563,7 +581,7 @@
       ],
       "repository": "https://github.com/bitflags/bitflags",
       "notices": [
-        19
+        20
       ]
     },
     {
@@ -578,7 +596,7 @@
       ],
       "repository": "https://github.com/RustCrypto/utils",
       "notices": [
-        20
+        21
       ]
     },
     {
@@ -593,7 +611,7 @@
       ],
       "repository": "https://github.com/RustCrypto/utils",
       "notices": [
-        21
+        22
       ]
     },
     {
@@ -608,7 +626,7 @@
       ],
       "repository": "https://github.com/RustCrypto/utils",
       "notices": [
-        21
+        22
       ]
     },
     {
@@ -634,7 +652,7 @@
       ],
       "repository": "https://github.com/BurntSushi/bstr",
       "notices": [
-        22
+        23
       ]
     },
     {
@@ -649,7 +667,7 @@
       ],
       "repository": "https://github.com/Lokathor/bytemuck",
       "notices": [
-        23
+        24
       ]
     },
     {
@@ -664,7 +682,7 @@
       ],
       "repository": "https://github.com/Lokathor/bytemuck",
       "notices": [
-        23
+        24
       ]
     },
     {
@@ -679,7 +697,7 @@
       ],
       "repository": "https://github.com/BurntSushi/byteorder",
       "notices": [
-        24
+        25
       ]
     },
     {
@@ -692,7 +710,7 @@
       ],
       "repository": "https://github.com/image-rs/byteorder-lite",
       "notices": [
-        24
+        25
       ]
     },
     {
@@ -707,7 +725,7 @@
       ],
       "repository": "https://github.com/Smithay/calloop",
       "notices": [
-        25
+        26
       ]
     },
     {
@@ -722,7 +740,7 @@
       ],
       "repository": "https://github.com/Smithay/calloop",
       "notices": [
-        25
+        26
       ]
     },
     {
@@ -737,7 +755,7 @@
       ],
       "repository": "https://github.com/smithay/calloop-wayland-source",
       "notices": [
-        26
+        27
       ]
     },
     {
@@ -752,7 +770,7 @@
       ],
       "repository": "https://github.com/smithay/calloop-wayland-source",
       "notices": [
-        26
+        27
       ]
     },
     {
@@ -768,7 +786,7 @@
       ],
       "repository": "https://github.com/RustCrypto/block-modes",
       "notices": [
-        27
+        28
       ]
     },
     {
@@ -781,7 +799,7 @@
       ],
       "repository": "https://github.com/rust-lang/cc-rs",
       "notices": [
-        28
+        29
       ]
     },
     {
@@ -796,7 +814,7 @@
       ],
       "repository": "https://github.com/rust-lang/cfg-if",
       "notices": [
-        28
+        29
       ]
     },
     {
@@ -811,8 +829,8 @@
       ],
       "repository": "https://github.com/katharostech/cfg_aliases",
       "notices": [
-        29,
-        30
+        30,
+        31
       ]
     },
     {
@@ -827,7 +845,7 @@
       ],
       "repository": "https://github.com/RustCrypto/stream-ciphers",
       "notices": [
-        31
+        32
       ]
     },
     {
@@ -842,7 +860,7 @@
       ],
       "repository": "https://github.com/RustCrypto/traits",
       "notices": [
-        32
+        33
       ]
     },
     {
@@ -866,7 +884,7 @@
       "copyright": [],
       "repository": "https://github.com/linebender/color",
       "notices": [
-        33
+        34
       ]
     },
     {
@@ -881,7 +899,7 @@
       ],
       "repository": "https://github.com/image-rs/color_quant.git",
       "notices": [
-        34
+        35
       ]
     },
     {
@@ -911,7 +929,7 @@
       ],
       "repository": "https://github.com/RustCrypto/formats",
       "notices": [
-        35
+        36
       ]
     },
     {
@@ -926,7 +944,7 @@
       ],
       "repository": "https://github.com/robertbastian/core_maths",
       "notices": [
-        36
+        37
       ]
     },
     {
@@ -941,7 +959,7 @@
       ],
       "repository": "https://github.com/RustCrypto/utils",
       "notices": [
-        37
+        38
       ]
     },
     {
@@ -956,7 +974,7 @@
       ],
       "repository": "https://github.com/RustCrypto/utils",
       "notices": [
-        38
+        39
       ]
     },
     {
@@ -971,7 +989,7 @@
       ],
       "repository": "https://github.com/RustCrypto/utils",
       "notices": [
-        35
+        36
       ]
     },
     {
@@ -987,7 +1005,7 @@
       ],
       "repository": "https://github.com/srijs/rust-crc32fast",
       "notices": [
-        39
+        40
       ]
     },
     {
@@ -1000,7 +1018,7 @@
       ],
       "repository": "https://github.com/crossbeam-rs/crossbeam",
       "notices": [
-        40
+        41
       ]
     },
     {
@@ -1013,7 +1031,7 @@
       ],
       "repository": "https://github.com/crossbeam-rs/crossbeam",
       "notices": [
-        40
+        41
       ]
     },
     {
@@ -1026,7 +1044,7 @@
       ],
       "repository": "https://github.com/crossbeam-rs/crossbeam",
       "notices": [
-        40
+        41
       ]
     },
     {
@@ -1041,7 +1059,7 @@
       ],
       "repository": "https://github.com/RustCrypto/traits",
       "notices": [
-        41
+        42
       ]
     },
     {
@@ -1056,7 +1074,7 @@
       ],
       "repository": "https://github.com/RustCrypto/traits",
       "notices": [
-        42
+        43
       ]
     },
     {
@@ -1071,7 +1089,7 @@
       ],
       "repository": "https://github.com/rust-windowing/cursor-icon",
       "notices": [
-        43
+        44
       ]
     },
     {
@@ -1086,7 +1104,7 @@
       ],
       "repository": "https://github.com/servo/rust-url",
       "notices": [
-        44
+        45
       ]
     },
     {
@@ -1101,7 +1119,7 @@
       ],
       "repository": "https://github.com/RustCrypto/traits",
       "notices": [
-        45
+        46
       ]
     },
     {
@@ -1117,7 +1135,7 @@
       ],
       "repository": "https://github.com/RustCrypto/traits",
       "notices": [
-        46
+        47
       ]
     },
     {
@@ -1145,7 +1163,7 @@
       ],
       "repository": "https://github.com/elinorbgr/dlib",
       "notices": [
-        47
+        48
       ]
     },
     {
@@ -1160,7 +1178,7 @@
       ],
       "repository": "https://github.com/slint-ui/document-features",
       "notices": [
-        48
+        49
       ]
     },
     {
@@ -1176,7 +1194,7 @@
       ],
       "repository": "https://github.com/marcianx/downcast-rs",
       "notices": [
-        49
+        50
       ]
     },
     {
@@ -1190,7 +1208,7 @@
       "repository": "https://github.com/rust-windowing/winit",
       "notices": [
         1,
-        50
+        51
       ]
     },
     {
@@ -1221,7 +1239,7 @@
       ],
       "repository": "https://github.com/ciscorn/earcut-rs",
       "notices": [
-        51
+        52
       ]
     },
     {
@@ -1236,7 +1254,7 @@
       ],
       "repository": "https://github.com/RustCrypto/block-modes",
       "notices": [
-        52
+        53
       ]
     },
     {
@@ -1314,7 +1332,7 @@
       ],
       "repository": "https://github.com/emilk/egui/tree/main/crates/egui-winit",
       "notices": [
-        53
+        54
       ]
     },
     {
@@ -1327,7 +1345,7 @@
       ],
       "repository": "https://github.com/rayon-rs/either",
       "notices": [
-        54
+        55
       ]
     },
     {
@@ -1357,10 +1375,10 @@
       ],
       "repository": "https://github.com/hsivonen/encoding_rs",
       "notices": [
-        55,
         56,
         57,
-        58
+        58,
+        59
       ]
     },
     {
@@ -1389,7 +1407,7 @@
       ],
       "repository": "https://github.com/meithecatte/enumflags2",
       "notices": [
-        59
+        60
       ]
     },
     {
@@ -1405,7 +1423,7 @@
       ],
       "repository": "https://github.com/meithecatte/enumflags2",
       "notices": [
-        60
+        61
       ]
     },
     {
@@ -1435,9 +1453,9 @@
       ],
       "repository": "https://github.com/emilk/egui/tree/main/crates/epaint_default_fonts",
       "notices": [
-        61,
         62,
-        63
+        63,
+        64
       ]
     },
     {
@@ -1450,7 +1468,7 @@
       ],
       "repository": "https://github.com/indexmap-rs/equivalent",
       "notices": [
-        64
+        65
       ]
     },
     {
@@ -1479,7 +1497,7 @@
       ],
       "repository": "https://github.com/lambda-fairy/rust-errno",
       "notices": [
-        65
+        66
       ]
     },
     {
@@ -1494,8 +1512,8 @@
       ],
       "repository": "https://github.com/servo/euclid",
       "notices": [
-        66,
-        67
+        67,
+        68
       ]
     },
     {
@@ -1550,7 +1568,7 @@
       ],
       "repository": "https://github.com/pdf-rs/fax",
       "notices": [
-        68
+        69
       ]
     },
     {
@@ -1563,7 +1581,7 @@
       "copyright": [],
       "repository": "https://github.com/image-rs/fdeflate",
       "notices": [
-        69
+        70
       ]
     },
     {
@@ -1578,7 +1596,7 @@
       ],
       "repository": "https://github.com/linebender/fearless_simd",
       "notices": [
-        70
+        71
       ]
     },
     {
@@ -1593,7 +1611,7 @@
       ],
       "repository": "https://github.com/alexcrichton/filetime",
       "notices": [
-        28
+        29
       ]
     },
     {
@@ -1606,7 +1624,7 @@
       ],
       "repository": "https://github.com/rust-lang/cc-rs",
       "notices": [
-        28
+        29
       ]
     },
     {
@@ -1621,7 +1639,7 @@
       ],
       "repository": "https://github.com/petgraph/fixedbitset",
       "notices": [
-        71
+        72
       ]
     },
     {
@@ -1637,7 +1655,7 @@
       ],
       "repository": "https://github.com/rust-lang/flate2-rs",
       "notices": [
-        72
+        73
       ]
     },
     {
@@ -1652,7 +1670,7 @@
       ],
       "repository": "https://github.com/mikedilger/float-cmp",
       "notices": [
-        73
+        74
       ]
     },
     {
@@ -1667,7 +1685,7 @@
       ],
       "repository": "https://gitlab.com/bronsonbdevost/next_afterf",
       "notices": [
-        74
+        75
       ]
     },
     {
@@ -1682,7 +1700,7 @@
       ],
       "repository": "https://github.com/orlp/foldhash",
       "notices": [
-        75
+        76
       ]
     },
     {
@@ -1697,7 +1715,7 @@
       ],
       "repository": "https://github.com/orlp/foldhash",
       "notices": [
-        75
+        76
       ]
     },
     {
@@ -1710,7 +1728,7 @@
       ],
       "repository": "https://github.com/googlefonts/fontations",
       "notices": [
-        76
+        77
       ]
     },
     {
@@ -1723,7 +1741,7 @@
       ],
       "repository": "https://github.com/Riey/fontconfig-parser",
       "notices": [
-        77
+        78
       ]
     },
     {
@@ -1738,7 +1756,7 @@
       ],
       "repository": "https://github.com/RazrFalcon/fontdb",
       "notices": [
-        78
+        79
       ]
     },
     {
@@ -1753,7 +1771,22 @@
       ],
       "repository": "https://github.com/servo/rust-url",
       "notices": [
-        79
+        80
+      ]
+    },
+    {
+      "name": "fst",
+      "version": "0.4.7",
+      "license": "Unlicense OR MIT",
+      "authors": [
+        "Andrew Gallant <jamslam@gmail.com>"
+      ],
+      "copyright": [
+        "Copyright (c) 2015 Andrew Gallant"
+      ],
+      "repository": "https://github.com/BurntSushi/fst",
+      "notices": [
+        25
       ]
     },
     {
@@ -1767,7 +1800,7 @@
       ],
       "repository": "https://github.com/rust-lang/futures-rs",
       "notices": [
-        80
+        81
       ]
     },
     {
@@ -1781,7 +1814,7 @@
       ],
       "repository": "https://github.com/rust-lang/futures-rs",
       "notices": [
-        80
+        81
       ]
     },
     {
@@ -1795,7 +1828,7 @@
       ],
       "repository": "https://github.com/rust-lang/futures-rs",
       "notices": [
-        80
+        81
       ]
     },
     {
@@ -1827,7 +1860,7 @@
       ],
       "repository": "https://github.com/rust-lang/futures-rs",
       "notices": [
-        80
+        81
       ]
     },
     {
@@ -1841,7 +1874,7 @@
       ],
       "repository": "https://github.com/rust-lang/futures-rs",
       "notices": [
-        80
+        81
       ]
     },
     {
@@ -1855,7 +1888,7 @@
       ],
       "repository": "https://github.com/rust-lang/futures-rs",
       "notices": [
-        80
+        81
       ]
     },
     {
@@ -1871,7 +1904,7 @@
       ],
       "repository": "https://github.com/fizyk20/generic-array.git",
       "notices": [
-        81
+        82
       ]
     },
     {
@@ -1897,7 +1930,7 @@
       ],
       "repository": "https://github.com/georust/geo",
       "notices": [
-        82
+        83
       ]
     },
     {
@@ -1910,7 +1943,7 @@
       ],
       "repository": "https://github.com/georust/geographiclib-rs",
       "notices": [
-        83
+        84
       ]
     },
     {
@@ -1923,7 +1956,7 @@
       "copyright": [],
       "repository": "https://codeberg.org/swsnr/gethostname.rs.git",
       "notices": [
-        84
+        85
       ]
     },
     {
@@ -1939,7 +1972,7 @@
       ],
       "repository": "https://github.com/rust-random/getrandom",
       "notices": [
-        85
+        86
       ]
     },
     {
@@ -1955,7 +1988,7 @@
       ],
       "repository": "https://github.com/rust-random/getrandom",
       "notices": [
-        86
+        87
       ]
     },
     {
@@ -1971,7 +2004,7 @@
       ],
       "repository": "https://github.com/rust-random/getrandom",
       "notices": [
-        87
+        88
       ]
     },
     {
@@ -1986,7 +2019,7 @@
       ],
       "repository": "https://github.com/image-rs/image-gif",
       "notices": [
-        88
+        89
       ]
     },
     {
@@ -2015,7 +2048,7 @@
       ],
       "repository": "https://github.com/Traverse-Research/gpu-allocator",
       "notices": [
-        89
+        90
       ]
     },
     {
@@ -2030,7 +2063,7 @@
       ],
       "repository": "https://github.com/nical/guillotiere",
       "notices": [
-        90
+        91
       ]
     },
     {
@@ -2043,7 +2076,7 @@
       "copyright": [],
       "repository": "https://github.com/VoidStarKat/half-rs",
       "notices": [
-        33
+        34
       ]
     },
     {
@@ -2057,7 +2090,7 @@
       ],
       "repository": "https://github.com/harfbuzz/harfrust",
       "notices": [
-        91
+        92
       ]
     },
     {
@@ -2072,7 +2105,7 @@
       ],
       "repository": "https://github.com/japaric/hash32",
       "notices": [
-        92
+        93
       ]
     },
     {
@@ -2087,7 +2120,7 @@
       ],
       "repository": "https://github.com/rust-lang/hashbrown",
       "notices": [
-        93
+        94
       ]
     },
     {
@@ -2102,7 +2135,7 @@
       ],
       "repository": "https://github.com/rust-lang/hashbrown",
       "notices": [
-        93
+        94
       ]
     },
     {
@@ -2115,7 +2148,7 @@
       ],
       "repository": "https://github.com/rust-lang/hashbrown",
       "notices": [
-        93
+        94
       ]
     },
     {
@@ -2132,7 +2165,7 @@
       ],
       "repository": "https://github.com/rust-embedded/heapless",
       "notices": [
-        94
+        95
       ]
     },
     {
@@ -2148,7 +2181,7 @@
       ],
       "repository": "https://github.com/KokaKiwi/rust-hex",
       "notices": [
-        95
+        96
       ]
     },
     {
@@ -2163,7 +2196,37 @@
       ],
       "repository": "https://github.com/RustCrypto/hybrid-array",
       "notices": [
-        96
+        97
+      ]
+    },
+    {
+      "name": "hyphenation",
+      "version": "0.8.4",
+      "license": "Apache-2.0 OR MIT",
+      "authors": [
+        "Andrew <andrew@banausia.com>"
+      ],
+      "copyright": [
+        "Copyright (c) 2016 tapeinosyne"
+      ],
+      "repository": "https://github.com/tapeinosyne/hyphenation",
+      "notices": [
+        98
+      ]
+    },
+    {
+      "name": "hyphenation_commons",
+      "version": "0.8.4",
+      "license": "Apache-2.0 OR MIT",
+      "authors": [
+        "Andrew <andrew@banausia.com>"
+      ],
+      "copyright": [
+        "Copyright (c) <year> <copyright holders>"
+      ],
+      "repository": "https://github.com/tapeinosyne/hyphenation",
+      "notices": [
+        1
       ]
     },
     {
@@ -2178,7 +2241,7 @@
       ],
       "repository": "https://github.com/iShape-Rust/iFloat",
       "notices": [
-        97
+        99
       ]
     },
     {
@@ -2223,7 +2286,7 @@
       ],
       "repository": "https://github.com/iShape-Rust/iShape",
       "notices": [
-        97
+        99
       ]
     },
     {
@@ -2238,7 +2301,7 @@
       ],
       "repository": "https://github.com/iShape-Rust/iTree",
       "notices": [
-        98
+        100
       ]
     },
     {
@@ -2253,7 +2316,7 @@
       ],
       "repository": "https://github.com/unicode-org/icu4x",
       "notices": [
-        99
+        101
       ]
     },
     {
@@ -2268,7 +2331,7 @@
       ],
       "repository": "https://github.com/unicode-org/icu4x",
       "notices": [
-        99
+        101
       ]
     },
     {
@@ -2283,7 +2346,7 @@
       ],
       "repository": "https://github.com/unicode-org/icu4x",
       "notices": [
-        99
+        101
       ]
     },
     {
@@ -2298,7 +2361,7 @@
       ],
       "repository": "https://github.com/unicode-org/icu4x",
       "notices": [
-        99
+        101
       ]
     },
     {
@@ -2313,7 +2376,7 @@
       ],
       "repository": "https://github.com/unicode-org/icu4x",
       "notices": [
-        99
+        101
       ]
     },
     {
@@ -2328,7 +2391,7 @@
       ],
       "repository": "https://github.com/unicode-org/icu4x",
       "notices": [
-        99
+        101
       ]
     },
     {
@@ -2343,7 +2406,7 @@
       ],
       "repository": "https://github.com/unicode-org/icu4x",
       "notices": [
-        99
+        101
       ]
     },
     {
@@ -2358,7 +2421,7 @@
       ],
       "repository": "https://github.com/servo/rust-url/",
       "notices": [
-        44
+        45
       ]
     },
     {
@@ -2373,7 +2436,7 @@
       ],
       "repository": "https://github.com/hsivonen/idna_adapter",
       "notices": [
-        100
+        102
       ]
     },
     {
@@ -2386,7 +2449,7 @@
       "copyright": [],
       "repository": "https://github.com/image-rs/image",
       "notices": [
-        69
+        70
       ]
     },
     {
@@ -2397,7 +2460,7 @@
       "copyright": [],
       "repository": "https://github.com/image-rs/image-webp",
       "notices": [
-        69
+        70
       ]
     },
     {
@@ -2412,7 +2475,7 @@
       ],
       "repository": "https://github.com/Roughsketch/imagesize",
       "notices": [
-        101
+        103
       ]
     },
     {
@@ -2425,7 +2488,7 @@
       ],
       "repository": "https://github.com/indexmap-rs/indexmap",
       "notices": [
-        102
+        104
       ]
     },
     {
@@ -2441,7 +2504,7 @@
       ],
       "repository": "https://github.com/RustCrypto/utils",
       "notices": [
-        103
+        105
       ]
     },
     {
@@ -2456,7 +2519,7 @@
       ],
       "repository": "https://github.com/rust-itertools/itertools",
       "notices": [
-        54
+        55
       ]
     },
     {
@@ -2484,7 +2547,7 @@
       ],
       "repository": "https://github.com/rust-lang/jobserver-rs",
       "notices": [
-        28
+        29
       ]
     },
     {
@@ -2511,7 +2574,7 @@
       ],
       "repository": "https://github.com/linebender/kurbo",
       "notices": [
-        70
+        71
       ]
     },
     {
@@ -2524,7 +2587,7 @@
       ],
       "repository": "https://github.com/rust-lang/libc",
       "notices": [
-        104
+        106
       ]
     },
     {
@@ -2539,7 +2602,7 @@
       ],
       "repository": "https://github.com/nagisa/rust_libloading/",
       "notices": [
-        105
+        107
       ]
     },
     {
@@ -2554,7 +2617,7 @@
       ],
       "repository": "https://github.com/nagisa/rust_libloading/",
       "notices": [
-        105
+        107
       ]
     },
     {
@@ -2590,7 +2653,7 @@
       ],
       "repository": "https://github.com/rust-lang/libz-sys",
       "notices": [
-        106
+        108
       ]
     },
     {
@@ -2601,7 +2664,7 @@
       "copyright": [],
       "repository": "https://github.com/linebender/raw_resource_handle",
       "notices": [
-        33
+        34
       ]
     },
     {
@@ -2615,7 +2678,7 @@
       "repository": "https://github.com/sunfishcode/linux-raw-sys",
       "notices": [
         2,
-        107
+        109
       ]
     },
     {
@@ -2629,7 +2692,7 @@
       "repository": "https://github.com/sunfishcode/linux-raw-sys",
       "notices": [
         2,
-        107
+        109
       ]
     },
     {
@@ -2644,7 +2707,7 @@
       ],
       "repository": "https://github.com/unicode-org/icu4x",
       "notices": [
-        99
+        101
       ]
     },
     {
@@ -2659,7 +2722,7 @@
       ],
       "repository": "https://github.com/LukasKalbertodt/litrs",
       "notices": [
-        108
+        110
       ]
     },
     {
@@ -2674,7 +2737,7 @@
       ],
       "repository": "https://github.com/Amanieu/parking_lot",
       "notices": [
-        109
+        111
       ]
     },
     {
@@ -2689,7 +2752,7 @@
       ],
       "repository": "https://github.com/rust-lang/log",
       "notices": [
-        19
+        20
       ]
     },
     {
@@ -2705,7 +2768,7 @@
       ],
       "repository": "https://github.com/J-F-Liu/lopdf.git",
       "notices": [
-        110
+        112
       ]
     },
     {
@@ -2737,8 +2800,8 @@
       ],
       "repository": "https://github.com/mlua-rs/luajit-src-rs",
       "notices": [
-        111,
-        112
+        113,
+        114
       ]
     },
     {
@@ -2756,7 +2819,7 @@
       ],
       "repository": "https://github.com/RustCrypto/hashes",
       "notices": [
-        113
+        115
       ]
     },
     {
@@ -2772,7 +2835,7 @@
       ],
       "repository": "https://github.com/BurntSushi/memchr",
       "notices": [
-        24
+        25
       ]
     },
     {
@@ -2790,7 +2853,7 @@
       ],
       "repository": "https://github.com/RazrFalcon/memmap2-rs",
       "notices": [
-        114
+        116
       ]
     },
     {
@@ -2810,8 +2873,8 @@
       ],
       "repository": "https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide",
       "notices": [
-        115,
-        116
+        117,
+        118
       ]
     },
     {
@@ -2828,7 +2891,7 @@
       ],
       "repository": "https://github.com/mlua-rs/mlua",
       "notices": [
-        117
+        119
       ]
     },
     {
@@ -2858,7 +2921,7 @@
       ],
       "repository": "https://github.com/awxkee/moxcms.git",
       "notices": [
-        118
+        120
       ]
     },
     {
@@ -2879,11 +2942,11 @@
       ],
       "repository": "https://github.com/kornelski/mozjpeg-sys.git",
       "notices": [
-        119,
-        120,
         121,
         122,
-        123
+        123,
+        124,
+        125
       ]
     },
     {
@@ -2898,7 +2961,7 @@
       ],
       "repository": "https://github.com/gfx-rs/wgpu",
       "notices": [
-        124
+        126
       ]
     },
     {
@@ -2913,7 +2976,7 @@
       ],
       "repository": "https://github.com/gfx-rs/wgpu",
       "notices": [
-        124
+        126
       ]
     },
     {
@@ -2928,7 +2991,7 @@
       ],
       "repository": "https://github.com/paritytech/nohash-hasher",
       "notices": [
-        125
+        127
       ]
     },
     {
@@ -2943,7 +3006,7 @@
       ],
       "repository": "https://github.com/rust-bakery/nom",
       "notices": [
-        126
+        128
       ]
     },
     {
@@ -2958,7 +3021,7 @@
       ],
       "repository": "https://github.com/rust-num/num-traits",
       "notices": [
-        19
+        20
       ]
     },
     {
@@ -2987,7 +3050,7 @@
       ],
       "repository": "https://github.com/reem/rust-ordered-float",
       "notices": [
-        127
+        129
       ]
     },
     {
@@ -3003,7 +3066,7 @@
       ],
       "repository": "https://github.com/reem/rust-ordered-float",
       "notices": [
-        127
+        129
       ]
     },
     {
@@ -3034,7 +3097,7 @@
       ],
       "repository": "https://github.com/pykeio/ort",
       "notices": [
-        128
+        130
       ]
     },
     {
@@ -3050,7 +3113,7 @@
       ],
       "repository": "https://github.com/pykeio/ort",
       "notices": [
-        128
+        130
       ]
     },
     {
@@ -3063,7 +3126,7 @@
       "copyright": [],
       "repository": "https://github.com/oconnor663/os_pipe.rs",
       "notices": [
-        129
+        131
       ]
     },
     {
@@ -3107,7 +3170,7 @@
       ],
       "repository": "https://github.com/Amanieu/parking_lot",
       "notices": [
-        109
+        111
       ]
     },
     {
@@ -3122,7 +3185,7 @@
       ],
       "repository": "https://github.com/Amanieu/parking_lot",
       "notices": [
-        109
+        111
       ]
     },
     {
@@ -3135,7 +3198,7 @@
       ],
       "repository": "https://github.com/linebender/peniko",
       "notices": [
-        70
+        71
       ]
     },
     {
@@ -3150,7 +3213,7 @@
       ],
       "repository": "https://github.com/servo/rust-url/",
       "notices": [
-        44
+        45
       ]
     },
     {
@@ -3166,7 +3229,7 @@
       ],
       "repository": "https://github.com/petgraph/petgraph",
       "notices": [
-        54
+        55
       ]
     },
     {
@@ -3181,7 +3244,7 @@
       ],
       "repository": "https://github.com/rust-phf/rust-phf",
       "notices": [
-        130
+        132
       ]
     },
     {
@@ -3196,7 +3259,7 @@
       ],
       "repository": "https://github.com/rust-phf/rust-phf",
       "notices": [
-        130
+        132
       ]
     },
     {
@@ -3211,7 +3274,7 @@
       ],
       "repository": "https://github.com/rust-phf/rust-phf",
       "notices": [
-        130
+        132
       ]
     },
     {
@@ -3226,7 +3289,7 @@
       ],
       "repository": "https://github.com/rust-phf/rust-phf",
       "notices": [
-        130
+        132
       ]
     },
     {
@@ -3241,7 +3304,7 @@
       ],
       "repository": "https://github.com/RazrFalcon/pico-args",
       "notices": [
-        131
+        133
       ]
     },
     {
@@ -3281,7 +3344,7 @@
       ],
       "repository": "https://github.com/rust-lang/pkg-config-rs",
       "notices": [
-        28
+        29
       ]
     },
     {
@@ -3296,7 +3359,22 @@
       ],
       "repository": "https://github.com/image-rs/image-png",
       "notices": [
-        132
+        134
+      ]
+    },
+    {
+      "name": "pocket-resources",
+      "version": "0.3.2",
+      "license": "MIT",
+      "authors": [
+        "Pierre Krieger <pierre.krieger1708@gmail.com>"
+      ],
+      "copyright": [
+        "Copyright (c) <year> <copyright holders>"
+      ],
+      "repository": "https://github.com/tomaka/pocket-resources",
+      "notices": [
+        1
       ]
     },
     {
@@ -3325,7 +3403,7 @@
       ],
       "repository": "https://github.com/zesterer/pollster",
       "notices": [
-        133
+        135
       ]
     },
     {
@@ -3340,7 +3418,7 @@
       ],
       "repository": "https://github.com/zesterer/pollster",
       "notices": [
-        133
+        135
       ]
     },
     {
@@ -3353,7 +3431,7 @@
       ],
       "repository": "https://github.com/linebender/kurbo",
       "notices": [
-        70
+        71
       ]
     },
     {
@@ -3368,7 +3446,7 @@
       ],
       "repository": "https://github.com/unicode-org/icu4x",
       "notices": [
-        99
+        101
       ]
     },
     {
@@ -3383,7 +3461,7 @@
       ],
       "repository": "https://github.com/cryptocorrosion/cryptocorrosion",
       "notices": [
-        134
+        136
       ]
     },
     {
@@ -3399,7 +3477,7 @@
       ],
       "repository": "https://github.com/EmbarkStudios/presser",
       "notices": [
-        135
+        137
       ]
     },
     {
@@ -3456,7 +3534,7 @@
       ],
       "repository": "https://github.com/awxkee/pxfm",
       "notices": [
-        118
+        120
       ]
     },
     {
@@ -3472,7 +3550,7 @@
       ],
       "repository": "http://github.com/tailhook/quick-error",
       "notices": [
-        136
+        138
       ]
     },
     {
@@ -3485,7 +3563,7 @@
       ],
       "repository": "https://github.com/tafia/quick-xml",
       "notices": [
-        137
+        139
       ]
     },
     {
@@ -3515,8 +3593,8 @@
       ],
       "repository": "https://github.com/rust-random/rand",
       "notices": [
-        138,
-        139
+        140,
+        141
       ]
     },
     {
@@ -3533,8 +3611,8 @@
       ],
       "repository": "https://github.com/rust-random/rand",
       "notices": [
-        138,
-        139
+        140,
+        141
       ]
     },
     {
@@ -3552,8 +3630,8 @@
       ],
       "repository": "https://github.com/rust-random/rand",
       "notices": [
-        138,
-        139
+        140,
+        141
       ]
     },
     {
@@ -3570,8 +3648,8 @@
       ],
       "repository": "https://github.com/rust-random/rand",
       "notices": [
-        138,
-        139
+        140,
+        141
       ]
     },
     {
@@ -3586,8 +3664,8 @@
       ],
       "repository": "https://github.com/rust-random/rand_core",
       "notices": [
-        140,
-        141
+        142,
+        143
       ]
     },
     {
@@ -3603,8 +3681,8 @@
       ],
       "repository": "https://github.com/rust-random/rngs",
       "notices": [
-        139,
-        142
+        141,
+        144
       ]
     },
     {
@@ -3619,7 +3697,7 @@
       ],
       "repository": "https://github.com/jeffparsons/rangemap",
       "notices": [
-        143
+        145
       ]
     },
     {
@@ -3634,7 +3712,7 @@
       ],
       "repository": "https://github.com/rust-windowing/raw-window-handle",
       "notices": [
-        144
+        146
       ]
     },
     {
@@ -3647,7 +3725,7 @@
       ],
       "repository": "https://github.com/rayon-rs/rayon",
       "notices": [
-        145
+        147
       ]
     },
     {
@@ -3660,7 +3738,7 @@
       ],
       "repository": "https://github.com/rayon-rs/rayon",
       "notices": [
-        145
+        147
       ]
     },
     {
@@ -3673,7 +3751,7 @@
       ],
       "repository": "https://github.com/googlefonts/fontations",
       "notices": [
-        76
+        77
       ]
     },
     {
@@ -3688,7 +3766,7 @@
       ],
       "repository": "https://github.com/ebkalderon/renderdoc-rs",
       "notices": [
-        146
+        148
       ]
     },
     {
@@ -3701,7 +3779,7 @@
       ],
       "repository": "https://github.com/linebender/resvg",
       "notices": [
-        147
+        149
       ]
     },
     {
@@ -3716,7 +3794,7 @@
       ],
       "repository": "https://github.com/PolyMeilex/rfd",
       "notices": [
-        148
+        150
       ]
     },
     {
@@ -3732,7 +3810,7 @@
       ],
       "repository": "https://github.com/kornelski/rust-rgb",
       "notices": [
-        149
+        151
       ]
     },
     {
@@ -3756,9 +3834,7 @@
       ],
       "repository": "https://github.com/briansmith/ring",
       "notices": [
-        84,
-        150,
-        151,
+        85,
         152,
         153,
         154,
@@ -3773,7 +3849,9 @@
         163,
         164,
         165,
-        166
+        166,
+        167,
+        168
       ]
     },
     {
@@ -3790,7 +3868,7 @@
       ],
       "repository": "https://github.com/georust/robust",
       "notices": [
-        167
+        169
       ]
     },
     {
@@ -3805,7 +3883,7 @@
       ],
       "repository": "https://github.com/RazrFalcon/roxmltree",
       "notices": [
-        168
+        170
       ]
     },
     {
@@ -3820,7 +3898,7 @@
       ],
       "repository": "https://github.com/RazrFalcon/roxmltree",
       "notices": [
-        168
+        170
       ]
     },
     {
@@ -3877,7 +3955,7 @@
       "repository": "https://github.com/bytecodealliance/rustix",
       "notices": [
         2,
-        169
+        171
       ]
     },
     {
@@ -3892,7 +3970,7 @@
       "repository": "https://github.com/bytecodealliance/rustix",
       "notices": [
         2,
-        169
+        171
       ]
     },
     {
@@ -3905,7 +3983,7 @@
       ],
       "repository": "https://github.com/rustls/rustls",
       "notices": [
-        170
+        172
       ]
     },
     {
@@ -3918,7 +3996,7 @@
       ],
       "repository": "https://github.com/rustls/pki-types",
       "notices": [
-        171
+        173
       ]
     },
     {
@@ -3931,7 +4009,7 @@
       ],
       "repository": "https://github.com/rustls/webpki",
       "notices": [
-        172
+        174
       ]
     },
     {
@@ -3951,8 +4029,8 @@
       ],
       "repository": "https://github.com/harfbuzz/rustybuzz",
       "notices": [
-        91,
-        173
+        92,
+        175
       ]
     },
     {
@@ -3967,7 +4045,7 @@
       ],
       "repository": "https://github.com/alexcrichton/scoped-tls",
       "notices": [
-        28
+        29
       ]
     },
     {
@@ -3982,7 +4060,7 @@
       ],
       "repository": "https://github.com/bluss/scopeguard",
       "notices": [
-        174
+        176
       ]
     },
     {
@@ -3997,7 +4075,7 @@
       ],
       "repository": "https://github.com/PolyMeilex/sctk-adwaita",
       "notices": [
-        148
+        150
       ]
     },
     {
@@ -4052,7 +4130,7 @@
       ],
       "repository": "https://github.com/arcnmx/serde-value",
       "notices": [
-        175
+        177
       ]
     },
     {
@@ -4124,7 +4202,7 @@
       ],
       "repository": "https://github.com/RustCrypto/hashes",
       "notices": [
-        176
+        178
       ]
     },
     {
@@ -4142,7 +4220,7 @@
       ],
       "repository": "https://github.com/RustCrypto/hashes",
       "notices": [
-        113
+        115
       ]
     },
     {
@@ -4162,7 +4240,7 @@
       ],
       "repository": "https://github.com/comex/rust-shlex",
       "notices": [
-        177
+        179
       ]
     },
     {
@@ -4177,7 +4255,7 @@
       ],
       "repository": "https://codeberg.org/adamreichold/sif-itree",
       "notices": [
-        178
+        180
       ]
     },
     {
@@ -4193,7 +4271,7 @@
       ],
       "repository": "https://github.com/vorner/signal-hook",
       "notices": [
-        179
+        181
       ]
     },
     {
@@ -4208,7 +4286,7 @@
       ],
       "repository": "https://github.com/mcountryman/simd-adler32",
       "notices": [
-        180
+        182
       ]
     },
     {
@@ -4221,7 +4299,7 @@
       ],
       "repository": "https://github.com/linebender/simplecss",
       "notices": [
-        181
+        183
       ]
     },
     {
@@ -4249,7 +4327,7 @@
       ],
       "repository": "https://github.com/googlefonts/fontations",
       "notices": [
-        76
+        77
       ]
     },
     {
@@ -4264,7 +4342,7 @@
       ],
       "repository": "https://github.com/tokio-rs/slab",
       "notices": [
-        182
+        184
       ]
     },
     {
@@ -4279,7 +4357,7 @@
       ],
       "repository": "https://github.com/orlp/slotmap",
       "notices": [
-        183
+        185
       ]
     },
     {
@@ -4294,7 +4372,7 @@
       ],
       "repository": "https://github.com/servo/rust-smallvec",
       "notices": [
-        184
+        186
       ]
     },
     {
@@ -4311,7 +4389,7 @@
       ],
       "repository": "https://github.com/smithay/client-toolkit",
       "notices": [
-        25
+        26
       ]
     },
     {
@@ -4328,7 +4406,7 @@
       ],
       "repository": "https://github.com/smithay/client-toolkit",
       "notices": [
-        25
+        26
       ]
     },
     {
@@ -4344,7 +4422,7 @@
       ],
       "repository": "https://github.com/smithay/smithay-clipboard",
       "notices": [
-        185
+        187
       ]
     },
     {
@@ -4372,7 +4450,7 @@
       ],
       "repository": "https://github.com/Stoeoef/spade",
       "notices": [
-        186
+        188
       ]
     },
     {
@@ -4402,7 +4480,7 @@
       ],
       "repository": "https://github.com/storyyeller/stable_deref_trait",
       "notices": [
-        187
+        189
       ]
     },
     {
@@ -4417,7 +4495,7 @@
       ],
       "repository": "https://github.com/nvzqz/static-assertions-rs",
       "notices": [
-        188
+        190
       ]
     },
     {
@@ -4432,7 +4510,7 @@
       ],
       "repository": "https://github.com/RazrFalcon/strict-num",
       "notices": [
-        189
+        191
       ]
     },
     {
@@ -4447,7 +4525,7 @@
       ],
       "repository": "https://github.com/sfackler/rust-stringprep",
       "notices": [
-        190
+        192
       ]
     },
     {
@@ -4464,7 +4542,7 @@
       ],
       "repository": "https://github.com/dalek-cryptography/subtle",
       "notices": [
-        191
+        193
       ]
     },
     {
@@ -4477,7 +4555,7 @@
       ],
       "repository": "https://github.com/linebender/svgtypes",
       "notices": [
-        192
+        194
       ]
     },
     {
@@ -4518,7 +4596,7 @@
       ],
       "repository": "https://github.com/mystor/synstructure",
       "notices": [
-        193
+        195
       ]
     },
     {
@@ -4533,7 +4611,7 @@
       ],
       "repository": "https://github.com/composefs/tar-rs",
       "notices": [
-        194
+        196
       ]
     },
     {
@@ -4600,8 +4678,8 @@
       ],
       "repository": "https://github.com/image-rs/image-tiff",
       "notices": [
-        195,
-        196
+        197,
+        198
       ]
     },
     {
@@ -4617,7 +4695,7 @@
       ],
       "repository": "https://github.com/RazrFalcon/tiny-skia",
       "notices": [
-        197
+        199
       ]
     },
     {
@@ -4633,7 +4711,7 @@
       ],
       "repository": "https://github.com/linebender/tiny-skia",
       "notices": [
-        197
+        199
       ]
     },
     {
@@ -4649,7 +4727,7 @@
       ],
       "repository": "https://github.com/RazrFalcon/tiny-skia/tree/master/path",
       "notices": [
-        197
+        199
       ]
     },
     {
@@ -4665,7 +4743,7 @@
       ],
       "repository": "https://github.com/linebender/tiny-skia/tree/master/path",
       "notices": [
-        197
+        199
       ]
     },
     {
@@ -4680,7 +4758,7 @@
       ],
       "repository": "https://github.com/unicode-org/icu4x",
       "notices": [
-        99
+        101
       ]
     },
     {
@@ -4693,7 +4771,7 @@
       "copyright": [],
       "repository": "https://github.com/Lokathor/tinyvec",
       "notices": [
-        198
+        200
       ]
     },
     {
@@ -4708,7 +4786,7 @@
       ],
       "repository": "https://github.com/Soveu/tinyvec_macros",
       "notices": [
-        199
+        201
       ]
     },
     {
@@ -4721,7 +4799,7 @@
       ],
       "repository": "https://github.com/toml-rs/toml",
       "notices": [
-        200
+        202
       ]
     },
     {
@@ -4734,7 +4812,7 @@
       ],
       "repository": "https://github.com/toml-rs/toml",
       "notices": [
-        200
+        202
       ]
     },
     {
@@ -4747,7 +4825,7 @@
       ],
       "repository": "https://github.com/toml-rs/toml",
       "notices": [
-        200
+        202
       ]
     },
     {
@@ -4763,7 +4841,7 @@
       ],
       "repository": "https://github.com/tokio-rs/tracing",
       "notices": [
-        201
+        203
       ]
     },
     {
@@ -4780,7 +4858,7 @@
       ],
       "repository": "https://github.com/tokio-rs/tracing",
       "notices": [
-        201
+        203
       ]
     },
     {
@@ -4796,8 +4874,8 @@
       ],
       "repository": "https://github.com/tokio-rs/tracing",
       "notices": [
-        201,
-        202
+        203,
+        204
       ]
     },
     {
@@ -4813,7 +4891,7 @@
       ],
       "repository": "https://github.com/mbrubeck/tree_magic/",
       "notices": [
-        203
+        205
       ]
     },
     {
@@ -4831,7 +4909,7 @@
       ],
       "repository": "https://github.com/harfbuzz/ttf-parser",
       "notices": [
-        192
+        194
       ]
     },
     {
@@ -4885,7 +4963,7 @@
       ],
       "repository": "https://github.com/paholg/typenum",
       "notices": [
-        204
+        206
       ]
     },
     {
@@ -4900,8 +4978,8 @@
       ],
       "repository": "https://github.com/servo/unicode-bidi",
       "notices": [
-        205,
-        206
+        207,
+        208
       ]
     },
     {
@@ -4916,7 +4994,7 @@
       ],
       "repository": "https://github.com/RazrFalcon/unicode-bidi-mirroring",
       "notices": [
-        78
+        79
       ]
     },
     {
@@ -4931,7 +5009,7 @@
       ],
       "repository": "https://github.com/RazrFalcon/unicode-ccc",
       "notices": [
-        78
+        79
       ]
     },
     {
@@ -4944,7 +5022,7 @@
       "copyright": [],
       "repository": "https://github.com/yeslogic/unicode-general-category",
       "notices": [
-        50
+        51
       ]
     },
     {
@@ -4960,7 +5038,20 @@
       "repository": "https://github.com/dtolnay/unicode-ident",
       "notices": [
         2,
-        207
+        209
+      ]
+    },
+    {
+      "name": "unicode-linebreak",
+      "version": "0.1.5",
+      "license": "Apache-2.0",
+      "authors": [
+        "Axel Forsman <axelsfor@gmail.com>"
+      ],
+      "copyright": [],
+      "repository": "https://github.com/axelf4/unicode-linebreak",
+      "notices": [
+        5
       ]
     },
     {
@@ -4976,8 +5067,8 @@
       ],
       "repository": "https://github.com/unicode-rs/unicode-normalization",
       "notices": [
-        205,
-        208
+        207,
+        210
       ]
     },
     {
@@ -4993,8 +5084,8 @@
       ],
       "repository": "https://github.com/unicode-rs/unicode-properties",
       "notices": [
-        205,
-        208
+        207,
+        210
       ]
     },
     {
@@ -5009,7 +5100,7 @@
       ],
       "repository": "https://github.com/unicode-rs/unicode-script",
       "notices": [
-        209
+        211
       ]
     },
     {
@@ -5025,8 +5116,8 @@
       ],
       "repository": "https://github.com/unicode-rs/unicode-segmentation",
       "notices": [
-        205,
-        208
+        207,
+        210
       ]
     },
     {
@@ -5041,7 +5132,7 @@
       ],
       "repository": "https://github.com/RazrFalcon/unicode-vo",
       "notices": [
-        181
+        183
       ]
     },
     {
@@ -5057,8 +5148,8 @@
       ],
       "repository": "https://github.com/unicode-rs/unicode-width",
       "notices": [
-        205,
-        208
+        207,
+        210
       ]
     },
     {
@@ -5073,7 +5164,7 @@
       ],
       "repository": "https://github.com/briansmith/untrusted",
       "notices": [
-        210
+        212
       ]
     },
     {
@@ -5091,8 +5182,8 @@
       ],
       "repository": "https://github.com/algesten/ureq",
       "notices": [
-        211,
-        212
+        213,
+        214
       ]
     },
     {
@@ -5107,7 +5198,7 @@
       ],
       "repository": "https://github.com/servo/rust-url",
       "notices": [
-        44
+        45
       ]
     },
     {
@@ -5121,7 +5212,7 @@
       "copyright": [],
       "repository": "https://github.com/kornelski/rust_urlencoding",
       "notices": [
-        213
+        215
       ]
     },
     {
@@ -5134,7 +5225,7 @@
       ],
       "repository": "https://github.com/linebender/resvg",
       "notices": [
-        147
+        149
       ]
     },
     {
@@ -5147,8 +5238,8 @@
       "copyright": [],
       "repository": "https://github.com/hsivonen/utf8_iter",
       "notices": [
-        57,
-        214
+        58,
+        216
       ]
     },
     {
@@ -5166,7 +5257,7 @@
       ],
       "repository": "https://github.com/uuid-rs/uuid",
       "notices": [
-        215
+        217
       ]
     },
     {
@@ -5181,7 +5272,7 @@
       ],
       "repository": "https://github.com/mcgoo/vcpkg-rs",
       "notices": [
-        216
+        218
       ]
     },
     {
@@ -5194,7 +5285,7 @@
       ],
       "repository": "https://github.com/linebender/vello",
       "notices": [
-        217
+        219
       ]
     },
     {
@@ -5207,7 +5298,7 @@
       ],
       "repository": "https://github.com/linebender/vello",
       "notices": [
-        217
+        219
       ]
     },
     {
@@ -5222,7 +5313,7 @@
       ],
       "repository": "https://github.com/SergioBenitez/version_check",
       "notices": [
-        218
+        220
       ]
     },
     {
@@ -5237,7 +5328,7 @@
       ],
       "repository": "https://github.com/smithay/wayland-rs",
       "notices": [
-        219
+        221
       ]
     },
     {
@@ -5252,7 +5343,7 @@
       ],
       "repository": "https://github.com/smithay/wayland-rs",
       "notices": [
-        219
+        221
       ]
     },
     {
@@ -5267,7 +5358,7 @@
       ],
       "repository": "https://github.com/rust-windowing/wayland-csd-frame",
       "notices": [
-        43
+        44
       ]
     },
     {
@@ -5282,7 +5373,7 @@
       ],
       "repository": "https://github.com/smithay/wayland-rs",
       "notices": [
-        219
+        221
       ]
     },
     {
@@ -5305,8 +5396,8 @@
       ],
       "repository": "https://github.com/smithay/wayland-rs",
       "notices": [
-        219,
-        220
+        221,
+        222
       ]
     },
     {
@@ -5321,7 +5412,7 @@
       ],
       "repository": "https://github.com/smithay/wayland-rs",
       "notices": [
-        219
+        221
       ]
     },
     {
@@ -5336,7 +5427,7 @@
       ],
       "repository": "https://github.com/smithay/wayland-rs",
       "notices": [
-        219
+        221
       ]
     },
     {
@@ -5352,8 +5443,8 @@
       ],
       "repository": "https://github.com/smithay/wayland-rs",
       "notices": [
-        219,
-        221
+        221,
+        223
       ]
     },
     {
@@ -5368,7 +5459,7 @@
       ],
       "repository": "https://github.com/smithay/wayland-rs",
       "notices": [
-        219
+        221
       ]
     },
     {
@@ -5383,7 +5474,7 @@
       ],
       "repository": "https://github.com/smithay/wayland-rs",
       "notices": [
-        219
+        221
       ]
     },
     {
@@ -5398,7 +5489,7 @@
       ],
       "repository": "https://github.com/smithay/wayland-rs",
       "notices": [
-        219
+        221
       ]
     },
     {
@@ -5411,7 +5502,7 @@
       ],
       "repository": "https://github.com/daxpedda/web-time",
       "notices": [
-        222
+        224
       ]
     },
     {
@@ -5426,7 +5517,7 @@
       ],
       "repository": "https://github.com/amodm/webbrowser-rs",
       "notices": [
-        223
+        225
       ]
     },
     {
@@ -5437,7 +5528,7 @@
       "copyright": [],
       "repository": "https://github.com/rustls/webpki-roots",
       "notices": [
-        224
+        226
       ]
     },
     {
@@ -5448,7 +5539,7 @@
       "copyright": [],
       "repository": "https://github.com/rustls/webpki-roots",
       "notices": [
-        224
+        226
       ]
     },
     {
@@ -5463,7 +5554,7 @@
       ],
       "repository": "https://github.com/image-rs/weezl",
       "notices": [
-        225
+        227
       ]
     },
     {
@@ -5478,7 +5569,7 @@
       ],
       "repository": "https://github.com/image-rs/weezl",
       "notices": [
-        225
+        227
       ]
     },
     {
@@ -5493,7 +5584,7 @@
       ],
       "repository": "https://github.com/gfx-rs/wgpu",
       "notices": [
-        124
+        126
       ]
     },
     {
@@ -5508,7 +5599,7 @@
       ],
       "repository": "https://github.com/gfx-rs/wgpu",
       "notices": [
-        124
+        126
       ]
     },
     {
@@ -5523,7 +5614,7 @@
       ],
       "repository": "https://github.com/gfx-rs/wgpu",
       "notices": [
-        124
+        126
       ]
     },
     {
@@ -5538,7 +5629,7 @@
       ],
       "repository": "https://github.com/gfx-rs/wgpu",
       "notices": [
-        124
+        126
       ]
     },
     {
@@ -5553,7 +5644,7 @@
       ],
       "repository": "https://github.com/gfx-rs/wgpu",
       "notices": [
-        124
+        126
       ]
     },
     {
@@ -5568,7 +5659,7 @@
       ],
       "repository": "https://github.com/gfx-rs/wgpu",
       "notices": [
-        124
+        126
       ]
     },
     {
@@ -5583,7 +5674,7 @@
       ],
       "repository": "https://github.com/harryfei/which-rs.git",
       "notices": [
-        226
+        228
       ]
     },
     {
@@ -5597,7 +5688,7 @@
       "copyright": [],
       "repository": "https://github.com/rust-windowing/winit",
       "notices": [
-        50
+        51
       ]
     },
     {
@@ -5608,7 +5699,7 @@
       "copyright": [],
       "repository": "https://github.com/winnow-rs/winnow",
       "notices": [
-        227
+        229
       ]
     },
     {
@@ -5623,7 +5714,7 @@
       ],
       "repository": "https://github.com/YaLTeR/wl-clipboard-rs",
       "notices": [
-        228
+        230
       ]
     },
     {
@@ -5638,7 +5729,7 @@
       ],
       "repository": "https://github.com/unicode-org/icu4x",
       "notices": [
-        99
+        101
       ]
     },
     {
@@ -5653,7 +5744,7 @@
       ],
       "repository": "https://github.com/quininer/x11-clipboard",
       "notices": [
-        229
+        231
       ]
     },
     {
@@ -5685,7 +5776,7 @@
       ],
       "repository": "https://github.com/psychon/x11rb",
       "notices": [
-        230
+        232
       ]
     },
     {
@@ -5702,7 +5793,7 @@
       ],
       "repository": "https://github.com/psychon/x11rb",
       "notices": [
-        230
+        232
       ]
     },
     {
@@ -5717,7 +5808,7 @@
       ],
       "repository": "https://github.com/Stebalien/xattr",
       "notices": [
-        231
+        233
       ]
     },
     {
@@ -5732,7 +5823,7 @@
       ],
       "repository": "https://github.com/esposm03/xcursor-rs",
       "notices": [
-        232
+        234
       ]
     },
     {
@@ -5747,7 +5838,7 @@
       ],
       "repository": "https://github.com/rust-windowing/xkbcommon-dl",
       "notices": [
-        233
+        235
       ]
     },
     {
@@ -5762,7 +5853,7 @@
       ],
       "repository": "https://github.com/notgull/xkeysym",
       "notices": [
-        234
+        236
       ]
     },
     {
@@ -5777,7 +5868,7 @@
       ],
       "repository": "https://github.com/RazrFalcon/xmlwriter",
       "notices": [
-        235
+        237
       ]
     },
     {
@@ -5792,7 +5883,7 @@
       ],
       "repository": "https://github.com/unicode-org/icu4x",
       "notices": [
-        99
+        101
       ]
     },
     {
@@ -5807,7 +5898,7 @@
       ],
       "repository": "https://github.com/unicode-org/icu4x",
       "notices": [
-        99
+        101
       ]
     },
     {
@@ -5822,7 +5913,7 @@
       ],
       "repository": "https://github.com/z-galaxy/zbus/",
       "notices": [
-        236
+        238
       ]
     },
     {
@@ -5865,7 +5956,7 @@
       ],
       "repository": "https://github.com/z-galaxy/zbus/",
       "notices": [
-        236
+        238
       ]
     },
     {
@@ -5880,7 +5971,7 @@
       ],
       "repository": "https://github.com/z-galaxy/zbus/",
       "notices": [
-        236
+        238
       ]
     },
     {
@@ -5895,7 +5986,7 @@
       ],
       "repository": "https://github.com/z-galaxy/zbus/",
       "notices": [
-        236
+        238
       ]
     },
     {
@@ -5910,7 +6001,7 @@
       ],
       "repository": "https://github.com/z-galaxy/zcheapstr/",
       "notices": [
-        237
+        239
       ]
     },
     {
@@ -5923,7 +6014,7 @@
       ],
       "repository": "https://github.com/google/zerocopy",
       "notices": [
-        238
+        240
       ]
     },
     {
@@ -5936,7 +6027,7 @@
       ],
       "repository": "https://github.com/google/zerocopy",
       "notices": [
-        238
+        240
       ]
     },
     {
@@ -5951,7 +6042,7 @@
       ],
       "repository": "https://github.com/unicode-org/icu4x",
       "notices": [
-        99
+        101
       ]
     },
     {
@@ -5966,7 +6057,7 @@
       ],
       "repository": "https://github.com/unicode-org/icu4x",
       "notices": [
-        99
+        101
       ]
     },
     {
@@ -5981,7 +6072,7 @@
       ],
       "repository": "https://github.com/RustCrypto/utils",
       "notices": [
-        239
+        241
       ]
     },
     {
@@ -5996,7 +6087,7 @@
       ],
       "repository": "https://github.com/unicode-org/icu4x",
       "notices": [
-        99
+        101
       ]
     },
     {
@@ -6011,7 +6102,7 @@
       ],
       "repository": "https://github.com/unicode-org/icu4x",
       "notices": [
-        99
+        101
       ]
     },
     {
@@ -6026,7 +6117,7 @@
       ],
       "repository": "https://github.com/unicode-org/icu4x",
       "notices": [
-        99
+        101
       ]
     },
     {
@@ -6044,7 +6135,7 @@
       ],
       "repository": "https://github.com/zip-rs/zip2",
       "notices": [
-        202
+        204
       ]
     },
     {
@@ -6070,7 +6161,7 @@
       ],
       "repository": "https://github.com/etemesi254/zune-image",
       "notices": [
-        240
+        242
       ]
     },
     {
@@ -6085,7 +6176,7 @@
       ],
       "repository": "https://github.com/etemesi254/zune-image/tree/dev/crates/zune-jpeg",
       "notices": [
-        240
+        242
       ]
     },
     {
@@ -6100,7 +6191,7 @@
       ],
       "repository": "https://github.com/z-galaxy/zbus/",
       "notices": [
-        236
+        238
       ]
     },
     {
@@ -6115,7 +6206,7 @@
       ],
       "repository": "https://github.com/z-galaxy/zbus/",
       "notices": [
-        236
+        238
       ]
     },
     {
@@ -6151,6 +6242,7 @@
     "Copyright (c) 2022 Tait Hoyem <tait@tait.tech>\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.",
     "Copyright (c) 2018 Josh Stone\n\nPermission is hereby granted, free of charge, to any\nperson obtaining a copy of this software and associated\ndocumentation files (the \"Software\"), to deal in the\nSoftware without restriction, including without\nlimitation the rights to use, copy, modify, merge,\npublish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software\nis furnished to do so, subject to the following\nconditions:\n\nThe above copyright notice and this permission notice\nshall be included in all copies or substantial portions\nof the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF\nANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED\nTO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A\nPARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT\nSHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR\nIN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER\nDEALINGS IN THE SOFTWARE.",
     "The MIT License (MIT)\n\nCopyright (c) 2015 Alice Maz\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.",
+    "The MIT License (MIT)\n\nCopyright (c) 2014 Ty Overby\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
     "Copyright (c) 2026 The Rust Project Developers\n\nPermission is hereby granted, free of charge, to any\nperson obtaining a copy of this software and associated\ndocumentation files (the \"Software\"), to deal in the\nSoftware without restriction, including without\nlimitation the rights to use, copy, modify, merge,\npublish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software\nis furnished to do so, subject to the following\nconditions:\n\nThe above copyright notice and this permission notice\nshall be included in all copies or substantial portions\nof the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF\nANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED\nTO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A\nPARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT\nSHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR\nIN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER\nDEALINGS IN THE SOFTWARE.",
     "Copyright (c) 2023 The Rust Project Developers\n\nPermission is hereby granted, free of charge, to any\nperson obtaining a copy of this software and associated\ndocumentation files (the \"Software\"), to deal in the\nSoftware without restriction, including without\nlimitation the rights to use, copy, modify, merge,\npublish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software\nis furnished to do so, subject to the following\nconditions:\n\nThe above copyright notice and this permission notice\nshall be included in all copies or substantial portions\nof the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF\nANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED\nTO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A\nPARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT\nSHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR\nIN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER\nDEALINGS IN THE SOFTWARE.",
     "Copyright (c) 2014 The Rust Project Developers\n\nPermission is hereby granted, free of charge, to any\nperson obtaining a copy of this software and associated\ndocumentation files (the \"Software\"), to deal in the\nSoftware without restriction, including without\nlimitation the rights to use, copy, modify, merge,\npublish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software\nis furnished to do so, subject to the following\nconditions:\n\nThe above copyright notice and this permission notice\nshall be included in all copies or substantial portions\nof the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF\nANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED\nTO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A\nPARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT\nSHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR\nIN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER\nDEALINGS IN THE SOFTWARE.",
@@ -6231,6 +6323,7 @@
     "Copyright (c) 2017 Jorge Aparicio\n\nPermission is hereby granted, free of charge, to any\nperson obtaining a copy of this software and associated\ndocumentation files (the \"Software\"), to deal in the\nSoftware without restriction, including without\nlimitation the rights to use, copy, modify, merge,\npublish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software\nis furnished to do so, subject to the following\nconditions:\n\nThe above copyright notice and this permission notice\nshall be included in all copies or substantial portions\nof the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF\nANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED\nTO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A\nPARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT\nSHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR\nIN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER\nDEALINGS IN THE SOFTWARE.",
     "Copyright (c) 2013-2014 The Rust Project Developers.\nCopyright (c) 2015-2020 The rust-hex Developers\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
     "Copyright (c) 2022-2026 The RustCrypto Project Developers\n\nPermission is hereby granted, free of charge, to any\nperson obtaining a copy of this software and associated\ndocumentation files (the \"Software\"), to deal in the\nSoftware without restriction, including without\nlimitation the rights to use, copy, modify, merge,\npublish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software\nis furnished to do so, subject to the following\nconditions:\n\nThe above copyright notice and this permission notice\nshall be included in all copies or substantial portions\nof the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF\nANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED\nTO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A\nPARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT\nSHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR\nIN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER\nDEALINGS IN THE SOFTWARE.",
+    "The MIT License (MIT)\n\nCopyright (c) 2016 tapeinosyne\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
     "MIT License\n\nCopyright (c) 2023 iShape-Rust\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
     "MIT License\n\nCopyright (c) 2024 iShape-Rust\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
     "UNICODE LICENSE V3\n\nCOPYRIGHT AND PERMISSION NOTICE\n\nCopyright © 2020-2024 Unicode, Inc.\n\nNOTICE TO USER: Carefully read the following legal agreement. BY\nDOWNLOADING, INSTALLING, COPYING OR OTHERWISE USING DATA FILES, AND/OR\nSOFTWARE, YOU UNEQUIVOCALLY ACCEPT, AND AGREE TO BE BOUND BY, ALL OF THE\nTERMS AND CONDITIONS OF THIS AGREEMENT. IF YOU DO NOT AGREE, DO NOT\nDOWNLOAD, INSTALL, COPY, DISTRIBUTE OR USE THE DATA FILES OR SOFTWARE.\n\nPermission is hereby granted, free of charge, to any person obtaining a\ncopy of data files and any associated documentation (the \"Data Files\") or\nsoftware and any associated documentation (the \"Software\") to deal in the\nData Files or Software without restriction, including without limitation\nthe rights to use, copy, modify, merge, publish, distribute, and/or sell\ncopies of the Data Files or Software, and to permit persons to whom the\nData Files or Software are furnished to do so, provided that either (a)\nthis copyright and permission notice appear with all copies of the Data\nFiles or Software, or (b) this copyright and permission notice appear in\nassociated Documentation.\n\nTHE DATA FILES AND SOFTWARE ARE PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY\nKIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF\nTHIRD PARTY RIGHTS.\n\nIN NO EVENT SHALL THE COPYRIGHT HOLDER OR HOLDERS INCLUDED IN THIS NOTICE\nBE LIABLE FOR ANY CLAIM, OR ANY SPECIAL INDIRECT OR CONSEQUENTIAL DAMAGES,\nOR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,\nWHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,\nARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THE DATA\nFILES OR SOFTWARE.\n\nExcept as contained in this notice, the name of a copyright holder shall\nnot be used in advertising or otherwise to promote the sale, use or other\ndealings in these Data Files or Software without prior written\nauthorization of the copyright holder.\n\nSPDX-License-Identifier: Unicode-3.0\n\n—\n\nPortions of ICU4X may have been adapted from ICU4C and/or ICU4J.\nICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.",

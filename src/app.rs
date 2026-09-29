@@ -2032,7 +2032,7 @@ impl Studio {
             liga: self.text_liga,
             tnum: self.text_tnum,
             smcp: self.text_smcp,
-            contours: vec![],
+            ..TypeRun::default()
         }
     }
 
@@ -2196,7 +2196,7 @@ impl Studio {
         let a = crate::text::char_to_byte(&run.content, lo);
         let b = crate::text::char_to_byte(&run.content, hi);
         if a < b {
-            run.content.replace_range(a..b, "");
+            run.replace_text(lo, hi, "", None);
         }
         if let Some(e) = &mut self.type_edit {
             e.caret = lo;
@@ -2215,8 +2215,7 @@ impl Studio {
         }
         let caret = self.type_edit.as_ref().map(|e| e.caret).unwrap_or(0);
         if let Some(run) = self.live_type_mut() {
-            let byte = crate::text::char_to_byte(&run.content, caret);
-            run.content.insert_str(byte, s);
+            run.replace_text(caret, caret, s, None);
         }
         let n = s.chars().count();
         if let Some(e) = &mut self.type_edit {
@@ -2274,6 +2273,11 @@ impl Studio {
                 e.anchor = to;
             }
         }
+    }
+
+    pub fn patch_paragraph(&mut self, mut f: impl FnMut(&mut crate::geom::ParagraphStyle)) {
+        let range=self.type_edit.as_ref().map(|e|(e.caret.min(e.anchor),e.caret.max(e.anchor)));
+        self.patch_type(|run| {let (a,b)=range.unwrap_or((0,run.content.chars().count()));run.update_paragraphs(a,b,|p|f(p));});
     }
 
     pub fn patch_type(&mut self, f: impl FnOnce(&mut TypeRun)) {

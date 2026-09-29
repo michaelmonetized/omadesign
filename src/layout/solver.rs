@@ -162,6 +162,7 @@ impl Tree {
                             wrap_width: run.wrap_width,
                             align: run.align,
                             contours: vec![],
+                            ..run.clone()
                         })
                     } else {
                         None

@@ -520,14 +520,8 @@ impl<'a> Html<'a> {
                     u8::from(run.tnum),
                     u8::from(run.smcp)
                 );
-                for (line, content) in run.content.split('\n').enumerate() {
-                    let _ = write!(
-                        out,
-                        "<tspan x=\"{}\" y=\"{}\">{}</tspan>",
-                        run.origin.x,
-                        run.origin.y + line as f32 * run.line_height(),
-                        escape(content)
-                    );
+                for line in crate::text::compose(run).iter() {
+                    let _=write!(out,"<tspan x=\"{}\" y=\"{}\">{}</tspan>",run.origin.x+line.offset,run.origin.y+line.baseline,escape(&line.text));
                 }
                 out.push_str("</text></svg></div>");
                 return Ok(());
@@ -559,14 +553,16 @@ impl<'a> Html<'a> {
                         crate::geom::TextAlign::Start => "left",
                         crate::geom::TextAlign::Center => "center",
                         crate::geom::TextAlign::End => "right",
+                        crate::geom::TextAlign::Justify{..} => "justify",
                     }
                 );
             }
+            if let crate::geom::TextAlign::Justify{last}=run.align { let _=write!(text_style,"text-align-last:{};", match last {crate::geom::LastLine::Start=>"left",crate::geom::LastLine::Center=>"center",crate::geom::LastLine::End=>"right",crate::geom::LastLine::Justify=>"justify"}); }
             let _ = write!(
                 out,
                 "<span style=\"{}\">{}</span>",
                 escape(&text_style),
-                escape(&run.content)
+                crate::text::paragraph_html(run)
             );
         } else if !rect {
             let mut art = shape.clone();

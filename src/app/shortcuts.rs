@@ -266,6 +266,10 @@ impl Studio {
                 ),
                 _ => None,
             };
+            if focus == ShortcutFocus::Text && self.type_typography_event(event) {
+                consumed.push(index);
+                continue;
+            }
             if let Some(shortcut) = shortcut {
                 if (field_focused && !shortcut.global()) || !shortcut.available(self.persona) {
                     continue;
@@ -472,6 +476,16 @@ impl Studio {
             }
             _ => {}
         }
+    }
+
+    fn type_typography_event(&mut self,event:&Event)->bool {
+        let Event::Key{key,modifiers,pressed:true,..}=event else{return false;};
+        if (modifiers.ctrl||modifiers.command)&&modifiers.shift&&!modifiers.alt {
+            use crate::geom::{TextAlign,LastLine};
+            let align=match key {Key::L=>TextAlign::Start,Key::C=>TextAlign::Center,Key::R=>TextAlign::End,Key::J=>TextAlign::Justify{last:LastLine::Start},Key::F=>TextAlign::Justify{last:LastLine::Justify},Key::Minus=>{self.type_insert("\u{ad}");return true;},_=>return false};
+            self.patch_paragraph(|p|p.align=align);return true;
+        }
+        false
     }
 
     fn type_event(&mut self, event: &Event) -> bool {

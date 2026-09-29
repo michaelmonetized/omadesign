@@ -1,0 +1,30 @@
+Source: bdbe5507
+Command: cargo test --lib text:: -j 2 (copied exact test executable)
+
+
+running 22 tests
+test text::composer::tests::paragraph_edit_roundtrip ... ok
+test text::composer::tests::soft_hyphens_only_render_at_break ... ok
+test text::composer::tests::point_alignment_and_per_paragraph_carets ... ok
+test text::hyphenation::tests::capitalization_is_optional ... ok
+test text::composer::tests::unicode_modes_graphemes_and_no_break ... ok
+test text::hyphenation::tests::dictionary_and_limits ... ok
+test text::composer::tests::justification_limits_and_last_lines ... ok
+test text::composer::review_regressions::runt_repair_continues_until_both_configured_thresholds_are_satisfied ... ok
+test text::paragraph_export_spacing_tests::paragraph_export_preserves_desired_spacing_and_adds_tracking ... ok
+test text::tests::max_font_detection_prefers_inter ... ok
+test text::tests::old_json_defaults_kern_liga_on ... ok
+test text::composer::word_mode_tests::word_mode_keeps_katakana_words_but_anywhere_is_explicit ... ok
+test text::composer::review_regressions::last_word_hyphenation_ignores_trailing_punctuation_and_whitespace ... ok
+test text::composer::stretch_tests::dictionary_hyphenation_reduces_word_space_stretch ... ok
+test text::tests::fill_contours_writes_cache ... ok
+test text::tests::liga_reduces_fi_when_font_supports_it ... ok
+test text::composer::migration_regressions::trailing_discretionary_hyphen_is_invisible_without_break ... ok
+test text::composer::migration_regressions::runt_rebalancing_preserves_no_break_ranges ... ok
+test text::tests::caret_walks_forward ... ok
+test text::tests::shapes_when_font_exists ... ok
+test text::tests::wrapped_paragraph_keeps_source_and_caret_positions ... ok
+test text::composer::migration_regressions::new_wrap_semantics_roundtrip_and_legacy_point_stays_plain ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 718 filtered out; finished in 0.37s
+
