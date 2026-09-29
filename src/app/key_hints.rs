@@ -47,6 +47,8 @@ impl Shortcut {
             Front => ("Ctrl+Shift+]", "Bring to front"),
             Backward => ("Ctrl+[", "Send backward"),
             Back => ("Ctrl+Shift+[", "Send to back"),
+            FlipHorizontal => ("Shift+H", "Flip horizontal"),
+            FlipVertical => ("Shift+V", "Flip vertical"),
             Fit => ("Ctrl+0", "Fit canvas"),
             ActualSize => ("Ctrl+1", "Actual size"),
             ZoomIn if shift => ("Ctrl+Shift+=", "Zoom in"),

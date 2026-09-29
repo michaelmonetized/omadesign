@@ -552,7 +552,7 @@ fn object_menu(ui: &mut Ui, studio: &mut Studio) {
             ui.close();
         }
         ui.separator();
-        if let Some(horizontal) = super::selection::flip_buttons(ui, studio.can_flip_selection()) {
+        if let Some(horizontal) = super::selection::transform_menu(ui, studio.can_flip_selection()) {
             studio.flip_selection(horizontal);
         }
         ui.separator();

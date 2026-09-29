@@ -53,6 +53,8 @@ pub mod ph {
     pub const ALIGN_BOTTOM: &str = "\u{E506}";
     pub const ALIGN_CENTER_H: &str = "\u{E50A}";
     pub const ALIGN_CENTER_V: &str = "\u{E50C}";
+    pub const FLIP_HORIZONTAL: &str = "\u{ED6A}";
+    pub const FLIP_VERTICAL: &str = "\u{ED6C}";
     pub const STACK: &str = "\u{E466}";
     pub const CARET_DOWN: &str = "\u{E136}";
     pub const CARET_RIGHT: &str = "\u{E13A}";

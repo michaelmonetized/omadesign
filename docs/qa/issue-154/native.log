@@ -1,0 +1,10 @@
+PASS: one flip pair in inspector
+PASS: flip is one edit
+PASS: undo restores exact artwork
+PASS: redo restores flip
+PASS: horizontal shortcut
+PASS: menu shortcuts
+PASS: Layout shortcut
+PASS: Motion shortcut
+PASS: typing preserves H and V
+PASS: save reopen

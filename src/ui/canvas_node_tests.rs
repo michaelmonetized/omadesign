@@ -389,10 +389,17 @@ fn canvas_context_flip_targets_the_clicked_object_and_preserves_multi_selection(
             assert!(studio.artboard_sel.is_empty());
             assert!(studio.selected_layer.is_none());
         }
+        let transform = menu.iter().find_map(|item| match &item.shape {
+            eframe::egui::Shape::Text(text) if text.galley.job.text == "Transform" => Some(text.pos + text.galley.size() * 0.5),
+            _ => None,
+        }).expect("Transform submenu");
+        frame(&ctx, &mut studio, vec![Event::PointerMoved(transform), pen_pointer_button(transform, true, Modifiers::NONE)]);
+        frame(&ctx, &mut studio, vec![pen_pointer_button(transform, false, Modifiers::NONE)]);
+        let menu = frame(&ctx, &mut studio, vec![]);
         let button = menu
             .iter()
             .find_map(|item| match &item.shape {
-                eframe::egui::Shape::Text(text) if text.galley.job.text == "Flip horizontal" => {
+                eframe::egui::Shape::Text(text) if text.galley.job.text == "Flip Horizontal" => {
                     Some(text.pos + text.galley.size() * 0.5)
                 }
                 _ => None,
