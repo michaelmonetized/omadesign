@@ -416,7 +416,7 @@ fn shape_line(
     let mut buffer = rustybuzz::UnicodeBuffer::new();
     buffer.push_str(&visible);
     buffer.set_direction(rustybuzz::Direction::LeftToRight);
-    let shaped = rustybuzz::shape(face, &ot_features(run), buffer);
+    let shaped = rustybuzz::shape(face, &super::opentype::ranged_features(run,&mapping,visible.len()), buffer);
     let mut pen = 0.;
     let mut result: Vec<_> = shaped
         .glyph_infos()

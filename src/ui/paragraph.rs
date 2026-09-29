@@ -157,7 +157,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         .checkbox(&mut no_break, "No break in selected text")
         .changed()
     {
-        studio.patch_type(|r| r.set_character_style(range.0, range.1, |s| s.no_break = no_break));
+        studio.patch_character(|s| s.no_break = no_break);
     }
     ui.collapsing("Keeps & widows", |ui| {
         ui.checkbox(&mut p.allow_orphans, "Allow orphans");

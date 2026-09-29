@@ -1,0 +1,7 @@
+
+running 2 tests
+test app::type_clipboard::tests::pointer_reposition_and_drag_drop_pending_features ... ok
+test app::type_clipboard::tests::delayed_paste_does_not_follow_moved_caret_or_new_tab ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 750 filtered out; finished in 1.11s
+

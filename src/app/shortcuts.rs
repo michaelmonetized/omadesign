@@ -447,20 +447,17 @@ impl Studio {
                 if lo == hi {
                     return;
                 }
-                if let Some(run) = self.live_type_mut() {
-                    let a = crate::text::char_to_byte(&run.content, lo);
-                    let b = crate::text::char_to_byte(&run.content, hi);
-                    ctx.copy_text(run.content[a..b].to_owned());
-                    if shortcut == Shortcut::Cut {
-                        self.type_delete_range(lo, hi);
+                if let Some(run)=self.selected_type() {
+                    let copied=crate::clipboard::type_style::RichText::from_run(&run,lo,hi);
+                    #[cfg(test)]
+                    ctx.copy_text(copied.text.clone());
+                    if let Err(error)=crate::clipboard::type_style::write(&copied) {
+                        ctx.copy_text(copied.text.clone()); self.status=error;
                     }
+                    if shortcut==Shortcut::Cut {self.type_delete_range(lo,hi);}
                 }
             }
-            Shortcut::Paste => {
-                if let Some(text) = payload {
-                    self.type_insert(text);
-                }
-            }
+            Shortcut::Paste => self.request_type_clipboard_paste(ctx,payload),
             Shortcut::SelectAll => {
                 let count = self
                     .live_type_mut()
@@ -468,6 +465,7 @@ impl Studio {
                 if let Some(edit) = &mut self.type_edit {
                     edit.anchor = 0;
                     edit.caret = count;
+                    edit.pending_style = None;
                 }
             }
             Shortcut::Undo | Shortcut::Redo => {

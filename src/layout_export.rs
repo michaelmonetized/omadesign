@@ -500,7 +500,7 @@ impl<'a> Html<'a> {
         if let Geom::Text(run) = &shape.geom {
             let (font, asc, desc) = self.font(run);
             let b = shape.geom.bbox();
-            if run.wrap_width.is_none() {
+            if run.wrap_width.is_none() && run.spans.is_empty() && run.features.is_empty() {
                 let _ = write!(
                     out,
                     "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"{} {} {} {}\" width=\"100%\" height=\"100%\" style=\"overflow:visible\"><text font-family=\"{}\" font-size=\"{}\" letter-spacing=\"{}\" fill=\"{}\" style=\"font-kerning:{};font-feature-settings:'liga' {},'tnum' {},'smcp' {}\" xml:space=\"preserve\">",

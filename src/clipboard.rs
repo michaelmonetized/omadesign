@@ -1,4 +1,5 @@
 //! Native clipboard import. Call `read` on a worker: clipboard owners are other processes.
+pub mod type_style;
 use crate::photo::RgbaImage;
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};

@@ -2,6 +2,7 @@
 
 mod brand_assets;
 mod clipboard;
+mod type_clipboard;
 mod clipboard_insert;
 mod cloud;
 pub mod deform;
@@ -281,6 +282,16 @@ pub struct TypeEdit {
     pub caret: usize,
     pub anchor: usize,
     pub before: Geom,
+    pub pending_style: Option<crate::geom::CharSpan>,
+}
+
+impl TypeEdit {
+    /// Pointer moves start a new insertion context, just like keyboard navigation.
+    pub fn pointer_caret(&mut self, caret: usize, extend: bool) {
+        self.caret=caret;
+        if !extend { self.anchor=caret; }
+        self.pending_style=None;
+    }
 }
 
 pub struct Studio {
@@ -349,6 +360,9 @@ pub struct Studio {
     pub text_liga: bool,
     pub text_tnum: bool,
     pub text_smcp: bool,
+    pub text_features: Vec<([u8;4],u32)>,
+    pub text_character: crate::geom::CharSpan,
+    type_paste_jobs: Vec<type_clipboard::TypePasteJob>,
     pub type_edit: Option<TypeEdit>,
     pub polygon_sides: u32,
     pub star_points: u32,
@@ -589,6 +603,9 @@ impl Studio {
             text_liga: true,
             text_tnum: false,
             text_smcp: false,
+            text_features: vec![],
+            text_character: Default::default(),
+            type_paste_jobs: Vec::new(),
             type_edit: None,
             polygon_sides: 6,
             star_points: 5,
@@ -2032,6 +2049,7 @@ impl Studio {
             liga: self.text_liga,
             tnum: self.text_tnum,
             smcp: self.text_smcp,
+            features: self.text_features.clone(),
             ..TypeRun::default()
         }
     }
@@ -2045,6 +2063,7 @@ impl Studio {
         self.text_liga = run.liga;
         self.text_tnum = run.tnum;
         self.text_smcp = run.smcp;
+        self.text_features=run.features.clone();
     }
 
     pub fn place_text(&mut self, at: Pt) {
@@ -2080,6 +2099,7 @@ impl Studio {
             caret: n,
             anchor: 0,
             before: geom,
+            pending_style: Some(self.text_character.clone()),
         });
         self.status = "type — click or Esc to finish, Enter for a new line".into();
     }
@@ -2095,8 +2115,7 @@ impl Studio {
                     _ => None,
                 });
             if let (Some(c), Some(e)) = (caret, self.type_edit.as_mut()) {
-                e.caret = c;
-                e.anchor = c;
+                e.pointer_caret(c,false);
             }
             return;
         }
@@ -2119,6 +2138,7 @@ impl Studio {
             caret,
             anchor: caret,
             before,
+            pending_style: None,
         });
         self.status = "type — click or Esc to finish, Enter for a new line".into();
     }
@@ -2214,8 +2234,9 @@ impl Studio {
             self.type_delete_range(lo, hi);
         }
         let caret = self.type_edit.as_ref().map(|e| e.caret).unwrap_or(0);
+        let pending=self.type_edit.as_ref().and_then(|e|e.pending_style.clone());
         if let Some(run) = self.live_type_mut() {
-            run.replace_text(caret, caret, s, None);
+            run.replace_text(caret, caret, s, pending);
         }
         let n = s.chars().count();
         if let Some(e) = &mut self.type_edit {
@@ -2269,10 +2290,48 @@ impl Studio {
         let to = to.min(n);
         if let Some(e) = &mut self.type_edit {
             e.caret = to;
+            e.pending_style=None;
             if !shift {
                 e.anchor = to;
             }
         }
+    }
+
+    pub fn patch_character(&mut self, mut f:impl FnMut(&mut crate::geom::CharSpan)) {
+        if let Some(edit)=self.type_edit.clone() {
+            let (a,b)=(edit.caret.min(edit.anchor),edit.caret.max(edit.anchor));
+            if a==b {
+                let mut style=edit.pending_style.unwrap_or_else(||self.selected_type().map_or_else(Default::default,|r|r.character_style(a.saturating_sub(1))));
+                f(&mut style);self.type_edit.as_mut().unwrap().pending_style=Some(style);return;
+            }
+            self.patch_type(|r|r.set_character_style(a,b,|s|f(s)));
+        } else if self.selected_type().is_some() {
+            self.patch_type(|r|r.set_character_style(0,r.content.chars().count(),|s|f(s)));
+        } else {f(&mut self.text_character);}
+    }
+    pub fn patch_feature(&mut self, tag: [u8; 4], value: u32) {
+        self.patch_features(&[(tag, value)]);
+    }
+    /// A UI selection may set mutually exclusive tags; it remains one undo action.
+    pub fn patch_features(&mut self, features: &[([u8; 4], u32)]) {
+        self.patch_character(|s| {
+            for &(tag, value) in features {
+                s.features.retain(|(t, _)| *t != tag);
+                s.features.push((tag, value));
+            }
+            s.features.sort_by_key(|(t, _)| *t);
+        });
+    }
+    pub fn selection_feature(&self,tag:[u8;4])->Option<u32> {
+        let run=self.selected_type().unwrap_or_else(||self.type_defaults());
+        let (a,b)=self.type_edit.as_ref().map(|e|(e.caret.min(e.anchor),e.caret.max(e.anchor))).unwrap_or((0,run.content.chars().count()));
+        if a==b {
+            let inherited=if self.selected_type().is_some(){run.character_style(a.saturating_sub(1))}else{self.text_character.clone()};
+            let style=self.type_edit.as_ref().and_then(|e|e.pending_style.as_ref()).unwrap_or(&inherited);
+            return Some(style.features.iter().rev().find(|(t,_)|*t==tag).map_or_else(||crate::text::feature_value(&run,a.saturating_sub(1),tag),|(_,v)|*v));
+        }
+        let first=crate::text::feature_value(&run,a,tag);
+        (a..b).all(|i|crate::text::feature_value(&run,i,tag)==first).then_some(first)
     }
 
     pub fn patch_paragraph(&mut self, mut f: impl FnMut(&mut crate::geom::ParagraphStyle)) {
@@ -4426,6 +4485,7 @@ impl eframe::App for Studio {
         self.poll_cloud(&ctx);
         self.poll_file_jobs(&ctx);
         self.poll_clipboard_jobs(&ctx);
+        self.poll_type_clipboard_jobs(&ctx);
         self.photo.poll(&ctx);
         crate::ui::anim_export::poll(&ctx, self);
         crate::ui::run(ui, self);

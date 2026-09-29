@@ -286,6 +286,11 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     draw_comment_pins(&painter, rect, studio);
     draw_bleed_safe(&painter, rect, studio);
     draw_overlays(&painter, rect, studio, pen_preview);
+    if let Some(edit)=studio.type_edit.as_ref() && edit.caret!=edit.anchor && let Some(run)=studio.selected_type() {
+        let p=crate::text::caret_pt(&run,edit.caret.min(edit.anchor));
+        let at=win(rect,studio.view,Pt::new(p.x,p.y-run.px))-vec2(0.,78.);
+        super::opentype::alternates(ui,studio,at);
+    }
     super::deform::paint(&painter, rect, studio);
     super::pixel_edit::paint(&painter, rect, studio);
     super::plugins::paint(ui, studio, rect);
@@ -555,8 +560,7 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
                         _ => None,
                     });
                 if let (Some(c), Some(e)) = (caret, studio.type_edit.as_mut()) {
-                    e.anchor = c;
-                    e.caret = c;
+                    e.pointer_caret(c,false);
                 }
                 return;
             }
@@ -569,7 +573,7 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
                 {
                     let new_caret = crate::text::hit_char(run, pick);
                     if let Some(e) = studio.type_edit.as_mut() {
-                        e.caret = new_caret;
+                        e.pointer_caret(new_caret,true);
                     }
                 }
             }
