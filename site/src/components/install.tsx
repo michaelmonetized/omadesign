@@ -55,8 +55,8 @@ export function Install() {
         </a>
       </div>
       <p className="install-version">
-        {RELEASE_TAG} installs into ~/.local. Motion keys the design you already
-        made, and the brush shows its edge.{" "}
+        {RELEASE_TAG} installs into ~/.local. Offline AI, editable typography,
+        live canvas agents, and faster brushing.{" "}
         <a href={sitePath("updates")}>What shipped</a>
         {" · "}
         <a href={RELEASE_URL}>Release notes</a>.

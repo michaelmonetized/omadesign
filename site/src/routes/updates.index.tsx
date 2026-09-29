@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import moreControl from "../../../docs/blog/0.6.1-more-control-less-waiting.md?raw";
 import keyTheDesign from "../../../docs/blog/0.6.0-key-the-design.md?raw";
 import pixelYouMean from "../../../docs/blog/0.5.9-click-the-pixel.md?raw";
 import plugins from "../../../docs/blog/0.5.8-make-it-your-studio.md?raw";
@@ -13,6 +14,7 @@ import { CURL } from "../site";
 import { latestUpdate, updates } from "../updates";
 
 const bodies: Record<string, { markdown: string; path: string }> = {
+  "0.6.1": { markdown: moreControl, path: "docs/blog/0.6.1-more-control-less-waiting.md" },
   "0.6.0": { markdown: keyTheDesign, path: "docs/blog/0.6.0-key-the-design.md" },
   "0.5.9": { markdown: pixelYouMean, path: "docs/blog/0.5.9-click-the-pixel.md" },
   "0.5.8": { markdown: plugins, path: "docs/blog/0.5.8-make-it-your-studio.md" },
@@ -31,7 +33,7 @@ export const Route = createFileRoute("/updates/")({
       {
         name: "description",
         content:
-          "Studio notes from omadesign. 0.6.0 keys the design you already made, and the brush shows its edge.",
+          "Studio notes from omadesign. 0.6.1 brings offline AI tools, live agents, editable typography and faster canvas work.",
       },
     ],
   }),

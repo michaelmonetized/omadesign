@@ -8,6 +8,11 @@ export type UpdatePost = {
 
 export const updates: UpdatePost[] = [
   {
+    slug: "0.6.1", version: "0.6.1", date: "2026-09-29",
+    title: "More control. Less waiting.",
+    dek: "Offline cutouts and AI upscaling. Live canvas agents with durable references. Paragraphs, OpenType ranges, text on paths and linked area frames. Independent effects, direct selection controls, faster brushing and motion, and fixes for font search and new pixel layers.",
+  },
+  {
     slug: "0.6.0", version: "0.6.0", date: "2026-09-25",
     title: "Key the design you already made",
     dek: "Motion keys position, width, height, rotation, opacity, gradient angle, fill, stroke width, dash, gap, and dash length. Blend stays a design edit. The brush draws its edge. Clone has size, edge, opacity, flow, and an aligned source. A selection can move, resize, feather, and distort. Apple glass displaces through turbulence. Simplify drops extra nodes. Libraries show thumbnails. Pickers and zoom sit at the edges. Color pickers sample the screen and copy hex.",
