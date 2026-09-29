@@ -72,7 +72,7 @@ thread_local! {
 }
 
 pub(super) fn reset_admission() {
-    CACHE.with_borrow_mut(|cache| cache.admission = Admission::default());
+    CACHE.with_borrow_mut(|cache| cache.admission.reset());
 }
 
 fn key(source: &Pixmap, effects: &[Fx]) -> u64 {

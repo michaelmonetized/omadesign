@@ -67,7 +67,7 @@ thread_local! {
 }
 
 pub(super) fn reset_admission() {
-    CACHE.with_borrow_mut(|cache| cache.admission = Default::default());
+    CACHE.with_borrow_mut(|cache| cache.admission.reset());
 }
 
 /// Coverage belongs to these exact filtered pixels, including after ID reuse.
