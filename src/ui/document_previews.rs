@@ -5,11 +5,12 @@ use crate::compositor::{self, Draft, View};
 use crate::document::{Document, LayerKind, Pixels};
 use crate::geom::{Bounds, Pt};
 use eframe::egui::{self, TextureHandle};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 const JOB: &str = "document-thumbnail-render";
 const CACHE: &str = "document-thumbnail-cache";
+const READY: &str = "document-thumbnails-ready";
 const SIDE: u32 = 128;
 const REFRESH: Duration = Duration::from_millis(100);
 
@@ -33,15 +34,31 @@ pub(super) struct Cache {
     pending: bool,
     visible: Vec<String>,
     needs_initial: bool,
+    interacting: bool,
+    playing: bool,
+    playback_stopped: bool,
 }
 
 type Rendered = (String, Revision, egui::ColorImage);
 
 pub(super) fn begin(ctx: &egui::Context, studio: &Studio) -> Cache {
     let mut cache = ctx
-        .data(|d| d.get_temp::<Cache>(egui::Id::new(CACHE)))
+        .data_mut(|d| d.remove_temp::<Cache>(egui::Id::new(CACHE)))
         .unwrap_or_default();
     cache.pending = false;
+    let playing = studio.is_motion() && studio.playing;
+    cache.playback_stopped = cache.playing && !playing;
+    cache.playing = playing;
+    // Snapshotting vectors and pixel proxies is UI-thread work. It must not
+    // compete with a drag or stroke, even when the stale tab is inactive.
+    let (down, released) =
+        ctx.input(|input| (input.pointer.any_down(), input.pointer.any_released()));
+    cache.interacting = down || released;
+    if released {
+        // Tabs render before the canvas commits its release event. Snapshot
+        // the completed document next frame, after the final brush/drag step.
+        ctx.request_repaint();
+    }
     if let Some(Ok((id, revision, image))) = super::super::jobs::poll::<Rendered>(ctx, JOB) {
         let texture = if let Some(existing) = cache.images.get_mut(&id) {
             existing.texture.set(image, egui::TextureOptions::LINEAR);
@@ -62,13 +79,10 @@ pub(super) fn begin(ctx: &egui::Context, studio: &Studio) -> Cache {
             },
         );
     }
-    cache.images.retain(|id, _| {
-        (0..studio.tab_count()).any(|i| {
-            studio
-                .tab_preview_source(i)
-                .is_some_and(|(_, open_id, _, _)| id == open_id)
-        })
-    });
+    let open: HashSet<_> = (0..studio.tab_count())
+        .filter_map(|i| studio.tab_preview_source(i).map(|(_, id, _, _)| id))
+        .collect();
+    cache.images.retain(|id, _| open.contains(id.as_str()));
     cache.needs_initial = cache
         .visible
         .iter()
@@ -85,9 +99,14 @@ impl Cache {
         i: usize,
     ) -> Option<&TextureHandle> {
         let (doc, id, edited, playhead) = studio.tab_preview_source(i)?;
+        let motion = if i == studio.active_tab {
+            studio.is_motion()
+        } else {
+            doc.workspace == Some(crate::tools::Persona::Motion)
+        };
         let revision = Revision {
             edited,
-            motion: studio.is_motion().then_some(playhead.to_bits()),
+            motion: motion.then_some(playhead.to_bits()),
             dark: ctx.theme() == egui::Theme::Dark,
         };
         let cached = self.images.get(id);
@@ -95,10 +114,16 @@ impl Cache {
         let changed = cached.is_none_or(|preview| preview.revision != revision);
         self.pending |= changed;
         if changed
+            && !self.interacting
+            // Playback already renders the full canvas. A second posed render
+            // for a tiny tab competes for CPU, including native-size effects.
+            // Keep the last preview and refresh once playback pauses.
+            && !self.playing
             && (cached.is_none() || !self.needs_initial)
             && !super::super::jobs::is_running::<Rendered>(ctx, JOB)
         {
             let wait = cached
+                .filter(|_| !self.playback_stopped)
                 .map(|preview| REFRESH.saturating_sub(preview.updated.elapsed()))
                 .unwrap_or_default();
             if wait.is_zero() {
@@ -116,20 +141,40 @@ impl Cache {
     }
 
     pub(super) fn store(self, ctx: &egui::Context) {
-        ctx.data_mut(|d| d.insert_temp(egui::Id::new(CACHE), self));
+        // Initial-thumbnail priority is based on the previous visible rows.
+        // Scrolling can hide the missing row before it starts; guarantee that
+        // stale rows remaining in view get another scheduling opportunity.
+        if self.pending
+            && !self.interacting
+            && !self.playing
+            && !super::super::jobs::is_running::<Rendered>(ctx, JOB)
+        {
+            ctx.request_repaint_after(REFRESH);
+        }
+        ctx.data_mut(|d| {
+            d.insert_temp(egui::Id::new(READY), !self.pending);
+            d.insert_temp(egui::Id::new(CACHE), self);
+        });
     }
 }
 
 pub(super) fn ready(ctx: &egui::Context) -> bool {
-    ctx.data(|d| d.get_temp::<Cache>(egui::Id::new(CACHE)))
-        .is_some_and(|cache| !cache.pending)
+    ctx.data(|d| d.get_temp::<bool>(egui::Id::new(READY)))
+        .unwrap_or(false)
         && !super::super::jobs::is_running::<Rendered>(ctx, JOB)
 }
 
 /// Raster buffers are Vecs, not shared storage. Build a bounded image proxy on
 /// the UI thread instead of repeatedly cloning a full-resolution photograph.
 fn snapshot(doc: &Document) -> Document {
-    let mut out = doc.layout_snapshot();
+    let mut out = doc.layout_snapshot_with_shapes(|shape| {
+        shape.clone_with_mask(
+            shape
+                .mask
+                .as_ref()
+                .map(|mask| proxy_pixels(mask, (256.0 / mask.w.max(mask.h) as f32).min(1.0))),
+        )
+    });
     out.transparent = doc.transparent;
     out.motion = doc.motion.clone();
     for (source, target) in doc.layers.iter().zip(&mut out.layers) {
@@ -315,5 +360,235 @@ mod tests {
             doc.layers[0].kind.pixels().unwrap().data.len(),
             2048 * 1024 * 4
         );
+    }
+
+    #[test]
+    fn object_masks_are_bounded_without_changing_the_thumbnail() {
+        let mut doc = Document::new("Masked vector", 200.0, 100.0, 72.0);
+        let mut shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::ZERO,
+                size: Pt::new(200.0, 100.0),
+                radius: 0.0,
+            },
+            Style {
+                fill: crate::document::Fill::Solid(Rgba::rgb(255, 0, 0)),
+                stroke: None,
+            },
+        );
+        shape.mask = Pixels::from_rgba(2048, 1024, vec![255; 2048 * 1024 * 4]);
+        doc.layers[1].kind.shapes_mut().unwrap().push(shape);
+        let proxy = snapshot(&doc);
+        let mask = proxy.layers[1].kind.shapes().unwrap()[0]
+            .mask
+            .as_ref()
+            .unwrap();
+        assert_eq!((mask.w, mask.h, mask.data.len()), (256, 128, 256 * 128 * 4));
+        let original = render(&doc, None).unwrap();
+        let thumbnail = render(&proxy, None).unwrap();
+        // The compositor's workspace theme is global and other UI tests may
+        // change it concurrently. Compare the actual artboard, not its margin.
+        assert!((35..93).all(|y| {
+            (5..123).all(|x| original.pixels[y * 128 + x] == thumbnail.pixels[y * 128 + x])
+        }));
+        assert_eq!(
+            doc.layers[1].kind.shapes().unwrap()[0]
+                .mask
+                .as_ref()
+                .unwrap()
+                .w,
+            2048
+        );
+    }
+
+    #[test]
+    fn rotated_gradient_mask_proxy_preserves_placement_and_softness() {
+        let mut doc = Document::new("Soft rotated mask", 300.0, 200.0, 72.0);
+        let mut shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::new(60.0, 50.0),
+                size: Pt::new(160.0, 80.0),
+                radius: 0.0,
+            },
+            Style {
+                fill: crate::document::Fill::Solid(Rgba::rgb(255, 0, 0)),
+                stroke: None,
+            },
+        );
+        let mut mask = Pixels::new(1024, 512);
+        for (i, pixel) in mask.data.chunks_exact_mut(4).enumerate() {
+            let value = ((i % 1024) * 255 / 1023) as u8;
+            pixel.copy_from_slice(&[value, value, value, 255]);
+        }
+        mask.touch();
+        shape.mask = Some(mask);
+        shape.rotation = 0.37;
+        doc.layers[1].kind.shapes_mut().unwrap().push(shape);
+        let original = render(&doc, None).unwrap();
+        let proxy = render(&snapshot(&doc), None).unwrap();
+        let errors: Vec<_> = original
+            .pixels
+            .iter()
+            .zip(&proxy.pixels)
+            .enumerate()
+            .filter(|(i, _)| (5..123).contains(&(i % 128)) && (25..103).contains(&(i / 128)))
+            .map(|(_, pixels)| pixels)
+            .flat_map(|(a, b)| a.to_array().into_iter().zip(b.to_array()))
+            .map(|(a, b)| a.abs_diff(b) as usize)
+            .collect();
+        assert!(
+            errors.iter().sum::<usize>() as f32 / (errors.len() as f32) < 0.1,
+            "proxy must preserve the rotated gradient, including its soft edge"
+        );
+        assert!(
+            errors.iter().filter(|&&error| error > 8).count() < 128,
+            "only edge sampling may differ by more than a few channel values"
+        );
+    }
+
+    #[test]
+    fn preview_snapshots_wait_for_pointer_release_and_then_refresh() {
+        let ctx = egui::Context::default();
+        let mut studio = Studio::new();
+        studio.doc = Document::new("Preview", 8.0, 8.0, 72.0);
+        let pointer = |pressed| egui::RawInput {
+            events: vec![egui::Event::PointerButton {
+                pos: egui::pos2(20.0, 20.0),
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            ..Default::default()
+        };
+        ctx.begin_pass(pointer(true));
+        let mut cache = begin(&ctx, &studio);
+        assert!(cache.image(&ctx, &studio, 0).is_none());
+        assert!(!super::super::super::jobs::is_running::<Rendered>(
+            &ctx, JOB
+        ));
+        cache.store(&ctx);
+        assert!(!ready(&ctx));
+        ctx.end_pass().textures_delta.clear();
+
+        ctx.begin_pass(pointer(false));
+        let mut cache = begin(&ctx, &studio);
+        cache.image(&ctx, &studio, 0);
+        assert!(!super::super::super::jobs::is_running::<Rendered>(
+            &ctx, JOB
+        ));
+        cache.store(&ctx);
+        ctx.end_pass().textures_delta.clear();
+
+        ctx.begin_pass(egui::RawInput::default());
+        let mut cache = begin(&ctx, &studio);
+        cache.image(&ctx, &studio, 0);
+        assert!(super::super::super::jobs::is_running::<Rendered>(&ctx, JOB));
+        cache.store(&ctx);
+        ctx.end_pass().textures_delta.clear();
+    }
+
+    #[test]
+    fn cached_previews_move_between_frames_and_closed_tabs_release_them() {
+        let ctx = egui::Context::default();
+        let mut studio = Studio::new();
+        studio.show_welcome = false;
+        let (_, id, edited, _) = studio.tab_preview_source(0).unwrap();
+        let id = id.to_owned();
+        let mut cache = Cache::default();
+        cache.images.insert(
+            id.clone(),
+            Preview {
+                revision: Revision {
+                    edited,
+                    motion: None,
+                    dark: ctx.theme() == egui::Theme::Dark,
+                },
+                texture: ctx.load_texture(
+                    "test",
+                    egui::ColorImage::new([1, 1], vec![egui::Color32::WHITE]),
+                    egui::TextureOptions::LINEAR,
+                ),
+                updated: Instant::now(),
+            },
+        );
+        let storage = cache.images.get_key_value(&id).unwrap().0.as_ptr();
+        cache.store(&ctx);
+        let cache = begin(&ctx, &studio);
+        assert_eq!(
+            cache.images.get_key_value(&id).unwrap().0.as_ptr(),
+            storage,
+            "frames must not clone every cached tab identity and texture"
+        );
+        cache.store(&ctx);
+        studio.new_tab();
+        studio.close_tab(0);
+        assert!(begin(&ctx, &studio).images.is_empty());
+    }
+
+    #[test]
+    fn playing_keeps_the_cached_thumbnail_and_pause_refreshes_immediately() {
+        let ctx = egui::Context::default();
+        let mut studio = Studio::new();
+        studio.doc = Document::new("Motion preview", 8.0, 8.0, 72.0);
+        studio.persona = crate::tools::Persona::Motion;
+        let (_, id, edited, _) = studio.tab_preview_source(0).unwrap();
+        let id = id.to_owned();
+        let texture = ctx.load_texture(
+            "paused-preview",
+            egui::ColorImage::new([1, 1], vec![egui::Color32::RED]),
+            egui::TextureOptions::LINEAR,
+        );
+        let texture_id = texture.id();
+        let mut cache = Cache::default();
+        cache.images.insert(id.clone(), Preview {
+            revision: Revision {
+                edited,
+                motion: Some(0.0f32.to_bits()),
+                dark: ctx.theme() == egui::Theme::Dark,
+            },
+            texture,
+            // Even an updated texture inside the ordinary refresh interval
+            // must immediately become eligible after playback stops.
+            updated: Instant::now() + REFRESH,
+        });
+        cache.store(&ctx);
+        studio.playing = true;
+        for playhead in [0.25, 0.5, 0.75] {
+            studio.playhead = playhead;
+            let mut cache = begin(&ctx, &studio);
+            assert_eq!(cache.image(&ctx, &studio, 0).unwrap().id(), texture_id);
+            assert!(!super::super::super::jobs::is_running::<Rendered>(&ctx, JOB));
+            cache.store(&ctx);
+        }
+        studio.playing = false;
+        let mut cache = begin(&ctx, &studio);
+        assert_eq!(cache.image(&ctx, &studio, 0).unwrap().id(), texture_id);
+        assert!(super::super::super::jobs::is_running::<Rendered>(&ctx, JOB));
+        cache.store(&ctx);
+    }
+
+    #[test]
+    fn playing_defers_cold_previews_for_active_and_inactive_tabs() {
+        let ctx = egui::Context::default();
+        let mut studio = Studio::new();
+        studio.doc = Document::new("Inactive preview", 8.0, 8.0, 72.0);
+        studio.show_welcome = false;
+        studio.new_tab();
+        studio.doc = Document::new("Playing preview", 8.0, 8.0, 72.0);
+        studio.persona = crate::tools::Persona::Motion;
+        studio.playing = true;
+        let mut cache = begin(&ctx, &studio);
+        for i in 0..studio.tab_count() {
+            assert!(cache.image(&ctx, &studio, i).is_none());
+        }
+        assert!(!super::super::super::jobs::is_running::<Rendered>(&ctx, JOB));
+        cache.store(&ctx);
+        assert!(!ready(&ctx));
+
+        studio.playing = false;
+        let mut cache = begin(&ctx, &studio);
+        assert!(cache.image(&ctx, &studio, studio.active_tab).is_none());
+        assert!(super::super::super::jobs::is_running::<Rendered>(&ctx, JOB));
+        cache.store(&ctx);
     }
 }

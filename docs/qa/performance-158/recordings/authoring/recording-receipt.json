@@ -1,0 +1,124 @@
+{
+  "purpose": "Separate recorded native behavior proof, not a timing run",
+  "excluded_from_benchmark": true,
+  "scenario": "authoring",
+  "started_utc": "2026-09-28T22:00:10Z",
+  "geometry": "80,50 1440x900",
+  "wayland_display": "wayland-1",
+  "recording_command": [
+    "wf-recorder",
+    "--no-dmabuf",
+    "--no-damage",
+    "-g",
+    "80,50 1440x900",
+    "-c",
+    "libx264",
+    "-x",
+    "yuv420p",
+    "-r",
+    "60",
+    "-p",
+    "crf=20",
+    "-p",
+    "preset=ultrafast",
+    "-p",
+    "threads=2",
+    "-f",
+    "/home/michael/.local/state/omadesign/qa/performance-158/recorded-authoring-final/authoring-native.mp4"
+  ],
+  "workload_command": [
+    "unshare",
+    "-Urn",
+    "/home/michael/.local/state/omadesign/qa/performance-158/final/bin/authoring_qa",
+    "/home/michael/.local/state/omadesign/qa/fleet-benchmark-20260927/inputs/infographic-seed.oma",
+    "/home/michael/.local/state/omadesign/qa/fleet-benchmark-20260927/inputs/type-tasks.json",
+    "/home/michael/.local/state/omadesign/qa/performance-158/recorded-authoring-final/workload"
+  ],
+  "executable": {
+    "path": "/home/michael/.local/state/omadesign/qa/performance-158/final/bin/authoring_qa",
+    "bytes": 60825480,
+    "sha256": "b09f7d98ec133c945d3abe71434f1448040ddbd5769ae5b458dae90ba2fc40c5"
+  },
+  "inputs": {
+    "seed": {
+      "path": "/home/michael/.local/state/omadesign/qa/fleet-benchmark-20260927/inputs/infographic-seed.oma",
+      "bytes": 472296,
+      "sha256": "d75a60c1803b4718d171a897f2330b3faec80018a02d27ee6c5447b88eeef7a7"
+    },
+    "tasks": {
+      "path": "/home/michael/.local/state/omadesign/qa/fleet-benchmark-20260927/inputs/type-tasks.json",
+      "bytes": 624,
+      "sha256": "e859dd9c2e990468c36c818616addfbb47c46f0951f6e6e4f5be4c5eb0b96efe"
+    }
+  },
+  "workload_exit_code": 0,
+  "recorder_exit_code": 0,
+  "wall_seconds": 15.586247322964482,
+  "probe_command": [
+    "ffprobe",
+    "-v",
+    "error",
+    "-show_format",
+    "-show_streams",
+    "-of",
+    "json",
+    "/home/michael/.local/state/omadesign/qa/performance-158/recorded-authoring-final/authoring-native.mp4"
+  ],
+  "video_verified": true,
+  "video_format": {
+    "codec_name": "h264",
+    "width": 1440,
+    "height": 900,
+    "pix_fmt": "yuvj420p",
+    "color_range": "pc"
+  },
+  "native_checks": {
+    "typed_objects": 5,
+    "pen_paths": 3,
+    "brush_strokes": 3,
+    "undo_redo": true,
+    "save_reopen_exact": true,
+    "canvas_updated_frames": {
+      "typing": 83,
+      "brush-drag": 90,
+      "pan": 38,
+      "zoom": 60
+    }
+  },
+  "artifacts": {
+    "workload/authoring-result.json": {
+      "bytes": 93746,
+      "sha256": "4dc66df2c5ae8b30a77faa42d5ffa115588f2ffc5fe68e0238d303ccfdf8bef4"
+    },
+    "workload/infographic.oma": {
+      "bytes": 535537,
+      "sha256": "26c621117ba43b9261f7d77bb32a4e762524a73b02ab385f3f4aa540bb479821"
+    },
+    "workload/infographic.png": {
+      "bytes": 324067,
+      "sha256": "81c8ed16e6d970c3b6cd7b2f20b49f0569bbe29a7997ae2369d009cf4433289e"
+    },
+    "workload/native-editor.png": {
+      "bytes": 685372,
+      "sha256": "da94eab2cd8033ecdc30d81d81214ceba69674de35a05a110e3acdc68c17f5c9"
+    },
+    "authoring-native.mp4": {
+      "bytes": 11238863,
+      "sha256": "aada8dfa9a76c9423fc8cc6aa91736801634b0a6f3fbaf3cef0aed84a1598bea"
+    },
+    "ffprobe.json": {
+      "bytes": 2253,
+      "sha256": "537a6b9706c07bf99b6eb6f67d963650733c163563928e50d60d02111a2f39da"
+    },
+    "recorder.log": {
+      "bytes": 2172,
+      "sha256": "ebd9b51ce9e40143a6632f3a97eaf90078bb1858f1db5e769d56c730306ba18a"
+    },
+    "workload.log": {
+      "bytes": 2155,
+      "sha256": "0783fa658db39ca7fa27ee1f4b253ded9e6602f12aff3a59f7f85d29544bcb03"
+    }
+  },
+  "errors": [],
+  "success": true
+}

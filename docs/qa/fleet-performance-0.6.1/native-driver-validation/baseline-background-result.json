@@ -1,0 +1,30 @@
+{
+  "cancel_button_covered": false,
+  "cancel_input": "Escape key",
+  "cancel_preserves_document": true,
+  "elapsed_seconds": 3.1393851919999998,
+  "frames": 192,
+  "inference_frames": 16,
+  "inference_seconds": 0.258984839,
+  "interaction": "real egui pointer and keyboard events",
+  "matte_radius": 59,
+  "matte_radius_changed": true,
+  "one_undo_step": true,
+  "pixels_preserved": true,
+  "qa_input_protocol": "hover-atomic-buttons-held-sliders-escape-cancel-v2",
+  "renderer": "native WGPU",
+  "save_reopen": true,
+  "screenshots": [
+    "01-working",
+    "02-preview",
+    "03-matte",
+    "04-refined",
+    "05-applied",
+    "06-undo",
+    "07-redo-saved",
+    "08-credits"
+  ],
+  "ui_frame_max_ms": 37.260823,
+  "ui_frame_p95_ms": 13.836808000000001,
+  "undo_redo": true
+}

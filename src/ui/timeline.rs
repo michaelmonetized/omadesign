@@ -174,16 +174,7 @@ fn paint_timeline(ui: &mut Ui, studio: &mut Studio, rect: Rect, resp: &eframe::e
         t += step;
     }
 
-    let mut rows: Vec<(u64, String)> = Vec::new();
-    for id in studio.doc.motion.shapes() {
-        let name = shape_name(studio, id);
-        rows.push((id, name));
-    }
-    for (_, id) in &studio.selection {
-        if !rows.iter().any(|(x, _)| *x == *id) {
-            rows.push((*id, shape_name(studio, *id)));
-        }
-    }
+    let rows = row_ids(studio);
     let visible = ((lane.height() / ROW).floor() as usize).max(1);
     let max_scroll = rows.len().saturating_sub(visible);
     if resp.hovered() {
@@ -196,7 +187,14 @@ fn paint_timeline(ui: &mut Ui, studio: &mut Studio, rect: Rect, resp: &eframe::e
     }
     studio.timeline_scroll = studio.timeline_scroll.min(max_scroll);
     let start = studio.timeline_scroll;
-    let rows: Vec<(u64, String)> = rows.into_iter().skip(start).take(visible).collect();
+    // Looking up a name walks the document. Resolve only the few rows painted
+    // in this viewport, not every animated object on every playback frame.
+    let rows: Vec<(u64, String)> = rows
+        .into_iter()
+        .skip(start)
+        .take(visible)
+        .map(|id| (id, shape_name(studio, id)))
+        .collect();
 
     studio.forget_stale_key();
     let mut clicked_key: Option<(u64, Prop, usize)> = None;
@@ -347,6 +345,17 @@ fn paint_timeline(ui: &mut Ui, studio: &mut Studio, rect: Rect, resp: &eframe::e
     }
 }
 
+fn row_ids(studio: &Studio) -> Vec<u64> {
+    let mut rows = studio.doc.motion.shapes();
+    let mut seen: std::collections::HashSet<_> = rows.iter().copied().collect();
+    for (_, id) in &studio.selection {
+        if seen.insert(*id) {
+            rows.push(*id);
+        }
+    }
+    rows
+}
+
 fn shape_name(studio: &Studio, id: u64) -> String {
     for layer in &studio.doc.layers {
         if let Some(s) = layer.find(id) {
@@ -412,4 +421,101 @@ fn nice_time(dur: f32) -> f32 {
         5.0
     };
     (m * p).max(0.05)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::document::{Document, Shape, Style};
+    use crate::geom::{Geom, Pt};
+    use eframe::egui::{self, Event, Modifiers};
+
+    fn fixture() -> Studio {
+        let mut studio = Studio::new();
+        studio.doc = Document::new("Timeline", 100.0, 100.0, 72.0);
+        studio.persona = Persona::Motion;
+        studio.doc.motion.duration = 2.0;
+        for id in 101..=112 {
+            let mut shape = Shape::new(Geom::Rect {
+                origin: Pt::ZERO,
+                size: Pt::new(10.0, 10.0),
+                radius: 0.0,
+            }, Style::default());
+            shape.id = id;
+            shape.name = format!("Object {id}");
+            studio.doc.layers[1].kind.shapes_mut().unwrap().push(shape);
+            studio.doc.motion.set_key(id, Prop::X, 1.0, 10.0, Ease::Linear);
+        }
+        studio
+    }
+
+    fn frame(ctx: &egui::Context, studio: &mut Studio, events: Vec<Event>)
+        -> (Rect, Vec<egui::epaint::ClippedShape>)
+    {
+        let mut rect = Rect::NOTHING;
+        let mut output = ctx.run_ui(egui::RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(600.0, 240.0))),
+            events,
+            ..Default::default()
+        }, |ui| {
+            let (allocated, response) = ui.allocate_exact_size(vec2(500.0, 128.0), Sense::click_and_drag());
+            rect = allocated;
+            paint_timeline(ui, studio, rect, &response);
+        });
+        output.textures_delta.clear();
+        (rect, output.shapes)
+    }
+
+    fn click(ctx: &egui::Context, studio: &mut Studio, pos: Pos2) {
+        frame(ctx, studio, vec![Event::PointerMoved(pos)]);
+        for pressed in [true, false] {
+            frame(ctx, studio, vec![Event::PointerButton {
+                pos, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE,
+            }]);
+        }
+    }
+
+    #[test]
+    fn timeline_orders_animated_rows_then_unique_selected_objects() {
+        let mut studio = fixture();
+        studio.doc.motion.set_key(106, Prop::Y, 1.0, 5.0, Ease::Linear);
+        studio.selection = vec![(1, 109), (1, 300), (1, 200), (1, 300)];
+        let mut expected: Vec<_> = (101..=112).collect();
+        expected.extend([300, 200]);
+        assert_eq!(row_ids(&studio), expected);
+        assert_eq!(shape_name(&studio, 300), "#300", "missing objects retain their row label");
+    }
+
+    #[test]
+    fn scrolled_timeline_paints_only_visible_names_and_selects_their_rows_and_keys() {
+        let ctx = egui::Context::default();
+        let mut studio = fixture();
+        studio.timeline_scroll = usize::MAX;
+        let (rect, shapes) = frame(&ctx, &mut studio, vec![]);
+        assert_eq!(studio.timeline_scroll, 8);
+        let labels: Vec<_> = shapes.iter().filter_map(|shape| match &shape.shape {
+            egui::Shape::Text(text) if text.galley.text().starts_with("Object ") => {
+                Some(text.galley.text().to_owned())
+            }
+            _ => None,
+        }).collect();
+        assert_eq!(labels, ["Object 109", "Object 110", "Object 111", "Object 112"]);
+
+        click(&ctx, &mut studio, pos2(rect.left() + 30.0, rect.top() + 18.0 + ROW * 0.5));
+        assert_eq!(studio.selection, [(1, 109)]);
+        assert_eq!(studio.active_layer, Some(1));
+        assert_eq!(studio.status, "Object 109");
+
+        let lane_left = rect.left() + LABEL;
+        let lane_width = rect.width() - LABEL - PAD;
+        click(&ctx, &mut studio, pos2(lane_left + lane_width * 0.5, rect.top() + 18.0 + ROW * 1.5));
+        assert_eq!(studio.selected_key, Some((110, Prop::X, 1)));
+        assert_eq!(studio.selection, [(1, 110)]);
+        assert_eq!(studio.playhead, 1.0);
+
+        studio.playing = true;
+        click(&ctx, &mut studio, pos2(lane_left + lane_width * 0.25, rect.top() + 9.0));
+        assert!(!studio.playing, "ruler scrubbing pauses playback");
+        assert!((studio.playhead - 0.5).abs() < 0.001);
+    }
 }

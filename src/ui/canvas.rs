@@ -103,6 +103,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         && !guide_input
         && !deform_input
         && studio.tool != Tool::Select
+        && !pixel_stroke_active(studio)
         && live_op_should_close(studio, &resp)
     {
         if studio.tool == Tool::Node && resp.drag_stopped_by(PointerButton::Primary) {
@@ -136,6 +137,11 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         studio.view.offset.y += d.y;
     } else {
         handle_pointer(studio, &resp, space_pan);
+    }
+    // Finish interrupted gestures only after queued release/move samples have
+    // been consumed. This also covers focus loss without a release position.
+    if pixel_stroke_active(studio) && !ctx.input(|input| input.pointer.primary_down()) {
+        studio.end_pixel_stroke(false);
     }
     if !text_geometry_input
         && !plugin_input
@@ -218,22 +224,17 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
             .screen_tex
             .as_ref()
             .is_some_and(|t| t.size() == [w as usize, h as usize]);
+    let changing = interaction_objects(studio);
+    if changing.is_none() {
+        studio.interaction_render.clear();
+    }
     if !reuse {
-        let feathered = if let Some(Op::Brush { layer, buf, .. }) = &studio.op {
-            studio.pixel_sel_mask(*layer).map(|mask| {
-                let mut overlay = buf.clone();
-                paint::feather_overlay(&mut overlay, &mask);
-                overlay
-            })
-        } else {
-            None
-        };
         let draft = match &studio.op {
-            Some(Op::Brush { layer, buf, .. }) => Draft {
+            Some(Op::Brush { layer, buf, preview, .. }) => Draft {
                 preview: None,
                 brush: Some((
                     *layer,
-                    feathered.as_ref().unwrap_or(buf),
+                    preview.as_ref().unwrap_or(buf),
                     studio.brush.opacity,
                 )),
             },
@@ -249,11 +250,15 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
                 Some(studio.playhead),
                 Some(&studio.pose_drag),
             )
+        } else if let Some(changing) = &changing {
+            studio.interaction_render.render(
+                &studio.doc, studio.view, w, h, draft, changing,
+            )
         } else {
             compositor::render_view(&studio.doc, studio.view, w, h, draft)
         };
         if let Some(pm) = pm {
-            let image = eframe::egui::ColorImage::from_rgba_unmultiplied(
+            let image = eframe::egui::ColorImage::from_rgba_premultiplied(
                 [pm.width() as usize, pm.height() as usize],
                 pm.data(),
             );
@@ -309,6 +314,20 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         for f in files {
             studio.ingest_dropped(f.path(), at);
         }
+    }
+}
+
+fn interaction_objects(studio: &Studio) -> Option<Vec<(usize, u64)>> {
+    if studio.is_motion() { return None; }
+    match &studio.op {
+        Some(Op::Move { orig, .. } | Op::Rotate { orig, .. }) => {
+            Some(orig.iter().map(|snap| (snap.layer, snap.id)).collect())
+        }
+        // Resizing can move constrained siblings outside the selection; those
+        // operations continue to invalidate and render the complete scene.
+        Some(Op::Node { layer, id, .. } | Op::Corner { layer, id, .. }) => Some(vec![(*layer, *id)]),
+        Some(Op::Brush { layer, .. } | Op::Smudge { layer, .. } | Op::Clone { layer, .. } | Op::Retouch { layer, .. }) => Some(vec![(*layer, RASTER_ID)]),
+        _ => None,
     }
 }
 
@@ -377,10 +396,33 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
     if space {
         return;
     }
-    let Some(screen) = resp.interact_pointer_pos().or(resp.hover_pos()) else {
+    let Some(crect) = studio.canvas_rect else {
         return;
     };
-    let Some(crect) = studio.canvas_rect else {
+    let Some(screen) = resp.interact_pointer_pos().or(resp.hover_pos()).or_else(|| {
+        // PointerGone may follow a tablet release in the same frame. Recover
+        // samples only for a raster gesture owned by this canvas; unrelated
+        // inspector clicks must retain their normal response routing.
+        if !matches!(studio.tool, Tool::Brush | Tool::Eraser | Tool::Smudge | Tool::Clone | Tool::Heal) {
+            return None;
+        }
+        let (last, press) = resp.ctx.input(|input| {
+            let last = input.events.iter().rev().find_map(|event| match event {
+                eframe::egui::Event::PointerMoved(pos) | eframe::egui::Event::PointerButton { pos, .. } => Some(*pos),
+                _ => None,
+            });
+            let press = input.events.iter().find_map(|event| match event {
+                eframe::egui::Event::PointerButton { pos, button: PointerButton::Primary, pressed: true, .. }
+                    if crect.contains(*pos) => Some(*pos),
+                _ => None,
+            });
+            (last, press)
+        });
+        if pixel_stroke_active(studio)
+            || press.is_some_and(|pos| resp.ctx.layer_id_at(pos) == Some(resp.layer_id)) {
+            last
+        } else { None }
+    }) else {
         return;
     };
     let origin = Pt::new(crect.min.x, crect.min.y);
@@ -681,6 +723,11 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
         return;
     }
 
+    if matches!(studio.tool, Tool::Brush | Tool::Eraser | Tool::Smudge | Tool::Clone | Tool::Heal) {
+        handle_pixel_pointer_samples(studio, resp, crect, origin);
+        return;
+    }
+
     // Same click-vs-drag delay as Pen/Node/Artboard. Lock the hit on press
     // so scale/rotate/corner handles and thin strokes are grabbed where the
     // pointer went down, not 6px later. Do not end a live op on drag_started —
@@ -747,6 +794,46 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
                 studio.ensure_path(hit.0, hit.1);
                 studio.tool = Tool::Node;
             }
+        }
+    }
+}
+
+fn pixel_stroke_active(studio: &Studio) -> bool {
+    matches!(studio.op, Some(Op::Brush { .. } | Op::Retouch { .. } | Op::Smudge { .. } | Op::Clone { .. }))
+}
+
+// Egui can receive several pointer positions between paints. Processing only
+// interact_pointer_pos cuts corners off fast strokes and loses the release
+// segment. Preserve the ordered samples, including sub-drag-threshold motion.
+fn handle_pixel_pointer_samples(
+    studio: &mut Studio, resp: &eframe::egui::Response, canvas: Rect, origin: Pt,
+) {
+    use eframe::egui::Event;
+    let (events, modifiers) = resp.ctx.input(|input| (input.events.clone(), input.modifiers));
+    for event in events {
+        match event {
+            Event::PointerButton { pos, button: PointerButton::Primary, pressed: true, modifiers }
+                if studio.op.is_none() && canvas.contains(pos)
+                    && resp.ctx.layer_id_at(pos) == Some(resp.layer_id)
+                    && !(modifiers.alt && matches!(studio.tool, Tool::Clone | Tool::Heal)) => {
+                let point = studio.view.pointer_to_world(origin, from_egui(pos));
+                studio.reset_snap_gesture();
+                start_drag(studio, point, point, modifiers.shift, modifiers.alt);
+                studio.cursor = Some(point);
+            }
+            Event::PointerMoved(pos) if pixel_stroke_active(studio) => {
+                let point = studio.view.pointer_to_world(origin, from_egui(pos));
+                continue_drag(studio, point, modifiers.shift, modifiers.alt);
+                studio.cursor = Some(point);
+            }
+            Event::PointerButton { pos, button: PointerButton::Primary, pressed: false, modifiers }
+                if pixel_stroke_active(studio) => {
+                let point = studio.view.pointer_to_world(origin, from_egui(pos));
+                continue_drag(studio, point, modifiers.shift, modifiers.alt);
+                studio.cursor = Some(point);
+                studio.end_pixel_stroke(false);
+            }
+            _ => {}
         }
     }
 }
@@ -1676,7 +1763,7 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                 | Op::Retouch { .. }
         )
     ) {
-        studio.mark();
+        studio.mark_interaction();
     }
     if let Some(Op::Skew {
         orig,
@@ -1742,7 +1829,7 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
             let d = world - *start;
             if studio.persona == Persona::Motion {
                 studio.playing = false;
-                for snap in orig.clone() {
+                for snap in orig.iter() {
                     if snap.id == RASTER_ID {
                         continue;
                     }
@@ -1754,7 +1841,7 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
             } else {
                 let moving: std::collections::HashSet<_> =
                     orig.iter().map(|s| (s.layer, s.id)).collect();
-                for snap in orig.clone() {
+                for snap in orig.iter() {
                     if snap.id == RASTER_ID {
                         if let Some(l) = studio.doc.layers.get_mut(snap.layer) {
                             l.kind
@@ -1900,7 +1987,7 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                 let sx = dst.width() / start_box.width().max(1.0);
                 let sy = dst.height() / start_box.height().max(1.0);
                 let f = if shift { sx.max(sy) } else { (sx + sy) * 0.5 };
-                for snap in orig.clone() {
+                for snap in orig.iter() {
                     if snap.id == RASTER_ID {
                         continue;
                     }
@@ -1909,7 +1996,7 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                     studio.pose_drag.insert(snap.id, pose);
                 }
             } else {
-                for snap in orig.clone() {
+                for snap in orig.iter() {
                     if snap.id == RASTER_ID {
                         let nb = Bounds {
                             min: start_box.map_pt(snap.origin, dst),
@@ -1952,7 +2039,7 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
             }
             if studio.persona == Persona::Motion {
                 studio.playing = false;
-                for snap in orig.clone() {
+                for snap in orig.iter() {
                     if snap.id == RASTER_ID {
                         continue;
                     }
@@ -1961,7 +2048,7 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                     studio.pose_drag.insert(snap.id, pose);
                 }
             } else {
-                for snap in orig.clone() {
+                for snap in orig.iter() {
                     if snap.id == RASTER_ID {
                         let c0 = snap.origin + snap.size * 0.5;
                         let c1 = c0.rotate_about(*center, ang);
@@ -2259,6 +2346,13 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
         None => {}
     }
     studio.sync_pen_source();
+    // Raster paint does not change geometry. Reflow vector dependencies after
+    // applying this sample so linked text follows the current pointer position.
+    if matches!(studio.op, Some(Op::Move { .. } | Op::Resize { .. } | Op::Rotate { .. }
+        | Op::Skew { .. } | Op::Node { .. } | Op::Corner { .. }
+        | Op::ArtboardMove { .. } | Op::ArtboardResize { .. } | Op::ArtboardRotate { .. })) {
+        crate::text_geometry::reflow(&mut studio.doc);
+    }
 }
 
 fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) {

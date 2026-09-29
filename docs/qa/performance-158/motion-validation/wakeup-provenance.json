@@ -1,0 +1,73 @@
+{
+  "application_source_commit_at_test": "b6bad21b403745022de3ed8ad4d012ac5b253f70",
+  "coverage": "Native wakeup probe linked the patched eframe dependency used by this recorded b6bad21b motion binary. Final35c39093 retains the identical guard source; this probe was not rerun against the final application binary.",
+  "probe_binary_sha256": "567f68dfb104c7b803c5f18d7d519ddb99460a3f5de260dde6494191496d9657",
+  "probe_source_sha256": "e4b6e618f249c98884d34d90815ccf4c7eebd2bf69dce0f1b6fd542f0e1f0aab",
+  "motion_qa_sha256_at_test": "8c828e551b5c325ebb4f743ff05da7c571c63595b2effcedfc1c5a898a74b56c",
+  "eframe_run_source_sha256": "ce6003c02f174dfc256125cf1ddabe58e07a223b8ab0f66d08877a60a407d086",
+  "dependencies": {
+    "eframe": {
+      "name": "eframe",
+      "fingerprint": 7273595977670190312,
+      "fingerprint_file": "[target]/release/.fingerprint/eframe-2a03040fa624ce3b/lib-eframe",
+      "rlib": "[target]/release/deps/libeframe-2a03040fa624ce3b.rlib",
+      "rlib_sha256": "f7f27a1c0eb05482a94e9975562d811a3b0602f332c9b4546389878a1ec29e68"
+    },
+    "serde_json": {
+      "name": "serde_json",
+      "fingerprint": 8372806024298624809,
+      "fingerprint_file": "[target]/release/.fingerprint/serde_json-27e3e9d5957ff292/lib-serde_json",
+      "rlib": "[target]/release/deps/libserde_json-27e3e9d5957ff292.rlib",
+      "rlib_sha256": "e603d4edf20c42f741f763e9d74102bbbbf19099bd7a9b7888da1a875d6fe0f5"
+    }
+  },
+  "compile": {
+    "command": [
+      "rustc",
+      "--edition=2024",
+      "-C",
+      "opt-level=3",
+      "-C",
+      "lto=thin",
+      "-C",
+      "codegen-units=1",
+      "-C",
+      "strip=debuginfo",
+      "-L",
+      "dependency=[target]/release/deps",
+      "-L",
+      "native=[target]/release/build/omadesign-e62b8d18047eb604/out",
+      "-L",
+      "native=[target]/release/build/mozjpeg-sys-d77d8aecde5431f2/out",
+      "-L",
+      "native=[target]/release/build/libz-sys-80466549ce76142b/out/lib",
+      "-L",
+      "native=[target]/release/build/mlua-sys-431f77617285a8fd/out/lib",
+      "-L",
+      "native=[target]/release/build/ring-3fed50a5f66b561c/out",
+      "--extern",
+      "eframe=[target]/release/deps/libeframe-2a03040fa624ce3b.rlib",
+      "--extern",
+      "serde_json=[target]/release/deps/libserde_json-27e3e9d5957ff292.rlib",
+      "[motion-artifacts]/native_wakeup.rs",
+      "-o",
+      "[motion-artifacts]/native-wakeup-bounded-build/native-wakeup"
+    ],
+    "start_utc": "2026-09-29T00:33:52.596831+00:00",
+    "finish_utc": "2026-09-29T00:34:09.489057+00:00",
+    "exit_code": 0,
+    "wall_seconds": 16.892224360024557
+  },
+  "native_run": {
+    "command": [
+      "unshare",
+      "-Urn",
+      "[motion-artifacts]/native-wakeup-bounded-build/native-wakeup",
+      "[motion-artifacts]/native-wakeup-bounded"
+    ],
+    "exit_code": 0,
+    "seconds": 2.6730558869894594,
+    "binary_sha256": "567f68dfb104c7b803c5f18d7d519ddb99460a3f5de260dde6494191496d9657"
+  },
+  "result_sha256": "3900bd1c54507feea414a71e28703d0740fa2f636b16c76625b97f491ad82180"
+}

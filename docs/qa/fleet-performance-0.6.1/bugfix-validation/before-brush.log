@@ -1,0 +1,21 @@
+   Compiling omadesign v0.6.0 (${REPOSITORY})
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 42.88s
+     Running unittests src/lib.rs (${TARGET}/debug/deps/omadesign-41dd6c6f5a68cf14)
+
+running 1 test
+
+thread 'ui::retouch::tests::new_pixel_layer_keeps_brush_clipped_and_undoable' (<pid>) panicked at src/ui/retouch.rs:1325:9:
+assertion `left == right` failed
+  left: None
+ right: Some([255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test ui::retouch::tests::new_pixel_layer_keeps_brush_clipped_and_undoable ... FAILED
+
+failures:
+
+failures:
+    ui::retouch::tests::new_pixel_layer_keeps_brush_clipped_and_undoable
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 912 filtered out; finished in 8.42s
+
+error: test failed, to rerun pass `--lib`

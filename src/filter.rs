@@ -345,49 +345,184 @@ fn blur(pm: &mut Pixmap, sigma: f32) {
         return;
     }
     let r = (sigma * 1.35).round().max(1.0) as i32;
+    // Both box kernels have finite support. Outside this expanded nonzero
+    // rectangle every input and intermediate sample is exactly transparent.
+    // Preserve the original image edge by clipping the rectangle to the image.
+    if pm.data().len() >= 256 * 1024 {
+        let width = pm.width() as usize;
+        let height = pm.height() as usize;
+        let (mut left, mut top, mut right, mut bottom) = (width, height, 0, 0);
+        for (y, row) in pm.data().chunks_exact(width * 4).enumerate() {
+            let pixels = row.as_chunks::<4>().0;
+            if let Some(first) = pixels.iter().position(|pixel| *pixel != [0; 4]) {
+                left = left.min(first);
+                top = top.min(y);
+                right = right.max(pixels.iter().rposition(|pixel| *pixel != [0; 4]).unwrap() + 1);
+                bottom = y + 1;
+            }
+        }
+        if right == 0 {
+            return;
+        }
+        let reach = r as usize + (r - 1).max(1) as usize;
+        left = left.saturating_sub(reach);
+        top = top.saturating_sub(reach);
+        right = right.saturating_add(reach).min(width);
+        bottom = bottom.saturating_add(reach).min(height);
+        let area = (right - left) * (bottom - top);
+        if area < width * height / 2 {
+            let rect = tiny_skia::IntRect::from_xywh(
+                left as i32,
+                top as i32,
+                (right - left) as u32,
+                (bottom - top) as u32,
+            )
+            .unwrap();
+            if let Some(mut cropped) = pm.clone_rect(rect) {
+                box_blur(&mut cropped, r);
+                box_blur(&mut cropped, (r - 1).max(1));
+                let row_bytes = (right - left) * 4;
+                for (y, row) in cropped.data().chunks_exact(row_bytes).enumerate() {
+                    let start = ((top + y) * width + left) * 4;
+                    pm.data_mut()[start..start + row_bytes].copy_from_slice(row);
+                }
+                return;
+            }
+        }
+    }
     box_blur(pm, r);
     box_blur(pm, (r - 1).max(1));
 }
 
-fn box_blur(pm: &mut Pixmap, radius: i32) {
-    let r = radius.max(1);
-    let n = 2 * r + 1;
-    let w = pm.width() as i32;
-    let h = pm.height() as i32;
-    let src = pm.data().to_vec();
-    let mut tmp = vec![0u8; src.len()];
-    // Horizontal.
-    for y in 0..h {
-        for c in 0..4 {
-            let mut acc = 0i32;
-            for k in -r..=r {
-                acc += sample(&src, w, h, k, y, c) as i32;
+/// Tint replaces RGB completely, so its blur input needs only the alpha plane.
+/// Keep the same two kernels, transparent padding and division at every pass.
+fn blur_alpha(pm: &mut Pixmap, sigma: f32) {
+    if sigma < 0.15 {
+        return;
+    }
+    let radius = (sigma * 1.35).round().max(1.0) as i32;
+    let width = pm.width() as usize;
+    let height = pm.height() as usize;
+    let mut alpha: Vec<_> = pm.data().chunks_exact(4).map(|pixel| pixel[3]).collect();
+    let mut temporary = vec![0u8; alpha.len()];
+    let mut sums = vec![0i32; width];
+    for radius in [radius, (radius - 1).max(1)] {
+        let r = radius as usize;
+        let divisor = (2 * r + 1) as i32;
+        for (source, destination) in alpha
+            .chunks_exact(width)
+            .zip(temporary.chunks_exact_mut(width))
+        {
+            let mut sum: i32 = source[..(r + 1).min(width)]
+                .iter()
+                .map(|value| *value as i32)
+                .sum();
+            for (x, value) in destination.iter_mut().enumerate() {
+                *value = (sum / divisor) as u8;
+                if x + r + 1 < width {
+                    sum += source[x + r + 1] as i32;
+                }
+                if x >= r {
+                    sum -= source[x - r] as i32;
+                }
             }
-            for x in 0..w {
-                tmp[idx(w, x, y, c)] = (acc / n) as u8;
-                acc += sample(&src, w, h, x + r + 1, y, c) as i32;
-                acc -= sample(&src, w, h, x - r, y, c) as i32;
+        }
+        sums.fill(0);
+        for row in temporary[..(r + 1).min(height) * width].chunks_exact(width) {
+            for (sum, value) in sums.iter_mut().zip(row) {
+                *sum += *value as i32;
+            }
+        }
+        for (y, row) in alpha.chunks_exact_mut(width).enumerate() {
+            for (value, sum) in row.iter_mut().zip(&sums) {
+                *value = (sum / divisor) as u8;
+            }
+            if y + r + 1 < height {
+                for (sum, value) in sums
+                    .iter_mut()
+                    .zip(&temporary[(y + r + 1) * width..][..width])
+                {
+                    *sum += *value as i32;
+                }
+            }
+            if y >= r {
+                for (sum, value) in sums.iter_mut().zip(&temporary[(y - r) * width..][..width]) {
+                    *sum -= *value as i32;
+                }
             }
         }
     }
-    // Vertical.
-    let mut out = vec![0u8; src.len()];
-    for x in 0..w {
-        for c in 0..4 {
-            let mut acc = 0i32;
-            for k in -r..=r {
-                acc += sample(&tmp, w, h, x, k, c) as i32;
-            }
-            for y in 0..h {
-                out[idx(w, x, y, c)] = (acc / n) as u8;
-                acc += sample(&tmp, w, h, x, y + r + 1, c) as i32;
-                acc -= sample(&tmp, w, h, x, y - r, c) as i32;
-            }
-        }
+    for (pixel, alpha) in pm.data_mut().chunks_exact_mut(4).zip(alpha) {
+        pixel[3] = alpha;
     }
-    pm.data_mut().copy_from_slice(&out);
 }
 
+fn box_blur(pm: &mut Pixmap, radius: i32) {
+    let r = radius.max(1) as usize;
+    let n = (2 * r + 1) as i32;
+    let w = pm.width() as usize;
+    let h = pm.height() as usize;
+    let stride = w * 4;
+    let mut tmp = vec![0u8; pm.data().len()];
+    // Keep the original zero padding and integer rounding at each pass, but
+    // visit adjacent RGBA pixels together instead of rescanning each channel.
+    for (src, dst) in pm
+        .data()
+        .chunks_exact(stride)
+        .zip(tmp.chunks_exact_mut(stride))
+    {
+        let mut acc = [0i32; 4];
+        for pixel in src[..(r + 1).min(w) * 4].chunks_exact(4) {
+            for c in 0..4 {
+                acc[c] += pixel[c] as i32;
+            }
+        }
+        for (x, pixel) in dst.chunks_exact_mut(4).enumerate() {
+            for c in 0..4 {
+                pixel[c] = (acc[c] / n) as u8;
+            }
+            if x + r + 1 < w {
+                let entering = &src[(x + r + 1) * 4..][..4];
+                for c in 0..4 {
+                    acc[c] += entering[c] as i32;
+                }
+            }
+            if x >= r {
+                let leaving = &src[(x - r) * 4..][..4];
+                for c in 0..4 {
+                    acc[c] -= leaving[c] as i32;
+                }
+            }
+        }
+    }
+    // A row of column sums makes the vertical pass contiguous too. Its input
+    // is now entirely in tmp, so write directly back without another pixmap.
+    let mut sums = vec![0i32; stride];
+    for row in tmp[..(r + 1).min(h) * stride].chunks_exact(stride) {
+        for (sum, value) in sums.iter_mut().zip(row) {
+            *sum += *value as i32;
+        }
+    }
+    for (y, row) in pm.data_mut().chunks_exact_mut(stride).enumerate() {
+        for (value, sum) in row.iter_mut().zip(&sums) {
+            *value = (sum / n) as u8;
+        }
+        if y + r + 1 < h {
+            let entering = &tmp[(y + r + 1) * stride..][..stride];
+            for (sum, value) in sums.iter_mut().zip(entering) {
+                *sum += *value as i32;
+            }
+        }
+        if y >= r {
+            let leaving = &tmp[(y - r) * stride..][..stride];
+            for (sum, value) in sums.iter_mut().zip(leaving) {
+                *sum -= *value as i32;
+            }
+        }
+    }
+}
+
+#[cfg(test)]
 fn sample(data: &[u8], w: i32, h: i32, x: i32, y: i32, c: i32) -> u8 {
     if x < 0 || y < 0 || x >= w || y >= h {
         0
@@ -401,24 +536,23 @@ fn idx(w: i32, x: i32, y: i32, c: i32) -> usize {
 }
 
 fn offset(pm: &mut Pixmap, dx: f32, dy: f32) {
-    let w = pm.width() as i32;
-    let h = pm.height() as i32;
-    let ox = dx.round() as i32;
-    let oy = dy.round() as i32;
+    let w = pm.width() as i64;
+    let h = pm.height() as i64;
+    let ox = dx.round() as i32 as i64;
+    let oy = dy.round() as i32 as i64;
     if ox == 0 && oy == 0 {
         return;
     }
-    let src = pm.data().to_vec();
-    let mut out = vec![0u8; src.len()];
-    for y in 0..h {
-        for x in 0..w {
-            let sx = x - ox;
-            let sy = y - oy;
-            if sx >= 0 && sy >= 0 && sx < w && sy < h {
-                let di = idx(w, x, y, 0);
-                let si = idx(w, sx, sy, 0);
-                out[di..di + 4].copy_from_slice(&src[si..si + 4]);
-            }
+    let mut out = vec![0u8; pm.data().len()];
+    let x0 = ox.max(0);
+    let x1 = (w + ox).min(w);
+    if x1 > x0 {
+        let row_bytes = (x1 - x0) as usize * 4;
+        for y in oy.max(0)..(h + oy).min(h) {
+            let destination = ((y * w + x0) * 4) as usize;
+            let source = (((y - oy) * w + x0 - ox) * 4) as usize;
+            out[destination..destination + row_bytes]
+                .copy_from_slice(&pm.data()[source..source + row_bytes]);
         }
     }
     pm.data_mut().copy_from_slice(&out);
@@ -436,7 +570,7 @@ fn inner_shadow(pm: &mut Pixmap, dx: f32, dy: f32, sigma: f32, color: Rgba) {
     let src = pm.clone();
     invert_alpha(pm);
     offset(pm, dx, dy);
-    blur(pm, sigma);
+    blur_alpha(pm, sigma);
     tint_alpha(pm, color);
     clip_to_alpha(pm, &src);
     let shadow = pm.clone();
@@ -1076,6 +1210,157 @@ mod tests {
             px[3] = a;
         }
         pm
+    }
+
+    #[test]
+    fn box_blur_matches_separable_reference_at_edges_and_large_radii() {
+        // Deliberately direct scalar oracle: both passes divide independently,
+        // including transparent samples beyond every edge of the pixmap.
+        fn reference(pm: &Pixmap, radius: i32) -> Pixmap {
+            let r = radius.max(1);
+            let n = 2 * r + 1;
+            let w = pm.width() as i32;
+            let h = pm.height() as i32;
+            let mut tmp = vec![0; pm.data().len()];
+            let mut out = pm.clone();
+            for y in 0..h {
+                for x in 0..w {
+                    for c in 0..4 {
+                        let sum: i32 = (-r..=r)
+                            .map(|k| sample(pm.data(), w, h, x + k, y, c) as i32)
+                            .sum();
+                        tmp[idx(w, x, y, c)] = (sum / n) as u8;
+                    }
+                }
+            }
+            for y in 0..h {
+                for x in 0..w {
+                    for c in 0..4 {
+                        let sum: i32 = (-r..=r)
+                            .map(|k| sample(&tmp, w, h, x, y + k, c) as i32)
+                            .sum();
+                        out.data_mut()[idx(w, x, y, c)] = (sum / n) as u8;
+                    }
+                }
+            }
+            out
+        }
+        let mut state = 0x719eaf31_u32;
+        for (w, h) in [(1, 1), (1, 17), (53, 2), (2, 53), (71, 37)] {
+            let mut source = Pixmap::new(w, h).unwrap();
+            for pixel in source.data_mut().chunks_exact_mut(4) {
+                state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+                let alpha = (state >> 24) as u8;
+                pixel.copy_from_slice(&[
+                    (state as u8).min(alpha),
+                    ((state >> 8) as u8).min(alpha),
+                    ((state >> 16) as u8).min(alpha),
+                    alpha,
+                ]);
+            }
+            for radius in [-1, 0, 1, 2, 6, 20, 100] {
+                let expected = reference(&source, radius);
+                let mut actual = source.clone();
+                box_blur(&mut actual, radius);
+                assert_eq!(actual.data(), expected.data(), "{w}x{h}, radius {radius}");
+                box_blur(&mut actual, (radius - 1).max(1));
+                let expected_twice = reference(&expected, (radius - 1).max(1));
+                assert_eq!(
+                    actual.data(),
+                    expected_twice.data(),
+                    "second pass {w}x{h}, radius {radius}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn alpha_blur_before_tint_matches_full_rgba_blur() {
+        let mut state = 0x381ef523_u32;
+        for (w, h) in [(1, 1), (1, 19), (41, 2), (2, 41), (71, 37)] {
+            let mut source = Pixmap::new(w, h).unwrap();
+            for value in source.data_mut() {
+                state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+                *value = (state >> 24) as u8;
+            }
+            for sigma in [-1., 0., 0.149, 0.15, 1., 2.5, 12.2, 50., 100.] {
+                for color in [Rgba::BLACK, Rgba::WHITE, Rgba::new(191, 73, 29, 157)] {
+                    let mut expected = source.clone();
+                    blur(&mut expected, sigma);
+                    tint_alpha(&mut expected, color);
+                    let mut actual = source.clone();
+                    blur_alpha(&mut actual, sigma);
+                    tint_alpha(&mut actual, color);
+                    assert_eq!(actual.data(), expected.data(), "{w}x{h}, sigma {sigma}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn sparse_blur_retains_full_image_kernel_domain_and_rounding() {
+        for region in [
+            (120, 80, 7, 11),
+            (0, 0, 7, 11),
+            (290, 279, 10, 21),
+            (0, 137, 300, 1),
+        ] {
+            let mut source = Pixmap::new(300, 300).unwrap();
+            let (x0, y0, width, height) = region;
+            for y in y0..y0 + height {
+                for x in x0..x0 + width {
+                    let start = (y * 300 + x) * 4;
+                    // Include nonzero RGB at alpha zero: every channel matters.
+                    source.data_mut()[start..start + 4].copy_from_slice(&[91, 73, 211, 0]);
+                }
+            }
+            for sigma in [0.15, 1., 8., 12.2, 34., 100.] {
+                let radius = (sigma * 1.35_f32).round().max(1.) as i32;
+                let mut expected = source.clone();
+                box_blur(&mut expected, radius);
+                box_blur(&mut expected, (radius - 1).max(1));
+                let mut actual = source.clone();
+                blur(&mut actual, sigma);
+                assert_eq!(
+                    actual.data(),
+                    expected.data(),
+                    "region {region:?}, sigma {sigma}"
+                );
+            }
+        }
+        let mut empty = Pixmap::new(300, 300).unwrap();
+        blur(&mut empty, 10.);
+        assert!(empty.data().iter().all(|value| *value == 0));
+    }
+
+    #[test]
+    fn offset_row_copies_preserve_rounding_clipping_and_all_channels() {
+        let mut source = Pixmap::new(31, 19).unwrap();
+        for (index, value) in source.data_mut().iter_mut().enumerate() {
+            *value = index.wrapping_mul(71) as u8;
+        }
+        for dx in [-50., -30., -8.5, -0.49, 0., 0.5, 7., 30., 50.] {
+            for dy in [-50., -18., -4.5, 0., 0.5, 18., 50.] {
+                let mut expected = Pixmap::new(31, 19).unwrap();
+                for y in 0..19 {
+                    for x in 0..31 {
+                        for channel in 0..4 {
+                            expected.data_mut()[idx(31, x, y, channel)] = sample(
+                                source.data(),
+                                31,
+                                19,
+                                x - (dx as f32).round() as i32,
+                                y - (dy as f32).round() as i32,
+                                channel,
+                            );
+                        }
+                    }
+                }
+                let mut actual = source.clone();
+                offset(&mut actual, dx, dy);
+                assert_eq!(actual.data(), expected.data(), "offset {dx},{dy}");
+            }
+        }
     }
 
     #[test]

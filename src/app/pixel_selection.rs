@@ -55,6 +55,7 @@ impl Studio {
         self.pixel_sel = Some(values);
         self.pixel_sel_space = Some(space);
         self.pixel_sel_gen = self.pixel_sel_gen.wrapping_add(1);
+        self.pixel_sel_cache.clear();
         self.status = format!(
             "{} pixels selected",
             crate::paint::selected_count(self.pixel_sel.as_ref().unwrap())

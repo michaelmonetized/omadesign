@@ -121,7 +121,7 @@ impl Context<'_> {
                 }
             }
             let own_mask = object_mask(pm, shape, transform, pose, mask);
-            let mask = own_mask.as_ref().or(mask);
+            let mask = own_mask.as_deref().or(mask);
             let alpha = pose.opacity.unwrap_or(shape.opacity).clamp(0.0, 1.0);
             if alpha <= 0.0 {
                 continue;

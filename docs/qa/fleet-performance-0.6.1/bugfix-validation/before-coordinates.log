@@ -1,0 +1,20 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.61s
+     Running unittests src/lib.rs (${TARGET}/debug/deps/omadesign-41dd6c6f5a68cf14)
+
+running 1 test
+
+thread 'app::layer_groups::tests::new_layers_preserve_pixel_selection_coordinates_and_history' (<pid>) panicked at src/app/layer_groups.rs:521:21:
+assertion `left == right` failed
+  left: None
+ right: Some([0, 64, 128, 255, 0, 64, 128, 255, 0, 64, 128, 255, 0, 64, 128, 255, 0, 64, 128, 255, 0, 64, 128, 255, 0, 64, 128, 255, 0, 64, 128, 255, 0, 64, 128, 255, 0, 64, 128, 255, 0, 64, 128, 255, 0, 64, 128, 255])
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test app::layer_groups::tests::new_layers_preserve_pixel_selection_coordinates_and_history ... FAILED
+
+failures:
+
+failures:
+    app::layer_groups::tests::new_layers_preserve_pixel_selection_coordinates_and_history
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 912 filtered out; finished in 1.11s
+
+error: test failed, to rerun pass `--lib`

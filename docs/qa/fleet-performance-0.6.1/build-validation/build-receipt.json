@@ -1,0 +1,187 @@
+{
+  "source_commit": "8ee01b4ea08e0dac9891694b82dd3f4f377a5cf2",
+  "started_utc": "2026-09-29T03:05:47.065828+00:00",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: aarch64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+  "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+  "steps": [
+    {
+      "name": "check-all-targets",
+      "command": [
+        "cargo",
+        "check",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "-j",
+        "2"
+      ],
+      "environment_overrides": {},
+      "exit_code": 0,
+      "seconds": 4.508687935071066,
+      "log_sha256": "2d6ae988a4194cee733bbac8dc3343e6484a51d11cab692ebcc54b60a7840ed9"
+    },
+    {
+      "name": "library-tests",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--lib",
+        "-j",
+        "2"
+      ],
+      "environment_overrides": {},
+      "exit_code": 0,
+      "seconds": 92.84926117502619,
+      "log_sha256": "80a32f409e427990b72957048fbe558cbc848a4f647b83c0aa82159885cc2dfa"
+    },
+    {
+      "name": "native-qa-release",
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--release",
+        "-j",
+        "2",
+        "--bin",
+        "authoring_qa",
+        "--bin",
+        "canvas_profile",
+        "--bin",
+        "upscale_qa",
+        "--bin",
+        "background_removal_qa"
+      ],
+      "environment_overrides": {
+        "CARGO_PROFILE_RELEASE_LTO": "false"
+      },
+      "exit_code": 0,
+      "seconds": 229.02454473497346,
+      "log_sha256": "5734c0fb72b03edf69a682a2df3ed8d43b833f0444a1e91afb518936d5479544"
+    },
+    {
+      "name": "x86_64-portable-release",
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--release",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "-j",
+        "2",
+        "--bin",
+        "omadesign",
+        "--bin",
+        "authoring_qa",
+        "--bin",
+        "canvas_profile",
+        "--bin",
+        "upscale_qa",
+        "--bin",
+        "background_removal_qa"
+      ],
+      "environment_overrides": {
+        "CARGO_PROFILE_RELEASE_LTO": "false",
+        "OMA_RAW_CXX_STDLIB": "c++",
+        "CC_x86_64_unknown_linux_gnu": "<repository>/scripts/zig-cc-x86_64",
+        "CXX_x86_64_unknown_linux_gnu": "<repository>/scripts/zig-cxx-x86_64",
+        "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER": "<repository>/scripts/zig-cc-x86_64"
+      },
+      "exit_code": 0,
+      "seconds": 396.09631267306395,
+      "log_sha256": "a6949ec17d20d7c7204b9e2452491d3384788b685838c167689ceb098e706ab1"
+    },
+    {
+      "name": "aarch64-portable-release",
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--release",
+        "--target",
+        "aarch64-unknown-linux-gnu",
+        "-j",
+        "2",
+        "--bin",
+        "omadesign"
+      ],
+      "environment_overrides": {
+        "CARGO_PROFILE_RELEASE_LTO": "false",
+        "OMA_RAW_CXX_STDLIB": "c++",
+        "CC_aarch64_unknown_linux_gnu": "<repository>/scripts/zig-cc-aarch64",
+        "CXX_aarch64_unknown_linux_gnu": "<repository>/scripts/zig-cxx-aarch64",
+        "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER": "<repository>/scripts/zig-cc-aarch64"
+      },
+      "exit_code": 0,
+      "seconds": 407.78447216702625,
+      "log_sha256": "bd1376db667f1093368407af305348744c1209df49198c872f72b595d5d6e1d2"
+    }
+  ],
+  "artifacts": {
+    "aarch64/bin/authoring_qa": {
+      "bytes": 59640160,
+      "sha256": "f7a55f9e190849789dc90c4569025ccb4a14381ad95fa6a66bf5fb99cc289cfd"
+    },
+    "aarch64/bin/canvas_profile": {
+      "bytes": 5241120,
+      "sha256": "e6491d2038da6a67541da9f2bda5a5346716b276b214bda919404febb9bae103"
+    },
+    "aarch64/bin/upscale_qa": {
+      "bytes": 59873584,
+      "sha256": "2c39fdbc263adf46d2ff153a401eb5591b84cb6472a2734b34fe7bf24050496d"
+    },
+    "aarch64/bin/background_removal_qa": {
+      "bytes": 59868464,
+      "sha256": "2ec9b5b3e8e7111be52401001a32a77a2ef2fda0d90ad914f983da5ef2a8bbac"
+    },
+    "x86_64/bin/omadesign": {
+      "bytes": 55983824,
+      "sha256": "fece86f888b2158d04b9b55f32bb87071bbba2d0a70a2c66a1c00879c4ce9cfa"
+    },
+    "x86_64/bin/authoring_qa": {
+      "bytes": 55739344,
+      "sha256": "0440badf38d4d7399af11bbc6bcb64b44ef65640ef76db65eef21c89c4123350"
+    },
+    "x86_64/bin/canvas_profile": {
+      "bytes": 6359256,
+      "sha256": "9aaf0df97c30abb466c016a45c478194858958b3c938a78c4e0c57517b232d8c"
+    },
+    "x86_64/bin/upscale_qa": {
+      "bytes": 55991960,
+      "sha256": "2baf23c724f685580e165e21073d36b20aec9e7ab10b8d230a724acbcc65f176"
+    },
+    "x86_64/bin/background_removal_qa": {
+      "bytes": 55964440,
+      "sha256": "eacadccece83c2f8c44433aa17346064d2f907da727f6d8c553fe579ef71d75d"
+    },
+    "aarch64/bin/omadesign": {
+      "bytes": 49931056,
+      "sha256": "20bd72b91906b00d280d3bca18b14c0c1c0eeff1693388462f333727f3f9f613"
+    },
+    "aarch64/lib/libonnxruntime.so.1.28.0": {
+      "bytes": 20591712,
+      "sha256": "f1ec1a08eb99bd6e5401340f0a2b101381bf4694415480291dc13bcaa30f9ec7"
+    },
+    "aarch64/lib/libonnxruntime_providers_shared.so": {
+      "bytes": 198792,
+      "sha256": "3b6be288fbfb7dff8770d08a23defdde18e8f7e0f5a2b344a0e5e238c999ea88"
+    },
+    "x86_64/lib/libonnxruntime.so.1.28.0": {
+      "bytes": 24268848,
+      "sha256": "1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab"
+    },
+    "x86_64/lib/libonnxruntime_providers_shared.so": {
+      "bytes": 14632,
+      "sha256": "086ec1d5388f64153d9c63470d126693db9a182c8ce236d3a1119068471b8a0d"
+    }
+  },
+  "profile": "Original fleet profile: native QA LTO=false; portable application and x86 QA use Zig glibc2.35 LTO=false.",
+  "finished_utc": "2026-09-29T03:24:38.760552+00:00",
+  "success": true
+}

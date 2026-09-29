@@ -1,0 +1,66 @@
+{
+  "source_commit": "8ee01b4ea08e0dac9891694b82dd3f4f377a5cf2",
+  "sanitization": "Repository and Cargo target absolute paths replaced; extra blank lines at end of published logs removed. Commands, artifacts, outcomes and timings unchanged. The original receipt remains the run identity.",
+  "files": {
+    "aarch64-portable-release.log": {
+      "original": {
+        "bytes": 13816,
+        "sha256": "bd1376db667f1093368407af305348744c1209df49198c872f72b595d5d6e1d2"
+      },
+      "published": {
+        "bytes": 13628,
+        "sha256": "e696796dfecd1732c806fb8cab8af80b1bc2f1c439268dac01442483911a0381"
+      }
+    },
+    "check-all-targets.log": {
+      "original": {
+        "bytes": 164,
+        "sha256": "2d6ae988a4194cee733bbac8dc3343e6484a51d11cab692ebcc54b60a7840ed9"
+      },
+      "published": {
+        "bytes": 117,
+        "sha256": "560af8c92f1ee4cc4e37575daa917e6f511824ee043b5973908f897a1b6343d4"
+      }
+    },
+    "library-tests.log": {
+      "original": {
+        "bytes": 82820,
+        "sha256": "80a32f409e427990b72957048fbe558cbc848a4f647b83c0aa82159885cc2dfa"
+      },
+      "published": {
+        "bytes": 82794,
+        "sha256": "be31b640caee172e5c130a88768da011f83aca304c66f407362a696a52bee0c6"
+      }
+    },
+    "native-qa-release.log": {
+      "original": {
+        "bytes": 769,
+        "sha256": "5734c0fb72b03edf69a682a2df3ed8d43b833f0444a1e91afb518936d5479544"
+      },
+      "published": {
+        "bytes": 581,
+        "sha256": "b700907b08a4217605cd1ae70b1a837cb7c798a48422524d59ec557d546b85f3"
+      }
+    },
+    "x86_64-portable-release.log": {
+      "original": {
+        "bytes": 12547,
+        "sha256": "a6949ec17d20d7c7204b9e2452491d3384788b685838c167689ceb098e706ab1"
+      },
+      "published": {
+        "bytes": 12359,
+        "sha256": "20d78c4b5c618bfbfd1cc7396df86edce5d517968767633d68b3138039cf20a0"
+      }
+    },
+    "build-receipt.json": {
+      "original": {
+        "bytes": 6227,
+        "sha256": "2ee7e043b93c1cf061ce00a93b9ae9dd63a21df587cf41edd1461972a82c36cd"
+      },
+      "published": {
+        "bytes": 5945,
+        "sha256": "f498977eb2aa24849340e762b16899e26b219e84ca14abfa5f14a872f46b1ee9"
+      }
+    }
+  }
+}

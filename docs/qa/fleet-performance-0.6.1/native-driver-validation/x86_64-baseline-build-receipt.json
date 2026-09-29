@@ -1,0 +1,161 @@
+{
+  "architecture": "x86_64",
+  "side": "baseline",
+  "product_source": "221834bdd8af5aee8554a0e835629cbe2f467558",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: aarch64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+  "link_method": "Compile corrected QA entry points against pinned production rlib. Baseline may use the separately recorded rebuild of the exact original product source; native static archive objects are bundled in those rlibs.",
+  "externs": {
+    "omadesign": {
+      "path": "<BASELINE_TARGET>/x86_64-unknown-linux-gnu/release/libomadesign.rlib",
+      "bytes": 62648952,
+      "sha256": "e03d800e31f8d79c5143b283d4c594b9f90e78cf4a728c18ab2882ed34a26d44"
+    },
+    "eframe": {
+      "path": "<BASELINE_TARGET>/x86_64-unknown-linux-gnu/release/deps/libeframe-3ca381b7ce9c5f61.rlib",
+      "bytes": 2799934,
+      "sha256": "77f66ff179283e0326201d5ab11293c703921b406c0ce18fb354e2c7365db714"
+    },
+    "image": {
+      "path": "<BASELINE_TARGET>/x86_64-unknown-linux-gnu/release/deps/libimage-421f7866fd7640e3.rlib",
+      "bytes": 6391570,
+      "sha256": "9a35e22e9010c5ae4800a9d5fb384f8b365a63aa0ada502bfd7819946f674937"
+    },
+    "serde_json": {
+      "path": "<BASELINE_TARGET>/x86_64-unknown-linux-gnu/release/deps/libserde_json-654e11ca1c539840.rlib",
+      "bytes": 1932218,
+      "sha256": "a384306c7d639a7abacd00054a4e1ddab32627475d57babe51c487c8aa8a252f"
+    }
+  },
+  "embedded_dependency_crate_hashes": {
+    "eframe": "4001fef354ccb61c898bc0ad2604bc7a",
+    "image": "5279dfa90619187b590a2406663c26cd",
+    "serde_json": "50a21295abfe8446f061c3f29ed2ba6c"
+  },
+  "harness_sources": {
+    "src/bin/background_removal_qa/native.rs": {
+      "bytes": 17344,
+      "sha256": "ef45748b158fe4f9c49d3bee9b2ac670c68185b55e9ed0d6913b31b1ed4a55bc"
+    },
+    "src/bin/background_removal_qa.rs": {
+      "bytes": 3636,
+      "sha256": "7cc50ed98ff37b357c2ea3151bb25b99ab4ceecfa7a348e2a717f132b72217bd"
+    },
+    "src/bin/upscale_qa/native.rs": {
+      "bytes": 22104,
+      "sha256": "3693e664be2bb853abf82b41070f22b77dd8ef9903e1bcc4d3790626b44daa64"
+    },
+    "src/bin/upscale_qa/pipelines.rs": {
+      "bytes": 4935,
+      "sha256": "b13fb7b0732f96b7af0179f3ca50976f0670ccad09eb5d09b8edef6075f8a2a4"
+    },
+    "src/bin/upscale_qa.rs": {
+      "bytes": 3279,
+      "sha256": "9f719f7200e1f33df680c1d5b554b2c1fd2902b1f2742193a34dcc3204cbab02"
+    }
+  },
+  "steps": [
+    {
+      "binary": "background_removal_qa",
+      "command": [
+        "rustc",
+        "--edition=2024",
+        "--crate-name",
+        "background_removal_qa",
+        "--crate-type",
+        "bin",
+        "<BUILD_ROOT>/native-harness-source-final-v2/src/bin/background_removal_qa.rs",
+        "-C",
+        "opt-level=3",
+        "-C",
+        "codegen-units=1",
+        "-C",
+        "lto=off",
+        "-C",
+        "embed-bitcode=no",
+        "-C",
+        "debug-assertions=off",
+        "-L",
+        "dependency=<BASELINE_TARGET>/x86_64-unknown-linux-gnu/release/deps",
+        "-o",
+        "<BUILD_ROOT>/native-harness-final/x86_64/baseline/background_removal_qa",
+        "-L",
+        "dependency=<BASELINE_TARGET>/release/deps",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "-C",
+        "linker=<WORKTREE>/scripts/zig-cc-x86_64",
+        "--extern",
+        "omadesign=<BASELINE_TARGET>/x86_64-unknown-linux-gnu/release/libomadesign.rlib",
+        "--extern",
+        "eframe=<BASELINE_TARGET>/x86_64-unknown-linux-gnu/release/deps/libeframe-3ca381b7ce9c5f61.rlib",
+        "--extern",
+        "image=<BASELINE_TARGET>/x86_64-unknown-linux-gnu/release/deps/libimage-421f7866fd7640e3.rlib",
+        "--extern",
+        "serde_json=<BASELINE_TARGET>/x86_64-unknown-linux-gnu/release/deps/libserde_json-654e11ca1c539840.rlib"
+      ],
+      "exit_code": 0,
+      "seconds": 9.432684671948664,
+      "log": {
+        "bytes": 160,
+        "sha256": "f3d1fb4060a61a4fb2c780f945b5672c41d4cbf2c9e915ba6ae595ccabde0079"
+      }
+    },
+    {
+      "binary": "upscale_qa",
+      "command": [
+        "rustc",
+        "--edition=2024",
+        "--crate-name",
+        "upscale_qa",
+        "--crate-type",
+        "bin",
+        "<BUILD_ROOT>/native-harness-source-final-v2/src/bin/upscale_qa.rs",
+        "-C",
+        "opt-level=3",
+        "-C",
+        "codegen-units=1",
+        "-C",
+        "lto=off",
+        "-C",
+        "embed-bitcode=no",
+        "-C",
+        "debug-assertions=off",
+        "-L",
+        "dependency=<BASELINE_TARGET>/x86_64-unknown-linux-gnu/release/deps",
+        "-o",
+        "<BUILD_ROOT>/native-harness-final/x86_64/baseline/upscale_qa",
+        "-L",
+        "dependency=<BASELINE_TARGET>/release/deps",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "-C",
+        "linker=<WORKTREE>/scripts/zig-cc-x86_64",
+        "--extern",
+        "omadesign=<BASELINE_TARGET>/x86_64-unknown-linux-gnu/release/libomadesign.rlib",
+        "--extern",
+        "eframe=<BASELINE_TARGET>/x86_64-unknown-linux-gnu/release/deps/libeframe-3ca381b7ce9c5f61.rlib",
+        "--extern",
+        "image=<BASELINE_TARGET>/x86_64-unknown-linux-gnu/release/deps/libimage-421f7866fd7640e3.rlib",
+        "--extern",
+        "serde_json=<BASELINE_TARGET>/x86_64-unknown-linux-gnu/release/deps/libserde_json-654e11ca1c539840.rlib"
+      ],
+      "exit_code": 0,
+      "seconds": 8.421198546071537,
+      "log": {
+        "bytes": 160,
+        "sha256": "f3d1fb4060a61a4fb2c780f945b5672c41d4cbf2c9e915ba6ae595ccabde0079"
+      }
+    }
+  ],
+  "artifacts": {
+    "background_removal_qa": {
+      "bytes": 74521368,
+      "sha256": "0d9627610ba87c321fd82b2e25f6ce111eefcd66a3f9aed31e6e066432501f68"
+    },
+    "upscale_qa": {
+      "bytes": 74547816,
+      "sha256": "834e99b28c8ac644ad45fc6c0ebb2fbfce21fdc9bced561f05f4c32be8f1c411"
+    }
+  },
+  "success": true
+}

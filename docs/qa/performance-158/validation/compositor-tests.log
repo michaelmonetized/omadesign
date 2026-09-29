@@ -1,0 +1,54 @@
+   Compiling omadesign v0.6.0 (/home/michael/Projects/omadesign/.worktrees/performance-158)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 45.08s
+     Running unittests src/lib.rs (/home/michael/Projects/omadesign/target/debug/deps/omadesign-eeb97c2698df9278)
+
+running 46 tests
+test compositor::appearance_tests::effect_fields_roundtrip_undo_layer_and_legacy_appearance ... ok
+test compositor::appearance_tests::frame_blend_applies_to_the_whole_subtree ... ok
+test compositor::appearance_tests::frame_child_blend_isolation_is_stable_at_every_opacity_and_after_save ... ok
+test compositor::appearance_tests::independent_effect_reference_golden_overlay_multiply_screen ... ok
+test compositor::appearance_tests::fill_opacity_knockout_interior_and_object_opacity_are_independent ... ok
+test compositor::appearance_tests::layer_opacity_is_applied_once_to_overlapping_objects ... ok
+test compositor::appearance_tests::nested_frame_blend_ancestors_are_isolated_and_html_isolates_only_frames ... ok
+test compositor::appearance_tests::normal_full_strength_effects_keep_the_fast_source_over_output ... ok
+test compositor::appearance_tests::object_blends_against_underlying_artwork_and_roundtrips_with_undo ... ok
+test compositor::appearance_tests::object_opacity_is_applied_once_to_overlapping_fill_and_stroke ... ok
+test compositor::appearance_tests::regular_layer_child_blend_isolation_is_stable_at_every_opacity_and_after_save ... ok
+test compositor::appearance_tests::svg_independent_blend_siblings_match_native_without_blur_approximation ... ok
+test compositor::effects_cache::tests::cache_evicts_old_paths_instead_of_retaining_closed_documents ... ok
+test compositor::frames::tests::frame_opacity_composites_once_and_clip_toggle_permits_overflow ... ok
+test compositor::frames::tests::nested_clips_intersect_and_hidden_frames_hide_their_whole_subtree ... ok
+test compositor::groups::tests::group_opacity_is_applied_once_and_hidden_parent_hides_children ... ok
+test compositor::appearance_tests::layer_effects_and_all_new_effects_render_and_export ... ok
+test compositor::interaction::tests::brush_and_isolated_layer_blends_keep_their_exact_backdrop ... ok
+test compositor::interaction::tests::cached_drag_matches_full_renderer_at_every_position_and_view ... ok
+test compositor::interaction::tests::moving_later_guides_and_wrap_obstacles_reflows_earlier_text_without_stale_pixels ... ok
+test compositor::interaction::tests::dense_same_layer_drag_preserves_single_and_multiple_selection_compositing ... ok
+test compositor::mask_cache::tests::cache_evicts_by_entry_and_byte_limits_and_rejects_large_sources ... ok
+test compositor::mask_cache::tests::cache_matches_original_mask_at_fractional_transforms_and_changed_viewports ... ok
+test compositor::mask_cache::tests::parent_changes_are_applied_without_modifying_cached_own_mask ... ok
+test compositor::mask_cache::tests::source_replacement_touch_and_actual_premultiplied_bytes_invalidate_safely ... ok
+test compositor::performance_tests::benchmark_cached_effects ... ignored, manual release timing; do not measure under concurrent builds
+test compositor::performance_tests::bounded_layer_surfaces_match_full_viewport_compositing ... ok
+test compositor::performance_tests::cached_effect_pixels_match_fresh_masks_blends_motion_and_camera_transforms ... ok
+test compositor::performance_tests::effect_cache_invalidates_paint_geometry_filter_pose_and_image_edits ... ok
+test compositor::performance_tests::offscreen_rejection_preserves_wide_strokes_cubic_hulls_and_motion ... ok
+test compositor::tests::artboard_plate_follows_origin ... ok
+test compositor::tests::artboardless_workspace_has_no_fallback_plate_but_explicit_boards_render ... ok
+test compositor::tests::checker_clips_large_artboards_without_changing_pattern ... ok
+test compositor::tests::export_images_preserve_dimensions_and_transparency ... ok
+test compositor::tests::filtered_motion_does_not_clip_travel_to_rest_bounds ... ok
+test compositor::tests::fit_does_not_bake_in_a_window_origin ... ok
+test compositor::tests::gradient_angle_offset_turns_the_fill ... ok
+test compositor::tests::gradient_fill_respects_shape_and_layer_opacity ... ok
+test compositor::tests::keyed_fill_replaces_the_designed_color ... ok
+test compositor::tests::pinch_keeps_the_point_under_the_cursor ... ok
+test compositor::tests::pointer_and_overlay_share_canvas_space ... ok
+test compositor::tests::posed_draw_moves_pixels ... ok
+test compositor::tests::reveal_channels_clip_fill_and_trim_stroke_independently_under_motion ... ok
+test compositor::tests::width_scale_stretches_without_changing_height ... ok
+test compositor::tests::zoom_to_fits_the_box_in_the_viewport ... ok
+test compositor::interaction::tests::unrelated_edit_invalidates_the_backdrop ... ok
+
+test result: ok. 45 passed; 0 failed; 1 ignored; 0 measured; 824 filtered out; finished in 6.63s
+

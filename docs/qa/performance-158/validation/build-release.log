@@ -1,0 +1,7 @@
+   Compiling winit v0.30.13 (/home/michael/Projects/omadesign/.worktrees/performance-158/vendor/winit)
+   Compiling omadesign v0.6.0 (/home/michael/Projects/omadesign/.worktrees/performance-158)
+   Compiling accesskit_winit v0.32.2
+   Compiling egui-winit v0.36.1 (/home/michael/Projects/omadesign/.worktrees/performance-158/vendor/egui-winit)
+   Compiling egui-wgpu v0.36.1
+   Compiling eframe v0.36.1
+    Finished `release` profile [optimized] target(s) in 8m 40s

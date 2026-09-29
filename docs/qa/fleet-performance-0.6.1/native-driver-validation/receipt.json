@@ -1,0 +1,230 @@
+{
+  "scope": "Functional diagnostics only. These runs may overlap compilation and are excluded from paired benchmark timings.",
+  "qa_input_protocol": "hover-atomic-buttons-held-sliders-escape-cancel-v2",
+  "product_candidate_source": "8ee01b4ea08e0dac9891694b82dd3f4f377a5cf2",
+  "product_baseline_source": "221834bdd8af5aee8554a0e835629cbe2f467558",
+  "baseline_rebuild_checkout": "587433037d1df9be5e66b36cc77bc6f44fcd7071",
+  "cancel_input": "Escape key",
+  "cancel_button_covered": false,
+  "files": {
+    "source-receipt.json": {
+      "source_artifact": "<BUILD_ROOT>/native-harness-source-final-v2/source-receipt.json",
+      "original": {
+        "bytes": 1361,
+        "sha256": "3b3038e38e845cc73bf281b4b15ed39477c740f8c3e1e954f614f60cb3bbf95d"
+      },
+      "published": {
+        "bytes": 1361,
+        "sha256": "3b3038e38e845cc73bf281b4b15ed39477c740f8c3e1e954f614f60cb3bbf95d"
+      }
+    },
+    "aarch64-build-receipt.json": {
+      "source_artifact": "<BUILD_ROOT>/native-harness-corrected-v2b/aarch64/build-receipt.json",
+      "original": {
+        "bytes": 11397,
+        "sha256": "07d2ce9e8969c818041a2120962bc5db1c8da0c2c46eb2c337059dfcbc39631f"
+      },
+      "published": {
+        "bytes": 10085,
+        "sha256": "098ade623ea11cbf3df872669282df5c90422d34cecda8ff95da40fd9f980eb4"
+      }
+    },
+    "x86_64-baseline-build-receipt.json": {
+      "source_artifact": "<BUILD_ROOT>/native-harness-final/x86_64/baseline/build-receipt.json",
+      "original": {
+        "bytes": 6875,
+        "sha256": "8393e3e31cf0214f3c04a17d962c742bd2450a7ecdcf79a196bd663360c7f783"
+      },
+      "published": {
+        "bytes": 5925,
+        "sha256": "a8ebde4a2438ad9b427907abfcbc49aedb4df930b9cfd02a97ef7c340b41736b"
+      }
+    },
+    "baseline-background-result.json": {
+      "source_artifact": "<BUILD_ROOT>/native-harness-corrected-v2b/aarch64/validation-baseline-background-1/native-result.json",
+      "original": {
+        "bytes": 778,
+        "sha256": "39429f99e4a0183602a06cc0f8339eeca1fb4feddc2573a9d022dfa53952f7ae"
+      },
+      "published": {
+        "bytes": 778,
+        "sha256": "39429f99e4a0183602a06cc0f8339eeca1fb4feddc2573a9d022dfa53952f7ae"
+      }
+    },
+    "baseline-upscale-result.json": {
+      "source_artifact": "<BUILD_ROOT>/native-harness-corrected-v2b/aarch64/validation-baseline-upscale-1/native-result.json",
+      "original": {
+        "bytes": 998,
+        "sha256": "7b0adf2f5e271226c3b6beb6f7bda7451527a2fd446b73aecf989e250d76689f"
+      },
+      "published": {
+        "bytes": 998,
+        "sha256": "7b0adf2f5e271226c3b6beb6f7bda7451527a2fd446b73aecf989e250d76689f"
+      }
+    },
+    "x86_64-candidate-build-receipt.json": {
+      "source_artifact": "<BUILD_ROOT>/native-harness-final/x86_64/candidate/build-receipt.json",
+      "original": {
+        "bytes": 6640,
+        "sha256": "081f4c21e48c57db653d6074ca6a4cb0144946ec66c1b742b53aa176924245d2"
+      },
+      "published": {
+        "bytes": 6010,
+        "sha256": "ca3543f46c3f609f1b1502c8be7ad3a43967becae64d14ebcc6ef97d30bb5432"
+      }
+    },
+    "candidate-background-result.json": {
+      "source_artifact": "<BUILD_ROOT>/native-harness-corrected-v2b/aarch64/validation-candidate-background-1/native-result.json",
+      "original": {
+        "bytes": 770,
+        "sha256": "b136c92df720943fc9eb7bf9cb7a8f3ef9e7916902b42bc38891f67fcac12c82"
+      },
+      "published": {
+        "bytes": 770,
+        "sha256": "b136c92df720943fc9eb7bf9cb7a8f3ef9e7916902b42bc38891f67fcac12c82"
+      }
+    },
+    "candidate-upscale-result.json": {
+      "source_artifact": "<BUILD_ROOT>/native-harness-corrected-v2b/aarch64/validation-candidate-upscale-1/native-result.json",
+      "original": {
+        "bytes": 991,
+        "sha256": "224e9bb24614c6c15866506f6dc3b52185338b1f929886209a3cda2e1d3448cb"
+      },
+      "published": {
+        "bytes": 991,
+        "sha256": "224e9bb24614c6c15866506f6dc3b52185338b1f929886209a3cda2e1d3448cb"
+      }
+    },
+    "baseline-library-build.json": {
+      "source_artifact": "<BUILD_ROOT>/baseline-library-build/receipt.json",
+      "original": {
+        "bytes": 1206,
+        "sha256": "8c749108c17bea499c544f7afacf4ddce433cbff937a2548ad75ae0f55597190"
+      },
+      "published": {
+        "bytes": 1206,
+        "sha256": "8c749108c17bea499c544f7afacf4ddce433cbff937a2548ad75ae0f55597190"
+      }
+    },
+    "matte-validation.json": {
+      "source_artifact": "<BUILD_ROOT>/native-harness-corrected-v2b/aarch64/matte-validation.json",
+      "original": {
+        "bytes": 2554,
+        "sha256": "88836bf8ebb5011b3dafc94e01b60b90b492a73369890c06bd25e9585e6b9cd3"
+      },
+      "published": {
+        "bytes": 2309,
+        "sha256": "201586b84b233a7a0da275327e393908da05059f2ba2e2fba863cf2814ebf8f6"
+      }
+    },
+    "trace-receipt.json": {
+      "source_artifact": "<TRACE_ROOT>/receipt.json",
+      "original": {
+        "bytes": 1555,
+        "sha256": "50a1789bc6f088d18362e9526ba3076d8888c894d0cce215d4a0617efdaae6b1"
+      },
+      "published": {
+        "bytes": 1260,
+        "sha256": "b701e838a319c5fc60b2627b2775394ab1643175431f01f0e1045b83c566b9f1"
+      }
+    },
+    "diagnosis.json": {
+      "source_artifact": "<TRACE_ROOT>/diagnosis.json",
+      "original": {
+        "bytes": 1888,
+        "sha256": "4252bfca300cca4d44ca75e97a7f61e867fcabee0286a150e16aff92a024b828"
+      },
+      "published": {
+        "bytes": 1888,
+        "sha256": "4252bfca300cca4d44ca75e97a7f61e867fcabee0286a150e16aff92a024b828"
+      }
+    },
+    "trace-excerpt.log": {
+      "source_artifact": "<TRACE_ROOT>/transition-excerpt.log",
+      "source_identity": {
+        "bytes": 20250,
+        "sha256": "c51e89dbfb093b1176b4a09aa71656ab4b50d6146851aac5541b00bfcee527b1"
+      },
+      "selected_original_trace_line_numbers": [
+        137,
+        139,
+        140,
+        142,
+        164,
+        167,
+        173
+      ],
+      "published": {
+        "bytes": 7189,
+        "sha256": "54f50cf40a53bb403989a007496513fdf0e6a47488d311297a4008126c6cdf35"
+      },
+      "transformation": "Only listed lines retained verbatim; original trace line numbers preserved."
+    }
+  },
+  "diagnostic_results": [
+    {
+      "side": "baseline",
+      "case": "background",
+      "exit_code": 0,
+      "started_utc": "2026-09-29T04:07:54.452686+00:00",
+      "finished_utc": "2026-09-29T04:08:01.733473+00:00",
+      "result": "baseline-background-result.json",
+      "result_identity": {
+        "bytes": 778,
+        "sha256": "39429f99e4a0183602a06cc0f8339eeca1fb4feddc2573a9d022dfa53952f7ae"
+      },
+      "input": "cat-320.png (320 x 212 RGBA source)",
+      "renderer": "native WGPU",
+      "protocol": "hover-atomic-buttons-held-sliders-escape-cancel-v2",
+      "functional_pass": true
+    },
+    {
+      "side": "baseline",
+      "case": "upscale",
+      "exit_code": 0,
+      "started_utc": "2026-09-29T04:08:17.142661+00:00",
+      "finished_utc": "2026-09-29T04:08:33.531342+00:00",
+      "result": "baseline-upscale-result.json",
+      "result_identity": {
+        "bytes": 998,
+        "sha256": "7b0adf2f5e271226c3b6beb6f7bda7451527a2fd446b73aecf989e250d76689f"
+      },
+      "input": "cat-320.png (320 x 212 RGBA source)",
+      "renderer": "native WGPU",
+      "protocol": "hover-atomic-buttons-held-sliders-escape-cancel-v2",
+      "functional_pass": true
+    },
+    {
+      "side": "candidate",
+      "case": "background",
+      "exit_code": 0,
+      "started_utc": "2026-09-29T04:07:46.324120+00:00",
+      "finished_utc": "2026-09-29T04:07:54.452447+00:00",
+      "result": "candidate-background-result.json",
+      "result_identity": {
+        "bytes": 770,
+        "sha256": "b136c92df720943fc9eb7bf9cb7a8f3ef9e7916902b42bc38891f67fcac12c82"
+      },
+      "input": "cat-320.png (320 x 212 RGBA source)",
+      "renderer": "native WGPU",
+      "protocol": "hover-atomic-buttons-held-sliders-escape-cancel-v2",
+      "functional_pass": true
+    },
+    {
+      "side": "candidate",
+      "case": "upscale",
+      "exit_code": 0,
+      "started_utc": "2026-09-29T04:08:01.734979+00:00",
+      "finished_utc": "2026-09-29T04:08:17.140916+00:00",
+      "result": "candidate-upscale-result.json",
+      "result_identity": {
+        "bytes": 991,
+        "sha256": "224e9bb24614c6c15866506f6dc3b52185338b1f929886209a3cda2e1d3448cb"
+      },
+      "input": "cat-320.png (320 x 212 RGBA source)",
+      "renderer": "native WGPU",
+      "protocol": "hover-atomic-buttons-held-sliders-escape-cancel-v2",
+      "functional_pass": true
+    }
+  ]
+}

@@ -1,0 +1,143 @@
+00:00:00.000 [INFO] [sway/main.c:308] Sway version 1.12
+00:00:00.000 [INFO] [sway/main.c:309] wlroots version 0.20.1
+00:00:00.003 [INFO] [sway/main.c:78] Linux m1pro16 7.1.13-3-2-ARCH #1 SMP PREEMPT_DYNAMIC Sat, 19 Sep 2026 16:04:41 +0000 aarch64 GNU/Linux
+00:00:00.003 [INFO] [sway/main.c:94] Contents of /etc/os-release:
+00:00:00.003 [INFO] [sway/main.c:78] NAME="Arch Linux ARM"
+00:00:00.003 [INFO] [sway/main.c:78] PRETTY_NAME="Arch Linux ARM"
+00:00:00.003 [INFO] [sway/main.c:78] ID=archarm
+00:00:00.003 [INFO] [sway/main.c:78] ID_LIKE=arch
+00:00:00.003 [INFO] [sway/main.c:78] BUILD_ID=rolling
+00:00:00.003 [INFO] [sway/main.c:78] ANSI_COLOR="38;2;23;147;209"
+00:00:00.003 [INFO] [sway/main.c:78] HOME_URL="https://archlinuxarm.org/"
+00:00:00.003 [INFO] [sway/main.c:78] DOCUMENTATION_URL="https://archlinuxarm.org/wiki"
+00:00:00.003 [INFO] [sway/main.c:78] SUPPORT_URL="https://archlinuxarm.org/forum"
+00:00:00.003 [INFO] [sway/main.c:78] BUG_REPORT_URL="https://github.com/archlinuxarm/PKGBUILDs/issues"
+00:00:00.003 [INFO] [sway/main.c:78] LOGO=archlinux-logo
+00:00:00.003 [INFO] [sway/main.c:66] LD_LIBRARY_PATH=
+00:00:00.003 [INFO] [sway/main.c:66] LD_PRELOAD=
+00:00:00.003 [INFO] [sway/main.c:66] PATH=/home/michael/.local/bin:/home/michael/bin:/home/michael/.local/bin:/home/michael/.local/bin:/home/michael/.vite-plus/bin:/home/michael/bin:/home/michael/.codex/packages/standalone/releases/0.157.1-aarch64-unknown-linux-musl/codex-path:/home/michael/.codex/tmp/arg0/codex-arg0sVssbp:/home/michael/.local/bin:/home/michael/.opencode/bin:/home/michael/.resend/bin:/home/michael/.vite-plus/bin:/home/michael/bin:/home/michael/.bun/bin:/home/michael/.local/share/zinit/polaris/bin:/home/michael/.grok/bin:/home/michael/.local/share/pnpm:/home/michael/.vite-plus/js_runtime/node/24.20.0/bin:/home/michael/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl:/usr/lib/rustup/bin:/home/michael/go/bin
+00:00:00.003 [INFO] [sway/main.c:66] SWAYSOCK=
+00:00:00.003 [INFO] [sway/main.c:338] Starting sway version 1.12
+00:00:00.003 [INFO] [wlr] [backend/backend.c:342] Loading user-specified backends due to WLR_BACKENDS: headless
+00:00:00.003 [INFO] [wlr] [backend/headless/backend.c:60] Creating headless backend
+00:00:00.003 [INFO] [wlr] [util/env.c:25] Loading WLR_RENDERER option: gles2
+00:00:00.003 [INFO] [wlr] [render/wlr_renderer.c:157] Opening DRM render node '/dev/dri/renderD128' from WLR_RENDER_DRM_DEVICE
+00:00:00.027 [INFO] [wlr] [render/egl.c:205] Supported EGL client extensions: EGL_EXT_device_base EGL_EXT_device_enumeration EGL_EXT_device_query EGL_EXT_platform_base EGL_KHR_client_get_all_proc_addresses EGL_EXT_client_extensions EGL_KHR_debug EGL_EXT_platform_device EGL_EXT_explicit_device EGL_EXT_platform_wayland EGL_KHR_platform_wayland EGL_EXT_platform_x11 EGL_KHR_platform_x11 EGL_EXT_platform_xcb EGL_MESA_platform_gbm EGL_KHR_platform_gbm EGL_MESA_platform_surfaceless
+00:00:00.037 [INFO] [wlr] [render/egl.c:369] Using EGL 1.5
+00:00:00.037 [INFO] [wlr] [render/egl.c:370] Supported EGL display extensions: EGL_ANDROID_blob_cache EGL_ANDROID_native_fence_sync EGL_EXT_config_select_group EGL_EXT_create_context_robustness EGL_EXT_image_dma_buf_import EGL_EXT_image_dma_buf_import_modifiers EGL_EXT_query_reset_notification_strategy EGL_EXT_surface_compression EGL_IMG_context_priority EGL_KHR_cl_event2 EGL_KHR_config_attribs EGL_KHR_context_flush_control EGL_KHR_create_context EGL_KHR_create_context_no_error EGL_KHR_fence_sync EGL_KHR_get_all_proc_addresses EGL_KHR_gl_colorspace EGL_KHR_gl_renderbuffer_image EGL_KHR_gl_texture_2D_image EGL_KHR_gl_texture_3D_image EGL_KHR_gl_texture_cubemap_image EGL_KHR_image_base EGL_KHR_no_config_context EGL_KHR_reusable_sync EGL_KHR_surfaceless_context EGL_EXT_pixel_format_float EGL_KHR_wait_sync EGL_MESA_configless_context EGL_MESA_gl_interop EGL_MESA_image_dma_buf_export EGL_MESA_query_driver EGL_MESA_x11_native_visual_id EGL_NV_context_priority_realtime 
+00:00:00.037 [INFO] [wlr] [render/egl.c:372] Supported EGL device extensions: EGL_EXT_device_drm EGL_EXT_device_drm_render_node EGL_EXT_device_query_name EGL_EXT_device_persistent_id
+00:00:00.037 [INFO] [wlr] [render/egl.c:374] EGL vendor: Mesa Project
+00:00:00.037 [INFO] [wlr] [render/egl.c:376] EGL driver name: asahi
+00:00:00.039 [INFO] [wlr] [render/gles2/renderer.c:538] Creating GLES2 renderer
+00:00:00.039 [INFO] [wlr] [render/gles2/renderer.c:539] Using OpenGL ES 3.2 Mesa 26.2.3-arch1.1
+00:00:00.039 [INFO] [wlr] [render/gles2/renderer.c:540] GL vendor: Mesa
+00:00:00.039 [INFO] [wlr] [render/gles2/renderer.c:541] GL renderer: Apple M1 Pro (G13S C0)
+00:00:00.039 [INFO] [wlr] [render/gles2/renderer.c:542] Supported GLES2 extensions: GL_EXT_blend_minmax GL_EXT_multi_draw_arrays GL_EXT_texture_filter_anisotropic GL_EXT_texture_compression_s3tc GL_EXT_texture_compression_dxt1 GL_EXT_texture_compression_rgtc GL_EXT_texture_format_BGRA8888 GL_OES_compressed_ETC1_RGB8_texture GL_OES_depth24 GL_OES_element_index_uint GL_OES_fbo_render_mipmap GL_OES_mapbuffer GL_OES_rgb8_rgba8 GL_OES_standard_derivatives GL_OES_stencil8 GL_OES_texture_3D GL_OES_texture_float GL_OES_texture_float_linear GL_OES_texture_half_float GL_OES_texture_half_float_linear GL_OES_texture_npot GL_OES_vertex_half_float GL_EXT_draw_instanced GL_EXT_texture_sRGB_decode GL_OES_EGL_image GL_OES_depth_texture GL_OES_packed_depth_stencil GL_EXT_texture_type_2_10_10_10_REV GL_NV_conditional_render GL_OES_get_program_binary GL_APPLE_texture_max_level GL_EXT_discard_framebuffer GL_EXT_read_format_bgra GL_EXT_texture_storage GL_NV_pack_subimage GL_NV_texture_barrier GL_EXT_frag_depth GL_NV_fbo_color_attachments GL_OES_EGL_image_external GL_OES_EGL_sync GL_OES_vertex_array_object GL_OES_viewport_array GL_ANGLE_pack_reverse_row_order GL_ANGLE_texture_compression_dxt3 GL_ANGLE_texture_compression_dxt5 GL_EXT_occlusion_query_boolean GL_EXT_robustness GL_EXT_sRGB GL_EXT_texture_rg GL_EXT_unpack_subimage GL_NV_draw_buffers GL_NV_read_buffer GL_NV_read_depth GL_NV_read_depth_stencil GL_NV_read_stencil GL_APPLE_sync GL_EXT_draw_buffers GL_EXT_instanced_arrays GL_EXT_map_buffer_range GL_EXT_shadow_samplers GL_KHR_debug GL_KHR_robustness GL_KHR_texture_compression_astc_hdr GL_KHR_texture_compression_astc_ldr GL_NV_generate_mipmap_sRGB GL_NV_pixel_buffer_object GL_OES_depth_texture_cube_map GL_OES_required_internalformat GL_OES_surfaceless_context GL_EXT_color_buffer_float GL_EXT_debug_label GL_EXT_sRGB_write_control GL_EXT_separate_shader_objects GL_EXT_shader_framebuffer_fetch GL_EXT_shader_group_vote GL_EXT_shader_implicit_conversions GL_EXT_shader_integer_mix GL_EXT_tessellation_point_size GL_EXT_tessellation_shader GL_ANDROID_extension_pack_es31a GL_EXT_base_instance GL_EXT_compressed_ETC1_RGB8_sub_texture GL_EXT_copy_image GL_EXT_draw_buffers_indexed GL_EXT_draw_elements_base_vertex GL_EXT_gpu_shader5 GL_EXT_multi_draw_indirect GL_EXT_polygon_offset_clamp GL_EXT_primitive_bounding_box GL_EXT_render_snorm GL_EXT_shader_io_blocks GL_EXT_texture_border_clamp GL_EXT_texture_buffer GL_EXT_texture_cube_map_array GL_EXT_texture_norm16 GL_EXT_texture_view GL_KHR_blend_equation_advanced GL_KHR_blend_equation_advanced_coherent GL_KHR_context_flush_control GL_KHR_robust_buffer_access_behavior GL_NV_image_formats GL_NV_shader_noperspective_interpolation GL_OES_copy_image GL_OES_draw_buffers_indexed GL_OES_draw_elements_base_vertex GL_OES_gpu_shader5 GL_OES_primitive_bounding_box GL_OES_sample_shading GL_OES_sample_variables GL_OES_shader_io_blocks GL_OES_shader_multisample_interpolation GL_OES_tessellation_point_size GL_OES_tessellation_shader GL_OES_texture_border_clamp GL_OES_texture_buffer GL_OES_texture_cube_map_array GL_OES_texture_stencil8 GL_OES_texture_storage_multisample_2d_array GL_OES_texture_view GL_EXT_blend_func_extended GL_EXT_buffer_storage GL_EXT_float_blend GL_EXT_geometry_point_size GL_EXT_geometry_shader GL_EXT_texture_sRGB_R8 GL_EXT_texture_sRGB_RG8 GL_KHR_no_error GL_KHR_texture_compression_astc_sliced_3d GL_OES_EGL_image_external_essl3 GL_OES_geometry_point_size GL_OES_geometry_shader GL_OES_shader_image_atomic GL_EXT_clear_texture GL_EXT_clip_cull_distance GL_EXT_conservative_depth GL_EXT_disjoint_timer_query GL_EXT_texture_compression_s3tc_srgb GL_MESA_shader_integer_functions GL_EXT_clip_control GL_EXT_color_buffer_half_float GL_EXT_texture_compression_bptc GL_EXT_texture_mirror_clamp_to_edge GL_KHR_parallel_shader_compile GL_EXT_EGL_image_storage GL_EXT_shader_framebuffer_fetch_non_coherent GL_EXT_texture_shadow_lod GL_MESA_framebuffer_flip_y GL_EXT_depth_clamp GL_EXT_texture_query_lod GL_KHR_shader_subgroup GL_MESA_sampler_objects GL_EXT_EGL_image_storage_compression GL_EXT_texture_storage_compression GL_MESA_bgra 
+00:00:00.059 [INFO] [sway/server.c:498] VR will not be available
+00:00:00.059 [INFO] [wlr] [backend/headless/backend.c:60] Creating headless backend
+00:00:00.061 [INFO] [sway/config.c:422] Loading config from /home/michael/.local/state/omadesign/qa/performance-158/sway-headless.conf
+00:00:00.061 [INFO] [sway/commands.c:381] Config command: xwayland disable
+00:00:00.061 [INFO] [sway/commands.c:404] After replacement: xwayland disable
+00:00:00.061 [INFO] [sway/commands.c:381] Config command: output HEADLESS-1 mode 1600x1000@60Hz scale 1
+00:00:00.061 [INFO] [sway/commands.c:404] After replacement: output HEADLESS-1 mode 1600x1000@60Hz scale 1
+00:00:00.061 [INFO] [sway/commands.c:381] Config command: output HEADLESS-1 position 0 0
+00:00:00.061 [INFO] [sway/commands.c:404] After replacement: output HEADLESS-1 position 0 0
+00:00:00.061 [INFO] [sway/commands.c:381] Config command: workspace 1 output HEADLESS-1
+00:00:00.061 [INFO] [sway/commands.c:404] After replacement: workspace 1 output HEADLESS-1
+00:00:00.061 [INFO] [sway/commands.c:381] Config command: default_border none
+00:00:00.061 [INFO] [sway/commands.c:404] After replacement: default_border none
+00:00:00.061 [INFO] [sway/commands.c:381] Config command: default_floating_border none
+00:00:00.061 [INFO] [sway/commands.c:404] After replacement: default_floating_border none
+00:00:00.061 [INFO] [sway/commands.c:381] Config command: floating_minimum_size 1440 x 900
+00:00:00.061 [INFO] [sway/commands.c:404] After replacement: floating_minimum_size 1440 x 900
+00:00:00.061 [INFO] [sway/commands.c:381] Config command: floating_maximum_size 1440 x 900
+00:00:00.061 [INFO] [sway/commands.c:404] After replacement: floating_maximum_size 1440 x 900
+00:00:00.061 [INFO] [sway/commands.c:381] Config command: for_window [all] floating enable
+00:00:00.061 [INFO] [sway/commands.c:404] After replacement: for_window [all] floating enable
+00:00:00.061 [INFO] [sway/commands.c:381] Config command: for_window [all] border none
+00:00:00.061 [INFO] [sway/commands.c:404] After replacement: for_window [all] border none
+00:00:00.061 [INFO] [sway/commands.c:381] Config command: for_window [all] resize set width 1440 px height 900 px
+00:00:00.061 [INFO] [sway/commands.c:404] After replacement: for_window [all] resize set width 1440 px height 900 px
+00:00:00.061 [INFO] [sway/commands.c:381] Config command: for_window [all] move position center
+00:00:00.061 [INFO] [sway/commands.c:404] After replacement: for_window [all] move position center
+00:00:00.061 [INFO] [sway/commands.c:381] Config command: focus_follows_mouse no
+00:00:00.061 [INFO] [sway/commands.c:404] After replacement: focus_follows_mouse no
+00:00:00.061 [INFO] [sway/commands.c:381] Config command: seat seat0 hide_cursor 1000
+00:00:00.061 [INFO] [sway/commands.c:404] After replacement: seat seat0 hide_cursor 1000
+00:00:00.076 [INFO] [sway/server.c:787] Starting backend on wayland display 'wayland-1'
+00:00:00.076 [INFO] [wlr] [backend/headless/backend.c:17] Starting headless backend
+00:00:00.076 [INFO] [wlr] [backend/headless/backend.c:17] Starting headless backend
+00:00:00.076 [ERROR] [sway/config/output.c:1219] failed to execute 'swaybg' (background configuration probably not applied): No such file or directory
+00:00:00.098 [INFO] [sway/server.c:799] Running compositor on wayland display 'wayland-1'
+00:00:14.334 [INFO] [sway/ipc-server.c:570] IPC Client 24 disconnected
+00:00:14.335 [INFO] [sway/ipc-server.c:570] IPC Client 24 disconnected
+00:00:53.314 [INFO] [sway/commands.c:261] Handling command 'floating enable'
+00:00:53.315 [INFO] [sway/commands.c:261] Handling command 'border none'
+00:00:53.315 [INFO] [sway/commands.c:261] Handling command 'resize set width 1440 px height 900 px'
+00:00:53.315 [INFO] [sway/commands.c:261] Handling command 'move position center'
+00:00:53.806 [ERROR] [wlr] [types/wlr_linux_dmabuf_v1.c:1130] Failed to get backend DRM FD
+00:01:02.196 [INFO] [sway/commands.c:261] Handling command 'floating enable'
+00:01:02.196 [INFO] [sway/commands.c:261] Handling command 'border none'
+00:01:02.196 [INFO] [sway/commands.c:261] Handling command 'resize set width 1440 px height 900 px'
+00:01:02.196 [INFO] [sway/commands.c:261] Handling command 'move position center'
+00:01:02.224 [ERROR] [wlr] [types/wlr_linux_dmabuf_v1.c:1130] Failed to get backend DRM FD
+00:01:26.007 [INFO] [sway/commands.c:261] Handling command 'floating enable'
+00:01:26.008 [INFO] [sway/commands.c:261] Handling command 'border none'
+00:01:26.008 [INFO] [sway/commands.c:261] Handling command 'resize set width 1440 px height 900 px'
+00:01:26.008 [INFO] [sway/commands.c:261] Handling command 'move position center'
+00:01:26.030 [ERROR] [wlr] [types/wlr_linux_dmabuf_v1.c:1130] Failed to get backend DRM FD
+00:01:51.228 [INFO] [sway/commands.c:261] Handling command 'floating enable'
+00:01:51.228 [INFO] [sway/commands.c:261] Handling command 'border none'
+00:01:51.228 [INFO] [sway/commands.c:261] Handling command 'resize set width 1440 px height 900 px'
+00:01:51.228 [INFO] [sway/commands.c:261] Handling command 'move position center'
+00:01:51.249 [ERROR] [wlr] [types/wlr_linux_dmabuf_v1.c:1130] Failed to get backend DRM FD
+00:02:15.391 [INFO] [sway/commands.c:261] Handling command 'floating enable'
+00:02:15.391 [INFO] [sway/commands.c:261] Handling command 'border none'
+00:02:15.391 [INFO] [sway/commands.c:261] Handling command 'resize set width 1440 px height 900 px'
+00:02:15.391 [INFO] [sway/commands.c:261] Handling command 'move position center'
+00:02:15.413 [ERROR] [wlr] [types/wlr_linux_dmabuf_v1.c:1130] Failed to get backend DRM FD
+00:02:24.227 [INFO] [sway/commands.c:261] Handling command 'floating enable'
+00:02:24.227 [INFO] [sway/commands.c:261] Handling command 'border none'
+00:02:24.227 [INFO] [sway/commands.c:261] Handling command 'resize set width 1440 px height 900 px'
+00:02:24.227 [INFO] [sway/commands.c:261] Handling command 'move position center'
+00:02:24.249 [ERROR] [wlr] [types/wlr_linux_dmabuf_v1.c:1130] Failed to get backend DRM FD
+00:02:36.992 [INFO] [sway/commands.c:261] Handling command 'floating enable'
+00:02:36.992 [INFO] [sway/commands.c:261] Handling command 'border none'
+00:02:36.992 [INFO] [sway/commands.c:261] Handling command 'resize set width 1440 px height 900 px'
+00:02:36.992 [INFO] [sway/commands.c:261] Handling command 'move position center'
+00:02:37.014 [ERROR] [wlr] [types/wlr_linux_dmabuf_v1.c:1130] Failed to get backend DRM FD
+00:02:45.418 [INFO] [sway/commands.c:261] Handling command 'floating enable'
+00:02:45.418 [INFO] [sway/commands.c:261] Handling command 'border none'
+00:02:45.418 [INFO] [sway/commands.c:261] Handling command 'resize set width 1440 px height 900 px'
+00:02:45.418 [INFO] [sway/commands.c:261] Handling command 'move position center'
+00:02:45.442 [ERROR] [wlr] [types/wlr_linux_dmabuf_v1.c:1130] Failed to get backend DRM FD
+00:03:05.665 [INFO] [sway/commands.c:261] Handling command 'floating enable'
+00:03:05.665 [INFO] [sway/commands.c:261] Handling command 'border none'
+00:03:05.665 [INFO] [sway/commands.c:261] Handling command 'resize set width 1440 px height 900 px'
+00:03:05.665 [INFO] [sway/commands.c:261] Handling command 'move position center'
+00:03:05.687 [ERROR] [wlr] [types/wlr_linux_dmabuf_v1.c:1130] Failed to get backend DRM FD
+00:03:25.934 [INFO] [sway/commands.c:261] Handling command 'floating enable'
+00:03:25.935 [INFO] [sway/commands.c:261] Handling command 'border none'
+00:03:25.935 [INFO] [sway/commands.c:261] Handling command 'resize set width 1440 px height 900 px'
+00:03:25.935 [INFO] [sway/commands.c:261] Handling command 'move position center'
+00:03:25.955 [ERROR] [wlr] [types/wlr_linux_dmabuf_v1.c:1130] Failed to get backend DRM FD
+00:03:48.057 [INFO] [sway/commands.c:261] Handling command 'floating enable'
+00:03:48.057 [INFO] [sway/commands.c:261] Handling command 'border none'
+00:03:48.057 [INFO] [sway/commands.c:261] Handling command 'resize set width 1440 px height 900 px'
+00:03:48.057 [INFO] [sway/commands.c:261] Handling command 'move position center'
+00:03:48.078 [ERROR] [wlr] [types/wlr_linux_dmabuf_v1.c:1130] Failed to get backend DRM FD
+00:03:58.381 [INFO] [sway/commands.c:261] Handling command 'floating enable'
+00:03:58.381 [INFO] [sway/commands.c:261] Handling command 'border none'
+00:03:58.381 [INFO] [sway/commands.c:261] Handling command 'resize set width 1440 px height 900 px'
+00:03:58.381 [INFO] [sway/commands.c:261] Handling command 'move position center'
+00:03:58.401 [ERROR] [wlr] [types/wlr_linux_dmabuf_v1.c:1130] Failed to get backend DRM FD
+00:05:01.487 [INFO] [sway/commands.c:261] Handling command 'floating enable'
+00:05:01.487 [INFO] [sway/commands.c:261] Handling command 'border none'
+00:05:01.487 [INFO] [sway/commands.c:261] Handling command 'resize set width 1440 px height 900 px'
+00:05:01.487 [INFO] [sway/commands.c:261] Handling command 'move position center'
+00:05:01.508 [ERROR] [wlr] [types/wlr_linux_dmabuf_v1.c:1130] Failed to get backend DRM FD
+00:05:13.398 [INFO] [sway/commands.c:261] Handling command 'floating enable'
+00:05:13.398 [INFO] [sway/commands.c:261] Handling command 'border none'
+00:05:13.398 [INFO] [sway/commands.c:261] Handling command 'resize set width 1440 px height 900 px'
+00:05:13.398 [INFO] [sway/commands.c:261] Handling command 'move position center'
+00:05:13.419 [ERROR] [wlr] [types/wlr_linux_dmabuf_v1.c:1130] Failed to get backend DRM FD

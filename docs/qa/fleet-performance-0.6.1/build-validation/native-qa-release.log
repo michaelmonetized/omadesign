@@ -1,0 +1,14 @@
+   Compiling fst v0.4.7
+   Compiling winit v0.30.13 (<repository>/vendor/winit)
+   Compiling hyphenation_commons v0.8.4
+   Compiling bincode v1.3.3
+   Compiling pocket-resources v0.3.2
+   Compiling hyphenation v0.8.4
+   Compiling arboard v3.6.1
+   Compiling accesskit_winit v0.32.2
+   Compiling egui-winit v0.36.1 (<repository>/vendor/egui-winit)
+   Compiling egui-wgpu v0.36.1
+   Compiling omadesign v0.6.0 (<repository>)
+   Compiling eframe v0.36.1 (<repository>/vendor/eframe)
+   Compiling unicode-linebreak v0.1.5
+    Finished `release` profile [optimized] target(s) in 3m 48s

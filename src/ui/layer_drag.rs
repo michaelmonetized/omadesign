@@ -71,7 +71,7 @@ impl TreeDrop {
 }
 
 pub(super) fn source(response: &Response, studio: &Studio, index: usize) -> bool {
-    if !studio.layer_unlocked(index) {
+    if !response.drag_started() || !studio.layer_unlocked(index) {
         return false;
     }
     response.dnd_set_drag_payload(LayerDrag {
@@ -82,7 +82,10 @@ pub(super) fn source(response: &Response, studio: &Studio, index: usize) -> bool
 }
 
 pub(super) fn object_source(response: &Response, studio: &Studio, layer: usize, id: u64) -> bool {
-    if !studio.layer_unlocked(layer) || studio.doc.find_shape(layer, id).is_none_or(|s| s.locked) {
+    if !response.drag_started()
+        || !studio.layer_unlocked(layer)
+        || studio.doc.find_shape(layer, id).is_none_or(|s| s.locked)
+    {
         return false;
     }
     let selected = if studio.selection.contains(&(layer, id)) {

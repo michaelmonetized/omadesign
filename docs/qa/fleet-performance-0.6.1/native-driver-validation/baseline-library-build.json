@@ -1,0 +1,42 @@
+{
+  "product_source": "221834bdd8af5aee8554a0e835629cbe2f467558",
+  "checkout": "587433037d1df9be5e66b36cc77bc6f44fcd7071",
+  "product_source_diff": "empty outside QA harness entry points; original authoring/profiler additions are not linked into library",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: aarch64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+  "cache": "isolated Btrfs CoW clone of existing cache, avoids replacing candidate dependencies",
+  "steps": [
+    {
+      "architecture": "aarch64",
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--release",
+        "--lib",
+        "-j",
+        "2"
+      ],
+      "exit_code": 0,
+      "seconds": 185.5176376790041
+    },
+    {
+      "architecture": "x86_64",
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--release",
+        "--lib",
+        "-j",
+        "2",
+        "--target",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "exit_code": 0,
+      "seconds": 390.4924777870765
+    }
+  ],
+  "success": true
+}

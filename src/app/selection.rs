@@ -93,7 +93,7 @@ impl Studio {
             .collect()
     }
 
-    fn selected_objects(&mut self, objects: Vec<(usize, u64)>) {
+    pub(super) fn selected_objects(&mut self, objects: Vec<(usize, u64)>) {
         self.selected_layer = None;
         self.individual_object = None;
         self.end_deform(true);

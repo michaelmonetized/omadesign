@@ -1,0 +1,294 @@
+[
+  {
+    "side": "candidate",
+    "binary": "background_removal_qa",
+    "protocol": "hover-atomic-buttons-held-sliders-escape-cancel-v2",
+    "command": [
+      "rustc",
+      "--edition=2024",
+      "--crate-name",
+      "background_removal_qa",
+      "--crate-type",
+      "bin",
+      "src/bin/background_removal_qa.rs",
+      "-C",
+      "opt-level=3",
+      "-C",
+      "codegen-units=1",
+      "-C",
+      "lto=off",
+      "-C",
+      "embed-bitcode=no",
+      "-C",
+      "debug-assertions=off",
+      "-C",
+      "strip=debuginfo",
+      "-L",
+      "dependency=<CANDIDATE_TARGET>/release/deps",
+      "-o",
+      "<BUILD_ROOT>/native-harness-corrected-v2b/aarch64/candidate/background_removal_qa",
+      "--extern",
+      "omadesign=<CANDIDATE_TARGET>/release/deps/libomadesign-6641cf0a357bd8b0.rlib",
+      "--extern",
+      "eframe=<CANDIDATE_TARGET>/release/deps/libeframe-5e91c3af32061ed8.rlib",
+      "--extern",
+      "image=<CANDIDATE_TARGET>/release/deps/libimage-bbda0615fa22c033.rlib",
+      "--extern",
+      "serde_json=<CANDIDATE_TARGET>/release/deps/libserde_json-8e7ad2bc023d29c4.rlib"
+    ],
+    "sources": {
+      "src/bin/background_removal_qa/native.rs": {
+        "sha256": "ef45748b158fe4f9c49d3bee9b2ac670c68185b55e9ed0d6913b31b1ed4a55bc",
+        "bytes": 17344
+      },
+      "src/bin/upscale_qa/native.rs": {
+        "sha256": "3693e664be2bb853abf82b41070f22b77dd8ef9903e1bcc4d3790626b44daa64",
+        "bytes": 22104
+      }
+    },
+    "externs": {
+      "omadesign": {
+        "path": "<CANDIDATE_TARGET>/release/deps/libomadesign-6641cf0a357bd8b0.rlib",
+        "sha256": "b3ac9dc07d8f3ea94c503d22fb7c0a8f88ecb0a11221688df817362fd5f5af91"
+      },
+      "eframe": {
+        "path": "<CANDIDATE_TARGET>/release/deps/libeframe-5e91c3af32061ed8.rlib",
+        "sha256": "4a832cf5a771fd909eaf8a54cd1c743f2f414830f336c9f5a528f80fe1ab288d"
+      },
+      "image": {
+        "path": "<CANDIDATE_TARGET>/release/deps/libimage-bbda0615fa22c033.rlib",
+        "sha256": "192fcce58511eced0b9060e3c0fdca74ba4abe00845fbc9b2cf99ac095f472bc"
+      },
+      "serde_json": {
+        "path": "<CANDIDATE_TARGET>/release/deps/libserde_json-8e7ad2bc023d29c4.rlib",
+        "sha256": "69fd8361eec2bd77e111a9be75df1d693d4a73f5f18c85968ae1cb59467ee82c"
+      }
+    },
+    "started_utc": "2026-09-29T04:06:47.889175+00:00",
+    "exit_code": 0,
+    "finished_utc": "2026-09-29T04:06:57.703183+00:00",
+    "output": {
+      "sha256": "55b0928e641cc2e755185e1dd1cd47a19d5a7510d3e822420ebb1d91bdd9c572",
+      "bytes": 59871384
+    }
+  },
+  {
+    "side": "candidate",
+    "binary": "upscale_qa",
+    "protocol": "hover-atomic-buttons-held-sliders-escape-cancel-v2",
+    "command": [
+      "rustc",
+      "--edition=2024",
+      "--crate-name",
+      "upscale_qa",
+      "--crate-type",
+      "bin",
+      "src/bin/upscale_qa.rs",
+      "-C",
+      "opt-level=3",
+      "-C",
+      "codegen-units=1",
+      "-C",
+      "lto=off",
+      "-C",
+      "embed-bitcode=no",
+      "-C",
+      "debug-assertions=off",
+      "-C",
+      "strip=debuginfo",
+      "-L",
+      "dependency=<CANDIDATE_TARGET>/release/deps",
+      "-o",
+      "<BUILD_ROOT>/native-harness-corrected-v2b/aarch64/candidate/upscale_qa",
+      "--extern",
+      "omadesign=<CANDIDATE_TARGET>/release/deps/libomadesign-6641cf0a357bd8b0.rlib",
+      "--extern",
+      "eframe=<CANDIDATE_TARGET>/release/deps/libeframe-5e91c3af32061ed8.rlib",
+      "--extern",
+      "image=<CANDIDATE_TARGET>/release/deps/libimage-bbda0615fa22c033.rlib",
+      "--extern",
+      "serde_json=<CANDIDATE_TARGET>/release/deps/libserde_json-8e7ad2bc023d29c4.rlib"
+    ],
+    "sources": {
+      "src/bin/background_removal_qa/native.rs": {
+        "sha256": "ef45748b158fe4f9c49d3bee9b2ac670c68185b55e9ed0d6913b31b1ed4a55bc",
+        "bytes": 17344
+      },
+      "src/bin/upscale_qa/native.rs": {
+        "sha256": "3693e664be2bb853abf82b41070f22b77dd8ef9903e1bcc4d3790626b44daa64",
+        "bytes": 22104
+      }
+    },
+    "externs": {
+      "omadesign": {
+        "path": "<CANDIDATE_TARGET>/release/deps/libomadesign-6641cf0a357bd8b0.rlib",
+        "sha256": "b3ac9dc07d8f3ea94c503d22fb7c0a8f88ecb0a11221688df817362fd5f5af91"
+      },
+      "eframe": {
+        "path": "<CANDIDATE_TARGET>/release/deps/libeframe-5e91c3af32061ed8.rlib",
+        "sha256": "4a832cf5a771fd909eaf8a54cd1c743f2f414830f336c9f5a528f80fe1ab288d"
+      },
+      "image": {
+        "path": "<CANDIDATE_TARGET>/release/deps/libimage-bbda0615fa22c033.rlib",
+        "sha256": "192fcce58511eced0b9060e3c0fdca74ba4abe00845fbc9b2cf99ac095f472bc"
+      },
+      "serde_json": {
+        "path": "<CANDIDATE_TARGET>/release/deps/libserde_json-8e7ad2bc023d29c4.rlib",
+        "sha256": "69fd8361eec2bd77e111a9be75df1d693d4a73f5f18c85968ae1cb59467ee82c"
+      }
+    },
+    "started_utc": "2026-09-29T04:06:57.745636+00:00",
+    "exit_code": 0,
+    "finished_utc": "2026-09-29T04:07:07.603340+00:00",
+    "output": {
+      "sha256": "99ed12bd14b31d7979c0209938f1ade53d36c113511fba477e0b7a9cc0f25a37",
+      "bytes": 59876544
+    }
+  },
+  {
+    "side": "baseline",
+    "binary": "background_removal_qa",
+    "protocol": "hover-atomic-buttons-held-sliders-escape-cancel-v2",
+    "command": [
+      "rustc",
+      "--edition=2024",
+      "--crate-name",
+      "background_removal_qa",
+      "--crate-type",
+      "bin",
+      "src/bin/background_removal_qa.rs",
+      "-C",
+      "opt-level=3",
+      "-C",
+      "codegen-units=1",
+      "-C",
+      "lto=off",
+      "-C",
+      "embed-bitcode=no",
+      "-C",
+      "debug-assertions=off",
+      "-C",
+      "strip=debuginfo",
+      "-L",
+      "dependency=<BASELINE_TARGET>/release/deps",
+      "-o",
+      "<BUILD_ROOT>/native-harness-corrected-v2b/aarch64/baseline/background_removal_qa",
+      "--extern",
+      "omadesign=<BASELINE_TARGET>/release/deps/libomadesign-c7ef3e53a8ddcb5b.rlib",
+      "--extern",
+      "eframe=<BASELINE_TARGET>/release/deps/libeframe-8bfc7213330fe934.rlib",
+      "--extern",
+      "image=<BASELINE_TARGET>/release/deps/libimage-bbda0615fa22c033.rlib",
+      "--extern",
+      "serde_json=<BASELINE_TARGET>/release/deps/libserde_json-8e7ad2bc023d29c4.rlib"
+    ],
+    "sources": {
+      "src/bin/background_removal_qa/native.rs": {
+        "sha256": "ef45748b158fe4f9c49d3bee9b2ac670c68185b55e9ed0d6913b31b1ed4a55bc",
+        "bytes": 17344
+      },
+      "src/bin/upscale_qa/native.rs": {
+        "sha256": "3693e664be2bb853abf82b41070f22b77dd8ef9903e1bcc4d3790626b44daa64",
+        "bytes": 22104
+      }
+    },
+    "externs": {
+      "omadesign": {
+        "path": "<BASELINE_TARGET>/release/deps/libomadesign-c7ef3e53a8ddcb5b.rlib",
+        "sha256": "8a0dd60d6e5e6d8f35a4c025c619ea9b387a67bf89cc8bcf2faa80d5892c0a69"
+      },
+      "eframe": {
+        "path": "<BASELINE_TARGET>/release/deps/libeframe-8bfc7213330fe934.rlib",
+        "sha256": "be1d82d928fdfd16ae784755cdd6891fa841f8e78267d7723b6ff99332b27466"
+      },
+      "image": {
+        "path": "<BASELINE_TARGET>/release/deps/libimage-bbda0615fa22c033.rlib",
+        "sha256": "192fcce58511eced0b9060e3c0fdca74ba4abe00845fbc9b2cf99ac095f472bc"
+      },
+      "serde_json": {
+        "path": "<BASELINE_TARGET>/release/deps/libserde_json-8e7ad2bc023d29c4.rlib",
+        "sha256": "69fd8361eec2bd77e111a9be75df1d693d4a73f5f18c85968ae1cb59467ee82c"
+      }
+    },
+    "started_utc": "2026-09-29T04:07:07.649634+00:00",
+    "exit_code": 0,
+    "finished_utc": "2026-09-29T04:07:17.424463+00:00",
+    "output": {
+      "sha256": "69f68f87935cc6e4eb1e3a535236205f605cd1d6baa248509a3398a55eb71c65",
+      "bytes": 57509704
+    }
+  },
+  {
+    "side": "baseline",
+    "binary": "upscale_qa",
+    "protocol": "hover-atomic-buttons-held-sliders-escape-cancel-v2",
+    "command": [
+      "rustc",
+      "--edition=2024",
+      "--crate-name",
+      "upscale_qa",
+      "--crate-type",
+      "bin",
+      "src/bin/upscale_qa.rs",
+      "-C",
+      "opt-level=3",
+      "-C",
+      "codegen-units=1",
+      "-C",
+      "lto=off",
+      "-C",
+      "embed-bitcode=no",
+      "-C",
+      "debug-assertions=off",
+      "-C",
+      "strip=debuginfo",
+      "-L",
+      "dependency=<BASELINE_TARGET>/release/deps",
+      "-o",
+      "<BUILD_ROOT>/native-harness-corrected-v2b/aarch64/baseline/upscale_qa",
+      "--extern",
+      "omadesign=<BASELINE_TARGET>/release/deps/libomadesign-c7ef3e53a8ddcb5b.rlib",
+      "--extern",
+      "eframe=<BASELINE_TARGET>/release/deps/libeframe-8bfc7213330fe934.rlib",
+      "--extern",
+      "image=<BASELINE_TARGET>/release/deps/libimage-bbda0615fa22c033.rlib",
+      "--extern",
+      "serde_json=<BASELINE_TARGET>/release/deps/libserde_json-8e7ad2bc023d29c4.rlib"
+    ],
+    "sources": {
+      "src/bin/background_removal_qa/native.rs": {
+        "sha256": "ef45748b158fe4f9c49d3bee9b2ac670c68185b55e9ed0d6913b31b1ed4a55bc",
+        "bytes": 17344
+      },
+      "src/bin/upscale_qa/native.rs": {
+        "sha256": "3693e664be2bb853abf82b41070f22b77dd8ef9903e1bcc4d3790626b44daa64",
+        "bytes": 22104
+      }
+    },
+    "externs": {
+      "omadesign": {
+        "path": "<BASELINE_TARGET>/release/deps/libomadesign-c7ef3e53a8ddcb5b.rlib",
+        "sha256": "8a0dd60d6e5e6d8f35a4c025c619ea9b387a67bf89cc8bcf2faa80d5892c0a69"
+      },
+      "eframe": {
+        "path": "<BASELINE_TARGET>/release/deps/libeframe-8bfc7213330fe934.rlib",
+        "sha256": "be1d82d928fdfd16ae784755cdd6891fa841f8e78267d7723b6ff99332b27466"
+      },
+      "image": {
+        "path": "<BASELINE_TARGET>/release/deps/libimage-bbda0615fa22c033.rlib",
+        "sha256": "192fcce58511eced0b9060e3c0fdca74ba4abe00845fbc9b2cf99ac095f472bc"
+      },
+      "serde_json": {
+        "path": "<BASELINE_TARGET>/release/deps/libserde_json-8e7ad2bc023d29c4.rlib",
+        "sha256": "69fd8361eec2bd77e111a9be75df1d693d4a73f5f18c85968ae1cb59467ee82c"
+      }
+    },
+    "started_utc": "2026-09-29T04:07:17.473221+00:00",
+    "exit_code": 0,
+    "finished_utc": "2026-09-29T04:07:26.704900+00:00",
+    "output": {
+      "sha256": "b6fd8fdd641563ee7688fa7bdb1cf59a6703fe1e2d1f49ca4fc595ffc3e36e6e",
+      "bytes": 57514744
+    }
+  }
+]

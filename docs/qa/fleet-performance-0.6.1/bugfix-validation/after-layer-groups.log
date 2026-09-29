@@ -1,0 +1,11 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.17s
+     Running unittests src/lib.rs (${TARGET}/debug/deps/omadesign-41dd6c6f5a68cf14)
+
+running 5 tests
+test app::layer_groups::tests::deleting_group_removes_descendants_in_one_undo_step ... ok
+test app::layer_groups::tests::inserting_and_removing_layers_preserves_selected_object_identity ... ok
+test app::layer_groups::tests::ancestor_lock_blocks_child_actions ... ok
+test app::layer_groups::tests::moving_nested_group_preserves_parentage_and_undo_order ... ok
+test app::layer_groups::tests::new_layers_preserve_pixel_selection_coordinates_and_history ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 908 filtered out; finished in 6.73s

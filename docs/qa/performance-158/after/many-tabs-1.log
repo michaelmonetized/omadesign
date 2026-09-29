@@ -1,0 +1,1 @@
+INTERACTION COMPLETE many-tabs {"frame_interval":{"max_ms":55.163286,"p50_ms":16.135872,"p95_ms":18.037608},"frames":360,"input_to_ui":{"max_ms":39.502437,"p50_ms":0.676023,"p95_ms":1.810298},"ui":{"max_ms":39.45627,"p50_ms":0.653065,"p95_ms":1.7962570000000002}}

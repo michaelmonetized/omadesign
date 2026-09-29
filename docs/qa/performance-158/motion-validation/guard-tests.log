@@ -1,0 +1,9 @@
+
+running 4 tests
+test redraw_poll_guard_tests::a_progressing_window_keeps_polling_beside_an_occluded_window ... ok
+test redraw_poll_guard_tests::explicit_waits_timers_and_other_backends_keep_their_control_flow ... ok
+test redraw_poll_guard_tests::delivered_or_removed_windows_do_not_poison_later_requests ... ok
+test redraw_poll_guard_tests::repeated_requests_do_not_extend_the_stall_deadline ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

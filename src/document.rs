@@ -270,6 +270,31 @@ impl PartialEq for Shape {
 }
 
 impl Shape {
+    /// Copy vector state while choosing mask storage before any pixel buffer is
+    /// cloned. Thumbnail snapshots use a bounded mask proxy here.
+    pub(crate) fn clone_with_mask(&self, mask: Option<Pixels>) -> Self {
+        Self {
+            id: self.id,
+            name: self.name.clone(),
+            geom: self.geom.clone(),
+            style: self.style.clone(),
+            rotation: self.rotation,
+            opacity: self.opacity,
+            fill_opacity: self.fill_opacity,
+            blend_interior: self.blend_interior,
+            blend: self.blend,
+            visible: self.visible,
+            locked: self.locked,
+            guide: self.guide,
+            filters: self.filters.clone(),
+            corners: self.corners,
+            mask,
+            layout: self.layout.clone(),
+            text_wrap: self.text_wrap.clone(),
+            cached_path: self.cached_path.clone(),
+        }
+    }
+
     pub fn new(geom: Geom, style: Style) -> Self {
         let name = geom.kind_name().to_string();
         Self {
@@ -412,13 +437,18 @@ impl Shape {
             }
         }
         if matches!(geometry, Geom::Path { .. } | Geom::Paths { .. }) {
+            // Path bounds sample every contour. Compute the unchanged rotation
+            // center once, not once for every cubic control point (quadratic on
+            // detailed imported paths). Keep world_point's exact arithmetic.
+            let center = self.geom.bbox().center();
+            let world_point = |point: Pt| point.rotate_about(center, self.rotation);
             for (anchors, closed) in geometry.path_contours() {
                 let segments = crate::geom::path_cubics(anchors, closed);
                 if let Some(first) = segments.first() {
-                    let p = self.world_point(first[0]);
+                    let p = world_point(first[0]);
                     pb.move_to(p.x, p.y);
                     for [a, c1, c2, b] in segments {
-                        let [a, c1, c2, b] = [a, c1, c2, b].map(|p| self.world_point(p));
+                        let [a, c1, c2, b] = [a, c1, c2, b].map(world_point);
                         if (c1 - a).length_sq() < 1e-10 && (c2 - b).length_sq() < 1e-10 {
                             pb.line_to(b.x, b.y);
                         } else {
@@ -1197,6 +1227,13 @@ impl Document {
     /// Editing layout needs vector state only. Preserve layer indices without
     /// copying image buffers or mask data into temporary solver documents.
     pub fn layout_snapshot(&self) -> Self {
+        self.layout_snapshot_with_shapes(Shape::clone)
+    }
+
+    pub(crate) fn layout_snapshot_with_shapes(
+        &self,
+        mut clone_shape: impl FnMut(&Shape) -> Shape,
+    ) -> Self {
         let mut copy = Self::new(&self.name, 1.0, 1.0, self.dpi);
         copy.width = self.width;
         copy.height = self.height;
@@ -1218,7 +1255,7 @@ impl Document {
                 out.opacity = layer.opacity;
                 out.blend = layer.blend;
                 out.text_wrap = layer.text_wrap.clone();                if let Some(shapes) = layer.kind.shapes() {
-                    out.kind.shapes_mut().unwrap().extend_from_slice(shapes);
+                    out.kind.shapes_mut().unwrap().extend(shapes.iter().map(&mut clone_shape));
                 }
                 out
             })
@@ -2779,6 +2816,148 @@ mod tests {
         s.geom.translate(Pt::new(40.0, 0.0));
         let b = s.get_cached_path(8).unwrap();
         assert_ne!(a.bounds(), b.bounds(), "moved shape must rebuild its path");
+    }
+
+    #[test]
+    fn cached_cubic_paths_match_per_point_world_transform_exactly() {
+        use crate::geom::{Anchor, PathContour};
+        let anchors = vec![
+            Anchor {
+                pt: Pt::new(12.31, -8.7),
+                h_in: Pt::ZERO,
+                h_out: Pt::ZERO,
+                radius: 0.,
+            },
+            Anchor {
+                pt: Pt::new(38.6, -5.1),
+                h_in: Pt::ZERO,
+                h_out: Pt::new(13.7, 4.2),
+                radius: 0.,
+            },
+            Anchor {
+                pt: Pt::new(29.4, 26.8),
+                h_in: Pt::new(-3.2, -7.9),
+                h_out: Pt::ZERO,
+                radius: 2.3,
+            },
+            Anchor {
+                pt: Pt::new(-6.75, 19.3),
+                h_in: Pt::ZERO,
+                h_out: Pt::ZERO,
+                radius: 4.7,
+            },
+        ];
+        for geometry in [
+            Geom::Path {
+                anchors: anchors.clone(),
+                closed: false,
+            },
+            Geom::Path {
+                anchors: anchors.clone(),
+                closed: true,
+            },
+            Geom::Paths {
+                paths: vec![
+                    PathContour {
+                        anchors: anchors.clone(),
+                        closed: true,
+                    },
+                    PathContour {
+                        anchors: anchors
+                            .iter()
+                            .rev()
+                            .copied()
+                            .map(|mut anchor| {
+                                anchor.pt += Pt::new(53.9, 23.6);
+                                anchor
+                            })
+                            .collect(),
+                        closed: false,
+                    },
+                ],
+                winding: true,
+            },
+        ] {
+            let mut shape = Shape::new(geometry, Style::default());
+            for rotation in [
+                -2.3,
+                -0.17,
+                -0.000001,
+                -0.0,
+                0.0,
+                0.000001,
+                0.73,
+                std::f32::consts::PI,
+            ] {
+                shape.rotation = rotation;
+                // Reference the original per-point conversion, including the
+                // original center subtraction/addition even at zero rotation.
+                let mut reference = tiny_skia::PathBuilder::new();
+                for (anchors, closed) in shape.geom.path_contours() {
+                    let segments = crate::geom::path_cubics(anchors, closed);
+                    if let Some(first) = segments.first() {
+                        let point = shape.world_point(first[0]);
+                        reference.move_to(point.x, point.y);
+                        for [a, c1, c2, b] in segments {
+                            let [a, c1, c2, b] =
+                                [a, c1, c2, b].map(|point| shape.world_point(point));
+                            if (c1 - a).length_sq() < 1e-10 && (c2 - b).length_sq() < 1e-10 {
+                                reference.line_to(b.x, b.y);
+                            } else {
+                                reference.cubic_to(c1.x, c1.y, c2.x, c2.y, b.x, b.y);
+                            }
+                        }
+                        if closed {
+                            reference.close();
+                        }
+                    }
+                }
+                let expected = reference.finish().unwrap();
+                let actual = shape.get_cached_path(96).unwrap();
+                assert!(
+                    actual.as_ref() == &expected,
+                    "exact path at rotation {rotation}"
+                );
+                assert!(Arc::ptr_eq(&actual, &shape.get_cached_path(96).unwrap()));
+            }
+        }
+    }
+
+    #[test]
+    fn cached_cubic_paths_keep_empty_and_single_anchor_contours_empty() {
+        use crate::geom::{Anchor, PathContour};
+        for anchors in [
+            vec![],
+            vec![Anchor {
+                pt: Pt::new(12.31, -8.7),
+                h_in: Pt::new(-4.2, 7.9),
+                h_out: Pt::new(13.7, 4.2),
+                radius: 2.3,
+            }],
+        ] {
+            for closed in [false, true] {
+                for geometry in [
+                    Geom::Path {
+                        anchors: anchors.clone(),
+                        closed,
+                    },
+                    Geom::Paths {
+                        paths: vec![PathContour {
+                            anchors: anchors.clone(),
+                            closed,
+                        }],
+                        winding: true,
+                    },
+                ] {
+                    let mut shape = Shape::new(geometry, Style::default());
+                    for rotation in [0.0, 0.73] {
+                        shape.rotation = rotation;
+                        assert!(shape.get_cached_path(96).is_none());
+                        assert!(shape.get_cached_path(96).is_none());
+                    }
+                }
+            }
+        }
     }
 
     #[test]

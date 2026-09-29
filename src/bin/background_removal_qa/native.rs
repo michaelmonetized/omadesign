@@ -19,7 +19,9 @@ struct Capture {
     started: Instant,
     labels: Vec<(String, Rect)>,
     events: Vec<Event>,
-    release: Option<egui::Pos2>,
+    pending_click: Option<(Option<String>, egui::Pos2)>,
+    held_release: Option<egui::Pos2>,
+    refined_radius: u32,
     pending_shot: Option<String>,
     shots: Vec<String>,
     ui_ms: Vec<f64>,
@@ -47,19 +49,81 @@ impl Capture {
             .center()
     }
     fn click_at(&mut self, pos: egui::Pos2) {
-        self.events.extend([
-            Event::PointerMoved(pos),
-            Event::PointerButton {
-                pos,
-                button: PointerButton::Primary,
-                pressed: true,
-                modifiers: Modifiers::NONE,
-            },
-        ]);
-        self.release = Some(pos);
+        assert!(
+            self.pending_click.is_none() && self.held_release.is_none() && self.events.is_empty()
+        );
+        // Let egui resolve hover and settle layout before the semantic click.
+        self.events.push(Event::PointerMoved(pos));
+        self.pending_click = Some((None, pos));
     }
     fn click(&mut self, label: &str) {
         self.click_at(self.find(label));
+        self.pending_click.as_mut().unwrap().0 = Some(label.into());
+    }
+    fn radius_value(&self) -> u32 {
+        let radius = self
+            .labels
+            .iter()
+            .find(|(label, _)| label == "Radius")
+            .expect("Radius label")
+            .1;
+        self.labels
+            .iter()
+            .filter(|(_, rect)| {
+                rect.right() < radius.left() && (rect.center().y - radius.center().y).abs() < 1.
+            })
+            .filter_map(|(label, rect)| {
+                label
+                    .trim_end_matches(" px")
+                    .trim()
+                    .parse::<u32>()
+                    .ok()
+                    .map(|value| (value, rect.right()))
+            })
+            .max_by(|a, b| a.1.total_cmp(&b.1))
+            .expect("Radius numeric value")
+            .0
+    }
+    fn assert_modal(&self, ctx: &egui::Context, id: &str, controls: &[&str]) {
+        assert_eq!(
+            ctx.memory(|m| m.top_modal_layer()),
+            Some(egui::LayerId::new(
+                egui::Order::Foreground,
+                egui::Id::new(id)
+            )),
+            "Expected modal {id} at stage {}",
+            self.stage,
+        );
+        for control in controls {
+            assert!(
+                self.labels.iter().any(|(label, _)| label == control),
+                "Missing modal control {control} at stage {}",
+                self.stage
+            );
+        }
+    }
+    fn assert_no_modal(&self, ctx: &egui::Context) {
+        assert!(
+            ctx.memory(|m| m.top_modal_layer()).is_none(),
+            "Previous dialog did not close at stage {}",
+            self.stage
+        );
+    }
+    fn cancel(&mut self) {
+        // The footer moves when inference finishes. Exercise the actual Escape
+        // cancellation path, without asserting coverage of the Cancel button.
+        assert!(
+            self.pending_click.is_none() && self.held_release.is_none() && self.events.is_empty()
+        );
+        for pressed in [true, false] {
+            self.events.push(Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed,
+                repeat: false,
+                modifiers: Modifiers::NONE,
+            });
+        }
     }
     fn key(&mut self, key: egui::Key, shift: bool) {
         let modifiers = Modifiers {
@@ -121,10 +185,20 @@ impl Capture {
     }
     fn step(&mut self, ctx: &egui::Context) {
         if self.pending_shot.is_some()
-            || self.release.is_some()
+            || self.pending_click.is_some()
+            || self.held_release.is_some()
             || self.frames - self.stage_frame < 8
         {
             return;
+        }
+        match self.stage {
+            1 | 2 | 4..=10 => self.assert_modal(
+                ctx,
+                "remove-background-modal",
+                &["Refine matte", "Radius", "Apply mask"],
+            ),
+            0 | 3 | 11..=16 => self.assert_no_modal(ctx),
+            _ => {}
         }
         let ready = omadesign::ui::scene_ready(ctx, &self.studio);
         match self.stage {
@@ -138,7 +212,7 @@ impl Capture {
                 self.next(2);
             }
             2 => {
-                self.click("Cancel");
+                self.cancel();
                 self.next(3);
             }
             3 => {
@@ -164,6 +238,7 @@ impl Capture {
                 self.next(7);
             }
             7 => {
+                assert_eq!(self.radius_value(), 12, "initial matte radius");
                 let rect = self
                     .labels
                     .iter()
@@ -174,6 +249,11 @@ impl Capture {
                 self.next(8);
             }
             8 if ready => {
+                self.refined_radius = self.radius_value();
+                assert!(
+                    self.refined_radius > 12,
+                    "Radius slider must change the matte setting"
+                );
                 self.click("Preview");
                 self.next(9);
             }
@@ -244,7 +324,7 @@ impl Capture {
             }
             19 => {
                 self.ui_ms.sort_by(f64::total_cmp);
-                let report = serde_json::json!({"renderer":"native WGPU","interaction":"real egui pointer and keyboard events","frames":self.frames,"inference_frames":self.inference_frames,"inference_seconds":self.inference_seconds,"ui_frame_p95_ms":self.ui_ms[self.ui_ms.len()*95/100],"ui_frame_max_ms":self.ui_ms.last(),"cancel_preserves_document":true,"pixels_preserved":true,"one_undo_step":true,"undo_redo":true,"save_reopen":true,"screenshots":self.shots,"elapsed_seconds":self.started.elapsed().as_secs_f64()});
+                let report = serde_json::json!({"renderer":"native WGPU","qa_input_protocol":"hover-atomic-buttons-held-sliders-escape-cancel-v2","cancel_input":"Escape key","cancel_button_covered":false,"matte_radius_changed":true,"matte_radius":self.refined_radius,"interaction":"real egui pointer and keyboard events","frames":self.frames,"inference_frames":self.inference_frames,"inference_seconds":self.inference_seconds,"ui_frame_p95_ms":self.ui_ms[self.ui_ms.len()*95/100],"ui_frame_max_ms":self.ui_ms.last(),"cancel_preserves_document":true,"pixels_preserved":true,"one_undo_step":true,"undo_redo":true,"save_reopen":true,"screenshots":self.shots,"elapsed_seconds":self.started.elapsed().as_secs_f64()});
                 std::fs::write(
                     self.output.join("native-result.json"),
                     serde_json::to_vec_pretty(&report).unwrap(),
@@ -269,7 +349,29 @@ impl eframe::App for Capture {
         input.focused = true;
         input.events.push(Event::ModifiersChanged(Modifiers::NONE));
         if self.events.is_empty()
-            && let Some(pos) = self.release.take()
+            && let Some((label, pos)) = self.pending_click.take()
+        {
+            // Refresh semantic targets after the hover pass. Keep press/release
+            // in one batch: inference completion can move the dialog footer.
+            let pos = label.as_deref().map_or(pos, |label| self.find(label));
+            input.events.push(Event::PointerMoved(pos));
+            let buttons: &[bool] = if label.is_some() {
+                &[true, false]
+            } else {
+                // Slider interaction requires a held pointer across a UI pass.
+                self.held_release = Some(pos);
+                &[true]
+            };
+            for &pressed in buttons {
+                input.events.push(Event::PointerButton {
+                    pos,
+                    button: PointerButton::Primary,
+                    pressed,
+                    modifiers: Modifiers::NONE,
+                });
+            }
+        } else if self.events.is_empty()
+            && let Some(pos) = self.held_release.take()
         {
             input.events.push(Event::PointerButton {
                 pos,
@@ -376,7 +478,9 @@ pub fn run(input: PathBuf, output: PathBuf) -> eframe::Result {
                 started: Instant::now(),
                 labels: vec![],
                 events: vec![],
-                release: None,
+                pending_click: None,
+                held_release: None,
+                refined_radius: 0,
                 pending_shot: None,
                 shots: vec![],
                 ui_ms: vec![],

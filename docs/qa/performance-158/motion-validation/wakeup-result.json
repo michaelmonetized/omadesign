@@ -1,0 +1,224 @@
+{
+  "adapter": {
+    "backend": "Vulkan",
+    "device": 0,
+    "device_type": "IntegratedGpu",
+    "driver": "Honeykrisp",
+    "driver_info": "Mesa 26.2.3-arch1.1",
+    "name": "Apple M1 Pro (G13S C0)",
+    "vendor": 65541
+  },
+  "checks": [
+    {
+      "callback_seconds": 1.7164743,
+      "deadline_lateness_ms": 16.12182400000006,
+      "due_seconds": 1.700352476,
+      "external_input_events": 0,
+      "maximum_native_callback_idle_ms": 683.394191,
+      "passed": true,
+      "test": "future_repaint_after_idle"
+    },
+    {
+      "callback_seconds": 2.416708568,
+      "external_input_events": 0,
+      "maximum_native_callback_idle_ms": 700.221727,
+      "passed": true,
+      "request_to_ui_ms": 0.0818729999996215,
+      "requested_seconds": 2.416626695,
+      "test": "worker_repaint_after_idle"
+    }
+  ],
+  "elapsed_seconds": 2.416727817,
+  "events": [
+    {
+      "delay_seconds": 0.7,
+      "due_seconds": 1.700352476,
+      "elapsed_seconds": 1.000352476,
+      "event": "request_repaint_after"
+    },
+    {
+      "elapsed_seconds": 1.7164743,
+      "event": "spawn_worker",
+      "sleep_seconds": 0.7
+    },
+    {
+      "elapsed_seconds": 2.416626695,
+      "event": "worker_request_repaint"
+    }
+  ],
+  "failure": null,
+  "observed_inner_rect": null,
+  "passed": true,
+  "protocol": {
+    "future_delay_seconds": 0.7,
+    "minimum_callback_idle_ms": 500.0,
+    "mutated_input_timestamps": false,
+    "synthetic_input": false,
+    "warmup_seconds": 1.0,
+    "watchdog_repaints": false,
+    "worker_delay_seconds": 0.7
+  },
+  "raw_input_callbacks": [
+    {
+      "egui_time": 0.010015819,
+      "elapsed_seconds": 0.00983445,
+      "events": [],
+      "interval_ms": 0.0,
+      "phase": "warmup",
+      "sequence": 1
+    },
+    {
+      "egui_time": 0.028401925,
+      "elapsed_seconds": 0.028220388,
+      "events": [],
+      "interval_ms": 18.385938,
+      "phase": "warmup",
+      "sequence": 2
+    },
+    {
+      "egui_time": 0.030617482,
+      "elapsed_seconds": 0.030435987,
+      "events": [],
+      "interval_ms": 2.215599,
+      "phase": "warmup",
+      "sequence": 3
+    },
+    {
+      "egui_time": 0.98361636,
+      "elapsed_seconds": 0.983434866,
+      "events": [],
+      "interval_ms": 952.998879,
+      "phase": "warmup",
+      "sequence": 4
+    },
+    {
+      "egui_time": 0.984402128,
+      "elapsed_seconds": 0.9842208,
+      "events": [],
+      "interval_ms": 0.7859339999999999,
+      "phase": "warmup",
+      "sequence": 5
+    },
+    {
+      "egui_time": 1.000521429,
+      "elapsed_seconds": 1.00034006,
+      "events": [],
+      "interval_ms": 16.11926,
+      "phase": "warmup",
+      "sequence": 6
+    },
+    {
+      "egui_time": 1.683915788,
+      "elapsed_seconds": 1.683734251,
+      "events": [],
+      "interval_ms": 683.394191,
+      "phase": "future_repaint",
+      "sequence": 7
+    },
+    {
+      "egui_time": 1.684429314,
+      "elapsed_seconds": 1.684247777,
+      "events": [],
+      "interval_ms": 0.513526,
+      "phase": "future_repaint",
+      "sequence": 8
+    },
+    {
+      "egui_time": 1.700504951,
+      "elapsed_seconds": 1.700323415,
+      "events": [],
+      "interval_ms": 16.075638,
+      "phase": "future_repaint",
+      "sequence": 9
+    },
+    {
+      "egui_time": 1.716650212,
+      "elapsed_seconds": 1.716468675,
+      "events": [],
+      "interval_ms": 16.14526,
+      "phase": "future_repaint",
+      "sequence": 10
+    },
+    {
+      "egui_time": 2.416871938,
+      "elapsed_seconds": 2.416690402,
+      "events": [],
+      "interval_ms": 700.221727,
+      "phase": "worker_repaint",
+      "sequence": 11
+    }
+  ],
+  "renderer": "native eframe WGPU",
+  "requested_window": [
+    1440,
+    900
+  ],
+  "ui_callbacks": [
+    {
+      "egui_time": 0.010015819,
+      "elapsed_seconds": 0.010114566,
+      "input_sequence": 1,
+      "phase": "warmup"
+    },
+    {
+      "egui_time": 0.028401925,
+      "elapsed_seconds": 0.028237513,
+      "input_sequence": 2,
+      "phase": "warmup"
+    },
+    {
+      "egui_time": 0.030617482,
+      "elapsed_seconds": 0.030440571,
+      "input_sequence": 3,
+      "phase": "warmup"
+    },
+    {
+      "egui_time": 0.98361636,
+      "elapsed_seconds": 0.983453407,
+      "input_sequence": 4,
+      "phase": "warmup"
+    },
+    {
+      "egui_time": 0.984402128,
+      "elapsed_seconds": 0.984235966,
+      "input_sequence": 5,
+      "phase": "warmup"
+    },
+    {
+      "egui_time": 1.000521429,
+      "elapsed_seconds": 1.000352476,
+      "input_sequence": 6,
+      "phase": "warmup"
+    },
+    {
+      "egui_time": 1.683915788,
+      "elapsed_seconds": 1.6837502930000001,
+      "input_sequence": 7,
+      "phase": "future_repaint"
+    },
+    {
+      "egui_time": 1.684429314,
+      "elapsed_seconds": 1.684250736,
+      "input_sequence": 8,
+      "phase": "future_repaint"
+    },
+    {
+      "egui_time": 1.700504951,
+      "elapsed_seconds": 1.700328415,
+      "input_sequence": 9,
+      "phase": "future_repaint"
+    },
+    {
+      "egui_time": 1.716650212,
+      "elapsed_seconds": 1.7164743,
+      "input_sequence": 10,
+      "phase": "future_repaint"
+    },
+    {
+      "egui_time": 2.416871938,
+      "elapsed_seconds": 2.416708568,
+      "input_sequence": 11,
+      "phase": "worker_repaint"
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+INTERACTION COMPLETE complex-middle {"frame_interval":{"max_ms":70.52384,"p50_ms":45.8511875,"p95_ms":61.849976},"frames":360,"input_to_ui":{"max_ms":69.79354599999999,"p50_ms":45.1147055,"p95_ms":61.139181},"ui":{"max_ms":69.758796,"p50_ms":45.071664,"p95_ms":61.125181}}

@@ -805,12 +805,23 @@ pub fn doc_tabs(ui: &mut Ui, studio: &mut Studio) {
         .show(ui, |ui| {
             let mut switch = None;
             let mut close = None;
+            let count = studio.tab_count();
+            ui.spacing_mut().item_spacing.y = 8.0;
             ScrollArea::vertical()
                 .id_salt("document-tabs-scroll")
                 .scroll_bar_visibility(eframe::egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
-                .show(ui, |ui| {
-                    ui.spacing_mut().item_spacing.y = 8.0;
-                    for i in 0..studio.tab_count() {
+                .show_rows(ui, 64.0, count + 1, |ui, rows| {
+                    for i in rows {
+                        if i == count {
+                            ui.add_space(2.0);
+                            ui.horizontal(|ui| {
+                                ui.add_space(17.0);
+                                if icons::icon_button(ui, ph::PLUS, "New document  Ctrl+N", false) {
+                                    studio.new_tab_welcome();
+                                }
+                            });
+                            continue;
+                        }
                         let (title, dirty) = studio.tab_title(i);
                         let active = i == studio.active_tab;
                         ui.push_id(i, |ui| {
@@ -913,13 +924,6 @@ pub fn doc_tabs(ui: &mut Ui, studio: &mut Studio) {
                                 });
                         });
                     }
-                    ui.add_space(2.0);
-                    ui.horizontal(|ui| {
-                        ui.add_space(17.0);
-                        if icons::icon_button(ui, ph::PLUS, "New document  Ctrl+N", false) {
-                            studio.new_tab_welcome();
-                        }
-                    });
                 });
             if let Some(i) = switch {
                 studio.switch_tab(i);
@@ -1141,6 +1145,62 @@ mod tests {
         );
         output.textures_delta.clear();
         output.shapes
+    }
+
+    #[test]
+    fn scrolled_document_rows_switch_and_close_the_displayed_tab() {
+        use eframe::egui::{Event, Modifiers, MouseWheelUnit, PointerButton, Shape};
+        let ctx = eframe::egui::Context::default();
+        super::super::theme::apply(&ctx);
+        let mut studio = Studio::new();
+        studio.show_welcome = false;
+        for i in 0..48 {
+            if i > 0 {
+                studio.new_tab();
+            }
+            studio.doc = crate::document::Document::new(format!("Tab {i}"), 8.0, 8.0, 72.0);
+        }
+        let size = vec2(960.0, 640.0);
+        for _ in 0..3 {
+            chrome_frame(&ctx, &mut studio, size, vec![]);
+        }
+        chrome_frame(&ctx, &mut studio, size, vec![
+            Event::PointerMoved(eframe::egui::pos2(40.0, 250.0)),
+            Event::MouseWheel {
+                unit: MouseWheelUnit::Point,
+                delta: vec2(0.0, -864.0),
+                modifiers: Modifiers::NONE,
+                phase: eframe::egui::TouchPhase::Move,
+            },
+        ]);
+        let mut shapes = vec![];
+        for _ in 0..40 {
+            shapes = chrome_frame(&ctx, &mut studio, size, vec![]);
+        }
+        let rect = shapes.iter().filter_map(|shape| match &shape.shape {
+            Shape::Rect(rect) if rect.rect.size() == vec2(64.0, 64.0)
+                && shape.clip_rect.contains_rect(rect.rect) => Some(rect.rect),
+            _ => None,
+        }).min_by(|a, b| a.top().total_cmp(&b.top())).expect("visible tab after scrolling");
+        let pos = rect.center();
+        for pressed in [true, false] {
+            chrome_frame(&ctx, &mut studio, size, vec![
+                Event::PointerMoved(pos),
+                Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE },
+            ]);
+        }
+        assert!(studio.active_tab >= 10 && studio.active_tab < 20,
+            "scrolling must expose a middle row, got {}", studio.active_tab);
+        let closed = format!("Tab {}", studio.active_tab);
+        assert_eq!(studio.doc.name, closed, "the visible row must activate the matching document");
+        for pressed in [true, false] {
+            chrome_frame(&ctx, &mut studio, size, vec![
+                Event::PointerMoved(pos),
+                Event::PointerButton { pos, button: PointerButton::Middle, pressed, modifiers: Modifiers::NONE },
+            ]);
+        }
+        assert_eq!(studio.tab_count(), 47);
+        assert!((0..studio.tab_count()).all(|i| studio.tab_title(i).0 != closed));
     }
 
     #[test]

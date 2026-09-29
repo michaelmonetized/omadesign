@@ -2,8 +2,24 @@
 
 #[cfg(test)]
 mod appearance_tests;
+mod bounded_blit;
+pub(crate) mod cache_admission;
+mod effects_cache;
+mod mask_cache;
 mod frames;
 mod groups;
+pub(crate) mod interaction;
+#[cfg(test)]
+mod performance_tests;
+mod surface_cache;
+
+/// Give a newly active or edited document an immediate chance to populate the
+/// bounded effect caches without discarding exact pixels that remain useful.
+pub(crate) fn reset_effect_admission() {
+    effects_cache::reset_admission();
+    surface_cache::reset_admission();
+    crate::filter::reset_appearance_admission();
+}
 
 use crate::color::Rgba;
 use crate::document::{Document, Fill, Layer, LayerKind, Shape};
@@ -342,7 +358,22 @@ fn draw_layer(
         || layer.opacity < 1.0
         || layer.blend != crate::color::Blend::Normal
     {
-        let Some(mut temp) = Pixmap::new(pm.width(), pm.height()) else {
+        let Some(region) = layer_region(
+            layer,
+            t,
+            brush,
+            preview,
+            motion_t,
+            doc,
+            overrides,
+            pm.width(),
+            pm.height(),
+        ) else {
+            return;
+        };
+        let placement = Transform::from_translate(region.x() as f32, region.y() as f32);
+        let t = Transform::from_translate(-(region.x() as f32), -(region.y() as f32)).pre_concat(t);
+        let Some(mut temp) = Pixmap::new(region.width(), region.height()) else {
             return;
         };
         draw_content(
@@ -359,7 +390,7 @@ fn draw_layer(
         );
         if let Some(mask) = &layer.mask {
             let _ = mask.with_pm(|mask_pm| {
-                let Some(mut placed) = Pixmap::new(pm.width(), pm.height()) else {
+                let Some(mut placed) = Pixmap::new(temp.width(), temp.height()) else {
                     return;
                 };
                 placed.draw_pixmap(
@@ -383,7 +414,7 @@ fn draw_layer(
                 pm,
                 temp,
                 &layer.filters,
-                Transform::identity(),
+                placement,
                 layer.blend.to_skia(),
                 layer.opacity,
                 layer.fill_opacity,
@@ -392,20 +423,20 @@ fn draw_layer(
             );
             return;
         }
-        if filtered {
-            crate::filter::apply(&mut temp, &layer.filters);
-        }
-        pm.draw_pixmap(
-            0,
-            0,
-            temp.as_ref(),
-            &PixmapPaint {
-                opacity: layer.opacity.clamp(0.0, 1.0),
-                blend_mode: layer.blend.to_skia(),
-                ..Default::default()
-            },
-            Transform::identity(),
-            None,
+        let cached;
+        let (pixels, coverage) = if filtered {
+            cached = surface_cache::render(layer.id, temp, &layer.filters);
+            (cached.as_ref(), surface_cache::bounds(layer.id, &cached))
+        } else {
+            (&temp, bounded_blit::bounds(temp.as_ref()))
+        };
+        bounded_blit::draw(
+            pm,
+            pixels.as_ref(),
+            coverage,
+            layer.opacity,
+            layer.blend,
+            placement,
         );
     } else {
         draw_content(
@@ -421,6 +452,80 @@ fn draw_layer(
             overrides,
         );
     }
+}
+
+/// Isolated, unfiltered layers need transparent storage only around their content.
+/// Frame hierarchies and layer effects keep the complete surface: their clipping,
+/// sampling domain, and effect padding belong to the subtree as a whole.
+fn layer_region(
+    layer: &Layer,
+    transform: Transform,
+    brush: Option<(&Pixmap, f32)>,
+    preview: Option<&Shape>,
+    motion: Option<f32>,
+    doc: &Document,
+    overrides: Option<&HashMap<u64, Pose>>,
+    width: u32,
+    height: u32,
+) -> Option<tiny_skia::IntRect> {
+    let full = || tiny_skia::IntRect::from_xywh(0, 0, width, height);
+    if layer.filters.active() {
+        return full();
+    }
+    let bounds = match &layer.kind {
+        LayerKind::Vector { shapes } => {
+            if shapes
+                .iter()
+                .any(|shape| shape.layout.frame || shape.layout.parent.is_some())
+            {
+                return full();
+            }
+            let mut bounds: Option<crate::geom::Bounds> = None;
+            for shape in shapes
+                .iter()
+                .chain(preview)
+                .filter(|shape| shape.visible && !shape.guide)
+            {
+                let pose = pose_of(shape.id, motion, doc, overrides);
+                if pose.opacity.unwrap_or(shape.opacity) <= 0.0 {
+                    continue;
+                }
+                let Some(next) = shape_screen_bounds(shape, transform, pose) else {
+                    return full();
+                };
+                bounds = Some(bounds.map_or(next, |bounds| bounds.union(next)));
+                if bounds.is_some_and(|bounds| {
+                    bounds.min.x <= 2.0
+                        && bounds.min.y <= 2.0
+                        && bounds.max.x >= width as f32 - 2.0
+                        && bounds.max.y >= height as f32 - 2.0
+                }) {
+                    return full();
+                }
+            }
+            bounds?
+        }
+        LayerKind::Raster { pixels, .. } => {
+            let w = brush.map_or(pixels.w, |(pm, _)| pixels.w.max(pm.width()));
+            let h = brush.map_or(pixels.h, |(pm, _)| pixels.h.max(pm.height()));
+            let bounds = crate::geom::Bounds::from_min_size(
+                Pt::new(-1.0, -1.0),
+                Pt::new(w as f32 + 2.0, h as f32 + 2.0),
+            );
+            let Some(bounds) =
+                transformed_bounds(bounds, transform.pre_concat(layer_pixel_transform(layer)))
+            else {
+                return full();
+            };
+            bounds
+        }
+    }
+    .inflate(2.0);
+    let left = bounds.min.x.floor().max(0.0).min(width as f32) as i32;
+    let top = bounds.min.y.floor().max(0.0).min(height as f32) as i32;
+    let right = bounds.max.x.ceil().max(0.0).min(width as f32) as i32;
+    let bottom = bounds.max.y.ceil().max(0.0).min(height as f32) as i32;
+    tiny_skia::IntRect::from_ltrb(left, top, right, bottom)
 }
 
 /// A mask bounds all output unless a filter expands or replaces the masked pixels.
@@ -590,27 +695,18 @@ fn object_mask(
     t: Transform,
     pose: Pose,
     parent: Option<&tiny_skia::Mask>,
-) -> Option<tiny_skia::Mask> {
+) -> Option<std::sync::Arc<tiny_skia::Mask>> {
     let pixels = shape.mask.as_ref()?;
-    let source = pixels.to_pixmap()?;
-    let mut placed = Pixmap::new(pm.width(), pm.height())?;
     let transform = t
         .pre_concat(pose.to_skia(shape.world_bbox().center()))
         .pre_concat(shape_mask_transform(shape));
-    placed.draw_pixmap(
-        0,
-        0,
-        source.as_ref(),
-        &PixmapPaint {
-            quality: tiny_skia::FilterQuality::Bilinear,
-            ..Default::default()
-        },
-        transform,
-        None,
-    );
-    let mut mask = tiny_skia::Mask::from_pixmap(placed.as_ref(), tiny_skia::MaskType::Luminance);
+    let mut mask = pixels.with_pm(|source| {
+        mask_cache::render(shape.id, source, pm.width(), pm.height(), transform)
+    })??;
     if let Some(parent) = parent {
-        for (a, b) in mask.data_mut().iter_mut().zip(parent.data()) {
+        // A parent's coverage can change independently. Keep the reusable own
+        // mask immutable, and combine the current parent only for this draw.
+        for (a, b) in std::sync::Arc::make_mut(&mut mask).data_mut().iter_mut().zip(parent.data()) {
             *a = ((u16::from(*a) * u16::from(*b) + 127) / 255) as u8;
         }
     }
@@ -758,12 +854,28 @@ fn draw_shape_masked(
     } else {
         shape
     };
-    let own_mask = object_mask(pm, shape, t, pose, mask);
-    let mask = own_mask.as_ref().or(mask);
     let alpha = pose.opacity.unwrap_or(shape.opacity).clamp(0.0, 1.0);
     if alpha <= 0.0 {
         return;
     }
+    // Reject invisible work before allocating object masks or effect buffers. Use
+    // the actual cached path hull (including cubic controls), not sampled curves.
+    let allocates_surface = shape.filters.active()
+        || shape.mask.is_some()
+        || shape.layout.image.is_some()
+        || pose
+            .fill_reveal
+            .is_some_and(|reveal| reveal > 0.0 && reveal < 1.0)
+        || shape
+            .style
+            .stroke
+            .as_ref()
+            .is_some_and(|stroke| stroke.alignment != crate::document::StrokeAlignment::Center);
+    if allocates_surface && shape_outside_view(shape, t, pose, pm.width(), pm.height()) {
+        return;
+    }
+    let own_mask = object_mask(pm, shape, t, pose, mask);
+    let mask = own_mask.as_deref().or(mask);
     let blend = if shape.blend == crate::color::Blend::Normal {
         blend
     } else {
@@ -813,22 +925,28 @@ fn draw_shape_masked(
         if right <= x || bottom <= y {
             return;
         }
-        if let Some(mut temp) = Pixmap::new((right - x) as u32, (bottom - y) as u32) {
+        let size = [(right - x) as u32, (bottom - y) as u32];
+        let local = Transform::from_translate(-x, -y).pre_concat(t);
+        let temp = effects_cache::render_screen(shape, pose, local, size, || {
+            let mut temp = Pixmap::new(size[0], size[1])?;
             let mut opaque_pose = pose;
             opaque_pose.opacity = Some(1.0);
             draw_shape_inner(
                 &mut temp,
                 shape,
-                Transform::from_translate(-x, -y).pre_concat(t),
+                local,
                 1.0,
                 tiny_skia::BlendMode::SourceOver,
                 opaque_pose,
                 None,
             );
+            Some(temp)
+        });
+        if let Some(temp) = temp {
             pm.draw_pixmap(
                 x as i32,
                 y as i32,
-                temp.as_ref(),
+                temp.as_ref().as_ref(),
                 &PixmapPaint {
                     opacity: (opacity * alpha * shape.fill_opacity).clamp(0.0, 1.0),
                     blend_mode: blend,
@@ -845,6 +963,54 @@ fn draw_shape_masked(
         let b = pose.map_bounds(shape.world_bbox()).inflate(pad);
         let tw = b.width().ceil().max(1.0) as u32;
         let th = b.height().ceil().max(1.0) as u32;
+        let xf = t.pre_concat(Transform::from_translate(b.min.x, b.min.y));
+        // These stacks already combine locally before one bilinear canvas blit.
+        // Reuse those exact pixels; backdrop-dependent appearance keeps its full
+        // compositing path below, including per-effect blend and group opacity.
+        let cacheable = shape.fill_opacity >= 1.0
+            && !shape.blend_interior
+            && (!shape.filters.independent()
+                || (blend == tiny_skia::BlendMode::SourceOver
+                    && opacity * alpha >= 1.0
+                    && mask.is_none()
+                    && shape.filters.items.iter().all(|fx| {
+                        fx.appearance().is_none_or(|(blend, opacity)| {
+                            blend == crate::color::Blend::Normal && opacity >= 1.0
+                        })
+                    })));
+        if cacheable {
+            let cached = effects_cache::render(shape, pose, b, || {
+                let mut temp = Pixmap::new(tw, th)?;
+                let mut opaque_pose = pose;
+                opaque_pose.opacity = Some(1.0);
+                draw_shape_inner(
+                    &mut temp,
+                    shape,
+                    Transform::from_translate(-b.min.x, -b.min.y),
+                    1.0,
+                    tiny_skia::BlendMode::SourceOver,
+                    opaque_pose,
+                    None,
+                );
+                crate::filter::apply(&mut temp, &shape.filters);
+                Some(temp)
+            });
+            if let Some(temp) = cached {
+                pm.draw_pixmap(
+                    0,
+                    0,
+                    temp.as_ref().as_ref(),
+                    &PixmapPaint {
+                        opacity: (opacity * alpha).clamp(0.0, 1.0),
+                        blend_mode: blend,
+                        quality: tiny_skia::FilterQuality::Bilinear,
+                    },
+                    xf,
+                    mask,
+                );
+            }
+            return;
+        }
         if let Some(mut temp) = Pixmap::new(tw, th) {
             let local = Transform::from_translate(-b.min.x, -b.min.y);
             let mut opaque_pose = pose;
@@ -858,7 +1024,6 @@ fn draw_shape_masked(
                 opaque_pose,
                 None,
             );
-            let xf = t.pre_concat(Transform::from_translate(b.min.x, b.min.y));
             if shape.filters.independent() || shape.fill_opacity < 1. || shape.blend_interior {
                 crate::filter::composite(
                     pm,
@@ -890,6 +1055,68 @@ fn draw_shape_masked(
         return;
     }
     draw_shape_inner(pm, shape, t, opacity, blend, pose, mask);
+}
+
+/// A conservative screen-space rejection only: no rendering resolution changes.
+fn shape_outside_view(shape: &Shape, t: Transform, pose: Pose, width: u32, height: u32) -> bool {
+    let Some(bounds) = shape_screen_bounds(shape, t, pose) else {
+        return false;
+    };
+    // Two output pixels cover anti-aliasing and bilinear sampling at every zoom.
+    bounds.max.x < -2.0
+        || bounds.max.y < -2.0
+        || bounds.min.x > width as f32 + 2.0
+        || bounds.min.y > height as f32 + 2.0
+}
+
+fn shape_screen_bounds(shape: &Shape, t: Transform, pose: Pose) -> Option<crate::geom::Bounds> {
+    let (bounds, transform) = if shape.filters.active() {
+        // Effects are generated inside this exact local rectangle, even filters
+        // such as turbulence or alpha-changing color matrices that fill it.
+        let pad = crate::filter::svg_pad(&shape.filters).ceil().max(8.0);
+        let mut bounds = pose.map_bounds(shape.world_bbox()).inflate(pad);
+        bounds.max = bounds.min + Pt::new(bounds.width().ceil(), bounds.height().ceil());
+        (bounds, t)
+    } else {
+        let path = shape.get_cached_path(96)?;
+        let rect = path.bounds();
+        let pad = shape.style.stroke.as_ref().map_or(0.0, |s| {
+            (s.width.max(0.0) + pose.stroke_width.unwrap_or(0.0).max(0.0)) * 5.0
+        });
+        let bounds = crate::geom::Bounds {
+            min: Pt::new(rect.left(), rect.top()),
+            max: Pt::new(rect.right(), rect.bottom()),
+        }
+        .inflate(pad);
+        let transform = if pose.is_identity() {
+            t
+        } else {
+            t.pre_concat(pose.to_skia(shape.world_bbox().center()))
+        };
+        (bounds, transform)
+    };
+    transformed_bounds(bounds, transform)
+}
+
+fn transformed_bounds(
+    bounds: crate::geom::Bounds,
+    transform: Transform,
+) -> Option<crate::geom::Bounds> {
+    let mut corners = [
+        Point::from_xy(bounds.min.x, bounds.min.y),
+        Point::from_xy(bounds.max.x, bounds.min.y),
+        Point::from_xy(bounds.max.x, bounds.max.y),
+        Point::from_xy(bounds.min.x, bounds.max.y),
+    ];
+    transform.map_points(&mut corners);
+    if corners.iter().any(|p| !p.x.is_finite() || !p.y.is_finite()) {
+        return None;
+    }
+    let mut bounds = crate::geom::Bounds::from_pt(Pt::new(corners[0].x, corners[0].y));
+    for p in &corners[1..] {
+        bounds.union_pt(Pt::new(p.x, p.y));
+    }
+    Some(bounds)
 }
 
 fn draw_shape_inner(

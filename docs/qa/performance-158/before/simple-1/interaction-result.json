@@ -1,0 +1,3962 @@
+{
+  "active_shapes": 1,
+  "canvas_size": [
+    1020.0,
+    771.0
+  ],
+  "checks": {
+    "continuous_canvas_updates": true,
+    "continuous_object_motion": true,
+    "inactive_documents_unchanged": true,
+    "moves_and_undo_redo": 12,
+    "save_reopen_exact": true,
+    "tab_selection_and_history": true
+  },
+  "elapsed_seconds": 7.71462487,
+  "inactive_shapes_each": 0,
+  "input": "Real egui pointer and keyboard events through the native window; one movement per frame",
+  "open_documents": 1,
+  "phases": {
+    "check": {
+      "frame_interval": {
+        "max_ms": 16.472684,
+        "p50_ms": 10.861665,
+        "p95_ms": 16.472684
+      },
+      "frames": 17,
+      "input_to_ui": {
+        "max_ms": 0.765795,
+        "p50_ms": 0.456377,
+        "p95_ms": 0.765795
+      },
+      "ui": {
+        "max_ms": 0.742795,
+        "p50_ms": 0.425877,
+        "p95_ms": 0.742795
+      }
+    },
+    "drag-down": {
+      "frame_interval": {
+        "max_ms": 21.79212,
+        "p50_ms": 21.522015500000002,
+        "p95_ms": 21.79212
+      },
+      "frames": 4,
+      "input_to_ui": {
+        "max_ms": 5.872770999999999,
+        "p50_ms": 5.606249,
+        "p95_ms": 5.872770999999999
+      },
+      "ui": {
+        "max_ms": 5.853812,
+        "p50_ms": 5.590916,
+        "p95_ms": 5.853812
+      }
+    },
+    "drag-hover": {
+      "frame_interval": {
+        "max_ms": 16.082934,
+        "p50_ms": 15.802119999999999,
+        "p95_ms": 16.082934
+      },
+      "frames": 4,
+      "input_to_ui": {
+        "max_ms": 0.23950100000000002,
+        "p50_ms": 0.20998,
+        "p95_ms": 0.23950100000000002
+      },
+      "ui": {
+        "max_ms": 0.218834,
+        "p50_ms": 0.1942925,
+        "p95_ms": 0.218834
+      }
+    },
+    "drag-move": {
+      "frame_interval": {
+        "max_ms": 35.333336,
+        "p50_ms": 16.0994545,
+        "p95_ms": 17.00802
+      },
+      "frames": 360,
+      "input_to_ui": {
+        "max_ms": 24.839548,
+        "p50_ms": 5.676833500000001,
+        "p95_ms": 6.45244
+      },
+      "ui": {
+        "max_ms": 24.823798,
+        "p50_ms": 5.6594785000000005,
+        "p95_ms": 6.39819
+      }
+    },
+    "drag-up": {
+      "frame_interval": {
+        "max_ms": 17.052687,
+        "p50_ms": 16.2701215,
+        "p95_ms": 17.052687
+      },
+      "frames": 4,
+      "input_to_ui": {
+        "max_ms": 6.453523,
+        "p50_ms": 5.7838959999999995,
+        "p95_ms": 6.453523
+      },
+      "ui": {
+        "max_ms": 6.3978150000000005,
+        "p50_ms": 5.7653955,
+        "p95_ms": 6.3978150000000005
+      }
+    },
+    "idle": {
+      "frame_interval": {
+        "max_ms": 32.483993000000005,
+        "p50_ms": 16.087725,
+        "p95_ms": 16.518518
+      },
+      "frames": 60,
+      "input_to_ui": {
+        "max_ms": 16.668018999999997,
+        "p50_ms": 0.2088135,
+        "p95_ms": 0.5905440000000001
+      },
+      "ui": {
+        "max_ms": 16.658436,
+        "p50_ms": 0.19781300000000002,
+        "p95_ms": 0.562752
+      }
+    },
+    "preview-wait": {
+      "frame_interval": {
+        "max_ms": 16.115642,
+        "p50_ms": 16.089641999999998,
+        "p95_ms": 16.115642
+      },
+      "frames": 2,
+      "input_to_ui": {
+        "max_ms": 0.20158500000000001,
+        "p50_ms": 0.18991750000000002,
+        "p95_ms": 0.20158500000000001
+      },
+      "ui": {
+        "max_ms": 0.19446,
+        "p50_ms": 0.1830635,
+        "p95_ms": 0.19446
+      }
+    },
+    "redo": {
+      "frame_interval": {
+        "max_ms": 21.757329,
+        "p50_ms": 21.3783895,
+        "p95_ms": 21.757329
+      },
+      "frames": 4,
+      "input_to_ui": {
+        "max_ms": 6.210689,
+        "p50_ms": 5.7793955,
+        "p95_ms": 6.210689
+      },
+      "ui": {
+        "max_ms": 6.185272,
+        "p50_ms": 5.7538955000000005,
+        "p95_ms": 6.185272
+      }
+    },
+    "startup": {
+      "frame_interval": {
+        "max_ms": 88.99199,
+        "p50_ms": 16.0685165,
+        "p95_ms": 88.99199
+      },
+      "frames": 10,
+      "input_to_ui": {
+        "max_ms": 56.460788,
+        "p50_ms": 0.2582505,
+        "p95_ms": 56.460788
+      },
+      "ui": {
+        "max_ms": 55.046658,
+        "p50_ms": 0.24147949999999999,
+        "p95_ms": 55.046658
+      }
+    },
+    "undo": {
+      "frame_interval": {
+        "max_ms": 23.873212000000002,
+        "p50_ms": 21.523974,
+        "p95_ms": 23.873212000000002
+      },
+      "frames": 4,
+      "input_to_ui": {
+        "max_ms": 8.129572,
+        "p50_ms": 5.855709,
+        "p95_ms": 8.129572
+      },
+      "ui": {
+        "max_ms": 8.074945999999999,
+        "p50_ms": 5.8462715,
+        "p95_ms": 8.074945999999999
+      }
+    }
+  },
+  "renderer": "native WGPU",
+  "samples": [
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 88.99199,
+      "input_to_ui_ms": 55.438992999999996,
+      "object_moved": false,
+      "phase": "startup",
+      "ui_ms": 55.046658
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 1.021795,
+      "input_to_ui_ms": 56.460788,
+      "object_moved": false,
+      "phase": "startup",
+      "ui_ms": 0.94967
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 10.025537,
+      "input_to_ui_ms": 0.34641799999999995,
+      "object_moved": false,
+      "phase": "startup",
+      "ui_ms": 0.312085
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 3.391345,
+      "input_to_ui_ms": 0.253209,
+      "object_moved": false,
+      "phase": "startup",
+      "ui_ms": 0.241917
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.224809,
+      "input_to_ui_ms": 0.290668,
+      "object_moved": false,
+      "phase": "startup",
+      "ui_ms": 0.274542
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.073767,
+      "input_to_ui_ms": 0.229459,
+      "object_moved": false,
+      "phase": "startup",
+      "ui_ms": 0.219126
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.189975,
+      "input_to_ui_ms": 0.26329199999999997,
+      "object_moved": false,
+      "phase": "startup",
+      "ui_ms": 0.24104199999999998
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.055684,
+      "input_to_ui_ms": 0.20146,
+      "object_moved": false,
+      "phase": "startup",
+      "ui_ms": 0.19295900000000002
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.073933,
+      "input_to_ui_ms": 0.171584,
+      "object_moved": false,
+      "phase": "startup",
+      "ui_ms": 0.16608399999999998
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.063266,
+      "input_to_ui_ms": 0.142625,
+      "object_moved": false,
+      "phase": "startup",
+      "ui_ms": 0.13941699999999999
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.109976000000003,
+      "input_to_ui_ms": 0.143043,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.139251
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.254934,
+      "input_to_ui_ms": 0.325043,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.30821
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.121225,
+      "input_to_ui_ms": 0.244918,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.23116799999999998
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 15.901891,
+      "input_to_ui_ms": 0.16525099999999998,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.160959
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.127517,
+      "input_to_ui_ms": 0.153043,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.14870899999999998
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.117683,
+      "input_to_ui_ms": 0.24716700000000003,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.236292
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 15.998558,
+      "input_to_ui_ms": 0.172042,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.166709
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.094141999999998,
+      "input_to_ui_ms": 0.177792,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.171542
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.17385,
+      "input_to_ui_ms": 0.219834,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.209751
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.086267000000003,
+      "input_to_ui_ms": 0.21241700000000002,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.203459
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.195017,
+      "input_to_ui_ms": 0.255626,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.242584
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.076267,
+      "input_to_ui_ms": 0.214918,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.20600100000000002
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.225891999999998,
+      "input_to_ui_ms": 0.298335,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.281584
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 15.989766,
+      "input_to_ui_ms": 0.219834,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.210375
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 31.492823,
+      "input_to_ui_ms": 15.63589,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 15.622682000000001
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 0.6204189999999999,
+      "input_to_ui_ms": 0.15112599999999998,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.145001
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.118892,
+      "input_to_ui_ms": 0.143168,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.139876
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.120890999999997,
+      "input_to_ui_ms": 0.16941699999999998,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.163833
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.071642,
+      "input_to_ui_ms": 0.14908400000000002,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.144917
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.096933,
+      "input_to_ui_ms": 0.16349999999999998,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.158833
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.053683999999997,
+      "input_to_ui_ms": 0.147792,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.14358400000000002
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.374851,
+      "input_to_ui_ms": 0.39571,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.373585
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 15.915016000000001,
+      "input_to_ui_ms": 0.223918,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.209793
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.032975,
+      "input_to_ui_ms": 0.170459,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.16608399999999998
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.125058000000003,
+      "input_to_ui_ms": 0.17525000000000002,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.169209
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.106642,
+      "input_to_ui_ms": 0.155876,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.151667
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.579435,
+      "input_to_ui_ms": 0.5905440000000001,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.562752
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 15.669807,
+      "input_to_ui_ms": 0.209376,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.19337600000000002
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.032767,
+      "input_to_ui_ms": 0.157918,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.153418
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.048974,
+      "input_to_ui_ms": 0.148167,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.14441700000000002
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.115642,
+      "input_to_ui_ms": 0.17825,
+      "object_moved": false,
+      "phase": "preview-wait",
+      "ui_ms": 0.171667
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.082934,
+      "input_to_ui_ms": 0.176376,
+      "object_moved": false,
+      "phase": "drag-hover",
+      "ui_ms": 0.165501
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 21.583036,
+      "input_to_ui_ms": 5.622895,
+      "object_moved": false,
+      "phase": "drag-down",
+      "ui_ms": 5.60152
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 17.897940000000002,
+      "input_to_ui_ms": 7.42111,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 7.40186
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 14.328094,
+      "input_to_ui_ms": 5.660145999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.631646
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.010725,
+      "input_to_ui_ms": 5.595021,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.5823540000000005
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.322267,
+      "input_to_ui_ms": 5.779604,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.760396
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.129184000000002,
+      "input_to_ui_ms": 5.77723,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.760521
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.947433,
+      "input_to_ui_ms": 5.616646,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.605354
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 35.333336,
+      "input_to_ui_ms": 24.839548,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 24.823798
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 6.646316000000001,
+      "input_to_ui_ms": 5.9356469999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.920522
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.928973999999998,
+      "input_to_ui_ms": 5.759396,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.744562
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.021642,
+      "input_to_ui_ms": 5.655146,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.637187
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.076891999999997,
+      "input_to_ui_ms": 5.641563,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.6292290000000005
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.002474,
+      "input_to_ui_ms": 5.554978,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.543353
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.592852,
+      "input_to_ui_ms": 5.944605,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.921938
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.096517000000002,
+      "input_to_ui_ms": 5.850855,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.83123
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.987725000000001,
+      "input_to_ui_ms": 5.713896,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.696229
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.857852,
+      "input_to_ui_ms": 6.361731,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.335939
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.715057000000002,
+      "input_to_ui_ms": 5.8796040000000005,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.8550629999999995
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.949892,
+      "input_to_ui_ms": 5.682396,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.665563000000001
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.981473999999999,
+      "input_to_ui_ms": 5.54227,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.531353
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.109642,
+      "input_to_ui_ms": 5.546062,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.535311999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.255726000000003,
+      "input_to_ui_ms": 5.672688,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.658687
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.106016,
+      "input_to_ui_ms": 5.666603,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.654852999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.054225,
+      "input_to_ui_ms": 5.559853,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.547103
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.567352,
+      "input_to_ui_ms": 6.096146999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.076522
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.723265999999999,
+      "input_to_ui_ms": 5.714729,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.6982289999999995
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.029557999999998,
+      "input_to_ui_ms": 5.640937,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.627312
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.162017000000002,
+      "input_to_ui_ms": 5.677479,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.661396
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.06835,
+      "input_to_ui_ms": 5.6516459999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.638479
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.275142,
+      "input_to_ui_ms": 5.706229,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.685229
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.999016000000001,
+      "input_to_ui_ms": 5.61327,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.59302
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.012434,
+      "input_to_ui_ms": 5.551396,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.540729000000001
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 32.933868999999994,
+      "input_to_ui_ms": 22.329998,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 22.319498
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 6.228064,
+      "input_to_ui_ms": 5.56902,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.554478
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.086017000000002,
+      "input_to_ui_ms": 5.5732289999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.56077
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.105933,
+      "input_to_ui_ms": 5.573103000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.559561
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.087517,
+      "input_to_ui_ms": 5.575937000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.5653120000000005
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.081684,
+      "input_to_ui_ms": 5.558229,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.546604
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.08335,
+      "input_to_ui_ms": 5.549271,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.537896
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.306434000000003,
+      "input_to_ui_ms": 5.715479,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.696938
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.347184000000002,
+      "input_to_ui_ms": 6.00098,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.988022
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.826391,
+      "input_to_ui_ms": 5.7036880000000005,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.686979
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.070141,
+      "input_to_ui_ms": 5.626645000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.613227999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.691603,
+      "input_to_ui_ms": 6.168856,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.117606
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.484223,
+      "input_to_ui_ms": 5.615813,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.6008960000000005
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.061016000000002,
+      "input_to_ui_ms": 5.590228,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.5786869999999995
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.08035,
+      "input_to_ui_ms": 5.594687,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.583937
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.1111,
+      "input_to_ui_ms": 5.6114370000000005,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.59852
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.384101,
+      "input_to_ui_ms": 5.920354,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.911479
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.729599,
+      "input_to_ui_ms": 5.560352999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.5485619999999995
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.052892,
+      "input_to_ui_ms": 5.533854000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.52402
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.394768,
+      "input_to_ui_ms": 5.798021,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.7788129999999995
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.833474,
+      "input_to_ui_ms": 5.548687,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.535604
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.205183,
+      "input_to_ui_ms": 5.598853,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.583310999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.111767,
+      "input_to_ui_ms": 5.618353000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.60752
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.066059,
+      "input_to_ui_ms": 5.606312,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.5950619999999995
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.478976,
+      "input_to_ui_ms": 5.976022,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.96223
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 34.758293,
+      "input_to_ui_ms": 24.626173,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 24.613673
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 6.276814000000001,
+      "input_to_ui_ms": 5.574103,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.558145
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.063392,
+      "input_to_ui_ms": 5.568854,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.55502
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.048475,
+      "input_to_ui_ms": 5.537979,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.527354
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.399601,
+      "input_to_ui_ms": 5.784771,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.763813
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.842266,
+      "input_to_ui_ms": 5.577145000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.564354
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.062265999999997,
+      "input_to_ui_ms": 5.537228,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.525228
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.517769,
+      "input_to_ui_ms": 5.9466470000000005,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.935772
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.787932000000001,
+      "input_to_ui_ms": 5.622895,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.61177
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.623019,
+      "input_to_ui_ms": 5.9578549999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.932355
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.839932000000001,
+      "input_to_ui_ms": 5.748854000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.732354
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.145892,
+      "input_to_ui_ms": 5.7610209999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.739979
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.50956,
+      "input_to_ui_ms": 6.1061060000000005,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.055854999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.552973,
+      "input_to_ui_ms": 5.6126450000000006,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.597604
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.170434,
+      "input_to_ui_ms": 5.683979,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.665521
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.460768,
+      "input_to_ui_ms": 6.054189,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.040689
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.651057,
+      "input_to_ui_ms": 5.625563,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.613854
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.341101000000002,
+      "input_to_ui_ms": 5.803313,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.779855
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.178933,
+      "input_to_ui_ms": 5.810270999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.786687000000001
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.040017,
+      "input_to_ui_ms": 5.693479000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.674646
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.235267,
+      "input_to_ui_ms": 5.7141459999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.697021
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.123684,
+      "input_to_ui_ms": 5.766563,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.751396
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.234892000000002,
+      "input_to_ui_ms": 5.824105,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.804605
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.319017000000002,
+      "input_to_ui_ms": 6.00748,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.993146
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.663514999999999,
+      "input_to_ui_ms": 5.533645,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.52227
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 33.116662,
+      "input_to_ui_ms": 22.588497999999998,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 22.568832
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 6.298107,
+      "input_to_ui_ms": 5.572854,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.5576039999999995
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.092225000000003,
+      "input_to_ui_ms": 5.577562,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.565562
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.1441,
+      "input_to_ui_ms": 5.603896,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.589145
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.439559,
+      "input_to_ui_ms": 5.891646000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.868104
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.762603000000002,
+      "input_to_ui_ms": 6.390815,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.36444
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.441389,
+      "input_to_ui_ms": 5.764146,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.7455620000000005
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.201434,
+      "input_to_ui_ms": 5.767146,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.745603999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.965808,
+      "input_to_ui_ms": 5.612312,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.598354
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.291434,
+      "input_to_ui_ms": 5.763395999999999,
+      "object_moved": false,
+      "phase": "drag-up",
+      "ui_ms": 5.743479
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 10.674289,
+      "input_to_ui_ms": 0.42891799999999997,
+      "object_moved": false,
+      "phase": "check",
+      "ui_ms": 0.41596
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 23.873212000000002,
+      "input_to_ui_ms": 8.129572,
+      "object_moved": true,
+      "phase": "undo",
+      "ui_ms": 8.074945999999999
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 8.465779999999999,
+      "input_to_ui_ms": 0.49454299999999995,
+      "object_moved": false,
+      "phase": "check",
+      "ui_ms": 0.457335
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 21.757329,
+      "input_to_ui_ms": 6.210689,
+      "object_moved": true,
+      "phase": "redo",
+      "ui_ms": 6.185272
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 10.426829999999999,
+      "input_to_ui_ms": 0.5408360000000001,
+      "object_moved": false,
+      "phase": "check",
+      "ui_ms": 0.500335
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 15.76139,
+      "input_to_ui_ms": 0.230626,
+      "object_moved": false,
+      "phase": "drag-hover",
+      "ui_ms": 0.211459
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 21.414911,
+      "input_to_ui_ms": 5.589603,
+      "object_moved": false,
+      "phase": "drag-down",
+      "ui_ms": 5.580311999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.404435,
+      "input_to_ui_ms": 5.902397000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.887355
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.874807,
+      "input_to_ui_ms": 5.684019999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.666854
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.100309,
+      "input_to_ui_ms": 5.704771,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.687437
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.026266,
+      "input_to_ui_ms": 5.6503120000000004,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.638561999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.521019000000003,
+      "input_to_ui_ms": 6.006772,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.991189
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.885015999999998,
+      "input_to_ui_ms": 5.7501050000000005,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.73498
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.018307999999998,
+      "input_to_ui_ms": 5.628187,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.612562
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.175183,
+      "input_to_ui_ms": 5.778312,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.758479
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 33.729789000000004,
+      "input_to_ui_ms": 23.399126,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 23.383333999999998
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 6.269482,
+      "input_to_ui_ms": 5.577770999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.563229000000001
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.107391,
+      "input_to_ui_ms": 5.600478,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.586145
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.542476999999998,
+      "input_to_ui_ms": 6.04048,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.028064
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.695099,
+      "input_to_ui_ms": 5.647188,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.635187
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.211433,
+      "input_to_ui_ms": 5.705311999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.686186999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.962975,
+      "input_to_ui_ms": 5.6091869999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.5964789999999995
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.1801,
+      "input_to_ui_ms": 5.631395,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.615228
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.034475,
+      "input_to_ui_ms": 5.565395,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.5537279999999996
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.302643,
+      "input_to_ui_ms": 5.7461459999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.730021
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.891266000000002,
+      "input_to_ui_ms": 5.539437,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.527978999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.509143,
+      "input_to_ui_ms": 5.902896,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.892521
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.772556999999999,
+      "input_to_ui_ms": 5.562062,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.551394999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.227976,
+      "input_to_ui_ms": 5.718438,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.697146
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.979433000000002,
+      "input_to_ui_ms": 5.622146,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.608812
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.070391,
+      "input_to_ui_ms": 5.597062,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.585603
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.266600999999998,
+      "input_to_ui_ms": 5.769062,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.756229
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.901891,
+      "input_to_ui_ms": 5.5723530000000006,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.561228
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.062725,
+      "input_to_ui_ms": 5.54627,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.535562
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.729436,
+      "input_to_ui_ms": 6.1773560000000005,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.165063999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.947683000000001,
+      "input_to_ui_ms": 5.963147,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.942147
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.808514999999998,
+      "input_to_ui_ms": 5.58902,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.573978
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.107934,
+      "input_to_ui_ms": 5.535645,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.524394999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.285266999999997,
+      "input_to_ui_ms": 5.711479000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.701479
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.173684,
+      "input_to_ui_ms": 5.724104,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.706312
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 32.906536,
+      "input_to_ui_ms": 22.44204,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 22.424123
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 6.764483,
+      "input_to_ui_ms": 6.017189,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.000272
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.800182,
+      "input_to_ui_ms": 5.710395,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.692604
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.422893000000002,
+      "input_to_ui_ms": 5.913271,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.886563
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.934725,
+      "input_to_ui_ms": 5.749521,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.728688
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.016933,
+      "input_to_ui_ms": 5.667562,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.651229
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.087058000000003,
+      "input_to_ui_ms": 5.6576450000000005,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.642937
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.106392,
+      "input_to_ui_ms": 5.6508959999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.635062
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.144517,
+      "input_to_ui_ms": 5.695521,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.681604
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.303517,
+      "input_to_ui_ms": 5.913813,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.9026879999999995
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.965433,
+      "input_to_ui_ms": 5.738187,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.718104
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.920765999999999,
+      "input_to_ui_ms": 5.597562,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.578437
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.452102,
+      "input_to_ui_ms": 5.9095629999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.861187999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.722307,
+      "input_to_ui_ms": 5.589187,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.575354
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.158433,
+      "input_to_ui_ms": 5.654687,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.641312
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.206059,
+      "input_to_ui_ms": 5.752229,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.729812
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.083434,
+      "input_to_ui_ms": 5.702688,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.682729
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.506851,
+      "input_to_ui_ms": 6.057147,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.038563
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.655223999999999,
+      "input_to_ui_ms": 5.6011869999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.587562
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.271975,
+      "input_to_ui_ms": 5.746395,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.729978999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.201934,
+      "input_to_ui_ms": 5.795729000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.774229
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.953475000000001,
+      "input_to_ui_ms": 5.635854,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.620687
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.105975,
+      "input_to_ui_ms": 5.637229,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.621437
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.16535,
+      "input_to_ui_ms": 5.67152,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.653895
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.330768,
+      "input_to_ui_ms": 5.77073,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.745188
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 31.766865,
+      "input_to_ui_ms": 21.469911,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 21.443286
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 6.456189999999999,
+      "input_to_ui_ms": 5.693604,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.67727
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.205059000000002,
+      "input_to_ui_ms": 5.774104,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.754854
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.158767,
+      "input_to_ui_ms": 5.822604999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.804063
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.925849,
+      "input_to_ui_ms": 5.634353,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.617395
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.114184,
+      "input_to_ui_ms": 5.610396,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.596229
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.216017,
+      "input_to_ui_ms": 5.707896,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.690979
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.007391,
+      "input_to_ui_ms": 5.605687,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.591103
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.460018,
+      "input_to_ui_ms": 5.99573,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.982938
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.809515999999999,
+      "input_to_ui_ms": 5.707396,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.68752
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.014058000000002,
+      "input_to_ui_ms": 5.605353,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.591603
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.081059000000003,
+      "input_to_ui_ms": 5.576854,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.566312
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.090640999999998,
+      "input_to_ui_ms": 5.533436,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.521728
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.160767,
+      "input_to_ui_ms": 5.579728,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.569186999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.079434,
+      "input_to_ui_ms": 5.5475200000000005,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.535895
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.687810000000002,
+      "input_to_ui_ms": 6.006188,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.964105
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.027725,
+      "input_to_ui_ms": 6.020605,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.008272
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.608139999999999,
+      "input_to_ui_ms": 5.544687000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.533812
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.080766999999998,
+      "input_to_ui_ms": 5.5532699999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.542104
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.116100000000003,
+      "input_to_ui_ms": 5.59552,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.585062
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.150642,
+      "input_to_ui_ms": 5.649896,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.6360209999999995
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.299267,
+      "input_to_ui_ms": 5.710853999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.691853999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.031058,
+      "input_to_ui_ms": 5.684812,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.669895
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.138851,
+      "input_to_ui_ms": 5.703021,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.684646
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.285391999999998,
+      "input_to_ui_ms": 5.932313,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.919771
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 31.642865,
+      "input_to_ui_ms": 21.443369,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 21.431994
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 6.312148,
+      "input_to_ui_ms": 5.543603999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.52977
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.21985,
+      "input_to_ui_ms": 5.637812,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.622936999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.189393,
+      "input_to_ui_ms": 5.675813,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.660646
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.945641,
+      "input_to_ui_ms": 5.552144999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.540395
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.196933,
+      "input_to_ui_ms": 5.5907279999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.5769779999999995
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.074767,
+      "input_to_ui_ms": 5.586228,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.576187
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 17.052687,
+      "input_to_ui_ms": 6.453523,
+      "object_moved": false,
+      "phase": "drag-up",
+      "ui_ms": 6.3978150000000005
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 10.001619999999999,
+      "input_to_ui_ms": 0.393752,
+      "object_moved": false,
+      "phase": "check",
+      "ui_ms": 0.37658499999999995
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 21.494078,
+      "input_to_ui_ms": 5.822855,
+      "object_moved": true,
+      "phase": "undo",
+      "ui_ms": 5.814688
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 10.738372,
+      "input_to_ui_ms": 0.456377,
+      "object_moved": false,
+      "phase": "check",
+      "ui_ms": 0.425877
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 21.454119000000002,
+      "input_to_ui_ms": 5.807354,
+      "object_moved": true,
+      "phase": "redo",
+      "ui_ms": 5.776479
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 10.831581,
+      "input_to_ui_ms": 0.531043,
+      "object_moved": false,
+      "phase": "check",
+      "ui_ms": 0.486501
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 15.776683,
+      "input_to_ui_ms": 0.23950100000000002,
+      "object_moved": false,
+      "phase": "drag-hover",
+      "ui_ms": 0.218834
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 21.79212,
+      "input_to_ui_ms": 5.872770999999999,
+      "object_moved": false,
+      "phase": "drag-down",
+      "ui_ms": 5.853812
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.484894,
+      "input_to_ui_ms": 6.189273,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.168439
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.891432,
+      "input_to_ui_ms": 5.8856459999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.850146
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.168351,
+      "input_to_ui_ms": 5.879855,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.852188
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.140933,
+      "input_to_ui_ms": 5.846063,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.821229
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.03085,
+      "input_to_ui_ms": 5.750271000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.728521000000001
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.011058000000002,
+      "input_to_ui_ms": 5.664729,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.644104
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.973516,
+      "input_to_ui_ms": 5.579603,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.565436
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.207934,
+      "input_to_ui_ms": 5.729978999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.715896
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.299101,
+      "input_to_ui_ms": 5.940397,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.9284799999999995
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.859016,
+      "input_to_ui_ms": 5.681312,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.655812
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 33.090703,
+      "input_to_ui_ms": 22.58729,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 22.541414999999997
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 6.277523,
+      "input_to_ui_ms": 5.59452,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.581145
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.292351,
+      "input_to_ui_ms": 5.744604000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.724188
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.067058,
+      "input_to_ui_ms": 5.683561999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.66752
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.979766999999999,
+      "input_to_ui_ms": 5.6331039999999994,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.618938
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.436850999999997,
+      "input_to_ui_ms": 5.953062999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.940647
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.069683,
+      "input_to_ui_ms": 5.872354,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.823188
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.873223999999999,
+      "input_to_ui_ms": 5.701687000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.686729
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.987517,
+      "input_to_ui_ms": 5.593896,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.5793539999999995
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.223517,
+      "input_to_ui_ms": 5.6822289999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.665729000000001
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.094517,
+      "input_to_ui_ms": 5.6636869999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.648312
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.0416,
+      "input_to_ui_ms": 5.600479,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.584979000000001
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.109558,
+      "input_to_ui_ms": 5.584145,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.573228
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.522185,
+      "input_to_ui_ms": 5.997147,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.983605000000001
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.830390999999999,
+      "input_to_ui_ms": 5.694854,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.682562000000001
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.934058,
+      "input_to_ui_ms": 5.525104000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.515187
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.151017,
+      "input_to_ui_ms": 5.560979,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.550562
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.217642,
+      "input_to_ui_ms": 5.651229,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.637562
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.15685,
+      "input_to_ui_ms": 5.763229,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.743854
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.038892,
+      "input_to_ui_ms": 5.661604,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.644479
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.067225,
+      "input_to_ui_ms": 5.5906460000000004,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.576312
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.409059,
+      "input_to_ui_ms": 5.914937999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.9056880000000005
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.877058,
+      "input_to_ui_ms": 5.657354,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.642729
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.022891,
+      "input_to_ui_ms": 5.567853,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.55652
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.064642,
+      "input_to_ui_ms": 5.5176039999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.508478
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 32.963619,
+      "input_to_ui_ms": 22.366622,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 22.356872
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 6.27719,
+      "input_to_ui_ms": 5.593604,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.579479
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.050141,
+      "input_to_ui_ms": 5.56602,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.554395
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.516769,
+      "input_to_ui_ms": 5.997022,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.985689
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.797348999999999,
+      "input_to_ui_ms": 5.676188000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.660937
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.156267,
+      "input_to_ui_ms": 5.692271,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.673521
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.072433,
+      "input_to_ui_ms": 5.662521,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.613229
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.976265999999999,
+      "input_to_ui_ms": 5.551394999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.539645
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.151601000000003,
+      "input_to_ui_ms": 5.610854,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.599729
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.271642,
+      "input_to_ui_ms": 5.745063,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.7258960000000005
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.063392,
+      "input_to_ui_ms": 5.670479,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.652646
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.421851,
+      "input_to_ui_ms": 5.9920219999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.97923
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.669265000000001,
+      "input_to_ui_ms": 5.551728,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.541478
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.15035,
+      "input_to_ui_ms": 5.576728,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.565937
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 17.057646,
+      "input_to_ui_ms": 6.45244,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.39819
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.35768,
+      "input_to_ui_ms": 5.769520999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.754811999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.956017,
+      "input_to_ui_ms": 5.632396,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.615687
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.050724,
+      "input_to_ui_ms": 5.581103,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.567227999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.183184,
+      "input_to_ui_ms": 5.644479,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.629437
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.404768,
+      "input_to_ui_ms": 5.957188,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.943063
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.9696,
+      "input_to_ui_ms": 5.781645999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.762896
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.983724,
+      "input_to_ui_ms": 5.69977,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.683354
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.108725,
+      "input_to_ui_ms": 5.665395,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.649728
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.000517,
+      "input_to_ui_ms": 5.55577,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.544895
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.201642,
+      "input_to_ui_ms": 5.617979,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.6041870000000005
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 30.685653,
+      "input_to_ui_ms": 20.198407000000003,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 20.179032
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 6.910192,
+      "input_to_ui_ms": 6.098439,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.0803139999999996
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.710807,
+      "input_to_ui_ms": 5.690688,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.6727289999999995
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.139183000000003,
+      "input_to_ui_ms": 5.708062,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.691687
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.145934,
+      "input_to_ui_ms": 5.720146,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.701312
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.133017,
+      "input_to_ui_ms": 5.7088540000000005,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.688896
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.951433000000002,
+      "input_to_ui_ms": 5.594812,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.5823540000000005
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.154392,
+      "input_to_ui_ms": 5.654271,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.6373120000000005
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.255184,
+      "input_to_ui_ms": 5.770938,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.752146
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.255724999999998,
+      "input_to_ui_ms": 5.97248,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.959355
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.898933000000001,
+      "input_to_ui_ms": 5.713521,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.693854
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.126808999999998,
+      "input_to_ui_ms": 5.671021,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.652688
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.097141,
+      "input_to_ui_ms": 5.671145,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.655854
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.056141999999998,
+      "input_to_ui_ms": 5.600395,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.58577
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.0861,
+      "input_to_ui_ms": 5.584395,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.572019999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.2131,
+      "input_to_ui_ms": 5.669228,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.653478
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.876395,
+      "input_to_ui_ms": 5.745313,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.723354
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.305101,
+      "input_to_ui_ms": 5.967647,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.954022
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.695056999999998,
+      "input_to_ui_ms": 5.551187,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.539104
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.268559,
+      "input_to_ui_ms": 5.679062,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.658146
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.961683,
+      "input_to_ui_ms": 5.616187,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.603770999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.176517,
+      "input_to_ui_ms": 5.679354,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.666562
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.013849999999998,
+      "input_to_ui_ms": 5.576021,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.564521
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.058766,
+      "input_to_ui_ms": 5.51952,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.509561
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.193392,
+      "input_to_ui_ms": 5.587228,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.575978
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 33.327496,
+      "input_to_ui_ms": 22.816208,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 22.807124
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 6.2266889999999995,
+      "input_to_ui_ms": 5.554436,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.540061
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.251559,
+      "input_to_ui_ms": 5.669645,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.655895
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.970808,
+      "input_to_ui_ms": 5.558895000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.5452699999999995
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.206809,
+      "input_to_ui_ms": 5.6685620000000005,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.653395000000001
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.248808999999998,
+      "input_to_ui_ms": 5.804396,
+      "object_moved": false,
+      "phase": "drag-up",
+      "ui_ms": 5.787312
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 10.695789000000001,
+      "input_to_ui_ms": 0.38904299999999997,
+      "object_moved": false,
+      "phase": "check",
+      "ui_ms": 0.37150099999999997
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 21.55387,
+      "input_to_ui_ms": 5.819896,
+      "object_moved": true,
+      "phase": "undo",
+      "ui_ms": 5.811271
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 11.056082,
+      "input_to_ui_ms": 0.765795,
+      "object_moved": false,
+      "phase": "check",
+      "ui_ms": 0.742795
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 21.080535,
+      "input_to_ui_ms": 5.7171460000000005,
+      "object_moved": true,
+      "phase": "redo",
+      "ui_ms": 5.696813000000001
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 10.878706,
+      "input_to_ui_ms": 0.446419,
+      "object_moved": false,
+      "phase": "check",
+      "ui_ms": 0.41862699999999997
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 15.827556999999999,
+      "input_to_ui_ms": 0.18933399999999997,
+      "object_moved": false,
+      "phase": "drag-hover",
+      "ui_ms": 0.177126
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 21.460995,
+      "input_to_ui_ms": 5.53952,
+      "object_moved": false,
+      "phase": "drag-down",
+      "ui_ms": 5.530645
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.268683999999997,
+      "input_to_ui_ms": 5.695354,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.678479
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.018725,
+      "input_to_ui_ms": 5.633979,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.596312
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.023474,
+      "input_to_ui_ms": 5.563645,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.55052
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.469935000000003,
+      "input_to_ui_ms": 5.933605,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.921438
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.891516000000001,
+      "input_to_ui_ms": 5.7141459999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.694604
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.223892,
+      "input_to_ui_ms": 5.745979,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.724562
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.847058,
+      "input_to_ui_ms": 5.59202,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.58027
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.122267,
+      "input_to_ui_ms": 5.595146,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.585103999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.158433,
+      "input_to_ui_ms": 5.616978,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.603312
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.087184,
+      "input_to_ui_ms": 5.596396,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.5822709999999995
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.186767,
+      "input_to_ui_ms": 5.663021,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.649437
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.67706,
+      "input_to_ui_ms": 6.171897,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.122022
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 32.398618,
+      "input_to_ui_ms": 22.508081999999998,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 22.492915
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 6.337230999999999,
+      "input_to_ui_ms": 5.6420200000000005,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.628437
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.049892,
+      "input_to_ui_ms": 5.615603999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.601562
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.197975,
+      "input_to_ui_ms": 5.683479,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.660270000000001
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.0276,
+      "input_to_ui_ms": 5.650062,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.636895
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.069391999999997,
+      "input_to_ui_ms": 5.592354,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.579479
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.151058,
+      "input_to_ui_ms": 5.620728000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.6104780000000005
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.580227,
+      "input_to_ui_ms": 6.11123,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.093022
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.595806999999999,
+      "input_to_ui_ms": 5.615145999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.602104
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.145767,
+      "input_to_ui_ms": 5.645271,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.631604
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.973474000000001,
+      "input_to_ui_ms": 5.535436000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.52527
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.385726,
+      "input_to_ui_ms": 5.768895,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.750395
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.138892,
+      "input_to_ui_ms": 5.746396,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.729312
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.093684,
+      "input_to_ui_ms": 5.693188,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.676896
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.273934,
+      "input_to_ui_ms": 5.839605000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.817355
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.467893,
+      "input_to_ui_ms": 6.127064,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.103606
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.716015,
+      "input_to_ui_ms": 5.68927,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.671562
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 17.00802,
+      "input_to_ui_ms": 6.521482000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.481232
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.303056,
+      "input_to_ui_ms": 5.701187,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.678229
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.965683000000002,
+      "input_to_ui_ms": 5.593479,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.578895
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.141849999999998,
+      "input_to_ui_ms": 5.60427,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.5896870000000005
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.221684,
+      "input_to_ui_ms": 5.686896,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.672354
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.008641,
+      "input_to_ui_ms": 5.588687,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.576478
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.499935,
+      "input_to_ui_ms": 6.04798,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.03223
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.706723999999998,
+      "input_to_ui_ms": 5.6463540000000005,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.6321460000000005
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 32.863661,
+      "input_to_ui_ms": 22.417373,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 22.406498
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 6.298106000000001,
+      "input_to_ui_ms": 5.645562,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.6307290000000005
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.000266,
+      "input_to_ui_ms": 5.558645,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.54677
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.373018,
+      "input_to_ui_ms": 5.754062,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.737979
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.033558,
+      "input_to_ui_ms": 5.699479,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.683145
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.338726,
+      "input_to_ui_ms": 5.932438,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.91998
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.116433999999998,
+      "input_to_ui_ms": 5.900188,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.880022
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.755765000000002,
+      "input_to_ui_ms": 5.5693529999999996,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.555644999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.304976,
+      "input_to_ui_ms": 5.739812000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.725771
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.104391999999997,
+      "input_to_ui_ms": 5.709479,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.688854
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.004016,
+      "input_to_ui_ms": 5.58652,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.573395
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.0986,
+      "input_to_ui_ms": 5.547478,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.53627
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.053892,
+      "input_to_ui_ms": 5.511645,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.5025200000000005
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.535185000000002,
+      "input_to_ui_ms": 5.91498,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.9049380000000005
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.980766000000001,
+      "input_to_ui_ms": 5.7744789999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.753479
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.967892,
+      "input_to_ui_ms": 5.690813,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.676688
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.219725,
+      "input_to_ui_ms": 5.733979,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.715312
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.080684,
+      "input_to_ui_ms": 5.695895999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.680063
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.946598999999999,
+      "input_to_ui_ms": 5.5957289999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.584020000000001
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.047058,
+      "input_to_ui_ms": 5.52977,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.515644999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.235518000000003,
+      "input_to_ui_ms": 5.643854,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.633063
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.397976,
+      "input_to_ui_ms": 5.9295219999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.919271999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.718848000000001,
+      "input_to_ui_ms": 5.5345200000000006,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.524228
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.182558999999998,
+      "input_to_ui_ms": 5.595853,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.584895
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.144683999999998,
+      "input_to_ui_ms": 5.626771,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.615729
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 33.612413000000004,
+      "input_to_ui_ms": 23.135459,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 23.125041999999997
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 6.462357,
+      "input_to_ui_ms": 5.704479,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.689104
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.964058,
+      "input_to_ui_ms": 5.582395,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.5697280000000005
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.645394,
+      "input_to_ui_ms": 6.068147000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.045855
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.653848000000002,
+      "input_to_ui_ms": 5.662854,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.644645000000001
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.033724999999997,
+      "input_to_ui_ms": 5.58877,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.576312
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.121767,
+      "input_to_ui_ms": 5.610479,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.599354
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.233434000000003,
+      "input_to_ui_ms": 5.699521,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.684437
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.357518000000002,
+      "input_to_ui_ms": 5.919397,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.871563
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.780432000000001,
+      "input_to_ui_ms": 5.614104,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.601437
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.083433,
+      "input_to_ui_ms": 5.602395,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.591562
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.434893,
+      "input_to_ui_ms": 5.938105,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.925854999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.768641,
+      "input_to_ui_ms": 5.625729000000001,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.614854
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.067933,
+      "input_to_ui_ms": 5.61577,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.605229
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.029767,
+      "input_to_ui_ms": 5.564812,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.553854
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.286767,
+      "input_to_ui_ms": 5.726729,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.709396
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.133934,
+      "input_to_ui_ms": 5.7228959999999995,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.701396
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.855141,
+      "input_to_ui_ms": 5.583895999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.571437
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.173099999999998,
+      "input_to_ui_ms": 5.692562,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.682021
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.487268,
+      "input_to_ui_ms": 6.066814,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.053814
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.65589,
+      "input_to_ui_ms": 5.611603,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.599145
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.115975000000002,
+      "input_to_ui_ms": 5.62277,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.610895
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.168017,
+      "input_to_ui_ms": 5.681645,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.667312
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.321559999999998,
+      "input_to_ui_ms": 5.826063,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.803063
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.032849,
+      "input_to_ui_ms": 5.717187,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.6983950000000005
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 29.996943,
+      "input_to_ui_ms": 19.604905,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 19.587946
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 6.877691,
+      "input_to_ui_ms": 6.0960220000000005,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 6.036187999999999
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 15.639556999999998,
+      "input_to_ui_ms": 5.606853999999999,
+      "object_moved": true,
+      "phase": "drag-move",
+      "ui_ms": 5.593062000000001
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 16.109017,
+      "input_to_ui_ms": 5.608936999999999,
+      "object_moved": false,
+      "phase": "drag-up",
+      "ui_ms": 5.598187
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 11.051582000000002,
+      "input_to_ui_ms": 0.422919,
+      "object_moved": false,
+      "phase": "check",
+      "ui_ms": 0.404335
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 21.415286,
+      "input_to_ui_ms": 5.888563,
+      "object_moved": true,
+      "phase": "undo",
+      "ui_ms": 5.877855
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 10.715539,
+      "input_to_ui_ms": 0.465252,
+      "object_moved": false,
+      "phase": "check",
+      "ui_ms": 0.42896
+    },
+    {
+      "canvas_changed": true,
+      "frame_interval_ms": 21.30266,
+      "input_to_ui_ms": 5.751437,
+      "object_moved": true,
+      "phase": "redo",
+      "ui_ms": 5.731312
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 10.861665,
+      "input_to_ui_ms": 0.545419,
+      "object_moved": false,
+      "phase": "check",
+      "ui_ms": 0.49671100000000007
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.122391,
+      "input_to_ui_ms": 0.585668,
+      "object_moved": false,
+      "phase": "check",
+      "ui_ms": 0.56771
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 15.882890999999999,
+      "input_to_ui_ms": 0.31429199999999996,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.298167
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 15.983308000000001,
+      "input_to_ui_ms": 0.19404200000000002,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.188084
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.061517000000002,
+      "input_to_ui_ms": 0.176959,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.172001
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.364850999999998,
+      "input_to_ui_ms": 0.39771,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.375085
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 15.811724,
+      "input_to_ui_ms": 0.203917,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.197542
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.058017,
+      "input_to_ui_ms": 0.190584,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.184293
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.102017,
+      "input_to_ui_ms": 0.215793,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.20733500000000002
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.012349,
+      "input_to_ui_ms": 0.18304199999999998,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.178
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.054517,
+      "input_to_ui_ms": 0.176917,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.17233400000000001
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.061642000000003,
+      "input_to_ui_ms": 0.17575100000000002,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.17141800000000001
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.055724,
+      "input_to_ui_ms": 0.172542,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.167917
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.274642999999998,
+      "input_to_ui_ms": 0.329793,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.307835
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.008975000000003,
+      "input_to_ui_ms": 0.251085,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.239085
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.518518,
+      "input_to_ui_ms": 0.634669,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.5921270000000001
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 15.689432,
+      "input_to_ui_ms": 0.25920899999999997,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.24600099999999997
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 32.483993000000005,
+      "input_to_ui_ms": 16.668018999999997,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 16.658436
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 0.696044,
+      "input_to_ui_ms": 0.21050100000000002,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.198084
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.225225,
+      "input_to_ui_ms": 0.319709,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.302167
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 15.990184000000001,
+      "input_to_ui_ms": 0.22425099999999998,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.21462599999999998
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.342851,
+      "input_to_ui_ms": 0.368627,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.346085
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 15.87264,
+      "input_to_ui_ms": 0.213959,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.20575
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.102933999999998,
+      "input_to_ui_ms": 0.209751,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.202334
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.062683,
+      "input_to_ui_ms": 0.192501,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.186
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.093891999999997,
+      "input_to_ui_ms": 0.17754199999999998,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.172626
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.110725,
+      "input_to_ui_ms": 0.176417,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.171751
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.122600000000002,
+      "input_to_ui_ms": 0.195417,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.188917
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.226934,
+      "input_to_ui_ms": 0.350626,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.33291800000000005
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 15.919974999999999,
+      "input_to_ui_ms": 0.214251,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.206835
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.058225,
+      "input_to_ui_ms": 0.202168,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.19454300000000002
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.089183,
+      "input_to_ui_ms": 0.20825100000000002,
+      "object_moved": false,
+      "phase": "idle",
+      "ui_ms": 0.201167
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.063641999999998,
+      "input_to_ui_ms": 0.20158500000000001,
+      "object_moved": false,
+      "phase": "preview-wait",
+      "ui_ms": 0.19446
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.472684,
+      "input_to_ui_ms": 0.570335,
+      "object_moved": false,
+      "phase": "check",
+      "ui_ms": 0.556835
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 15.732765999999998,
+      "input_to_ui_ms": 0.226751,
+      "object_moved": false,
+      "phase": "check",
+      "ui_ms": 0.217209
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.120683,
+      "input_to_ui_ms": 0.263542,
+      "object_moved": false,
+      "phase": "check",
+      "ui_ms": 0.250334
+    },
+    {
+      "canvas_changed": false,
+      "frame_interval_ms": 16.129141999999998,
+      "input_to_ui_ms": 0.273418,
+      "object_moved": false,
+      "phase": "check",
+      "ui_ms": 0.257959
+    }
+  ],
+  "scenario": "simple",
+  "timing": "Full Studio::ui CPU duration and real egui input-to-UI duration; frame intervals include scheduling and presentation pacing, not a GPU latency measurement",
+  "window": [
+    1440,
+    900
+  ]
+}

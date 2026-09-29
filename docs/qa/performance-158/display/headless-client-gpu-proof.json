@@ -1,0 +1,168 @@
+{
+  "pid": 814763,
+  "exe": "/home/michael/.local/state/omadesign/qa/performance-158/baseline/bin/interaction_qa",
+  "cmdline": "/home/michael/.local/state/omadesign/qa/performance-158/baseline/bin/interaction_qa /home/michael/.local/state/omadesign/qa/performance-158/before/complex-1 complex ",
+  "maps": [
+    "ffff609c0000-ffff63b04000 r-xp 00000000 103:05 20710                     /usr/lib/libgallium-26.2.3-arch1.1.so",
+    "ffff63b04000-ffff63b10000 ---p 03144000 103:05 20710                     /usr/lib/libgallium-26.2.3-arch1.1.so",
+    "ffff63b10000-ffff63ca0000 r--p 03150000 103:05 20710                     /usr/lib/libgallium-26.2.3-arch1.1.so",
+    "ffff63ca0000-ffff63ce0000 rw-p 032e0000 103:05 20710                     /usr/lib/libgallium-26.2.3-arch1.1.so",
+    "ffff64300000-ffff65090000 r-xp 00000000 103:05 25398                     /usr/lib/libvulkan_asahi.so",
+    "ffff65090000-ffff65098000 ---p 00d90000 103:05 25398                     /usr/lib/libvulkan_asahi.so",
+    "ffff65098000-ffff65110000 r--p 00d98000 103:05 25398                     /usr/lib/libvulkan_asahi.so",
+    "ffff65110000-ffff65118000 rw-p 00e10000 103:05 25398                     /usr/lib/libvulkan_asahi.so",
+    "ffff71f90000-ffff72cec000 r-xp 00000000 103:05 20996                     /usr/lib/libvulkan_lvp.so",
+    "ffff72cec000-ffff72cf0000 ---p 00d5c000 103:05 20996                     /usr/lib/libvulkan_lvp.so",
+    "ffff72cf0000-ffff72d50000 r--p 00d60000 103:05 20996                     /usr/lib/libvulkan_lvp.so",
+    "ffff72d50000-ffff72d54000 rw-p 00dc0000 103:05 20996                     /usr/lib/libvulkan_lvp.so"
+  ],
+  "asahi_sysfs_uevent": "DRIVER=asahi\nOF_NAME=gpu\nOF_FULLNAME=/soc/gpu@406400000\nOF_COMPATIBLE_0=apple,agx-t6000\nOF_COMPATIBLE_1=apple,agx-g13x\nOF_COMPATIBLE_N=2\nMODALIAS=of:NgpuT(null)Capple,agx-t6000Capple,agx-g13x\n",
+  "first": {
+    "utc": "2026-09-28T21:35:29.344693+00:00",
+    "threads": {
+      "814763": {
+        "name": "interaction_qa",
+        "ticks": 1877
+      },
+      "814973": {
+        "name": "interac:disk$0",
+        "ticks": 0
+      },
+      "814975": {
+        "name": "interac:disk$0",
+        "ticks": 0
+      },
+      "814977": {
+        "name": "interac:disk$1",
+        "ticks": 0
+      },
+      "814978": {
+        "name": "smithay-clipboa",
+        "ticks": 0
+      },
+      "814980": {
+        "name": "blocking-1",
+        "ticks": 0
+      },
+      "814982": {
+        "name": "async-io",
+        "ticks": 0
+      }
+    },
+    "drm_fds": {
+      "10": {
+        "target": "/dev/dri/renderD128",
+        "fdinfo": "pos:\t0\nflags:\t02400002\nmnt_id:\t30\nino:\t93\n"
+      },
+      "11": {
+        "target": "/dev/dri/renderD128",
+        "fdinfo": "pos:\t0\nflags:\t02400002\nmnt_id:\t30\nino:\t93\n"
+      },
+      "12": {
+        "target": "/dev/dri/renderD128",
+        "fdinfo": "pos:\t0\nflags:\t02400002\nmnt_id:\t30\nino:\t93\n"
+      },
+      "13": {
+        "target": "/dev/dri/renderD128",
+        "fdinfo": "pos:\t0\nflags:\t02400002\nmnt_id:\t30\nino:\t93\n"
+      },
+      "15": {
+        "target": "/dev/dri/renderD128",
+        "fdinfo": "pos:\t0\nflags:\t02400002\nmnt_id:\t30\nino:\t93\n"
+      }
+    }
+  },
+  "second": {
+    "utc": "2026-09-28T21:35:29.845335+00:00",
+    "threads": {
+      "814763": {
+        "name": "interaction_qa",
+        "ticks": 1925
+      },
+      "814973": {
+        "name": "interac:disk$0",
+        "ticks": 0
+      },
+      "814975": {
+        "name": "interac:disk$0",
+        "ticks": 0
+      },
+      "814977": {
+        "name": "interac:disk$1",
+        "ticks": 0
+      },
+      "814978": {
+        "name": "smithay-clipboa",
+        "ticks": 0
+      },
+      "814980": {
+        "name": "blocking-1",
+        "ticks": 0
+      },
+      "814982": {
+        "name": "async-io",
+        "ticks": 0
+      }
+    },
+    "drm_fds": {
+      "10": {
+        "target": "/dev/dri/renderD128",
+        "fdinfo": "pos:\t0\nflags:\t02400002\nmnt_id:\t30\nino:\t93\n"
+      },
+      "11": {
+        "target": "/dev/dri/renderD128",
+        "fdinfo": "pos:\t0\nflags:\t02400002\nmnt_id:\t30\nino:\t93\n"
+      },
+      "12": {
+        "target": "/dev/dri/renderD128",
+        "fdinfo": "pos:\t0\nflags:\t02400002\nmnt_id:\t30\nino:\t93\n"
+      },
+      "13": {
+        "target": "/dev/dri/renderD128",
+        "fdinfo": "pos:\t0\nflags:\t02400002\nmnt_id:\t30\nino:\t93\n"
+      },
+      "15": {
+        "target": "/dev/dri/renderD128",
+        "fdinfo": "pos:\t0\nflags:\t02400002\nmnt_id:\t30\nino:\t93\n"
+      }
+    }
+  },
+  "thread_cpu_deltas": [
+    {
+      "tid": "814763",
+      "name": "interaction_qa",
+      "cpu_ms": 480.0
+    },
+    {
+      "tid": "814973",
+      "name": "interac:disk$0",
+      "cpu_ms": 0.0
+    },
+    {
+      "tid": "814975",
+      "name": "interac:disk$0",
+      "cpu_ms": 0.0
+    },
+    {
+      "tid": "814977",
+      "name": "interac:disk$1",
+      "cpu_ms": 0.0
+    },
+    {
+      "tid": "814978",
+      "name": "smithay-clipboa",
+      "cpu_ms": 0.0
+    },
+    {
+      "tid": "814980",
+      "name": "blocking-1",
+      "cpu_ms": 0.0
+    },
+    {
+      "tid": "814982",
+      "name": "async-io",
+      "cpu_ms": 0.0
+    }
+  ],
+  "llvmpipe_cpu_ms": 0
+}

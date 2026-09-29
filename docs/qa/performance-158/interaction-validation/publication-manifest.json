@@ -1,0 +1,187 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-09-29T01:14:20.012639+00:00",
+  "integrity_passed": true,
+  "all_statistics_recomputed_from_raw_samples": true,
+  "source_revisions": {
+    "baseline": "54d7051c5c878c741ea5f5a5bb5bb030e0f4a6a6",
+    "candidate": "35c39093b8e8361a7970909bede8d5114e26022c"
+  },
+  "binary_identities": {
+    "baseline": {
+      "interaction_binary": {
+        "sha256": "2d3f1467ac26dc9105f2737ed67c01798f82ae65accbb066572df929467b01c5",
+        "bytes": 60904448,
+        "verified": true
+      },
+      "authoring_binary": {
+        "sha256": "b09f7d98ec133c945d3abe71434f1448040ddbd5769ae5b458dae90ba2fc40c5",
+        "bytes": 60825480,
+        "verified": true
+      }
+    },
+    "candidate": {
+      "interaction_binary": {
+        "sha256": "db01beb41fe4cb1fdf583d804c2dfe2d90ed7ec546cde0ffa210e6ac7d93cb2a",
+        "bytes": 60919488,
+        "verified": true
+      },
+      "authoring_binary": {
+        "sha256": "f95de4cac50d0028e5939d41b9886d92d8cc57e3fbd78521595ff5629372424c",
+        "bytes": 60907160,
+        "verified": true
+      }
+    }
+  },
+  "raw_document_byte_mismatches": [
+    {
+      "side": "candidate",
+      "scenario": "authoring",
+      "repetition": 1,
+      "equal_bytes": false,
+      "baseline_sha256": "47e49f822ad4edc07cf05d40d0cba3a7ea5d5bf3df8c2b4797b46769350e7987",
+      "compared_sha256": "34e98054742b87727fdd0c83eea7451460e177d498ac4e6857ffbc7490b709af",
+      "id_equivalence": {
+        "equal_after_consistent_id_remap": true,
+        "bijection": true,
+        "all_non_id_fields_and_array_order_equal": true,
+        "seed_entity_ids_protected": 586,
+        "validated_entities": 597,
+        "validated_reference_edges": 0,
+        "unclassified_changed_id_occurrences": 0,
+        "changed_entity_ids": [
+          {
+            "entity_path": "doc/layers/17/kind/Vector/shapes/3/id",
+            "kind": "shape",
+            "baseline_id": 1383,
+            "candidate_id": 1362
+          },
+          {
+            "entity_path": "doc/layers/17/kind/Vector/shapes/4/id",
+            "kind": "shape",
+            "baseline_id": 1489,
+            "candidate_id": 1468
+          },
+          {
+            "entity_path": "doc/layers/18/id",
+            "kind": "layer",
+            "baseline_id": 1553,
+            "candidate_id": 1532
+          },
+          {
+            "entity_path": "doc/layers/18/kind/Vector/shapes/0/id",
+            "kind": "shape",
+            "baseline_id": 1576,
+            "candidate_id": 1555
+          },
+          {
+            "entity_path": "doc/layers/18/kind/Vector/shapes/1/id",
+            "kind": "shape",
+            "baseline_id": 1599,
+            "candidate_id": 1578
+          },
+          {
+            "entity_path": "doc/layers/18/kind/Vector/shapes/2/id",
+            "kind": "shape",
+            "baseline_id": 1622,
+            "candidate_id": 1601
+          },
+          {
+            "entity_path": "doc/layers/19/id",
+            "kind": "layer",
+            "baseline_id": 1645,
+            "candidate_id": 1624
+          }
+        ],
+        "changed_reference_edges": [],
+        "remapped_baseline_canonical_sha256": "692341fd210a9b2683f52dd8d248e3537f8516302d53824213f916977a89c235",
+        "candidate_canonical_sha256": "692341fd210a9b2683f52dd8d248e3537f8516302d53824213f916977a89c235"
+      }
+    },
+    {
+      "side": "candidate",
+      "scenario": "authoring",
+      "repetition": 2,
+      "equal_bytes": false,
+      "baseline_sha256": "47e49f822ad4edc07cf05d40d0cba3a7ea5d5bf3df8c2b4797b46769350e7987",
+      "compared_sha256": "34e98054742b87727fdd0c83eea7451460e177d498ac4e6857ffbc7490b709af",
+      "id_equivalence": {
+        "equal_after_consistent_id_remap": true,
+        "bijection": true,
+        "all_non_id_fields_and_array_order_equal": true,
+        "seed_entity_ids_protected": 586,
+        "validated_entities": 597,
+        "validated_reference_edges": 0,
+        "unclassified_changed_id_occurrences": 0,
+        "changed_entity_ids": [
+          {
+            "entity_path": "doc/layers/17/kind/Vector/shapes/3/id",
+            "kind": "shape",
+            "baseline_id": 1383,
+            "candidate_id": 1362
+          },
+          {
+            "entity_path": "doc/layers/17/kind/Vector/shapes/4/id",
+            "kind": "shape",
+            "baseline_id": 1489,
+            "candidate_id": 1468
+          },
+          {
+            "entity_path": "doc/layers/18/id",
+            "kind": "layer",
+            "baseline_id": 1553,
+            "candidate_id": 1532
+          },
+          {
+            "entity_path": "doc/layers/18/kind/Vector/shapes/0/id",
+            "kind": "shape",
+            "baseline_id": 1576,
+            "candidate_id": 1555
+          },
+          {
+            "entity_path": "doc/layers/18/kind/Vector/shapes/1/id",
+            "kind": "shape",
+            "baseline_id": 1599,
+            "candidate_id": 1578
+          },
+          {
+            "entity_path": "doc/layers/18/kind/Vector/shapes/2/id",
+            "kind": "shape",
+            "baseline_id": 1622,
+            "candidate_id": 1601
+          },
+          {
+            "entity_path": "doc/layers/19/id",
+            "kind": "layer",
+            "baseline_id": 1645,
+            "candidate_id": 1624
+          }
+        ],
+        "changed_reference_edges": [],
+        "remapped_baseline_canonical_sha256": "692341fd210a9b2683f52dd8d248e3537f8516302d53824213f916977a89c235",
+        "candidate_canonical_sha256": "692341fd210a9b2683f52dd8d248e3537f8516302d53824213f916977a89c235"
+      }
+    }
+  ],
+  "files": {
+    "interaction-results.json": {
+      "sha256": "9103d633a15ca7bad0cdb89bbf6f3a37ff09f5f9569dfbe51727cd5c3b5e5cdd",
+      "bytes": 2615432
+    },
+    "interaction-review.json": {
+      "sha256": "e09c8fcb261e40d84ea4d88098118f33cc2ab75c074eb6a1e31594e3be4dae67",
+      "bytes": 416086
+    }
+  },
+  "export_tools_sha256": {
+    "package_final_interaction.py": "cc0507f3f88019b79378ab7d6582c2c6718f1c58733aadd96a0feb1930979d22",
+    "export_interaction_regression.py": "27fd8f0047d22b70e53d53addf500a0ae4d7851ae08e9cfe3439edc6b18a0c2c",
+    "document_id_equivalence.py": "46b317a925c76d07040304eb719f805d9d2c1bfe0d7ce5dbc0381ae79c0173af"
+  },
+  "privacy": "Explicitly selected timing, identity and proof fields only; no original documents, artwork, font bytes, private paths, screenshots, commands or process environments.",
+  "limits": [
+    "As-used sequential local comparison; clocks and pressure are not controlled.",
+    "Artifact integrity does not itself establish performance acceptance; every increase remains available for review.",
+    "Native editor screenshots are checked for dimensions; authoring exported PNGs are compared by decoded RGBA."
+  ]
+}

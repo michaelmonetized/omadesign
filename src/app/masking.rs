@@ -8,6 +8,43 @@ pub struct SelectionSpace {
     pub transform: tiny_skia::Transform,
 }
 
+/// The same-space case borrows the source. A transformed mask shares one
+/// cached allocation across all dabs instead of resampling and copying it.
+pub(crate) enum SelectionMask<'a> {
+    Borrowed(&'a [u8]),
+    Mapped(std::sync::Arc<[u8]>),
+}
+
+impl std::ops::Deref for SelectionMask<'_> {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        match self {
+            Self::Borrowed(values) => values,
+            Self::Mapped(values) => values,
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+struct SelectionKey {
+    generation: u64,
+    source: SelectionSpace,
+    target: SelectionSpace,
+    address: usize,
+    length: usize,
+}
+
+#[derive(Default)]
+pub(super) struct SelectionCache {
+    entry: std::cell::RefCell<Option<(SelectionKey, std::sync::Arc<[u8]>)>>,
+}
+
+impl SelectionCache {
+    pub(super) fn clear(&self) {
+        self.entry.borrow_mut().take();
+    }
+}
+
 #[derive(Clone)]
 pub struct ItemMask {
     pub values: Vec<u8>,
@@ -65,12 +102,18 @@ impl Studio {
                 return false;
             }
         };
-        let buffer = buffer.map(|mut buffer| {
-            if let Some(selection) = self.pixel_sel_mask(layer) {
-                paint::feather_overlay(&mut buffer, &selection);
-            }
-            buffer
-        });
+        let buffer = if cancel {
+            // Undo/Escape discards the overlay; preparing its selection preview
+            // can scan millions of pixels that will never be displayed.
+            None
+        } else {
+            buffer.map(|mut buffer| {
+                if let Some(selection) = self.cached_pixel_sel_mask(layer) {
+                    paint::feather_overlay(&mut buffer, &selection);
+                }
+                buffer
+            })
+        };
         let Some(target) = self.doc.layers.get_mut(layer) else {
             return true;
         };
@@ -107,8 +150,19 @@ impl Studio {
     }
 
     fn layer_selection_space(&self, layer: usize) -> Option<SelectionSpace> {
-        let item = self.doc.layers.get(layer)?;
-        let (w, h) = self.mask_dimensions(layer)?;
+        let item = self
+            .doc
+            .layers
+            .get(layer)
+            .filter(|_| self.layer_unlocked(layer))?;
+        // Raster coordinates come from the raster itself, even when a loaded
+        // layer retains a differently sized mask or vector-mask metadata.
+        // layer_pixel_transform uses this same native raster grid.
+        let (w, h) = item
+            .kind
+            .pixels()
+            .map(|pixels| (pixels.w, pixels.h))
+            .or_else(|| self.mask_dimensions(layer))?;
         Some(SelectionSpace {
             w,
             h,
@@ -117,14 +171,39 @@ impl Studio {
     }
 
     pub fn pixel_sel_mask(&self, layer: usize) -> Option<std::borrow::Cow<'_, [u8]>> {
+        self.cached_pixel_sel_mask(layer).map(|mask| match mask {
+            SelectionMask::Borrowed(values) => std::borrow::Cow::Borrowed(values),
+            SelectionMask::Mapped(values) => std::borrow::Cow::Owned(values.to_vec()),
+        })
+    }
+
+    pub(crate) fn cached_pixel_sel_mask(&self, layer: usize) -> Option<SelectionMask<'_>> {
         let target = self.layer_selection_space(layer)?;
         let mask = self.pixel_sel.as_ref()?;
         let source = self.pixel_sel_space.unwrap_or(target);
         if source == target && mask.len() == target.w as usize * target.h as usize {
-            Some(std::borrow::Cow::Borrowed(mask))
-        } else {
-            resample(mask, source, target).map(std::borrow::Cow::Owned)
+            return Some(SelectionMask::Borrowed(mask));
         }
+        let key = SelectionKey {
+            generation: self.pixel_sel_gen,
+            source,
+            target,
+            address: mask.as_ptr() as usize,
+            length: mask.len(),
+        };
+        if let Some((cached_key, values)) = self.pixel_sel_cache.entry.borrow().as_ref()
+            && *cached_key == key
+        {
+            return Some(SelectionMask::Mapped(values.clone()));
+        }
+        self.pixel_sel_cache.clear();
+        let values: std::sync::Arc<[u8]> = resample(mask, source, target)?.into();
+        // Keep at most one derived mask, never one per open tab or layer. The
+        // image size limit is 64M pixels; oversized inputs remain uncached.
+        if values.len() <= 64 * 1024 * 1024 {
+            *self.pixel_sel_cache.entry.borrow_mut() = Some((key, values.clone()));
+        }
+        Some(SelectionMask::Mapped(values))
     }
 
     pub fn set_pixel_sel(&mut self, mask: Option<Vec<u8>>) {
@@ -141,6 +220,7 @@ impl Studio {
         };
         self.pixel_sel = mask;
         self.pixel_sel_gen = self.pixel_sel_gen.wrapping_add(1);
+        self.pixel_sel_cache.clear();
         self.status = self.pixel_sel.as_ref().map_or_else(
             || "Pixel selection cleared".into(),
             |mask| format!("{} pixels selected", paint::selected_count(mask)),
@@ -193,6 +273,7 @@ impl Studio {
         }
         self.pixel_sel = Some(edit(&mask, space.w, space.h));
         self.pixel_sel_gen = self.pixel_sel_gen.wrapping_add(1);
+        self.pixel_sel_cache.clear();
     }
 
     pub fn merge_pixel_sel(&mut self, next: Vec<u8>, op: paint::PixelCombine) {
@@ -257,6 +338,7 @@ impl Studio {
             self.pixel_sel = Some(mask.values);
             self.pixel_sel_space = Some(mask.space);
             self.pixel_sel_gen = self.pixel_sel_gen.wrapping_add(1);
+            self.pixel_sel_cache.clear();
             self.status = "Item outline selected · choose any layer or object to mask".into();
             return;
         }
@@ -285,6 +367,7 @@ impl Studio {
         self.pixel_sel = Some(combined);
         self.pixel_sel_space = Some(target);
         self.pixel_sel_gen = self.pixel_sel_gen.wrapping_add(1);
+        self.pixel_sel_cache.clear();
         self.status = format!("{count} pixels selected");
     }
 
@@ -348,10 +431,16 @@ impl Studio {
                 transform,
             }
         } else {
-            let Some(target) = self.layer_selection_space(layer) else {
+            // Replacing a layer mask preserves that mask's grid; this is a
+            // different target from editing the raster's native pixel grid.
+            let Some((w, h)) = self.mask_dimensions(layer) else {
                 return false;
             };
-            target
+            SelectionSpace {
+                w,
+                h,
+                transform: compositor::layer_pixel_transform(&self.doc.layers[layer]),
+            }
         };
         if u64::from(target.w) * u64::from(target.h) > 67_108_864 {
             self.status = "Mask target exceeds the 64 megapixel limit".into();
@@ -689,6 +778,128 @@ mod tests {
             .pixels()
             .map(|p| p[3])
             .collect()
+    }
+
+    fn transformed_selection_studio() -> Studio {
+        let mut studio = pixels_studio();
+        studio.doc.width = 64.0;
+        studio.doc.height = 48.0;
+        studio.doc.layers[0] = Layer::placed_raster(
+            "Placed",
+            Pixels::new(16, 12),
+            Pt::new(5.0, 7.0),
+            Pt::new(40.0, 30.0),
+        );
+        if let LayerKind::Raster { rotation, .. } = &mut studio.doc.layers[0].kind {
+            *rotation = 0.27;
+        }
+        studio.replace_pixel_selection(
+            (0..64 * 48)
+                .map(|i| ((i % 64) * 3 + (i / 64) * 2) as u8)
+                .collect(),
+            SelectionSpace {
+                w: 64,
+                h: 48,
+                transform: tiny_skia::Transform::identity(),
+            },
+        );
+        studio
+    }
+
+    fn mapped(studio: &Studio) -> std::sync::Arc<[u8]> {
+        let SelectionMask::Mapped(values) = studio.cached_pixel_sel_mask(0).unwrap() else {
+            panic!("transformed mask");
+        };
+        let expected = resample(
+            studio.pixel_sel.as_ref().unwrap(),
+            studio.pixel_sel_space.unwrap(),
+            studio.layer_selection_space(0).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(&*values, expected);
+        values
+    }
+
+    #[test]
+    fn mapped_selection_reuses_pixels_and_invalidates_on_transform_resize_and_nudge() {
+        let mut studio = transformed_selection_studio();
+        let first = mapped(&studio);
+        assert!(std::sync::Arc::ptr_eq(&first, &mapped(&studio)));
+        // Preserve the public Cow API for callers that need an owned snapshot.
+        assert_eq!(&*studio.pixel_sel_mask(0).unwrap(), &*first);
+        if let LayerKind::Raster { origin, .. } = &mut studio.doc.layers[0].kind {
+            origin.x += 6.0;
+        }
+        let moved = mapped(&studio);
+        assert!(!std::sync::Arc::ptr_eq(&first, &moved));
+        assert_ne!(first, moved);
+        if let LayerKind::Raster { pixels, .. } = &mut studio.doc.layers[0].kind {
+            *pixels = Pixels::new(24, 8);
+        }
+        let resized = mapped(&studio);
+        assert_eq!(
+            resized.len(),
+            moved.len(),
+            "equal byte counts with different dimensions must invalidate"
+        );
+        assert!(!std::sync::Arc::ptr_eq(&moved, &resized));
+        studio.nudge_pixel_sel(3, -2);
+        assert!(studio.pixel_sel_cache.entry.borrow().is_none());
+        let nudged = mapped(&studio);
+        assert!(!std::sync::Arc::ptr_eq(&resized, &nudged));
+        assert!(std::sync::Arc::ptr_eq(&nudged, &mapped(&studio)));
+        studio.set_pixel_sel(None);
+        assert!(studio.pixel_sel_cache.entry.borrow().is_none());
+        assert!(studio.cached_pixel_sel_mask(0).is_none());
+        studio.set_pixel_sel(Some(vec![128; 24 * 8]));
+        let Some(SelectionMask::Borrowed(mask)) = studio.cached_pixel_sel_mask(0) else {
+            panic!("native selection should borrow");
+        };
+        assert_eq!(mask.as_ptr(), studio.pixel_sel.as_ref().unwrap().as_ptr());
+    }
+
+    #[test]
+    fn cancelling_a_brush_restores_pixels_without_preparing_its_transformed_selection() {
+        let mut studio = transformed_selection_studio();
+        let before = studio.doc.layers[0].kind.pixels().unwrap().data.clone();
+        let mut buf = tiny_skia::Pixmap::new(16, 12).unwrap();
+        buf.fill(tiny_skia::Color::from_rgba8(200, 50, 20, 255));
+        studio.op = Some(Op::Brush {
+            layer: 0,
+            erase: false,
+            buf,
+            preview: None,
+            last: Some(Pt::new(4.0, 4.0)),
+            before: before.clone(),
+            selection_generation: studio.pixel_sel_gen,
+        });
+        assert!(studio.end_pixel_stroke(true));
+        assert!(
+            studio.pixel_sel_cache.entry.borrow().is_none(),
+            "discarded paint must not resample a selection"
+        );
+        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data, before);
+        assert!(studio.op.is_none());
+        assert_eq!(studio.history.len(), 0);
+    }
+
+    #[test]
+    fn mapped_selection_cache_is_released_on_tab_switch_and_restored_from_that_tabs_mask() {
+        let mut studio = transformed_selection_studio();
+        let first = mapped(&studio);
+        studio.show_welcome = false;
+        studio.ensure_tabs();
+        studio.new_tab();
+        assert_eq!(studio.tab_count(), 2);
+        assert_eq!(studio.active_tab, 1);
+        assert!(studio.pixel_sel_cache.entry.borrow().is_none());
+        assert!(studio.cached_pixel_sel_mask(0).is_none());
+        studio.switch_tab(0);
+        assert!(studio.pixel_sel_cache.entry.borrow().is_none());
+        let restored = mapped(&studio);
+        assert_eq!(first, restored);
+        assert!(!std::sync::Arc::ptr_eq(&first, &restored));
+        assert!(std::sync::Arc::ptr_eq(&restored, &mapped(&studio)));
     }
 
     #[test]

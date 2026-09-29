@@ -1,0 +1,62 @@
+{
+  "conclusion": "Harness Cancel gesture misses when removal dialog layout moves between press and release; later supposed reopen closes the still-open dialog by clicking its backdrop.",
+  "evidence": [
+    {
+      "frame": 44,
+      "event": "Harness resolves Cancel label at y733.4..750.4 and schedules press/release at (272.4,741.9).",
+      "trace_lines": [
+        135,
+        136,
+        137
+      ]
+    },
+    {
+      "frame": 45,
+      "event": "Press correctly hits old Cancel response id_91D6; this UI update moves current Cancel label upward32px to y701.4..718.4.",
+      "trace_lines": [
+        138,
+        139,
+        140
+      ]
+    },
+    {
+      "frame": 46,
+      "event": "Release at original point produces clicked=None; modal remains open.",
+      "trace_lines": [
+        141,
+        142,
+        143
+      ]
+    },
+    {
+      "frame": 53,
+      "event": "Harness assumes cancel succeeded and presses editor Remove Background behind the still-open modal; modal backdrop id_C032 owns press.",
+      "trace_lines": [
+        162,
+        163,
+        164,
+        165
+      ]
+    },
+    {
+      "frame": 54,
+      "event": "Release clicks modal backdrop id_C032, dismissing the existing dialog.",
+      "trace_lines": [
+        166,
+        167,
+        168
+      ]
+    },
+    {
+      "frame": 56,
+      "event": "Modal absent; global scene_ready can now pass without a removal Session.",
+      "trace_lines": [
+        172,
+        173,
+        174
+      ]
+    }
+  ],
+  "code_limits": "Product removal UI and native QA event sequence unchanged; trace only observes. Async completion is supported by the32px progress-row disappearance and source busy/ready layout branches; exact job poll state was not logged.",
+  "state": "Original harness source restored byte-for-byte; staged benchmark executables untouched; diagnostic run excluded from timing results."
+}

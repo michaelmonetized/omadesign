@@ -15,6 +15,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+const HISTORY_FILE_LIMIT: usize = 4 * 1024 * 1024;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Entry {
     pub role: String,
@@ -49,6 +51,58 @@ impl Thread {
             messages: vec![],
             updated: 0,
         }
+    }
+
+    // Called only by the persistence worker. Include escaped strings and all
+    // attachment metadata in the same byte budget enforced by History.
+    fn storage_bytes(&self) -> Result<Vec<u8>, String> {
+        #[derive(Serialize)]
+        struct Stored<'a> {
+            id: &'a str,
+            title: &'a str,
+            settings: &'a Settings,
+            purpose: &'a Purpose,
+            session_id: &'a Option<String>,
+            document: &'a Option<PathBuf>,
+            messages: &'a [Entry],
+            updated: u64,
+        }
+        let encode = |start| {
+            serde_json::to_vec_pretty(&Stored {
+                id: &self.id,
+                title: &self.title,
+                settings: &self.settings,
+                purpose: &self.purpose,
+                session_id: &self.session_id,
+                document: &self.document,
+                messages: &self.messages[start..],
+                updated: self.updated,
+            })
+            .map_err(|e| e.to_string())
+        };
+        let bytes = encode(0)?;
+        if bytes.len() < HISTORY_FILE_LIMIT {
+            return Ok(bytes);
+        }
+        drop(bytes);
+        let mut first = 1;
+        let mut last = self.messages.len().saturating_sub(1);
+        let mut saved = encode(last)?;
+        if saved.len() >= HISTORY_FILE_LIMIT {
+            return Err("Conversation metadata exceeds the 4 MiB storage limit; the previous saved conversation was preserved".into());
+        }
+        // Find the longest suffix that fits, retaining the newest message.
+        while first < last {
+            let middle = first + (last - first) / 2;
+            let bytes = encode(middle)?;
+            if bytes.len() < HISTORY_FILE_LIMIT {
+                last = middle;
+                saved = bytes;
+            } else {
+                first = middle + 1;
+            }
+        }
+        Ok(saved)
     }
 }
 
@@ -173,13 +227,17 @@ impl Workspace {
                 }
                 queued.push(thread);
                 for thread in queued {
-                    let result = config::write(
-                        &config::root()
-                            .join("threads")
-                            .join(format!("{}.json", thread.id)),
-                        &thread,
-                    )
-                    .and_then(|_| thread.settings.save());
+                    let result = thread
+                        .storage_bytes()
+                        .and_then(|bytes| {
+                            config::write_bytes(
+                                &config::root()
+                                    .join("threads")
+                                    .join(format!("{}.json", thread.id)),
+                                &bytes,
+                            )
+                        })
+                        .and_then(|_| thread.settings.save());
                     if let Err(e) = result {
                         *errors.lock().unwrap() = Some(e);
                     }
@@ -192,14 +250,18 @@ impl Workspace {
         self.config_directory = self.settings.directory.display().to_string();
     }
     pub fn refresh_history(&mut self) {
-        let mut files: Vec<_> = std::fs::read_dir(config::root().join("threads"))
+        self.refresh_history_from(&config::root().join("threads"));
+    }
+    fn refresh_history_from(&mut self, directory: &std::path::Path) {
+        let mut files: Vec<_> = std::fs::read_dir(directory)
             .into_iter()
             .flatten()
             .flatten()
             .filter(|e| {
                 e.path().extension().is_some_and(|v| v == "json")
                     && e.file_type().is_ok_and(|t| t.is_file())
-                    && e.metadata().is_ok_and(|m| m.len() < 4 * 1024 * 1024)
+                    && e.metadata()
+                        .is_ok_and(|m| m.len() < HISTORY_FILE_LIMIT as u64)
             })
             .collect();
         files.sort_by_key(|e| std::cmp::Reverse(e.metadata().and_then(|m| m.modified()).ok()));
@@ -1012,6 +1074,107 @@ impl Drop for Workspace {
 #[cfg(test)]
 mod attachment_recovery_tests {
     use super::*;
+
+    #[test]
+    fn transcript_storage_counts_metadata_and_escaped_text_and_reopens_in_history() {
+        for escaped in [false, true] {
+            let mut thread = Thread::new(Settings::default(), Purpose::Create, None);
+            let attachment = Attachment {
+                id: "attachment".into(),
+                kind: attachments::Kind::Image,
+                mime: "image/jpeg".into(),
+                name: "photo.jpg".into(),
+                size: 100_000,
+                source: format!("/home/artist/{}photo.jpg", "project-segment/".repeat(12)).into(),
+                preview: Some(
+                    format!(
+                        "/home/artist/{}image-preview.png",
+                        "cache-segment/".repeat(14)
+                    )
+                    .into(),
+                ),
+                dimensions: Some([2048, 1536]),
+                delivery: "Sent as an image".into(),
+                thumbnail: None,
+            };
+            for i in 0..if escaped { 60 } else { 400 } {
+                thread.messages.push(Entry {
+                    role: if i % 2 == 0 { "user" } else { "assistant" }.into(),
+                    text: if escaped {
+                        "\0".repeat(30_000)
+                    } else {
+                        "x".repeat(if i % 2 == 0 { 6000 } else { 4000 })
+                    },
+                    id: i.to_string(),
+                    status: String::new(),
+                    attachments: if !escaped && i % 2 == 0 {
+                        vec![attachment.clone(); 20]
+                    } else {
+                        vec![]
+                    },
+                });
+            }
+            assert!(thread.messages.iter().map(|m| m.text.len()).sum::<usize>() <= 2 * 1024 * 1024);
+            assert!(serde_json::to_vec_pretty(&thread).unwrap().len() >= HISTORY_FILE_LIMIT);
+            let original = serde_json::to_value(&thread).unwrap();
+            let bytes = thread.storage_bytes().unwrap();
+            assert!(bytes.len() < HISTORY_FILE_LIMIT);
+            let folder = std::env::temp_dir().join(format!(
+                "omadesign-thread-{}",
+                crate::project::new_swap_id()
+            ));
+            config::write_bytes(&folder.join(format!("{}.json", thread.id)), &bytes).unwrap();
+            let mut workspace = Workspace::default();
+            workspace.refresh_history_from(&folder);
+            assert_eq!(
+                workspace.history.len(),
+                1,
+                "bounded transcript vanished from History"
+            );
+            let saved = &workspace.history[0];
+            let first = saved.messages[0].id.parse::<usize>().unwrap();
+            assert!(first > 0);
+            assert_eq!(
+                saved.messages.last().unwrap().id,
+                thread.messages.last().unwrap().id
+            );
+            let mut expected = original;
+            expected["messages"] =
+                Value::Array(expected["messages"].as_array().unwrap()[first..].to_vec());
+            assert_eq!(serde_json::to_value(saved).unwrap(), expected);
+            // Preserve the longest suffix, not an arbitrary smaller batch.
+            thread.messages.drain(..first - 1);
+            assert!(serde_json::to_vec_pretty(&thread).unwrap().len() >= HISTORY_FILE_LIMIT);
+            assert_eq!(
+                saved.storage_bytes().unwrap(),
+                serde_json::to_vec_pretty(saved).unwrap()
+            );
+            std::fs::remove_dir_all(folder).unwrap();
+        }
+    }
+
+    #[test]
+    fn transcript_oversized_header_preserves_the_previous_saved_file() {
+        let mut thread = Thread::new(Settings::default(), Purpose::Create, None);
+        let folder = std::env::temp_dir().join(format!(
+            "omadesign-thread-{}",
+            crate::project::new_swap_id()
+        ));
+        let path = folder.join(format!("{}.json", thread.id));
+        let original = thread.storage_bytes().unwrap();
+        config::write_bytes(&path, &original).unwrap();
+        thread.title = "x".repeat(HISTORY_FILE_LIMIT);
+        let result = thread
+            .storage_bytes()
+            .and_then(|bytes| config::write_bytes(&path, &bytes));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("previous saved conversation was preserved")
+        );
+        assert_eq!(std::fs::read(path).unwrap(), original);
+        std::fs::remove_dir_all(folder).unwrap();
+    }
 
     #[test]
     fn readiness_pending_paste_handles_deletion_suffix_and_destination_edits() {

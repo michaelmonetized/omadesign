@@ -1,0 +1,24 @@
+PASS: all 12 real before runs paired with themselves; pooled primary sample counts verified and all speedups exactly 1.
+PASS reject: failed run
+PASS reject: timed-out run
+PASS reject: duplicate run
+PASS reject: missing scenario run
+PASS reject: missing declared repetition
+PASS reject: result scenario mismatch
+PASS reject: missing workload samples
+PASS reject: phase mismatch
+PASS reject: count mismatch
+PASS reject: nonfinite timing
+PASS reject: missing timing
+PASS reject: different complete scenario set
+PASS: coordination-only phase/count differences are accepted.
+PASS runner rejects before launch: --rounds 0
+PASS runner rejects before launch: --rounds -2
+PASS runner rejects before launch: --timeout 0
+PASS runner rejects before launch: --timeout -1
+PASS runner rejects before launch: --timeout nan
+PASS runner rejects before launch: --timeout inf
+PASS runner rejects before launch: --scenarios simple simple
+PASS runner rejects before launch: --scenarios unknown
+PASS runner rejects nonempty output without altering existing files.
+No native workloads, compilers or Rust tests were invoked.

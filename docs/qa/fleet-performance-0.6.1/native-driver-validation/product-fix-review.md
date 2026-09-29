@@ -1,0 +1,9 @@
+# Read-only product fix review
+
+Reviewed production commit `8ee01b4ea08e0dac9891694b82dd3f4f377a5cf2` and its existing tests. No application, compiler or test was run for this review; the reproducible before/after evidence is in [bugfix-validation](../bugfix-validation/README.md). No blocking behavior regression was found.
+
+The font picker changes its popup to close on outside clicks, then explicitly closes after selection in each project-font, recent-font, installed-font and downloaded-font branch. Search and scrollbar clicks can therefore retain the popup. The actual pointer/key tests cover search focus, filtering, no artwork/history change while typing, font application, one-step undo/redo, selecting the current font without a new edit, Escape and outside dismissal. They do not separately exercise every font-list source or a scrollbar drag.
+
+Layer creation clears object selection through the same helper previously called by full deselection, preserves the pixel selection's original coverage/coordinate space, and resets mask-paint targeting for the newly created layer. `commit` finishes an outstanding stroke against its captured old target before inserting the layer; resetting `paint_mask` does not rewrite that operation's captured mask flag. Text-session and rename paths are unchanged. No eager mask copy or resampling is added.
+
+Existing tests cover soft selection values, scaled/rotated/sheared source rasters inside and partly outside the document, root/group insertion, pixel/vector layers, selection allocation/generation/path preservation, layer switching, explicit deselection and undo/redo. A separate brush test verifies selection clipping on both a pending old-layer stroke and a new-layer stroke, including three-step undo/redo. Combining a transformed source with a pending stroke was reviewed through these shared production paths; it is not claimed as a separate executed test.

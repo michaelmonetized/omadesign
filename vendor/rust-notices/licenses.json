@@ -1,7 +1,7 @@
 {
   "format": 1,
   "generator": "cargo-about 0.9.2 / scripts/update-third-party.py",
-  "cargo_lock_sha256": "541a220ddd6771dd451a85918f770e2d4bc14bda63afcd959f4f990b390018a5",
+  "cargo_lock_sha256": "2630994e61f11f05618d26cd0d08bf46e7a93ed775562d7a79cb79b925e6a3a9",
   "components": [
     {
       "name": "ab_glyph",
@@ -1281,11 +1281,11 @@
         "Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"
       ],
       "copyright": [
-        "Copyright (c) <year> <copyright holders>"
+        "Copyright (c) 2018-2021 Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"
       ],
       "repository": "https://github.com/emilk/egui/tree/main/crates/eframe",
       "notices": [
-        1
+        54
       ]
     },
     {

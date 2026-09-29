@@ -1,0 +1,11 @@
+
+running 6 tests
+test app::masking::tests::hide_reveal_remove_and_locked_mask_targets_are_safe ... ok
+test app::masking::tests::cancelling_a_brush_restores_pixels_without_preparing_its_transformed_selection ... ok
+test app::masking::tests::masks_follow_a_scaled_rotated_placed_image ... ok
+test app::masking::tests::selection_mask_survives_serialization_and_apply_is_one_undo ... ok
+test app::masking::tests::mapped_selection_reuses_pixels_and_invalidates_on_transform_resize_and_nudge ... ok
+test app::masking::tests::mapped_selection_cache_is_released_on_tab_switch_and_restored_from_that_tabs_mask ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 860 filtered out; finished in 5.84s
+

@@ -1,0 +1,19 @@
+{
+  "command": [
+    "unshare",
+    "-Urn",
+    "/home/michael/.local/state/omadesign/qa/performance-158/final/bin/omadesign",
+    "--shot-file",
+    "/home/michael/.local/state/omadesign/qa/performance-158/production-smoke/infographic.oma",
+    "--out",
+    "/home/michael/.local/state/omadesign/qa/performance-158/production-smoke/native-editor.png",
+    "--size",
+    "1440x900"
+  ],
+  "exit_code": 0,
+  "wall_seconds": 4.536774346954189,
+  "binary_sha256": "610091f7926d7246b466bda566ac087ff6266cc9c4e5d92fa06c10668925f205",
+  "installed_binary_used": false,
+  "network": "disabled by unshare -Urn",
+  "screenshot_exists": true
+}
