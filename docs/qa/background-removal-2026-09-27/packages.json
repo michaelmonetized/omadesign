@@ -1,0 +1,20 @@
+{
+  "aarch64": {
+    "archive": "omadesign-0.6.0-aarch64-unknown-linux-gnu.tar.gz",
+    "sha256": "db67055b451d54c77b317d26c44b63bcba0e4526cd25a5eb5ac5308fd0799cab",
+    "bytes": 31045067,
+    "binary_sha256": "d85ef2f90a7bc4a3595dacc2b5bb22bb81104bdde4c29655781032c9cf76e0c1",
+    "runtime_and_notices_present": true,
+    "glibc_ceiling": "2.35",
+    "runtime_glibc_ceiling": "2.27"
+  },
+  "x86_64": {
+    "archive": "omadesign-0.6.0-x86_64-unknown-linux-gnu.tar.gz",
+    "sha256": "421b64f93b300317ed1343daeec71f865dd953aef75762991c7ad42bd8c36ab3",
+    "bytes": 33252737,
+    "binary_sha256": "c2bc196ddd4f71cc688ce1a8b3c08c51649ca23aad085d76edff96571c4bc03a",
+    "runtime_and_notices_present": true,
+    "glibc_ceiling": "2.35",
+    "runtime_glibc_ceiling": "2.27"
+  }
+}

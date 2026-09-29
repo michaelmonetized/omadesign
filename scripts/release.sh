@@ -15,6 +15,11 @@ for tool in cargo readelf tar sha256sum; do
   command -v "$tool" >/dev/null || { echo "missing release tool: $tool" >&2; exit 1; }
 done
 
+# Bundle a pinned runtime per architecture; do not depend on a system ORT.
+sh scripts/prepare-ml-runtime.sh aarch64
+sh scripts/prepare-ml-runtime.sh x86_64
+printf '%s  %s\n' 309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8 assets/models/u2netp.onnx | sha256sum -c
+
 chmod +x scripts/zig-cc scripts/zig-cc-aarch64 scripts/zig-cc-x86_64 \
   scripts/zig-cxx-aarch64 scripts/zig-cxx-x86_64
 
@@ -91,6 +96,23 @@ package() {
     README.md > "$stage/README.md"
   chmod 644 "$stage/README.md"
   install -Dm644 LICENSE "$stage/LICENSE"
+  case "$triple" in
+    aarch64-*) ml_arch=aarch64 ;;
+    *) ml_arch=x64 ;;
+  esac
+  runtime="target/ml-downloads/onnxruntime-linux-$ml_arch-1.28.0"
+  mkdir -p "$stage/lib" "$stage/licenses/ml" "$stage/licenses/rust"
+  cp -P "$runtime/lib/"*.so* "$stage/lib/"
+  cp vendor/ml-notices/* "$stage/licenses/ml/"
+  cp vendor/rust-notices/* "$stage/licenses/rust/"
+  # Inspect every shared object, not just the Rust executable.
+  for library in "$stage/lib/"*.so*; do
+    required="$(readelf --version-info "$library" | sed -n 's/.*Name: \(GLIBC_[0-9.]*\).*/\1/p')"
+    if [ -z "$required" ] || ! printf '%s\n' "$required" | awk -F '[_.]' '$2 > 2 || ($2 == 2 && $3 > 35) { exit 1 }'; then
+      echo "refusing to ship $library: unsupported glibc requirements" >&2
+      exit 1
+    fi
+  done
   install -Dm644 skills/omadesign-create/SKILL.md "$stage/skills/omadesign-create/SKILL.md"
   mkdir -p "$stage/docs"
   for document in MANUAL.md layout.md format-support.md cloud.md plugins.md CONTRIBUTING.md; do

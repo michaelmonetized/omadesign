@@ -637,7 +637,7 @@ impl Studio {
         ))
     }
 
-    fn replace_layer_mask(&mut self, index: usize, after: Option<Pixels>) {
+    pub(crate) fn replace_layer_mask(&mut self, index: usize, after: Option<Pixels>) {
         let Some(layer) = self
             .doc
             .layers

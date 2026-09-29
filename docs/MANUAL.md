@@ -256,6 +256,18 @@ The dialog previews the result on a transparency checkerboard. **Original** comp
 
 For green-screen or blue-screen removal, choose **Chroma key…**, choose Green / Blue or **Sample image**, then click the background in the preview. The color picker also accepts a custom key color. **Similarity** sets how much color is removed; **Falloff** gives partial transparency near the boundary; **Hardness** tightens that transition; **Spill cleanup** removes excess key color near the keyed edges. **Flow** controls how much of the key is applied in this pass by blending the original and keyed result. Other filters call this control **Strength**. The key uses RGB chroma; the key color chip's alpha is not a keying parameter. Existing source transparency is preserved. For local refinement after applying, add or select a layer mask and paint with the brush's **Edge**, **Flow**, and **Opacity** controls.
 
+### Remove Background (offline)
+
+In **Pixel**, select an unlocked pixel layer and choose **Remove Background…** next to **Chroma key…** in Raster studio, or under **Filters → Key & transparency**. The command reads the layer's pixels and creates an editable layer mask. A pixel selection limits processing to its bounds; feathering is respected and the existing mask outside the selection is preserved.
+
+**Fast · bundled** works without a network connection on a fresh installation. **High quality · U²-Net** (176 MB) and **High quality · IS-Net** (179 MB) are optional: select one and click **Download model**. Downloads are verified by SHA-256 before use and stored in the user data directory. Images never leave the machine.
+
+Compare **Preview**, **Original**, and **Mask**. **Radius** controls how far the guided filter follows image detail; **Epsilon** controls how strongly it respects image edges. Positive **Shift edge** expands the mask and negative values contract it. **Matte contrast** tightens or softens the transition. These controls reuse the cached subject mask without repeating inference. **Intersect with existing mask** combines with an existing mask; unchecked replaces it inside the selection.
+
+**Cancel** stops the job and leaves the document untouched. **Apply mask** commits one undo step and selects the mask for brush cleanup. Original pixels remain unchanged, including alpha. Difficult hair, transparent subjects, and ambiguous backgrounds may still need mask painting. The Real-ESRGAN upscale-first and upscale-cutout controls are tracked in #145, following this background-removal core.
+
+**Settings → Credits** lists bundled libraries, models, fonts, and icons with full offline license and copyright notices. Source builds must run `sh scripts/prepare-ml-runtime.sh` before using background removal; packaged installations include the runtime.
+
 ### Masks
 
 Use the layer context menu's **Mask** submenu, or **Add layer mask** in Pixel, to reveal all, hide all, or start from the current pixel selection. Switch between Pixels/Artwork and Mask in the inspector. Black hides; white reveals. The Eraser hides on a mask, and Fill works on the current paint target.
