@@ -19,6 +19,8 @@ pub mod libraries;
 pub(crate) mod masking;
 mod motion_presets;
 mod photo_session;
+pub(crate) mod pixel_selection;
+pub(crate) mod pixel_edit;
 mod placement;
 mod recovery;
 mod restart;
@@ -281,6 +283,7 @@ pub struct TypeEdit {
 }
 
 pub struct Studio {
+    pub agent: crate::agent::Workspace,
     pub show_preferences: bool,
     pub updates: updates::Updates,
     pub settings_page: u8,
@@ -309,6 +312,8 @@ pub struct Studio {
     /// Keep the source offset while painting. Off samples the same source each dab.
     pub clone_aligned: bool,
     pub pixel_sel: Option<Vec<u8>>,
+    pub(crate) pixel_edit: Option<pixel_edit::Editor>,
+    pub(crate) pixel_path: Option<pixel_edit::SelectionPath>,
     pub pixel_sel_space: Option<masking::SelectionSpace>,
     pub pixel_sel_gen: u64,
     pub paint_mask: bool,
@@ -520,6 +525,7 @@ impl Default for Studio {
 impl Studio {
     pub fn new() -> Self {
         let mut s = Self {
+            agent: Default::default(),
             doc: Document::new("Untitled", 1280.0, 800.0, 72.0),
             path: None,
             dirty: false,
@@ -545,6 +551,8 @@ impl Studio {
             clone_source: None,
             clone_aligned: true,
             pixel_sel: None,
+            pixel_edit: None,
+            pixel_path: None,
             pixel_sel_space: None,
             pixel_sel_gen: 0,
             paint_mask: false,
@@ -1403,6 +1411,7 @@ impl Studio {
     }
 
     pub fn undo(&mut self) {
+        if self.pixel_edit_history(false) { return; }
         crate::telemetry::count("feature.undo");
         if self.persona == Persona::Photo {
             self.photo.undo();
@@ -1430,6 +1439,7 @@ impl Studio {
     }
 
     pub fn redo(&mut self) {
+        if self.pixel_edit_history(true) { return; }
         crate::telemetry::count("feature.redo");
         if self.persona == Persona::Photo {
             self.photo.redo();
@@ -2296,6 +2306,7 @@ impl Studio {
     }
 
     pub fn set_tool(&mut self, t: Tool) {
+        if t != self.tool { self.pixel_edit = None; }
         if t == Tool::Eyedropper {
             crate::screen_pick::rearm();
         }

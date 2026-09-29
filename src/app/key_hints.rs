@@ -215,6 +215,25 @@ impl Studio {
         };
         let mut context = self.tool.label();
         let mut snapping = false;
+        if let Some(edit)=&self.pixel_edit {
+            match edit.mode {
+                super::pixel_edit::ModeKind::Bezier=> {
+                    add("Drag", "Move node / tangent", false);
+                    add("Shift+edge", "Insert node", mods.shift);
+                    add("Alt+node", "Delete node", mods.alt);
+                    add("Ctrl+node", "Sharp / curved", command);
+                }
+                super::pixel_edit::ModeKind::Transform=> {
+                    add("Drag inside", "Move selection", false);
+                    add("Drag corner", "Resize selection", false);
+                    add("Shift", "Keep proportions", mods.shift);
+                }
+                super::pixel_edit::ModeKind::Reshape(_)=> {add("Drag corner", "Reshape selection", false);}
+            }
+            add("Enter", "Close / finish", ctx.input(|i|i.key_down(Key::Enter)));
+            add("Esc", "Cancel selection edit", ctx.input(|i|i.key_down(Key::Escape)));
+            return ("Selection handles",hints);
+        }
         if self.pending_place.is_some() {
             context = "Place artwork";
             add("Click", "Place here", false);
@@ -473,6 +492,13 @@ impl Studio {
                         add("Drag", "Select pixels", false);
                         add("Shift+drag", "Add to selection", mods.shift);
                         add("Alt+drag", "Subtract from selection", mods.alt);
+                    }
+                    Tool::BezierLasso => {
+                        add("Click / drag", "Place / curve node", false);
+                        add("Shift+edge", "Insert node", mods.shift);
+                        add("Alt+node", "Delete node", mods.alt);
+                        add("Ctrl+node", "Corner / curve", mods.ctrl);
+                        add("Enter", "Close path", false);
                     }
                     Tool::Wand => {
                         add("Click", "Select similar color", false);

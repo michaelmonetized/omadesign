@@ -44,6 +44,52 @@ pub struct Cage {
 }
 
 impl Cage {
+    pub fn translated(&self, delta: Pt) -> Option<Self> {
+        let mut result = self.clone();
+        for p in &mut result.controls {
+            *p += delta;
+        }
+        result.mapper()?;
+        Some(result)
+    }
+
+    /// Axis-aligned corner scaling for selection transform handles.
+    pub fn resized(&self, corner: usize, delta: Pt, proportional: bool) -> Option<Self> {
+        if self.controls.len() != 4 || corner >= 4 {
+            return None;
+        }
+        let opposite = self.controls[(corner + 2) % 4];
+        let mut point = self.controls[corner] + delta;
+        if proportional {
+            let extent = self.controls[2] - self.controls[0];
+            let ratio = extent.x.abs() / extent.y.abs();
+            let d = point - opposite;
+            if d.x.abs() > d.y.abs() * ratio {
+                point.y = opposite.y + d.x.abs() / ratio * d.y.signum();
+            } else {
+                point.x = opposite.x + d.y.abs() * ratio * d.x.signum();
+            }
+        }
+        let mut result = self.clone();
+        result.controls[corner] = point;
+        result.controls[(corner + 1) % 4] = if corner.is_multiple_of(2) {
+            Pt::new(opposite.x, point.y)
+        } else {
+            Pt::new(point.x, opposite.y)
+        };
+        result.controls[(corner + 3) % 4] = if corner.is_multiple_of(2) {
+            Pt::new(point.x, opposite.y)
+        } else {
+            Pt::new(opposite.x, point.y)
+        };
+        result.mapper()?;
+        Some(result)
+    }
+
+    pub fn corner_handles(&self) -> Vec<Pt> {
+        self.controls.clone()
+    }
+
     pub fn new(mode: Mode, bounds: Bounds) -> Option<Self> {
         if !finite(bounds.min)
             || !finite(bounds.max)
@@ -146,6 +192,38 @@ enum Surface {
 }
 
 impl Mapper {
+    /// Inverse sampling for pixel selections. Newton iteration works for each
+    /// supported envelope and rejects folded/singular or nonconverging samples.
+    pub fn unmap(&self, target: Pt, destination: Bounds) -> Option<Pt> {
+        let mut p = self.bounds.min
+            + Pt::new(
+                (target.x - destination.min.x) / destination.width().max(0.001)
+                    * self.bounds.width(),
+                (target.y - destination.min.y) / destination.height().max(0.001)
+                    * self.bounds.height(),
+            );
+        let ex = self.bounds.width() * 0.001;
+        let ey = self.bounds.height() * 0.001;
+        for _ in 0..12 {
+            let value = self.map(p)?;
+            let error = value - target;
+            if error.length_sq() < 0.0001 {
+                return Some(p);
+            }
+            let dx = (self.map(p + Pt::new(ex, 0.0))? - value) / ex;
+            let dy = (self.map(p + Pt::new(0.0, ey))? - value) / ey;
+            let det = dx.x * dy.y - dx.y * dy.x;
+            if det.abs() < 1e-8 {
+                return None;
+            }
+            p = p - Pt::new(
+                (error.x * dy.y - error.y * dy.x) / det,
+                (dx.x * error.y - dx.y * error.x) / det,
+            );
+        }
+        ((self.map(p)? - target).length() < 0.1).then_some(p)
+    }
+
     pub fn map(&self, p: Pt) -> Option<Pt> {
         let u = (p.x - self.bounds.min.x) / self.bounds.width();
         let v = (p.y - self.bounds.min.y) / self.bounds.height();

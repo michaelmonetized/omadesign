@@ -16,6 +16,8 @@ pub(super) struct TabState {
     clone_source: Option<Pt>,
     pixel_sel: Option<Vec<u8>>,
     pixel_sel_space: Option<masking::SelectionSpace>,
+    pixel_path: Option<pixel_edit::SelectionPath>,
+    pixel_edit: Option<pixel_edit::Editor>,
     type_edit: Option<TypeEdit>,
     need_fit: bool,
     layer_rename: Option<(usize, String)>,
@@ -54,6 +56,8 @@ impl TabState {
             clone_source: None,
             pixel_sel: None,
             pixel_sel_space: None,
+            pixel_path: None,
+            pixel_edit: None,
             type_edit: None,
             need_fit: true,
             layer_rename: None,
@@ -81,6 +85,8 @@ impl TabState {
 impl Studio {
     fn exchange_tab(&mut self, i: usize) {
         self.end_pixel_stroke(true);
+        if self.pixel_edit.as_ref().is_some_and(|e|e.generation!=self.pixel_sel_gen) {self.pixel_edit=None;}
+        if self.pixel_path.as_ref().is_some_and(|p|p.generation!=self.pixel_sel_gen) {self.pixel_path=None;}
         self.end_deform(true);
         self.reset_snap_gesture();
         self.paint_mask = false;
@@ -100,6 +106,8 @@ impl Studio {
         swap(&mut self.clone_source, &mut t.clone_source);
         swap(&mut self.pixel_sel, &mut t.pixel_sel);
         swap(&mut self.pixel_sel_space, &mut t.pixel_sel_space);
+        swap(&mut self.pixel_path, &mut t.pixel_path);
+        swap(&mut self.pixel_edit,&mut t.pixel_edit);
         self.pending_item_mask = None;
         swap(&mut self.type_edit, &mut t.type_edit);
         swap(&mut self.need_fit, &mut t.need_fit);
@@ -140,6 +148,8 @@ impl Studio {
         self.canvas_key = None;
         self.canvas_gen = self.canvas_gen.wrapping_add(1);
         self.pixel_sel_gen = self.pixel_sel_gen.wrapping_add(1);
+        if let Some(path)=&mut self.pixel_path {path.generation=self.pixel_sel_gen;}
+        if let Some(edit)=&mut self.pixel_edit {edit.generation=self.pixel_sel_gen;self.tool=if edit.mode==pixel_edit::ModeKind::Bezier{Tool::BezierLasso}else{Tool::Marquee};}
     }
 
     pub fn ensure_tabs(&mut self) {
@@ -643,6 +653,7 @@ impl Studio {
                     let t = v.transform;
                     (v.w, v.h, [t.sx, t.ky, t.kx, t.sy, t.tx, t.ty])
                 }),
+                selection_path: self.pixel_path.as_ref().filter(|p|p.generation==self.pixel_sel_gen).map(|p|p.anchors.clone()),
                 welcome: self.show_welcome,
                 playhead: self.playhead,
             });
@@ -679,6 +690,7 @@ impl Studio {
                                 t[0], t[1], t[2], t[3], t[4], t[5],
                             ),
                         });
+                tab.pixel_path=s.selection_path.zip(tab.pixel_sel_space).map(|(anchors,space)|pixel_edit::SelectionPath{anchors,space,generation:0});
                 tab.show_welcome = s.welcome;
                 tab.playhead = s.playhead;
                 tab.need_fit = false;

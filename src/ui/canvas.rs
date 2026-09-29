@@ -78,11 +78,12 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
             rect,
             space_pan || studio.tool == Tool::Hand,
         );
-    let guide_input = !plugin_input
+    let pixel_input = !plugin_input && !brand_input && super::pixel_edit::input(studio, &resp, rect, space_pan || studio.tool == Tool::Hand);
+    let guide_input = !pixel_input && !plugin_input
         && !brand_input
         && studio.deformation.is_none()
         && super::guides::handle_input(ui, studio, rect);
-    let deform_input = if plugin_input || guide_input || brand_input {
+    let deform_input = if pixel_input { true } else if plugin_input || guide_input || brand_input {
         false
     } else {
         super::deform::input(studio, &resp, rect, space_pan || studio.tool == Tool::Hand)
@@ -207,10 +208,23 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
             .as_ref()
             .is_some_and(|t| t.size() == [w as usize, h as usize]);
     if !reuse {
+        let feathered = if let Some(Op::Brush { layer, buf, .. }) = &studio.op {
+            studio.pixel_sel_mask(*layer).map(|mask| {
+                let mut overlay = buf.clone();
+                paint::feather_overlay(&mut overlay, &mask);
+                overlay
+            })
+        } else {
+            None
+        };
         let draft = match &studio.op {
             Some(Op::Brush { layer, buf, .. }) => Draft {
                 preview: None,
-                brush: Some((*layer, buf, studio.brush.opacity)),
+                brush: Some((
+                    *layer,
+                    feathered.as_ref().unwrap_or(buf),
+                    studio.brush.opacity,
+                )),
             },
             _ => Draft::none(),
         };
@@ -266,6 +280,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     draw_bleed_safe(&painter, rect, studio);
     draw_overlays(&painter, rect, studio, pen_preview);
     super::deform::paint(&painter, rect, studio);
+    super::pixel_edit::paint(&painter, rect, studio);
     super::plugins::paint(ui, studio, rect);
     if !plugin_input && !brand_input && !guide_input && !deform_input {
         set_cursor(ui, studio, &resp);
@@ -1079,6 +1094,7 @@ fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
                 ellipse: true,
             })
         }
+        Tool::BezierLasso => {},
         Tool::Lasso => studio.op = Some(Op::Lasso { pts: vec![snap] }),
         Tool::Crop => {
             studio.op = Some(Op::CropPhoto {
@@ -2402,8 +2418,14 @@ fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) 
             commit_canvas_commands(studio, commands);
         }
         Some(Op::Brush {
-            layer, buf, before, ..
+            layer,
+            mut buf,
+            before,
+            ..
         }) => {
+            if let Some(mask) = studio.pixel_sel_mask(layer) {
+                paint::feather_overlay(&mut buf, &mask);
+            }
             if let Some(px) = studio
                 .doc
                 .layers
@@ -3117,18 +3139,27 @@ fn draw_type_caret(
 }
 
 fn draw_pixel_sel(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
-    let Some(mask) = studio.pixel_sel.as_ref() else {
+    let preview = super::pixel_selection::canvas_preview(p.ctx(), studio);
+    let Some(mask) = preview
+        .as_ref()
+        .map(|(v, _, _)| v.as_ref())
+        .or(studio.pixel_sel.as_ref())
+    else {
         return;
     };
-    let space = studio.pixel_sel_space.or_else(|| {
-        let layer = studio.doc.layers.get(studio.raster_target()?)?;
-        let pixels = layer.kind.pixels()?;
-        Some(crate::app::masking::SelectionSpace {
-            w: pixels.w,
-            h: pixels.h,
-            transform: compositor::layer_pixel_transform(layer),
-        })
-    });
+    let space = preview
+        .as_ref()
+        .map(|(_, s, _)| *s)
+        .or(studio.pixel_sel_space)
+        .or_else(|| {
+            let layer = studio.doc.layers.get(studio.raster_target()?)?;
+            let pixels = layer.kind.pixels()?;
+            Some(crate::app::masking::SelectionSpace {
+                w: pixels.w,
+                h: pixels.h,
+                transform: compositor::layer_pixel_transform(layer),
+            })
+        });
     let Some(space) = space else {
         return;
     };
@@ -3136,13 +3167,16 @@ fn draw_pixel_sel(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
     if mask.len() != w as usize * h as usize {
         return;
     }
-    let Some((x0, y0, x1, y1)) = paint::selection_bounds(mask, w, h) else {
+    let Some(_) = paint::selection_bounds(mask, w, h) else {
         return;
     };
-    let id = eframe::egui::Id::new("pixel-sel-overlay");
+    let id = eframe::egui::Id::new(("pixel-sel-overlay", preview.is_some()));
+    let generation = preview
+        .as_ref()
+        .map_or(studio.pixel_sel_gen, |(_, _, revision)| *revision);
     let tex = p.ctx().data(|data| {
         data.get_temp::<(u64, eframe::egui::TextureHandle)>(id)
-            .filter(|(generation, _)| *generation == studio.pixel_sel_gen)
+            .filter(|(cached, _)| *cached == generation)
             .map(|(_, tex)| tex)
     });
     let tex = tex.unwrap_or_else(|| {
@@ -3153,7 +3187,7 @@ fn draw_pixel_sel(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
             .ctx()
             .load_texture("pixel-sel", image, TextureOptions::NEAREST);
         p.ctx().data_mut(|data| {
-            data.insert_temp(id, (studio.pixel_sel_gen, tex.clone()));
+            data.insert_temp(id, (generation, tex.clone()));
         });
         tex
     });
@@ -3181,28 +3215,14 @@ fn draw_pixel_sel(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
     mesh.add_triangle(0, 1, 2);
     mesh.add_triangle(0, 2, 3);
     p.add(Shape::mesh(mesh));
-    let outline = [
-        corner(x0, y0),
-        corner(x1, y0),
-        corner(x1, y1),
-        corner(x0, y1),
-        corner(x0, y0),
-    ];
-    let phase = (p.ctx().input(|i| i.time) * 28.0) as f32;
-    p.extend(Shape::dashed_line_with_offset(
-        &outline,
-        Stroke::new(1.0, Color32::WHITE),
-        &[5.0],
-        &[5.0],
-        phase,
-    ));
-    p.extend(Shape::dashed_line_with_offset(
-        &outline,
-        Stroke::new(1.0, Color32::BLACK),
-        &[5.0],
-        &[5.0],
-        phase + 5.0,
-    ));
+    let contours=super::pixel_edit::outlines(p.ctx(),mask,w,h,generation,preview.is_some(),&studio.swap_id);
+    let phase=(p.ctx().input(|i|i.time)*28.0)as f32;
+    for contour in contours.iter() {
+        let outline:Vec<_>=contour.iter().chain(contour.first()).map(|p|corner(p.x as u32,p.y as u32)).collect();
+        for (color,offset) in [(Color32::WHITE,0.0),(Color32::BLACK,5.0)] {
+            p.extend(Shape::dashed_line_with_offset(&outline,Stroke::new(1.0,color),&[5.0],&[5.0],phase+offset));
+        }
+    }
     p.ctx()
         .request_repaint_after(std::time::Duration::from_millis(32));
 }
@@ -3260,7 +3280,7 @@ fn set_cursor(ui: &mut Ui, studio: &Studio, resp: &eframe::egui::Response) {
             | Tool::Heal
             | Tool::Smudge => CursorIcon::Crosshair,
             Tool::Eyedropper | Tool::Trace => CursorIcon::Crosshair,
-            Tool::Crop | Tool::Marquee | Tool::EllipseMarquee | Tool::Lasso => {
+            Tool::Crop | Tool::Marquee | Tool::EllipseMarquee | Tool::Lasso | Tool::BezierLasso => {
                 CursorIcon::Crosshair
             }
             Tool::Select => CursorIcon::Default,

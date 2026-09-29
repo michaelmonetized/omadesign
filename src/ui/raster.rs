@@ -143,10 +143,11 @@ pub(super) fn open_with_settings(ctx: &Context, studio: &mut Studio, settings: S
     {
         return;
     }
-    let selection = studio.pixel_sel.clone();
-    if selection
-        .as_ref()
-        .is_some_and(|m| m.len() != pixels.w as usize * pixels.h as usize)
+    let selection = studio.pixel_sel_mask(index).map(|mask| mask.into_owned());
+    if (studio.pixel_sel.is_some() && selection.is_none())
+        || selection
+            .as_ref()
+            .is_some_and(|m| m.len() != pixels.w as usize * pixels.h as usize)
     {
         studio.status = "Clear the old pixel selection before filtering this layer".into();
         return;

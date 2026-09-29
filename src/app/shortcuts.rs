@@ -333,7 +333,7 @@ impl Studio {
         match shortcut {
             Shortcut::ToggleGuides => self.toggle_guides(),
             Shortcut::ToggleKeyHud => self.show_key_hud = !self.show_key_hud,
-            Shortcut::FreeTransform => self.free_transform(),
+            Shortcut::FreeTransform => {if self.persona==Persona::Pixel {self.begin_pixel_edit(super::pixel_edit::ModeKind::Transform);}else{self.free_transform();}},
             Shortcut::ToggleSnapping => self.toggle_snapping(),
             Shortcut::Save => self.save(),
             Shortcut::SaveAs => self.save_as(),
@@ -384,6 +384,8 @@ impl Studio {
                     if !self.photo.is_batching() {
                         self.photo.select_all_images();
                     }
+                } else if self.persona == Persona::Pixel {
+                    self.select_all_pixels();
                 } else {
                     self.select_all();
                 }
@@ -431,7 +433,7 @@ impl Studio {
 
     fn type_shortcut(&mut self, ctx: &egui::Context, shortcut: Shortcut, payload: Option<&str>) {
         match shortcut {
-            Shortcut::FreeTransform => self.free_transform(),
+            Shortcut::FreeTransform => {if self.persona==Persona::Pixel {self.begin_pixel_edit(super::pixel_edit::ModeKind::Transform);}else{self.free_transform();}},
             Shortcut::Copy | Shortcut::Cut => {
                 let (lo, hi) = self.type_sel_range();
                 if lo == hi {
@@ -568,6 +570,7 @@ impl Studio {
                 _ => {}
             }
         }
+        if self.pixel_edit_key(key) { return true; }
         if self.deformation.is_some() && matches!(key, Key::Escape | Key::Enter) {
             self.end_deform(key == Key::Escape);
             return true;
@@ -704,6 +707,7 @@ impl Studio {
                     (Key::M, false, Persona::Pixel) => Tool::Smudge,
                     (Key::C, false, _) => Tool::Crop,
                     (Key::W, false, _) => Tool::Wand,
+                    (Key::Q, true, Persona::Pixel) => Tool::BezierLasso,
                     (Key::Q, false, _) => Tool::Lasso,
                     (Key::H, false, _) => Tool::Hand,
                     (Key::Z, false, _) => Tool::Zoom,

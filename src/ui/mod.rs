@@ -1,4 +1,5 @@
 mod agent;
+mod agent_picker;
 pub(crate) mod anim_export;
 mod browsers;
 mod canvas;
@@ -20,6 +21,8 @@ mod masking;
 mod motion_presets;
 pub(crate) mod photo;
 mod photo_detail;
+mod pixel_selection;
+mod pixel_edit;
 mod plugins;
 mod preferences;
 mod raster;
@@ -83,13 +86,18 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     canvas::poll_screen_pick(&ctx, studio);
     theme::poll(&ctx);
     ctx.data_mut(|data| {
-        data.insert_temp(eframe::egui::Id::new("oma-recent-colors"), studio.recent.clone())
+        data.insert_temp(
+            eframe::egui::Id::new("oma-recent-colors"),
+            studio.recent.clone(),
+        )
     });
+    studio.poll_pixel_edit(&ctx);
+    agent::tick(&ctx, studio);
     if !studio.file_dialog_pending()
         && !studio.show_preferences
         && !studio.updates.freezing
+        && !pixel_selection::is_open(&ctx)
         && !plugins::is_open(&ctx)
-        && !agent::is_open(&ctx)
         && !welcome::modal_open(&ctx)
         && !studio.show_templates
     {
@@ -100,8 +108,8 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         && !studio.updates.freezing
         && !layout_preview::is_open(&ctx)
         && !raster::is_open(&ctx)
+        && !pixel_selection::is_open(&ctx)
         && !plugins::is_open(&ctx)
-        && !agent::is_open(&ctx)
         && !welcome::modal_open(&ctx)
         && !studio.show_templates
     {
@@ -110,11 +118,17 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     studio.tick_motion(&ctx);
     layout::poll_image(&ctx, studio);
 
+    // Keep the canvas visible for previews while preventing edits behind the dialog.
+    if pixel_selection::is_open(&ctx) {
+        ui.disable();
+    }
+
     chrome::top_bar(ui, studio);
     if !studio.show_welcome {
         welcome::cancel(&ctx);
     }
     key_hud::show(ui, studio);
+    agent::panel(ui, studio);
 
     if studio.show_welcome {
         if studio.tab_count() > 1 {
@@ -134,7 +148,9 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         chrome::doc_tabs(ui, studio);
         layout::hierarchy(ui, studio);
         chrome::left_toolbar(ui, studio);
-        studios::right_panel(ui, studio);
+        if !studio.agent.visible {
+            studios::right_panel(ui, studio);
+        }
         chrome::status_bar(ui, studio);
         timeline::show(ui, studio);
         canvas::show(ui, studio);
@@ -142,7 +158,6 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
 
     if !studio.file_dialog_pending() {
         preferences::show(&ctx, studio);
-        agent::show(&ctx, studio);
         plugins::show(&ctx, studio);
         browsers::show_shape_browser(ui, studio);
         browsers::show_asset_browser(ui, studio);
@@ -151,6 +166,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         layout_preview::show(ui, studio);
         raster::show(ui, studio);
         anim_export::show(ui, studio);
+        pixel_selection::show(&ctx, studio);
 
         if studio.show_shortcuts {
             egui_shortcuts(ui, studio);
@@ -180,12 +196,14 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
 
 /// Screenshot scenes wait for their actual template previews, not a fixed sleep.
 pub fn scene_ready(ctx: &eframe::egui::Context, studio: &Studio) -> bool {
+    if studio.pixel_edit.as_ref().is_some_and(|e|e.pending()||e.job.is_some()) {return false;}
     !studio.cloud_busy()
         && (!studio.show_welcome || welcome::ready(ctx))
         && (studio.show_welcome || chrome::document_previews_ready(ctx))
         && !studio.photo.is_loading_previews()
         && library::ready(ctx, studio)
         && raster::ready(ctx)
+        && pixel_selection::ready(ctx)
         && (studio.persona != Persona::Photo || photo_detail::ready(ctx))
         && (!(studio.show_templates
             || (studio.show_welcome && studio.welcome_page == crate::app::WelcomePage::Templates))

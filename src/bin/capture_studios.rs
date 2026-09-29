@@ -155,11 +155,11 @@ fn schedule(scene: &str) -> Vec<Action> {
             event(1.6, ScrollAt(At(810., 720.), -380.)),
             drag(2.4, 0.8, Move(Any("Learn with AI"))),
             event(3.3, Click(Any("Learn with AI"))),
-            event(3.8, Expect("Ask anything…")),
+            event(3.8, Expect("Design with agent")),
             drag(4.2, 3., Type("How do I make a responsive landing page?")),
             event(7.6, Expect("How do I make a responsive landing page?")),
-            drag(8.1, 0.7, Move(Any("Cancel"))),
-            event(9., Click(Any("Cancel"))),
+            drag(8.1, 0.7, Move(Any("Agent"))),
+            event(9., Click(Any("Agent"))),
             drag(9.6, 0.7, Move(Any("Create with agent"))),
             event(10.5, Click(Any("Create with agent"))),
             drag(
@@ -171,8 +171,8 @@ fn schedule(scene: &str) -> Vec<Action> {
                 16.2,
                 Expect("Create an editable poster for a late-night listening party."),
             ),
-            drag(17., 0.8, Move(Any("Cancel"))),
-            event(18., Click(Any("Cancel"))),
+            drag(17., 0.8, Move(Any("Agent"))),
+            event(18., Click(Any("Agent"))),
             drag(18.8, 0.8, Move(At(850., 80.))),
         ],
         "layout" => vec![
@@ -264,6 +264,35 @@ fn schedule(scene: &str) -> Vec<Action> {
             event(37., Click(Any("Multiply"))),
             event(38.6, Click(Text("Multiply"))),
             event(39.2, Click(Any("Normal"))),
+        ],
+        "agent-picker" => vec![
+            event(1.,Click(Any("6 Astra ▾"))),
+            event(2.,Expect("Search models…")),
+            event(3.,Click(Any("Claude"))),
+            event(4.,Expect("Claude")),
+            event(5.,Click(Any("Codex"))),
+            event(5.6,Click(Any("6 Sol"))),
+            event(6.6,Click(Any("Ultra"))),
+            event(7.2,Click(Any("High"))),
+            event(8.,Click(Any("6 Sol ▾"))),
+        ],
+        "pixel-selection" => vec![
+            drag(0.5,0.7,Drag(World(180.,180.),World(480.,430.))),
+            event(1.5,Click(Any("Select"))),event(1.8,Click(Any("Move / resize selection"))),
+            drag(2.2,0.7,Drag(World(330.,305.),World(390.,345.))),
+            drag(3.2,0.7,Drag(World(540.,470.),World(620.,500.))),
+            event(4.1,Key(egui::Key::Enter,Modifiers::NONE)),
+            event(4.5,Click(Any("Select"))),event(4.8,Hover(Any("Reshape"))),event(5.2,Click(Any("Distort"))),
+            drag(5.6,0.7,Drag(World(240.,220.),World(280.,170.))),event(6.5,Key(egui::Key::Enter,Modifiers::NONE)),
+            event(6.8,Click(Any("Select"))),event(7.1,Click(Any("Feather…"))),event(8.,Click(Any("Apply"))),
+            event(8.4,Click(Any("Select"))),event(8.7,Click(Any("New Bézier selection"))),
+            event(9.2,Click(World(200.,200.))),drag(9.6,0.5,Drag(World(550.,200.),World(600.,260.))),
+            event(10.4,Click(World(550.,520.))),event(10.8,Click(World(200.,520.))),event(11.2,Click(World(200.,200.))),
+            event(11.8,ModifiedClick(World(200.,360.),Modifiers{shift:true,..Modifiers::NONE})),
+            event(12.3,ModifiedClick(World(200.,360.),ctrl())),
+            drag(12.8,0.7,Drag(World(200.,360.),World(150.,340.))),
+            event(14.,ModifiedClick(World(150.,340.),Modifiers{alt:true,..Modifiers::NONE})),
+            event(14.6,Key(egui::Key::Enter,Modifiers::NONE)),
         ],
         "pixel" => vec![
             drag(1., 1.2, Delta(Field("Size"), 14.)),
@@ -648,7 +677,11 @@ fn seed(scene: &str) -> Studio {
             }
             s.photo.select_image(0);
         }
-        "pixel" => {
+        "agent-picker" => {
+            s.doc=Document::new("Agent providers",960.,640.,96.);
+            s.persona=Persona::Design;s.tool=Tool::Select;s.agent.load();s.agent.visible=true;
+        }
+        "pixel" | "pixel-selection" => {
             let img =
                 omadesign::photo::load_file(Path::new("examples/site-showcase/pixel-original.png"))
                     .unwrap();
@@ -670,6 +703,10 @@ fn seed(scene: &str) -> Studio {
             s.brush.opacity = 0.55;
             s.brush.flow = 0.6;
             s.brush.hardness = 0.45;
+            if scene == "pixel-selection" {
+                s.active_layer = Some(0);
+                s.tool = Tool::EllipseMarquee;
+            }
         }
         _ => {
             let file = if scene == "motion" {
@@ -762,6 +799,8 @@ impl Capture {
             "design" => 42,
             "photo" => 24,
             "pixel" | "motion" | "brand-kit" => 30,
+            "pixel-selection" => 16,
+            "agent-picker" => 10,
             _ => panic!("unknown scene"),
         };
         let mut actions = schedule(&scene);
@@ -1136,6 +1175,10 @@ impl eframe::App for Capture {
             self.ready_since = Instant::now();
             self.pending = false;
             self.stepped = false;
+            if self.scene=="pixel-selection" && self.frame.is_multiple_of(30) {
+                let value=serde_json::json!({"frame":self.frame,"path":self.studio.pixel_selection_path()});
+                fs::write(self.directory.join(format!("selection-state-{}.json",self.frame)),serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+            }
             if self.frame >= self.total {
                 if matches!(self.scene.as_str(), "graphics" | "chroma") {
                     omadesign::project::save_to(
@@ -1173,6 +1216,7 @@ impl eframe::App for Capture {
         if self.stepped
             && !self.pending
             && (live_interaction || omadesign::ui::scene_ready(&ctx, &self.studio))
+            && (self.scene!="agent-picker" || (!self.studio.agent.connecting && !self.studio.agent.discovery.providers.iter().any(|p|p.status==omadesign::agent::discovery::Status::Checking)))
         {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
             self.pending = true;
@@ -1194,6 +1238,7 @@ impl eframe::App for Capture {
 }
 fn main() -> eframe::Result {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if let Some(result)=omadesign::agent::cli(&args) {if let Err(e)=result{eprintln!("{e}");std::process::exit(2);}return Ok(());}
     let scene = args
         .first()
         .expect("SCENE OUTPUT_DIR [--probe] [--fps 30|60]")

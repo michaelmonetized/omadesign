@@ -170,6 +170,7 @@ fn tool_code(t: crate::tools::Tool) -> &'static str {
         Marquee => "marquee",
         EllipseMarquee => "ellipse_marquee",
         Lasso => "lasso",
+        BezierLasso => "bezier_lasso",
         Wand => "wand",
         Hand => "hand",
         Zoom => "zoom",

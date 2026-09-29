@@ -15,6 +15,8 @@ pub(super) struct RestartTab {
     pub expanded: HashSet<u64>,
     pub pixel_selection: Option<Vec<u8>>,
     pub selection_space: Option<(u32, u32, [f32; 6])>,
+    #[serde(default)]
+    pub selection_path: Option<Vec<crate::geom::Anchor>>,
     pub welcome: bool,
     pub playhead: f32,
 }

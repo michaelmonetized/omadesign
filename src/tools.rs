@@ -57,6 +57,7 @@ pub enum Tool {
     Marquee,
     EllipseMarquee,
     Lasso,
+    BezierLasso,
     Wand,
     Hand,
     Zoom,
@@ -90,6 +91,7 @@ impl Tool {
             Tool::Marquee => "Marquee",
             Tool::EllipseMarquee => "Elliptical marquee",
             Tool::Lasso => "Lasso",
+            Tool::BezierLasso => "Bézier lasso",
             Tool::Wand => "Wand",
             Tool::Hand => "Hand",
             Tool::Zoom => "Zoom",
@@ -123,6 +125,7 @@ impl Tool {
             Tool::Marquee => "Shift+M",
             Tool::EllipseMarquee => "Shift+O",
             Tool::Lasso => "Q",
+            Tool::BezierLasso => "Shift+Q",
             Tool::Wand => "W",
             Tool::Hand => "H",
             Tool::Zoom => "Z",
@@ -133,6 +136,8 @@ impl Tool {
 
     pub fn hint(self) -> &'static str {
         match self {
+            Tool::BezierLasso => "Click nodes, drag to curve; click first node or Enter to close. Shift-edge inserts, Alt-node deletes, Ctrl-node toggles corner/curve.",
+
             Tool::Select => {
                 "Click to select · drag to move · handles scale · the top handle rotates · Shift-click adds"
             }
@@ -224,6 +229,7 @@ impl Tool {
                     | Tool::Marquee
                     | Tool::EllipseMarquee
                     | Tool::Lasso
+                    | Tool::BezierLasso
                     | Tool::Wand
                     | Tool::Eyedropper
                     | Tool::Hand
@@ -293,6 +299,7 @@ impl Tool {
             Tool::Marquee,
             Tool::EllipseMarquee,
             Tool::Lasso,
+            Tool::BezierLasso,
             Tool::Wand,
             Tool::Eyedropper,
             Tool::Hand,
@@ -737,6 +744,7 @@ mod tests {
             Tool::Marquee,
             Tool::EllipseMarquee,
             Tool::Lasso,
+            Tool::BezierLasso,
             Tool::Wand,
             Tool::Hand,
             Tool::Zoom,

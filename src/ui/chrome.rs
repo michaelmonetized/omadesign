@@ -84,6 +84,7 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
                             }
                         }
                         ui.add_space(8.0);
+                        super::agent::button(ui, studio);
                         if photo {
                             library_buttons(ui, studio);
                         }
@@ -1102,7 +1103,7 @@ pub fn left_toolbar(ui: &mut Ui, studio: &mut Studio) {
                             | Tool::Clone
                             | Tool::Heal
                             | Tool::Smudge => "paint",
-                            Tool::Marquee | Tool::EllipseMarquee | Tool::Lasso | Tool::Wand => {
+                            Tool::Marquee | Tool::EllipseMarquee | Tool::Lasso | Tool::BezierLasso | Tool::Wand => {
                                 "selpx"
                             }
                             Tool::Hand | Tool::Zoom | Tool::Crop => "nav",
@@ -1125,20 +1126,10 @@ pub fn left_toolbar(ui: &mut Ui, studio: &mut Studio) {
 }
 
 fn library_buttons(ui: &mut Ui, studio: &mut Studio) {
-    if icons::icon_button(
-        ui,
-        ph::SHAPES,
-        "Shape library",
-        studio.show_shape_browser,
-    ) {
+    if icons::icon_button(ui, ph::SHAPES, "Shape library", studio.show_shape_browser) {
         studio.show_shape_browser = !studio.show_shape_browser;
     }
-    if icons::icon_button(
-        ui,
-        ph::IMAGES,
-        "Free photos",
-        studio.show_asset_browser,
-    ) {
+    if icons::icon_button(ui, ph::IMAGES, "Free photos", studio.show_asset_browser) {
         studio.show_asset_browser = !studio.show_asset_browser;
     }
 }
