@@ -1,0 +1,182 @@
+{
+  "source": {
+    "commit": "b84c01c99fe249e69b493519b496322ccce4d4d9",
+    "tree": "942ab8312c724e4a8430330980c5f56d303a555b",
+    "started_utc": "2026-09-29T11:04:13.678825+00:00",
+    "build_jobs": 2,
+    "release_lto": false,
+    "glibc_target": "2.35",
+    "tmpdir": "/home/michael/.cache/oma061-build-tmp",
+    "command": "env -u CARGO_TARGET_DIR TMPDIR=/home/michael/.cache/oma061-build-tmp CARGO_BUILD_JOBS=2 sh scripts/release.sh"
+  },
+  "build_exit_code": 0,
+  "finished_utc": "2026-09-29T11:19:27.952382+00:00",
+  "packages": [
+    {
+      "architecture": "aarch64",
+      "archive": "omadesign-0.6.1-aarch64-unknown-linux-gnu.tar.gz",
+      "bytes": 36492779,
+      "sha256": "bf7063cf4e396b4ad057363f311fc9ada435f16bc595f51252cbf63e248139e1",
+      "binary": {
+        "bytes": 49933040,
+        "sha256": "2e48e869ec4be2960ffcf389c34b82782a7a8688c49e016eafcbbf55886c8635"
+      },
+      "stripped": true,
+      "max_glibc": "2.35",
+      "archive_entries": 69,
+      "runtime": [
+        {
+          "name": "libonnxruntime.so",
+          "bytes": 20591712,
+          "sha256": "f1ec1a08eb99bd6e5401340f0a2b101381bf4694415480291dc13bcaa30f9ec7",
+          "symlink": "libonnxruntime.so.1",
+          "max_glibc": "2.27",
+          "max_glibcxx": "3.4.21",
+          "needed": [
+            "libdl.so.2",
+            "librt.so.1",
+            "libpthread.so.0",
+            "libstdc++.so.6",
+            "libm.so.6",
+            "libgcc_s.so.1",
+            "libc.so.6",
+            "ld-linux-aarch64.so.1"
+          ]
+        },
+        {
+          "name": "libonnxruntime.so.1",
+          "bytes": 20591712,
+          "sha256": "f1ec1a08eb99bd6e5401340f0a2b101381bf4694415480291dc13bcaa30f9ec7",
+          "symlink": "libonnxruntime.so.1.28.0",
+          "max_glibc": "2.27",
+          "max_glibcxx": "3.4.21",
+          "needed": [
+            "libdl.so.2",
+            "librt.so.1",
+            "libpthread.so.0",
+            "libstdc++.so.6",
+            "libm.so.6",
+            "libgcc_s.so.1",
+            "libc.so.6",
+            "ld-linux-aarch64.so.1"
+          ]
+        },
+        {
+          "name": "libonnxruntime.so.1.28.0",
+          "bytes": 20591712,
+          "sha256": "f1ec1a08eb99bd6e5401340f0a2b101381bf4694415480291dc13bcaa30f9ec7",
+          "symlink": null,
+          "max_glibc": "2.27",
+          "max_glibcxx": "3.4.21",
+          "needed": [
+            "libdl.so.2",
+            "librt.so.1",
+            "libpthread.so.0",
+            "libstdc++.so.6",
+            "libm.so.6",
+            "libgcc_s.so.1",
+            "libc.so.6",
+            "ld-linux-aarch64.so.1"
+          ]
+        },
+        {
+          "name": "libonnxruntime_providers_shared.so",
+          "bytes": 198792,
+          "sha256": "3b6be288fbfb7dff8770d08a23defdde18e8f7e0f5a2b344a0e5e238c999ea88",
+          "symlink": null,
+          "max_glibc": "2.17",
+          "max_glibcxx": null,
+          "needed": [
+            "libstdc++.so.6",
+            "libm.so.6",
+            "libgcc_s.so.1",
+            "libc.so.6"
+          ]
+        }
+      ]
+    },
+    {
+      "architecture": "x86_64",
+      "archive": "omadesign-0.6.1-x86_64-unknown-linux-gnu.tar.gz",
+      "bytes": 38791631,
+      "sha256": "a9f01e18525b7bd8432353d4e91ea19dec9a6c8d91096bfe2531a26584d31952",
+      "binary": {
+        "bytes": 55986728,
+        "sha256": "d30757395c6487d6d07b31aea5d0ad924fcf39c74330ddd897baa806779d279d"
+      },
+      "stripped": true,
+      "max_glibc": "2.35",
+      "archive_entries": 69,
+      "runtime": [
+        {
+          "name": "libonnxruntime.so",
+          "bytes": 24268848,
+          "sha256": "1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab",
+          "symlink": "libonnxruntime.so.1",
+          "max_glibc": "2.27",
+          "max_glibcxx": "3.4.21",
+          "needed": [
+            "libdl.so.2",
+            "librt.so.1",
+            "libpthread.so.0",
+            "libstdc++.so.6",
+            "libm.so.6",
+            "libgcc_s.so.1",
+            "libc.so.6",
+            "ld-linux-x86-64.so.2"
+          ]
+        },
+        {
+          "name": "libonnxruntime.so.1",
+          "bytes": 24268848,
+          "sha256": "1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab",
+          "symlink": "libonnxruntime.so.1.28.0",
+          "max_glibc": "2.27",
+          "max_glibcxx": "3.4.21",
+          "needed": [
+            "libdl.so.2",
+            "librt.so.1",
+            "libpthread.so.0",
+            "libstdc++.so.6",
+            "libm.so.6",
+            "libgcc_s.so.1",
+            "libc.so.6",
+            "ld-linux-x86-64.so.2"
+          ]
+        },
+        {
+          "name": "libonnxruntime.so.1.28.0",
+          "bytes": 24268848,
+          "sha256": "1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab",
+          "symlink": null,
+          "max_glibc": "2.27",
+          "max_glibcxx": "3.4.21",
+          "needed": [
+            "libdl.so.2",
+            "librt.so.1",
+            "libpthread.so.0",
+            "libstdc++.so.6",
+            "libm.so.6",
+            "libgcc_s.so.1",
+            "libc.so.6",
+            "ld-linux-x86-64.so.2"
+          ]
+        },
+        {
+          "name": "libonnxruntime_providers_shared.so",
+          "bytes": 14632,
+          "sha256": "086ec1d5388f64153d9c63470d126693db9a182c8ce236d3a1119068471b8a0d",
+          "symlink": null,
+          "max_glibc": "2.2.5",
+          "max_glibcxx": null,
+          "needed": [
+            "libstdc++.so.6",
+            "libm.so.6",
+            "libgcc_s.so.1",
+            "libc.so.6"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "success": true,
+  "verified_utc": "2026-09-29T11:32:39.280136+00:00",
+  "installer_url": "https://omadesign.app/install",
+  "installer_sha256": "5cf18da3a512052bc06bbede604ad69ecd8cd408c49164d62e6a721b1fba55ad",
+  "resolved_latest_without_override": true,
+  "version": "omadesign 0.6.1",
+  "binary": "/home/michael/.local/bin/omadesign",
+  "binary_sha256": "2e48e869ec4be2960ffcf389c34b82782a7a8688c49e016eafcbbf55886c8635",
+  "runtime_sha256": "f1ec1a08eb99bd6e5401340f0a2b101381bf4694415480291dc13bcaa30f9ec7",
+  "prior_plugin_files_and_preferences_unchanged": true,
+  "prior_install_backed_up": true
+}

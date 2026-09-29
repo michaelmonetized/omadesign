@@ -1,0 +1,36 @@
+{
+  "tag": "v0.6.1",
+  "verified_utc": "2026-09-29T11:31:49.567252+00:00",
+  "unauthenticated": true,
+  "success": true,
+  "files": [
+    {
+      "name": "omadesign-0.6.1-aarch64-unknown-linux-gnu.tar.gz",
+      "url": "https://github.com/michaelmonetized/omadesign/releases/download/v0.6.1/omadesign-0.6.1-aarch64-unknown-linux-gnu.tar.gz",
+      "bytes": 36492779,
+      "sha256": "bf7063cf4e396b4ad057363f311fc9ada435f16bc595f51252cbf63e248139e1",
+      "http_status": 200
+    },
+    {
+      "name": "omadesign-0.6.1-aarch64-unknown-linux-gnu.tar.gz.sha256",
+      "url": "https://github.com/michaelmonetized/omadesign/releases/download/v0.6.1/omadesign-0.6.1-aarch64-unknown-linux-gnu.tar.gz.sha256",
+      "bytes": 115,
+      "sha256": "d83668cf965068563caedcb0703ccc1f8ed8d1b30ab1ee844c359d57d6a182a9",
+      "http_status": 200
+    },
+    {
+      "name": "omadesign-0.6.1-x86_64-unknown-linux-gnu.tar.gz",
+      "url": "https://github.com/michaelmonetized/omadesign/releases/download/v0.6.1/omadesign-0.6.1-x86_64-unknown-linux-gnu.tar.gz",
+      "bytes": 38791631,
+      "sha256": "a9f01e18525b7bd8432353d4e91ea19dec9a6c8d91096bfe2531a26584d31952",
+      "http_status": 200
+    },
+    {
+      "name": "omadesign-0.6.1-x86_64-unknown-linux-gnu.tar.gz.sha256",
+      "url": "https://github.com/michaelmonetized/omadesign/releases/download/v0.6.1/omadesign-0.6.1-x86_64-unknown-linux-gnu.tar.gz.sha256",
+      "bytes": 114,
+      "sha256": "de28a6ec6e37ead4cef3c4069d31d9bd25221abcd46df81610bbb7bacc8d820f",
+      "http_status": 200
+    }
+  ]
+}

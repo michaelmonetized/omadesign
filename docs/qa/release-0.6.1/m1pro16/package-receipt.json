@@ -1,0 +1,217 @@
+{
+  "source_commit": "b84c01c99fe249e69b493519b496322ccce4d4d9",
+  "archive_sha256": "bf7063cf4e396b4ad057363f311fc9ada435f16bc595f51252cbf63e248139e1",
+  "archive": "/home/michael/Projects/omadesign/.worktrees/release-061/dist/omadesign-0.6.1-aarch64-unknown-linux-gnu.tar.gz",
+  "checks": [
+    {
+      "name": "install",
+      "command": [
+        "sh",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.1/arm/package/omadesign-0.6.1-aarch64-unknown-linux-gnu/install.sh",
+        "--prefix",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.1/arm/installed"
+      ],
+      "exit_code": 0,
+      "seconds": 0.05364120507147163
+    },
+    {
+      "name": "version",
+      "command": [
+        "unshare",
+        "-Urn",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.1/arm/installed/bin/omadesign",
+        "--version"
+      ],
+      "exit_code": 0,
+      "seconds": 0.001530549954622984
+    },
+    {
+      "name": "binary-ldd",
+      "command": [
+        "ldd",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.1/arm/installed/bin/omadesign"
+      ],
+      "exit_code": 0,
+      "seconds": 0.002555722021497786
+    },
+    {
+      "name": "runtime-ldd",
+      "command": [
+        "ldd",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.1/arm/installed/share/omadesign/lib/libonnxruntime.so.1"
+      ],
+      "exit_code": 0,
+      "seconds": 0.004245606018230319
+    },
+    {
+      "name": "inspect",
+      "command": [
+        "unshare",
+        "-Urn",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.1/arm/installed/bin/omadesign",
+        "--inspect",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.1/arm/fixtures/infographic-seed.oma"
+      ],
+      "exit_code": 0,
+      "seconds": 0.11392019502818584
+    },
+    {
+      "name": "convert",
+      "command": [
+        "unshare",
+        "-Urn",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.1/arm/installed/bin/omadesign",
+        "--convert",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.1/arm/fixtures/infographic-seed.oma",
+        "--output",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.1/arm/converted.png"
+      ],
+      "exit_code": 0,
+      "seconds": 0.12293157691601664
+    },
+    {
+      "name": "prepare-raster",
+      "command": [
+        "unshare",
+        "-Urn",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.1/arm/installed/bin/omadesign",
+        "--convert",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.1/arm/fixtures/cat-320.png",
+        "--output",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.1/arm/inference.oma"
+      ],
+      "exit_code": 0,
+      "seconds": 0.034793561906553805
+    },
+    {
+      "name": "native-shot",
+      "command": [
+        "unshare",
+        "-Urn",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.1/arm/installed/bin/omadesign",
+        "--shot-file",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.1/arm/fixtures/infographic-seed.oma",
+        "--out",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.1/arm/native-shot.png",
+        "--size",
+        "1440x900"
+      ],
+      "exit_code": 0,
+      "seconds": 6.656347941956483
+    }
+  ],
+  "network": "unshare -Urn for every application process",
+  "runtime_override": false,
+  "binary_sha256": "2e48e869ec4be2960ffcf389c34b82782a7a8688c49e016eafcbbf55886c8635",
+  "runtime_sha256": "f1ec1a08eb99bd6e5401340f0a2b101381bf4694415480291dc13bcaa30f9ec7",
+  "binary": "/home/michael/.local/state/omadesign/qa/release-0.6.1/arm/installed/bin/omadesign",
+  "runtime": "/home/michael/.local/state/omadesign/qa/release-0.6.1/arm/installed/share/omadesign/lib/libonnxruntime.so.1",
+  "fixtures": {
+    "cat-320.png": "be014031f03404af7f6a4c222caf34c806a55cc943cc33736556e021bc9610ff",
+    "infographic-seed.oma": "d75a60c1803b4718d171a897f2330b3faec80018a02d27ee6c5447b88eeef7a7"
+  },
+  "converted_size": [
+    1200,
+    900
+  ],
+  "native_size": [
+    1440,
+    900
+  ],
+  "cli_success": true,
+  "production_ui_inference": {
+    "success": true,
+    "implementation": "unmodified installed production binary, actual UI pointer/keyboard events",
+    "background_model": "Fast bundled U2NetP",
+    "upscale_model": "General bundled Real-ESRGAN",
+    "source_size": [
+      320,
+      212
+    ],
+    "upscaled_pixels_and_mask": [
+      640,
+      424
+    ],
+    "original_pixels_preserved_by_background_removal": true,
+    "canvas_placement_preserved_by_upscale": true,
+    "mask_red_range": [
+      0,
+      255
+    ],
+    "bundled_runtime": "/home/michael/.local/state/omadesign/qa/release-0.6.1/arm/installed/share/omadesign/lib/libonnxruntime.so.1",
+    "runtime_sha256": "f1ec1a08eb99bd6e5401340f0a2b101381bf4694415480291dc13bcaa30f9ec7",
+    "process_proof": {
+      "pid": 3713363,
+      "executable": "/home/michael/.local/state/omadesign/qa/release-0.6.1/arm/installed/bin/omadesign",
+      "binary_sha256": "2e48e869ec4be2960ffcf389c34b82782a7a8688c49e016eafcbbf55886c8635",
+      "network_namespace": "net:[4026533229]",
+      "host_network_namespace": "net:[4026531833]",
+      "gpu_handles": [
+        {
+          "fd": "10",
+          "target": "/dev/dri/renderD128",
+          "device": "/sys/devices/platform/soc/406400000.gpu/drm/renderD128",
+          "driver": "asahi"
+        },
+        {
+          "fd": "11",
+          "target": "/dev/dri/renderD128",
+          "device": "/sys/devices/platform/soc/406400000.gpu/drm/renderD128",
+          "driver": "asahi"
+        },
+        {
+          "fd": "12",
+          "target": "/dev/dri/renderD128",
+          "device": "/sys/devices/platform/soc/406400000.gpu/drm/renderD128",
+          "driver": "asahi"
+        },
+        {
+          "fd": "13",
+          "target": "/dev/dri/renderD128",
+          "device": "/sys/devices/platform/soc/406400000.gpu/drm/renderD128",
+          "driver": "asahi"
+        },
+        {
+          "fd": "15",
+          "target": "/dev/dri/renderD128",
+          "device": "/sys/devices/platform/soc/406400000.gpu/drm/renderD128",
+          "driver": "asahi"
+        }
+      ]
+    },
+    "saved_document_cli_reopen_checks": [
+      {
+        "name": "background-applied-inspect",
+        "exit_code": 0
+      },
+      {
+        "name": "background-applied-convert",
+        "exit_code": 0
+      },
+      {
+        "name": "upscale-applied-inspect",
+        "exit_code": 0
+      },
+      {
+        "name": "upscale-applied-convert",
+        "exit_code": 0
+      }
+    ],
+    "network": "private network namespace, only loopback interface, no ORT override or LD_LIBRARY_PATH",
+    "qa_setup": "private GPU Sway; direct scanout and explicit sync disabled for headless capture; task-only WayVNC virtual input; private input-process /tmp bind mount because host /tmp is full",
+    "limits": "Smoke verification only; no release performance timing claim. No Cancel-button, optional downloadable-model or whole-application behavior coverage claim."
+  },
+  "outputs": {
+    "background-applied.oma": "6d77af841e91c54fae7022d08f46804e77e061140c611a8b0df247f3dd2569ba",
+    "upscale-applied.oma": "518c114ef1a0d09ccbcfc01867ecb174dc80cd1032f29ff8c361a6ca2bc09a7a",
+    "background-applied.png": "db1545364ab76c60898a2f947112179ab693485aa95ab7a0dba89858a1dda1e3",
+    "upscale-applied.png": "43b9610946d2630cd0d634889c55f269b0aa544255a7f4fc78e33c68ebb37002",
+    "ui-removal.png": "74003cd7be4cce43059f339f03b842e322a8c56e78590e7515313568c9322398",
+    "ui-upscale.png": "0c9b2aefc3fe1f2c37b50ce20cf42257e0130e4e1a2081391b980c4a1e0b6307",
+    "ui-mask-applied.png": "841d1fdd6439bb2f8a2353f49ef0e3f3e211d04bc796252e8efe2890885572d4",
+    "ui-upscale-applied.png": "f2597a36879ff1c0ee6bc859002590b2bf366a8622c14257de522b23bf8193c0",
+    "native-shot.png": "641bf6e65ac4d56cbff1b5effd8fe0e710569b0cd26b1b3d9f6ff1b85c6f7eee",
+    "converted.png": "3cdce7cb10fc90dff5db55b2fc50ad0f7ba28eebc51ec5deab0071c4d3fe08df"
+  },
+  "success": true
+}
