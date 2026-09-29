@@ -22,6 +22,7 @@ const SIZE: [u32; 2] = [1600, 900];
 #[derive(Clone, Debug)]
 enum Target {
     Text(&'static str),
+    FieldNth(&'static str, usize),
     Any(&'static str),
     Left(&'static str),
     Field(&'static str),
@@ -79,6 +80,49 @@ fn schedule(scene: &str) -> Vec<Action> {
     use ActionKind::*;
     use Target::*;
     match scene {
+        "independent-effects" => vec![
+            event(0.5, Scroll(-1200.)),
+            event(1.5, Expect("Object blend")),
+            event(2., Click(Field("Object blend"))),
+            event(2.8, Click(Text("Overlay"))),
+            event(3.5, Click(Text("Effects"))),
+            event(4.2, Scroll(-480.)),
+            event(5.2, Click(FieldNth("Blend", 0))),
+            event(6., Click(Text("Multiply"))),
+            event(6.8, Click(FieldNth("Opacity", 0))),
+            event(7., Key(egui::Key::A, ctrl())),
+            drag(7.2, 0.2, Type("60")),
+            event(7.6, Key(egui::Key::Enter, Modifiers::NONE)),
+            event(8., Click(Text("Knockout"))),
+            event(8.8, Click(Text("Knockout"))),
+            event(9.5, Scroll(-480.)),
+            event(10.5, Click(FieldNth("Blend", 0))),
+            event(11.3, Click(Text("Screen"))),
+            event(11.8, Click(FieldNth("Opacity", 0))),
+            event(12., Key(egui::Key::A, ctrl())),
+            drag(12.2, 0.2, Type("80")),
+            event(12.6, Key(egui::Key::Enter, Modifiers::NONE)),
+            event(13.2, Scroll(3000.)),
+            event(14.2, Scroll(-800.)),
+            event(15., Click(Field("Fill opacity"))),
+            event(15.2, Key(egui::Key::A, ctrl())),
+            drag(15.4, 0.2, Type("0")),
+            event(15.8, Key(egui::Key::Enter, Modifiers::NONE)),
+            event(17., Click(Text("Blend interior effects as group"))),
+            event(18., Click(Text("Blend interior effects as group"))),
+            event(19., Key(egui::Key::Z, ctrl())),
+            event(
+                20.,
+                Key(
+                    egui::Key::Z,
+                    Modifiers {
+                        shift: true,
+                        ..ctrl()
+                    },
+                ),
+            ),
+            event(21., Key(egui::Key::S, ctrl())),
+        ],
         "welcome-browse" => vec![
             event(0.5, Expect("Your Work")),
             drag(0.8, 0.7, Move(At(105., 180.))),
@@ -649,6 +693,66 @@ fn seed(scene: &str) -> Studio {
     s.recents.clear();
     s.path = None;
     match scene {
+        "independent-effects" => {
+            use omadesign::{
+                color::Blend,
+                document::{Fill, Shape, Style},
+                filter::Fx,
+            };
+            s.doc = Document::new("Independent object and effect blending", 900., 600., 72.);
+            s.doc.layers = vec![Layer::vector("Gradient study")];
+            let make = |origin, size, fill| {
+                Shape::new(
+                    Geom::Rect {
+                        origin,
+                        size,
+                        radius: 24.,
+                    },
+                    Style { fill, stroke: None },
+                )
+            };
+            let bg = make(
+                Pt::ZERO,
+                Pt::new(900., 600.),
+                Fill::Linear {
+                    from: [0., 0.],
+                    to: [1., 0.],
+                    c0: Rgba::rgb(60, 100, 170),
+                    c1: Rgba::rgb(230, 170, 100),
+                },
+            );
+            let mut subject = make(
+                Pt::new(240., 150.),
+                Pt::new(400., 290.),
+                Fill::Solid(Rgba::rgb(180, 90, 50)),
+            );
+            subject.name = "Overlay + Multiply + Screen".into();
+            subject.filters.items = vec![
+                Fx::Shadow {
+                    dx: 35.,
+                    dy: 25.,
+                    blur: 12.,
+                    color: Rgba::rgb(30, 35, 50),
+                    blend: Blend::Normal,
+                    opacity: 1.,
+                    knockout: true,
+                    spread: 0.,
+                },
+                Fx::InnerShadow {
+                    dx: 15.,
+                    dy: 12.,
+                    blur: 10.,
+                    color: Rgba::rgb(180, 210, 255),
+                    blend: Blend::Normal,
+                    opacity: 1.,
+                    choke: 0.,
+                },
+            ];
+            s.selection = vec![(0, subject.id)];
+            s.active_layer = Some(0);
+            *s.doc.layers[0].kind.shapes_mut().unwrap() = vec![bg, subject];
+        }
+
         scene if scene.starts_with("welcome-") => {
             s.show_welcome = true;
             s.welcome_page = omadesign::app::WelcomePage::Recents;
@@ -788,7 +892,10 @@ fn seed(scene: &str) -> Studio {
 }
 impl Capture {
     fn new(scene: String, directory: PathBuf, probe: bool, fps: u32) -> Self {
-        let studio = seed(&scene);
+        let mut studio = seed(&scene);
+        if scene == "independent-effects" {
+            studio.path = Some(directory.join("independent-effects-final.oma"));
+        }
         let seconds = match scene.as_str() {
             "welcome-browse" => 23,
             "welcome-vector" | "welcome-layout" => 9,
@@ -796,6 +903,7 @@ impl Capture {
             "welcome-agents" => 21,
             "chroma" | "layout" => 15,
             "graphics" => 17,
+            "independent-effects" => 23,
             "design" => 42,
             "photo" => 24,
             "pixel" | "motion" | "brand-kit" => 30,
@@ -846,6 +954,24 @@ impl Capture {
         };
         match t {
             Target::Text(s) => label(s, true).map(|r| r.center()),
+
+            Target::FieldNth(s, n) => {
+                let r = self
+                    .labels
+                    .iter()
+                    .filter(|(t, r)| {
+                        t == s && r.left() > 1100. && r.top() > 0. && r.bottom() < 900.
+                    })
+                    .nth(*n)?
+                    .1;
+                self.labels
+                    .iter()
+                    .filter(|(_, f)| {
+                        f.left() > r.right() + 2. && (f.center().y - r.center().y).abs() < 6.
+                    })
+                    .min_by(|(_, a), (_, b)| a.left().total_cmp(&b.left()))
+                    .map(|(_, r)| r.center())
+            }
             Target::Any(s) => label(s, false).map(|r| r.center()),
             Target::Left(s) => self
                 .labels
@@ -1190,6 +1316,52 @@ impl eframe::App for Capture {
                     )
                     .unwrap();
                 }
+                if self.scene == "independent-effects" {
+                    use omadesign::{color::Blend, filter::Fx};
+                    let subject = &self.studio.doc.layers[0].kind.shapes().unwrap()[1];
+                    if subject.blend != Blend::Overlay
+                        || subject.fill_opacity != 0.
+                        || subject.blend_interior
+                    {
+                        self.errors.push(format!(
+                            "Incorrect final object appearance: {:?} fill={} interior={}",
+                            subject.blend, subject.fill_opacity, subject.blend_interior
+                        ));
+                    }
+                    if !matches!(subject.filters.items[0],Fx::Shadow{blend:Blend::Multiply,opacity,knockout:true,..} if (opacity-0.6).abs()<0.001)
+                    {
+                        self.errors
+                            .push(format!("Incorrect shadow: {:?}", subject.filters.items[0]));
+                    }
+                    if !matches!(subject.filters.items[1],Fx::InnerShadow{blend:Blend::Screen,opacity,..} if (opacity-0.8).abs()<0.001)
+                    {
+                        self.errors.push(format!(
+                            "Incorrect inner shadow: {:?}",
+                            subject.filters.items[1]
+                        ));
+                    }
+                    let saved = omadesign::project::load_from(
+                        &self.directory.join("independent-effects-final.oma"),
+                    );
+                    match saved {
+                        Ok(reopened) => {
+                            let pixels =
+                                omadesign::compositor::export_png(&self.studio.doc, 1).unwrap();
+                            if pixels != omadesign::compositor::export_png(&reopened, 1).unwrap() {
+                                self.errors.push(
+                                    "Saved/reopened appearance differs from native edited document"
+                                        .into(),
+                                );
+                            }
+                            fs::write(
+                                self.directory.join("independent-effects-reopened.png"),
+                                pixels,
+                            )
+                            .unwrap();
+                        }
+                        Err(error) => self.errors.push(format!("Native save failed: {error}")),
+                    }
+                }
                 self.encoder.take().unwrap().finish();
                 fs::write(
                     self.directory.join(format!("{}-errors.json", self.scene)),
@@ -1259,7 +1431,7 @@ fn main() -> eframe::Result {
                 .expect("invalid FPS")
         })
         .unwrap_or(FPS);
-    assert!(matches!(fps, 30 | 60), "FPS must be 30 or 60");
+    assert!(matches!(fps, 10 | 30 | 60), "FPS must be 10, 30 or 60");
     // Keep the real desktop HOME/theme, isolate every app write and credential.
     let profile = std::env::temp_dir().join(format!("omadesign-recording-{}", std::process::id()));
     for (variable, name) in [

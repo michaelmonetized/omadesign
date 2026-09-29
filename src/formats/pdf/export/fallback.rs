@@ -37,7 +37,10 @@ pub(super) fn prepare(
                 layer.blend != Blend::Normal && document.layer_ancestors(child).contains(index)
             })
     });
-    if needs_backdrop {
+    let effect_backdrop = document.layers.iter().any(|l| {
+        l.filters.independent() && (l.filters.blends_backdrop() || l.blend != Blend::Normal)
+    });
+    if needs_backdrop || effect_backdrop {
         return bake_pages(document);
     }
     let mut prepared = document.clone();
@@ -121,13 +124,20 @@ pub(super) fn prepare(
 
 fn needs_pixels(layer: &Layer) -> bool {
     if layer.is_group {
-        !layer.pass_through || layer.opacity < 1. || layer.mask.is_some() || layer.filters.active()
+        !layer.pass_through
+            || layer.fill_opacity < 1.
+            || layer.opacity < 1.
+            || layer.mask.is_some()
+            || layer.filters.active()
     } else {
-        layer.mask.is_some()
+        layer.fill_opacity < 1.
+            || layer.mask.is_some()
             || layer.filters.active()
             || layer.kind.shapes().is_some_and(|shapes| {
                 shapes.iter().any(|shape| {
-                    shape.filters.active()
+                    shape.fill_opacity < 1.
+                        || shape.blend != Blend::Normal
+                        || shape.filters.active()
                         || shape.mask.is_some()
                         || shape.style.stroke.as_ref().is_some_and(|s| {
                             s.gradient.is_some()

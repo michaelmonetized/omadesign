@@ -423,10 +423,33 @@ pub(super) fn scale_filters(stack: &mut crate::filter::FilterStack, scale: f32) 
     for effect in &mut stack.items {
         match effect {
             Fx::Blur { std } => *std *= scale,
-            Fx::Shadow { dx, dy, blur, .. } | Fx::InnerShadow { dx, dy, blur, .. } => {
+            Fx::Shadow {
+                dx,
+                dy,
+                blur,
+                spread: extent,
+                ..
+            }
+            | Fx::InnerShadow {
+                dx,
+                dy,
+                blur,
+                choke: extent,
+                ..
+            } => {
+                *extent *= scale;
                 *dx *= scale;
                 *dy *= scale;
                 *blur *= scale;
+            }
+            Fx::OuterGlow { blur, spread, .. }
+            | Fx::InnerGlow {
+                blur,
+                choke: spread,
+                ..
+            } => {
+                *blur *= scale;
+                *spread *= scale;
             }
             Fx::Offset { dx, dy } => {
                 *dx *= scale;

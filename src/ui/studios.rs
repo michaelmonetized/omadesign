@@ -1,5 +1,7 @@
 #[path = "gradient_editor.rs"]
 mod gradient_editor;
+#[path = "object_appearance.rs"]
+mod object_appearance;
 
 use super::layer_drag;
 
@@ -111,19 +113,14 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                         if matches!(studio.tool, Tool::Brush | Tool::Fill | Tool::Eyedropper) {
                             paint_color_studio(ui, studio);
                         } else if !paint {
-                            if motion {
-                                eframe::egui::CollapsingHeader::new("Appearance")
-                                    .show(ui, |ui| color_studio(ui, studio));
-                            } else {
-                                color_studio(ui, studio);
-                            }
+                            color_studio(ui, studio);
                         }
                     }
                     if studio.tool == Tool::Trace {
                         section_gap(ui);
                         trace_studio(ui, studio);
                     }
-                    if design {
+                    if design || motion {
                         section_gap(ui);
                         eframe::egui::CollapsingHeader::new("Effects")
                             .show(ui, |ui| fx_studio(ui, studio));
@@ -714,6 +711,7 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
         heading(ui, "Stroke");
         stroke_studio(ui, studio);
     }
+    object_appearance::show(ui, studio);
 }
 
 fn apply_gradient(studio: &mut Studio, gradient: Option<crate::gradient::Gradient>) {
@@ -1544,8 +1542,6 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
     };
     let layout_frame = shape.layout.frame;
     let rotation = shape.rotation;
-    let opacity = shape.opacity;
-    let original_blend = shape.blend;
     let polygon = if let Geom::Polygon { sides, .. } = shape.geom {
         Some(sides)
     } else {
@@ -1631,19 +1627,12 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
     } else {
         rotation.to_degrees()
     };
-    let mut opacity_percent = if motion {
-        pose.opacity.unwrap_or(opacity) * 100.0
-    } else {
-        opacity * 100.0
-    };
     let mut rotation_changed = false;
-    let opacity_changed;
     ui.columns(2, |columns| {
         rotation_changed =
             number_field(&mut columns[0], "Rotate", &mut degrees, -180.0..=180.0, "°");
         super::selection::flip_icons(&mut columns[1], studio);
     });
-    opacity_changed = number_field(ui, "Opacity", &mut opacity_percent, 0.0..=100.0, "%");
     if rotation_changed && let Some(shape) = studio.doc.find_shape(layer, id) {
         if motion {
             studio.key_prop(
@@ -1662,49 +1651,7 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
             });
         }
     }
-    if opacity_changed {
-        if motion {
-            studio.key_prop(id, crate::motion::Prop::Opacity, opacity_percent / 100.0);
-        } else {
-            studio.commit(crate::document::Cmd::SetOpacity {
-                layer,
-                id,
-                before: opacity,
-                after: opacity_percent / 100.0,
-            });
-        }
-    }
-    let mut blend = original_blend;
-    ui.horizontal(|ui| {
-        ui.label(RichText::new("Blend").small().color(fg_weak()));
-        ComboBox::from_id_salt(("object-blend", layer, id))
-            .selected_text(blend.name())
-            .show_ui(ui, |ui| {
-                for mode in Blend::ALL {
-                    ui.selectable_value(&mut blend, mode, mode.name());
-                }
-            });
-    });
-    if blend != original_blend {
-        let commands = studio
-            .selection
-            .iter()
-            .filter_map(|&(li, object)| {
-                let shape = studio.doc.find_shape(li, object)?;
-                (studio.doc.layer_editable(li) && !shape.locked && shape.blend != blend).then_some(
-                    crate::document::Cmd::SetBlend {
-                        layer: li,
-                        id: object,
-                        before: shape.blend,
-                        after: blend,
-                    },
-                )
-            })
-            .collect::<Vec<_>>();
-        if !commands.is_empty() {
-            studio.commit(crate::document::Cmd::Batch(commands));
-        }
-    }
+
     if let Some(mut count) = polygon
         && number_field(ui, "Sides", &mut count, 3..=16, "")
     {
@@ -1789,6 +1736,7 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
 }
 
 fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &str) {
+    let original = stack.clone();
     ui.horizontal(|ui| {
         ui.checkbox(&mut stack.enabled, "Enabled");
         ComboBox::from_id_salt(format!("fx-add-{salt}"))
@@ -1821,6 +1769,22 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
                     }
                 });
             });
+            if let Some((blend, opacity)) = fx.appearance_mut() {
+                ui.horizontal(|ui| {
+                    ui.label("Blend");
+                    ComboBox::from_id_salt(("effect-blend", salt, i))
+                        .selected_text(blend.name())
+                        .show_ui(ui, |ui| {
+                            for mode in Blend::ALL {
+                                ui.selectable_value(blend, mode, mode.name());
+                            }
+                        });
+                });
+                let mut percent = *opacity * 100.;
+                if inspector_slider(ui, "Opacity", &mut percent, 0.0..=100.0, "%") {
+                    *opacity = percent / 100.;
+                }
+            }
             match fx {
                 crate::filter::Fx::Blur { std } => {
                     inspector_slider(ui, "Blur", std, 0.0..=80.0, "");
@@ -1830,12 +1794,14 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
                     dy,
                     blur,
                     color,
+                    ..
                 }
                 | crate::filter::Fx::InnerShadow {
                     dx,
                     dy,
                     blur,
                     color,
+                    ..
                 } => {
                     inspector_slider(ui, "Offset X", dx, -80.0..=80.0, "");
                     inspector_slider(ui, "Offset Y", dy, -80.0..=80.0, "");
@@ -1843,6 +1809,25 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
                     ui.horizontal(|ui| {
                         super::color_picker::color_edit(ui, ("effect-color", salt, i), color);
                     });
+                }
+                crate::filter::Fx::OuterGlow {
+                    blur,
+                    spread,
+                    color,
+                    ..
+                }
+                | crate::filter::Fx::InnerGlow {
+                    blur,
+                    choke: spread,
+                    color,
+                    ..
+                } => {
+                    inspector_slider(ui, "Blur", blur, 0.0..=80.0, "");
+                    inspector_slider(ui, "Spread / choke", spread, 0.0..=64.0, "");
+                    super::color_picker::color_edit(ui, ("effect-color", salt, i), color);
+                }
+                crate::filter::Fx::ColorOverlay { color, .. } => {
+                    super::color_picker::color_edit(ui, ("effect-color", salt, i), color);
                 }
                 crate::filter::Fx::Offset { dx, dy } => {
                     inspector_slider(ui, "Offset X", dx, -200.0..=200.0, "");
@@ -1905,6 +1890,25 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
                     inspector_slider(ui, "Falloff", &mut glass.falloff, 0.0..=300.0, "");
                 }
             }
+            match fx {
+                crate::filter::Fx::Shadow {
+                    knockout, spread, ..
+                } => {
+                    ui.checkbox(knockout, "Knockout");
+                    inspector_slider(ui, "Spread", spread, 0.0..=64.0, "");
+                }
+                crate::filter::Fx::InnerShadow { choke, .. } => {
+                    inspector_slider(ui, "Choke", choke, 0.0..=64.0, "");
+                }
+                crate::filter::Fx::InnerGlow { source, .. } => {
+                    ui.horizontal(|ui| {
+                        ui.label("Source");
+                        ui.selectable_value(source, crate::filter::GlowSource::Edge, "Edge");
+                        ui.selectable_value(source, crate::filter::GlowSource::Center, "Center");
+                    });
+                }
+                _ => {}
+            }
         });
     }
     if let Some(i) = remove {
@@ -1915,6 +1919,9 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
         if j >= 0 && (j as usize) < stack.items.len() {
             stack.items.swap(i, j as usize);
         }
+    }
+    if *stack != original {
+        stack.legacy_composite = false;
     }
 }
 
@@ -1955,6 +1962,30 @@ fn fx_studio(ui: &mut Ui, studio: &mut Studio) {
     }
     if !studio.layer_unlocked(li) {
         ui.disable();
+    }
+    let layer = &studio.doc.layers[li];
+    let mut fill = layer.fill_opacity * 100.;
+    let before = layer.fill_opacity;
+    let mut interior = layer.blend_interior;
+    let before_interior = interior;
+    if number_field(ui, "Layer fill opacity", &mut fill, 0.0..=100.0, "%") {
+        studio.commit(crate::document::Cmd::SetFillOpacity {
+            layer: li,
+            id: None,
+            before,
+            after: fill / 100.,
+        });
+    }
+    if ui
+        .checkbox(&mut interior, "Blend layer interior effects as group")
+        .changed()
+    {
+        studio.commit(crate::document::Cmd::SetBlendInterior {
+            layer: li,
+            id: None,
+            before: before_interior,
+            after: interior,
+        });
     }
     let mut stack = studio.doc.layers[li].filters.clone();
     fx_stack_editor(ui, &mut stack, "layer");
@@ -2222,35 +2253,41 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                 });
             }
         }
-        ui.horizontal(|ui| {
+        ui.vertical(|ui| {
             if !studio.layer_unlocked(i) {
                 ui.disable();
             }
             let mut blend = studio.doc.layers[i].blend;
             let pass_through = studio.doc.layers[i].is_group && studio.doc.layers[i].pass_through;
             ui.add_enabled_ui(!pass_through, |ui| {
-                ComboBox::from_id_salt("active-layer-blend")
-                    .selected_text(if pass_through {
-                        "Pass through"
-                    } else {
-                        blend.name()
-                    })
-                    .width((ui.available_width() - 76.0).max(100.0))
-                    .show_ui(ui, |ui| {
-                        for value in Blend::ALL {
-                            ui.selectable_value(&mut blend, value, value.name());
-                        }
-                    });
+                ui.horizontal(|ui| {
+                    ui.label("Layer blend");
+                    ComboBox::from_id_salt("active-layer-blend")
+                        .selected_text(if pass_through {
+                            "Pass through"
+                        } else {
+                            blend.name()
+                        })
+                        .width(80.0)
+                        .show_ui(ui, |ui| {
+                            for value in Blend::ALL {
+                                ui.selectable_value(&mut blend, value, value.name());
+                            }
+                        });
+                });
             });
             let mut opacity = studio.doc.layers[i].opacity * 100.0;
-            ui.add(
-                eframe::egui::DragValue::new(&mut opacity)
-                    .range(0.0..=100.0)
-                    .suffix("%")
-                    .speed(0.5)
-                    .max_decimals(0),
-            )
-            .on_hover_text("Layer opacity");
+            ui.horizontal(|ui| {
+                ui.label("Layer opacity");
+                ui.add(
+                    eframe::egui::DragValue::new(&mut opacity)
+                        .range(0.0..=100.0)
+                        .suffix("%")
+                        .speed(0.5)
+                        .max_decimals(0),
+                )
+                .on_hover_text("Layer opacity");
+            });
             let layer = &studio.doc.layers[i];
             if blend != layer.blend || (opacity / 100.0 - layer.opacity).abs() > 0.0001 {
                 studio.commit(crate::document::Cmd::SetLayerMeta {
@@ -2332,6 +2369,7 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                             },
                             fg_weak(),
                         );
+                        if layer.filters.active() { ui.label(RichText::new("fx").small().color(accent())); }
                         let name_width = (ui.available_width()
                             - if layer.mask.is_some() { 74.0 } else { 50.0 })
                         .max(42.0);
@@ -2534,10 +2572,11 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                                             } else {
                                                 &shape.name
                                             };
+                                            if shape.filters.active() { ui.label(RichText::new("fx").small().color(accent())); }
                                             let response = object_name(
                                                 ui,
                                                 name,
-                                                name_width,
+                                                name_width - if shape.filters.active() { 24. } else { 0. },
                                                 studio.selection.contains(&(i, shape.id))
                                                     && shape.visible,
                                                 true,
@@ -2948,11 +2987,34 @@ fn expanded_keyframes_and_effects_respect_the_resized_panel() {
     }
 
     fn open_section(ctx: &egui::Context, studio: &mut Studio, time: &mut f64, title: &str) {
-        let (_, labels) = frame(ctx, studio, time, vec![]);
+        let mut labels = frame(ctx, studio, time, vec![]).1;
+        for _ in 0..8 {
+            if labels.iter().any(|(text, _)| text == title) {
+                break;
+            }
+            labels = frame(
+                ctx,
+                studio,
+                time,
+                vec![
+                    Event::PointerMoved(egui::pos2(1490., 800.)),
+                    Event::MouseWheel {
+                        unit: egui::MouseWheelUnit::Point,
+                        delta: vec2(0., -300.),
+                        modifiers: Modifiers::NONE,
+                        phase: egui::TouchPhase::Move,
+                    },
+                ],
+            )
+            .1;
+            for _ in 0..4 {
+                labels = frame(ctx, studio, time, vec![]).1;
+            }
+        }
         let pos = labels
             .iter()
             .find(|(text, _)| text == title)
-            .unwrap()
+            .unwrap_or_else(|| panic!("Missing {title}"))
             .1
             .center();
         frame(ctx, studio, time, vec![Event::PointerMoved(pos)]);

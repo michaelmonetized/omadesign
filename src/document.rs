@@ -191,6 +191,10 @@ impl Default for Style {
     }
 }
 
+fn one() -> f32 {
+    1.0
+}
+
 fn default_true() -> bool {
     true
 }
@@ -203,6 +207,10 @@ pub struct Shape {
     pub style: Style,
     pub rotation: f32,
     pub opacity: f32,
+    #[serde(default = "one")]
+    pub fill_opacity: f32,
+    #[serde(default)]
+    pub blend_interior: bool,
     #[serde(default)]
     pub blend: Blend,
     #[serde(default = "default_true")]
@@ -243,6 +251,8 @@ impl PartialEq for Shape {
             && self.geom == other.geom
             && self.style == other.style
             && self.rotation == other.rotation
+            && self.fill_opacity == other.fill_opacity
+            && self.blend_interior == other.blend_interior
             && self.opacity == other.opacity
             && self.blend == other.blend
             && self.visible == other.visible
@@ -266,6 +276,8 @@ impl Shape {
             style,
             rotation: 0.0,
             opacity: 1.0,
+            fill_opacity: 1.0,
+            blend_interior: false,
             blend: Blend::Normal,
             visible: true,
             locked: false,
@@ -739,6 +751,10 @@ pub struct Layer {
     pub visible: bool,
     pub locked: bool,
     pub opacity: f32,
+    #[serde(default = "one")]
+    pub fill_opacity: f32,
+    #[serde(default)]
+    pub blend_interior: bool,
     pub blend: Blend,
     pub mask: Option<Pixels>,
     /// Optional placed mask geometry for vector layers and groups.
@@ -773,6 +789,8 @@ impl Layer {
             visible: true,
             locked: false,
             opacity: 1.0,
+            fill_opacity: 1.0,
+            blend_interior: false,
             blend: Blend::Normal,
             parent: None,
             is_group: false,
@@ -792,6 +810,8 @@ impl Layer {
             visible: true,
             locked: false,
             opacity: 1.0,
+            fill_opacity: 1.0,
+            blend_interior: false,
             blend: Blend::Normal,
             parent: None,
             is_group: false,
@@ -817,6 +837,8 @@ impl Layer {
             visible: true,
             locked: false,
             opacity: 1.0,
+            fill_opacity: 1.0,
+            blend_interior: false,
             blend: Blend::Normal,
             parent: None,
             is_group: false,
@@ -1558,6 +1580,18 @@ impl Document {
 
 #[derive(Clone, Debug)]
 pub enum Cmd {
+    SetFillOpacity {
+        layer: usize,
+        id: Option<u64>,
+        before: f32,
+        after: f32,
+    },
+    SetBlendInterior {
+        layer: usize,
+        id: Option<u64>,
+        before: bool,
+        after: bool,
+    },
     SetBlend {
         layer: usize,
         id: u64,
@@ -1991,6 +2025,28 @@ fn coalesce(prev: &mut Cmd, next: &Cmd) -> bool {
 
 fn invert_cmd(cmd: Cmd) -> Cmd {
     match cmd {
+        Cmd::SetFillOpacity {
+            layer,
+            id,
+            before,
+            after,
+        } => Cmd::SetFillOpacity {
+            layer,
+            id,
+            before: after,
+            after: before,
+        },
+        Cmd::SetBlendInterior {
+            layer,
+            id,
+            before,
+            after,
+        } => Cmd::SetBlendInterior {
+            layer,
+            id,
+            before: after,
+            after: before,
+        },
         Cmd::SetBlend {
             layer,
             id,
@@ -2046,7 +2102,11 @@ fn invert_cmd(cmd: Cmd) -> Cmd {
             before: after,
             after: before,
         },
-        Cmd::UpscaleLayer { index, before, after } => Cmd::UpscaleLayer {
+        Cmd::UpscaleLayer {
+            index,
+            before,
+            after,
+        } => Cmd::UpscaleLayer {
             index,
             before: after,
             after: before,
@@ -2286,6 +2346,28 @@ fn invert_cmd(cmd: Cmd) -> Cmd {
 
 pub fn apply(doc: &mut Document, cmd: &Cmd) {
     match cmd {
+        Cmd::SetFillOpacity {
+            layer, id, after, ..
+        } => {
+            if let Some(id) = id {
+                if let Some(s) = doc.find_shape_mut(*layer, *id) {
+                    s.fill_opacity = after.clamp(0., 1.);
+                }
+            } else if let Some(l) = doc.layers.get_mut(*layer) {
+                l.fill_opacity = after.clamp(0., 1.);
+            }
+        }
+        Cmd::SetBlendInterior {
+            layer, id, after, ..
+        } => {
+            if let Some(id) = id {
+                if let Some(s) = doc.find_shape_mut(*layer, *id) {
+                    s.blend_interior = *after;
+                }
+            } else if let Some(l) = doc.layers.get_mut(*layer) {
+                l.blend_interior = *after;
+            }
+        }
         Cmd::SetBlend {
             layer, id, after, ..
         } => {

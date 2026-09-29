@@ -172,7 +172,12 @@ fn dot_shape() -> Shape {
 fn word_shadow(amount: f32) -> FilterStack {
     FilterStack {
         enabled: true,
+        legacy_composite: false,
         items: vec![Fx::Shadow {
+            blend: crate::color::Blend::Normal,
+            opacity: 1.,
+            knockout: true,
+            spread: 0.,
             dx: 0.,
             dy: 10. * amount,
             blur: 12. * amount,
@@ -201,6 +206,7 @@ fn maze_shape() -> Shape {
     shape.opacity = 0.82;
     shape.filters = FilterStack {
         enabled: true,
+        legacy_composite: false,
         items: vec![Fx::Blur { std: 22. }],
     };
     shape
@@ -584,6 +590,7 @@ impl LogoDemo {
             if let Some(shape) = studio.doc.find_shape_mut(1, self.maze.id) {
                 shape.filters = FilterStack {
                     enabled: true,
+                    legacy_composite: false,
                     items: vec![Fx::Blur { std: 22. * amount }],
                 };
                 shape.opacity = 1. - 0.18 * amount;

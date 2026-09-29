@@ -5,7 +5,7 @@ use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub(crate) const VERSION: u32 = 6;
+pub(crate) const VERSION: u32 = 7;
 
 #[derive(Serialize, Deserialize)]
 struct File {
@@ -18,8 +18,19 @@ pub fn encode(doc: &Document) -> Result<String, String> {
     pack_rasters(&mut packed)?;
     serde_json::to_string(&File {
         // Older readers must not silently strip a mask or change stroke placement.
-        // Keep plain documents compatible with v5; v1-v6 remain readable here.
-        version: if doc
+        // Keep plain documents compatible with v5; v1-v7 remain readable here.
+        version: if doc.layers.iter().any(|l| {
+            l.fill_opacity != 1.
+                || l.blend_interior
+                || !l.filters.items.is_empty()
+                || l.kind.shapes().is_some_and(|ss| {
+                    ss.iter().any(|s| {
+                        s.fill_opacity != 1. || s.blend_interior || !s.filters.items.is_empty()
+                    })
+                })
+        }) {
+            7
+        } else if doc
             .layers
             .iter()
             .filter_map(|l| l.kind.shapes())
@@ -29,7 +40,8 @@ pub fn encode(doc: &Document) -> Result<String, String> {
                     || s.style.stroke.as_ref().is_some_and(|stroke| {
                         stroke.alignment != crate::document::StrokeAlignment::Center
                     })
-            }) {
+            })
+        {
             6
         } else {
             5
@@ -46,6 +58,9 @@ pub fn decode(s: &str) -> Result<Document, String> {
     }
     let mut doc = file.doc;
     for layer in &mut doc.layers {
+        if file.version < 7 {
+            layer.filters.migrate_legacy(layer.blend);
+        }
         if let Some(px) = layer.kind.pixels_mut() {
             *px = decompress_pixels(px)?;
         }
@@ -54,6 +69,9 @@ pub fn decode(s: &str) -> Result<Document, String> {
         }
         if let Some(shapes) = layer.kind.shapes_mut() {
             for s in shapes {
+                if file.version < 7 {
+                    s.filters.migrate_legacy(s.blend);
+                }
                 crate::text::fill_contours(&mut s.geom);
                 if let Some(mask) = s.mask.as_mut() {
                     *mask = decompress_pixels(mask)?;
@@ -64,6 +82,40 @@ pub fn decode(s: &str) -> Result<Document, String> {
     doc.ensure_ids();
     doc.validate_hierarchy()?;
     Ok(doc)
+}
+
+/// Versionless vector clipboard payloads predate independent effect appearance.
+/// Newer writers include explicit per-effect blend/opacity fields; preserve them.
+pub fn decode_clipboard_shapes(text: &str) -> Result<Vec<crate::document::Shape>, String> {
+    let raw: Vec<serde_json::Value> = serde_json::from_str(text).map_err(|e| e.to_string())?;
+    raw.into_iter()
+        .map(|value| {
+            let mut shape: crate::document::Shape =
+                serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
+            let filters = &value["filters"];
+            let old_effects = filters.get("legacy_composite").is_none()
+                && filters["items"].as_array().is_some_and(|items| {
+                    items.iter().any(|item| {
+                        [
+                            "Shadow",
+                            "InnerShadow",
+                            "OuterGlow",
+                            "InnerGlow",
+                            "ColorOverlay",
+                        ]
+                        .iter()
+                        .filter_map(|kind| item.get(*kind))
+                        .any(|effect| {
+                            effect.get("blend").is_none() || effect.get("opacity").is_none()
+                        })
+                    })
+                });
+            if old_effects {
+                shape.filters.migrate_legacy(shape.blend);
+            }
+            Ok(shape)
+        })
+        .collect()
 }
 
 fn compress_pixels(px: &Pixels) -> Result<Pixels, String> {

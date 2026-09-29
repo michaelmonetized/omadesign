@@ -1,5 +1,6 @@
 //! SVG export of the current document.
 
+mod appearance;
 use crate::color::Rgba;
 use crate::document::{Document, Fill, Layer, LayerKind, Shape};
 use crate::geom::{Bounds, Geom, Pt};
@@ -710,6 +711,11 @@ fn export_warnings(doc: &Document) -> Vec<String> {
     let mut warnings = Vec::new();
     for layer in &doc.layers {
         if layer.filters.active() {
+            warnings.extend(
+                crate::filter::export_notes(&layer.filters)
+                    .into_iter()
+                    .map(|note| format!("{}: {note}", layer.name)),
+            );
             for fx in &layer.filters.items {
                 if !svg_fx(fx) {
                     warnings.push(format!(
@@ -735,6 +741,11 @@ fn export_warnings(doc: &Document) -> Vec<String> {
                         continue;
                     }
                     if shape.filters.active() {
+                        warnings.extend(
+                            crate::filter::export_notes(&shape.filters)
+                                .into_iter()
+                                .map(|note| format!("{}: {note}", shape.name)),
+                        );
                         for fx in &shape.filters.items {
                             if !svg_fx(fx) {
                                 warnings.push(format!(
@@ -1015,6 +1026,22 @@ fn write_shape_tree(
             if shape.guide {
                 continue;
             }
+            let original = *shape;
+            let independent = shape.filters.independent() || shape.fill_opacity < 1.;
+            let normalized;
+            let shape = if independent {
+                let mut s = (*original).clone();
+                s.filters = Default::default();
+                s.opacity = 1.;
+                s.fill_opacity = 1.;
+                s.blend = crate::color::Blend::Normal;
+                s.blend_interior = false;
+                normalized = s;
+                &normalized
+            } else {
+                original
+            };
+            let appearance_start = body.len();
             let mut extra = String::new();
             if shape.filters.active() {
                 let fid = format!("oma-fx-s{}", shape.id);
@@ -1116,6 +1143,20 @@ fn write_shape_tree(
                 extra.push_str(&xf_attr(shape));
                 write_shape(body, defs, grad_id, shape, &extra, text_as_paths);
             }
+            if independent {
+                let content = body.split_off(appearance_start);
+                body.push_str(&appearance::wrap(
+                    defs,
+                    &format!("oma-fx-s{}", original.id),
+                    &content,
+                    original.world_bbox(),
+                    &original.filters,
+                    original.blend,
+                    original.opacity,
+                    original.fill_opacity,
+                    original.blend_interior,
+                ));
+            }
         }
     }
     visit(
@@ -1168,7 +1209,8 @@ fn export_inner(doc: &Document, animate: bool, text_as_paths: bool) -> Result<St
     });
     for layer in order {
         let fx_id = format!("oma-fx-{}", layer.id);
-        let fx_attr = if layer.filters.active() {
+        let independent = layer.filters.independent() || layer.fill_opacity < 1.;
+        let fx_attr = if layer.filters.active() && !independent {
             let b = layer_bounds(layer).unwrap_or(crate::geom::Bounds {
                 min: crate::geom::Pt::ZERO,
                 max: crate::geom::Pt::new(doc.width, doc.height),
@@ -1219,6 +1261,39 @@ fn export_inner(doc: &Document, animate: bool, text_as_paths: bool) -> Result<St
             }
         }
         if layer_body.is_empty() && !layer.is_group {
+            continue;
+        }
+        if independent {
+            if let Some(mask_id) = write_layer_mask(&mut defs, layer)? {
+                layer_body = format!("<g mask=\"url(#{mask_id})\">{layer_body}</g>");
+            }
+            let bounds = layer_bounds(layer).unwrap_or(Bounds::from_min_size(
+                Pt::ZERO,
+                Pt::new(doc.width, doc.height),
+            ));
+            let composed = appearance::wrap(
+                &mut defs,
+                &format!("oma-fx-l{}", layer.id),
+                &layer_body,
+                bounds,
+                &layer.filters,
+                layer.blend,
+                layer.opacity,
+                layer.fill_opacity,
+                layer.blend_interior,
+            );
+            layer_outputs.insert(
+                layer.id,
+                format!(
+                    "<g inkscape:label=\"{}\"{}>{composed}</g>",
+                    xml_escape(&layer.name),
+                    if layer.visible {
+                        ""
+                    } else {
+                        " visibility=\"hidden\""
+                    }
+                ),
+            );
             continue;
         }
         let mut output = String::new();
@@ -1336,6 +1411,10 @@ mod tests {
         doc.layers[1].filters.enabled = true;
         doc.layers[1].filters.items = vec![
             crate::filter::Fx::Shadow {
+                blend: crate::color::Blend::Normal,
+                opacity: 1.,
+                knockout: true,
+                spread: 0.,
                 dx: 50.0,
                 dy: 55.0,
                 blur: 22.0,

@@ -1,0 +1,33 @@
+{
+  "build_profile": "dev, opt-level=0; CPU compositor only; not WGPU presentation timing",
+  "fixture": "512x384, six rounded 120px rectangles, one Normal/100% shadow each, knockout=false on both",
+  "independent_median_ms": 205.415968625,
+  "independent_ms_per_frame": [
+    206.11591925,
+    204.35992749999997,
+    207.28185875,
+    209.01874625,
+    205.965569375,
+    204.93817662499998,
+    205.415968625,
+    203.48499125,
+    203.936273
+  ],
+  "iterations_per_round": 8,
+  "legacy_median_ms": 205.119548125,
+  "legacy_ms_per_frame": [
+    208.059378125,
+    205.221682875,
+    205.119548125,
+    208.676852625,
+    208.209338375,
+    203.76641312499999,
+    203.97228374999997,
+    203.804853,
+    203.665968625
+  ],
+  "method": "Alternating retained pre-153 filter path vs Normal/100% independent path in the same binary",
+  "pixel_identical": true,
+  "relative_change_percent": 0.14451109253583727,
+  "rounds": 9
+}

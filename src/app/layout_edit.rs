@@ -388,6 +388,8 @@ impl Studio {
                     shape.name = layer.name.clone();
                     shape.rotation = rotation;
                     shape.opacity = layer.opacity;
+                    shape.fill_opacity = layer.fill_opacity;
+                    shape.blend_interior = layer.blend_interior;
                     shape.blend = layer.blend;
                     shape.filters = layer.filters.clone();
                     shape.layout.image = Some(fill);

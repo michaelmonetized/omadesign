@@ -1,6 +1,8 @@
 //! SVG filter effects on a layer. Rasterised for the canvas, emitted as `<filter>` on export.
 
-use crate::color::Rgba;
+use crate::color::{Blend, Rgba};
+mod appearance;
+pub use appearance::*;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use tiny_skia::Pixmap;
@@ -11,6 +13,9 @@ pub use glass::AppleGlass;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FilterStack {
+    /// Old projects retain their original combined-content filter semantics.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub legacy_composite: bool,
     #[serde(default = "default_true")]
     pub enabled: bool,
     #[serde(default)]
@@ -25,6 +30,7 @@ impl Default for FilterStack {
     fn default() -> Self {
         Self {
             enabled: true,
+            legacy_composite: false,
             items: vec![],
         }
     }
@@ -46,16 +52,59 @@ pub enum Fx {
         std: f32,
     },
     Shadow {
+        #[serde(default)]
+        blend: Blend,
+        #[serde(default = "one")]
+        opacity: f32,
+        #[serde(default = "default_true")]
+        knockout: bool,
+        #[serde(default)]
+        spread: f32,
         dx: f32,
         dy: f32,
         blur: f32,
         color: Rgba,
     },
     InnerShadow {
+        #[serde(default)]
+        blend: Blend,
+        #[serde(default = "one")]
+        opacity: f32,
+        #[serde(default)]
+        choke: f32,
         dx: f32,
         dy: f32,
         blur: f32,
         color: Rgba,
+    },
+    OuterGlow {
+        blur: f32,
+        #[serde(default)]
+        spread: f32,
+        color: Rgba,
+        #[serde(default)]
+        blend: Blend,
+        #[serde(default = "one")]
+        opacity: f32,
+    },
+    InnerGlow {
+        blur: f32,
+        #[serde(default)]
+        choke: f32,
+        color: Rgba,
+        #[serde(default)]
+        blend: Blend,
+        #[serde(default = "one")]
+        opacity: f32,
+        #[serde(default)]
+        source: GlowSource,
+    },
+    ColorOverlay {
+        color: Rgba,
+        #[serde(default)]
+        blend: Blend,
+        #[serde(default = "one")]
+        opacity: f32,
     },
     Offset {
         dx: f32,
@@ -98,12 +147,24 @@ pub enum Fx {
     AppleGlass(AppleGlass),
 }
 
+fn one() -> f32 {
+    1.0
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub enum GlowSource {
+    #[default]
+    Edge,
+    Center,
+}
 impl Fx {
     pub fn name(&self) -> &'static str {
         match self {
             Fx::Blur { .. } => "Gaussian blur",
             Fx::Shadow { .. } => "Drop shadow",
             Fx::InnerShadow { .. } => "Inner shadow",
+            Fx::OuterGlow { .. } => "Outer glow",
+            Fx::InnerGlow { .. } => "Inner glow",
+            Fx::ColorOverlay { .. } => "Color overlay",
             Fx::Offset { .. } => "Offset",
             Fx::Morphology { erode: true, .. } => "Erode",
             Fx::Morphology { .. } => "Dilate",
@@ -123,16 +184,43 @@ impl Fx {
         &[
             ("Gaussian blur", || Fx::Blur { std: 8.0 }),
             ("Drop shadow", || Fx::Shadow {
+                blend: crate::color::Blend::Normal,
+                opacity: 1.,
+                knockout: true,
+                spread: 0.,
                 dx: 6.0,
                 dy: 8.0,
                 blur: 10.0,
                 color: Rgba::new(0, 0, 0, 160),
             }),
             ("Inner shadow", || Fx::InnerShadow {
+                blend: crate::color::Blend::Normal,
+                opacity: 1.,
+                choke: 0.,
                 dx: 3.0,
                 dy: 4.0,
                 blur: 6.0,
                 color: Rgba::new(0, 0, 0, 180),
+            }),
+            ("Outer glow", || Fx::OuterGlow {
+                blur: 12.,
+                spread: 0.,
+                color: Rgba::rgb(255, 220, 100),
+                blend: Blend::Screen,
+                opacity: 1.,
+            }),
+            ("Inner glow", || Fx::InnerGlow {
+                blur: 12.,
+                choke: 0.,
+                color: Rgba::rgb(255, 255, 255),
+                blend: Blend::Screen,
+                opacity: 1.,
+                source: GlowSource::Edge,
+            }),
+            ("Color overlay", || Fx::ColorOverlay {
+                color: Rgba::rgb(255, 80, 80),
+                blend: Blend::Normal,
+                opacity: 1.,
             }),
             ("Offset", || Fx::Offset { dx: 8.0, dy: 8.0 }),
             ("Dilate", || Fx::Morphology {
@@ -175,6 +263,22 @@ fn identity_matrix() -> [f32; 20] {
 }
 
 pub fn apply(pm: &mut Pixmap, stack: &FilterStack) {
+    if stack.independent() {
+        let content = pm.clone();
+        pm.fill(tiny_skia::Color::TRANSPARENT);
+        composite(
+            pm,
+            content,
+            stack,
+            tiny_skia::Transform::identity(),
+            tiny_skia::BlendMode::SourceOver,
+            1.,
+            1.,
+            false,
+            None,
+        );
+        return;
+    }
     if stack.is_empty() {
         return;
     }
@@ -191,13 +295,32 @@ fn apply_one(pm: &mut Pixmap, fx: &Fx) {
             dy,
             blur: b,
             color,
+            ..
         } => drop_shadow(pm, dx, dy, b, color),
         Fx::InnerShadow {
             dx,
             dy,
             blur: b,
             color,
+            ..
         } => inner_shadow(pm, dx, dy, b, color),
+        Fx::OuterGlow { .. } | Fx::InnerGlow { .. } | Fx::ColorOverlay { .. } => {
+            if let Some(effect) = effect_pixels(pm, fx) {
+                let (blend, opacity) = fx.appearance().unwrap();
+                pm.draw_pixmap(
+                    0,
+                    0,
+                    effect.as_ref(),
+                    &tiny_skia::PixmapPaint {
+                        blend_mode: blend.to_skia(),
+                        opacity,
+                        ..Default::default()
+                    },
+                    tiny_skia::Transform::identity(),
+                    None,
+                );
+            }
+        }
         Fx::Offset { dx, dy } => offset(pm, dx, dy),
         Fx::Morphology { erode, radius } => morphology(pm, erode, radius.max(0.0)),
         Fx::Saturate { amount } => color_matrix(pm, &saturate_matrix(amount)),
@@ -731,9 +854,24 @@ pub fn svg_pad(stack: &FilterStack) -> f32 {
     for fx in &stack.items {
         match fx {
             Fx::Blur { std } => pad += std.max(0.0) * 4.0,
-            Fx::Shadow { dx, dy, blur, .. } | Fx::InnerShadow { dx, dy, blur, .. } => {
-                pad += blur.max(0.0) * 4.0 + dx.abs() + dy.abs();
+            Fx::Shadow {
+                dx,
+                dy,
+                blur,
+                spread: extent,
+                ..
             }
+            | Fx::InnerShadow {
+                dx,
+                dy,
+                blur,
+                choke: extent,
+                ..
+            } => {
+                pad += blur.max(0.0) * 4.0 + dx.abs() + dy.abs() + extent.max(0.);
+            }
+            Fx::OuterGlow { blur, spread, .. } => pad += blur.max(0.) * 4. + spread.max(0.),
+            Fx::InnerGlow { .. } | Fx::ColorOverlay { .. } => {}
             Fx::Offset { dx, dy } => pad += dx.abs() + dy.abs(),
             Fx::Morphology { radius, .. } => pad += radius.max(0.0),
             Fx::Displacement { scale, .. } => pad += scale.abs(),
@@ -773,6 +911,7 @@ pub fn svg_filter(id: &str, stack: &FilterStack, region: [f32; 4]) -> Option<Str
                 dy,
                 blur,
                 color,
+                ..
             } => {
                 // SVG 1.1 chain. feDropShadow is SVG 2; many Linux viewers drop the
                 // whole filter when they see it, and you get the raw shape.
@@ -798,6 +937,7 @@ pub fn svg_filter(id: &str, stack: &FilterStack, region: [f32; 4]) -> Option<Str
                 dy,
                 blur,
                 color,
+                ..
             } => {
                 let a = next();
                 let b = next();
@@ -813,6 +953,9 @@ pub fn svg_filter(id: &str, stack: &FilterStack, region: [f32; 4]) -> Option<Str
                     format!("#{:02X}{:02X}{:02X}", color.r, color.g, color.b),
                     color.a as f32 / 255.0
                 ));
+            }
+            Fx::OuterGlow { .. } | Fx::InnerGlow { .. } | Fx::ColorOverlay { .. } => {
+                body.push_str(&svg_effect_primitives(fx, &last, &out));
             }
             Fx::Offset { dx, dy } => {
                 body.push_str(&format!(
@@ -907,11 +1050,16 @@ pub fn svg_filter(id: &str, stack: &FilterStack, region: [f32; 4]) -> Option<Str
 /// `stack` is the filter stack being exported. Each string is a warning a
 /// caller can show next to the file. The Apple glass note names that effect.
 pub fn export_notes(stack: &FilterStack) -> Vec<String> {
+    let mut notes = Vec::new();
     if stack.items.iter().any(|fx| matches!(fx, Fx::AppleGlass(_))) {
-        vec!["Apple glass is a lens on the canvas and in PNG. SVG uses a mild blur instead.".into()]
-    } else {
-        Vec::new()
+        notes.push(
+            "Apple glass is a lens on the canvas and in PNG. SVG uses a mild blur instead.".into(),
+        );
     }
+    if stack.independent() {
+        notes.push("SVG preserves separate effect blend modes. Its Gaussian blur can differ slightly from the native blur; partial object opacity is approximated by SVG group opacity, which isolates blending in some viewers.".into());
+    }
+    notes
 }
 
 #[cfg(test)]
@@ -995,6 +1143,7 @@ mod tests {
         let before = pm.data().to_vec();
         let stack = FilterStack {
             enabled: true,
+            legacy_composite: false,
             items: vec![Fx::AppleGlass(AppleGlass::default())],
         };
         apply(&mut pm, &stack);
@@ -1068,6 +1217,10 @@ mod tests {
         let mut s = FilterStack::default();
         s.items.push(Fx::Blur { std: 4.0 });
         s.items.push(Fx::Shadow {
+            blend: crate::color::Blend::Normal,
+            opacity: 1.,
+            knockout: true,
+            spread: 0.,
             dx: 2.0,
             dy: 3.0,
             blur: 5.0,

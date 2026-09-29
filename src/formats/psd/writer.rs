@@ -91,6 +91,17 @@ pub fn encode(doc: &Document, large: bool) -> Result<PsdExport, String> {
         return Err("Photoshop export exceeds the 8192 layer limit".into());
     }
     let mut warnings = Vec::new();
+    if doc.layers.iter().any(|l| {
+        l.filters.independent()
+            || l.kind
+                .shapes()
+                .is_some_and(|ss| ss.iter().any(|s| s.filters.independent()))
+    }) {
+        warn(
+            &mut warnings,
+            "Per-effect blend modes were flattened into each Photoshop pixel layer against transparency. The compatibility composite preserves the complete document backdrop; edit native effects in the .oma project.",
+        );
+    }
     let mut records = Vec::new();
     let mut visited = HashSet::new();
     let mut used = 0usize;
@@ -271,7 +282,15 @@ fn collect(
             } else {
                 *encode_blend(layer.blend)
             },
-            opacity: (layer.opacity.clamp(0.0, 1.0) * 255.0).round() as u8,
+            opacity: ((layer.opacity
+                * if layer.is_group && !layer.filters.active() {
+                    layer.fill_opacity
+                } else {
+                    1.
+                })
+            .clamp(0.0, 1.0)
+                * 255.0)
+                .round() as u8,
             flags: 8 | if layer.visible { 0 } else { 2 } | u8::from(layer.locked),
             section: if layer.is_group { 1 } else { 0 },
             mask_rect: None,
@@ -437,6 +456,7 @@ fn layer_pixels(
         let no_resize = size.x.abs() <= 0.5 && size.y.abs() <= 0.5
             || (size.x - pixels.w as f32).abs() < 0.001 && (size.y - pixels.h as f32).abs() < 0.001;
         if no_resize
+            && layer.fill_opacity >= 1.
             && rotation.abs() < 0.00001
             && (origin.x - origin.x.round()).abs() < 0.001
             && (origin.y - origin.y.round()).abs() < 0.001

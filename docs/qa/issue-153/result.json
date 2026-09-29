@@ -1,0 +1,89 @@
+{
+  "issue": 153,
+  "capture_utc": "2026-09-27T19:58:43.071362+00:00",
+  "base_revision": "8c71d26",
+  "capture": "real native WGPU viewport Screenshot events; actual egui pointer and keyboard input replay",
+  "native_resolution": [
+    1600,
+    900
+  ],
+  "frames": 230,
+  "playback_fps": 10,
+  "duration_seconds": 23,
+  "timing": "Replay time; waits for settled rendering before each captured frame. Not a realtime performance benchmark.",
+  "input_errors": [],
+  "assertions": [
+    "Object Overlay",
+    "Drop shadow Multiply at exactly 60%; Knockout toggled off and back on",
+    "Inner shadow Screen at exactly 80%",
+    "Fill opacity set to 0%; effects remain visible",
+    "Blend interior effects as group toggled; undo and redo through native keys",
+    "Ctrl+S writes .oma; reopened render is byte-identical to edited document"
+  ],
+  "sha256": {
+    "independent-effects.mp4": "7a90f7862d4238d4b1bcf32c5769e5b77b32278ae09245b8247aabf68d3653df",
+    "independent-effects-errors.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "independent-effects-final.oma": "8a06b7b064baed35e883329d99bfb04b5a3431a03a4479795db4868d076cadba",
+    "independent-effects-reopened.png": "eda85cf3c3770ecdfb924e007913985168ba3808ab773f4b3c8d213d72df9c88",
+    "independent-effects-0080.png": "3377d51e63f86c415b4d2793af00ab879fdc1640cee74cb6278c2755728b6b1e",
+    "independent-effects-0120.png": "394ce7bf90c11972f7a50e0bcda3d57f2b6c63a11ee16a39c0055918d7914a71",
+    "independent-effects-0220.png": "882dfe64a1e762c644074fe6a8a748ade3122667b83ae5eca27aad4dd018c397"
+  },
+  "capture_binary_sha256": "641e695c4d3f950da68bd8674185c25f740678229ffcbfa3fc86257d464011d4",
+  "test_binary_sha256": "6f6d7aebc01945483e02f9db10ea29d60482c06c5670e9384259651c205e494b",
+  "tests": [
+    {
+      "filter": "compositor::appearance_tests",
+      "exit_code": 0,
+      "result": "ok. 13 passed; 0 failed; 0 ignored; 0 measured; 702 filtered out; finished in 0.25s"
+    },
+    {
+      "filter": "compositor::groups::tests",
+      "exit_code": 0,
+      "result": "ok. 1 passed; 0 failed; 0 ignored; 0 measured; 714 filtered out; finished in 0.00s"
+    },
+    {
+      "filter": "object_appearance",
+      "exit_code": 0,
+      "result": "ok. 2 passed; 0 failed; 0 ignored; 0 measured; 713 filtered out; finished in 6.63s"
+    },
+    {
+      "filter": "clipboard_preserves_independent_appearance_fields",
+      "exit_code": 0,
+      "result": "ok. 1 passed; 0 failed; 0 ignored; 0 measured; 714 filtered out; finished in 2.84s"
+    },
+    {
+      "filter": "independent_effect_plugins",
+      "exit_code": 0,
+      "result": "ok. 1 passed; 0 failed; 0 ignored; 0 measured; 714 filtered out; finished in 0.00s"
+    },
+    {
+      "filter": "ui::studios::expanded_keyframes",
+      "exit_code": 0,
+      "result": "ok. 1 passed; 0 failed; 0 ignored; 0 measured; 714 filtered out; finished in 4.38s"
+    },
+    {
+      "filter": "project::tests::save_as_keeps_portable_fonts",
+      "exit_code": 0,
+      "result": "ok. 1 passed; 0 failed; 0 ignored; 0 measured; 714 filtered out; finished in 1.76s"
+    },
+    {
+      "filter": "typography::tests::project_fonts_copy",
+      "exit_code": 0,
+      "result": "ok. 1 passed; 0 failed; 0 ignored; 0 measured; 714 filtered out; finished in 7.31s"
+    },
+    {
+      "filter": "svg::tests",
+      "exit_code": 0,
+      "result": "ok. 19 passed; 0 failed; 0 ignored; 0 measured; 696 filtered out; finished in 0.39s"
+    },
+    {
+      "filter": "filter::tests",
+      "exit_code": 0,
+      "result": "ok. 9 passed; 0 failed; 0 ignored; 0 measured; 706 filtered out; finished in 0.16s"
+    }
+  ],
+  "recorded_code_revision": "80b754c72049a64596fc94d70c938d78c4689124",
+  "stack": "PR147 -> PR159 -> PR160 -> PR161 -> this PR",
+  "normal_fast_path_followup": "403bd277 adds measured legacy-path reuse; the two-effect recorded scenario does not enter that single-effect optimization. Pixel parity is checked in benchmark.json."
+}

@@ -1,0 +1,128 @@
+FILTER compositor::appearance_tests
+
+running 13 tests
+test compositor::appearance_tests::nested_frame_blend_ancestors_are_isolated_and_html_isolates_only_frames ... ok
+test compositor::appearance_tests::object_opacity_is_applied_once_to_overlapping_fill_and_stroke ... ok
+test compositor::appearance_tests::layer_opacity_is_applied_once_to_overlapping_objects ... ok
+test compositor::appearance_tests::frame_blend_applies_to_the_whole_subtree ... ok
+test compositor::appearance_tests::object_blends_against_underlying_artwork_and_roundtrips_with_undo ... ok
+test compositor::appearance_tests::regular_layer_child_blend_isolation_is_stable_at_every_opacity_and_after_save ... ok
+test compositor::appearance_tests::frame_child_blend_isolation_is_stable_at_every_opacity_and_after_save ... ok
+test compositor::appearance_tests::normal_full_strength_effects_keep_the_fast_source_over_output ... ok
+test compositor::appearance_tests::effect_fields_roundtrip_undo_layer_and_legacy_appearance ... ok
+test compositor::appearance_tests::independent_effect_reference_golden_overlay_multiply_screen ... ok
+test compositor::appearance_tests::svg_independent_blend_siblings_match_native_without_blur_approximation ... ok
+test compositor::appearance_tests::fill_opacity_knockout_interior_and_object_opacity_are_independent ... ok
+test compositor::appearance_tests::layer_effects_and_all_new_effects_render_and_export ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 702 filtered out; finished in 0.25s
+
+
+FILTER compositor::groups::tests
+
+running 1 test
+test compositor::groups::tests::group_opacity_is_applied_once_and_hidden_parent_hides_children ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 714 filtered out; finished in 0.00s
+
+
+FILTER object_appearance
+
+running 2 tests
+test ui::studios::object_appearance::tests::object_appearance_visible_short_text_motion_and_mixed_edits_are_one_undo_step ... ok
+test ui::studios::object_appearance::tests::layer_controls_label_and_issue_layer_metadata_without_touching_object_blends ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 713 filtered out; finished in 6.63s
+
+
+FILTER clipboard_preserves_independent_appearance_fields
+
+running 1 test
+test app::clipboard::tests::clipboard_preserves_independent_appearance_fields ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 714 filtered out; finished in 2.84s
+
+
+FILTER independent_effect_plugins
+
+running 1 test
+test plugins::tests::independent_effect_plugins_accept_defaults_and_validate_new_ranges ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 714 filtered out; finished in 0.00s
+
+
+FILTER ui::studios::expanded_keyframes
+
+running 1 test
+test ui::studios::expanded_keyframes_and_effects_respect_the_resized_panel ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 714 filtered out; finished in 4.38s
+
+
+FILTER project::tests::save_as_keeps_portable_fonts
+
+running 1 test
+test project::tests::save_as_keeps_portable_fonts_and_failures_preserve_the_previous_file ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 714 filtered out; finished in 1.76s
+
+
+FILTER typography::tests::project_fonts_copy
+
+running 1 test
+test typography::tests::project_fonts_copy_reopen_and_edit_without_an_installed_font_path ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 714 filtered out; finished in 7.31s
+
+
+FILTER svg::tests
+
+running 19 tests
+test formats::svg::tests::svg_doctype_does_not_resolve_external_entities ... ok
+test svg::tests::flattened_pixels_and_unmapped_motion_are_named ... ok
+test svg::tests::opaque_fill_is_hex_not_rgba ... ok
+test svg::tests::logo_oma_roundtrip_structure ... ok
+test svg::tests::rotating_linear_gradient_is_an_animate_transform ... ok
+test svg::tests::rotating_radial_gradient_spins_around_its_center ... ok
+test svg::tests::svg_contains_path ... ok
+test svg::tests::svg_path_keeps_cubics ... ok
+test formats::svg::tests::stylesheet_hidden_groups_keep_artwork_and_honor_css_cascade ... ok
+test formats::svg::tests::imports_css_nested_layers_hidden_content_and_cubic_handles ... ok
+test svg::tests::unsupported_effect_names_the_shape_and_layer ... ok
+test formats::svg::tests::two_stop_gradient_preserves_affine_scalar_field_as_native_fill ... ok
+test formats::svg::tests::multi_stop_gradient_and_gradient_stroke_import_stay_editable ... ok
+test svg::tests::svg_writes_layer_fx ... ok
+test formats::svg::tests::fallback_filter_group_keeps_ancestor_transform_and_blend ... ok
+test formats::svg::tests::svg_11_doctype_keeps_transformed_artwork_editable ... ok
+test formats::svg::tests::vector_clips_keep_child_geometry_and_match_svg_pixels ... ok
+test formats::svg::tests::fallback_paths_and_images_keep_ancestor_transforms ... ok
+test svg::tests::project_type_exports_its_glyphs_without_requiring_the_brand_font ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 696 filtered out; finished in 0.39s
+
+
+FILTER filter::tests
+
+running 9 tests
+test filter::tests::apple_glass_round_trips_and_old_scale_fields_still_load ... ok
+test filter::tests::svg_emits_primitives ... ok
+test filter::tests::saturate_zero_is_grey ... ok
+test filter::tests::dilate_grows_a_hard_cutout_without_moving_its_interior ... ok
+test filter::tests::erode_shrinks_a_hard_cutout_and_leaves_the_middle_put ... ok
+test filter::tests::erode_does_not_blank_a_solid_image ... ok
+test filter::tests::blur_changes_pixels ... ok
+test filter::tests::apple_glass_lens_shifts_a_gradient_and_matches_twelveux_defaults ... ok
+test filter::tests::morphology_on_a_large_cutout_stays_responsive ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 706 filtered out; finished in 0.16s
+
+
+Final SVG sibling parity rerun after center-glow morphology export correction:
+   Compiling omadesign v0.6.0 (/home/michael/Projects/omadesign/.worktrees/issues-effects-attachments)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 35.49s
+     Running unittests src/lib.rs (target/debug/deps/omadesign-c58ab0ac9c063d1e)
+
+running 1 test
+test compositor::appearance_tests::svg_independent_blend_siblings_match_native_without_blur_approximation ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 714 filtered out; finished in 0.12s

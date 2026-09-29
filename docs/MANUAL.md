@@ -553,3 +553,31 @@ Shift-select corners, then drag a selected corner’s radius handle to update th
 selected set. Compound Boolean paths retain their contours and holes when you
 convert to paths or double-click with Select/Node. Nodes, handles, and radii stay
 editable after repeated operations. **View → Guides** has Lock all and Unlock all.
+
+### Independent object and effect appearance
+
+Select vector artwork in Design, Layout or Motion. Appearance now contains Fill,
+Stroke, **Object blend**, **Object opacity**, **Fill opacity**, and **Blend interior
+effects as group**, followed by Effects. Object opacity fades content and effects
+together; Fill opacity fades only the content. The Motion opacity control still
+keys animation, while Appearance edits the designed value. Mixed selections show
+**Mixed**; an edit changes unlocked selected objects in one undo step.
+
+Drop shadow, Inner shadow, Outer glow, Inner glow and Color overlay each have their
+own Blend and Opacity. Drop shadow also has Knockout (on by default) and Spread;
+inner shadows/glows have Choke, and inner glow can originate at Edge or Center.
+Outer effects blend first, then the content, then inner effects. Enable Blend
+interior effects as group to apply the object's blend to content and inner effects
+together. Layer effects expose the same controls. The layer tree labels its own
+Layer blend and Layer opacity controls and marks active effect stacks with `fx`.
+
+Older projects retain their previous combined filter appearance until their effect
+stack is edited. New effect documents use project format 7. SVG writes independent
+vector effect siblings with blend modes; its Gaussian blur and partial group
+opacity can differ in viewers, as the export notes explain. PSD flattens effects
+per pixel layer and preserves the full backdrop in its compatibility composite;
+PDF rasterizes affected layers or pages when backdrop blending requires it.
+
+Plugins can use `oma.set_effects` with the new effect fields and
+`oma.set_appearance(layer, id, {blend="Overlay", opacity=1, fill_opacity=0.5,
+blend_interior=false})`; opacity values must be within 0–1.

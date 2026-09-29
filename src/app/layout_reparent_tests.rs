@@ -191,6 +191,22 @@ fn placed_raster_becomes_embedded_image_and_undo_restores_original_layer() {
         Pt::new(70.0, 90.0),
         Pt::new(80.0, 40.0),
     );
+    raster.fill_opacity = 0.0;
+    raster.blend_interior = true;
+    raster.opacity = 0.7;
+    raster.blend = crate::color::Blend::Multiply;
+    raster.filters.items.push(crate::filter::Fx::ColorOverlay {
+        color: crate::color::Rgba::WHITE,
+        blend: crate::color::Blend::Screen,
+        opacity: 0.4,
+    });
+    let appearance = (
+        raster.fill_opacity,
+        raster.blend_interior,
+        raster.opacity,
+        raster.blend,
+        raster.filters.clone(),
+    );
     raster
         .kind
         .set_raster_xform(Pt::new(70.0, 90.0), Pt::new(80.0, 40.0), 0.2);
@@ -205,6 +221,16 @@ fn placed_raster_becomes_embedded_image_and_undo_restores_original_layer() {
     assert_eq!(s.doc.layers.len(), 1);
     assert_eq!(s.selection[0].0, 0);
     let placed = s.doc.find_shape(0, s.selection[0].1).unwrap();
+    assert_eq!(
+        (
+            placed.fill_opacity,
+            placed.blend_interior,
+            placed.opacity,
+            placed.blend,
+            placed.filters.clone()
+        ),
+        appearance
+    );
     assert_eq!(placed.layout.parent, Some(parent));
     assert_eq!(placed.name, "Placed SVG");
     assert_eq!(placed.world_bbox(), original_bounds);
@@ -217,6 +243,17 @@ fn placed_raster_becomes_embedded_image_and_undo_restores_original_layer() {
     let id = placed.id;
     s.undo();
     assert_eq!(s.doc.layers.len(), 2);
+    let restored = &s.doc.layers[0];
+    assert_eq!(
+        (
+            restored.fill_opacity,
+            restored.blend_interior,
+            restored.opacity,
+            restored.blend,
+            restored.filters.clone()
+        ),
+        appearance
+    );
     assert_eq!(s.doc.layers[0].kind.pixels().unwrap().data, original_pixels);
     assert!(s.doc.find_shape(1, id).is_none());
     s.redo();

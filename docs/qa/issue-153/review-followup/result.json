@@ -1,0 +1,74 @@
+{
+  "tested_source_sha": "0c7308cd6ef9ec4c0aeca3ab7679554c6f3c0683",
+  "test_binary_sha256": "0d42d07409dc5ef1c7661776047825957f15ee25292e246216b7227f8a889fbb",
+  "focused_tests": {
+    "passed": 5,
+    "failed": 0
+  },
+  "pdf_cases": [
+    {
+      "kind": "object",
+      "backdrop": "shared-layer",
+      "native_pdf_roundtrip_pixel_equal": true,
+      "actual_poppler_pixel_equal": true,
+      "center_rgb": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "kind": "object",
+      "backdrop": "separate-layers",
+      "native_pdf_roundtrip_pixel_equal": true,
+      "actual_poppler_pixel_equal": true,
+      "center_rgb": [
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "kind": "effect",
+      "backdrop": "shared-layer",
+      "native_pdf_roundtrip_pixel_equal": true,
+      "actual_poppler_pixel_equal": true,
+      "center_rgb": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "kind": "effect",
+      "backdrop": "separate-layers",
+      "native_pdf_roundtrip_pixel_equal": true,
+      "actual_poppler_pixel_equal": true,
+      "center_rgb": [
+        0,
+        0,
+        255
+      ]
+    }
+  ],
+  "files": {
+    "effect-separate-layers-native.png": "85a41042d8ae160ab5cccd0cc06c1439aca5bdcc15e6f73eb781f5824094fe91",
+    "effect-separate-layers-poppler.png": "d523c92d2191d9243b2a0fe7456fa05dbf137b4d7154a952ad00cf8174aa164b",
+    "effect-separate-layers.oma": "472d87f30cbc18147e361924cd0a05ec30a9bc3d63f3cf67a9c129d04f527045",
+    "effect-separate-layers.pdf": "f06655bc905dd696d0e007ec791c7fa6d90ccf04f1aa6c25a6de75bbf1ae6ed3",
+    "effect-shared-layer-native.png": "bba5012ff5b4a48af9ce0d833ad92f74a572f6f87858eea112cf73026ba9394e",
+    "effect-shared-layer-poppler.png": "351fb2ad1cd582c99d2786f49479b7e74211c1d939b4639b9a6a94c3c1d8897b",
+    "effect-shared-layer.oma": "54de0b718c675850858dfdd57c0a0b57deb34f31974d2e627fe28df26d05e8d5",
+    "effect-shared-layer.pdf": "00a7ae5f3bcd36d014ed9c92ccd741347a1e10e561fa0688ba728f19f57d1877",
+    "focused-tests.log": "035ee38ceabba0d9fc835088418db112ad03c21bc3831bce2e79c2b373bb5373",
+    "object-separate-layers-native.png": "85a41042d8ae160ab5cccd0cc06c1439aca5bdcc15e6f73eb781f5824094fe91",
+    "object-separate-layers-poppler.png": "d523c92d2191d9243b2a0fe7456fa05dbf137b4d7154a952ad00cf8174aa164b",
+    "object-separate-layers.oma": "b7b602fea364cda4105243c4129b41e0bb2ebf2ee6d4a7113b00638811ce3c4c",
+    "object-separate-layers.pdf": "7a068b89d0819d161f313e9e1dbad063554afd8b6cd920037fa651f8c4d88ec5",
+    "object-shared-layer-native.png": "bba5012ff5b4a48af9ce0d833ad92f74a572f6f87858eea112cf73026ba9394e",
+    "object-shared-layer-poppler.png": "351fb2ad1cd582c99d2786f49479b7e74211c1d939b4639b9a6a94c3c1d8897b",
+    "object-shared-layer.oma": "8db071d60828c7b3f821be9b61d42ab93e8a869c2de16d42fd5b8cca6e5a38e8",
+    "object-shared-layer.pdf": "44bd1b0cfb0a6061fd326e47a4bfe803d0a033f2c210ba4d96f60811857a70f5"
+  },
+  "scope": "Supplemental export, conversion and compatibility regressions. Existing native screen recording is preserved. PNG references use the CPU document compositor; PDF renders use real Poppler pdftocairo."
+}

@@ -96,6 +96,7 @@ impl Context<'_, '_> {
             }
             if layer.pass_through
                 && layer.opacity >= 1.0
+                && layer.fill_opacity >= 1.0
                 && layer.mask.is_none()
                 && !layer.filters.active()
             {
@@ -130,7 +131,7 @@ impl Context<'_, '_> {
             });
             if passthrough {
                 // Interpolate with the original backdrop so child blend modes still see it.
-                let opacity = layer.opacity.clamp(0.0, 1.0);
+                let opacity = (layer.opacity * layer.fill_opacity).clamp(0.0, 1.0);
                 for (i, (dst, src)) in pm
                     .data_mut()
                     .as_chunks_mut::<4>()
@@ -152,6 +153,20 @@ impl Context<'_, '_> {
             } else {
                 if let Some(mask) = mask {
                     temp.apply_mask(&mask);
+                }
+                if layer.filters.independent() || layer.fill_opacity < 1. || layer.blend_interior {
+                    crate::filter::composite(
+                        pm,
+                        temp,
+                        &layer.filters,
+                        Transform::identity(),
+                        layer.blend.to_skia(),
+                        layer.opacity,
+                        layer.fill_opacity,
+                        layer.blend_interior,
+                        None,
+                    );
+                    continue;
                 }
                 if layer.filters.active() {
                     crate::filter::apply(&mut temp, &layer.filters);
@@ -209,6 +224,14 @@ mod tests {
         doc.layers[2].pass_through = true;
         doc.layers[1].blend = Blend::Multiply;
         assert_eq!(render_export(&doc, 1).unwrap().pixels()[0].alpha(), 128);
+        let opacity_pixels = render_export(&doc, 1).unwrap();
+        doc.layers[2].opacity = 1.;
+        doc.layers[2].fill_opacity = 0.5;
+        assert_eq!(
+            render_export(&doc, 1).unwrap().data(),
+            opacity_pixels.data(),
+            "Fill opacity must preserve a pass-through child's backdrop"
+        );
         let decoded = crate::project::decode(&crate::project::encode(&doc).unwrap()).unwrap();
         assert_eq!(decoded.layers[0].parent, Some(decoded.layers[2].id));
     }

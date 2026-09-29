@@ -210,3 +210,310 @@ fn nested_frame_blend_ancestors_are_isolated_and_html_isolates_only_frames() {
         assert_eq!(tag.contains("isolation:isolate"), isolated);
     }
 }
+
+fn independent_subject() -> Shape {
+    let mut s = rectangle(Rgba::rgb(180, 90, 50));
+    s.geom = Geom::Rect {
+        origin: Pt::new(24., 20.),
+        size: Pt::new(48., 40.),
+        radius: 4.,
+    };
+    s.blend = Blend::Overlay;
+    s.filters.items = vec![
+        crate::filter::Fx::Shadow {
+            dx: 10.,
+            dy: 8.,
+            blur: 3.,
+            color: Rgba::rgb(30, 35, 50),
+            blend: Blend::Multiply,
+            opacity: 0.6,
+            knockout: true,
+            spread: 0.,
+        },
+        crate::filter::Fx::InnerShadow {
+            dx: 5.,
+            dy: 4.,
+            blur: 2.,
+            color: Rgba::rgb(180, 210, 255),
+            blend: Blend::Screen,
+            opacity: 0.8,
+            choke: 0.,
+        },
+    ];
+    s
+}
+fn appearance_scene(subject: Shape) -> Document {
+    let mut backdrop = rectangle(Rgba::WHITE);
+    backdrop.geom = Geom::Rect {
+        origin: Pt::ZERO,
+        size: Pt::new(96., 80.),
+        radius: 0.,
+    };
+    backdrop.style.fill = Fill::Linear {
+        from: [0., 0.],
+        to: [1., 0.],
+        c0: Rgba::rgb(70, 110, 170),
+        c1: Rgba::rgb(220, 180, 100),
+    };
+    let mut doc = document(vec![backdrop, subject]);
+    doc.width = 96.;
+    doc.height = 80.;
+    doc.artboards.clear();
+    doc
+}
+#[test]
+fn independent_effect_reference_golden_overlay_multiply_screen() {
+    let scene = appearance_scene(independent_subject());
+    let output = render_export(&scene, 1).unwrap();
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/independent-effects.png");
+    if std::env::var_os("OMADESIGN_UPDATE_GOLDEN").is_some() {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        output.save_png(&path).unwrap();
+    }
+    let golden = Pixmap::load_png(path).unwrap();
+    assert_eq!(
+        output.data(),
+        golden.data(),
+        "Independent appearance golden changed"
+    );
+    // Independent scalar reference at unblurred interiors: object Overlay only.
+    let mut backdrop = scene.clone();
+    backdrop.layers[0].kind.shapes_mut().unwrap().pop();
+    let background = render_export(&backdrop, 1).unwrap();
+    let p = background.pixel(48, 40).unwrap();
+    let actual = output.pixel(48, 40).unwrap();
+    for (b, s, v) in [
+        (p.red(), 180, actual.red()),
+        (p.green(), 90, actual.green()),
+        (p.blue(), 50, actual.blue()),
+    ] {
+        let b = b as f32 / 255.;
+        let s = s as f32 / 255.;
+        let expected = if b <= 0.5 {
+            2. * b * s
+        } else {
+            1. - 2. * (1. - b) * (1. - s)
+        };
+        assert!((v as f32 - expected * 255.).abs() <= 2.);
+    }
+    // Drop shadow at the offset corner: Multiply at 60% against gradient, no fill.
+    let p = background.pixel(76, 60).unwrap();
+    let a = output.pixel(76, 60).unwrap();
+    assert!(a.red() < p.red() && a.green() < p.green() && a.blue() < p.blue());
+    // Inner effect is Screen independently of Overlay.
+    let mut no_inner = scene.clone();
+    no_inner.layers[0].kind.shapes_mut().unwrap()[1]
+        .filters
+        .items
+        .pop();
+    let inner_base = render_export(&no_inner, 1).unwrap();
+    assert!(output.pixel(26, 30).unwrap().blue() > inner_base.pixel(26, 30).unwrap().blue());
+}
+#[test]
+fn fill_opacity_knockout_interior_and_object_opacity_are_independent() {
+    let mut subject = independent_subject();
+    subject.fill_opacity = 0.;
+    let id = subject.id;
+    let mut scene = appearance_scene(subject);
+    let hidden_fill = render_export(&scene, 1).unwrap();
+    let mut bare = scene.clone();
+    bare.layers[0].kind.shapes_mut().unwrap().pop();
+    let bare = render_export(&bare, 1).unwrap();
+    assert_eq!(hidden_fill.pixel(48, 40), bare.pixel(48, 40));
+    assert_ne!(hidden_fill.pixel(26, 30), bare.pixel(26, 30));
+    // Object opacity interpolates the entire contribution, including both effects.
+    scene.find_shape_mut(0, id).unwrap().opacity = 0.5;
+    let half = render_export(&scene, 1).unwrap();
+    for ((a, b), c) in bare.data().iter().zip(hidden_fill.data()).zip(half.data()) {
+        assert!((*c as f32 - (*a as f32 + *b as f32) * 0.5).abs() <= 1.);
+    }
+    scene.find_shape_mut(0, id).unwrap().opacity = 1.;
+    scene.find_shape_mut(0, id).unwrap().blend_interior = true;
+    assert_ne!(render_export(&scene, 1).unwrap().data(), hidden_fill.data());
+    let s = scene.find_shape_mut(0, id).unwrap();
+    s.blend_interior = false;
+    if let crate::filter::Fx::Shadow { knockout, .. } = &mut s.filters.items[0] {
+        *knockout = false;
+    }
+    assert_ne!(
+        render_export(&scene, 1).unwrap().pixel(48, 40),
+        hidden_fill.pixel(48, 40)
+    );
+}
+#[test]
+fn effect_fields_roundtrip_undo_layer_and_legacy_appearance() {
+    let subject = independent_subject();
+    let id = subject.id;
+    let mut doc = appearance_scene(subject);
+    let command = Cmd::Batch(vec![
+        Cmd::SetFillOpacity {
+            layer: 0,
+            id: Some(id),
+            before: 1.,
+            after: 0.3,
+        },
+        Cmd::SetBlendInterior {
+            layer: 0,
+            id: Some(id),
+            before: false,
+            after: true,
+        },
+        Cmd::SetFillOpacity {
+            layer: 0,
+            id: None,
+            before: 1.,
+            after: 0.8,
+        },
+    ]);
+    let mut history = History::default();
+    apply(&mut doc, &command);
+    history.push(command);
+    let reopened = crate::project::decode(&crate::project::encode(&doc).unwrap()).unwrap();
+    assert_eq!(doc.find_shape(0, id), reopened.find_shape(0, id));
+    assert_eq!(reopened.layers[0].fill_opacity, 0.8);
+    apply(&mut doc, &history.undo().unwrap());
+    assert_eq!(doc.find_shape(0, id).unwrap().fill_opacity, 1.);
+    apply(&mut doc, &history.redo().unwrap());
+    assert_eq!(doc.find_shape(0, id).unwrap().fill_opacity, 0.3);
+    let fixture = include_str!("../../tests/fixtures/legacy-effects-v6.oma");
+    let old = crate::project::decode(fixture).unwrap();
+    let shape = &old.layers[0].kind.shapes().unwrap()[1];
+    assert!(shape.filters.legacy_composite);
+    assert!(matches!(
+        shape.filters.items[0],
+        crate::filter::Fx::Shadow {
+            blend: Blend::Overlay,
+            knockout: false,
+            ..
+        }
+    ));
+    let mut expected = old.clone();
+    for fx in &mut expected.layers[0].kind.shapes_mut().unwrap()[1]
+        .filters
+        .items
+    {
+        if let Some((blend, _)) = fx.appearance_mut() {
+            *blend = Blend::Normal;
+        }
+    }
+    assert_eq!(
+        render_export(&old, 1).unwrap().data(),
+        render_export(&expected, 1).unwrap().data()
+    );
+    assert_eq!(
+        render_export(&old, 1).unwrap().data(),
+        render_export(
+            &crate::project::decode(&crate::project::encode(&old).unwrap()).unwrap(),
+            1
+        )
+        .unwrap()
+        .data()
+    );
+}
+#[test]
+fn layer_effects_and_all_new_effects_render_and_export() {
+    let mut scene = appearance_scene(independent_subject());
+    let subject = scene.layers[0].kind.shapes_mut().unwrap().pop().unwrap();
+    let mut layer = Layer::vector("Effect layer");
+    let mut content = subject.clone();
+    content.filters = Default::default();
+    content.blend = Blend::Normal;
+    layer.filters = subject.filters.clone();
+    layer.blend = subject.blend;
+    layer.fill_opacity = 0.4;
+    layer.kind.shapes_mut().unwrap().push(content);
+    scene.layers.push(layer);
+    let rendered = render_export(&scene, 1).unwrap();
+    assert_ne!(rendered.pixel(26, 30), rendered.pixel(48, 40));
+    for (name, make) in crate::filter::Fx::catalog()
+        .iter()
+        .filter(|(_, f)| f().appearance().is_some())
+    {
+        let mut doc = appearance_scene(independent_subject());
+        doc.layers[0].kind.shapes_mut().unwrap()[1].filters.items = vec![make()];
+        let svg = crate::svg::export(&doc).unwrap();
+        assert!(svg.contains("-effect-0"), "{name}");
+        assert!(!svg.contains("BackgroundImage"));
+        let tree = usvg::Tree::from_str(&svg, &usvg::Options::default()).unwrap();
+        let mut output = Pixmap::new(96, 80).unwrap();
+        resvg::render(&tree, Transform::identity(), &mut output.as_mut());
+        assert!(output.data().iter().any(|b| *b > 0));
+        assert!(
+            crate::filter::export_notes(&doc.layers[0].kind.shapes().unwrap()[1].filters)
+                .iter()
+                .any(|s| s.contains("separate effect"))
+        );
+    }
+    let psd = crate::formats::psd::encode(&scene, false).unwrap();
+    assert!(psd.warnings.iter().any(|w| w.contains("Per-effect blend")));
+    assert!(
+        crate::formats::pdf::write(&scene)
+            .unwrap()
+            .1
+            .iter()
+            .any(|w| w.contains("raster"))
+    );
+}
+
+#[test]
+fn normal_full_strength_effects_keep_the_fast_source_over_output() {
+    let mut subject = independent_subject();
+    subject.blend = Blend::Normal;
+    subject.filters.items.truncate(1);
+    if let crate::filter::Fx::Shadow {
+        blend,
+        opacity,
+        knockout,
+        ..
+    } = &mut subject.filters.items[0]
+    {
+        *blend = Blend::Normal;
+        *opacity = 1.;
+        *knockout = false;
+    }
+    let modern = appearance_scene(subject.clone());
+    subject.filters.legacy_composite = true;
+    let legacy = appearance_scene(subject);
+    let a = render_export(&modern, 1).unwrap();
+    let b = render_export(&legacy, 1).unwrap();
+    for (a, b) in a.data().iter().zip(b.data()) {
+        assert!((*a as i32 - *b as i32).abs() <= 1);
+    }
+}
+
+#[test]
+fn svg_independent_blend_siblings_match_native_without_blur_approximation() {
+    let mut subject = independent_subject();
+    for effect in &mut subject.filters.items {
+        match effect {
+            crate::filter::Fx::Shadow { blur, .. }
+            | crate::filter::Fx::InnerShadow { blur, .. } => *blur = 0.,
+            _ => {}
+        }
+    }
+    for interior in [false, true] {
+        subject.blend_interior = interior;
+        let doc = appearance_scene(subject.clone());
+        let native = render_export(&doc, 1).unwrap();
+        let svg = crate::svg::export(&doc).unwrap();
+        let tree = usvg::Tree::from_str(&svg, &usvg::Options::default()).unwrap();
+        let mut output = Pixmap::new(96, 80).unwrap();
+        resvg::render(&tree, Transform::identity(), &mut output.as_mut());
+        for (x, y) in [(48, 40), (76, 60), (26, 30)] {
+            let native = native.pixel(x, y).unwrap();
+            let svg = output.pixel(x, y).unwrap();
+            for (a, b) in [
+                (native.red(), svg.red()),
+                (native.green(), svg.green()),
+                (native.blue(), svg.blue()),
+                (native.alpha(), svg.alpha()),
+            ] {
+                assert!(
+                    (a as i32 - b as i32).abs() <= 2,
+                    "interior={interior} at{x},{y}: native={native:?} svg={svg:?}"
+                );
+            }
+        }
+    }
+}
