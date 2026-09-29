@@ -23,6 +23,7 @@ enum Action {
     ShiftClick(&'static str),
     Right(&'static str),
     ScrollLayer,
+    FitView,
     World(Pt, PointerButton),
     Press(Key, Modifiers),
     Type(&'static str),
@@ -198,6 +199,34 @@ fn actions(issue: &str) -> VecDeque<Action> {
             ]);
             q.into()
         }
+        "156" => {
+            let mut q = vec![];
+            for glyph in ["\u{EB00}", "\u{E6D6}", "\u{E6F0}", "\u{E730}", "\u{E836}"] {
+                q.extend([
+                    Click(glyph),
+                    Check("zoom controls in status corner"),
+                    Click("100%"),
+                    Check("actual size"),
+                    FitView,
+                    Check("fit view"),
+                ]);
+            }
+            q.extend([
+                Click("\u{EB00}"),
+                Click("Agent"),
+                Check("agent open"),
+                Click("Agent"),
+                Check("agent closed"),
+                Click("View"),
+                Click("Fit artboard"),
+                Press(Key::Num0, ctrl()),
+                Check("fit view"),
+                Click("File"),
+                Click("New…"),
+                Check("welcome sparkle and no fit"),
+            ]);
+            q.into()
+        }
         _ => panic!("unknown issue {issue}"),
     }
 }
@@ -241,6 +270,13 @@ impl Qa {
             let child=studio.doc.find_shape_mut(li,id).unwrap();child.visible=false;child.locked=true;
             let hit=studio.selection[0];studio.selection=studio.selection_for_hit(hit);
             studio.history.clear();studio.dirty=false;
+        }
+        if issue == "156" {
+            studio.photo.import_bytes(
+                "QA photo.png".into(),
+                &fs::read("examples/site-showcase/photo-original.png").unwrap(),
+            );
+            studio.photo.select_image(0);
         }
         studio.path = Some(output.join("result.oma"));
         let original = omadesign::project::encode(&studio.doc).unwrap();
@@ -291,6 +327,16 @@ impl Qa {
         if let Some(action) = self.actions.pop_front() {
             match action {
                 Action::Click(s) => self.pointer(self.point(s), PointerButton::Primary),
+                Action::FitView => {
+                    let p = self
+                        .labels
+                        .iter()
+                        .find(|(s, r)| s == "\u{E626}" && r.center().y > 900.)
+                        .unwrap()
+                        .1
+                        .center();
+                    self.pointer(p, PointerButton::Primary);
+                }
                 Action::ScrollLayer => {
                     let p = self.point("Artwork");
                     self.cursor = p;
@@ -509,6 +555,55 @@ impl Qa {
                 assert!(delta.unwrap().length() > 0.01);
                 assert_eq!(self.studio.history.len(), self.history + 1);
             }
+            "zoom controls in status corner" => {
+                assert!(
+                    !self
+                        .labels
+                        .iter()
+                        .any(|(s, r)| s == "\u{E626}" && r.center().y < 50.)
+                );
+                let fit = self
+                    .labels
+                    .iter()
+                    .find(|(s, r)| s == "\u{E626}" && r.center().y > 900.)
+                    .unwrap()
+                    .1;
+                let actual = self
+                    .labels
+                    .iter()
+                    .find(|(s, r)| s == "100%" && r.center().y > 900.)
+                    .unwrap()
+                    .1;
+                assert!(fit.center().x < actual.center().x);
+                assert!(
+                    fit.center().y < 942. && actual.center().y < 942.,
+                    "controls above read-only HUD"
+                );
+            }
+            "actual size" => {
+                let scale = if self.studio.persona == Persona::Photo {
+                    self.studio.photo.view_scale * self.studio.photo.fit_scale
+                } else {
+                    self.studio.view.scale
+                };
+                assert!((scale - 1.).abs() < 0.001, "actual={scale}");
+            }
+            "fit view" => {
+                if self.studio.persona == Persona::Photo {
+                    assert!((self.studio.photo.view_scale - 1.).abs() < 0.001);
+                    assert_eq!(self.studio.photo.view_offset, egui::Vec2::ZERO);
+                } else {
+                    assert!(!self.studio.need_fit);
+                    assert!(self.studio.view.scale > 0.);
+                }
+            }
+            "agent open" => assert!(self.studio.agent.visible),
+            "agent closed" => assert!(!self.studio.agent.visible),
+            "welcome sparkle and no fit" => {
+                assert!(self.studio.show_welcome);
+                assert!(self.labels.iter().any(|(s, _)| s == "Learn with AI"));
+                assert!(!self.labels.iter().any(|(s, _)| s == "\u{E626}"));
+            }
             _ => panic!("unknown check {name}"),
         }
         eprintln!("PASS: {name}");
@@ -542,6 +637,9 @@ impl Qa {
                 }
             }
         });
+        if let Some(response) = ctx.read_response(egui::Id::new("studio-agent-toggle")) {
+            self.labels.push(("Agent".into(), response.rect));
+        }
     }
 }
 impl eframe::App for Qa {

@@ -1080,6 +1080,9 @@ impl Capture {
                 }
             }
         });
+        if let Some(response) = ctx.read_response(egui::Id::new("studio-agent-toggle")) {
+            self.labels.push(("Agent".into(), response.rect));
+        }
     }
 }
 impl eframe::App for Capture {

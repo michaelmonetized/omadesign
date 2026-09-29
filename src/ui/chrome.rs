@@ -66,24 +66,6 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
                 ui.scope_builder(eframe::egui::UiBuilder::new().max_rect(right), |ui| {
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         let photo = studio.persona == Persona::Photo;
-                        if icons::icon_button(
-                            ui,
-                            ph::FRAME_CORNERS,
-                            if photo {
-                                "Fit photo  Ctrl+0"
-                            } else {
-                                "Fit artboard  Ctrl+0"
-                            },
-                            false,
-                        ) {
-                            if photo {
-                                studio.photo.view_scale = 1.0;
-                                studio.photo.view_offset = eframe::egui::Vec2::ZERO;
-                            } else {
-                                studio.need_fit = true;
-                            }
-                        }
-                        ui.add_space(8.0);
                         super::agent::button(ui, studio);
                         if photo {
                             library_buttons(ui, studio);
@@ -104,30 +86,36 @@ fn zoom_corner(ui: &mut Ui, studio: &mut Studio) {
     } else {
         studio.view.scale
     };
-    if ui
-        .small_button("100%")
-        .on_hover_text("Zoom to 100% at the center")
-        .clicked()
-    {
-        if photo {
-            studio.photo.view_scale = 1.0 / studio.photo.fit_scale.max(0.001);
-            studio.photo.view_offset = eframe::egui::Vec2::ZERO;
-        } else {
-            let anchor = studio
-                .canvas_rect
-                .map(|rect| {
-                    let center = rect.center();
-                    Pt::new(center.x, center.y)
-                })
-                .unwrap_or(Pt::ZERO);
-            studio.zoom_by(1.0 / studio.view.scale.max(0.001), anchor);
+    ui.allocate_ui_with_layout(vec2(132.0, 22.0), Layout::left_to_right(Align::Center), |ui| {
+        let fit_tip = if photo { "Fit photo  Ctrl+0" } else { "Fit artboard  Ctrl+0" };
+        if icons::tiny_icon(ui, ph::FRAME_CORNERS, fit_tip, false) {
+            studio.fit_view();
         }
-    }
-    ui.label(
-        RichText::new(format!("{:.0}%", actual * 100.0))
-            .small()
-            .color(fg()),
-    );
+        if ui
+            .small_button("100%")
+            .on_hover_text("Zoom to 100% at the center")
+            .clicked()
+        {
+            if photo {
+                studio.photo.view_scale = 1.0 / studio.photo.fit_scale.max(0.001);
+                studio.photo.view_offset = eframe::egui::Vec2::ZERO;
+            } else {
+                let anchor = studio
+                    .canvas_rect
+                    .map(|rect| {
+                        let center = rect.center();
+                        Pt::new(center.x, center.y)
+                    })
+                    .unwrap_or(Pt::ZERO);
+                studio.zoom_by(1.0 / studio.view.scale.max(0.001), anchor);
+            }
+        }
+        ui.label(
+            RichText::new(format!("{:.0}%", actual * 100.0))
+                .small()
+                .color(fg()),
+        );
+    });
 }
 
 fn main_menus(ui: &mut Ui, studio: &mut Studio) {

@@ -646,14 +646,15 @@ fn action(ui: &mut Ui, glyph: &'static str, label: &str) -> bool {
         _ => include_bytes!("../../../assets/phosphor/welcome/cloud.svg"),
     };
     let white = String::from_utf8_lossy(source).replace("currentColor", "#ffffff");
-    if let Some(texture) = icons::svg_texture(ui, glyph, white.as_bytes()) {
+    let texture = if glyph == "sparkle" { icons::sparkle_texture(ui) } else { icons::svg_texture(ui, glyph, white.as_bytes()) };
+    if let Some(texture) = texture {
         let size = texture.size_vec2();
         let size = size * (17. / size.x.max(size.y));
         ui.painter().image(
             texture.id(),
             Rect::from_center_size(rect.left_center() + vec2(20., 0.), size),
             Rect::from_min_max(pos2(0., 0.), pos2(1., 1.)),
-            fg_weak(),
+            if glyph == "sparkle" { egui::Color32::WHITE } else { fg_weak() },
         );
     }
     ui.painter().text(

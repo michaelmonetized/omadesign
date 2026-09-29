@@ -409,14 +409,7 @@ impl Studio {
             Shortcut::Front => self.bring_to_front(),
             Shortcut::Backward => self.send_backward(),
             Shortcut::Back => self.send_to_back(),
-            Shortcut::Fit => {
-                if self.persona == Persona::Photo {
-                    self.photo.view_scale = 1.0;
-                    self.photo.view_offset = egui::Vec2::ZERO;
-                } else {
-                    self.need_fit = true;
-                }
-            }
+            Shortcut::Fit => self.fit_view(),
             Shortcut::ActualSize => {
                 if self.persona == Persona::Photo {
                     self.photo.view_scale = 1.0 / self.photo.fit_scale.max(f32::EPSILON);
