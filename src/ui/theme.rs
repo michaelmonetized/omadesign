@@ -7,7 +7,7 @@ use eframe::egui::{
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock, mpsc};
 use std::time::{Duration, Instant, SystemTime};
 
 #[derive(Clone, Copy, Debug)]
@@ -37,8 +37,17 @@ pub struct Palette {
 
 /// Shared AI affordance colors, with enough contrast in either appearance.
 pub fn agent_gradient(dark: bool) -> [Color32; 2] {
-    if dark { [Color32::from_rgb(245,194,231),Color32::from_rgb(203,166,247)] }
-    else { [Color32::from_rgb(234,118,203),Color32::from_rgb(136,57,239)] }
+    if dark {
+        [
+            Color32::from_rgb(245, 194, 231),
+            Color32::from_rgb(203, 166, 247),
+        ]
+    } else {
+        [
+            Color32::from_rgb(234, 118, 203),
+            Color32::from_rgb(136, 57, 239),
+        ]
+    }
 }
 
 struct LiveTheme {
@@ -47,6 +56,134 @@ struct LiveTheme {
     colors_key: Option<u128>,
     name_key: Option<u128>,
     warned: bool,
+    poll: ThemePoll,
+}
+
+type UiFontBytes = (String, Vec<u8>);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ThemeSnapshot {
+    colors_key: Option<u128>,
+    name_key: Option<u128>,
+    font: String,
+}
+
+#[derive(Debug)]
+struct ThemeUpdate {
+    snapshot: ThemeSnapshot,
+    files_changed: bool,
+    changed: bool,
+    palette: Option<Palette>,
+    font_bytes: Option<UiFontBytes>,
+}
+
+#[derive(Default)]
+struct ThemePoll {
+    pending: Option<mpsc::Receiver<ThemeUpdate>>,
+}
+
+impl ThemePoll {
+    fn start(
+        &mut self,
+        ctx: Context,
+        lookup: impl FnOnce() -> ThemeUpdate + Send + 'static,
+    ) -> bool {
+        if self.pending.is_some() {
+            return false;
+        }
+        let (sender, receiver) = mpsc::channel();
+        self.pending = Some(receiver);
+        let started = std::thread::Builder::new()
+            .name("omadesign-theme".into())
+            .spawn(move || {
+                let update = lookup();
+                let changed = update.changed;
+                if sender.send(update).is_ok() && changed {
+                    ctx.request_repaint();
+                }
+            });
+        if started.is_err() {
+            self.pending = None;
+            return false;
+        }
+        true
+    }
+
+    fn completed(&mut self) -> Option<ThemeUpdate> {
+        match self.pending.as_ref()?.try_recv() {
+            Ok(update) => {
+                self.pending = None;
+                Some(update)
+            }
+            Err(mpsc::TryRecvError::Empty) => None,
+            Err(mpsc::TryRecvError::Disconnected) => {
+                self.pending = None;
+                None
+            }
+        }
+    }
+}
+
+impl LiveTheme {
+    fn snapshot(&self) -> ThemeSnapshot {
+        ThemeSnapshot {
+            colors_key: self.colors_key,
+            name_key: self.name_key,
+            font: self.font.clone(),
+        }
+    }
+
+    fn accept(&mut self, update: ThemeUpdate) -> Option<Option<UiFontBytes>> {
+        if update.files_changed {
+            if let Some(palette) = update.palette {
+                self.palette = palette;
+                self.warned = false;
+            } else if !self.warned {
+                eprintln!(
+                    "omadesign: Omarchy theme colors could not be read; keeping the current palette"
+                );
+                self.warned = true;
+            }
+        }
+        self.colors_key = update.snapshot.colors_key;
+        self.name_key = update.snapshot.name_key;
+        self.font = update.snapshot.font;
+        update.changed.then_some(update.font_bytes)
+    }
+}
+
+fn read_theme(previous: ThemeSnapshot) -> ThemeUpdate {
+    let snapshot = ThemeSnapshot {
+        colors_key: file_key(&omarchy_colors_path()),
+        name_key: file_key(&omarchy_name_path()),
+        font: omarchy_font_name().unwrap_or_default(),
+    };
+    prepare_theme_update(
+        previous,
+        snapshot,
+        || palette_from_file(&omarchy_colors_path()),
+        |font| load_ui_font_bytes_named(|| (!font.is_empty()).then(|| font.to_owned())),
+    )
+}
+
+fn prepare_theme_update(
+    previous: ThemeSnapshot,
+    snapshot: ThemeSnapshot,
+    palette: impl FnOnce() -> Option<Palette>,
+    font: impl FnOnce(&str) -> Option<UiFontBytes>,
+) -> ThemeUpdate {
+    let files_changed =
+        snapshot.colors_key != previous.colors_key || snapshot.name_key != previous.name_key;
+    let changed = snapshot != previous;
+    let palette = files_changed.then(palette).flatten();
+    let font_bytes = changed.then(|| font(&snapshot.font)).flatten();
+    ThemeUpdate {
+        snapshot,
+        files_changed,
+        changed,
+        palette,
+        font_bytes,
+    }
 }
 
 static LIVE: OnceLock<Mutex<LiveTheme>> = OnceLock::new();
@@ -59,6 +196,7 @@ fn live() -> &'static Mutex<LiveTheme> {
             colors_key: file_key(&omarchy_colors_path()),
             name_key: file_key(&omarchy_name_path()),
             warned: false,
+            poll: ThemePoll::default(),
         })
     })
 }
@@ -72,48 +210,43 @@ pub fn p() -> Palette {
 
 /// Re-read the Omarchy theme after it changes on disk. A bad file keeps the last good palette.
 pub fn poll(ctx: &Context) {
+    // Consume a worker's result even when its repaint arrives before the next
+    // 400ms check. No command or font-file read runs on this UI path.
+    let ready = {
+        let mut state = live().lock().unwrap_or_else(|poison| poison.into_inner());
+        poll_theme(&mut state, ctx, Instant::now(), read_theme)
+    };
+    if let Some(font_bytes) = ready {
+        apply_prepared(ctx, font_bytes);
+    }
+}
+
+fn poll_theme(
+    state: &mut LiveTheme,
+    ctx: &Context,
+    now: Instant,
+    lookup: impl FnOnce(ThemeSnapshot) -> ThemeUpdate + Send + 'static,
+) -> Option<Option<UiFontBytes>> {
+    let ready = state
+        .poll
+        .completed()
+        .and_then(|update| state.accept(update));
     let id = eframe::egui::Id::new("omarchy-theme-poll");
-    let now = Instant::now();
-    let due = ctx
-        .data(|data| data.get_temp::<Instant>(id))
-        .is_none_or(|then| now.duration_since(then) >= Duration::from_millis(400));
-    if !due {
-        return;
+    if let Some(then) = ctx.data(|data| data.get_temp::<Instant>(id)) {
+        let remaining =
+            Duration::from_millis(400).saturating_sub(now.saturating_duration_since(then));
+        if !remaining.is_zero() {
+            // A worker's immediate repaint can replace the previous timer.
+            // Re-arm the deadline so watching continues while the editor idles.
+            ctx.request_repaint_after(remaining);
+            return ready;
+        }
     }
     ctx.data_mut(|data| data.insert_temp(id, now));
     ctx.request_repaint_after(Duration::from_millis(500));
-    let colors_key = file_key(&omarchy_colors_path());
-    let name_key = file_key(&omarchy_name_path());
-    let font = omarchy_font_name().unwrap_or_default();
-    let mut state = live().lock().unwrap_or_else(|poison| poison.into_inner());
-    let files_changed = colors_key != state.colors_key || name_key != state.name_key;
-    let font_changed = font != state.font;
-    if !files_changed && !font_changed {
-        return;
-    }
-    if files_changed {
-        match palette_from_file(&omarchy_colors_path()) {
-            Some(palette) => {
-                state.palette = palette;
-                state.warned = false;
-            }
-            None => {
-                if !state.warned {
-                    eprintln!(
-                        "omadesign: Omarchy theme colors could not be read; keeping the current palette"
-                    );
-                    state.warned = true;
-                }
-            }
-        }
-        state.colors_key = colors_key;
-        state.name_key = name_key;
-    }
-    if font_changed {
-        state.font = font;
-    }
-    drop(state);
-    apply(ctx);
+    let previous = state.snapshot();
+    state.poll.start(ctx.clone(), move || lookup(previous));
+    ready
 }
 
 pub fn accent() -> Color32 {
@@ -434,7 +567,11 @@ fn omarchy_font_name() -> Option<String> {
     (!s.is_empty()).then_some(s)
 }
 
-fn load_ui_font_bytes() -> Option<(String, Vec<u8>)> {
+fn load_ui_font_bytes() -> Option<UiFontBytes> {
+    load_ui_font_bytes_named(omarchy_font_name)
+}
+
+fn load_ui_font_bytes_named(named: impl FnOnce() -> Option<String>) -> Option<UiFontBytes> {
     if let Ok(p) = std::env::var("OMADESIGN_FONT") {
         let path = PathBuf::from(p);
         if let Ok(b) = std::fs::read(&path) {
@@ -446,7 +583,7 @@ fn load_ui_font_bytes() -> Option<(String, Vec<u8>)> {
             ));
         }
     }
-    let named = omarchy_font_name();
+    let named = named();
     let patterns: Vec<String> = [
         named.clone(),
         named.map(|n| format!("{n}:style=Regular")),
@@ -479,9 +616,6 @@ pub fn apply(ctx: &Context) {
 }
 
 pub fn apply_preferences(ctx: &Context, preferred: &str) {
-    let pal = p();
-
-    let mut fonts = FontDefinitions::default();
     let selected = if preferred.is_empty() {
         None
     } else {
@@ -496,7 +630,13 @@ pub fn apply_preferences(ctx: &Context, preferred: &str) {
             .filter(|bytes| ab_glyph::FontArc::try_from_vec(bytes.clone()).is_ok())
             .map(|bytes| ("preferred-ui".to_string(), bytes))
     };
-    if let Some((name, bytes)) = selected.or_else(load_ui_font_bytes) {
+    apply_prepared(ctx, selected.or_else(load_ui_font_bytes));
+}
+
+fn apply_prepared(ctx: &Context, font_bytes: Option<UiFontBytes>) {
+    let pal = p();
+    let mut fonts = FontDefinitions::default();
+    if let Some((name, bytes)) = font_bytes {
         fonts.font_data.insert(
             name.clone(),
             std::sync::Arc::new(FontData::from_owned(bytes)),
@@ -630,6 +770,150 @@ pub fn apply_preferences(ctx: &Context, preferred: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn theme_state() -> LiveTheme {
+        LiveTheme {
+            palette: Palette::fallback(),
+            font: "Original".into(),
+            colors_key: Some(1),
+            name_key: Some(1),
+            warned: false,
+            poll: ThemePoll::default(),
+        }
+    }
+
+    fn settle_repaints(ctx: &Context) {
+        for _ in 0..3 {
+            ctx.begin_pass(Default::default());
+            ctx.end_pass().textures_delta.clear();
+        }
+    }
+
+    #[test]
+    fn theme_lookup_is_bounded_and_completion_rearms_idle_watching() {
+        let ctx = Context::default();
+        settle_repaints(&ctx);
+        let (repaint_tx, repaint_rx) = mpsc::channel();
+        ctx.set_request_repaint_callback(move |info| {
+            let _ = repaint_tx.send(info.delay);
+        });
+        let mut state = theme_state();
+        let original = state.snapshot();
+        let now = Instant::now();
+        let caller = std::thread::current().id();
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        assert!(
+            poll_theme(&mut state, &ctx, now, move |previous| {
+                entered_tx.send(std::thread::current().id()).unwrap();
+                release_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+                let mut next = previous.clone();
+                next.font = "Updated".into();
+                prepare_theme_update(
+                    previous,
+                    next,
+                    || panic!("unchanged palette"),
+                    |name| {
+                        assert_eq!(name, "Updated");
+                        Some(("ui".into(), vec![1, 2, 3]))
+                    },
+                )
+            })
+            .is_none()
+        );
+        assert_ne!(
+            entered_rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+            caller
+        );
+        assert!(!state.poll.start(ctx.clone(), || panic!("duplicate job")));
+        assert!(state.poll.completed().is_none());
+        assert_eq!(state.snapshot(), original);
+        // Discard the periodic timer, then observe the worker's immediate wake.
+        while repaint_rx.try_recv().is_ok() {}
+        release_tx.send(()).unwrap();
+        assert_eq!(
+            repaint_rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+            Duration::ZERO
+        );
+        let ready = poll_theme(&mut state, &ctx, now + Duration::from_millis(20), |_| {
+            panic!("poll interval has not elapsed")
+        });
+        assert_eq!(ready, Some(Some(("ui".into(), vec![1, 2, 3]))));
+        assert_eq!(state.font, "Updated");
+        assert!(state.poll.pending.is_none());
+        // Egui settles an immediate wake over two passes. The subsequent idle
+        // pass must still schedule a future poll, even though it is not due.
+        settle_repaints(&ctx);
+        while repaint_rx.try_recv().is_ok() {}
+        assert!(
+            poll_theme(&mut state, &ctx, now + Duration::from_millis(30), |_| {
+                panic!("poll interval has not elapsed")
+            })
+            .is_none()
+        );
+        let delay = repaint_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(delay > Duration::ZERO && delay <= Duration::from_millis(370));
+    }
+
+    #[test]
+    fn unchanged_theme_neither_loads_fonts_nor_replaces_font_definitions() {
+        let mut state = theme_state();
+        let previous = state.snapshot();
+        let update = prepare_theme_update(
+            previous.clone(),
+            previous.clone(),
+            || panic!("unchanged palette must not be loaded"),
+            |_| panic!("unchanged font must not be loaded"),
+        );
+        assert!(!update.changed);
+        let (sender, receiver) = mpsc::channel();
+        state.poll.pending = Some(receiver);
+        sender.send(update).unwrap();
+        let ctx = Context::default();
+        let now = Instant::now();
+        ctx.data_mut(|data| data.insert_temp(eframe::egui::Id::new("omarchy-theme-poll"), now));
+        assert!(poll_theme(&mut state, &ctx, now, |_| panic!("not due")).is_none());
+        assert_eq!(state.snapshot(), previous);
+        assert!(state.poll.pending.is_none());
+    }
+
+    #[test]
+    fn changed_palette_keeps_last_good_colors_and_existing_font_fallback_semantics() {
+        let mut state = theme_state();
+        let color = state.palette.bg_window;
+        let previous = state.snapshot();
+        let mut next = previous.clone();
+        next.colors_key = Some(2);
+        let update = prepare_theme_update(previous, next, || None, |_| None);
+        assert_eq!(state.accept(update), Some(None));
+        assert_eq!(state.palette.bg_window, color);
+        assert!(state.warned);
+        let previous = state.snapshot();
+        let mut next = previous.clone();
+        next.colors_key = Some(3);
+        let mut palette = state.palette;
+        palette.bg_window = Color32::RED;
+        let update = prepare_theme_update(
+            previous,
+            next,
+            || Some(palette),
+            |_| Some(("ui".into(), vec![4, 5])),
+        );
+        assert_eq!(state.accept(update), Some(Some(("ui".into(), vec![4, 5]))));
+        assert_eq!(state.palette.bg_window, Color32::RED);
+        assert!(!state.warned);
+    }
+
+    #[test]
+    fn failed_worker_releases_the_in_flight_slot() {
+        let (sender, receiver) = mpsc::channel();
+        let mut poll = ThemePoll {
+            pending: Some(receiver),
+        };
+        drop(sender);
+        assert!(poll.completed().is_none());
+        assert!(poll.pending.is_none());
+    }
 
     #[test]
     fn parses_omarchy_toml() {
