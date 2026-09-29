@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-09-29 · 0.6.1 — More control. Less waiting.
+
+- Offline Pixel background removal creates editable masks, with edge refinement, original pixels preserved and one-step undo. Bundled models and runtime work without a network connection; optional models download on request.
+- AI upscaling adds 2×, 4× and custom scales to Photo, Pixel cutouts and raster export. Photo opens a saved copy; Pixel keeps its mask and placement aligned. The export dialog shows exact output dimensions.
+- The native Agent panel connects to local ACP harnesses, discovers provider/model choices and makes undoable live-canvas edits. Durable prompt references accept screenshots, SVG, copied objects, files and long logs; History and interrupted-send recovery preserve attachments and drafts.
+- Pixel selections gain direct transform handles and editable Bézier lassos, with previewed Grow, Shrink and Feather operations. Adding a pixel layer preserves the selection and its brush clipping.
+- Paragraphs support justification limits, Unicode breaking, hyphenation, no-break ranges and keep/widow controls. OpenType features, kerning, leading, tracking, baseline shift and character scale are editable per range.
+- Editable text follows live vector paths or flows through linked area frames and around objects. Frame resizing reflows letters. Font search stays open while clicked and typed into.
+- Object content and individual appearance effects have independent blend and opacity controls, alongside Fill opacity and interior grouping. Older documents migrate their existing appearance.
+- Flip controls sit beside Rotate, with shared-center shortcuts and Motion-key reflection. Inspector alignment supports objects, groups and selected layers; Fit sits beside zoom in every studio.
+- Brush updates, cached object movement, visible sidebar/tab rows, motion effects and complex path construction do less repeated work. Hidden Wayland windows stop stalled redraw spinning; theme polling no longer blocks the UI. Multi-file command-line opening queues every file.
+
+The [fleet benchmark](docs/qa/fleet-performance-0.6.1/README.md) measures 2.87–3.03× faster median brush-drag UI processing against the retained issue #158 baseline, not shipped 0.6.0. [Motion measurements](docs/qa/performance-158/motion.md) are a separate M1 Pro comparison. Both reports retain memory costs, slower workflows and output differences; they do not claim universal speedups or displayed FPS. See the [release note](docs/blog/0.6.1-more-control-less-waiting.md).
+
 ## 2026-09-25 · 0.6.0 — The bundles replaced.
 
 Same version. The Linux archives on the 0.6.0 release were rebuilt from the QA revision and uploaded over the original files.
