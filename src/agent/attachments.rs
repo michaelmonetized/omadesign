@@ -418,13 +418,20 @@ fn native(content: ClipboardContent, dir: &Path) -> Result<Prepared, String> {
                 let (kind, mime) = classify(&path);
                 let mut a = metadata(path, mime.into(), kind)?;
                 if a.kind == Kind::Image {
-                    if let ClipboardContent::Image { image: im, .. } =
-                        crate::clipboard::read_file(&a.source)?
-                    {
-                        let preview = image(dir, "image-preview.png", im)?;
+                    let preview = match crate::clipboard::read_file(&a.source) {
+                        Ok(ClipboardContent::Image { image: im, .. }) => {
+                            image(dir, "image-preview.png", im).ok()
+                        }
+                        _ => None,
+                    };
+                    if let Some(preview) = preview {
                         a.preview = Some(preview.source);
                         a.dimensions = preview.dimensions;
                         a.thumbnail = preview.thumbnail;
+                    } else {
+                        // Preview limits do not prevent attaching a permitted
+                        // file by reference, or discard valid sibling files.
+                        a.kind = Kind::File;
                     }
                 }
                 attachments.push(a);
@@ -725,6 +732,78 @@ mod tests {
         let p = std::env::temp_dir().join(format!("omadesign-attachments-{}", identity()));
         std::fs::create_dir_all(&p).unwrap();
         p
+    }
+    #[test]
+    fn attachment_preview_failure_keeps_original_files_and_valid_siblings() {
+        let dir = dir();
+        let text = dir.join("brief.txt");
+        let broken = dir.join("undecodable.jpg");
+        let oversized = dir.join("large-dimensions.bmp");
+        let valid = dir.join("valid.png");
+        std::fs::write(&text, b"keep this brief").unwrap();
+        std::fs::write(&broken, b"image extension, undecodable bytes").unwrap();
+        // Reject the image dimensions without allocating a huge decoded raster.
+        let mut bmp = vec![0; 54];
+        bmp[..2].copy_from_slice(b"BM");
+        bmp[10..14].copy_from_slice(&54u32.to_le_bytes());
+        bmp[14..18].copy_from_slice(&40u32.to_le_bytes());
+        bmp[18..22].copy_from_slice(&32768u32.to_le_bytes());
+        bmp[22..26].copy_from_slice(&32768u32.to_le_bytes());
+        bmp[26..28].copy_from_slice(&1u16.to_le_bytes());
+        bmp[28..30].copy_from_slice(&24u16.to_le_bytes());
+        std::fs::write(&oversized, &bmp).unwrap();
+        assert!(
+            crate::clipboard::read_file(&oversized)
+                .unwrap_err()
+                .contains("64 megapixels")
+        );
+        let png = crate::photo::RgbaImage::new(2, 2, vec![255; 16])
+            .unwrap()
+            .encode_png()
+            .unwrap();
+        std::fs::write(&valid, &png).unwrap();
+        let files = vec![text, broken, oversized, valid];
+        let originals: Vec<_> = files.iter().map(|p| std::fs::read(p).unwrap()).collect();
+        for input in [
+            Input::Files(files.clone()),
+            Input::Native(ClipboardContent::Files(files.clone())),
+        ] {
+            let prepared = ingest(input, &dir).unwrap();
+            assert_eq!(prepared.attachments.len(), 4);
+            assert_eq!(
+                prepared
+                    .attachments
+                    .iter()
+                    .map(|a| &a.source)
+                    .collect::<Vec<_>>(),
+                files.iter().collect::<Vec<_>>()
+            );
+            for (index, mime) in [(1, "image/jpeg"), (2, "image/bmp")] {
+                let a = &prepared.attachments[index];
+                assert_eq!(a.kind, Kind::File);
+                assert_eq!(a.mime, mime);
+                assert!(a.preview.is_none() && a.dimensions.is_none() && a.thumbnail.is_none());
+            }
+            assert_eq!(prepared.attachments[3].kind, Kind::Image);
+            assert!(prepared.attachments[3].preview.as_ref().unwrap().is_file());
+            let turn =
+                payload(prepared.text, prepared.attachments, &json!({"image":true})).unwrap();
+            assert_eq!(
+                turn.blocks.iter().filter(|b| b["type"] == "image").count(),
+                1
+            );
+            for mime in ["image/jpeg", "image/bmp"] {
+                assert!(
+                    turn.blocks
+                        .iter()
+                        .any(|b| b["type"] == "resource_link" && b["mimeType"] == mime)
+                );
+            }
+            for (path, original) in files.iter().zip(&originals) {
+                assert_eq!(std::fs::read(path).unwrap(), *original);
+            }
+        }
+        std::fs::remove_dir_all(dir).unwrap();
     }
     #[test]
     fn attachment_ingest_preserves_short_text_and_external_paths_and_bounds_resources() {

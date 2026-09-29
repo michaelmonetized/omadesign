@@ -21,10 +21,19 @@ fn publish(
     buffer: &tiny_skia::Pixmap,
     before: &[u8],
 ) {
+    let selection = (!mask)
+        .then(|| studio.cached_pixel_sel_mask(layer))
+        .flatten();
+    if selection
+        .as_ref()
+        .is_some_and(|selection| selection.len() != buffer.pixels().len())
+    {
+        return;
+    }
     // Keep working buffers unfeathered so moving the pointer cannot repeatedly
     // attenuate earlier dabs. Only the displayed/committed result is blended.
     let feathered = if !mask {
-        studio.cached_pixel_sel_mask(layer).and_then(|selection| {
+        selection.as_ref().and_then(|selection| {
             if !selection.iter().any(|v| *v > 0 && *v < 255) {
                 return None;
             }
@@ -37,6 +46,7 @@ fn publish(
     } else {
         None
     };
+    drop(selection);
     let buffer = feathered.as_ref().unwrap_or(buffer);
     let Some(layer) = studio.doc.layers.get_mut(layer) else {
         return;
@@ -65,6 +75,12 @@ fn publish_region(
     let selection = (!mask)
         .then(|| studio.cached_pixel_sel_mask(layer))
         .flatten();
+    if selection
+        .as_ref()
+        .is_some_and(|selection| selection.len() != buffer.pixels().len())
+    {
+        return;
+    }
     let mut patch = Vec::with_capacity((region.x1 - region.x0) * (region.y1 - region.y0));
     for row in region.rows(buffer.width()) {
         for i in row {
@@ -211,6 +227,9 @@ fn clip_working(
     let Some(sel) = studio.cached_pixel_sel_mask(layer) else {
         return;
     };
+    if sel.len() != buf.pixels().len() {
+        return;
+    }
     let width = buf.width();
     for row in region.rows(width) {
         for i in row {
@@ -745,6 +764,43 @@ mod tests {
     }
 
     #[test]
+    fn loaded_raster_mask_metadata_does_not_change_pixel_selection_coordinates() {
+        // Both a short mask and an equal-area, differently shaped mask are
+        // legal project data. Pixel selection still uses the raster's grid.
+        for (mask_w, mask_h) in [(2, 2), (4, 16)] {
+            let mut actual = studio(8, 8);
+            let mut reference = studio(8, 8);
+            let selection: Vec<_> = (0..64).map(|i| if i % 8 < 4 { 128 } else { 0 }).collect();
+            for studio in [&mut actual, &mut reference] {
+                studio.set_pixel_sel(Some(selection.clone()));
+                studio.tool = Tool::Eraser;
+                studio.brush.size = 3.0;
+            }
+            actual.doc.layers[0].mask = Some(Pixels::new(mask_w, mask_h));
+            actual.doc.layers[0].mask_size = Pt::new(mask_w as f32, mask_h as f32);
+            actual.doc =
+                crate::project::decode(&crate::project::encode(&actual.doc).unwrap()).unwrap();
+            let before = pixels(&actual, 0, false).unwrap().data.clone();
+            for studio in [&mut actual, &mut reference] {
+                start(studio, Pt::new(2.0, 3.0));
+                drag(studio, Pt::new(6.0, 5.0));
+                studio.end_pixel_stroke(false);
+            }
+            assert_eq!(
+                pixels(&actual, 0, false).unwrap().data,
+                pixels(&reference, 0, false).unwrap().data
+            );
+            assert_ne!(pixels(&actual, 0, false).unwrap().data, before);
+            assert_eq!(rgba(&actual, 6, 5, false), [160, 170, 180, 255]);
+            let after = pixels(&actual, 0, false).unwrap().data.clone();
+            actual.undo();
+            assert_eq!(pixels(&actual, 0, false).unwrap().data, before);
+            actual.redo();
+            assert_eq!(pixels(&actual, 0, false).unwrap().data, after);
+        }
+    }
+
+    #[test]
     fn dirty_region_publication_matches_full_buffer_for_every_retouch_tool() {
         for tool in [
             Tool::Eraser,
@@ -1047,41 +1103,54 @@ mod tests {
 
     #[test]
     fn painting_a_placed_mask_uses_native_coordinates_and_undo_preserves_pixels() {
-        let mut studio = studio(32, 32);
-        if let LayerKind::Raster {
-            origin,
-            size,
-            rotation,
-            ..
-        } = &mut studio.doc.layers[0].kind
-        {
-            *origin = Pt::new(50.0, 40.0);
-            *size = Pt::new(64.0, 64.0);
-            *rotation = std::f32::consts::FRAC_PI_2;
+        for (mask_w, mask_h) in [(32, 32), (24, 20)] {
+            let mut studio = studio(32, 32);
+            if let LayerKind::Raster {
+                origin,
+                size,
+                rotation,
+                ..
+            } = &mut studio.doc.layers[0].kind
+            {
+                *origin = Pt::new(50.0, 40.0);
+                *size = Pt::new(64.0, 64.0);
+                *rotation = std::f32::consts::FRAC_PI_2;
+            }
+            studio.add_layer_mask(0, true);
+            // A stored mask can have fewer pixels than its raster, but shares the
+            // raster's native-to-world transform. Pixel selections do not constrain
+            // editing mask pixels, even when their dimensions differ.
+            studio.doc.layers[0].mask =
+                Pixels::from_rgba(mask_w, mask_h, vec![255; (mask_w * mask_h * 4) as usize]);
+            studio.doc.layers[0].mask_size = Pt::new(mask_w as f32, mask_h as f32);
+            studio.set_pixel_sel(Some(vec![0; 32 * 32]));
+            let original = pixels(&studio, 0, false).unwrap().data.clone();
+            let mask_before = pixels(&studio, 0, true).unwrap().data.clone();
+            studio.history.clear();
+            let transform = crate::compositor::layer_pixel_transform(&studio.doc.layers[0]);
+            let world = |local: Pt| {
+                let mut point = tiny_skia::Point::from_xy(local.x, local.y);
+                transform.map_point(&mut point);
+                Pt::new(point.x, point.y)
+            };
+            start(&mut studio, world(Pt::new(12.0, 14.0)));
+            drag(&mut studio, world(Pt::new(20.0, 14.0)));
+            assert!(rgba(&studio, 12, 14, true)[0] < 10);
+            assert!(rgba(&studio, 18, 14, true)[0] < 10);
+            assert_eq!(rgba(&studio, 2, 2, true), [255; 4]);
+            assert_eq!(pixels(&studio, 0, false).unwrap().data, original);
+            assert!(studio.end_pixel_stroke(false));
+            assert_eq!(studio.history.len(), 1);
+            studio.undo();
+            assert_eq!(pixels(&studio, 0, true).unwrap().data, mask_before);
+            assert_eq!(pixels(&studio, 0, false).unwrap().data, original);
+            studio.redo();
+            assert!(rgba(&studio, 18, 14, true)[0] < 10);
+            studio.mask_from_selection(0);
+            let mask = pixels(&studio, 0, true).unwrap();
+            assert_eq!((mask.w, mask.h), (mask_w, mask_h));
+            assert_eq!(pixels(&studio, 0, false).unwrap().data, original);
         }
-        studio.add_layer_mask(0, true);
-        let original = pixels(&studio, 0, false).unwrap().data.clone();
-        let mask_before = pixels(&studio, 0, true).unwrap().data.clone();
-        studio.history.clear();
-        let transform = crate::compositor::layer_pixel_transform(&studio.doc.layers[0]);
-        let world = |local: Pt| {
-            let mut point = tiny_skia::Point::from_xy(local.x, local.y);
-            transform.map_point(&mut point);
-            Pt::new(point.x, point.y)
-        };
-        start(&mut studio, world(Pt::new(12.0, 14.0)));
-        drag(&mut studio, world(Pt::new(20.0, 14.0)));
-        assert!(rgba(&studio, 12, 14, true)[0] < 10);
-        assert!(rgba(&studio, 18, 14, true)[0] < 10);
-        assert_eq!(rgba(&studio, 2, 2, true), [255; 4]);
-        assert_eq!(pixels(&studio, 0, false).unwrap().data, original);
-        assert!(studio.end_pixel_stroke(false));
-        assert_eq!(studio.history.len(), 1);
-        studio.undo();
-        assert_eq!(pixels(&studio, 0, true).unwrap().data, mask_before);
-        assert_eq!(pixels(&studio, 0, false).unwrap().data, original);
-        studio.redo();
-        assert!(rgba(&studio, 18, 14, true)[0] < 10);
     }
 
     fn canvas_frame(ctx: &Context, studio: &mut Studio, events: Vec<Event>) {

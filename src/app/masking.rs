@@ -150,8 +150,19 @@ impl Studio {
     }
 
     fn layer_selection_space(&self, layer: usize) -> Option<SelectionSpace> {
-        let item = self.doc.layers.get(layer)?;
-        let (w, h) = self.mask_dimensions(layer)?;
+        let item = self
+            .doc
+            .layers
+            .get(layer)
+            .filter(|_| self.layer_unlocked(layer))?;
+        // Raster coordinates come from the raster itself, even when a loaded
+        // layer retains a differently sized mask or vector-mask metadata.
+        // layer_pixel_transform uses this same native raster grid.
+        let (w, h) = item
+            .kind
+            .pixels()
+            .map(|pixels| (pixels.w, pixels.h))
+            .or_else(|| self.mask_dimensions(layer))?;
         Some(SelectionSpace {
             w,
             h,
@@ -420,10 +431,16 @@ impl Studio {
                 transform,
             }
         } else {
-            let Some(target) = self.layer_selection_space(layer) else {
+            // Replacing a layer mask preserves that mask's grid; this is a
+            // different target from editing the raster's native pixel grid.
+            let Some((w, h)) = self.mask_dimensions(layer) else {
                 return false;
             };
-            target
+            SelectionSpace {
+                w,
+                h,
+                transform: compositor::layer_pixel_transform(&self.doc.layers[layer]),
+            }
         };
         if u64::from(target.w) * u64::from(target.h) > 67_108_864 {
             self.status = "Mask target exceeds the 64 megapixel limit".into();

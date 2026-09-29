@@ -78,7 +78,9 @@ Settings and transcripts live under
 `~/.local/share/omadesign/agent`). Writes are atomic, ordered on a background
 writer, and flushed on shutdown. Directories are private (0700) and files are
 0600. History shows the 50 most recent saved threads; each transcript retains up
-to 400 entries and 2 MiB of message text. Provider thought chunks are used only
+to 400 entries and 2 MiB of message text. The background writer also prunes older
+entries to keep the complete serialized transcript, including attachment metadata,
+below History's 4 MiB file limit. Provider thought chunks are used only
 as a transient status, not saved as conversation text.
 
 ## Protocol and implementation
@@ -138,7 +140,9 @@ missing source files are marked unavailable. Older conversations remain readable
 
 Limits are 20 attachments per prompt, 100 MiB per file, 20 MiB per encoded image,
 5 MiB per inline audio/resource, and 25 MiB of inline base64 per turn. Larger
-permitted files use paths. Clipboard reads retain the hard 256 MiB byte, 16 MiB
+permitted files use paths. If an attached file cannot be decoded for a preview,
+the original file remains attached by reference and valid sibling files are kept.
+Clipboard reads retain the hard 256 MiB byte, 16 MiB
 ordinary text, and 64-megapixel image caps. Oversized/refused data shows an inline
 error. The 32 KiB brief cap counts typed text, excluding attachment tokens and
 attachment contents.

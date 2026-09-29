@@ -44,15 +44,19 @@ pub fn root() -> PathBuf {
 }
 
 pub fn write<T: Serialize>(path: &std::path::Path, value: &T) -> Result<(), String> {
+    write_bytes(
+        path,
+        &serde_json::to_vec_pretty(value).map_err(|e| e.to_string())?,
+    )
+}
+
+pub(super) fn write_bytes(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
     let parent = path.parent().ok_or("Invalid agent data path")?;
     std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700))
         .map_err(|e| e.to_string())?;
-    crate::formats::write_atomic(
-        path,
-        &serde_json::to_vec_pretty(value).map_err(|e| e.to_string())?,
-    )?;
+    crate::formats::write_atomic(path, bytes)?;
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
         .map_err(|e| e.to_string())
 }
