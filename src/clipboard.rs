@@ -1,6 +1,6 @@
 //! Native clipboard import. Call `read` on a worker: clipboard owners are other processes.
-pub mod type_style;
 pub mod agent;
+pub mod type_style;
 use crate::photo::RgbaImage;
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
@@ -21,6 +21,57 @@ pub enum ClipboardContent {
     Files(Vec<PathBuf>),
     Text(String),
     Empty,
+}
+
+/// Intrinsic image size, or the painted bounds of copied native artwork.
+/// Call on a worker: SVG parsing and local file decoding may take time.
+pub fn dimensions(content: &ClipboardContent) -> Option<[f32; 2]> {
+    use crate::geom::Bounds;
+    fn extent(bounds: Option<Bounds>) -> Option<[f32; 2]> {
+        let b = bounds?;
+        let size = [b.width().ceil().max(1.), b.height().ceil().max(1.)];
+        size.iter()
+            .all(|v| v.is_finite() && *v <= 65535.)
+            .then_some(size)
+    }
+    match content {
+        ClipboardContent::Image { image, .. } => Some([image.w as f32, image.h as f32]),
+        ClipboardContent::Svg(svg) => {
+            let tree = usvg::Tree::from_str(svg, &usvg::Options::default()).ok()?;
+            Some([tree.size().width().ceil(), tree.size().height().ceil()])
+        }
+        ClipboardContent::Files(paths) if paths.len() == 1 => {
+            dimensions(&read_file(&paths[0]).ok()?)
+        }
+        ClipboardContent::Text(text) if text.starts_with("omadesign-shapes:") => {
+            let shapes: Vec<crate::document::Shape> =
+                serde_json::from_str(text.strip_prefix("omadesign-shapes:")?).ok()?;
+            extent(
+                shapes
+                    .iter()
+                    .map(|s| s.world_bbox())
+                    .reduce(|a, b| a.union(b)),
+            )
+        }
+        ClipboardContent::Text(text) if text.starts_with("omadesign-objects:") => {
+            let doc = crate::project::decode(text.strip_prefix("omadesign-objects:")?).ok()?;
+            extent(
+                doc.layers
+                    .iter()
+                    .flat_map(|layer| {
+                        layer
+                            .kind
+                            .shapes()
+                            .unwrap_or_default()
+                            .iter()
+                            .map(|s| s.world_bbox())
+                            .chain(layer.kind.raster_bounds())
+                    })
+                    .reduce(|a, b| a.union(b)),
+            )
+        }
+        _ => None,
+    }
 }
 
 // Prefer original vector/file data over preview images or a browser's URL text.
@@ -117,7 +168,9 @@ pub fn parse_text(text: &str) -> Result<ClipboardContent, String> {
     if !path_lines.is_empty() && path_lines.len() == lines.len() {
         let paths: Vec<PathBuf> = path_lines.iter().map(PathBuf::from).collect();
         if paths.iter().all(|path| path.is_file()) {
-            if paths.iter().any(|path| !is_image_path(path) && !is_svg_path(path))
+            if paths
+                .iter()
+                .any(|path| !is_image_path(path) && !is_svg_path(path))
                 && paths.iter().all(|path| !is_image_path(path))
             {
                 return Err(format!(
@@ -126,7 +179,10 @@ pub fn parse_text(text: &str) -> Result<ClipboardContent, String> {
                 ));
             }
             return Ok(ClipboardContent::Files(
-                paths.into_iter().filter(|path| is_image_path(path)).collect(),
+                paths
+                    .into_iter()
+                    .filter(|path| is_image_path(path))
+                    .collect(),
             ));
         }
     }
@@ -841,5 +897,49 @@ mod tests {
                 .unwrap_err()
                 .contains("64 megapixels")
         );
+    }
+}
+
+#[cfg(test)]
+mod canvas_dimensions_tests {
+    use super::*;
+    #[test]
+    fn clipboard_canvas_dimensions_cover_pixels_svg_and_native_bounds() {
+        let image = RgbaImage::new(19, 11, vec![255; 19 * 11 * 4]).unwrap();
+        assert_eq!(
+            dimensions(&ClipboardContent::Image {
+                name: "tiny".into(),
+                image
+            }),
+            Some([19., 11.])
+        );
+        assert_eq!(
+            dimensions(&ClipboardContent::Svg(
+                r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 417 239"/>"#.into()
+            )),
+            Some([417., 239.])
+        );
+        let mut shape = crate::document::Shape::new(
+            crate::geom::Geom::Rect {
+                origin: crate::geom::Pt::new(20., 30.),
+                size: crate::geom::Pt::new(120., 80.),
+                radius: 0.,
+            },
+            Default::default(),
+        );
+        shape.rotation = 0.;
+        let payload = format!(
+            "omadesign-shapes:{}",
+            serde_json::to_string(&vec![shape]).unwrap()
+        );
+        assert_eq!(
+            dimensions(&ClipboardContent::Text(payload)),
+            Some([120., 80.])
+        );
+        assert_eq!(
+            dimensions(&ClipboardContent::Text("plain text".into())),
+            None
+        );
+        assert_eq!(dimensions(&ClipboardContent::Svg("broken".into())), None);
     }
 }

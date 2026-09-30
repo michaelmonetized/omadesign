@@ -36,6 +36,8 @@ struct State {
     left: Selection,
     right: Selection,
     size: Option<Persona>,
+    clipboard_probe: Option<[f32; 2]>,
+    clipboard_size: Option<[f32; 2]>,
     brand: bool,
     entered: bool,
     narrow_panel: usize,
@@ -470,7 +472,7 @@ fn center(ui: &mut Ui, studio: &mut Studio, state: &mut State) {
         if response.clicked() {
             match persona {
                 Persona::Photo => studio.switch_persona(persona),
-                Persona::Pixel => state.size = Some(persona),
+                Persona::Pixel => open_size(ui.ctx(), studio, state, persona),
                 _ => crate::ui::templates::open(ui.ctx(), studio, persona),
             }
         }
@@ -514,7 +516,7 @@ fn center(ui: &mut Ui, studio: &mut Studio, state: &mut State) {
             response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tip));
             if response.on_hover_text(tip).clicked() {
                 if persona != Persona::Photo {
-                    state.size = Some(persona);
+                    open_size(ui.ctx(), studio, state, persona);
                 } else if is_folder {
                     studio.request_file_dialog(crate::project::dialog_folder, |_, studio, path| {
                         studio.switch_persona(Persona::Photo);
@@ -992,8 +994,31 @@ fn project_grid(
     }
 }
 
+const CLIPBOARD_SIZE_JOB: &str = "new-canvas-clipboard-size";
+fn open_size(ctx: &egui::Context, studio: &Studio, state: &mut State, persona: Persona) {
+    state.size = Some(persona);
+    state.clipboard_size = None;
+    state.clipboard_probe = Some([studio.custom_w, studio.custom_h]);
+    crate::ui::jobs::cancel::<Option<[f32; 2]>>(ctx, CLIPBOARD_SIZE_JOB);
+    crate::ui::jobs::start(ctx, CLIPBOARD_SIZE_JOB, || {
+        crate::clipboard::read().map(|content| crate::clipboard::dimensions(&content))
+    });
+}
+fn apply_clipboard_size(studio: &mut Studio, state: &mut State, size: Option<[f32; 2]>) {
+    if let Some(original) = state.clipboard_probe.take() {
+        state.clipboard_size = size;
+        if [studio.custom_w, studio.custom_h] == original && let Some([w,h]) = size {
+            studio.custom_w = w;
+            studio.custom_h = h;
+        }
+    }
+}
+
 fn dialogs(ctx: &egui::Context, studio: &mut Studio, state: &mut State) {
     if let Some(persona) = state.size {
+        if let Some(result) = crate::ui::jobs::poll::<Option<[f32; 2]>>(ctx, CLIPBOARD_SIZE_JOB) {
+            apply_clipboard_size(studio, state, result.ok().flatten());
+        }
         let mut close = false;
         let response = egui::Modal::new(Id::new("welcome-size")).show(ctx, |ui| {
             ui.set_width((ctx.content_rect().width() - 100.).clamp(300., 850.));
@@ -1001,6 +1026,12 @@ fn dialogs(ctx: &egui::Context, studio: &mut Studio, state: &mut State) {
                 "New {} document",
                 modes().iter().find(|(m, _)| *m == persona).unwrap().1
             ));
+            if let Some([w,h]) = state.clipboard_size {
+                ui.horizontal(|ui| {
+                    ui.small(format!("Clipboard image: {w:.0} × {h:.0} px"));
+                    if ui.small_button("Use clipboard size").clicked() { studio.custom_w=w; studio.custom_h=h; }
+                });
+            }
             ui.add_space(12.);
             if ctx.content_rect().height() < 600. {
                 ScrollArea::vertical()
@@ -1030,6 +1061,10 @@ fn dialogs(ctx: &egui::Context, studio: &mut Studio, state: &mut State) {
         } else if close || response.should_close() {
             state.size = None;
         }
+    }
+    if state.size.is_none() {
+        crate::ui::jobs::cancel::<Option<[f32; 2]>>(ctx, CLIPBOARD_SIZE_JOB);
+        state.clipboard_probe = None;
     }
     if state.brand {
         let mut open = true;
@@ -1140,6 +1175,21 @@ mod tests {
                 }
                 _ => unreachable!(),
             }
+        }
+    }
+
+    #[test]
+    fn clipboard_size_fills_all_blank_modes_without_overwriting_manual_edits() {
+        for persona in [Persona::Design, Persona::Pixel, Persona::Layout] {
+            let mut studio = Studio::new();
+            let mut state = State { size: Some(persona), clipboard_probe: Some([studio.custom_w,studio.custom_h]), ..Default::default() };
+            apply_clipboard_size(&mut studio, &mut state, Some([417.,239.]));
+            assert_eq!([studio.custom_w,studio.custom_h],[417.,239.]);
+            state.clipboard_probe=Some([417.,239.]);
+            studio.custom_w=600.;
+            apply_clipboard_size(&mut studio, &mut state, Some([1920.,1080.]));
+            assert_eq!([studio.custom_w,studio.custom_h],[600.,239.]);
+            assert_eq!(state.clipboard_size,Some([1920.,1080.]));
         }
     }
 

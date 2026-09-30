@@ -167,13 +167,13 @@ fn new_page(ui: &mut Ui, studio: &mut Studio) {
                 ui.add_space(8.0);
                 ui.add(
                     eframe::egui::DragValue::new(&mut studio.custom_w)
-                        .range(32.0..=16000.0)
+                        .range(1.0..=65535.0)
                         .prefix("W  ")
                         .speed(4.0),
                 );
                 ui.add(
                     eframe::egui::DragValue::new(&mut studio.custom_h)
-                        .range(32.0..=16000.0)
+                        .range(1.0..=65535.0)
                         .prefix("H  ")
                         .speed(4.0),
                 );
