@@ -15,6 +15,35 @@ use std::{
     time::{Duration, Instant},
 };
 
+fn same_document_path(a: &std::path::Path, b: &std::path::Path) -> bool {
+    a == b
+        || a.canonicalize()
+            .ok()
+            .zip(b.canonicalize().ok())
+            .is_some_and(|(a, b)| a == b)
+}
+fn focus_document(studio: &mut Studio, path: &std::path::Path) -> bool {
+    if studio
+        .path
+        .as_ref()
+        .is_some_and(|p| same_document_path(p, path))
+    {
+        return true;
+    }
+    let index = (0..studio.tab_count()).find(|i| {
+        *i != studio.active_tab
+            && studio
+                .tab_path(*i)
+                .is_some_and(|p| same_document_path(p, path))
+    });
+    if let Some(index) = index {
+        studio.switch_tab(index);
+        true
+    } else {
+        false
+    }
+}
+
 const HISTORY_FILE_LIMIT: usize = 4 * 1024 * 1024;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -142,6 +171,11 @@ pub struct Workspace {
     save_error: Arc<Mutex<Option<String>>>,
     pending_prompt: Option<(String, Vec<Attachment>)>,
     restoring: bool,
+    pending_document: Option<(
+        Thread,
+        mpsc::Receiver<Result<crate::document::Document, String>>,
+    )>,
+    resume_connect: bool,
 }
 impl Default for Workspace {
     fn default() -> Self {
@@ -182,6 +216,8 @@ impl Default for Workspace {
             save_error: Arc::new(Mutex::new(None)),
             pending_prompt: None,
             restoring: false,
+            pending_document: None,
+            resume_connect: false,
         }
     }
 }
@@ -487,6 +523,8 @@ impl Workspace {
         self.dirty = false;
     }
     pub fn disconnect(&mut self) {
+        self.pending_document = None;
+        self.resume_connect = false;
         if let Some(c) = &self.connection {
             c.cancel();
         }
@@ -748,6 +786,12 @@ impl Workspace {
         self.focus_prompt = true;
     }
     pub fn stop(&mut self) {
+        if self.pending_document.take().is_some() || self.resume_connect {
+            self.resume_connect = false;
+            self.connecting = false;
+            self.status = "Stopped opening saved document".into();
+            return;
+        }
         if let Some(job) = self.turn_job.take() {
             self.restore_unsent(job.request, job.attachments);
             self.busy = false;
@@ -764,7 +808,12 @@ impl Workspace {
         self.permissions.clear();
     }
     pub fn restore(&mut self, thread: Thread, studio: &Studio) -> Result<(), String> {
-        if thread.document.is_none() || thread.document != studio.path {
+        if !thread
+            .document
+            .as_ref()
+            .zip(studio.path.as_ref())
+            .is_some_and(|(a, b)| same_document_path(a, b))
+        {
             return Err("Open this conversation's saved document before continuing it. Unsaved-document conversations remain readable in history.".into());
         }
         self.disconnect();
@@ -778,11 +827,89 @@ impl Workspace {
         self.attachment_jobs.clear();
         self.thread = Some(thread);
         self.owner = Some(studio.swap_id.clone());
+        self.error.clear();
+        self.edits = 0;
+        self.focus_prompt = true;
         self.status = "Conversation loaded · Connect to continue".into();
         self.show_history = false;
         Ok(())
     }
+    /// Focus an existing tab, or decode its saved OMA off the UI thread before
+    /// binding the conversation. Never replace an already-open dirty document.
+    pub fn continue_in_document(
+        &mut self,
+        thread: Thread,
+        studio: &mut Studio,
+        ctx: &eframe::egui::Context,
+    ) -> Result<(), String> {
+        if self.busy || self.connecting {
+            return Err("Wait for the current connection or turn to finish".into());
+        }
+        let path = thread.document.as_ref().ok_or(
+            "This conversation has no saved document. Its messages remain readable in History.",
+        )?;
+        if focus_document(studio, path) {
+            self.restore(thread, studio)?;
+            self.resume_connect = true;
+            return Ok(());
+        }
+        std::fs::File::open(path)
+            .map_err(|e| format!("Could not open saved document {}: {e}", path.display()))?;
+        self.disconnect();
+        let path = path.clone();
+        let (tx, rx) = mpsc::channel();
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let _ = tx.send(crate::project::load_from(&path));
+            ctx.request_repaint();
+        });
+        self.pending_document = Some((thread, rx));
+        self.connecting = true;
+        self.error.clear();
+        self.status = "Opening conversation’s saved document…".into();
+        Ok(())
+    }
+    fn poll_document(&mut self, studio: &mut Studio) {
+        let result = self
+            .pending_document
+            .as_ref()
+            .and_then(|(_, rx)| match rx.try_recv() {
+                Ok(result) => Some(result),
+                Err(mpsc::TryRecvError::Empty) => None,
+                Err(_) => Some(Err("The saved-document worker stopped".into())),
+            });
+        let Some(result) = result else {
+            return;
+        };
+        let (thread, _) = self.pending_document.take().unwrap();
+        self.connecting = false;
+        let result = result.and_then(|doc| {
+            let path = thread.document.as_ref().unwrap();
+            // The user may have opened it while the worker was decoding.
+            if !focus_document(studio, path) {
+                studio.open_document(doc, Some(path.clone()));
+            }
+            self.restore(thread, studio)
+        });
+        match result {
+            Ok(()) => self.resume_connect = true,
+            Err(error) => {
+                self.error = format!("Could not continue conversation: {error}");
+                self.status = "Saved document could not be opened".into();
+            }
+        }
+    }
     pub fn poll(&mut self, studio: &mut Studio, ctx: &eframe::egui::Context) {
+        self.poll_document(studio);
+        if std::mem::take(&mut self.resume_connect) {
+            let result = std::env::current_exe()
+                .map_err(|e| e.to_string())
+                .and_then(|binary| self.connect(studio, ctx, binary));
+            if let Err(error) = result {
+                self.error = error;
+                self.status = "Conversation loaded · connection failed".into();
+            }
+        }
         if let Some(connection) = &self.connection {
             connection.bridge.writable.store(
                 self.settings.live_edits
@@ -1402,4 +1529,111 @@ mod attachment_recovery_tests {
             assert!(workspace.turn_job.is_none());
         }
     }
+}
+
+#[cfg(test)]
+mod saved_document_tests {
+    use super::*;
+    use crate::document::Document;
+
+    fn thread(path: Option<PathBuf>) -> Thread {
+        let mut thread = Thread::new(Settings::default(), Purpose::Create, path);
+        thread.session_id = Some("saved-session".into());
+        thread
+    }
+    #[test]
+    fn resume_focuses_open_dirty_tab_and_keeps_its_content() {
+        let mut studio = Studio::new();
+        let path = PathBuf::from("/tmp/agent-resume-open.oma");
+        studio.open_document(
+            Document::new("unsaved edits", 222., 111., 96.),
+            Some(path.clone()),
+        );
+        studio.dirty = true;
+        let owner = studio.swap_id.clone();
+        studio.open_document(
+            Document::new("other", 99., 88., 96.),
+            Some("/tmp/other.oma".into()),
+        );
+        let tabs = studio.tab_count();
+        let mut agent = Workspace::default();
+        agent.error = "stale error".into();
+        agent
+            .continue_in_document(thread(Some(path)), &mut studio, &Default::default())
+            .unwrap();
+        assert_eq!(studio.swap_id, owner);
+        assert_eq!(studio.doc.name, "unsaved edits");
+        assert!(studio.dirty);
+        assert_eq!(studio.tab_count(), tabs);
+        assert_eq!(
+            agent.thread.as_ref().unwrap().session_id.as_deref(),
+            Some("saved-session")
+        );
+        assert!(agent.error.is_empty() && agent.resume_connect);
+    }
+    #[test]
+    fn resume_opens_closed_saved_document_asynchronously_and_recognizes_aliases() {
+        let root =
+            std::env::temp_dir().join(format!("oma-resume-{}", crate::project::new_swap_id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("saved.oma");
+        crate::project::save_to(&Document::new("saved canvas", 333., 222., 96.), &path).unwrap();
+        let mut studio = Studio::new();
+        studio.doc.name = "keep this unsaved canvas".into();
+        studio.dirty = true;
+        let mut agent = Workspace::default();
+        agent
+            .continue_in_document(thread(Some(path.clone())), &mut studio, &Default::default())
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while agent.pending_document.is_some() && Instant::now() < deadline {
+            agent.poll_document(&mut studio);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(agent.resume_connect, "{}", agent.error);
+        assert_eq!(studio.doc.name, "saved canvas");
+        assert_eq!(studio.tab_count(), 2);
+        assert_eq!(studio.tab_title(0).0, "keep this unsaved canvas");
+        #[cfg(unix)]
+        {
+            let alias = root.join("alias.oma");
+            std::os::unix::fs::symlink(&path, &alias).unwrap();
+            agent.restore(thread(Some(alias)), &studio).unwrap();
+            assert_eq!(agent.owner.as_deref(), Some(studio.swap_id.as_str()));
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn missing_or_unsaved_history_cannot_rebind_the_current_canvas() {
+        let mut studio = Studio::new();
+        let owner = studio.swap_id.clone();
+        let mut agent = Workspace::default();
+        for path in [None, Some(PathBuf::from("/missing/omadesign-resume.oma"))] {
+            assert!(
+                agent
+                    .continue_in_document(thread(path), &mut studio, &Default::default())
+                    .is_err()
+            );
+            assert_eq!(studio.swap_id, owner);
+            assert!(agent.thread.is_none() && agent.pending_document.is_none());
+        }
+    }
+    #[test]
+    fn stop_discards_pending_document_and_deferred_connection() {
+        let mut studio = Studio::new();
+        let owner = studio.swap_id.clone();
+        let mut agent = Workspace::default();
+        let (tx, rx) = mpsc::channel();
+        agent.pending_document = Some((thread(Some("/tmp/stopped.oma".into())), rx));
+        agent.connecting = true;
+        agent.resume_connect = true;
+        agent.stop();
+        assert!(tx.send(Ok(Document::new("stopped", 10., 10., 96.))).is_err());
+        agent.poll_document(&mut studio);
+        assert_eq!(studio.swap_id, owner);
+        assert!(!agent.connecting && !agent.resume_connect);
+        assert!(agent.pending_document.is_none());
+        assert_eq!(agent.status, "Stopped opening saved document");
+    }
+
 }
