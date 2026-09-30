@@ -5,6 +5,12 @@ use crate::{
     document::{Cmd, Fill, Layer, Shape, Stroke, Style},
     geom::{Anchor, Geom, Pt},
 };
+mod animation;
+mod catalog;
+mod editing;
+pub mod files;
+mod photos;
+mod pixels;
 use base64::Engine;
 use serde_json::{Value, json};
 
@@ -60,15 +66,15 @@ pub fn catalog() -> Vec<Value> {
         ),
         (
             "create_layer",
-            "Create an editable vector layer and return its index. Use separate layers for meaningful parts of a composition.",
-            json!({"name":string}),
+            "Create an editable vector, raster or group layer. Raster dimensions default to canvas pixels. Return its index and stable ID.",
+            json!({"name":string,"kind":{"enum":["vector","raster","group"]},"width":integer,"height":integer}),
             vec!["name"],
             true,
         ),
         (
             "update_layer",
-            "Rename an editable layer or change its opacity (0–1).",
-            json!({"layer":integer,"name":string,"opacity":number}),
+            "Rename any layer, set opacity/blend, show/hide or unlock/lock it. Locked ancestors must be unlocked separately.",
+            json!({"layer":integer,"name":string,"opacity":number,"visible":{"type":"boolean"},"locked":{"type":"boolean"},"blend":string,"parent":{"type":["integer","null"],"minimum":0}}),
             vec!["layer"],
             true,
         ),
@@ -96,14 +102,14 @@ pub fn catalog() -> Vec<Value> {
         (
             "get_canvas_snapshot",
             "See the current rendered design as a PNG image, up to 960 pixels wide. Inspect composition after meaningful changes.",
-            json!({}),
+            json!({"source":{"enum":["canvas","photo"]},"time":number}),
             vec![],
             false,
         ),
         (
             "get_documentation",
             "Read version-matched Omadesign documentation for learning or design work.",
-            json!({"topic":{"type":"string","enum":["manual","layout","tools"]}}),
+            json!({"topic":{"type":"string","enum":["manual","layout","tools","formats","skill","agent"]}}),
             vec!["topic"],
             false,
         ),
@@ -111,7 +117,7 @@ pub fn catalog() -> Vec<Value> {
     specs.into_iter().map(|(name, description, mut properties, mut required, mutation)| {
         if mutation { properties["revision"] = integer.clone(); required.push("revision"); }
         json!({"name":name,"description":description,"inputSchema":{"type":"object","properties":properties,"required":required,"additionalProperties":false},"annotations":{"readOnlyHint":!mutation,"openWorldHint":false}})
-    }).collect()
+    }).chain(catalog::extended()).collect()
 }
 
 pub fn mutates(name: &str) -> bool {
@@ -123,7 +129,32 @@ pub fn mutates(name: &str) -> bool {
             | "create_layer"
             | "update_layer"
             | "set_effects"
+            | "import_file"
+            | "set_image_fill"
+            | "set_mode"
+            | "transform_raster"
+            | "set_layout"
+            | "set_filter_stack"
+            | "editor_action"
+            | "set_pixel_selection"
+            | "paint_stroke"
+            | "set_mask"
+            | "set_motion"
+            | "set_keyframes"
+            | "apply_motion_preset"
+            | "develop_photo"
+            | "select_photo"
+            | "save_document"
+            | "configure_canvas"
+            | "patch_object"
     )
+}
+
+fn boolean(value: &Value, key: &str, default: bool) -> Result<bool, String> {
+    match value.get(key) {
+        Some(v) => v.as_bool().ok_or_else(|| format!("{key} must be boolean")),
+        None => Ok(default),
+    }
 }
 
 fn text(value: &Value, key: &str, default: &str) -> Result<String, String> {
@@ -468,6 +499,24 @@ pub fn execute(
     args: &Value,
     editable: bool,
 ) -> Result<Value, String> {
+    execute_prepared(
+        studio,
+        name,
+        args,
+        editable,
+        None,
+        &std::env::current_dir().unwrap_or_default(),
+    )
+}
+
+pub fn execute_prepared(
+    studio: &mut Studio,
+    name: &str,
+    args: &Value,
+    editable: bool,
+    prepared: Option<Result<files::Prepared, String>>,
+    directory: &std::path::Path,
+) -> Result<Value, String> {
     if mutates(name) {
         if !editable {
             return Err("This session is read-only. Enable live edits in the agent panel to modify the design.".into());
@@ -482,6 +531,9 @@ pub fn execute(
             || studio.type_edit.is_some()
             || studio.deformation.is_some()
             || studio.pixel_edit.is_some()
+            || studio.free_transform.is_some()
+            || studio.pending_place.is_some()
+            || studio.photo.crop_drag.is_some()
         {
             return Err(
                 "The designer is editing the canvas. Retry after the gesture finishes.".into(),
@@ -499,7 +551,7 @@ pub fn execute(
                 .skip(offset)
                 .take(50)
                 .map(|(i, l)| {
-                    json!({"index":i,"name":l.name.chars().take(200).collect::<String>(),
+                    json!({"index":i,"id":l.id,"kind":if l.is_group{"group"}else if l.kind.pixels().is_some(){"raster"}else{"vector"},"visible":l.visible,"locked":l.locked,"opacity":l.opacity,"parent":l.parent,"raster":raster_summary(l),"name":l.name.chars().take(200).collect::<String>(),
                     "editable":studio.doc.layer_editable(i),"vector":l.kind.shapes().is_some(),
                     "objects":l.kind.shapes().map_or(0,|s|s.len()),
                     "items":l.kind.shapes().map(|s|s.iter().take(20).map(|s|json!({
@@ -511,6 +563,8 @@ pub fn execute(
             let next = offset.saturating_add(layers.len());
             json!({"name":studio.doc.name.chars().take(200).collect::<String>(),
                 "width":studio.doc.width,"height":studio.doc.height,"revision":studio.canvas_gen,
+                "mode":studio.persona,"project_directory":directory,"photo_revision":studio.photo.edit_revision,
+                "photos":studio.photo.images.len(),"dpi":studio.doc.dpi,"transparent":studio.doc.transparent,"artboards":studio.doc.artboards,"guides":studio.doc.guides,"layout_tokens":studio.doc.layout_tokens,"capabilities":"Native disk import, vector, pixel, photo, layout and motion tools are available in all workspaces. Use get_editor_capabilities and tools documentation.",
                 "selection":studio.selection.iter().take(100).collect::<Vec<_>>(),
                 "selection_count":studio.selection.len(),"active_layer":studio.active_layer,
                 "layers":layers,"total_layers":studio.doc.layers.len(),
@@ -522,6 +576,11 @@ pub fn execute(
                 .layers
                 .get(index(args, "layer")?)
                 .ok_or("Missing layer")?;
+            if l.kind.pixels().is_some() {
+                return content(
+                    json!({"layer":index(args,"layer")?,"raster":raster_summary(l),"revision":studio.canvas_gen}),
+                );
+            }
             let shapes = l.kind.shapes().ok_or("Not a vector layer")?;
             let offset = args["offset"].as_u64().unwrap_or(0) as usize;
             let mut objects = vec![];
@@ -537,9 +596,9 @@ pub fn execute(
                 let item = json!({"id":shape.id,"name":shape.name.chars().take(200).collect::<String>(),
                     "bounds":shape.world_bbox(),"geom":(points<=4096).then_some(&shape.geom),
                     "geometry_omitted":points>4096,"style":shape.style,"rotation":shape.rotation,
-                    "opacity":shape.opacity,"blend":shape.blend,"visible":shape.visible,
+                    "opacity":shape.opacity,"fill_opacity":shape.fill_opacity,"blend_interior":shape.blend_interior,"text_wrap":shape.text_wrap,"blend":shape.blend,"visible":shape.visible,
                     "locked":shape.locked,"guide":shape.guide,"filters":shape.filters,
-                    "corners":shape.corners,"layout":shape.layout,
+                    "corners":shape.corners,"layout":layout_summary(&shape.layout),
                     "mask":shape.mask.as_ref().map(|m|json!({"width":m.w,"height":m.h}))});
                 let size = serde_json::to_vec(&item).map_err(|e| e.to_string())?.len();
                 if bytes + size > 1024 * 1024 {
@@ -617,6 +676,19 @@ pub fn execute(
             if ids.len() > 100 {
                 return Err("At most 100 objects per call".into());
             }
+            if name == "select_objects" {
+                let selection = ids
+                    .iter()
+                    .map(|v| {
+                        let id = v.as_u64().ok_or("Invalid ID")?;
+                        editing::target(studio, li, id)?;
+                        Ok((li, id))
+                    })
+                    .collect::<Result<Vec<_>, String>>()?;
+                studio.selection = selection;
+                studio.active_layer = Some(li);
+                return content(json!({"revision":studio.canvas_gen,"selection":studio.selection}));
+            }
             let mut unique = std::collections::HashSet::new();
             let mut shapes = ids
                 .iter()
@@ -685,26 +757,74 @@ pub fn execute(
             }
             let i = studio.doc.layers.len();
             let name = text(args, "name", "Agent artwork")?;
-            studio.commit(Cmd::AddLayer {
-                index: i,
-                layer: Layer::vector(name),
-            });
+            let layer = match args["kind"].as_str().unwrap_or("vector") {
+                "vector" => Layer::vector(name),
+                "group" => Layer::group(name),
+                "raster" => {
+                    let w = args["width"]
+                        .as_u64()
+                        .unwrap_or(studio.doc.width.ceil() as u64);
+                    let h = args["height"]
+                        .as_u64()
+                        .unwrap_or(studio.doc.height.ceil() as u64);
+                    if w == 0 || h == 0 || w > 32768 || h > 32768 || w * h > 64_000_000 {
+                        return Err("Raster dimensions must be positive, at most 32768 per edge and 64 megapixels".into());
+                    }
+                    Layer::raster(name, w as u32, h as u32)
+                }
+                _ => return Err("Choose vector, raster or group".into()),
+            };
+            studio.commit(Cmd::AddLayer { index: i, layer });
             studio.active_layer = Some(i);
-            json!({"layer":i,"revision":studio.canvas_gen})
+            json!({"layer":i,"id":studio.doc.layers[i].id,"revision":studio.canvas_gen})
         }
         "update_layer" => {
             let li = index(args, "layer")?;
-            layer(studio, li)?;
-            let l = &studio.doc.layers[li];
-            studio.commit(Cmd::SetLayerMeta {
+            if !studio.layer_ancestors_unlocked(li) {
+                return Err("Unlock the layer's ancestors first".into());
+            }
+            let l = studio.doc.layers.get(li).ok_or("Layer no longer exists")?;
+            let blend = if args.get("blend").is_some() {
+                serde_json::from_value(args["blend"].clone()).map_err(|e| e.to_string())?
+            } else {
+                l.blend
+            };
+            let mut commands = vec![];
+            if let Some(parent) = args.get("parent") {
+                let parent = if parent.is_null() {
+                    None
+                } else {
+                    Some(parent.as_u64().ok_or("parent must be a group ID or null")?)
+                };
+                if let Some(parent) = parent {
+                    let (index, _) = studio
+                        .doc
+                        .layers
+                        .iter()
+                        .enumerate()
+                        .find(|(_, l)| l.id == parent && l.is_group)
+                        .ok_or("Parent group no longer exists")?;
+                    editing::editable_layer(studio, index)?;
+                }
+                let mut check = studio.doc.clone();
+                check.layers[li].parent = parent;
+                check.validate_hierarchy()?;
+                commands.push(Cmd::SetLayerParent {
+                    index: li,
+                    before: l.parent,
+                    after: parent,
+                });
+            }
+            commands.push(Cmd::SetLayerMeta {
                 index: li,
                 name: text(args, "name", &l.name)?,
-                visible: l.visible,
-                locked: l.locked,
+                visible: boolean(args, "visible", l.visible)?,
+                locked: boolean(args, "locked", l.locked)?,
                 opacity: number(args, "opacity", l.opacity)?.clamp(0.0, 1.0),
-                blend: l.blend,
+                blend,
                 before: (l.name.clone(), l.visible, l.locked, l.opacity, l.blend),
             });
+            studio.commit(Cmd::Batch(commands));
             json!({"revision":studio.canvas_gen})
         }
         "set_effects" => {
@@ -745,12 +865,39 @@ pub fn execute(
             json!({"fonts":crate::text::all_fonts_cached().iter().filter(|f|f.name.to_lowercase().contains(&query)).take(200).map(|f|&f.name).collect::<Vec<_>>()})
         }
         "get_canvas_snapshot" => {
+            if args["source"].as_str().unwrap_or(
+                if studio.persona == crate::tools::Persona::Photo {
+                    "photo"
+                } else {
+                    "canvas"
+                },
+            ) == "photo"
+            {
+                let p = studio
+                    .photo
+                    .selected()
+                    .ok_or("Select/import a photo first")?;
+                let preview = p.render_thumbnail(960);
+                let bytes = preview.encode_png().ok_or("Could not render photo")?;
+                return Ok(
+                    json!({"content":[{"type":"image","mimeType":"image/png","data":base64::engine::general_purpose::STANDARD.encode(bytes)},{"type":"text","text":format!("Photo revision {} · {}",studio.photo.edit_revision,p.name)}]}),
+                );
+            }
             let scale = (960.0 / studio.doc.width.max(studio.doc.height).max(1.0)).min(1.0);
             let (w, h) = (
                 (studio.doc.width * scale).ceil().max(1.0) as u32,
                 (studio.doc.height * scale).ceil().max(1.0) as u32,
             );
-            let pixmap = crate::compositor::render_view(
+            let time = number(
+                args,
+                "time",
+                if studio.is_motion() {
+                    studio.playhead
+                } else {
+                    0.0
+                },
+            )?;
+            let pixmap = crate::compositor::render_view_posed(
                 &studio.doc,
                 crate::compositor::View {
                     scale,
@@ -759,8 +906,10 @@ pub fn execute(
                 w,
                 h,
                 crate::compositor::Draft::none(),
+                Some(time),
+                None,
             )
-            .ok_or("Unable to render canvas")?;
+            .ok_or("Could not render snapshot")?;
             let bytes = pixmap.encode_png().map_err(|e| e.to_string())?;
             return Ok(
                 json!({"content":[{"type":"image","mimeType":"image/png","data":base64::engine::general_purpose::STANDARD.encode(bytes)},{"type":"text","text":format!("Canvas revision {} · {} × {}",studio.canvas_gen,w,h)}]}),
@@ -770,6 +919,9 @@ pub fn execute(
             let doc = match args["topic"].as_str() {
                 Some("manual") => include_str!("../../docs/MANUAL.md"),
                 Some("layout") => include_str!("../../docs/layout.md"),
+                Some("formats") => include_str!("../../docs/format-support.md"),
+                Some("skill") => super::SKILL,
+                Some("agent") => include_str!("../../docs/agent-harness.md"),
                 Some("tools") => {
                     return Ok(
                         json!({"content":[{"type":"text","text":serde_json::to_string(&catalog()).unwrap()}]}),
@@ -779,13 +931,52 @@ pub fn execute(
             };
             return Ok(json!({"content":[{"type":"text","text":doc}]}));
         }
+        "list_files" | "read_file" | "import_file" | "set_image_fill" => {
+            let prepared = prepared
+                .or_else(|| files::prepare(name, args))
+                .ok_or("Missing file preparation")??;
+            files::apply(studio, name, args, prepared)?
+        }
+        "configure_canvas"
+        | "patch_object"
+        | "set_mode"
+        | "transform_raster"
+        | "set_layout"
+        | "set_filter_stack"
+        | "get_editor_capabilities"
+        | "editor_action" => editing::execute(studio, name, args)?,
+        "set_pixel_selection" | "paint_stroke" | "set_mask" => pixels::execute(studio, name, args)?,
+        "get_motion" | "set_motion" | "set_keyframes" | "apply_motion_preset" => {
+            animation::execute(studio, name, args)?
+        }
+        "get_photos" | "select_photo" | "develop_photo" | "save_document" => {
+            photos::execute(studio, name, args)?
+        }
         _ => return Err(format!("Unknown design tool: {name}")),
     };
     if mutates(name) {
         studio.show_welcome = false;
         studio.status = format!("Agent · {}", name.replace('_', " "));
     }
+    content(result)
+}
+fn content(result: Value) -> Result<Value, String> {
+    if result["content"].is_array() {
+        return Ok(result);
+    }
     Ok(
         json!({"content":[{"type":"text","text":serde_json::to_string(&result).map_err(|e|e.to_string())?}]}),
     )
+}
+fn layout_summary(layout: &crate::layout::FrameLayout) -> Value {
+    let mut data = layout.clone();
+    data.image = None;
+    let mut value = serde_json::to_value(data).unwrap();
+    if let Some(image) = &layout.image {
+        value["image"] = json!({"embedded":true,"fit":image.fit,"focal":image.focal});
+    }
+    value
+}
+fn raster_summary(layer: &Layer) -> Value {
+    layer.kind.pixels().map_or(Value::Null,|p|json!({"id":0,"motion_id":layer.id,"pixel_width":p.w,"pixel_height":p.h,"transform":layer.kind.raster_xform(),"shear":layer.kind.raster_shear(),"mask":layer.mask.as_ref().map(|m|json!({"width":m.w,"height":m.h})),"filters":layer.filters}))
 }

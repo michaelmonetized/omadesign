@@ -19,6 +19,7 @@ pub const MAX_MESSAGE: usize = 8 * 1024 * 1024;
 pub struct Call {
     pub name: String,
     pub arguments: Value,
+    pub prepared: Option<Result<super::tools::files::Prepared, String>>,
     pub reply: mpsc::Sender<Value>,
     pub deadline: Instant,
 }
@@ -28,6 +29,7 @@ pub struct Bridge {
     pub token: String,
     pub calls: Receiver<Call>,
     pub accepting: Arc<AtomicBool>,
+    pub writable: Arc<AtomicBool>,
     stop: Arc<AtomicBool>,
 }
 
@@ -116,6 +118,7 @@ impl Bridge {
             token,
             calls,
             accepting,
+            writable: Arc::new(AtomicBool::new(false)),
             stop,
         })
     }
@@ -163,8 +166,11 @@ fn serve(
         return;
     }
     let (reply, receive) = mpsc::channel();
+    let name = request["name"].as_str().unwrap_or_default();
+    let prepared = super::tools::files::prepare(name, &request["arguments"]);
     let call = Call {
-        name: request["name"].as_str().unwrap_or_default().into(),
+        prepared,
+        name: name.into(),
         arguments: request["arguments"].clone(),
         reply,
         deadline: Instant::now() + Duration::from_secs(60),

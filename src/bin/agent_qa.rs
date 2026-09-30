@@ -18,7 +18,7 @@ struct Capture {
     finished_shots: usize,
 }
 impl Capture {
-    fn start(directory: PathBuf, resume: Option<PathBuf>) -> Self {
+    fn start(directory: PathBuf, resume: Option<PathBuf>, prompt: Option<String>) -> Self {
         let mut studio = Studio::new();
         studio.show_welcome = false;
         studio.doc = Document::new("Live ACP design", 960.0, 640.0, 96.0);
@@ -42,6 +42,9 @@ impl Capture {
             harness.restore(thread, &studio).unwrap();
             harness.request = "Change only the main title from FERN & FORM to FERN & FIELD using the native update tool. Preserve all other artwork. Inspect a snapshot. Do not use terminal, filesystem or subagent tools.".into();
             studio.agent = harness;
+        }
+        if let Some(prompt) = prompt {
+            studio.agent.request = prompt;
         }
         Self {
             studio,
@@ -69,7 +72,7 @@ impl Capture {
             )
             .map_err(|e| e.to_string())?;
         }
-        let result = serde_json::json!({"edits":self.studio.agent.edits,"objects":self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).map(|s|s.len()).sum::<usize>(),"error":self.studio.agent.error,"status":self.studio.agent.status,"screenshots":self.screenshots,"elapsed_seconds":self.started.elapsed().as_secs()});
+        let result = serde_json::json!({"edits":self.studio.agent.edits,"objects":self.studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).map(|s|s.len()).sum::<usize>(),"error":self.studio.agent.error,"status":self.studio.agent.status,"screenshots":self.screenshots,"raster_layers":self.studio.doc.layers.iter().filter(|l|l.kind.pixels().is_some()).count(),"masked_layers":self.studio.doc.layers.iter().filter(|l|l.mask.is_some()).count(),"photos":self.studio.photo.images.len(),"tracks":self.studio.doc.motion.tracks.len(),"elapsed_seconds":self.started.elapsed().as_secs()});
         std::fs::write(
             self.directory.join("result.json"),
             serde_json::to_vec_pretty(&result).unwrap(),
@@ -131,7 +134,7 @@ impl eframe::App for Capture {
                 && !self.studio.agent.busy
                 && !self.studio.agent.connecting
                 && self.studio.agent.edits > 0)
-                || self.started.elapsed() > Duration::from_secs(240)
+                || self.started.elapsed() > Duration::from_secs(900)
                 || (!self.studio.agent.error.is_empty()
                     && !self.studio.agent.busy
                     && !self.studio.agent.connecting))
@@ -168,6 +171,10 @@ fn main() -> eframe::Result {
         .windows(2)
         .find(|w| w[0] == "--resume-from")
         .map(|w| PathBuf::from(&w[1]));
+    let prompt = args
+        .windows(2)
+        .find(|w| w[0] == "--prompt-file")
+        .map(|w| std::fs::read_to_string(&w[1]).expect("Readable prompt file"));
     for (key, name) in [
         ("XDG_CONFIG_HOME", "config"),
         ("XDG_DATA_HOME", "data"),
@@ -189,7 +196,7 @@ fn main() -> eframe::Result {
         },
         Box::new(move |cc| {
             omadesign::ui::theme::apply(&cc.egui_ctx);
-            Ok(Box::new(Capture::start(directory, resume)))
+            Ok(Box::new(Capture::start(directory, resume, prompt)))
         }),
     )
 }

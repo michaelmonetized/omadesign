@@ -643,15 +643,23 @@ impl Workspace {
     fn dispatch_turn(&mut self, studio: &Studio, turn: attachments::Turn) -> Result<(), String> {
         let request = &turn.request;
         let guidance = if self.purpose == Purpose::Learn {
-            "Help the user learn Omadesign. This is a read-only session. Use get_documentation and live canvas context. Do not change files or artwork."
+            "Help the user learn Omadesign in this read-only session. Inspect canvas, photos, requested disk assets and documentation. Do not modify files or artwork."
         } else {
-            "You are a designer working directly in the user's live Omadesign canvas. Use the omadesign MCP native design tools to create and refine editable artwork. The user watches each tool result appear immediately. Build in meaningful incremental steps: foundation, composition, typography, details, then inspect a canvas snapshot and refine. Never produce SVG code, scripts, terminal artwork or .oma files as a substitute for these tools. Do not use filesystem/shell tools for design changes. Keep narration concise and visual. Get current document context before editing; every mutation requires its current revision and returns the next revision. If a revision is stale, re-read context and adapt. Preserve existing work unless asked to replace it. Make native text with installed fonts. Use unlocked vector layers; create one when needed. Read-only tools work in all sessions. Inspect the snapshot before calling the design finished."
+            "Work directly in the user's live Omadesign session with native editable tools. All tools are available in Design, Pixel, Photo, Layout and Motion; the visible mode is not a capability boundary. Read get_document and get_editor_capabilities first. User-requested disk assets and prompt attachments may be read, previewed and imported: use list_files/read_file to find or inspect them, import_file to place them, set_image_fill for image-filled frames, and destination=photo for original Photo development. Attachments are references until explicitly placed. File access is allowed for the requested work, including assets outside the project; do not claim the skill/harness forbids it. Provider filesystem/shell tools may prepare assets when appropriate, then bring the result into the live editor. Preserve original source assets and existing artwork unless replacement is requested. Use native masks for photographic cutouts, native text with installed fonts, and native editable motion/layout/effects. Consult the available tools/docs before claiming a task is unsupported; report an actual tool/codec limitation precisely rather than substituting a silhouette or flattened file without the user's agreement. Make visible progress in meaningful steps. Every mutation needs the current revision; re-read after concurrent edits. Photo adjustments also require photo_revision from get_photos. Inspect a canvas or Photo snapshot before finishing. Keep narration concise."
         };
+        if let Some(connection) = &self.connection {
+            connection.bridge.writable.store(
+                self.settings.live_edits && self.purpose == Purpose::Create,
+                Ordering::Release,
+            );
+        }
         let prompt = format!(
-            "Omadesign design harness instructions:\n{guidance}\nCanvas: {} ({} × {} pixels). Live editing: {}.\n\nUser request:\n{request}",
+            "Omadesign design harness instructions:\n{guidance}\nCanvas: {} ({} × {} pixels). Workspace: {}. Project directory: {}. Live editing: {}.\n\nUser request:\n{request}",
             studio.doc.name,
             studio.doc.width,
             studio.doc.height,
+            studio.persona.name(),
+            self.settings.directory.display(),
             self.settings.live_edits && self.purpose == Purpose::Create
         );
         let mut blocks = vec![serde_json::json!({"type":"text","text":prompt})];
@@ -775,6 +783,14 @@ impl Workspace {
         Ok(())
     }
     pub fn poll(&mut self, studio: &mut Studio, ctx: &eframe::egui::Context) {
+        if let Some(connection) = &self.connection {
+            connection.bridge.writable.store(
+                self.settings.live_edits
+                    && self.purpose == Purpose::Create
+                    && self.owner.as_deref() == Some(&studio.swap_id),
+                Ordering::Release,
+            );
+        }
         if let Some(result) = self
             .turn_job
             .as_ref()
@@ -919,11 +935,13 @@ impl Workspace {
             let result = if !allowed {
                 Err("This design turn is no longer active".into())
             } else {
-                tools::execute(
+                tools::execute_prepared(
                     studio,
                     &call.name,
                     &call.arguments,
                     self.settings.live_edits && self.purpose == Purpose::Create,
+                    call.prepared,
+                    &self.settings.directory,
                 )
             };
             if result.is_ok() && tools::mutates(&call.name) {

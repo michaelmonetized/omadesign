@@ -1810,7 +1810,7 @@ impl Studio {
         let mut commands = Vec::new();
         let mut new_layers = 0;
         let mut ids = self.selection.clone();
-        let mut groups = Vec::new();
+        let mut groups: Vec<_> = self.selected_layer.filter(|_| self.selection.is_empty()).and_then(|id| self.doc.layers.iter().position(|l| l.id == id)).into_iter().collect();
         for &hit in &self.selection {
             if self.individual_object == Some(hit) {
                 continue;
@@ -1858,7 +1858,9 @@ impl Studio {
                 let mut layer = self.doc.layers[i].clone();
                 let index = self.doc.layers.len() + new_layers;
                 layer.id = layer_ids[&layer.id];
-                layer.parent = layer.parent.and_then(|p| layer_ids.get(&p).copied());
+                if i != group {
+                    layer.parent = layer.parent.and_then(|p| layer_ids.get(&p).copied());
+                }
                 if i == group {
                     layer.name = format!("{} copy", layer.name);
                     copied_group = Some(layer.id);

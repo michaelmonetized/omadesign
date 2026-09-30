@@ -31,7 +31,7 @@ impl Studio {
         Ok(())
     }
 
-    pub(super) fn place_imported_at(
+    pub(crate) fn place_imported_at(
         &mut self,
         imported: Imported,
         at: Pt,

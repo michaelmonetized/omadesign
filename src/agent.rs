@@ -8,6 +8,8 @@ pub mod tools;
 pub mod workspace;
 pub use workspace::Workspace;
 #[cfg(test)]
+mod all_modes_tests;
+#[cfg(test)]
 mod tests;
 
 pub const SKILL: &str = include_str!("../skills/omadesign-create/SKILL.md");

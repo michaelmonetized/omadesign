@@ -246,7 +246,7 @@ impl Studio {
         }
     }
 
-    pub(super) fn place_imported_in_frame(
+    pub(crate) fn place_imported_in_frame(
         &mut self,
         imported: Imported,
         at: Pt,

@@ -1,0 +1,19 @@
+{
+  "commit": "f371b37523fe7f499939094f743ec59565ec8abb",
+  "base_with_accepted_raster_fix": "57f93a7b",
+  "agent_tests": {
+    "passed": 42,
+    "failed": 0
+  },
+  "full_library": {
+    "passed": 928,
+    "failed": 2,
+    "ignored": 7,
+    "failures": [
+      "text_geometry::area::tests::ellipsis_respects_graphemes_and_word_boundary",
+      "text_geometry::area::tests::visible_clip_ellipsis_and_max_lines_never_truncate_source"
+    ]
+  },
+  "all_targets_check": "passed",
+  "skill_sha256": "2685533887420df5b0aeeafa2e757d913c847aade30334f10f1ba6baa917ff4c"
+}

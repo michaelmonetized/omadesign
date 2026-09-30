@@ -1,0 +1,9 @@
+{
+  "commit": "f371b375",
+  "binary": "/home/michael/Projects/omadesign/target/release/omadesign",
+  "installed": "/home/michael/.local/bin/omadesign-agent-all-modes",
+  "sha256": "e733fedd2fb9b9212535f0255ffec8dd170e44c10cc2cc4a6cbbebbe7dbb59a4",
+  "installed_sha256": "e733fedd2fb9b9212535f0255ffec8dd170e44c10cc2cc4a6cbbebbe7dbb59a4",
+  "qa_binary_sha256": "47e7e1e3f15cda26d21c2e082f8d1c0a8eb54be5fcb822f7825d701ae7809450",
+  "qa_pid": 396821
+}

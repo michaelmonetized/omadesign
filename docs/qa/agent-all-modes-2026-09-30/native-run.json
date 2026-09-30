@@ -1,0 +1,257 @@
+{
+  "result": {
+    "edits": 30,
+    "elapsed_seconds": 188,
+    "error": "",
+    "masked_layers": 1,
+    "objects": 5,
+    "photos": 1,
+    "raster_layers": 2,
+    "screenshots": 31,
+    "status": "Ready \u00b7 30 live edits",
+    "tracks": 2
+  },
+  "tools": [
+    {
+      "name": "mcp.omadesign.get_document",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_editor_capabilities",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.list_files",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.read_file",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.list_fonts",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.list_files",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_documentation",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.import_file",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_photos",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_mode",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.develop_photo",
+      "status": "failed"
+    },
+    {
+      "name": "mcp.omadesign.get_canvas_snapshot",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_document",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.develop_photo",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_canvas_snapshot",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_document",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.save_document",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_documentation",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_mode",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.configure_canvas",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.update_layer",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.add_shape",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_mode",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.add_shape",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_image_fill",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_mode",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.add_shape",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.add_shape",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.add_shape",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.import_file",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_document",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_mode",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.update_layer",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_pixel_selection",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_mask",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_pixel_selection",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_canvas_snapshot",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_objects",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_document",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_mode",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.update_shape",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_mode",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_motion",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.apply_motion_preset",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_keyframes",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_canvas_snapshot",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_motion",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_document",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_motion",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_canvas_snapshot",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_document",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.save_document",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.save_document",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_motion",
+      "status": "completed"
+    }
+  ],
+  "directory": "/home/michael/Projects/omadesign/target/qa/agent-all-modes-20260930/native",
+  "provider_session_id": "01a0f3d7-9512-7b90-87df-877ba8ca8007",
+  "stale_request": "The agent guessed revision 3 after set_mode returned 2. Host rejected it and agent re-read the document and completed the adjustment.",
+  "artifacts": {
+    "agent-card.oma": {
+      "path": "/home/michael/Projects/omadesign/target/qa/agent-all-modes-20260930/native/agent-card.oma",
+      "bytes": 19482092,
+      "sha256": "3b0b517a4fe2d87121e483b156b2d9a35501a5419a3ae9e0600fc9c5ad94e61d"
+    },
+    "agent-card.svg": {
+      "path": "/home/michael/Projects/omadesign/target/qa/agent-all-modes-20260930/native/agent-card.svg",
+      "bytes": 9125103,
+      "sha256": "95c8cd033d4a2341716349534806bfc6a4ed790436faf86077a951ab76e874ad"
+    },
+    "coast-developed.png": {
+      "path": "/home/michael/Projects/omadesign/target/qa/agent-all-modes-20260930/native/coast-developed.png",
+      "bytes": 3296256,
+      "sha256": "b93e69bd73c6625b2adb8dc83af7ef06e9293c01e35a69a4e989a34eb18cfdbd"
+    },
+    "native-030.png": {
+      "path": "/home/michael/Projects/omadesign/target/qa/agent-all-modes-20260930/native/native-030.png",
+      "bytes": 344377,
+      "sha256": "e8a60c0099927c47baeb298dab486fe3a65af989d6d4d9d9a71ccca1ba0d7af4"
+    }
+  }
+}

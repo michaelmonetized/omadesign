@@ -1,0 +1,7 @@
+   Compiling winit v0.30.13 (/home/michael/Projects/omadesign/.worktrees/agent-all-modes/vendor/winit)
+   Compiling omadesign v0.6.1 (/home/michael/Projects/omadesign/.worktrees/agent-all-modes)
+   Compiling accesskit_winit v0.32.2
+   Compiling egui-wgpu v0.36.1
+   Compiling egui-winit v0.36.1 (/home/michael/Projects/omadesign/.worktrees/agent-all-modes/vendor/egui-winit)
+   Compiling eframe v0.36.1 (/home/michael/Projects/omadesign/.worktrees/agent-all-modes/vendor/eframe)
+    Finished `release` profile [optimized] target(s) in 5m 25s
