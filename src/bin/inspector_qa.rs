@@ -927,7 +927,11 @@ impl eframe::App for Qa {
         if self.warm >= 30
             && !self.pending
             && !self.step_ready
-            && omadesign::ui::scene_ready(&ctx, &self.studio)
+            // Thumbnail generation waits until pointer-up or paused playback.
+            // Capture live gestures so the next input can release or pause them.
+            && (omadesign::ui::scene_ready(&ctx, &self.studio)
+                || (self.issue == "raster-motion"
+                    && (self.studio.op.is_some() || self.studio.playing)))
         {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
             self.pending = true;
