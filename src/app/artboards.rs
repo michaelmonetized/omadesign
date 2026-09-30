@@ -68,6 +68,28 @@ impl Studio {
                 (old, crate::document::next_id())
             })
             .collect();
+        let mut detached = HashMap::new();
+        for snap in snaps.iter().filter(|s| s.id != RASTER_ID) {
+            let Some(root) = self.doc.find_shape(snap.layer, snap.id) else { continue; };
+            if !root.layout.parent.is_some_and(|parent| !ids.contains_key(&parent)) { continue; }
+            let center = root.geom.bbox().center();
+            let mut world = center;
+            let mut rotation = 0.0;
+            let mut parent = root.layout.parent;
+            let mut seen = HashSet::new();
+            while let Some(id) = parent {
+                if !seen.insert(id) { break; }
+                let Some(frame) = self.doc.find_shape(snap.layer, id) else { break; };
+                world = world.rotate_about(frame.geom.bbox().center(), frame.rotation);
+                rotation += frame.rotation;
+                parent = frame.layout.parent;
+            }
+            let delta = world - center;
+            detached.insert(root.id, (delta, rotation));
+            for id in crate::layout::descendants(&self.doc, snap.layer, root.id) {
+                detached.insert(id, (delta, 0.0));
+            }
+        }
         let mut commands = Vec::new();
         let mut copies = Vec::new();
         let mut added_layers = 0;
@@ -89,10 +111,13 @@ impl Studio {
                 copied.id = shape.id;
                 crate::layout_components::remap_duplicate(&mut shape, &ids);
                 crate::text_geometry::remap_copy_in_document(&self.doc, &mut shape, &ids);
-                shape.layout.parent = shape
-                    .layout
-                    .parent
-                    .map(|parent| ids.get(&parent).copied().unwrap_or(parent));
+                shape.layout.parent = source.layout.parent.and_then(|parent| ids.get(&parent).copied());
+                if let Some((delta, rotation)) = detached.get(&source.id) {
+                    shape.geom.translate(*delta);
+                    shape.rotation += rotation;
+                    copied.geom = Some(shape.geom.clone());
+                    copied.rot = shape.rotation;
+                }
                 commands.push(Cmd::AddShape {
                     layer: snap.layer,
                     shape,
@@ -422,6 +447,28 @@ mod tests {
             s.wrap_selection_artboard_with_padding(0.);
             assert_eq!(s.doc.artboards.last().unwrap().bounds(), expected);
         }
+    }
+
+    #[test]
+    fn artboard_clone_detaches_external_frame_and_preserves_world_transform() {
+        let (mut s, _, id, _) = fixture();
+        let mut frame = crate::layout::make_frame(Pt::new(-200., -200.), Pt::splat(100.));
+        frame.rotation = 0.4;
+        let parent = frame.id;
+        let center = frame.geom.bbox().center();
+        s.doc.layers[0].kind.shapes_mut().unwrap().push(frame);
+        s.doc.find_shape_mut(0, id).unwrap().layout.parent = Some(parent);
+        let source = s.doc.find_shape(0, id).unwrap().clone();
+        let expected = source.geom.bbox().center().rotate_about(center, 0.4);
+        let snap = ObjSnap { layer: 0, id, geom: Some(source.geom.clone()), origin: Pt::ZERO, size: Pt::ZERO, rot: source.rotation, shear: 0. };
+        let (copies, commands) = s.copy_artboard_contents(&[snap]);
+        let copy = s.doc.find_shape(0, copies[0].id).unwrap();
+        assert_eq!(copy.layout.parent, None);
+        assert!((copy.geom.bbox().center() - expected).length() < 0.001);
+        assert_eq!(copy.rotation, source.rotation + 0.4);
+        assert_eq!(copies[0].geom.as_ref(), Some(&copy.geom));
+        s.discard_artboard_copies(commands);
+        assert_eq!(s.doc.find_shape(0, id).unwrap(), &source);
     }
 
 }
