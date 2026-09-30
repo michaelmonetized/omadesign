@@ -53,6 +53,7 @@ struct Qa {
     checks: Vec<String>,
     started: Instant,
     double_at: Option<Pos2>,
+    release_pointer: Option<(Pos2, PointerButton)>,
     pending_export: Option<&'static str>,
 }
 fn ctrl() -> Modifiers {
@@ -435,6 +436,7 @@ impl Qa {
             checks: vec![],
             started: Instant::now(),
             double_at: None,
+            release_pointer: None,
             pending_export: None,
         }
     }
@@ -448,14 +450,10 @@ impl Qa {
     fn pointer(&mut self, p: Pos2, button: PointerButton) {
         self.cursor = p;
         self.events.push(Event::PointerMoved(p));
-        for pressed in [true, false] {
-            self.events.push(Event::PointerButton {
-                pos: p,
-                button,
-                pressed,
-                modifiers: Modifiers::NONE,
-            });
-        }
+        self.events.push(Event::PointerButton {
+            pos: p, button, pressed: true, modifiers: Modifiers::NONE,
+        });
+        self.release_pointer = Some((p, button));
     }
     fn step(&mut self) {
         if self.frame % FPS != 0 {
@@ -919,6 +917,9 @@ impl eframe::App for Qa {
             .events
             .retain(|e| matches!(e, Event::Screenshot { .. }));
         input.focused = true;
+        if let Some((pos, button)) = self.release_pointer.take() {
+            self.events.push(Event::PointerButton { pos, button, pressed: false, modifiers: Modifiers::NONE });
+        }
         if let Some(point)=self.double_at.take() { self.pointer(point,PointerButton::Primary); }
         input.time = Some(self.frame as f64 / FPS as f64);
         input.events.push(Event::ModifiersChanged(Modifiers::NONE));
