@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { sitePath } from "../site";
 
-const film = (extension: string) => sitePath(`media/studio/film-0.5.7.${extension}`);
+const film = (extension: string) => sitePath(`media/studio/film-0.6.1.${extension}`);
 
 export function ProductFilm() {
   const player = useRef<HTMLVideoElement>(null);
@@ -28,12 +28,12 @@ export function ProductFilm() {
     <section className="section shell film-section" id="film" aria-labelledby="product-film-title">
       <div className="section-heading">
         <div>
-          <p className="gallery-kicker">OMADESIGN 0.5.7 · THE FILM</p>
+          <p className="gallery-kicker">OMADESIGN 0.6.1 · THE FILM</p>
           <h2 id="product-film-title">See the studio move.</h2>
         </div>
         <p id="product-film-description">
-          A quick look at the native studio, captured in Omadesign 0.5.7.
-          Thirty-two seconds. No audio.
+          New tools, cloud collaboration, and the built-in agentic harness.
+          Fifty-five seconds. No audio.
         </p>
       </div>
       <video
@@ -45,7 +45,7 @@ export function ProductFilm() {
         width="1920"
         height="1080"
         poster={film("webp")}
-        aria-label="Omadesign 0.5.7 native product film, 32 seconds, no audio"
+        aria-label="Omadesign 0.6.1 native product film, 55 seconds, no audio"
         aria-describedby="product-film-description"
         onError={() => setFailed(true)}
         onLoadedMetadata={() => setFailed(false)}
@@ -56,7 +56,7 @@ export function ProductFilm() {
         <a href={film("mp4")}>Watch the product film.</a>
       </video>
       <div className="film-caption">
-        <span>Native app footage · 0:32 · Silent</span>
+        <span>Native app footage · 0:55 · Silent</span>
         <nav aria-label="Product film downloads">
           <a href={film("vtt")}>Scene descriptions</a>
           <a href={film("mp4")} download>Keep a copy ↓</a>

@@ -1,0 +1,59 @@
+{
+  "title": "Omadesign \u2014 More control. Less waiting.",
+  "release": "0.6.1",
+  "duration_seconds": 55,
+  "width": 1920,
+  "height": 1080,
+  "fps": 60,
+  "frames": 3300,
+  "audio": false,
+  "shot_count": 50,
+  "agent_chapter_seconds": [
+    34,
+    50
+  ],
+  "provenance": "Michael\u2019s September 28 native recordings, September 29 installed 0.6.1 reshoots, supplied 0.6.1 motion export, and the official logo ending. Edited crops and time compression; motion playback retained at 1x.",
+  "benchmark_note": "4\u00d7 rounds the arithmetic mean of three brush p95 ratios (3.81+3.99+4.56)/3 = 4.12. Object drag 73.66\u00d7 rounds to 74\u00d7. Both refer to UI processing versus issue #158 baseline, not presented FPS or a blanket release comparison.",
+  "outputs": {
+    "film-0.6.1.mp4": {
+      "bytes": 31067436,
+      "sha256": "7a2b55b612fb9882c36eafef88a1fcb4cb4b42c3b2c098b75348bda47f7235b0"
+    },
+    "film-0.6.1.webm": {
+      "bytes": 17595186,
+      "sha256": "9f074cca8075fb1d390d19e75ba7a3d8c82ba58776cf863f0e44c504fb6bd4fe"
+    },
+    "film-0.6.1.webp": {
+      "bytes": 94000,
+      "sha256": "508c47f689e99043cf50b4cd964b3caacc9bbf5938e170a270ecae46f53307d4"
+    },
+    "film-0.6.1.vtt": {
+      "bytes": 2559,
+      "sha256": "0517ef942f362511083100f2e1040f6a02ad89e557ad4cdcc970e4b0d5cae8b2"
+    }
+  },
+  "verification": {
+    "mp4": {
+      "decode_ok": true,
+      "width": 1920,
+      "height": 1080,
+      "fps": "60/1",
+      "decoded_frames": 3300,
+      "duration": "55.000000",
+      "bytes": 31067436,
+      "sha256": "7a2b55b612fb9882c36eafef88a1fcb4cb4b42c3b2c098b75348bda47f7235b0"
+    },
+    "webm": {
+      "decode_ok": true,
+      "width": 1920,
+      "height": 1080,
+      "fps": "60/1",
+      "decoded_frames": 3300,
+      "duration": "55.000000",
+      "bytes": 17595186,
+      "sha256": "9f074cca8075fb1d390d19e75ba7a3d8c82ba58776cf863f0e44c504fb6bd4fe"
+    },
+    "visual_review": "All 50 original shot midpoints and all 17 replacement shot midpoints inspected. Replacement cloud crop checked again at full resolution. Full-size marquee scenes now show 0.6.1. Agent interactions are genuine native recordings; native motion and the user-supplied export retain 1x playback. Caption text and metric scope reviewed.",
+    "verified_utc": "2026-09-29T12:39:06.285010+00:00"
+  }
+}
