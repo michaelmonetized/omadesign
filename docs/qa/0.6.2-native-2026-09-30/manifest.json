@@ -1,0 +1,20 @@
+{
+  "version": "omadesign 0.6.2",
+  "source_commit": "3f1c31bead80aa2aacab28993f54fb560ed5a330",
+  "binary": "/home/michael/.local/bin/omadesign-0.6.2-qa",
+  "binary_sha256": "e8306abd3e0f347a5385e939a89374f6eb1b5bb70be8e9b80d6017a8fcc6b5fc",
+  "supervisor_pid": 857268,
+  "original_sha256": "11dde724eeee503ad2e09e6bad7a8ba2d65107b7f12e69977861b5e42416c161",
+  "document_initial_sha256": "11dde724eeee503ad2e09e6bad7a8ba2d65107b7f12e69977861b5e42416c161",
+  "release_status": "Local QA only; packaging and shipping held for Michael confirmation",
+  "gui_pid": 857270,
+  "live_sha256": "e8306abd3e0f347a5385e939a89374f6eb1b5bb70be8e9b80d6017a8fcc6b5fc",
+  "workspace": 7,
+  "native_export_checks": 8,
+  "native_artboard_checks": 9,
+  "library_tests": {
+    "passed": 967,
+    "known_baseline_failures": 2,
+    "ignored": 8
+  }
+}

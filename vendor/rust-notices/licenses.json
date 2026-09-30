@@ -1,7 +1,7 @@
 {
   "format": 1,
   "generator": "cargo-about 0.9.2 / scripts/update-third-party.py",
-  "cargo_lock_sha256": "75f3c3e3663dbf9726f298b9d3f85e267632cd58fc8eb6897900d9a3fca4e783",
+  "cargo_lock_sha256": "6f9772ccda2d3200101f0581f28ec4fd4823252e4bfb9bfb3c372bc53d185d3c",
   "components": [
     {
       "name": "ab_glyph",

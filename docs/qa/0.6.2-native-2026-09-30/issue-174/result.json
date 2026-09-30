@@ -1,0 +1,22 @@
+{
+  "checks": [
+    "export choices and preview",
+    "export selection dimensions",
+    "export options restored",
+    "selection file pixels",
+    "export artboard dimensions",
+    "artboard file pixels",
+    "saved export preset",
+    "export keeps document unchanged"
+  ],
+  "fps": 10,
+  "frames": 290,
+  "input": "actual egui pointer and keyboard events",
+  "issue": "174",
+  "renderer": "native WGPU",
+  "size": [
+    1600,
+    1000
+  ],
+  "wall_seconds": 10.5087222
+}
