@@ -18,7 +18,7 @@ use std::sync::{
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 const SCAN_ID: &str = "welcome-home-catalog-v3";
-const PREVIEW_ID: &str = "welcome-home-previews-v3";
+const PREVIEW_ID: &str = "welcome-home-previews-v4";
 const CAPTURE_ROOT_ID: &str = "welcome-capture-catalog-root";
 const REFRESH: Duration = Duration::from_secs(30);
 const MAX_TEXTURES: usize = 96;
@@ -758,9 +758,10 @@ struct PreviewKey {
 impl PreviewKey {
     fn disk_path(&self) -> PathBuf {
         let mut hash = std::collections::hash_map::DefaultHasher::new();
+        "native-snapshot-v1".hash(&mut hash);
         self.hash(&mut hash);
-        cache_root()
-            .join("previews")
+        home()
+            .join(".local/omadesign/tmp/snapshots")
             .join(format!("{:016x}.png", hash.finish()))
     }
 }
@@ -967,6 +968,10 @@ fn render_preview(request: &PreviewRequest) -> Result<egui::ColorImage, String> 
         }
     }
     let path = key.disk_path();
+    render_preview_at(request, &path)
+}
+
+fn render_preview_at(request: &PreviewRequest, path: &Path) -> Result<egui::ColorImage, String> {
     if let Ok(mut reader) = image::ImageReader::open(&path) {
         let mut limits = image::Limits::default();
         limits.max_image_width = Some(PREVIEW_EDGE);
@@ -988,7 +993,18 @@ fn render_preview(request: &PreviewRequest) -> Result<egui::ColorImage, String> 
             if let Some(error) = &entry.error {
                 return Err(error.clone());
             }
-            let doc = crate::brand::load_preview_document(&entry.path, entry.recovered)?;
+            // The library decoder is a quick path, not a capability limit. Real
+            // mixed compositions commonly exceed its 16 MP / 64-effect budget.
+            // Fall back to the native decoder on this existing single worker.
+            let doc = crate::brand::load_preview_document(&entry.path, entry.recovered).or_else(
+                |_| {
+                    if entry.recovered {
+                        crate::project::load_swap(&entry.path).map(|swap| swap.doc)
+                    } else {
+                        crate::project::load_from(&entry.path)
+                    }
+                },
+            )?;
             render_document(&doc)?
         }
         PreviewRequest::Asset { root, asset } => {
@@ -997,14 +1013,35 @@ fn render_preview(request: &PreviewRequest) -> Result<egui::ColorImage, String> 
     };
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
-        let _ = image::save_buffer_with_format(
-            &path,
-            &image.data,
-            image.w,
-            image.h,
-            image::ColorType::Rgba8,
-            image::ImageFormat::Png,
-        );
+        // Readers see a complete PNG even when two app windows request it.
+        let temporary = parent.join(format!(
+            ".snapshot-{}-{}.tmp",
+            std::process::id(),
+            crate::document::next_id()
+        ));
+        let write = || -> Result<(), String> {
+            use image::ImageEncoder;
+            let mut options = fs::OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            let file = options.open(&temporary).map_err(|e| e.to_string())?;
+            image::codecs::png::PngEncoder::new(file)
+                .write_image(
+                    &image.data,
+                    image.w,
+                    image.h,
+                    image::ExtendedColorType::Rgba8,
+                )
+                .map_err(|e| e.to_string())?;
+            fs::rename(&temporary, path).map_err(|e| e.to_string())
+        };
+        if write().is_err() {
+            let _ = fs::remove_file(&temporary);
+        }
         prune_disk_previews(parent);
     }
     Ok(egui::ColorImage::from_rgba_unmultiplied(
@@ -1110,6 +1147,88 @@ mod tests {
             &mut |_, _, _| {},
             None,
         )
+    }
+
+    #[test]
+    fn complex_mixed_document_falls_back_then_uses_flat_disk_snapshot() {
+        use crate::document::{Document, Layer, LayerKind, Pixels};
+        use crate::geom::Pt;
+        let root = Temp::new();
+        let path = root.0.join("complex.oma");
+        let mut doc = Document::new("mixed", 64., 32., 96.);
+        // Valid native documents can exceed library-only complexity budgets.
+        for _ in 0..260 {
+            doc.layers.push(Layer::vector("native layer"));
+        }
+        let mut raster = Layer::vector("photo");
+        raster.kind = LayerKind::Raster {
+            pixels: Pixels::from_rgba(2, 2, vec![220; 16]).unwrap(),
+            origin: Pt::new(8., 8.),
+            size: Pt::new(16., 16.),
+            rotation: 0.,
+            shear: 0.,
+        };
+        doc.layers.push(raster);
+        document(&path, &doc);
+        assert!(crate::brand::load_preview_document(&path, false).is_err());
+        let entry = index_entry(
+            &path,
+            &fs::metadata(&path).unwrap(),
+            false,
+            None,
+            &AtomicBool::new(false),
+        );
+        let key = entry.key();
+        let cache = root.0.join("snapshots/preview.png");
+        let request = PreviewRequest::Document(entry);
+        let first = render_preview_at(&request, &cache).unwrap();
+        assert_eq!(first.size, [384, 192]);
+        assert!(cache.is_file());
+        // A cache hit must not decode/render the source again.
+        fs::write(&path, "not a project").unwrap();
+        let second = render_preview_at(&request, &cache).unwrap();
+        assert_eq!(first.pixels, second.pixels);
+        let changed = index_entry(
+            &path,
+            &fs::metadata(&path).unwrap(),
+            false,
+            None,
+            &AtomicBool::new(false),
+        );
+        assert_ne!(key.disk_path(), changed.key().disk_path());
+        // A damaged snapshot is rebuilt, never treated as a permanent failure.
+        document(&path, &doc);
+        fs::write(&cache, b"partial png").unwrap();
+        assert_eq!(
+            render_preview_at(&request, &cache).unwrap().pixels,
+            first.pixels
+        );
+    }
+
+    #[test]
+    #[ignore = "set OMA_PREVIEW_QA_DOCUMENT to exercise a supplied local composition"]
+    fn supplied_composition_preview_caches_and_reopens() {
+        let path = PathBuf::from(std::env::var_os("OMA_PREVIEW_QA_DOCUMENT").unwrap());
+        let entry = index_entry(
+            &path,
+            &fs::metadata(&path).unwrap(),
+            false,
+            None,
+            &AtomicBool::new(false),
+        );
+        let request = PreviewRequest::Document(entry);
+        let started = Instant::now();
+        let first = render_preview(&request).unwrap();
+        let first_ms = started.elapsed().as_secs_f64() * 1000.;
+        let started = Instant::now();
+        let second = render_preview(&request).unwrap();
+        assert_eq!(first.pixels, second.pixels);
+        println!(
+            "snapshot={} dimensions={:?} initial_ms={first_ms:.2} cached_ms={:.2}",
+            request.key().disk_path().display(),
+            first.size,
+            started.elapsed().as_secs_f64() * 1000.
+        );
     }
 
     #[test]
