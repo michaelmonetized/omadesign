@@ -790,6 +790,7 @@ impl Workspace {
             self.resume_connect = false;
             self.connecting = false;
             self.status = "Stopped opening saved document".into();
+            return;
         }
         if let Some(job) = self.turn_job.take() {
             self.restore_unsent(job.request, job.attachments);
@@ -1632,6 +1633,7 @@ mod saved_document_tests {
         assert_eq!(studio.swap_id, owner);
         assert!(!agent.connecting && !agent.resume_connect);
         assert!(agent.pending_document.is_none());
+        assert_eq!(agent.status, "Stopped opening saved document");
     }
 
 }
