@@ -494,3 +494,17 @@ for line in sys.stdin:
         "round trip\n"
     );
 }
+
+#[test]
+fn layer_duplication_copies_ordinary_and_empty_layers_atomically() {
+    for layer in [Layer::vector("Empty vector"), Layer::raster("Pixels", 3, 2), Layer::group("Empty group")] {
+        let mut s = studio();
+        s.doc.layers = vec![layer];
+        let before = crate::project::encode(&s.doc).unwrap();
+        call(&mut s, "editor_action", json!({"action":"duplicate_layer", "layer":0}));
+        assert_eq!(s.doc.layers.len(), 2);
+        assert_ne!(s.doc.layers[0].id, s.doc.layers[1].id);
+        s.undo();
+        assert_eq!(crate::project::encode(&s.doc).unwrap(), before);
+    }
+}

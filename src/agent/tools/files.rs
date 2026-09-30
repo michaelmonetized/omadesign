@@ -239,6 +239,9 @@ pub fn apply(
             if w <= 0. || h <= 0. {
                 return Err("Placement dimensions must be positive".into());
             }
+            if destination != "frame" && (h - w * height / width).abs() > (h * 0.0001).max(0.001) {
+                return Err("Canvas placement preserves aspect ratio. Omit width or height, or supply matching dimensions; use set_raster_transform afterward to stretch an image.".into());
+            }
             let dest = Bounds::from_min_size(
                 Pt::new(
                     number(args, "x", (studio.doc.width - w) * 0.5)?,
