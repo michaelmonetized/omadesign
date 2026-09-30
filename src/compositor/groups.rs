@@ -15,7 +15,10 @@ pub(super) fn draw(
         .all(|layer| !layer.is_group && layer.parent.is_none())
     {
         for (index, layer) in doc.layers.iter().enumerate() {
-            if !layer.visible || layer.opacity <= 0.0 || is_paper_raster(layer) {
+            if !layer.visible
+                || (layer.kind.pixels().is_none() && layer.opacity <= 0.0)
+                || is_paper_raster(layer)
+            {
                 continue;
             }
             let brush = draft
@@ -69,8 +72,9 @@ impl Context<'_, '_> {
         for &index in children {
             let layer = &self.doc.layers[index];
             if !layer.visible
-                || layer.opacity <= 0.0
-                || masked_outside_view(layer, self.transform, pm.width(), pm.height())
+                || (layer.kind.pixels().is_none()
+                    && (layer.opacity <= 0.0
+                        || masked_outside_view(layer, self.transform, pm.width(), pm.height())))
             {
                 continue;
             }

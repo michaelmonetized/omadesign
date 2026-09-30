@@ -340,7 +340,19 @@ fn draw_layer(
     doc: &Document,
     overrides: Option<&HashMap<u64, Pose>>,
 ) {
-    if masked_outside_view(layer, t, pm.width(), pm.height()) {
+    let raster_pose = layer
+        .kind
+        .pixels()
+        .map(|_| pose_of(layer.id, motion_t, doc, overrides));
+    let t = if let Some(pose) = raster_pose {
+        t.pre_concat(pose.to_skia(layer.kind.raster_bounds().unwrap().center()))
+    } else {
+        t
+    };
+    let opacity = raster_pose
+        .and_then(|pose| pose.opacity)
+        .unwrap_or(layer.opacity);
+    if opacity <= 0.0 || masked_outside_view(layer, t, pm.width(), pm.height()) {
         return;
     }
     let filtered = layer.filters.active();
@@ -355,7 +367,7 @@ fn draw_layer(
         || layer.mask.is_some()
         || filtered
         || layer.fill_opacity < 1.0
-        || layer.opacity < 1.0
+        || opacity < 1.0
         || layer.blend != crate::color::Blend::Normal
     {
         let Some(region) = layer_region(
@@ -416,7 +428,7 @@ fn draw_layer(
                 &layer.filters,
                 placement,
                 layer.blend.to_skia(),
-                layer.opacity,
+                opacity,
                 layer.fill_opacity,
                 layer.blend_interior,
                 None,
@@ -434,7 +446,7 @@ fn draw_layer(
             pm,
             pixels.as_ref(),
             coverage,
-            layer.opacity,
+            opacity,
             layer.blend,
             placement,
         );
@@ -445,7 +457,7 @@ fn draw_layer(
             t,
             brush,
             preview,
-            layer.opacity,
+            opacity,
             layer.blend.to_skia(),
             motion_t,
             doc,
@@ -621,6 +633,34 @@ fn draw_content(
         }
         LayerKind::Raster { pixels, .. } => {
             let xf = t.pre_concat(layer_pixel_transform(layer));
+            let reveal = pose_of(layer.id, motion_t, doc, overrides)
+                .fill_reveal
+                .unwrap_or(1.0)
+                .clamp(0.0, 1.0);
+            if reveal <= 0.0 {
+                return;
+            }
+            let mask = if reveal < 1.0 {
+                let Some(mut mask) = tiny_skia::Mask::new(pm.width(), pm.height()) else {
+                    return;
+                };
+                let rect = tiny_skia::Rect::from_xywh(
+                    0.0,
+                    pixels.h as f32 * (1.0 - reveal),
+                    pixels.w as f32,
+                    pixels.h as f32 * reveal,
+                )
+                .unwrap();
+                mask.fill_path(
+                    &tiny_skia::PathBuilder::from_rect(rect),
+                    tiny_skia::FillRule::Winding,
+                    true,
+                    xf,
+                );
+                Some(mask)
+            } else {
+                None
+            };
             let _ = pixels.with_pm(|src| {
                 pm.draw_pixmap(
                     0,
@@ -632,7 +672,7 @@ fn draw_content(
                         quality: tiny_skia::FilterQuality::Bilinear,
                     },
                     xf,
-                    None,
+                    mask.as_ref(),
                 );
             });
             if let Some((buf, flow)) = brush {
@@ -646,7 +686,7 @@ fn draw_content(
                         ..Default::default()
                     },
                     xf,
-                    None,
+                    mask.as_ref(),
                 );
             }
         }

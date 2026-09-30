@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="800" height="520" viewBox="0 0 800 520">
+<style>
+.oma-a { animation-duration: 2.000s; animation-iteration-count: infinite; animation-fill-mode: both; animation-timing-function: linear; transform-box: view-box; }
+@keyframes oma-15 {
+  0.00000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.01000, 0.01000); }
+  0.50000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.05070, 0.05070); }
+  1.00000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.09068, 0.09068); }
+  1.50000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.12991, 0.12991); }
+  1.75000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.14926, 0.14926); }
+  2.00000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.16842, 0.16842); }
+  2.50000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.20619, 0.20619); }
+  3.00000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.24323, 0.24323); }
+  3.50000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.27953, 0.27953); }
+  4.00000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.31510, 0.31510); }
+  4.50000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.34994, 0.34994); }
+  5.00000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.38404, 0.38404); }
+  5.25000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.40082, 0.40082); }
+  5.50000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.41741, 0.41741); }
+  6.00000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.45005, 0.45005); }
+  6.50000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.48195, 0.48195); }
+  7.00000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.51313, 0.51313); }
+  7.50000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.54356, 0.54356); }
+  8.00000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.57327, 0.57327); }
+  8.75000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.61645, 0.61645); }
+  10.50000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.71078, 0.71078); }
+  12.25000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.79613, 0.79613); }
+  14.00000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.87250, 0.87250); }
+  15.75000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.93988, 0.93988); }
+  17.50000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(0.99828, 0.99828); }
+  19.25000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.04770, 1.04770); }
+  21.00000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.08812, 1.08812); }
+  22.75000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.11957, 1.11957); }
+  24.50000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.14203, 1.14203); }
+  26.25000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.15551, 1.15551); }
+  28.00000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.16000, 1.16000); }
+  28.75000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.15820, 1.15820); }
+  29.50000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.15312, 1.15312); }
+  30.25000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.14523, 1.14523); }
+  31.00000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.13500, 1.13500); }
+  31.75000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.12289, 1.12289); }
+  32.50000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.10938, 1.10938); }
+  33.25000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.09492, 1.09492); }
+  34.00000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.08000, 1.08000); }
+  34.75000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.06508, 1.06508); }
+  35.50000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.05062, 1.05062); }
+  36.25000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.03711, 1.03711); }
+  37.00000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.02500, 1.02500); }
+  37.75000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.01477, 1.01477); }
+  38.50000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.00688, 1.00688); }
+  39.25000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.00180, 1.00180); }
+  40.00000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  100.00000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+}
+@keyframes oma-15-opacity {
+  0.00000% { opacity: 0.00000; }
+  0.50000% { opacity: 0.12109; }
+  1.00000% { opacity: 0.23438; }
+  1.50000% { opacity: 0.33984; }
+  1.75000% { opacity: 0.38965; }
+  2.00000% { opacity: 0.43750; }
+  2.50000% { opacity: 0.52734; }
+  3.00000% { opacity: 0.60938; }
+  3.50000% { opacity: 0.68359; }
+  4.00000% { opacity: 0.75000; }
+  4.50000% { opacity: 0.80859; }
+  5.00000% { opacity: 0.85938; }
+  5.25000% { opacity: 0.88184; }
+  5.50000% { opacity: 0.90234; }
+  6.00000% { opacity: 0.93750; }
+  6.50000% { opacity: 0.96484; }
+  7.00000% { opacity: 0.98438; }
+  7.50000% { opacity: 0.99609; }
+  8.00000% { opacity: 1.00000; }
+  8.75000% { opacity: 1.00000; }
+  10.50000% { opacity: 1.00000; }
+  12.25000% { opacity: 1.00000; }
+  14.00000% { opacity: 1.00000; }
+  15.75000% { opacity: 1.00000; }
+  17.50000% { opacity: 1.00000; }
+  19.25000% { opacity: 1.00000; }
+  21.00000% { opacity: 1.00000; }
+  22.75000% { opacity: 1.00000; }
+  24.50000% { opacity: 1.00000; }
+  26.25000% { opacity: 1.00000; }
+  28.00000% { opacity: 1.00000; }
+  28.75000% { opacity: 1.00000; }
+  29.50000% { opacity: 1.00000; }
+  30.25000% { opacity: 1.00000; }
+  31.00000% { opacity: 1.00000; }
+  31.75000% { opacity: 1.00000; }
+  32.50000% { opacity: 1.00000; }
+  33.25000% { opacity: 1.00000; }
+  34.00000% { opacity: 1.00000; }
+  34.75000% { opacity: 1.00000; }
+  35.50000% { opacity: 1.00000; }
+  36.25000% { opacity: 1.00000; }
+  37.00000% { opacity: 1.00000; }
+  37.75000% { opacity: 1.00000; }
+  38.50000% { opacity: 1.00000; }
+  39.25000% { opacity: 1.00000; }
+  40.00000% { opacity: 1.00000; }
+  100.00000% { opacity: 1.00000; }
+}
+@keyframes oma-16 {
+  0.00000% { transform: translate(-200.0000px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  0.87500% { transform: translate(-191.3457px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  1.75000% { transform: translate(-182.8828px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  2.50000% { transform: translate(-175.7812px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  2.62500% { transform: translate(-174.6113px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  3.50000% { transform: translate(-166.5312px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  4.37500% { transform: translate(-158.6426px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  5.00000% { transform: translate(-153.1250px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  5.25000% { transform: translate(-150.9453px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  6.12500% { transform: translate(-143.4395px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  7.00000% { transform: translate(-136.1250px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  7.50000% { transform: translate(-132.0312px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  7.87500% { transform: translate(-129.0020px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  8.75000% { transform: translate(-122.0703px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  9.62500% { transform: translate(-115.3301px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  10.00000% { transform: translate(-112.5000px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  10.50000% { transform: translate(-108.7812px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  11.37500% { transform: translate(-102.4238px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  12.25000% { transform: translate(-96.2578px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  12.50000% { transform: translate(-94.5312px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  13.12500% { transform: translate(-90.2832px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  14.00000% { transform: translate(-84.5000px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  15.00000% { transform: translate(-78.1250px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  17.50000% { transform: translate(-63.2812px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  20.00000% { transform: translate(-50.0000px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  22.50000% { transform: translate(-38.2812px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  25.00000% { transform: translate(-28.1250px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  27.50000% { transform: translate(-19.5312px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  30.00000% { transform: translate(-12.5000px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  32.50000% { transform: translate(-7.0312px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  35.00000% { transform: translate(-3.1250px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  37.50000% { transform: translate(-0.7812px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  40.00000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+  100.00000% { transform: translate(0.0000px, 0.0000px) rotate(0.0000deg) scale(1.00000, 1.00000); }
+}
+@keyframes oma-16-opacity {
+  0.00000% { opacity: 0.00000; }
+  0.87500% { opacity: 0.12109; }
+  1.75000% { opacity: 0.23438; }
+  2.50000% { opacity: 0.32526; }
+  2.62500% { opacity: 0.33984; }
+  3.50000% { opacity: 0.43750; }
+  4.37500% { opacity: 0.52734; }
+  5.00000% { opacity: 0.58673; }
+  5.25000% { opacity: 0.60938; }
+  6.12500% { opacity: 0.68359; }
+  7.00000% { opacity: 0.75000; }
+  7.50000% { opacity: 0.78444; }
+  7.87500% { opacity: 0.80859; }
+  8.75000% { opacity: 0.85938; }
+  9.62500% { opacity: 0.90234; }
+  10.00000% { opacity: 0.91837; }
+  10.50000% { opacity: 0.93750; }
+  11.37500% { opacity: 0.96484; }
+  12.25000% { opacity: 0.98438; }
+  12.50000% { opacity: 0.98852; }
+  13.12500% { opacity: 0.99609; }
+  14.00000% { opacity: 1.00000; }
+  15.00000% { opacity: 1.00000; }
+  17.50000% { opacity: 1.00000; }
+  20.00000% { opacity: 1.00000; }
+  22.50000% { opacity: 1.00000; }
+  25.00000% { opacity: 1.00000; }
+  27.50000% { opacity: 1.00000; }
+  30.00000% { opacity: 1.00000; }
+  32.50000% { opacity: 1.00000; }
+  35.00000% { opacity: 1.00000; }
+  37.50000% { opacity: 1.00000; }
+  40.00000% { opacity: 1.00000; }
+  100.00000% { opacity: 1.00000; }
+}
+</style>
+<defs>
+</defs>
+<g class="oma-a" style="animation-name: oma-15; transform-origin: 180.0000px 200.0000px"><g class="oma-a" style="animation-name: oma-15-opacity"><g id="oma-layer-15" inkscape:label="Pasted amber image" opacity="1.000" style="mix-blend-mode:normal;isolation:isolate">
+  <image href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAACMCAYAAAA5kebkAAADw0lEQVR4nO3dwW1UWRCF4Z4RyUw2kwtBsCIXJIIhFzagEpYwprv6dZ8ndOvyfRHcRf3ywvY7775+/vDtAlz17wW4SSDQEAg0BAINgUBDINAQCDQEAg2BQEMg0BAINAQCDYFAQyDQEAg0BAINgUBDINAQCDQEAg2BQEMg0BAINAQCjXeXjf33/tPlTF8+/n85k/etb9tAHF9GHD9sGYjjy4jjp+0CcXwZcfxqq0AcX0Ycv9smEMeXEcd1WwTi+DLiuG18II4vI47e6EAcX0Yc940NxPFlxHHMyEAcX0Ycx437WyzHl/nb3pca9RPE8WXE8bgxgTi+jDieMyIQx5cRx/OWD8TxZcSRWToQx5cRR27ZQBxfRhznWDIQx5cRx3mWC8TxZcRxrqUCcXwZcZxv2/9Jd3wZcfywZSCOLyOOn7YLxPFlxPGrrQJxfBlx/G6bQBxfRhzXbRGI48uI47bxgTi+jDh6owNxfBlx3Dc2EMeXEccxIwNxfBlxHDcuEMeX8QGIx4wKxPFlxPG4MYE4vow4njMiEMeXEcfzlg/E8WXEkVk6EMeXEUdu2UAcX0Yc51gyEMeXEcd5lgvE8WXEca5/vn7+8O2yKceX+dvjKHbSDxJHZmIcxU76AeLITI2j2Em/QxyZyXEUO+kNcWSmx1HspN8gjswOcRQ76VeII7NLHMVO+hviyOwUR7GT/oo4MrvFUeykvxBHZsc4ip30izhSu8ZR7KSLI7L7ByDspJ/I+zKrxVHspJ/E+zIrxlHspJ/A+zKrxlHspIe8L7NyHMVOesD7MhO+yGgn/Unel5kQR7GT/gTvy0yJo9hJf5D3ZSbFUeykP8D7MtPiKHbSDxJHZmIcxU76AeLITI2j2Em/QxyZyXEUO+kNcWSmx1HspN8gjswOcRQ76VeII7NLHMVO+hviyOwUR7GT/oo4MrvFUeykvxBHZsc4ip30izhSu8ZR7KSLI7L7ByDspJ/I+zKrxVHspJ/E+zIrxlHspJ/A+zKrxlHspIe8L7NyHMVOesD7MhO+yGgn/Unel5kQR7GT/gTvy0yJo9hJf5D3ZSbFUeykP0AcmWlxFDvpB4kjMzGOYif9AHFkpsZR7KTfIY7M5DiKnfSGODLT4yh20m8QR2aHOIqd9CvEkdkljmIn/Q1xZHaKo9hJf0Ucmd3iKHbSX4gjs2McZevfpENq3E46/EkCgYZAoCEQaAgEGgKBhkCgIRBoCAQaAoGGQKAhEGgIBBoCgYZAoCEQaAgEGgKBhkCgIRBoCAQaAoGGQKAhEGh8B1TmcVUquVS1AAAAAElFTkSuQmCC" width="200" height="140" preserveAspectRatio="none" transform="matrix(1.000000 0.000000 0.000000 1.000000 80.000000 130.000000)"/>
+</g>
+</g></g><g class="oma-a" style="animation-name: oma-16; transform-origin: 500.0000px 300.0000px"><g class="oma-a" style="animation-name: oma-16-opacity"><g id="oma-layer-16" inkscape:label="Pasted blue image" opacity="1.000" style="mix-blend-mode:normal;isolation:isolate">
+  <image href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAACMCAYAAAA5kebkAAADw0lEQVR4nO3dwW1UWRCF4Z4RaU06EwBZsCEA4iADsmIDKmEJY7qrX/d5Qrcu3xfBXdQvL2y/8+7D56/fLsBV/16AmwQCDYFAQyDQEAg0BAINgUBDINAQCDQEAg2BQEMg0BAINAQCDYFAQyDQEAg0BAINgUBDINAQCDQEAg2BQEMg0Hh32din9/9dzvT/xy+XM3nf+rYNxPFlxPHDloE4vow4ftouEMeXEcevtgrE8WXE8bttAnF8GXFct0Ugji8jjtvGB+L4MuLojQ7E8WXEcd/YQBxfRhzHjAzE8WXEcdy4v8VyfJm/7X2pUT9BHF9GHI8bE4jjy4jjOSMCcXwZcTxv+UAcX0YcmaUDcXwZceSWDcTxZcRxjiUDcXwZcZxnuUAcX0Yc51oqEMeXEcf5tv2fdMeXEccPWwbi+DLi+Gm7QBxfRhy/2ioQx5cRx++2CcTxZcRx3RaBOL6MOG4bH4jjy4ijNzoQx5cRx31jA3F8GXEcMzIQx5cRx3HjAnF8GR+AeMyoQBxfRhyPGxOI48uI4zkjAnF8GXE8b/lAHF9GHJmlA3F8GXHklg3E8WXEcY4lA3F8GXGcZ7lAHF9GHOf658Pnr98um3J8mb89jmIn/SBxZCbGUeykHyCOzNQ4ip30O8SRmRxHsZPeEEdmehzFTvoN4sjsEEexk36FODK7xFHspL8hjsxOcRQ76a+II7NbHMVO+gtxZHaMo9hJv4gjtWscxU66OCK7fwDCTvqJvC+zWhzFTvpJvC+zYhzFTvoJvC+zahzFTnrI+zIrx1HspAe8LzPhi4x20p/kfZkJcRQ76U/wvsyUOIqd9Ad5X2ZSHMVO+gO8LzMtjmIn/SBxZCbGUeykHyCOzNQ4ip30O8SRmRxHsZPeEEdmehzFTvoN4sjsEEexk36FODK7xFHspL8hjsxOcRQ76a+II7NbHMVO+gtxZHaMo9hJv4gjtWscxU66OCK7fwDCTvqJvC+zWhzFTvpJvC+zYhzFTvoJvC+zahzFTnrI+zIrx1HspAe8LzPhi4x20p/kfZkJcRQ76U/wvsyUOIqd9Ad5X2ZSHMVO+gPEkZkWR7GTfpA4MhPjKHbSDxBHZmocxU76HeLITI6j2ElviCMzPY5iJ/0GcWR2iKPYSb9CHJld4ih20t8QR2anOIqd9FfEkdktjmIn/YU4MjvGUbb+TTqkxu2kw58kEGgIBBoCgYZAoCEQaAgEGgKBhkCgIRBoCAQaAoGGQKAhEGgIBBoCgYZAoCEQaAgEGgKBhkCgIRBoCAQaAoHGd5vScVuRcS61AAAAAElFTkSuQmCC" width="200" height="140" preserveAspectRatio="none" transform="matrix(1.000000 0.000000 0.000000 1.000000 400.000000 230.000000)"/>
+</g>
+</g></g></svg>

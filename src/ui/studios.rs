@@ -1244,15 +1244,19 @@ fn motion_keys(ui: &mut Ui, studio: &mut Studio) {
     ui.add_space(4.0);
     if studio.selection.is_empty() {
         ui.label(
-            RichText::new("Select a shape, then Key.")
+            RichText::new("Select an object or image, then Key.")
                 .small()
                 .color(fg_weak()),
         );
         return;
     }
-    let Some((_, id)) = studio.primary() else {
+    let Some(target) = studio
+        .primary()
+        .and_then(|(li, id)| crate::motion::target(&studio.doc, li, id))
+    else {
         return;
     };
+    let id = target.id;
     let pose = studio.live_pose(id);
     ui.horizontal(|ui| {
         ui.label(
@@ -1294,13 +1298,7 @@ fn motion_keys(ui: &mut Ui, studio: &mut Studio) {
             studio.key_prop(id, crate::motion::Prop::Scale, pose.scale);
         }
     });
-    let mut op = pose.opacity.unwrap_or_else(|| {
-        studio
-            .doc
-            .find_shape(studio.primary().map(|p| p.0).unwrap_or(0), id)
-            .map(|s| s.opacity)
-            .unwrap_or(1.0)
-    });
+    let mut op = pose.opacity.unwrap_or(target.opacity);
     if inspector_slider(ui, "Opacity", &mut op, 0.0..=1.0, "") {
         studio.key_prop(id, crate::motion::Prop::Opacity, op);
     }
@@ -1437,14 +1435,54 @@ fn raster_transform(ui: &mut Ui, studio: &mut Studio, li: usize) {
     let Some((origin, size, rot)) = layer.kind.raster_xform() else {
         return;
     };
-    let mut x = origin.x;
-    let mut y = origin.y;
-    let mut w = size.x;
-    let mut h = size.y;
-    let mut deg = rot.to_degrees();
+    let id = layer.id;
+    let pose = studio.live_pose(id);
+    let bounds = layer.kind.raster_bounds().unwrap();
+    let shown = pose.map_bounds(bounds);
+    let motion = studio.is_motion();
+    let mut x = if motion { shown.min.x } else { origin.x };
+    let mut y = if motion { shown.min.y } else { origin.y };
+    let local_size = crate::geom::Pt::new(size.x * pose.scale * pose.width_scale, size.y * pose.scale * pose.height_scale);
+    let mut w = if motion { local_size.x } else { size.x };
+    let mut h = if motion { local_size.y } else { size.y };
+    let mut deg = (rot + pose.rotation).to_degrees();
     let mut changed = bounds_fields(ui, &mut x, &mut y, &mut w, &mut h, 1.0);
     changed |= number_field(ui, "Rotation", &mut deg, -180.0..=180.0, "°");
-    if changed {
+    if changed && studio.doc.layer_editable(li) {
+        if motion {
+            let mut after = studio.doc.motion.clone();
+            for (prop, value, previous) in [
+                (crate::motion::Prop::X, pose.dx + x - shown.min.x, pose.dx),
+                (crate::motion::Prop::Y, pose.dy + y - shown.min.y, pose.dy),
+                (
+                    crate::motion::Prop::Width,
+                    pose.width_scale * w / local_size.x.max(1.0),
+                    pose.width_scale,
+                ),
+                (
+                    crate::motion::Prop::Height,
+                    pose.height_scale * h / local_size.y.max(1.0),
+                    pose.height_scale,
+                ),
+                (
+                    crate::motion::Prop::Rotation,
+                    deg.to_radians() - rot,
+                    pose.rotation,
+                ),
+            ] {
+                if (value - previous).abs() > 1e-5 {
+                    after.set_key(
+                        id,
+                        prop,
+                        studio.playhead,
+                        value,
+                        crate::motion::Ease::EaseInOut,
+                    );
+                }
+            }
+            studio.commit_motion(after);
+            return;
+        }
         studio.commit(crate::document::Cmd::SetRasterXform {
             layer: li,
             before: (origin, size, rot),

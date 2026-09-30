@@ -290,6 +290,26 @@ impl Studio {
                 layer: self.doc.layers[i].clone(),
             });
         }
+        let removed: Vec<_> = indices
+            .iter()
+            .flat_map(|&i| {
+                let layer = &self.doc.layers[i];
+                std::iter::once(layer.id).chain(
+                    layer
+                        .kind
+                        .shapes()
+                        .unwrap_or(&[])
+                        .iter()
+                        .map(|shape| shape.id),
+                )
+            })
+            .collect();
+        let before = self.doc.motion.clone();
+        let mut after = before.clone();
+        after.drop_shapes(&removed);
+        if after != before {
+            commands.push(Cmd::SetMotion { before, after });
+        }
         self.clear_layer_interaction();
         self.commit(Cmd::Batch(commands));
         self.active_layer = self.doc.layers.len().checked_sub(1);

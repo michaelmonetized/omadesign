@@ -493,6 +493,10 @@ impl Studio {
                             .map_err(|e| e.to_string())?,
                     )?);
                     shape.geom.map_into(src, dest);
+                    // Keep absolute layer opacity and effects on the wrapper, with
+                    // the original image pivot for rotation and scale tracks.
+                    shapes.iter_mut().find(|s| s.id == container).unwrap().geom = shape.geom.clone();
+                    ids.insert(imported_layer.id, container);
                     shapes.push(shape);
                 }
             }

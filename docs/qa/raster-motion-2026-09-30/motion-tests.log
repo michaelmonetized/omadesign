@@ -1,0 +1,60 @@
+   Compiling omadesign v0.6.1 (/home/michael/Projects/omadesign/.worktrees/raster-motion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 38.05s
+     Running unittests src/lib.rs (/home/michael/Projects/omadesign/target/debug/deps/omadesign-c7585cc17f1022b1)
+
+running 53 tests
+test app::layout_edit::reparent_tests::cross_layer_reparent_moves_subtree_without_flattening_or_losing_motion ... ok
+test app::motion_delete_tests::cut_in_motion_still_removes_the_object ... ok
+test app::brand_assets::tests::native_brand_placement_preserves_live_artwork_motion_and_tabs_with_one_undo ... ok
+test app::key_hints::tests::motion_delete_hint_names_the_animation_not_the_object ... ok
+test app::motion_delete_tests::delete_with_a_selected_key_keeps_the_object ... ok
+test app::motion_delete_tests::delete_in_design_still_removes_animated_objects ... ok
+test app::motion_delete_tests::delete_without_a_selected_key_strips_animation_not_the_object ... ok
+test app::motion_presets::tests::presets_commit_once_per_application_and_ignore_guides_or_locked_objects ... ok
+test app::raster_motion_tests::raster_motion_duplicate_and_delete_preserve_undoable_tracks ... ok
+test app::raster_motion_tests::raster_motion_masks_opacity_and_reveal_follow_exported_pixels ... ok
+test app::raster_motion_tests::raster_motion_pasted_images_key_independently_and_roundtrip ... ok
+test app::motion_flip_followup_tests::motion_flip_reflects_posed_selection_and_all_keyframes_in_one_undo ... ok
+test app::raster_motion_tests::raster_motion_skips_hidden_locked_and_ancestor_locked_layers ... ok
+test app::raster_motion_tests::raster_motion_selection_and_deletion_follow_layer_tracks ... ok
+test app::shortcuts::tests::every_advertised_tool_and_motion_transport_key_works ... ok
+test app::shortcuts::tests::motion_delete_of_a_selected_key_does_not_take_the_object ... ok
+test app::shortcuts::tests::motion_delete_strips_animation_and_ignores_a_held_key ... ok
+test compositor::effects_cache::tests::isolated_screen_cache_matches_fresh_pixels_through_motion_and_edits ... ok
+test compositor::performance_tests::offscreen_rejection_preserves_wide_strokes_cubic_hulls_and_motion ... ok
+test compositor::tests::filtered_motion_does_not_clip_travel_to_rest_bounds ... ok
+test compositor::tests::reveal_channels_clip_fill_and_trim_stroke_independently_under_motion ... ok
+test motion::tests::dash_array_and_length_key_apart ... ok
+test motion::tests::ease_endpoints ... ok
+test motion::tests::export_dotlottie_is_a_zip_and_imports ... ok
+test motion::tests::export_lottie_import_bytes_keeps_shapes_duration_and_rotation ... ok
+test motion::tests::export_sampling_stops_at_a_shortened_clip_and_keeps_independent_easing ... ok
+test motion::tests::fill_color_holds_the_design_then_moves ... ok
+test motion::tests::first_key_inserts_rest_at_zero ... ok
+test motion::tests::gradient_angle_is_a_key_on_the_pose ... ok
+test motion::tests::image_only_lottie_reports_no_vector_layers ... ok
+test motion::tests::lottie_roundtrip_keeps_motion ... ok
+test motion::tests::plain_object_is_not_a_lottie ... ok
+test motion::tests::pose_eval_lerps ... ok
+test motion::tests::pose_map_roundtrip ... ok
+test motion::tests::removing_a_key_selects_a_neighbor_then_another_channel ... ok
+test motion::tests::reveal_exports_keep_compound_paths_gradients_opacity_and_separate_channels ... ok
+test motion::tests::stroke_width_is_an_offset_from_the_design ... ok
+test motion::tests::third_party_rect_lottie_imports_from_json_and_dotlottie ... ok
+test motion::tests::unsupported_lottie_masks_fail_without_losing_animated_svg_layers ... ok
+test motion::tests::width_and_height_scale_on_their_own_axes ... ok
+test motion_presets::tests::every_recipe_moves_then_lands_on_the_existing_pose ... ok
+test motion_presets::tests::replacing_a_window_preserves_other_objects_channels_and_outside_keys ... ok
+test motion_presets::tests::short_buzz_keeps_distinct_editable_keys_and_rejects_invalid_settings ... ok
+test motion_presets::tests::stagger_and_delay_hold_entrances_then_extend_the_clip ... ok
+test svg::tests::flattened_pixels_and_unmapped_motion_are_named ... ok
+test compositor::performance_tests::cached_effect_pixels_match_fresh_masks_blends_motion_and_camera_transforms ... ok
+test app::snapping::tests::motion_movement_snaps_the_visible_edge_to_the_evaluated_target ... ok
+test ui::canvas::tests::raster_motion_canvas_drag_and_rotation_key_without_changing_pixels ... ok
+test ui::canvas::tests::marquee_uses_press_origin_when_motion_arrives_in_the_same_frame ... ok
+test ui::studios::object_appearance::tests::object_appearance_visible_short_text_motion_and_mixed_edits_are_one_undo_step ... ok
+test ui::timeline::tests::raster_motion_timeline_rows_and_keys_select_the_right_image ... ok
+test ui::welcome::workspace::tests::creation_targets_choose_templates_sizes_or_photo_without_a_motion_start ... ok
+test app::raster_motion_tests::raster_motion_all_image_presets_render_and_preserve_pixels ... ok
+
+test result: ok. 53 passed; 0 failed; 0 ignored; 0 measured; 874 filtered out; finished in 45.68s

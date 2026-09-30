@@ -2,18 +2,22 @@ use super::*;
 use crate::motion_presets::{self, Preset, Target};
 
 impl Studio {
+    fn motion_preset_target(&self, layer: usize, id: u64, preset: Preset) -> Option<Target> {
+        let target = crate::motion::target(&self.doc, layer, id)?;
+        let supported = if id == RASTER_ID {
+            preset != Preset::DrawStroke
+        } else {
+            self.doc
+                .find_shape(layer, id)
+                .is_some_and(|shape| preset.supports(shape))
+        };
+        supported.then_some(target)
+    }
+
     pub fn motion_preset_count(&self, preset: Preset) -> usize {
         self.selection
             .iter()
-            .filter(|(layer, id)| {
-                self.doc
-                    .layers
-                    .get(*layer)
-                    .is_some_and(|layer| layer.visible && !layer.locked)
-                    && self.doc.find_shape(*layer, *id).is_some_and(|shape| {
-                        shape.visible && !shape.locked && !shape.guide && preset.supports(shape)
-                    })
-            })
+            .filter(|(layer, id)| self.motion_preset_target(*layer, *id, preset).is_some())
             .count()
     }
 
@@ -24,20 +28,7 @@ impl Studio {
         let targets: Vec<_> = self
             .selection
             .iter()
-            .filter_map(|(layer, id)| {
-                let layer = self.doc.layers.get(*layer)?;
-                if !layer.visible || layer.locked {
-                    return None;
-                }
-                let shape = layer.kind.shapes()?.iter().find(|shape| shape.id == *id)?;
-                (shape.visible && !shape.locked && !shape.guide && preset.supports(shape)).then(
-                    || Target {
-                        id: shape.id,
-                        bounds: shape.world_bbox(),
-                        opacity: shape.opacity,
-                    },
-                )
-            })
+            .filter_map(|(layer, id)| self.motion_preset_target(*layer, *id, preset))
             .collect();
         match motion_presets::apply(
             &self.doc.motion,

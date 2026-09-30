@@ -1,0 +1,34 @@
+   Compiling winit v0.30.13 (/home/michael/Projects/omadesign/.worktrees/raster-motion-baseline/vendor/winit)
+   Compiling omadesign v0.6.1 (/home/michael/Projects/omadesign/.worktrees/raster-motion-baseline)
+   Compiling accesskit_winit v0.32.2
+   Compiling egui-wgpu v0.36.1
+   Compiling egui-winit v0.36.1 (/home/michael/Projects/omadesign/.worktrees/raster-motion-baseline/vendor/egui-winit)
+   Compiling eframe v0.36.1 (/home/michael/Projects/omadesign/.worktrees/raster-motion-baseline/vendor/eframe)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 59.19s
+     Running unittests src/lib.rs (/home/michael/Projects/omadesign/target/debug/deps/omadesign-c7585cc17f1022b1)
+
+running 2 tests
+test text_geometry::area::tests::ellipsis_respects_graphemes_and_word_boundary ... FAILED
+test text_geometry::area::tests::visible_clip_ellipsis_and_max_lines_never_truncate_source ... FAILED
+
+failures:
+
+---- text_geometry::area::tests::ellipsis_respects_graphemes_and_word_boundary stdout ----
+
+thread 'text_geometry::area::tests::ellipsis_respects_graphemes_and_word_boundary' (3710889) panicked at src/text_geometry/area.rs:1281:9:
+assertion failed: result == "one…" || result == "…"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- text_geometry::area::tests::visible_clip_ellipsis_and_max_lines_never_truncate_source stdout ----
+
+thread 'text_geometry::area::tests::visible_clip_ellipsis_and_max_lines_never_truncate_source' (3710914) panicked at src/text_geometry/area.rs:1269:9:
+assertion failed: ellipsis.visible_text.ends_with('…')
+
+
+failures:
+    text_geometry::area::tests::ellipsis_respects_graphemes_and_word_boundary
+    text_geometry::area::tests::visible_clip_ellipsis_and_max_lines_never_truncate_source
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 917 filtered out; finished in 1.06s
+
+error: test failed, to rerun pass `--lib`

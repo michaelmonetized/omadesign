@@ -1429,11 +1429,11 @@ fn posed_bounds(studio: &Studio) -> Option<Bounds> {
     let mut b: Option<Bounds> = None;
     for (li, id) in &studio.selection {
         let bb = if *id == RASTER_ID {
-            studio
-                .doc
-                .layers
-                .get(*li)
-                .and_then(|l| l.kind.raster_bounds())
+            studio.doc.layers.get(*li).and_then(|l| {
+                l.kind
+                    .raster_bounds()
+                    .map(|b| studio.live_pose(l.id).map_bounds(b))
+            })
         } else {
             studio.doc.find_shape(*li, *id).map(|s| {
                 if studio.is_motion() {
@@ -1830,13 +1830,14 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
             if studio.persona == Persona::Motion {
                 studio.playing = false;
                 for snap in orig.iter() {
-                    if snap.id == RASTER_ID {
+                    let Some(target) = crate::motion::target(&studio.doc, snap.layer, snap.id)
+                    else {
                         continue;
-                    }
-                    let mut pose = studio.doc.motion.pose(snap.id, studio.playhead);
+                    };
+                    let mut pose = studio.doc.motion.pose(target.id, studio.playhead);
                     pose.dx += d.x;
                     pose.dy += d.y;
-                    studio.pose_drag.insert(snap.id, pose);
+                    studio.pose_drag.insert(target.id, pose);
                 }
             } else {
                 let moving: std::collections::HashSet<_> =
@@ -1988,12 +1989,13 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                 let sy = dst.height() / start_box.height().max(1.0);
                 let f = if shift { sx.max(sy) } else { (sx + sy) * 0.5 };
                 for snap in orig.iter() {
-                    if snap.id == RASTER_ID {
+                    let Some(target) = crate::motion::target(&studio.doc, snap.layer, snap.id)
+                    else {
                         continue;
-                    }
-                    let mut pose = studio.doc.motion.pose(snap.id, studio.playhead);
+                    };
+                    let mut pose = studio.doc.motion.pose(target.id, studio.playhead);
                     pose.scale = (pose.scale * f).clamp(0.05, 32.0);
-                    studio.pose_drag.insert(snap.id, pose);
+                    studio.pose_drag.insert(target.id, pose);
                 }
             } else {
                 for snap in orig.iter() {
@@ -2040,12 +2042,13 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
             if studio.persona == Persona::Motion {
                 studio.playing = false;
                 for snap in orig.iter() {
-                    if snap.id == RASTER_ID {
+                    let Some(target) = crate::motion::target(&studio.doc, snap.layer, snap.id)
+                    else {
                         continue;
-                    }
-                    let mut pose = studio.doc.motion.pose(snap.id, studio.playhead);
+                    };
+                    let mut pose = studio.doc.motion.pose(target.id, studio.playhead);
                     pose.rotation += ang;
-                    studio.pose_drag.insert(snap.id, pose);
+                    studio.pose_drag.insert(target.id, pose);
                 }
             } else {
                 for snap in orig.iter() {
@@ -3115,12 +3118,11 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio, pen_pre
     // so handles are in the right place for rotated boxes.
     for (li, id) in &studio.selection {
         if *id == RASTER_ID {
-            if let Some(b) = studio
-                .doc
-                .layers
-                .get(*li)
-                .and_then(|l| l.kind.raster_bounds())
-            {
+            if let Some(b) = studio.doc.layers.get(*li).and_then(|l| {
+                l.kind
+                    .raster_bounds()
+                    .map(|b| studio.live_pose(l.id).map_bounds(b))
+            }) {
                 let sb = Rect::from_min_max(win(rect, v, b.min), win(rect, v, b.max));
                 p.rect_stroke(
                     sb,
@@ -3572,7 +3574,7 @@ fn commit_pose_drag(studio: &mut Studio) {
         }
     }
     studio.pose_drag.clear();
-    studio.commit_motion(after);
+    studio.commit_motion_step(after);
 }
 
 fn stroke_world_posed(
@@ -3721,6 +3723,48 @@ fn draw_nodes(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn raster_motion_canvas_drag_and_rotation_key_without_changing_pixels() {
+        let mut s = Studio::new();
+        s.persona = Persona::Motion;
+        s.snap.enabled = false;
+        s.doc.layers = vec![crate::document::Layer::placed_raster(
+            "Image",
+            crate::document::Pixels::from_rgba(20, 20, [255, 0, 0, 255].repeat(400)).unwrap(),
+            Pt::new(40., 40.),
+            Pt::splat(40.),
+        )];
+        s.selection = vec![(0, RASTER_ID)];
+        s.playhead = 1.;
+        let id = s.doc.layers[0].id;
+        let rest = serde_json::to_value(&s.doc.layers[0]).unwrap();
+        let orig = snapshot_moving(&s);
+        s.op = Some(Op::Move {
+            orig: orig.clone(),
+            start: Pt::new(60., 60.),
+            selection_on_click: s.selection.clone(),
+        });
+        continue_drag(&mut s, Pt::new(90., 80.), false, false);
+        assert_eq!(s.live_pose(id).dx, 30.);
+        assert_eq!(s.live_pose(id).dy, 20.);
+        assert_eq!(hit_shape(&s, Pt::new(90., 80.), 0.), Some((0, RASTER_ID)));
+        commit_pose_drag(&mut s);
+        assert_eq!(s.doc.motion.pose(id, 1.).dx, 30.);
+        s.op = Some(Op::Rotate {
+            orig,
+            center: Pt::new(90., 80.),
+            start_angle: 0.,
+        });
+        continue_drag(&mut s, Pt::new(90., 110.), false, false);
+        assert!((s.live_pose(id).rotation - std::f32::consts::FRAC_PI_2).abs() < 0.001);
+        commit_pose_drag(&mut s);
+        assert_eq!(serde_json::to_value(&s.doc.layers[0]).unwrap(), rest);
+        s.undo();
+        assert_eq!(s.doc.motion.pose(id, 1.).rotation, 0.);
+        s.undo();
+        assert!(s.doc.motion.is_empty());
+    }
 
     #[test]
     fn rotated_raster_selection_tint_tracks_native_pixels_through_camera() {

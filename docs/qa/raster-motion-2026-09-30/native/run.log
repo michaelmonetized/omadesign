@@ -1,0 +1,9 @@
+PASS: raster key uses layer ID
+PASS: raster drag writes keys
+PASS: raster pop preset
+PASS: raster preset undo
+PASS: raster pop preset
+PASS: raster independent preset
+PASS: raster playback
+PASS: save reopen
+PASS: raster native export

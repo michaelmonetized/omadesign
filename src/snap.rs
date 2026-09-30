@@ -109,7 +109,13 @@ impl Scene {
                 && layer.kind.is_placed_raster()
                 && let Some(bounds) = layer.kind.raster_bounds()
             {
-                objects.push(bounds);
+                let pose = motion.map(|(time, overrides)| {
+                    overrides
+                        .get(&layer.id)
+                        .copied()
+                        .unwrap_or_else(|| doc.motion.pose(layer.id, time))
+                });
+                objects.push(pose.map_or(bounds, |pose| pose.map_bounds(bounds)));
             }
         }
         let mut artboards: Vec<_> = doc

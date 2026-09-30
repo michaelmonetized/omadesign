@@ -136,7 +136,11 @@ impl Studio {
                     .iter()
                     .filter_map(|(li, id)| {
                         if *id == RASTER_ID {
-                            self.doc.layers.get(*li)?.kind.raster_bounds()
+                            let layer = self.doc.layers.get(*li)?;
+                            layer
+                                .kind
+                                .raster_bounds()
+                                .map(|bounds| self.live_pose(layer.id).map_bounds(bounds))
                         } else {
                             self.doc.find_shape(*li, *id).map(|shape| {
                                 let bounds = shape.world_bbox();
