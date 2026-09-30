@@ -68,11 +68,28 @@ pub(super) fn show(ctx: &egui::Context, studio: &mut Studio) {
         studio.commit_artboards(after);
         studio.artboard_sel = vec![id];
     }
+    let close = create || cancel || response.should_close();
     ctx.data_mut(|d| {
-        if create || cancel || response.should_close() {
+        if close {
             d.remove::<Dialog>(Id::new(ID));
         } else {
             d.insert_temp(Id::new(ID), dialog);
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn artboard_modal_can_render_and_close_without_nested_context_locks() {
+        let ctx = egui::Context::default();
+        let mut studio = Studio::new();
+        open(&ctx, &studio, Pt::ZERO);
+        let _ = ctx.run(Default::default(), |ctx| show(ctx, &mut studio));
+        assert!(is_open(&ctx));
+        let input = egui::RawInput { events: vec![egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }], ..Default::default() };
+        let _ = ctx.run(input, |ctx| show(ctx, &mut studio));
+        assert!(!is_open(&ctx));
+    }
 }

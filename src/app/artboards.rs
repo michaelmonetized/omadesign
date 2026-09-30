@@ -250,6 +250,7 @@ impl Studio {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn change_artboard(
         &mut self,
         original: Artboard,

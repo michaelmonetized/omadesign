@@ -1701,11 +1701,11 @@ fn artboard_press(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: boo
         } else if !studio.artboard_sel.contains(&id) {
             studio.artboard_sel = vec![id];
         }
-        if alt {
-            studio.clone_artboard(id);
-        }
-        if let Some(op) = hit_artboard_handle(studio, pick) {
+        if let Some(mut op) = hit_artboard_handle(studio, pick) {
+            if let Op::ArtboardResize { options, .. } = &mut op { *options = options.with_modifiers(ctrl, alt); }
             studio.op = Some(op);
+        } else if alt {
+            studio.clone_artboard(id);
         }
         return;
     }
