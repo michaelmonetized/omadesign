@@ -993,18 +993,10 @@ fn render_preview_at(request: &PreviewRequest, path: &Path) -> Result<egui::Colo
             if let Some(error) = &entry.error {
                 return Err(error.clone());
             }
-            // The library decoder is a quick path, not a capability limit. Real
-            // mixed compositions commonly exceed its 16 MP / 64-effect budget.
-            // Fall back to the native decoder on this existing single worker.
-            let doc = crate::brand::load_preview_document(&entry.path, entry.recovered).or_else(
-                |_| {
-                    if entry.recovered {
-                        crate::project::load_swap(&entry.path).map(|swap| swap.doc)
-                    } else {
-                        crate::project::load_from(&entry.path)
-                    }
-                },
-            )?;
+            // Relax scene complexity for real compositions, retaining file,
+            // geometry, effect and decoded-pixel budgets on this single worker.
+            let doc = crate::brand::load_preview_document(&entry.path, entry.recovered)
+                .or_else(|_| crate::brand::load_full_preview_document(&entry.path, entry.recovered))?;
             render_document(&doc)?
         }
         PreviewRequest::Asset { root, asset } => {
