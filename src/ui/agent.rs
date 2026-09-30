@@ -191,7 +191,7 @@ fn body(ui: &mut egui::Ui, studio: &mut Studio, agent: &mut Workspace, height: f
                                     )
                                     .clicked()
                                 {
-                                    if let Err(e) = agent.restore(thread.clone(), studio) {
+                                    if let Err(e) = agent.continue_in_document(thread.clone(), studio, ui.ctx()) {
                                         agent.error = e;
                                     }
                                 }

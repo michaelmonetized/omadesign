@@ -168,6 +168,10 @@ impl Studio {
         self.tabs.len().max(1)
     }
 
+    pub(crate) fn tab_path(&self, i: usize) -> Option<&std::path::Path> {
+        if i == self.active_tab { self.path.as_deref() } else { self.tabs.get(i).and_then(|tab| tab.path.as_deref()) }
+    }
+
     pub fn tab_title(&self, i: usize) -> (&str, bool) {
         let (name, dirty) = if i == self.active_tab {
             (self.doc.name.as_str(), self.dirty)

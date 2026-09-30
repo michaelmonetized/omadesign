@@ -3820,7 +3820,7 @@ impl Studio {
         self.queue_import(path, file_io::ImportMode::Open);
     }
 
-    fn open_document(&mut self, mut doc: crate::document::Document, path: Option<PathBuf>) {
+    pub(crate) fn open_document(&mut self, mut doc: crate::document::Document, path: Option<PathBuf>) {
         doc.ensure_ids();
         let imported = path
             .as_ref()
