@@ -63,7 +63,10 @@ pub(crate) fn native_bounds(shapes: &[crate::document::Shape], layers: &[crate::
         let stroke = shape.style.stroke.as_ref().map_or(0., |s| s.width.max(0.) * match s.alignment {
             StrokeAlignment::Inside => 0., StrokeAlignment::Center => 0.5, StrokeAlignment::Outside => 1.,
         });
-        let mut bounds = shape.world_bbox().inflate(stroke + crate::filter::svg_pad(&shape.filters));
+        let mut bounds = if let Some(outline) = crate::outline::expand(shape) {
+            shape.world_bbox().union(outline.bbox())
+        } else { shape.world_bbox().inflate(stroke) };
+        bounds = bounds.inflate(crate::filter::svg_pad(&shape.filters));
         let mut parent = shape.layout.parent;
         let mut seen = std::collections::HashSet::new();
         while let Some(id) = parent {
@@ -76,7 +79,12 @@ pub(crate) fn native_bounds(shapes: &[crate::document::Shape], layers: &[crate::
         }
         bounds
     });
-    let rasters = layers.iter().filter(|l| l.visible).filter_map(|l| l.kind.raster_bounds().map(|b| b.inflate(crate::filter::svg_pad(&l.filters))));
+    let rasters = layers.iter().filter(|l| l.visible).filter_map(|l| {
+        let pixels = l.kind.pixels()?;
+        let mut corners = [tiny_skia::Point::from_xy(0., 0.), tiny_skia::Point::from_xy(pixels.w as f32, 0.), tiny_skia::Point::from_xy(pixels.w as f32, pixels.h as f32), tiny_skia::Point::from_xy(0., pixels.h as f32)];
+        crate::compositor::layer_pixel_transform(l).map_points(&mut corners);
+        corners.into_iter().map(|p| Bounds::from_pt(Pt::new(p.x, p.y))).reduce(|a,b| a.union(b)).map(|b| b.inflate(crate::filter::svg_pad(&l.filters)))
+    });
     vectors.chain(rasters).reduce(|a,b| a.union(b))
 }
 
@@ -985,4 +993,15 @@ mod sizing_review_tests {
         studio.new_doc_artboards = 2;
         assert!(!studio.new_canvas_size_valid(8000., 8000.));
     }
+    #[test]
+    fn native_bounds_include_shear_and_miter_outline() {
+        let mut layer = crate::document::Layer::placed_raster("shear", crate::document::Pixels::new(100, 100), Pt::new(20., 30.), Pt::splat(100.));
+        layer.kind.set_raster_shear(100.);
+        assert_eq!(native_bounds(&[], &[layer]).unwrap().size(), Pt::new(200., 100.));
+        let shape = Shape::new(Geom::Poly { contours: vec![vec![Pt::new(0.,100.),Pt::new(50.,0.),Pt::new(55.,100.)]], winding: true }, Style { fill: crate::document::Fill::None, stroke: Some(Stroke { width: 20., join: crate::document::Join::Miter, ..Default::default() }) });
+        let outline = crate::outline::expand(&shape).unwrap().bbox();
+        let bounds = native_bounds(&[shape], &[]).unwrap();
+        assert!(bounds.contains(outline.min) && bounds.contains(outline.max));
+    }
+
 }
