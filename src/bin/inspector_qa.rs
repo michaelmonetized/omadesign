@@ -21,6 +21,7 @@ const SIZE: [usize; 2] = [1600, 1000];
 enum Action {
     Click(&'static str),
     DoubleWorld(Pt),
+    SaveExport(&'static str),
     ShiftClick(&'static str),
     Right(&'static str),
     ScrollLayer,
@@ -52,6 +53,7 @@ struct Qa {
     checks: Vec<String>,
     started: Instant,
     double_at: Option<Pos2>,
+    pending_export: Option<&'static str>,
 }
 fn ctrl() -> Modifiers {
     Modifiers::CTRL | Modifiers::COMMAND
@@ -103,6 +105,24 @@ fn actions(issue: &str) -> VecDeque<Action> {
             Check("artboard created outside"), Press(Key::Z, ctrl()), Check("artboard create undo"),
             DoubleWorld(Pt::new(465.,270.)), Check("artboard wraps exact object"),
             Press(Key::Z, ctrl()), Check("artboard create undo"),
+        ].into(),
+        "174" => vec![
+            Press(Key::E, ctrl()),
+            Check("export choices and preview"),
+            Click("Entire document"), Click("Selection"),
+            Click("Choose preset…"), Click("PNG · 2×"),
+            Check("export selection dimensions"),
+            Click("Preset name"), Type("Client PNG"), Click("Save preset"),
+            Click("Cancel"), Press(Key::E, ctrl()),
+            Check("export options restored"),
+            SaveExport("selection.png"), Check("selection file pixels"),
+            Press(Key::E, ctrl()), Click("Selection"), Click("Social crop"),
+            Click("Choose preset…"), Click("PNG · 1×"),
+            Check("export artboard dimensions"),
+            SaveExport("artboard.png"), Check("artboard file pixels"),
+            Press(Key::E, ctrl()), Click("Choose preset…"), Click("Client PNG"),
+            Check("saved export preset"), Click("Cancel"),
+            Check("export keeps document unchanged"),
         ].into(),
         "raster-motion" => vec![
             World(Pt::new(180., 200.), PointerButton::Primary),
@@ -286,6 +306,12 @@ impl Qa {
             studio.selection.clear();
             studio.set_tool(omadesign::tools::Tool::Artboard);
         }
+        if issue == "174" {
+            studio.selection.truncate(1);
+            let mut board = omadesign::document::Artboard::new(1, Pt::new(350.,180.), Pt::new(300.,200.));
+            board.name = "Social crop".into();
+            studio.doc.artboards.push(board);
+        }
         if issue == "raster-motion" {
             studio.doc.layers.clear();
             studio.selection.clear();
@@ -409,6 +435,7 @@ impl Qa {
             checks: vec![],
             started: Instant::now(),
             double_at: None,
+            pending_export: None,
         }
     }
     fn point(&self, label: &str) -> Pos2 {
@@ -443,6 +470,7 @@ impl Qa {
                     self.pointer(p,PointerButton::Primary);
                     self.double_at=Some(p);
                 }
+                Action::SaveExport(name) => self.pending_export = Some(name),
                 Action::FitView => {
                     let p = self
                         .labels
@@ -536,6 +564,28 @@ impl Qa {
                 assert_eq!(board.origin,Pt::new(410.,230.)); assert_eq!(board.size,Pt::new(170.,130.));
                 assert_eq!(self.studio.doc.artboards.len(),2); assert_eq!(self.studio.history.len(),1);
             }
+            "export choices and preview" => {
+                for label in ["Entire document", "Choose preset…", "Output: 800 × 520 px", "Options are remembered for this file and session."] {
+                    assert!(self.labels.iter().any(|(text,_)| text == label), "missing {label}");
+                }
+                assert!(!self.labels.iter().any(|(text,_)| text.contains("Rendering preview")));
+            }
+            "export selection dimensions" | "export options restored" => {
+                assert!(self.labels.iter().any(|(text,_)| text == "Selection"));
+                assert!(self.labels.iter().any(|(text,_)| text == "Output: 340 × 260 px"));
+            }
+            "export artboard dimensions" => {
+                assert!(self.labels.iter().any(|(text,_)| text == "Social crop"));
+                assert!(self.labels.iter().any(|(text,_)| text == "Output: 300 × 200 px"));
+            }
+            "saved export preset" => assert!(self.labels.iter().any(|(text,_)| text == "Output: 600 × 400 px")),
+            "selection file pixels" | "artboard file pixels" => {
+                let (file,size) = if name == "selection file pixels" { ("selection.png",(340,260)) } else { ("artboard.png",(300,200)) };
+                let image = image::open(self.output.join(file)).unwrap().to_rgba8();
+                assert_eq!(image.dimensions(),size);
+                assert!(image.pixels().any(|p| p[3]>0 && p[0]!=255));
+            }
+            "export keeps document unchanged" => assert_eq!(omadesign::project::encode(&self.studio.doc).unwrap(),self.original),
             "raster key uses layer ID" => {
                 let id = self.studio.doc.layers[0].id;
                 assert!(self.studio.doc.motion.has_shape(id));
@@ -879,6 +929,9 @@ impl eframe::App for Qa {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         eframe::App::ui(&mut self.studio, ui, frame);
+        if let Some(name) = self.pending_export.take() {
+            omadesign::ui::save_export_preview(&ctx, &self.studio, self.output.join(name)).unwrap();
+        }
         self.labels(&ctx);
         self.warm += 1;
         let painter = ctx.layer_painter(egui::LayerId::new(

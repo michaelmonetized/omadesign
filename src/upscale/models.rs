@@ -2,7 +2,7 @@ use crate::ml::{Progress, models};
 use serde::Deserialize;
 use std::{path::PathBuf, sync::OnceLock};
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Model {
     #[default]
     General,

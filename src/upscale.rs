@@ -9,7 +9,7 @@ use models::Model;
 use ort::session::Session;
 
 pub const MAX_PIXELS: u64 = 512_000_000;
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Settings {
     pub factor: f64,
     pub model: Model,
