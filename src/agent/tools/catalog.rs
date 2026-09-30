@@ -39,7 +39,7 @@ pub fn extended() -> Vec<Value> {
         ),
         (
             "import_file",
-            "Bring a file from disk into this live session, in any workspace. Use absolute path from attachments or list_files. Canvas preserves editable OMA/SVG/PDF/PSD/ORA/XCF layers and places photos as pixel layers. Frame places inside the specified native frame. Photo loads the original into Photo's nondestructive filmstrip. Canvas/frame bounds are document coordinates; omitted dimensions preserve aspect ratio. Existing artwork is preserved. Returns selection IDs and import notes.",
+            "Bring a file from disk into this live session, in any workspace. Use absolute path from attachments or list_files. Canvas preserves editable OMA/SVG/PDF/PSD/ORA/XCF layers and places photos as pixel layers. Frame places inside the specified native frame. Photo loads the original into Photo's nondestructive filmstrip. Canvas/frame bounds are document coordinates. Canvas placement preserves aspect ratio: omit one dimension or supply a matching pair; use set_raster_transform after placement to stretch an image. Frame placement accepts both dimensions. Existing artwork is preserved. Returns selection IDs and import notes.",
             json!({"path":s,"destination":{"enum":["canvas","frame","photo"]},"layer":i,"id":i,"x":n,"y":n,"width":n,"height":n}),
             vec!["path"],
             true,

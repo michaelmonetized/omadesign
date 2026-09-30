@@ -508,3 +508,14 @@ fn layer_duplication_copies_ordinary_and_empty_layers_atomically() {
         assert_eq!(crate::project::encode(&s.doc).unwrap(), before);
     }
 }
+
+#[test]
+fn incompatible_canvas_import_dimensions_fail_without_changing_the_document() {
+    let f = Fixture::new();
+    let mut s = studio();
+    let before = crate::project::encode(&s.doc).unwrap();
+    let args = json!({"revision":s.canvas_gen,"path":f.photo(),"x":10,"y":20,"width":160,"height":100});
+    let error = tools::execute(&mut s, "import_file", &args, true).unwrap_err();
+    assert!(error.contains("aspect ratio"), "{error}");
+    assert_eq!(crate::project::encode(&s.doc).unwrap(), before);
+}
