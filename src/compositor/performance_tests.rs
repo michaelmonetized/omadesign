@@ -76,6 +76,10 @@ fn reference_filtered(pm: &mut Pixmap, shape: &Shape, t: Transform, pose: Pose) 
     let shape = &painted;
     let mask = object_mask(pm, shape, t, pose, None);
     let alpha = pose.opacity.unwrap_or(shape.opacity).clamp(0.0, 1.0);
+    // Reference rendering uses local geometry plus final placement, independently
+    // of cache reuse. Avoid translation cancellation before rasterizing a blur.
+    let translation = Pt::new(pose.dx,pose.dy);
+    let pose=Pose{dx:0.,dy:0.,..pose};
     let bounds = pose
         .map_bounds(shape.world_bbox())
         .inflate(crate::filter::svg_pad(&shape.filters).ceil().max(8.0));
@@ -95,7 +99,7 @@ fn reference_filtered(pm: &mut Pixmap, shape: &Shape, t: Transform, pose: Pose) 
         opaque,
         None,
     );
-    let transform = t.pre_concat(Transform::from_translate(bounds.min.x, bounds.min.y));
+    let transform = t.pre_concat(Transform::from_translate(bounds.min.x+translation.x, bounds.min.y+translation.y));
     if shape.filters.independent() || shape.fill_opacity < 1.0 || shape.blend_interior {
         crate::filter::composite(
             pm,

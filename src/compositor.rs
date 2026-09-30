@@ -1000,10 +1000,15 @@ fn draw_shape_masked(
     }
     if shape.filters.active() {
         let pad = crate::filter::svg_pad(&shape.filters).ceil().max(8.0);
+        // Keep filtered pixels in stable object-local coordinates. Translating
+        // into and out of large world coordinates introduces cancellation noise
+        // that invalidates blur/shadow caches during otherwise identical motion.
+        let translation = Pt::new(pose.dx, pose.dy);
+        let pose = Pose { dx: 0., dy: 0., ..pose };
         let b = pose.map_bounds(shape.world_bbox()).inflate(pad);
         let tw = b.width().ceil().max(1.0) as u32;
         let th = b.height().ceil().max(1.0) as u32;
-        let xf = t.pre_concat(Transform::from_translate(b.min.x, b.min.y));
+        let xf = t.pre_concat(Transform::from_translate(b.min.x + translation.x, b.min.y + translation.y));
         // These stacks already combine locally before one bilinear canvas blit.
         // Reuse those exact pixels; backdrop-dependent appearance keeps its full
         // compositing path below, including per-effect blend and group opacity.
