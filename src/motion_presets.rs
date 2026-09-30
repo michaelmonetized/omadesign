@@ -135,7 +135,7 @@ pub fn apply(
 ) -> Result<Motion, String> {
     let options = options.checked()?;
     if targets.is_empty() {
-        return Err("Select compatible vector objects first".into());
+        return Err("Select compatible objects or images first".into());
     }
     if !playhead.is_finite() {
         return Err("Choose a valid animation start time".into());

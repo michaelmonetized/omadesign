@@ -1208,6 +1208,30 @@ fn export_inner(doc: &Document, animate: bool, text_as_paths: bool) -> Result<St
         std::cmp::Reverse(depth)
     });
     for layer in order {
+        let raster_animation = if animate && layer.kind.pixels().is_some() {
+            motion.css_keyframes(layer.id, &format!("oma-{}", layer.id), layer.opacity)
+        } else {
+            None
+        };
+        if let Some(keyframes) = &raster_animation {
+            css.push_str(keyframes);
+        }
+        let opacity = if raster_animation.is_some() {
+            1.0
+        } else {
+            layer.opacity
+        };
+        let wrap_motion = |output: String| {
+            if raster_animation.is_some() {
+                let center = layer.kind.raster_bounds().unwrap().center();
+                format!(
+                    "<g class=\"oma-a\" style=\"animation-name: oma-{}; transform-origin: {:.4}px {:.4}px\"><g class=\"oma-a\" style=\"animation-name: oma-{}-opacity\">{output}</g></g>",
+                    layer.id, center.x, center.y, layer.id
+                )
+            } else {
+                output
+            }
+        };
         let fx_id = format!("oma-fx-{}", layer.id);
         let independent = layer.filters.independent() || layer.fill_opacity < 1.;
         let fx_attr = if layer.filters.active() && !independent {
@@ -1253,10 +1277,36 @@ fn export_inner(doc: &Document, animate: bool, text_as_paths: bool) -> Result<St
             }
             LayerKind::Raster { pixels, .. } => {
                 if !pixels.is_invisible() && !crate::compositor::is_paper_raster(layer) {
-                    layer_body.push_str(&pixel_image(
-                        pixels,
-                        crate::compositor::layer_pixel_transform(layer),
-                    )?);
+                    let image =
+                        pixel_image(pixels, crate::compositor::layer_pixel_transform(layer))?;
+                    if animate
+                        && motion
+                            .value(layer.id, crate::motion::Prop::FillReveal, 0.0)
+                            .is_some()
+                    {
+                        let clip_id = format!("oma-raster-reveal-{}", layer.id);
+                        let times = motion.sample_times(layer.id);
+                        let reveal = |time| {
+                            motion
+                                .pose(layer.id, time)
+                                .fill_reveal
+                                .unwrap_or(1.0)
+                                .clamp(0.0, 1.0)
+                        };
+                        let xf = crate::compositor::layer_pixel_transform(layer);
+                        defs.push_str(&format!("<clipPath id=\"{clip_id}\" clipPathUnits=\"userSpaceOnUse\"><rect x=\"0\" y=\"{}\" width=\"{}\" height=\"{}\" transform=\"matrix({} {} {} {} {} {})\">", pixels.h as f32 * (1.0 - reveal(0.0)), pixels.w, pixels.h as f32 * reveal(0.0), xf.sx, xf.ky, xf.kx, xf.sy, xf.tx, xf.ty));
+                        defs.push_str(&animate_attribute("y", motion, &times, |time| {
+                            pixels.h as f32 * (1.0 - reveal(time))
+                        }));
+                        defs.push_str(&animate_attribute("height", motion, &times, |time| {
+                            pixels.h as f32 * reveal(time)
+                        }));
+                        defs.push_str("</rect></clipPath>");
+                        layer_body
+                            .push_str(&format!("<g clip-path=\"url(#{clip_id})\">{image}</g>"));
+                    } else {
+                        layer_body.push_str(&image);
+                    }
                 }
             }
         }
@@ -1278,13 +1328,13 @@ fn export_inner(doc: &Document, animate: bool, text_as_paths: bool) -> Result<St
                 bounds,
                 &layer.filters,
                 layer.blend,
-                layer.opacity,
+                opacity,
                 layer.fill_opacity,
                 layer.blend_interior,
             );
             layer_outputs.insert(
                 layer.id,
-                format!(
+                wrap_motion(format!(
                     "<g inkscape:label=\"{}\"{}>{composed}</g>",
                     xml_escape(&layer.name),
                     if layer.visible {
@@ -1292,7 +1342,7 @@ fn export_inner(doc: &Document, animate: bool, text_as_paths: bool) -> Result<St
                     } else {
                         " visibility=\"hidden\""
                     }
-                ),
+                )),
             );
             continue;
         }
@@ -1300,7 +1350,7 @@ fn export_inner(doc: &Document, animate: bool, text_as_paths: bool) -> Result<St
         output.push_str(&format!(
             "<g id=\"oma-layer-{}\" inkscape:label=\"{}\"{} opacity=\"{:.3}\" style=\"mix-blend-mode:{};isolation:{}\"{fx_attr}>\n",
             layer.id, xml_escape(&layer.name), if layer.visible { "" } else { " visibility=\"hidden\"" },
-            layer.opacity,
+            opacity,
             layer.blend.css(),
             if layer.is_group && layer.pass_through { "auto" } else { "isolate" }
         ));
@@ -1312,7 +1362,7 @@ fn export_inner(doc: &Document, animate: bool, text_as_paths: bool) -> Result<St
             output.push_str(&layer_body);
         }
         output.push_str("</g>\n");
-        layer_outputs.insert(layer.id, output);
+        layer_outputs.insert(layer.id, wrap_motion(output));
     }
 
     for layer in doc.layers.iter().filter(|layer| layer.parent.is_none()) {

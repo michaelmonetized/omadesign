@@ -25,6 +25,9 @@ enum Action {
     ScrollLayer,
     FitView,
     World(Pt, PointerButton),
+    DragPress(Pt),
+    DragMove(Pt),
+    DragRelease(Pt),
     Press(Key, Modifiers),
     Type(&'static str),
     Check(&'static str),
@@ -91,14 +94,48 @@ fn fixture() -> Studio {
 fn actions(issue: &str) -> VecDeque<Action> {
     use Action::*;
     match issue {
+        "raster-motion" => vec![
+            World(Pt::new(180., 200.), PointerButton::Primary),
+            Press(Key::K, Modifiers::NONE),
+            Check("raster key uses layer ID"),
+            DragPress(Pt::new(180., 200.)),
+            DragMove(Pt::new(240., 230.)),
+            DragRelease(Pt::new(240., 230.)),
+            Check("raster drag writes keys"),
+            Press(Key::Z, ctrl()),
+            Click("Pop in"),
+            Check("raster pop preset"),
+            Press(Key::Z, ctrl()),
+            Check("raster preset undo"),
+            Press(Key::Z, ctrl() | Modifiers::SHIFT),
+            Check("raster pop preset"),
+            World(Pt::new(500., 300.), PointerButton::Primary),
+            Click("Slide right"),
+            Check("raster independent preset"),
+            Press(Key::Space, Modifiers::NONE),
+            Check("raster playback"),
+            Press(Key::Space, Modifiers::NONE),
+            Press(Key::End, Modifiers::NONE),
+            Press(Key::S, ctrl()),
+            Check("save reopen"),
+            Check("raster native export"),
+        ]
+        .into(),
         "154-motion" => vec![
-            Press(Key::H, Modifiers::SHIFT), Check("posed horizontal reflection"),
-            Press(Key::Z, ctrl()), Check("undo restores exact artwork"),
-            Press(Key::V, Modifiers::SHIFT), Check("posed vertical reflection"),
-            Press(Key::Z, ctrl()), Check("undo restores exact artwork"),
-            Press(Key::H, Modifiers::SHIFT), Check("posed horizontal reflection"),
-            Press(Key::S, ctrl()), Check("save reopen"),
-        ].into(),
+            Press(Key::H, Modifiers::SHIFT),
+            Check("posed horizontal reflection"),
+            Press(Key::Z, ctrl()),
+            Check("undo restores exact artwork"),
+            Press(Key::V, Modifiers::SHIFT),
+            Check("posed vertical reflection"),
+            Press(Key::Z, ctrl()),
+            Check("undo restores exact artwork"),
+            Press(Key::H, Modifiers::SHIFT),
+            Check("posed horizontal reflection"),
+            Press(Key::S, ctrl()),
+            Check("save reopen"),
+        ]
+        .into(),
         "154" => vec![
             Check("one flip pair in inspector"),
             Click("\u{ED6A}"),
@@ -233,13 +270,69 @@ fn actions(issue: &str) -> VecDeque<Action> {
 impl Qa {
     fn new(issue: String, output: PathBuf) -> Self {
         let mut studio = fixture();
+        if issue == "raster-motion" {
+            studio.doc.layers.clear();
+            studio.selection.clear();
+            studio.persona = Persona::Motion;
+            for (name, center, color) in [
+                (
+                    "Pasted amber image",
+                    Pt::new(180., 200.),
+                    [250, 179, 135, 255],
+                ),
+                (
+                    "Pasted blue image",
+                    Pt::new(500., 300.),
+                    [137, 180, 250, 255],
+                ),
+            ] {
+                let mut data = color.repeat(200 * 140);
+                for y in 25..115 {
+                    for x in 35..165 {
+                        if (x + y) % 40 < 20 {
+                            data[(y * 200 + x) * 4..(y * 200 + x + 1) * 4]
+                                .copy_from_slice(&[35, 38, 55, 255]);
+                        }
+                    }
+                }
+                studio
+                    .insert_clipboard_content(
+                        omadesign::clipboard::ClipboardContent::Image {
+                            name: name.into(),
+                            image: omadesign::photo::RgbaImage {
+                                w: 200,
+                                h: 140,
+                                data,
+                            },
+                        },
+                        center,
+                    )
+                    .unwrap();
+            }
+            studio.selection.clear();
+            studio.history.clear();
+            studio.dirty = false;
+        }
         if issue == "154-motion" {
-            use omadesign::motion::{Prop,Ease};
-            studio.persona=Persona::Motion;studio.playhead=0.7;
-            for (i,(_,id)) in studio.selection.clone().into_iter().enumerate() {
-                for (prop,a,b) in [(Prop::X,0.,80.),(Prop::Y,-20.,40.),(Prop::Rotation,-0.2,0.3),(Prop::Width,0.8,1.2),(Prop::Height,1.1,0.9)] {
-                    studio.doc.motion.set_key(id,prop,0.,a*(i as f32+1.),Ease::Linear);
-                    studio.doc.motion.set_key(id,prop,1.4,b*(i as f32+1.),Ease::EaseInOut);
+            use omadesign::motion::{Ease, Prop};
+            studio.persona = Persona::Motion;
+            studio.playhead = 0.7;
+            for (i, (_, id)) in studio.selection.clone().into_iter().enumerate() {
+                for (prop, a, b) in [
+                    (Prop::X, 0., 80.),
+                    (Prop::Y, -20., 40.),
+                    (Prop::Rotation, -0.2, 0.3),
+                    (Prop::Width, 0.8, 1.2),
+                    (Prop::Height, 1.1, 0.9),
+                ] {
+                    studio
+                        .doc
+                        .motion
+                        .set_key(id, prop, 0., a * (i as f32 + 1.), Ease::Linear);
+                    studio
+                        .doc
+                        .motion
+                        .set_key(id, prop, 1.4, b * (i as f32 + 1.), Ease::EaseInOut);
                 }
             }
         }
@@ -366,6 +459,20 @@ impl Qa {
                         .insert(0, Event::ModifiersChanged(Modifiers::SHIFT));
                 }
                 Action::Right(s) => self.pointer(self.point(s), PointerButton::Secondary),
+                Action::DragPress(p) | Action::DragMove(p) | Action::DragRelease(p) => {
+                    let point = self.studio.view.to_screen(p);
+                    let pos = self.studio.canvas_rect.unwrap().min + egui::vec2(point.x, point.y);
+                    self.cursor = pos;
+                    self.events.push(Event::PointerMoved(pos));
+                    if !matches!(action, Action::DragMove(_)) {
+                        self.events.push(Event::PointerButton {
+                            pos,
+                            button: PointerButton::Primary,
+                            pressed: matches!(action, Action::DragPress(_)),
+                            modifiers: Modifiers::NONE,
+                        });
+                    }
+                }
                 Action::World(p, button) => {
                     let p = self.studio.view.to_screen(p);
                     self.pointer(
@@ -392,18 +499,93 @@ impl Qa {
     }
     fn check(&mut self, name: &str) {
         match name {
+            "raster key uses layer ID" => {
+                let id = self.studio.doc.layers[0].id;
+                assert!(self.studio.doc.motion.has_shape(id));
+                assert!(!self.studio.doc.motion.has_shape(0));
+                assert_eq!(self.studio.doc.motion.shapes(), vec![id]);
+            }
+            "raster drag writes keys" => {
+                let layer = &self.studio.doc.layers[0];
+                let pose = self.studio.doc.motion.pose(layer.id, self.studio.playhead);
+                assert!((pose.dx - 60.).abs() < 0.01 && (pose.dy - 30.).abs() < 0.01);
+                assert_eq!(layer.kind.raster_xform().unwrap().0, Pt::new(80., 130.));
+            }
+            "raster pop preset" => {
+                let id = self.studio.doc.layers[0].id;
+                assert!(self.studio.doc.motion.pose(id, 0.).scale < 0.02);
+                assert!(self.studio.doc.motion.pose(id, 0.8).scale > 0.99);
+            }
+            "raster preset undo" => {
+                let id = self.studio.doc.layers[0].id;
+                assert_eq!(self.studio.doc.motion.pose(id, 0.).scale, 1.);
+            }
+            "raster independent preset" => {
+                let ids: Vec<_> = self.studio.doc.layers.iter().map(|l| l.id).collect();
+                assert!(self.studio.doc.motion.pose(ids[1], 0.).dx < -100.);
+                assert_eq!(self.studio.doc.motion.pose(ids[0], 0.).dx, 0.);
+                assert_eq!(self.studio.doc.motion.shapes().len(), 2);
+            }
+            "raster playback" => {
+                assert!(self.studio.playing);
+                assert!(self.studio.playhead > 0.);
+            }
+            "raster native export" => {
+                for (name, t) in [("start", 0.), ("middle", 0.4), ("end", 0.8)] {
+                    omadesign::compositor::render_export_at(&self.studio.doc, 1., t, true)
+                        .unwrap()
+                        .save_png(self.output.join(format!("{name}.png")))
+                        .unwrap();
+                }
+                fs::write(
+                    self.output.join("animated.svg"),
+                    omadesign::svg::export_animated(&self.studio.doc).unwrap(),
+                )
+                .unwrap();
+            }
             "posed horizontal reflection" | "posed vertical reflection" => {
-                let horizontal=name=="posed horizontal reflection";
-                let before=omadesign::project::decode(&self.original).unwrap();
-                let axis=self.studio.selection.iter().map(|&(li,id)|before.motion.pose(id,self.studio.playhead).map_bounds(before.find_shape(li,id).unwrap().world_bbox())).reduce(|a,b|a.union(b)).unwrap().center();
-                for &(li,id) in &self.studio.selection {
-                    let original=before.find_shape(li,id).unwrap();let actual=self.studio.doc.find_shape(li,id).unwrap();
-                    for t in [0.,self.studio.playhead,1.4] {
-                        let points:Vec<_>=actual.world_contours(64).into_iter().flatten().map(|p|self.studio.doc.motion.pose(id,t).map(actual.world_bbox().center(),p)).collect();
+                let horizontal = name == "posed horizontal reflection";
+                let before = omadesign::project::decode(&self.original).unwrap();
+                let axis = self
+                    .studio
+                    .selection
+                    .iter()
+                    .map(|&(li, id)| {
+                        before
+                            .motion
+                            .pose(id, self.studio.playhead)
+                            .map_bounds(before.find_shape(li, id).unwrap().world_bbox())
+                    })
+                    .reduce(|a, b| a.union(b))
+                    .unwrap()
+                    .center();
+                for &(li, id) in &self.studio.selection {
+                    let original = before.find_shape(li, id).unwrap();
+                    let actual = self.studio.doc.find_shape(li, id).unwrap();
+                    for t in [0., self.studio.playhead, 1.4] {
+                        let points: Vec<_> = actual
+                            .world_contours(64)
+                            .into_iter()
+                            .flatten()
+                            .map(|p| {
+                                self.studio
+                                    .doc
+                                    .motion
+                                    .pose(id, t)
+                                    .map(actual.world_bbox().center(), p)
+                            })
+                            .collect();
                         for p in original.world_contours(64).into_iter().flatten() {
-                            let p=before.motion.pose(id,t).map(original.world_bbox().center(),p);
-                            let expected=if horizontal {Pt::new(2.*axis.x-p.x,p.y)}else{Pt::new(p.x,2.*axis.y-p.y)};
-                            assert!(points.iter().any(|q|(*q-expected).length()<0.003));
+                            let p = before
+                                .motion
+                                .pose(id, t)
+                                .map(original.world_bbox().center(), p);
+                            let expected = if horizontal {
+                                Pt::new(2. * axis.x - p.x, p.y)
+                            } else {
+                                Pt::new(p.x, 2. * axis.y - p.y)
+                            };
+                            assert!(points.iter().any(|q| (*q - expected).length() < 0.003));
                         }
                     }
                 }

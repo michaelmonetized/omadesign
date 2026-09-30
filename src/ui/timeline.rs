@@ -212,7 +212,8 @@ fn paint_timeline(ui: &mut Ui, studio: &mut Studio, rect: Rect, resp: &eframe::e
     for (i, (id, name)) in rows.iter().enumerate() {
         let y = lane.min.y + i as f32 * ROW;
         let row = Rect::from_min_max(pos2(rect.min.x, y), pos2(rect.max.x, y + ROW));
-        let selected = studio.selection.iter().any(|(_, sid)| sid == id);
+        let selected = crate::motion::selection(&studio.doc, *id)
+            .is_some_and(|hit| studio.selection.contains(&hit));
         if selected {
             painter.rect_filled(row, 0.0, accent().linear_multiply(0.10));
         } else if i % 2 == 1 {
@@ -318,6 +319,7 @@ fn paint_timeline(ui: &mut Ui, studio: &mut Studio, rect: Rect, resp: &eframe::e
         }
         if let Some(hit) = find_shape_layer(studio, id) {
             studio.selection = vec![hit];
+            studio.active_layer = Some(hit.0);
         }
     }
     if let Some((id, prop, i, t)) = dragged_key {
@@ -348,9 +350,22 @@ fn paint_timeline(ui: &mut Ui, studio: &mut Studio, rect: Rect, resp: &eframe::e
 fn row_ids(studio: &Studio) -> Vec<u64> {
     let mut rows = studio.doc.motion.shapes();
     let mut seen: std::collections::HashSet<_> = rows.iter().copied().collect();
-    for (_, id) in &studio.selection {
-        if seen.insert(*id) {
-            rows.push(*id);
+    for &(layer, id) in &studio.selection {
+        let id = if id == crate::document::RASTER_ID {
+            let Some(layer) = studio
+                .doc
+                .layers
+                .get(layer)
+                .filter(|layer| layer.kind.pixels().is_some())
+            else {
+                continue;
+            };
+            layer.id
+        } else {
+            id
+        };
+        if seen.insert(id) {
+            rows.push(id);
         }
     }
     rows
@@ -358,6 +373,9 @@ fn row_ids(studio: &Studio) -> Vec<u64> {
 
 fn shape_name(studio: &Studio, id: u64) -> String {
     for layer in &studio.doc.layers {
+        if layer.id == id && layer.kind.pixels().is_some() {
+            return layer.name.clone();
+        }
         if let Some(s) = layer.find(id) {
             return s.name.clone();
         }
@@ -366,12 +384,7 @@ fn shape_name(studio: &Studio, id: u64) -> String {
 }
 
 fn find_shape_layer(studio: &Studio, id: u64) -> Option<(usize, u64)> {
-    for (li, layer) in studio.doc.layers.iter().enumerate() {
-        if layer.find(id).is_some() {
-            return Some((li, id));
-        }
-    }
-    None
+    crate::motion::selection(&studio.doc, id)
 }
 
 fn prop_color(p: Prop) -> Color32 {
@@ -476,9 +489,47 @@ mod tests {
     }
 
     #[test]
+    fn raster_motion_timeline_rows_and_keys_select_the_right_image() {
+        let mut s = Studio::new();
+        s.persona = Persona::Motion;
+        s.doc.layers = vec![
+            crate::document::Layer::raster("First image", 10, 10),
+            crate::document::Layer::raster("Second image", 10, 10),
+        ];
+        s.selection = vec![
+            (0, crate::document::RASTER_ID),
+            (1, crate::document::RASTER_ID),
+        ];
+        s.playhead = 1.;
+        s.key_selection(Ease::Linear);
+        let ids = [s.doc.layers[0].id, s.doc.layers[1].id];
+        assert_eq!(row_ids(&s), ids);
+        assert_eq!(shape_name(&s, ids[1]), "Second image");
+        let ctx = egui::Context::default();
+        crate::ui::theme::apply(&ctx);
+        let (rect, _) = frame(&ctx, &mut s, vec![]);
+        click(
+            &ctx,
+            &mut s,
+            pos2(rect.left() + 20., rect.top() + 18. + ROW * 1.5),
+        );
+        assert_eq!(s.selection, vec![(1, crate::document::RASTER_ID)]);
+        let x = rect.left() + LABEL + (rect.width() - LABEL - PAD) * 0.5;
+        click(&ctx, &mut s, pos2(x, rect.top() + 18. + ROW * 0.5));
+        assert_eq!(s.selection, vec![(0, crate::document::RASTER_ID)]);
+        assert_eq!(s.active_layer, Some(0));
+        assert_eq!(s.selected_key.unwrap().0, ids[0]);
+        s.forget_stale_key();
+        assert!(s.selected_key.is_some());
+    }
+
+    #[test]
     fn timeline_orders_animated_rows_then_unique_selected_objects() {
         let mut studio = fixture();
-        studio.doc.motion.set_key(106, Prop::Y, 1.0, 5.0, Ease::Linear);
+        studio
+            .doc
+            .motion
+            .set_key(106, Prop::Y, 1.0, 5.0, Ease::Linear);
         studio.selection = vec![(1, 109), (1, 300), (1, 200), (1, 300)];
         let mut expected: Vec<_> = (101..=112).collect();
         expected.extend([300, 200]);

@@ -1381,15 +1381,28 @@ impl Studio {
         self.commit(Cmd::SetMotion { before, after });
     }
 
+    /// Discrete timeline actions must not merge with earlier slider edits.
+    pub(crate) fn commit_motion_step(&mut self, after: Motion) {
+        let before = self.doc.motion.clone();
+        if before != after {
+            self.commit(Cmd::Batch(vec![Cmd::SetMotion { before, after }]));
+        }
+    }
+
     pub fn key_selection(&mut self, ease: Ease) {
         let t = self.playhead;
-        let sel = self.selection.clone();
+        let sel: Vec<_> = self
+            .selection
+            .iter()
+            .filter_map(|&(layer, id)| crate::motion::target(&self.doc, layer, id))
+            .collect();
         if sel.is_empty() {
-            self.status = "select a shape to key".into();
+            self.status = "select an editable object or image to key".into();
             return;
         }
         let mut after = self.doc.motion.clone();
-        for (_, id) in sel {
+        for target in sel {
+            let id = target.id;
             let pose = self.live_pose(id);
             after.set_key(id, Prop::X, t, pose.dx, ease);
             after.set_key(id, Prop::Y, t, pose.dy, ease);
@@ -1397,9 +1410,13 @@ impl Studio {
             after.set_key(id, Prop::Scale, t, pose.scale, ease);
             after.set_key(id, Prop::Width, t, pose.width_scale, ease);
             after.set_key(id, Prop::Height, t, pose.height_scale, ease);
-            if let Some(op) = pose.opacity {
-                after.set_key(id, Prop::Opacity, t, op, ease);
-            }
+            after.set_key(
+                id,
+                Prop::Opacity,
+                t,
+                pose.opacity.unwrap_or(target.opacity),
+                ease,
+            );
             if let Some(reveal) = pose.stroke_reveal {
                 after.set_key(id, Prop::StrokeReveal, t, reveal, ease);
             }
@@ -1425,7 +1442,7 @@ impl Studio {
                 after.set_key(id, Prop::DashLength, t, extra, ease);
             }
         }
-        self.commit_motion(after);
+        self.commit_motion_step(after);
         self.status = format!("keyed at {:.2}s", t);
     }
 
@@ -1660,7 +1677,8 @@ impl Studio {
     fn selection_has_motion(&self) -> bool {
         self.selection
             .iter()
-            .any(|(_, id)| self.doc.motion.has_shape(*id))
+            .filter_map(|&(li, id)| crate::motion::target(&self.doc, li, id))
+            .any(|target| self.doc.motion.has_shape(target.id))
     }
 
     pub(crate) fn forget_stale_key(&mut self) {
@@ -1673,7 +1691,8 @@ impl Studio {
             .tracks
             .iter()
             .any(|tr| tr.shape == id && tr.prop == prop && index < tr.keys.len());
-        let selected = self.selection.iter().any(|(_, sid)| *sid == id);
+        let selected = crate::motion::selection(&self.doc, id)
+            .is_some_and(|hit| self.selection.contains(&hit));
         if !exists || !selected {
             self.selected_key = None;
         }
@@ -1688,7 +1707,7 @@ impl Studio {
             let mut after = self.doc.motion.clone();
             after.remove_key(id, prop, index);
             let next = after.key_after_remove(id, prop, index);
-            self.commit_motion(after);
+            self.commit_motion_step(after);
             self.selected_key = next;
             self.status = "key removed".into();
             return true;
@@ -1696,10 +1715,16 @@ impl Studio {
         if !self.selection_has_motion() {
             return false;
         }
-        let ids: Vec<u64> = self.selection.iter().map(|(_, id)| *id).collect();
+        let ids: Vec<u64> = self
+            .selection
+            .iter()
+            .filter_map(|&(li, id)| {
+                crate::motion::target(&self.doc, li, id).map(|target| target.id)
+            })
+            .collect();
         let mut after = self.doc.motion.clone();
         after.drop_shapes(&ids);
-        self.commit_motion(after);
+        self.commit_motion_step(after);
         self.status = "animation removed".into();
         true
     }
@@ -1752,7 +1777,13 @@ impl Studio {
         for li in rasters {
             if li < self.doc.layers.len() && self.doc.layers.len() > 1 {
                 let layer = self.doc.layers[li].clone();
-                self.commit(Cmd::RemoveLayer { index: li, layer });
+                let before = self.doc.motion.clone();
+                let mut after = before.clone();
+                after.drop_shapes(&[layer.id]);
+                self.commit(Cmd::Batch(vec![
+                    Cmd::RemoveLayer { index: li, layer },
+                    Cmd::SetMotion { before, after },
+                ]));
             }
         }
         self.selected_layer = None;
@@ -1804,7 +1835,10 @@ impl Studio {
                 })
                 .collect();
             for track in &self.doc.motion.tracks {
-                if let Some(&id) = shape_ids.get(&track.shape) {
+                if let Some(&id) = shape_ids
+                    .get(&track.shape)
+                    .or_else(|| layer_ids.get(&track.shape))
+                {
                     let mut copied = track.clone();
                     copied.shape = id;
                     duplicated_motion.tracks.push(copied);
@@ -1885,7 +1919,19 @@ impl Studio {
         for (li, id) in ids {
             if id == RASTER_ID {
                 if let Some(mut layer) = self.doc.layers.get(li).cloned() {
+                    let previous_id = layer.id;
                     layer.id = crate::document::next_id();
+                    for track in self
+                        .doc
+                        .motion
+                        .tracks
+                        .iter()
+                        .filter(|track| track.shape == previous_id)
+                    {
+                        let mut copied = track.clone();
+                        copied.shape = layer.id;
+                        duplicated_motion.tracks.push(copied);
+                    }
                     layer.parent = None;
                     layer.name = format!("{} copy", layer.name);
                     if let Some((origin, size, rotation)) = layer.kind.raster_xform() {
@@ -5746,3 +5792,6 @@ mod motion_flip_followup_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod raster_motion_tests;

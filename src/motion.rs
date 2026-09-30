@@ -633,6 +633,40 @@ pub fn trimmed_stroke_path(shape: &Shape, progress: f32) -> Option<tiny_skia::Pa
     path.finish()
 }
 
+/// Resolve an editable canvas selection to its persistent animation target.
+/// Raster selections use RASTER_ID, but tracks must use the layer's unique ID.
+pub fn target(doc: &Document, layer: usize, id: u64) -> Option<crate::motion_presets::Target> {
+    if !doc.layer_editable(layer) {
+        return None;
+    }
+    let layer = doc.layers.get(layer)?;
+    if id == crate::document::RASTER_ID {
+        Some(crate::motion_presets::Target {
+            id: layer.id,
+            bounds: layer.kind.raster_bounds()?,
+            opacity: layer.opacity,
+        })
+    } else {
+        let shape = layer.find(id)?;
+        (shape.visible && !shape.locked && !shape.guide).then(|| crate::motion_presets::Target {
+            id,
+            bounds: shape.world_bbox(),
+            opacity: shape.opacity,
+        })
+    }
+}
+
+/// Convert a persisted track target back into a canvas selection.
+pub fn selection(doc: &Document, id: u64) -> Option<(usize, u64)> {
+    doc.layers.iter().enumerate().find_map(|(li, layer)| {
+        if layer.id == id && layer.kind.pixels().is_some() {
+            Some((li, crate::document::RASTER_ID))
+        } else {
+            layer.find(id).map(|_| (li, id))
+        }
+    })
+}
+
 pub fn hit_test(
     doc: &Document,
     t: f32,
@@ -641,8 +675,17 @@ pub fn hit_test(
     slack: f32,
 ) -> Option<(usize, u64)> {
     for (li, layer) in doc.layers.iter().enumerate().rev() {
-        if !layer.visible || layer.locked {
+        if !doc.layer_editable(li) {
             continue;
+        }
+        if let Some(bounds) = layer.kind.raster_bounds() {
+            let pose = overrides
+                .get(&layer.id)
+                .copied()
+                .unwrap_or_else(|| doc.motion.pose(layer.id, t));
+            if layer.kind.raster_contains(pose.unmap(bounds.center(), p)) {
+                return Some((li, crate::document::RASTER_ID));
+            }
         }
         if let Some(shapes) = layer.kind.shapes() {
             for shape in shapes.iter().rev() {
@@ -673,8 +716,17 @@ pub fn hits_in_rect(
 ) -> Vec<(usize, u64)> {
     let mut out = vec![];
     for (li, layer) in doc.layers.iter().enumerate() {
-        if !layer.visible || layer.locked {
+        if !doc.layer_editable(li) {
             continue;
+        }
+        if let Some(bounds) = layer.kind.raster_bounds() {
+            let pose = overrides
+                .get(&layer.id)
+                .copied()
+                .unwrap_or_else(|| doc.motion.pose(layer.id, t));
+            if pose.map_bounds(bounds).intersects(r) {
+                out.push((li, crate::document::RASTER_ID));
+            }
         }
         if let Some(shapes) = layer.kind.shapes() {
             for shape in shapes {
