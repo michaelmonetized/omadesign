@@ -1,0 +1,157 @@
+{
+  "document": "Cloud.oma (supplied local fixture)",
+  "frames": [
+    {
+      "cycle": 0,
+      "frame": 0,
+      "render_ms": 14.542285,
+      "time": 0.0
+    },
+    {
+      "cycle": 0,
+      "frame": 1,
+      "render_ms": 421.864591,
+      "time": 0.1818181872367859
+    },
+    {
+      "cycle": 0,
+      "frame": 2,
+      "render_ms": 381.82546499999995,
+      "time": 0.3636363744735718
+    },
+    {
+      "cycle": 0,
+      "frame": 3,
+      "render_ms": 323.16098999999997,
+      "time": 0.5454545617103577
+    },
+    {
+      "cycle": 0,
+      "frame": 4,
+      "render_ms": 193.287182,
+      "time": 0.7272727489471436
+    },
+    {
+      "cycle": 0,
+      "frame": 5,
+      "render_ms": 108.205944,
+      "time": 0.9090909361839294
+    },
+    {
+      "cycle": 0,
+      "frame": 6,
+      "render_ms": 108.133235,
+      "time": 1.0909091234207153
+    },
+    {
+      "cycle": 0,
+      "frame": 7,
+      "render_ms": 101.507741,
+      "time": 1.2727272510528564
+    },
+    {
+      "cycle": 0,
+      "frame": 8,
+      "render_ms": 88.50834,
+      "time": 1.454545497894287
+    },
+    {
+      "cycle": 0,
+      "frame": 9,
+      "render_ms": 88.6908,
+      "time": 1.6363636255264282
+    },
+    {
+      "cycle": 0,
+      "frame": 10,
+      "render_ms": 88.62559,
+      "time": 1.8181818723678589
+    },
+    {
+      "cycle": 0,
+      "frame": 11,
+      "render_ms": 88.52413200000001,
+      "time": 2.0
+    },
+    {
+      "cycle": 1,
+      "frame": 0,
+      "render_ms": 1.299382,
+      "time": 0.0
+    },
+    {
+      "cycle": 1,
+      "frame": 1,
+      "render_ms": 46.313576000000005,
+      "time": 0.1818181872367859
+    },
+    {
+      "cycle": 1,
+      "frame": 2,
+      "render_ms": 74.683226,
+      "time": 0.3636363744735718
+    },
+    {
+      "cycle": 1,
+      "frame": 3,
+      "render_ms": 95.70617,
+      "time": 0.5454545617103577
+    },
+    {
+      "cycle": 1,
+      "frame": 4,
+      "render_ms": 100.802363,
+      "time": 0.7272727489471436
+    },
+    {
+      "cycle": 1,
+      "frame": 5,
+      "render_ms": 102.943208,
+      "time": 0.9090909361839294
+    },
+    {
+      "cycle": 1,
+      "frame": 6,
+      "render_ms": 100.559945,
+      "time": 1.0909091234207153
+    },
+    {
+      "cycle": 1,
+      "frame": 7,
+      "render_ms": 100.452153,
+      "time": 1.2727272510528564
+    },
+    {
+      "cycle": 1,
+      "frame": 8,
+      "render_ms": 88.41696400000001,
+      "time": 1.454545497894287
+    },
+    {
+      "cycle": 1,
+      "frame": 9,
+      "render_ms": 88.26292199999999,
+      "time": 1.6363636255264282
+    },
+    {
+      "cycle": 1,
+      "frame": 10,
+      "render_ms": 88.463257,
+      "time": 1.8181818723678589
+    },
+    {
+      "cycle": 1,
+      "frame": 11,
+      "render_ms": 88.562257,
+      "time": 2.0
+    }
+  ],
+  "scale": 0.625,
+  "viewport": [
+    1248,
+    798
+  ],
+  "warm_max_ms": 102.943208,
+  "warm_median_ms": 88.512757,
+  "document_sha256": "11dde724eeee503ad2e09e6bad7a8ba2d65107b7f12e69977861b5e42416c161"
+}
