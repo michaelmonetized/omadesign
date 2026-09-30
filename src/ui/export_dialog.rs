@@ -315,7 +315,9 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
     let mut cancel = false;
     let mut export = false;
     let mut settings = export::Settings::default();
-    let response = egui::Modal::new(Id::new("still-export-modal")).show(ctx, |ui| {
+    let response = egui::Modal::new(Id::new("still-export-modal"))
+        .area(egui::Modal::default_area(Id::new("still-export-modal")).default_size(egui::vec2(510., (ctx.content_rect().height()-96.).min(840.))))
+        .show(ctx, |ui| {
         ui.set_width((ctx.content_rect().width() - 64.).clamp(300., 510.));
         ui.heading(if dialog.copy { "AI upscale photo" } else { "Export" });
         egui::ScrollArea::vertical().max_height((ctx.content_rect().height()-180.).max(180.)).show(ui, |ui| {

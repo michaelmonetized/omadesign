@@ -440,7 +440,7 @@ impl Qa {
     }
     fn point(&self, label: &str) -> Pos2 {
         self.labels
-            .iter()
+            .iter().rev()
             .find(|(s, _)| s == label)
             .map(|(_, r)| r.center())
             .unwrap_or_else(|| panic!("missing {label:?}; labels {:?}", self.labels))
