@@ -3,15 +3,16 @@
 use super::*;
 use std::{cell::RefCell, sync::Arc};
 
-// A native 1920px effect-heavy composition can exceed 32 MiB without a single
-// oversized object. Keep that working set resident rather than evicting every
-// entry during each sequential playback traversal.
-const MAX_BYTES: usize = 64 * 1024 * 1024;
+// Cloud.oma needs more than 64 MiB of native filtered objects. Retain that
+// working set, including prepared content used during fades, within a fixed
+// 192 MiB cap; cold scenes still compete through frequency admission.
+const MAX_BYTES: usize = 192 * 1024 * 1024;
 const MAX_ENTRIES: usize = 256;
 
 #[derive(PartialEq)]
 struct RasterKey {
     screen: bool,
+    prepared: bool,
     transform: [u32; 6],
     size: [u32; 2],
     stroke_reveal: Option<f32>,
@@ -50,6 +51,7 @@ impl RasterKey {
     fn from_transform(pose: Pose, transform: Transform, size: [u32; 2], screen: bool) -> Self {
         Self {
             screen,
+            prepared: false,
             transform: [
                 transform.sx.to_bits(),
                 transform.kx.to_bits(),
@@ -107,6 +109,22 @@ pub(super) fn render(
     render_keyed(shape, raster, path, draw)
 }
 
+/// Cache shape rasterization and pixel filters separately from appearance
+/// compositing, so changing opacity does not recompute a large blur every frame.
+pub(super) fn prepared(
+    shape: &Shape,
+    pose: Pose,
+    bounds: crate::geom::Bounds,
+    draw: impl FnOnce() -> Option<Pixmap>,
+) -> Option<Arc<Pixmap>> {
+    let mut raster = RasterKey::new(shape, pose, bounds);
+    raster.prepared = true;
+    let Some(path) = shape.get_cached_path(96) else {
+        return draw().map(Arc::new);
+    };
+    render_keyed(shape, raster, path, draw)
+}
+
 /// Reuse only the expensive paths that already require an isolated screen-space
 /// image. The caller retains the original final opacity, blend and mask blit.
 pub(super) enum ScreenPixels {
@@ -151,7 +169,7 @@ fn render_keyed(
     path: Arc<tiny_skia::Path>,
     draw: impl FnOnce() -> Option<Pixmap>,
 ) -> Option<Arc<Pixmap>> {
-    let key = Arc::as_ptr(&path) as usize;
+    let key = (Arc::as_ptr(&path) as usize) | usize::from(raster.prepared);
     let hit = CACHE.with_borrow_mut(|cache| {
         cache.clock = cache.clock.wrapping_add(1);
         cache.admission.record(key as u64);
@@ -277,6 +295,47 @@ mod tests {
         shape.opacity = 0.395;
         shape.blend = crate::color::Blend::Overlay;
         shape
+    }
+
+    #[test]
+    fn prepared_blur_survives_opacity_changes_and_coexists_with_finished_effects() {
+        clear();
+        let shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::ZERO,
+                size: Pt::new(32., 24.),
+                radius: 2.,
+            },
+            Default::default(),
+        );
+        let bounds = shape.world_bbox();
+        let first = prepared(
+            &shape,
+            Pose {
+                opacity: Some(0.2),
+                ..Pose::identity()
+            },
+            bounds,
+            || Pixmap::new(32, 24),
+        )
+        .unwrap();
+        render(&shape, Pose::identity(), bounds, || Pixmap::new(32, 24)).unwrap();
+        let second = prepared(
+            &shape,
+            Pose {
+                opacity: Some(0.7),
+                ..Pose::identity()
+            },
+            bounds,
+            || panic!("fading must reuse prepared blur"),
+        )
+        .unwrap();
+        assert!(Arc::ptr_eq(&first, &second));
+        let mut changed = shape.clone();
+        changed.style.fill = Fill::Solid(Rgba::new(12, 34, 56, 255));
+        let third = prepared(&changed, Pose::identity(), bounds, || Pixmap::new(32, 24)).unwrap();
+        assert!(!Arc::ptr_eq(&first, &third));
+        clear();
     }
 
     #[test]
@@ -442,14 +501,14 @@ mod tests {
         let old_shape = Shape::new(
             Geom::Rect {
                 origin: Pt::ZERO,
-                size: Pt::new(4096., 4032.),
+                size: Pt::new(4096., (MAX_BYTES / (4096 * 4) - 64) as f32),
                 radius: 0.,
             },
             crate::document::Style::default(),
         );
         let bounds = old_shape.world_bbox();
         let first = render(&old_shape, Pose::identity(), bounds, || {
-            Pixmap::new(4096, 4032)
+            Pixmap::new(4096, (MAX_BYTES / (4096 * 4) - 64) as u32)
         })
         .unwrap();
         let previous = Arc::downgrade(&first);
@@ -655,7 +714,7 @@ mod tests {
         let mut studio = crate::app::Studio::new();
         studio.doc.layers = vec![Layer::vector("edited scene")];
         clear();
-        let shapes: Vec<_> = (0..80)
+        let shapes: Vec<_> = (0..(MAX_BYTES / (512 * 512 * 4) + 16))
             .map(|index| {
                 Shape::new(
                     Geom::Rect {

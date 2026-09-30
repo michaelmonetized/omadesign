@@ -287,7 +287,7 @@ pub fn apply(pm: &mut Pixmap, stack: &FilterStack) {
     }
 }
 
-fn apply_one(pm: &mut Pixmap, fx: &Fx) {
+pub(crate) fn apply_one(pm: &mut Pixmap, fx: &Fx) {
     match *fx {
         Fx::Blur { std } => blur(pm, std.max(0.0)),
         Fx::Shadow {
@@ -1578,3 +1578,5 @@ mod tests {
         assert_eq!(px(&pm, 240, 160), [200, 10, 20, 255]);
     }
 }
+
+pub(crate) use appearance::composite_prepared;

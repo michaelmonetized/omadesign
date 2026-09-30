@@ -153,6 +153,32 @@ pub fn composite(
             }
         }
     }
+    composite_prepared(
+        dst,
+        content,
+        stack,
+        transform,
+        blend,
+        opacity,
+        fill_opacity,
+        interior,
+        mask,
+    );
+}
+
+/// Composite content whose pixel filters have already been evaluated. Appearance
+/// planes still see the real destination and preserve independent blend semantics.
+pub(crate) fn composite_prepared(
+    dst: &mut Pixmap,
+    mut content: Pixmap,
+    stack: &FilterStack,
+    transform: Transform,
+    blend: tiny_skia::BlendMode,
+    opacity: f32,
+    fill_opacity: f32,
+    interior: bool,
+    mask: Option<&Mask>,
+) {
     // Normal/100% stacks need one transformed canvas blit, like the historical
     // filter path. Build the source-over result locally without copying backdrop.
     if blend == tiny_skia::BlendMode::SourceOver

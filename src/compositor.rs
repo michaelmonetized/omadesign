@@ -1051,45 +1051,22 @@ fn draw_shape_masked(
             }
             return;
         }
-        if let Some(mut temp) = Pixmap::new(tw, th) {
+        let prepared = effects_cache::prepared(shape, pose, b, || {
+            let mut temp = Pixmap::new(tw, th)?;
             let local = Transform::from_translate(-b.min.x, -b.min.y);
-            let mut opaque_pose = pose;
-            opaque_pose.opacity = Some(1.0);
-            draw_shape_inner(
-                &mut temp,
-                shape,
-                local,
-                1.0,
-                tiny_skia::BlendMode::SourceOver,
-                opaque_pose,
-                None,
-            );
-            if shape.filters.independent() || shape.fill_opacity < 1. || shape.blend_interior {
-                crate::filter::composite(
-                    pm,
-                    temp,
-                    &shape.filters,
-                    xf,
-                    blend,
-                    opacity * alpha,
-                    shape.fill_opacity,
-                    shape.blend_interior,
-                    mask,
-                );
-                return;
+            let opaque_pose = Pose { opacity: Some(1.), ..pose };
+            draw_shape_inner(&mut temp, shape, local, 1., tiny_skia::BlendMode::SourceOver, opaque_pose, None);
+            if shape.filters.active() {
+                for fx in &shape.filters.items {
+                    if fx.appearance().is_none() { crate::filter::apply_one(&mut temp, fx); }
+                }
             }
-            crate::filter::apply(&mut temp, &shape.filters);
-            pm.draw_pixmap(
-                0,
-                0,
-                temp.as_ref(),
-                &PixmapPaint {
-                    opacity: (opacity * alpha).clamp(0.0, 1.0),
-                    blend_mode: blend,
-                    quality: tiny_skia::FilterQuality::Bilinear,
-                },
-                xf,
-                mask,
+            Some(temp)
+        });
+        if let Some(temp) = prepared {
+            crate::filter::composite_prepared(
+                pm, (*temp).clone(), &shape.filters, xf, blend,
+                opacity * alpha, shape.fill_opacity, shape.blend_interior, mask,
             );
         }
         return;

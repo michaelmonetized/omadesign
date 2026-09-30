@@ -9,9 +9,10 @@ use std::{
     sync::Arc,
 };
 
-// Includes source snapshots and all effect planes. The measured independent
-// shadow needs about 6.5 MiB; do not duplicate the full native effect budget.
-const MAX_BYTES: usize = 16 * 1024 * 1024;
+// Includes source snapshots and all effect planes. A multi-cloud composition
+// exceeds the former 16 MiB cap; keep its reusable shadow planes within a fixed
+// budget instead of recomputing them throughout every fade.
+const MAX_BYTES: usize = 96 * 1024 * 1024;
 const MAX_ENTRIES: usize = 128;
 type Planes = Vec<(Fx, Pixmap)>;
 
@@ -386,7 +387,7 @@ mod tests {
                     .sum::<usize>()
             );
         });
-        let oversized = source(2048, 1024, 141);
+        let oversized = source(4096, (MAX_BYTES / (4096 * 4 * 2) + 1) as u32, 141);
         let result = render(&oversized, &stack);
         assert_eq!(
             result[0].1.data(),
