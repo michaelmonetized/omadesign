@@ -320,7 +320,7 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
         .show(ctx, |ui| {
         ui.set_width((ctx.content_rect().width() - 64.).clamp(300., 510.));
         ui.heading(if dialog.copy { "AI upscale photo" } else { "Export" });
-        egui::ScrollArea::vertical().max_height((ctx.content_rect().height()-180.).max(180.)).show(ui, |ui| {
+        egui::ScrollArea::vertical().max_height((ctx.content_rect().height()-160.).clamp(120.,600.)).min_scrolled_height((ctx.content_rect().height()-160.).clamp(120.,600.)).show(ui, |ui| {
         ui.add_enabled_ui(!dialog.busy, |ui| {
             if !dialog.copy {
                 let boards = match &*dialog.original.lock().unwrap() {
@@ -553,6 +553,33 @@ pub(super) fn save_to(ctx: &Context, studio: &Studio, mut path: PathBuf) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn export_modal_keeps_preset_and_export_controls_visible_after_preview_arrives() {
+        let mut studio=Studio::new();
+        let ctx=Context::default();
+        open(&ctx,&mut studio,Format::Png,false);
+        jobs::cancel::<crate::photo::RgbaImage>(&ctx,PREVIEW_JOB);
+        for frame in 0..5 {
+            if frame == 2 {
+                let texture=ctx.load_texture("qa-preview",egui::ColorImage::filled([320,210],egui::Color32::WHITE),Default::default());
+                ctx.data_mut(|d| {
+                    let mut dialog=d.get_temp::<Dialog>(id()).unwrap();
+                    dialog.preview=Some(texture);
+                    d.insert_temp(id(),dialog);
+                });
+            }
+            let mut output=ctx.run_ui(egui::RawInput { screen_rect:Some(egui::Rect::from_min_size(egui::Pos2::ZERO,egui::vec2(1600.,1000.))),time:Some(frame as f64), ..Default::default() }, |ui| show(ui.ctx(),&mut studio));
+            if frame == 4 {
+                let labels: Vec<_> = output.shapes.iter().filter_map(|s| if let egui::Shape::Text(t)=&s.shape {
+                    let rect=t.galley.rect.translate(t.pos.to_vec2());
+                    s.clip_rect.contains(rect.center()).then_some(t.galley.job.text.as_str())
+                } else { None }).collect();
+                for label in ["Preset name","Save preset","Cancel","Export…"] { assert!(labels.contains(&label),"{label}: {labels:?}"); }
+            }
+            output.textures_delta.clear();
+        }
+        close(&ctx);
+    }
     #[test]
     fn export_preview_matches_native_still_and_jpeg_background() {
         let mut doc = crate::document::Document::new("Preview", 23., 17., 96.);
