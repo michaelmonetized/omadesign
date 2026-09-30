@@ -786,6 +786,11 @@ impl Workspace {
         self.focus_prompt = true;
     }
     pub fn stop(&mut self) {
+        if self.pending_document.take().is_some() || self.resume_connect {
+            self.resume_connect = false;
+            self.connecting = false;
+            self.status = "Stopped opening saved document".into();
+        }
         if let Some(job) = self.turn_job.take() {
             self.restore_unsent(job.request, job.attachments);
             self.busy = false;
@@ -1612,4 +1617,21 @@ mod saved_document_tests {
             assert!(agent.thread.is_none() && agent.pending_document.is_none());
         }
     }
+    #[test]
+    fn stop_discards_pending_document_and_deferred_connection() {
+        let mut studio = Studio::new();
+        let owner = studio.swap_id.clone();
+        let mut agent = Workspace::default();
+        let (tx, rx) = mpsc::channel();
+        agent.pending_document = Some((thread(Some("/tmp/stopped.oma".into())), rx));
+        agent.connecting = true;
+        agent.resume_connect = true;
+        agent.stop();
+        assert!(tx.send(Ok(Document::new("stopped", 10., 10., 96.))).is_err());
+        agent.poll_document(&mut studio);
+        assert_eq!(studio.swap_id, owner);
+        assert!(!agent.connecting && !agent.resume_connect);
+        assert!(agent.pending_document.is_none());
+    }
+
 }
