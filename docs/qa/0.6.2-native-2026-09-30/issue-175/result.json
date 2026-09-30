@@ -1,0 +1,23 @@
+{
+  "checks": [
+    "artboard options visible",
+    "artboard keep mode",
+    "artboard move mode",
+    "artboard clone mode",
+    "artboard size dialog",
+    "artboard created outside",
+    "artboard create undo",
+    "artboard wraps exact object",
+    "artboard create undo"
+  ],
+  "fps": 10,
+  "frames": 170,
+  "input": "actual egui pointer and keyboard events",
+  "issue": "175",
+  "renderer": "native WGPU",
+  "size": [
+    1600,
+    1000
+  ],
+  "wall_seconds": 6.531246102
+}
