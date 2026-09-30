@@ -247,10 +247,10 @@ fn composite_plane(
     interior: bool,
     mask: Option<&Mask>,
 ) {
-    // Normal/100% stacks need one transformed canvas blit, like the historical
-    // filter path. Build the source-over result locally without copying backdrop.
+    // Normal effects form one isolated object at every object opacity. Compose
+    // before transforming, then fade once; changing alpha must not switch the
+    // resampling/composition order or recompute unchanged effect planes.
     if blend == tiny_skia::BlendMode::SourceOver
-        && opacity >= 1.
         && fill_opacity >= 1.
         && !interior
         && mask.is_none()
@@ -283,6 +283,7 @@ fn composite_plane(
                 content.as_ref(),
                 &PixmapPaint {
                     quality: tiny_skia::FilterQuality::Bilinear,
+                    opacity: opacity.clamp(0., 1.),
                     ..Default::default()
                 },
                 transform,
@@ -312,6 +313,7 @@ fn composite_plane(
                 combined.as_ref(),
                 &PixmapPaint {
                     quality: tiny_skia::FilterQuality::Bilinear,
+                    opacity: opacity.clamp(0., 1.),
                     ..Default::default()
                 },
                 transform,
@@ -452,6 +454,65 @@ impl BackdropRegion {
 #[cfg(test)]
 mod region_tests {
     use super::*;
+    #[test]
+    fn normal_effect_fade_does_not_change_composition_at_full_opacity() {
+        let mut source = Pixmap::new(27, 23).unwrap();
+        for y in 6..17 {
+            for x in 5..21 {
+                let index = (y * 27 + x) * 4;
+                source.data_mut()[index..index + 4].copy_from_slice(&[120, 80, 40, 160]);
+            }
+        }
+        let stack = FilterStack {
+            items: vec![Fx::Shadow {
+                blend: Blend::Normal,
+                opacity: 1.,
+                knockout: true,
+                spread: 0.,
+                dx: 2.3,
+                dy: 1.7,
+                blur: 1.6,
+                color: Rgba::new(20, 40, 80, 180),
+            }],
+            ..Default::default()
+        };
+        for transform in [
+            Transform::from_row(0.63, 0., 0., 0.63, 12.37, 8.91),
+            Transform::from_row(0.87, 0.2, -0.3, 1.21, 25., 12.),
+        ] {
+            let mut full = Pixmap::new(80, 80).unwrap();
+            full.fill(Rgba::new(90, 150, 210, 255).to_skia());
+            let mut fading = full.clone();
+            composite_prepared(
+                &mut full,
+                source.clone(),
+                &stack,
+                transform,
+                tiny_skia::BlendMode::SourceOver,
+                1.,
+                1.,
+                false,
+                None,
+            );
+            composite_prepared(
+                &mut fading,
+                source.clone(),
+                &stack,
+                transform,
+                tiny_skia::BlendMode::SourceOver,
+                0.99999,
+                1.,
+                false,
+                None,
+            );
+            assert!(
+                full.data()
+                    .iter()
+                    .zip(fading.data())
+                    .all(|(a, b)| (*a as i16 - *b as i16).abs() <= 1)
+            );
+        }
+    }
     #[test]
     fn bounded_opacity_matches_full_backdrop_with_transforms_masks_and_blends() {
         let mut source = Pixmap::new(19, 23).unwrap();

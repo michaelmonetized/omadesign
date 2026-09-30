@@ -1016,7 +1016,6 @@ fn draw_shape_masked(
             && !shape.blend_interior
             && (!shape.filters.independent()
                 || (blend == tiny_skia::BlendMode::SourceOver
-                    && opacity * alpha >= 1.0
                     && mask.is_none()
                     && shape.filters.items.iter().all(|fx| {
                         fx.appearance().is_none_or(|(blend, opacity)| {
