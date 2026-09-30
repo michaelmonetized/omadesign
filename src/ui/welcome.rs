@@ -167,13 +167,13 @@ fn new_page(ui: &mut Ui, studio: &mut Studio) {
                 ui.add_space(8.0);
                 ui.add(
                     eframe::egui::DragValue::new(&mut studio.custom_w)
-                        .range(32.0..=16000.0)
+                        .range(1.0..=65535.0)
                         .prefix("W  ")
                         .speed(4.0),
                 );
                 ui.add(
                     eframe::egui::DragValue::new(&mut studio.custom_h)
-                        .range(32.0..=16000.0)
+                        .range(1.0..=65535.0)
                         .prefix("H  ")
                         .speed(4.0),
                 );
@@ -184,12 +184,15 @@ fn new_page(ui: &mut Ui, studio: &mut Studio) {
                         .speed(1.0),
                 );
                 if ui
-                    .add(Button::new("Create document").fill(accent_soft()))
+                    .add_enabled(studio.new_canvas_size_valid(studio.custom_w, studio.custom_h), Button::new("Create document").fill(accent_soft()))
                     .clicked()
                 {
                     studio.new_custom();
                 }
             });
+            if !studio.new_canvas_size_valid(studio.custom_w, studio.custom_h) {
+                ui.label("Choose a size up to 64 million pixels across all artboards.");
+            }
             ui.add_space(6.0);
             ui.horizontal_wrapped(|ui| {
                 ui.checkbox(&mut studio.new_doc_transparent, "Transparent");

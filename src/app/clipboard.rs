@@ -843,7 +843,7 @@ impl Studio {
             }
             None => Ok((self.clipboard.clone(), self.clipboard_rasters.clone())),
         };
-        let (shapes, rasters) = match parsed {
+        let (mut shapes, mut rasters) = match parsed {
             Ok(value) => value,
             Err(error) => {
                 self.status = error;
@@ -853,6 +853,21 @@ impl Studio {
         if shapes.is_empty() && rasters.is_empty() {
             self.status = "clipboard is empty".into();
             return;
+        }
+        // A fresh clipboard-sized canvas fits the artwork even if copied far
+        // from the original origin. Existing document pastes keep their position.
+        if self.current_is_blank()
+            && let Some(bounds) = crate::clipboard::native_bounds(&shapes, &rasters)
+            && (self.doc.width - bounds.width().ceil()).abs() < 0.01
+            && (self.doc.height - bounds.height().ceil()).abs() < 0.01
+        {
+            let delta = self.doc.size() * 0.5 - bounds.center();
+            for shape in &mut shapes { shape.geom.translate(delta); }
+            for layer in &mut rasters {
+                if let Some((origin, size, rotation)) = layer.kind.raster_xform() {
+                    layer.kind.set_raster_xform(origin + delta, size, rotation);
+                }
+            }
         }
         let mut commands = Vec::new();
         let mut selection = Vec::new();
