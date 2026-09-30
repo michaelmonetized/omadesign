@@ -20,6 +20,7 @@ const FPS: u32 = 10;
 const SIZE: [usize; 2] = [1600, 1000];
 enum Action {
     Click(&'static str),
+    DoubleWorld(Pt),
     ShiftClick(&'static str),
     Right(&'static str),
     ScrollLayer,
@@ -50,6 +51,7 @@ struct Qa {
     history: usize,
     checks: Vec<String>,
     started: Instant,
+    double_at: Option<Pos2>,
 }
 fn ctrl() -> Modifiers {
     Modifiers::CTRL | Modifiers::COMMAND
@@ -94,6 +96,14 @@ fn fixture() -> Studio {
 fn actions(issue: &str) -> VecDeque<Action> {
     use Action::*;
     match issue {
+        "175" => vec![
+            Check("artboard options visible"), Click("Scale artwork"), Check("artboard keep mode"),
+            Click("Move artwork"), Check("artboard move mode"), Click("Clone artwork"), Check("artboard clone mode"),
+            DoubleWorld(Pt::new(670.,440.)), Check("artboard size dialog"), Click("Create artboard"),
+            Check("artboard created outside"), Press(Key::Z, ctrl()), Check("artboard create undo"),
+            DoubleWorld(Pt::new(465.,270.)), Check("artboard wraps exact object"),
+            Press(Key::Z, ctrl()), Check("artboard create undo"),
+        ].into(),
         "raster-motion" => vec![
             World(Pt::new(180., 200.), PointerButton::Primary),
             Press(Key::K, Modifiers::NONE),
@@ -270,6 +280,12 @@ fn actions(issue: &str) -> VecDeque<Action> {
 impl Qa {
     fn new(issue: String, output: PathBuf) -> Self {
         let mut studio = fixture();
+        if issue == "175" {
+            studio.doc.artboards[0].size = Pt::new(350.,300.);
+            studio.artboard_sel = vec![studio.doc.artboards[0].id];
+            studio.selection.clear();
+            studio.set_tool(omadesign::tools::Tool::Artboard);
+        }
         if issue == "raster-motion" {
             studio.doc.layers.clear();
             studio.selection.clear();
@@ -392,6 +408,7 @@ impl Qa {
             history,
             checks: vec![],
             started: Instant::now(),
+            double_at: None,
         }
     }
     fn point(&self, label: &str) -> Pos2 {
@@ -420,6 +437,12 @@ impl Qa {
         if let Some(action) = self.actions.pop_front() {
             match action {
                 Action::Click(s) => self.pointer(self.point(s), PointerButton::Primary),
+                Action::DoubleWorld(point) => {
+                    let p = self.studio.view.to_screen(point);
+                    let p = self.studio.canvas_rect.unwrap().min + egui::vec2(p.x,p.y);
+                    self.pointer(p,PointerButton::Primary);
+                    self.double_at=Some(p);
+                }
                 Action::FitView => {
                     let p = self
                         .labels
@@ -499,6 +522,20 @@ impl Qa {
     }
     fn check(&mut self, name: &str) {
         match name {
+            "artboard options visible" => {
+                for label in ["Scale artwork", "Move artwork", "Clone artwork"] { assert!(self.labels.iter().any(|(s,_)|s==label)); }
+            }
+            "artboard keep mode" => assert_eq!(self.studio.artboard_options.resize,omadesign::app::ArtworkResize::Keep),
+            "artboard move mode" => assert_eq!(self.studio.artboard_options.resize,omadesign::app::ArtworkResize::Move),
+            "artboard clone mode" => assert!(self.studio.artboard_options.clone),
+            "artboard size dialog" => assert!(self.labels.iter().any(|(s,_)|s=="Create artboard")),
+            "artboard created outside" => { assert_eq!(self.studio.doc.artboards.len(),2); assert_eq!(self.studio.history.len(),1); }
+            "artboard create undo" => assert_eq!(omadesign::project::encode(&self.studio.doc).unwrap(),self.original),
+            "artboard wraps exact object" => {
+                let board=self.studio.doc.artboards.last().unwrap();
+                assert_eq!(board.origin,Pt::new(410.,230.)); assert_eq!(board.size,Pt::new(170.,130.));
+                assert_eq!(self.studio.doc.artboards.len(),2); assert_eq!(self.studio.history.len(),1);
+            }
             "raster key uses layer ID" => {
                 let id = self.studio.doc.layers[0].id;
                 assert!(self.studio.doc.motion.has_shape(id));
@@ -830,6 +867,7 @@ impl eframe::App for Qa {
             .events
             .retain(|e| matches!(e, Event::Screenshot { .. }));
         input.focused = true;
+        if let Some(point)=self.double_at.take() { self.pointer(point,PointerButton::Primary); }
         input.time = Some(self.frame as f64 / FPS as f64);
         input.events.push(Event::ModifiersChanged(Modifiers::NONE));
         if self.warm >= 30 && !self.pending && self.step_ready {

@@ -1,3 +1,4 @@
+mod artboard_dialog;
 mod agent;
 mod agent_attachments;
 mod agent_picker;
@@ -119,6 +120,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         && !export_dialog::is_open(&ctx)
         && !plugins::is_open(&ctx)
         && !welcome::modal_open(&ctx)
+        && !artboard_dialog::is_open(&ctx)
         && !studio.show_templates
     {
         guides::handle_shortcuts(&ctx, studio);
@@ -133,6 +135,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         && !pixel_selection::is_open(&ctx)
         && !plugins::is_open(&ctx)
         && !welcome::modal_open(&ctx)
+        && !artboard_dialog::is_open(&ctx)
         && !studio.show_templates
     {
         studio.handle_shortcuts(&ctx);
@@ -141,7 +144,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     layout::poll_image(&ctx, studio);
 
     // Keep the canvas visible for previews while preventing edits behind the dialog.
-    if pixel_selection::is_open(&ctx) || background_removal::is_open(&ctx) || export_dialog::is_open(&ctx) {
+    if pixel_selection::is_open(&ctx) || background_removal::is_open(&ctx) || export_dialog::is_open(&ctx) || artboard_dialog::is_open(&ctx) {
         ui.disable();
     }
 
@@ -189,6 +192,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         raster::show(ui, studio);
         background_removal::show(&ctx, studio);
         export_dialog::show(&ctx, studio);
+        artboard_dialog::show(&ctx, studio);
         anim_export::show(ui, studio);
         pixel_selection::show(&ctx, studio);
 

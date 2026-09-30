@@ -1363,6 +1363,16 @@ fn motion_keys(ui: &mut Ui, studio: &mut Studio) {
 }
 
 fn artboard_transform(ui: &mut Ui, studio: &mut Studio) {
+    use crate::app::ArtworkResize;
+    ui.label("Artwork on resize");
+    let mut scale=studio.artboard_options.resize==ArtworkResize::Scale;
+    let mut movement=studio.artboard_options.resize==ArtworkResize::Move;
+    if ui.checkbox(&mut scale,"Scale artwork").changed() {studio.artboard_options.resize=if scale {ArtworkResize::Scale}else{ArtworkResize::Keep};}
+    if ui.checkbox(&mut movement,"Move artwork").on_hover_text("Move with the artboard origin, keeping artwork size").changed() {studio.artboard_options.resize=if movement {ArtworkResize::Move}else{ArtworkResize::Keep};}
+    ui.checkbox(&mut studio.artboard_options.clone,"Clone artwork").on_hover_text("Keep originals and transform copies");
+    ui.small("Start resize: Ctrl board only · Alt toggle clone");
+    ui.small("Double-click outside: size dialog or wrap object");
+    ui.separator();
     let Some(id) = studio.artboard_sel.first().copied() else {
         ui.label(
             RichText::new("Draw or click an artboard")
@@ -1405,18 +1415,13 @@ fn artboard_transform(ui: &mut Ui, studio: &mut Studio) {
     let mut changed = bounds_fields(ui, &mut x, &mut y, &mut w, &mut h, 8.0);
     changed |= number_field(ui, "Rotation", &mut deg, -180.0..=180.0, "°");
     if changed {
-        let orig = a.clone();
         a.origin = crate::geom::Pt::new(x, y);
         a.size = crate::geom::Pt::new(w, h);
         a.rotation = crate::document::Artboard::snap_rotation(deg.to_radians());
-        let snaps = studio.snapshot_artboard_contents(&orig);
-        let mut after = studio.doc.artboards.clone();
-        if let Some(slot) = after.iter_mut().find(|x| x.id == id) {
-            *slot = a.clone();
-        }
-        studio.commit_artboards(after);
-        studio.apply_artboard_contents(&orig, &a, &snaps);
-        studio.commit_mapped_contents(snaps);
+        studio.preview_inspector_artboard(a.clone());
+    }
+    if !ui.input(|i| i.pointer.primary_down()) {
+        studio.finish_inspector_artboard();
     }
     ui.horizontal(|ui| {
         if ui.button("Clone").clicked() {

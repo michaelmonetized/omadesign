@@ -1,6 +1,8 @@
 //! Studio: document + tool state. Mutations go through commands.
 
 mod brand_assets;
+mod artboards;
+pub use artboards::{ArtboardOptions, ArtworkResize};
 mod clipboard;
 mod type_clipboard;
 mod clipboard_insert;
@@ -205,6 +207,8 @@ pub enum Op {
         contents: Vec<ObjSnap>,
     },
     ArtboardResize {
+        options: ArtboardOptions,
+        copies: Option<Vec<Cmd>>,
         orig: Artboard,
         handle: usize,
         start_box: Bounds,
@@ -430,6 +434,7 @@ pub struct Studio {
     recovery_retry: Option<Instant>,
     pub active_tab: usize,
     pub artboard_sel: Vec<u64>,
+    pub artboard_options: ArtboardOptions,
     pub layer_expanded: HashSet<u64>,
     pub swap_id: String,
     pub last_input: Instant,
@@ -673,6 +678,7 @@ impl Studio {
             recovery_retry: None,
             active_tab: 0,
             artboard_sel: vec![],
+            artboard_options: ArtboardOptions::default(),
             layer_expanded: HashSet::new(),
             swap_id: crate::project::new_swap_id(),
             last_input: Instant::now(),
@@ -1111,7 +1117,9 @@ impl Studio {
         );
     }
 
-    pub fn wrap_selection_artboard(&mut self) {
+    pub fn wrap_selection_artboard(&mut self) { self.wrap_selection_artboard_with_padding(16.); }
+
+    pub(crate) fn wrap_selection_artboard_with_padding(&mut self, pad: f32) {
         let mut b: Option<Bounds> = None;
         for (li, id) in &self.selection {
             if *id == RASTER_ID {
@@ -1121,13 +1129,14 @@ impl Studio {
                     .get(*li)
                     .and_then(|l| l.kind.raster_bounds())
                 {
+                    let rb = if self.is_motion() { self.live_pose(self.doc.layers[*li].id).map_bounds(rb) } else { rb };
                     b = Some(match b {
                         None => rb,
                         Some(acc) => acc.union(rb),
                     });
                 }
             } else if let Some(s) = self.doc.find_shape(*li, *id) {
-                let sb = s.world_bbox();
+                let sb = if self.is_motion() { self.live_pose(s.id).map_bounds(s.world_bbox()) } else { s.world_bbox() };
                 b = Some(match b {
                     None => sb,
                     Some(acc) => acc.union(sb),
@@ -1138,7 +1147,6 @@ impl Studio {
             self.status = "select objects to wrap".into();
             return;
         };
-        let pad = 16.0;
         let board = Artboard::new(
             self.doc.artboards.len(),
             Pt::new(b.min.x - pad, b.min.y - pad),

@@ -636,6 +636,7 @@ impl Studio {
                 }
             }
             Key::Escape => {
+                if self.cancel_artboard_gesture() { return true; }
                 if self.pending_item_mask.take().is_some() {
                     self.status = "Mask cancelled".into();
                     return true;

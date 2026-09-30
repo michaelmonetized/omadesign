@@ -711,8 +711,9 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
     }
 
     if studio.tool == Tool::Artboard {
+        if resp.double_clicked() && artboard_double_click(studio,&resp.ctx,pick) {return;}
         if resp.ctx.input(|i| i.pointer.primary_pressed()) {
-            artboard_press(studio, pick, snap, shift, alt);
+            artboard_press(studio, pick, snap, shift, alt, ctrl);
         }
         if resp.drag_started_by(PointerButton::Primary) && studio.op.is_none() {
             start_drag(studio, pick, snap, shift, alt);
@@ -1639,6 +1640,16 @@ fn snapshot_on_artboards(studio: &Studio, ids: &[u64]) -> Vec<ObjSnap> {
     out
 }
 
+fn artboard_double_click(studio:&mut Studio,ctx:&eframe::egui::Context,pick:Pt)->bool {
+    if studio.doc.artboards.iter().any(|board|board.contains(pick)) {return false;}
+    studio.cancel_artboard_gesture();
+    if let Some(hit)=hit_shape(studio,pick,8. / studio.view.scale.max(0.01)) {
+        studio.selection=vec![hit];
+        studio.wrap_selection_artboard_with_padding(0.);
+    } else {super::artboard_dialog::open(ctx,studio,pick);}
+    true
+}
+
 fn hit_artboard_handle(studio: &Studio, pick: Pt) -> Option<Op> {
     let slack = 12.0 / studio.view.scale.max(0.01);
     for id in &studio.artboard_sel {
@@ -1659,6 +1670,8 @@ fn hit_artboard_handle(studio: &Studio, pick: Pt) -> Option<Op> {
         for (i, handle) in handles.iter().enumerate() {
             if (*handle - pick).length() <= slack {
                 return Some(Op::ArtboardResize {
+                    options: studio.artboard_options,
+                    copies: None,
                     orig: a.clone(),
                     handle: i,
                     start_box: a.local_bounds(),
@@ -1670,9 +1683,10 @@ fn hit_artboard_handle(studio: &Studio, pick: Pt) -> Option<Op> {
     None
 }
 
-fn artboard_press(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
+fn artboard_press(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool, ctrl: bool) {
     let _ = snap;
-    if let Some(op) = hit_artboard_handle(studio, pick) {
+    if let Some(mut op) = hit_artboard_handle(studio, pick) {
+        if let Op::ArtboardResize { options, .. } = &mut op { *options=options.with_modifiers(ctrl,alt); }
         studio.op = Some(op);
         return;
     }
@@ -1687,11 +1701,11 @@ fn artboard_press(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: boo
         } else if !studio.artboard_sel.contains(&id) {
             studio.artboard_sel = vec![id];
         }
-        if alt {
-            studio.clone_artboard(id);
-        }
-        if let Some(op) = hit_artboard_handle(studio, pick) {
+        if let Some(mut op) = hit_artboard_handle(studio, pick) {
+            if let Op::ArtboardResize { options, .. } = &mut op { *options = options.with_modifiers(ctrl, alt); }
             studio.op = Some(op);
+        } else if alt {
+            studio.clone_artboard(id);
         }
         return;
     }
@@ -1744,6 +1758,7 @@ fn hit_corner(studio: &Studio, world: Pt) -> Option<(usize, u64, Option<usize>)>
 }
 
 fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
+    studio.prepare_artboard_resize_copies();
     let world = studio.precise_drag(world, shift);
     if matches!(
         studio.op,
@@ -2264,11 +2279,9 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
             }
         }
         Some(Op::ArtboardResize {
-            orig,
-            handle,
-            start_box,
-            contents,
+            orig, handle, start_box, contents, options, ..
         }) => {
+            let behavior = options.resize;
             let orig = orig.clone();
             let handle = *handle;
             let start_box = *start_box;
@@ -2319,7 +2332,7 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
                 .find(|a| a.id == orig.id)
                 .cloned()
             {
-                studio.apply_artboard_contents(&orig, &neu, &contents);
+                studio.apply_artboard_resize(&orig, &neu, &contents, behavior);
             }
         }
         Some(Op::ArtboardRotate {
@@ -2502,8 +2515,21 @@ fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) 
             }
             commit_canvas_commands(studio, commands);
         }
-        Some(Op::ArtboardResize { orig, contents, .. })
-        | Some(Op::ArtboardRotate { orig, contents, .. }) => {
+        Some(Op::ArtboardResize { orig, contents, copies, .. }) => {
+            let unchanged=studio.doc.artboards.iter().find(|b| b.id==orig.id)==Some(&orig);
+            if unchanged {
+                studio.restore_snaps(&contents);
+                if let Some(copies)=copies {studio.discard_artboard_copies(copies);}
+            } else {
+                let mut commands=copies.unwrap_or_default();
+                commands.extend(object_commands(studio,contents));
+                let mut before=studio.doc.artboards.clone();
+                if let Some(board)=before.iter_mut().find(|b|b.id==orig.id) {*board=orig;}
+                commands.push(crate::document::Cmd::SetArtboards{before,after:studio.doc.artboards.clone()});
+                commit_canvas_commands(studio,commands);
+            }
+        }
+        Some(Op::ArtboardRotate { orig, contents, .. }) => {
             let mut commands = object_commands(studio, contents);
             let mut before = studio.doc.artboards.clone();
             if let Some(slot) = before.iter_mut().find(|board| board.id == orig.id) {
@@ -4929,6 +4955,40 @@ mod tests {
     }
 
     #[test]
+    fn artboard_resize_clone_gesture_commits_once_and_escape_restores_everything() {
+        for cancel in [false,true] {
+            let mut studio=Studio::new();
+            studio.snap.enabled=false;
+            studio.doc.artboards=vec![crate::document::Artboard::new(0,Pt::ZERO,Pt::new(200.,160.))];
+            studio.finish_create(CreateKind::Rect,Pt::new(40.,40.),Pt::new(80.,80.));
+            studio.artboard_sel=vec![studio.doc.artboards[0].id];studio.tool=Tool::Artboard;
+            let before=crate::project::encode(&studio.doc).unwrap();
+            let history=studio.history.len();
+            let start=Pt::new(200.,160.);
+            artboard_press(&mut studio,start,start,false,true,false);
+            continue_drag(&mut studio,Pt::new(400.,320.),false,true);
+            assert_eq!(studio.doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().count(),2);
+            if cancel {assert!(studio.cancel_artboard_gesture());assert_eq!(studio.history.len(),history);}
+            else {end_drag(&mut studio,Pt::new(400.,320.),true,false,false);assert_eq!(studio.history.len(),history+1);studio.undo();}
+            assert_eq!(crate::project::encode(&studio.doc).unwrap(),before);
+        }
+    }
+    #[test]
+    fn artboard_double_click_wraps_exact_bounds_or_opens_size_dialog() {
+        let ctx=eframe::egui::Context::default();
+        let mut studio=Studio::new();studio.doc.artboards.clear();studio.doc.artboardless=true;
+        studio.finish_create(CreateKind::Rect,Pt::new(200.,300.),Pt::new(340.,390.));
+        studio.tool=Tool::Artboard;
+        assert!(artboard_double_click(&mut studio,&ctx,Pt::new(270.,345.)));
+        assert_eq!(studio.doc.artboards[0].origin,Pt::new(200.,300.));
+        assert_eq!(studio.doc.artboards[0].size,Pt::new(140.,90.));
+        assert!(!super::super::artboard_dialog::is_open(&ctx));
+        assert!(!artboard_double_click(&mut studio,&ctx,Pt::new(270.,345.)));
+        assert!(artboard_double_click(&mut studio,&ctx,Pt::new(600.,500.)));
+        assert!(super::super::artboard_dialog::is_open(&ctx));
+    }
+
+    #[test]
     fn shift_artboard_move_constrains_the_board_and_its_contents_together() {
         let mut studio = Studio::new();
         studio.snap.enabled = false;
@@ -5177,3 +5237,20 @@ mod node_tests;
 #[cfg(test)]
 #[path = "canvas_layout_tests.rs"]
 mod layout_tests;
+
+#[cfg(test)]
+mod artboard_modifier_review_tests {
+    use super::*;
+    #[test]
+    fn unselected_artboard_resize_honors_ctrl_and_alt_at_press() {
+        let mut studio = Studio::new();
+        studio.doc.artboards = vec![crate::document::Artboard::new(0, Pt::ZERO, Pt::splat(100.))];
+        studio.artboard_sel.clear();
+        let before = studio.doc.artboards.len();
+        artboard_press(&mut studio, Pt::ZERO, Pt::ZERO, false, true, true);
+        let Some(Op::ArtboardResize { options, .. }) = &studio.op else { panic!("resize expected"); };
+        assert_eq!(options.resize, crate::app::ArtworkResize::Keep);
+        assert!(options.clone);
+        assert_eq!(studio.doc.artboards.len(), before);
+    }
+}

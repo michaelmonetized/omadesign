@@ -2092,7 +2092,7 @@ fn coalesce(prev: &mut Cmd, next: &Cmd) -> bool {
     }
 }
 
-fn invert_cmd(cmd: Cmd) -> Cmd {
+pub(crate) fn invert_cmd(cmd: Cmd) -> Cmd {
     match cmd {
         Cmd::SetCanvas { before, after } => Cmd::SetCanvas { before: after, after: before },
         Cmd::SetFillOpacity {
