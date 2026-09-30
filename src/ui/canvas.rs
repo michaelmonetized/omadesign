@@ -5237,3 +5237,20 @@ mod node_tests;
 #[cfg(test)]
 #[path = "canvas_layout_tests.rs"]
 mod layout_tests;
+
+#[cfg(test)]
+mod artboard_modifier_review_tests {
+    use super::*;
+    #[test]
+    fn unselected_artboard_resize_honors_ctrl_and_alt_at_press() {
+        let mut studio = Studio::new();
+        studio.doc.artboards = vec![crate::document::Artboard::new(0, Pt::ZERO, Pt::splat(100.))];
+        studio.artboard_sel.clear();
+        let before = studio.doc.artboards.len();
+        artboard_press(&mut studio, Pt::ZERO, Pt::ZERO, false, true, true);
+        let Some(Op::ArtboardResize { options, .. }) = &studio.op else { panic!("resize expected"); };
+        assert_eq!(options.resize, crate::app::ArtworkResize::Keep);
+        assert!(options.clone);
+        assert_eq!(studio.doc.artboards.len(), before);
+    }
+}
