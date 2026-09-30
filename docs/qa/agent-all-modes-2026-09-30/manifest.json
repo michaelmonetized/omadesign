@@ -1,0 +1,55 @@
+{
+  "verified_at": "2026-09-30T20:06:03.118948+00:00",
+  "source_commit": "f371b375",
+  "build": {
+    "commit": "f371b375",
+    "binary": "/home/michael/Projects/omadesign/target/release/omadesign",
+    "installed": "/home/michael/.local/bin/omadesign-agent-all-modes",
+    "sha256": "e733fedd2fb9b9212535f0255ffec8dd170e44c10cc2cc4a6cbbebbe7dbb59a4",
+    "installed_sha256": "e733fedd2fb9b9212535f0255ffec8dd170e44c10cc2cc4a6cbbebbe7dbb59a4",
+    "qa_binary_sha256": "47e7e1e3f15cda26d21c2e082f8d1c0a8eb54be5fcb822f7825d701ae7809450",
+    "qa_pid": 396821
+  },
+  "native_acceptance": "release-native-run.json",
+  "launch": "launch.json",
+  "source_photo": {
+    "path": "/home/michael/Projects/omadesign/target/qa/agent-all-modes-20260930/disk assets/Coast photograph.png",
+    "bytes": 2785840,
+    "sha256": "b91d027993a26abef2ac3cfe825672b557abb07aee323eb485bf7f69e96f139c"
+  },
+  "source_photo_unchanged": true,
+  "installed_skill_copies": [
+    {
+      "path": "/home/michael/Projects/omadesign/.worktrees/agent-all-modes/skills/omadesign-create/SKILL.md",
+      "bytes": 5693,
+      "sha256": "2685533887420df5b0aeeafa2e757d913c847aade30334f10f1ba6baa917ff4c"
+    },
+    {
+      "path": "/home/michael/.codex/skills/omadesign-create/SKILL.md",
+      "bytes": 5693,
+      "sha256": "2685533887420df5b0aeeafa2e757d913c847aade30334f10f1ba6baa917ff4c"
+    },
+    {
+      "path": "/home/michael/.local/share/omadesign/skills/omadesign-create/SKILL.md",
+      "bytes": 5693,
+      "sha256": "2685533887420df5b0aeeafa2e757d913c847aade30334f10f1ba6baa917ff4c"
+    }
+  ],
+  "demo": {
+    "path": "/home/michael/Documents/Omadesign Agent Tools Demo.oma",
+    "bytes": 19466792,
+    "sha256": "d4a06c3252a1b1786530d7f0345e579c2172ab9173d741241f0ce3b04bc1384b"
+  },
+  "validation": {
+    "agent_tests": 42,
+    "full_library": {
+      "passed": 928,
+      "failed_baseline": 2,
+      "ignored": 7
+    },
+    "all_targets_check": "passed",
+    "targeted_rustfmt": "passed",
+    "diff_check": "passed"
+  },
+  "public_release": false
+}

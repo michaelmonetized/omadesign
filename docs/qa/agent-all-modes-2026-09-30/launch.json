@@ -1,0 +1,56 @@
+{
+  "supervisor_pid": 451284,
+  "binary": "/home/michael/.local/bin/omadesign-agent-all-modes",
+  "profile": "/home/michael/.local/share/omadesign-agent-all-modes-preview",
+  "document": "/home/michael/Documents/Omadesign Agent Tools Demo.oma",
+  "child_pid": 451285,
+  "exe": "/home/michael/.local/bin/omadesign-agent-all-modes",
+  "sha256": "e733fedd2fb9b9212535f0255ffec8dd170e44c10cc2cc4a6cbbebbe7dbb59a4",
+  "workspace": 7,
+  "address": "0xaaab72009bc0",
+  "window": {
+    "address": "0xaaab72009bc0",
+    "mapped": true,
+    "hidden": false,
+    "visible": true,
+    "acceptsInput": true,
+    "at": [
+      22,
+      81
+    ],
+    "size": [
+      3412,
+      2131
+    ],
+    "workspace": {
+      "id": 7,
+      "name": "7"
+    },
+    "floating": false,
+    "monitor": 0,
+    "class": "omadesign",
+    "title": "omadesign",
+    "initialClass": "omadesign",
+    "initialTitle": "omadesign",
+    "pid": 451285,
+    "xwayland": false,
+    "pinned": false,
+    "pinFullscreened": false,
+    "fullscreen": 0,
+    "fullscreenClient": 0,
+    "fullscreenHandler": "default",
+    "allowedOverFullscreen": true,
+    "grouped": [],
+    "tags": [
+      "default-opacity*"
+    ],
+    "swallowing": "0x0",
+    "focusHistoryID": 0,
+    "inhibitingIdle": false,
+    "xdgTag": "",
+    "xdgDescription": "",
+    "contentType": "none",
+    "tearingHint": false,
+    "stableId": "180000b8"
+  }
+}

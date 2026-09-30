@@ -1,0 +1,237 @@
+{
+  "result": {
+    "edits": 26,
+    "elapsed_seconds": 163,
+    "error": "",
+    "masked_layers": 1,
+    "objects": 5,
+    "photos": 1,
+    "raster_layers": 2,
+    "screenshots": 27,
+    "status": "Ready \u00b7 26 live edits",
+    "tracks": 2
+  },
+  "directory": "/home/michael/Projects/omadesign/target/qa/agent-all-modes-20260930/release-native",
+  "provider_session_id": "01a0f3e4-3675-7b71-bc78-3aefcba78ce3",
+  "tools": [
+    {
+      "name": "mcp.omadesign.get_document",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.list_files",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_editor_capabilities",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.read_file",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.list_fonts",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.import_file",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_photos",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_mode",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.develop_photo",
+      "status": "failed"
+    },
+    {
+      "name": "mcp.omadesign.get_canvas_snapshot",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_document",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.develop_photo",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_canvas_snapshot",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_document",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.save_document",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_mode",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.add_shape",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_mode",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.add_shape",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_image_fill",
+      "status": "failed"
+    },
+    {
+      "name": "mcp.omadesign.import_file",
+      "status": "failed"
+    },
+    {
+      "name": "mcp.omadesign.get_document",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_image_fill",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.import_file",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_mode",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_pixel_selection",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_mask",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_pixel_selection",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_mode",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.add_shape",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.add_shape",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.add_shape",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_canvas_snapshot",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_document",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.update_shape",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_mode",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.apply_motion_preset",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_keyframes",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_motion",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_motion",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_canvas_snapshot",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_document",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.set_motion",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_canvas_snapshot",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_document",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.save_document",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.save_document",
+      "status": "completed"
+    },
+    {
+      "name": "mcp.omadesign.get_motion",
+      "status": "completed"
+    }
+  ],
+  "recovered_requests": [
+    "develop_photo: guessed revision 3 after mode change returned 2; re-read then succeeded.",
+    "set_image_fill: guessed object ID 72; re-read and used actual ID.",
+    "import_file: guessed revision 6 after rejected image-fill left 5; re-read then succeeded."
+  ],
+  "artifacts": {
+    "agent-card.oma": {
+      "path": "/home/michael/Projects/omadesign/target/qa/agent-all-modes-20260930/release-native/agent-card.oma",
+      "bytes": 19466792,
+      "sha256": "d4a06c3252a1b1786530d7f0345e579c2172ab9173d741241f0ce3b04bc1384b"
+    },
+    "agent-card.svg": {
+      "path": "/home/michael/Projects/omadesign/target/qa/agent-all-modes-20260930/release-native/agent-card.svg",
+      "bytes": 9123091,
+      "sha256": "ad75cb2152ecf48ebd5eb1befab43da95d8776444d3b38cd1d71820fc3f8d99b"
+    },
+    "coast-developed.png": {
+      "path": "/home/michael/Projects/omadesign/target/qa/agent-all-modes-20260930/release-native/coast-developed.png",
+      "bytes": 3296256,
+      "sha256": "b93e69bd73c6625b2adb8dc83af7ef06e9293c01e35a69a4e989a34eb18cfdbd"
+    },
+    "native-026.png": {
+      "path": "/home/michael/Projects/omadesign/target/qa/agent-all-modes-20260930/release-native/native-026.png",
+      "bytes": 890673,
+      "sha256": "0c93829c36643d9594861583eb613a56258c1e0fe77f9192cb4feaa9417b1a12"
+    }
+  }
+}

@@ -1,0 +1,1664 @@
+[
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read live dimensions, selection, revision and up to 50 layers with 20 object summaries each. Use layer_offset and get_objects to inspect more. Call before editing; user edits can change the revision.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "layer_offset": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "name": "get_document"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Inspect native geometry and styling of up to 50 objects. Layer is an index; IDs remain stable. Use next_offset for pagination. Pixel masks are summarized, and geometry exceeding 4096 points is omitted; use a canvas snapshot to inspect it.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "layer": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "offset": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "layer"
+      ],
+      "type": "object"
+    },
+    "name": "get_objects"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Add one editable native rectangle, ellipse, path, line, frame or text object, immediately visible on the canvas. Text uses top-left x/y, optional wrap width and installed font name. Rotation is degrees. Fill/stroke are hex colors or none. Gradients are arrays of hex colors. Do not send SVG or files. Returns ID and next revision.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "layer": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "shape": {
+          "additionalProperties": false,
+          "properties": {
+            "align": {
+              "enum": [
+                "start",
+                "center",
+                "end"
+              ],
+              "type": "string"
+            },
+            "closed": {
+              "type": "boolean"
+            },
+            "fill": {
+              "type": "string"
+            },
+            "font": {
+              "type": "string"
+            },
+            "font_size": {
+              "type": "number"
+            },
+            "gradient": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 32,
+              "minItems": 2,
+              "type": "array"
+            },
+            "gradient_kind": {
+              "enum": [
+                "linear",
+                "radial",
+                "conic",
+                "shape"
+              ],
+              "type": "string"
+            },
+            "height": {
+              "type": "number"
+            },
+            "kind": {
+              "enum": [
+                "rect",
+                "ellipse",
+                "line",
+                "path",
+                "text",
+                "frame"
+              ],
+              "type": "string"
+            },
+            "leading": {
+              "type": "number"
+            },
+            "name": {
+              "type": "string"
+            },
+            "opacity": {
+              "type": "number"
+            },
+            "parent": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "points": {
+              "items": {
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "type": "array"
+              },
+              "maxItems": 4096,
+              "type": "array"
+            },
+            "radius": {
+              "type": "number"
+            },
+            "rotation": {
+              "type": "number"
+            },
+            "stroke": {
+              "type": "string"
+            },
+            "stroke_width": {
+              "type": "number"
+            },
+            "text": {
+              "type": "string"
+            },
+            "tracking": {
+              "type": "number"
+            },
+            "width": {
+              "type": "number"
+            },
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "layer",
+        "shape",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "add_shape"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Update an existing native object's position, dimensions, text, fill, gradient, stroke, rotation or opacity. Supply only changed properties. Preserves its stable ID and editability.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "changes": {
+          "additionalProperties": false,
+          "properties": {
+            "align": {
+              "enum": [
+                "start",
+                "center",
+                "end"
+              ],
+              "type": "string"
+            },
+            "closed": {
+              "type": "boolean"
+            },
+            "fill": {
+              "type": "string"
+            },
+            "font": {
+              "type": "string"
+            },
+            "font_size": {
+              "type": "number"
+            },
+            "gradient": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 32,
+              "minItems": 2,
+              "type": "array"
+            },
+            "gradient_kind": {
+              "enum": [
+                "linear",
+                "radial",
+                "conic",
+                "shape"
+              ],
+              "type": "string"
+            },
+            "height": {
+              "type": "number"
+            },
+            "kind": {
+              "enum": [
+                "rect",
+                "ellipse",
+                "line",
+                "path",
+                "text",
+                "frame"
+              ],
+              "type": "string"
+            },
+            "leading": {
+              "type": "number"
+            },
+            "name": {
+              "type": "string"
+            },
+            "opacity": {
+              "type": "number"
+            },
+            "parent": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "points": {
+              "items": {
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "type": "array"
+              },
+              "maxItems": 4096,
+              "type": "array"
+            },
+            "radius": {
+              "type": "number"
+            },
+            "rotation": {
+              "type": "number"
+            },
+            "stroke": {
+              "type": "string"
+            },
+            "stroke_width": {
+              "type": "number"
+            },
+            "text": {
+              "type": "string"
+            },
+            "tracking": {
+              "type": "number"
+            },
+            "width": {
+              "type": "number"
+            },
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "id": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "layer": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "layer",
+        "id",
+        "changes",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "update_shape"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Remove specified unlocked objects, as one undoable edit. Never clears unrelated artwork.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "ids": {
+          "items": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "type": "array"
+        },
+        "layer": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "layer",
+        "ids",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "remove_shapes"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Create an editable vector, raster or group layer. Raster dimensions default to canvas pixels. Return its index and stable ID.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "vector",
+            "raster",
+            "group"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "width": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "create_layer"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Rename any layer, set opacity/blend, show/hide or unlock/lock it. Locked ancestors must be unlocked separately.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "blend": {
+          "type": "string"
+        },
+        "layer": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "locked": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "opacity": {
+          "type": "number"
+        },
+        "parent": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "visible": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "layer",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "update_layer"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Set native editable blur and drop-shadow effects on an object. Omitted effects are removed. Radius limits protect live rendering.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "blur": {
+          "type": "number"
+        },
+        "id": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "layer": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "shadow": {
+          "properties": {
+            "blur": {
+              "type": "number"
+            },
+            "color": {
+              "type": "string"
+            },
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "color"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "layer",
+        "id",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "set_effects"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Highlight objects on the live canvas for the user.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "ids": {
+          "items": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 100,
+          "type": "array"
+        },
+        "layer": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "layer",
+        "ids"
+      ],
+      "type": "object"
+    },
+    "name": "select_objects"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List installed fonts by name. Use a returned name for editable text, never a guessed file path.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "name": "list_fonts"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "See the current rendered design as a PNG image, up to 960 pixels wide. Inspect composition after meaningful changes.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "enum": [
+            "canvas",
+            "photo"
+          ]
+        },
+        "time": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "name": "get_canvas_snapshot"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read version-matched Omadesign documentation for learning or design work.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "topic": {
+          "enum": [
+            "manual",
+            "layout",
+            "tools",
+            "formats",
+            "skill",
+            "agent"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "topic"
+      ],
+      "type": "object"
+    },
+    "name": "get_documentation"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Set document name, dimensions, DPI or transparency without replacing artwork. Optionally replace native artboards, guides or layout_tokens with validated arrays using get_document data/schema; replacing artboards does not move their artwork.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "artboards": {
+          "items": {
+            "type": "object"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "dpi": {
+          "type": "number"
+        },
+        "guides": {
+          "items": {
+            "type": "object"
+          },
+          "maxItems": 1000,
+          "type": "array"
+        },
+        "height": {
+          "type": "number"
+        },
+        "layout_tokens": {
+          "items": {
+            "type": "object"
+          },
+          "maxItems": 1000,
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "transparent": {
+          "type": "boolean"
+        },
+        "width": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "configure_canvas"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Edit advanced native vector geometry/style/text properties while preserving ID, masks and layout. Supply changed native fields from get_objects: geom (including Bezier paths/rich text), style (full native stroke/gradient), corners, text_wrap, opacity, fill_opacity, blend_interior, blend, name, visible, locked or guide. Native rotation here is radians; update_shape uses degrees. Use dedicated layout/effect/image tools for those properties. One undo step.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "changes": {
+          "type": "object"
+        },
+        "id": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "layer": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "layer",
+        "id",
+        "changes",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "patch_object"
+  },
+  {
+    "annotations": {
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
+    "description": "Browse a user-requested local directory, including assets outside the project. Absolute path or ~/. Optional filename substring and pagination. No shell needed.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "offset": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "name": "list_files"
+  },
+  {
+    "annotations": {
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
+    "description": "Inspect a local asset. Photos return a bounded image preview; UTF-8 files return text with optional 1-based line/limit. Reading a photo does not place it: use import_file.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "as": {
+          "enum": [
+            "auto",
+            "image",
+            "text"
+          ]
+        },
+        "limit": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "line": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "name": "read_file"
+  },
+  {
+    "annotations": {
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "description": "Bring a file from disk into this live session, in any workspace. Use absolute path from attachments or list_files. Canvas preserves editable OMA/SVG/PDF/PSD/ORA/XCF layers and places photos as pixel layers. Frame places inside the specified native frame. Photo loads the original into Photo's nondestructive filmstrip. Canvas/frame bounds are document coordinates; omitted dimensions preserve aspect ratio. Existing artwork is preserved. Returns selection IDs and import notes.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "destination": {
+          "enum": [
+            "canvas",
+            "frame",
+            "photo"
+          ]
+        },
+        "height": {
+          "type": "number"
+        },
+        "id": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "layer": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "width": {
+          "type": "number"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "path",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "import_file"
+  },
+  {
+    "annotations": {
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "description": "Embed a disk photo as an editable image fill on a vector object/frame. Supports cover, contain, stretch and normalized focal point. Preserves the source file and existing shape geometry.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "fit": {
+          "enum": [
+            "cover",
+            "contain",
+            "stretch"
+          ]
+        },
+        "focal_x": {
+          "type": "number"
+        },
+        "focal_y": {
+          "type": "number"
+        },
+        "id": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "layer": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "layer",
+        "id",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "set_image_fill"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Show Design, Pixel, Photo, Layout or Motion. Tools remain available in every workspace; mode only changes the visible editor.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "design",
+            "pixel",
+            "photo",
+            "layout",
+            "motion"
+          ]
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "mode",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "set_mode"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Set the display bounds, rotation in degrees, shear or opacity of an imported/pasted pixel layer. Original pixels and masks remain editable. Use layer index; its selection ID is 0, motion ID is the persistent layer ID.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "type": "number"
+        },
+        "layer": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "opacity": {
+          "type": "number"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rotation": {
+          "type": "number"
+        },
+        "shear": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "layer",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "transform_raster"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Patch native frame/child layout properties. Use get_objects and get_documentation(layout) for schema: stack, sizing, constraints, clip, breakpoints, text_size, parent, etc. Parent may be null to detach. Image bytes and component bindings are managed by their dedicated tools/actions.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "changes": {
+          "type": "object"
+        },
+        "id": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "layer": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "layer",
+        "id",
+        "changes",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "set_layout"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Replace editable effects on any layer, or on a vector object when id is supplied. Each effect has name from get_editor_capabilities.effects and optional parameters overriding its native defaults. Empty effects removes the stack. Works on raster layers.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "effects": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "parameters": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": "object"
+          },
+          "maxItems": 32,
+          "type": "array"
+        },
+        "id": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "layer": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "layer",
+        "effects",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "set_filter_stack"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Discover native effect defaults, motion properties/presets, layout example and photo adjustment schema. Use this to find available operations before claiming a capability is missing.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "name": "get_editor_capabilities"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Run a native undoable editor command on explicit targets, or current selection if targets omitted. Raster selection ID is 0. Layer actions use layer. Undo/redo history is selected by history (canvas/photo), default current mode. Targets are validated before changing selection.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "undo",
+            "redo",
+            "duplicate",
+            "delete",
+            "nudge",
+            "align_left",
+            "align_center",
+            "align_right",
+            "align_top",
+            "align_middle",
+            "align_bottom",
+            "distribute_x",
+            "distribute_y",
+            "flip_horizontal",
+            "flip_vertical",
+            "bring_to_front",
+            "send_to_back",
+            "bring_forward",
+            "send_backward",
+            "union",
+            "subtract",
+            "intersect",
+            "xor",
+            "divide",
+            "combine",
+            "release_compound",
+            "convert_to_path",
+            "expand_strokes",
+            "simplify",
+            "auto_layout",
+            "create_component",
+            "detach_instance",
+            "reset_instance",
+            "text_inside_shape",
+            "attach_text_path",
+            "release_text_path",
+            "delete_layer",
+            "duplicate_layer",
+            "layer_forward",
+            "layer_backward",
+            "trace_raster",
+            "mask_selection",
+            "clear_pixels"
+          ]
+        },
+        "dx": {
+          "type": "number"
+        },
+        "dy": {
+          "type": "number"
+        },
+        "history": {
+          "enum": [
+            "canvas",
+            "photo"
+          ]
+        },
+        "layer": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "targets": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "layer": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "layer",
+              "id"
+            ],
+            "type": "object"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "action",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "editor_action"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Create a pixel selection in source-pixel coordinates on a raster layer: rect, ellipse, polygon, wand, all, none, invert. Optional combine=add/subtract/intersect, feather radius. The selection can drive masks and painting without deleting the original photo.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "combine": {
+          "enum": [
+            "replace",
+            "add",
+            "subtract",
+            "intersect"
+          ]
+        },
+        "feather": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "height": {
+          "type": "number"
+        },
+        "kind": {
+          "enum": [
+            "rect",
+            "ellipse",
+            "polygon",
+            "wand",
+            "all",
+            "none",
+            "invert"
+          ]
+        },
+        "layer": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "points": {
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "type": "array"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tolerance": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "layer",
+        "kind",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "set_pixel_selection"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Paint, erase, smudge, clone or heal a stroke on a raster layer using source-pixel coordinates. Respects current pixel selection; one undo step. Optional mask=true paints its mask. Points are [x,y]. Source is required for clone/heal.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "type": "string"
+        },
+        "flow": {
+          "type": "number"
+        },
+        "hardness": {
+          "type": "number"
+        },
+        "layer": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "mask": {
+          "type": "boolean"
+        },
+        "opacity": {
+          "type": "number"
+        },
+        "operation": {
+          "enum": [
+            "paint",
+            "erase",
+            "smudge",
+            "clone",
+            "heal",
+            "fill"
+          ]
+        },
+        "points": {
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "type": "array"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "size": {
+          "type": "number"
+        },
+        "source": {
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "spacing": {
+          "type": "number"
+        },
+        "tolerance": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "layer",
+        "points",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "paint_stroke"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Create or edit a nondestructive layer/object mask. Operations: selection, reveal, hide, invert, remove; layer masks also support apply. id targets a vector object; omit for raster/layer mask. Use a pixel selection for a photographic cutout and retain its source pixels.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "layer": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "operation": {
+          "enum": [
+            "selection",
+            "reveal",
+            "hide",
+            "invert",
+            "remove",
+            "apply"
+          ]
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "layer",
+        "operation",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "set_mask"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Inspect duration, FPS, loop, playhead and paginated tracks with persistent target IDs.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "offset": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "name": "get_motion"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Set duration, FPS, loop and playhead. Playback can be started/stopped. Works from every workspace; use set_mode to show Motion.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "duration": {
+          "type": "number"
+        },
+        "fps": {
+          "type": "number"
+        },
+        "looped": {
+          "type": "boolean"
+        },
+        "playing": {
+          "type": "boolean"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "time": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "set_motion"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Add/update or remove keys on vector objects or raster images. id=0 selects raster layer. property uses names from get_editor_capabilities. Rotation is degrees; x/y are offsets, scale/width/height are multipliers, opacity/reveal 0\u20131. Key ease is Linear, EaseIn, EaseOut or EaseInOut. Fill keys use hex color. One undo step.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "keys": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "color": {
+                "type": "string"
+              },
+              "ease": {
+                "enum": [
+                  "Linear",
+                  "EaseIn",
+                  "EaseOut",
+                  "EaseInOut"
+                ]
+              },
+              "time": {
+                "type": "number"
+              },
+              "value": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "time"
+            ],
+            "type": "object"
+          },
+          "maxItems": 1000,
+          "minItems": 1,
+          "type": "array"
+        },
+        "layer": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "property": {
+          "type": "string"
+        },
+        "remove": {
+          "type": "boolean"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "layer",
+        "id",
+        "property",
+        "keys",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "set_keyframes"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Apply a native motion preset to explicit targets (raster id=0) or selection. Recipes remain ordinary editable keys. Preset names come from get_editor_capabilities; only Draw stroke requires a vector stroke.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "delay": {
+          "type": "number"
+        },
+        "duration": {
+          "type": "number"
+        },
+        "intensity": {
+          "type": "number"
+        },
+        "preset": {
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stagger": {
+          "type": "number"
+        },
+        "targets": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "layer": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "layer",
+              "id"
+            ],
+            "type": "object"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "type": "array"
+        },
+        "time": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "preset",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "apply_motion_preset"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Inspect Photo filmstrip, selected photo, original dimensions, source paths and nondestructive adjustments. Includes photo_revision; use it for Photo writes to detect concurrent edits.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "offset": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "name": "get_photos"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Patch nondestructive Photo adjustments, including crop/rotate, tone, color, curves, HSL, grain and vignette. Numeric ranges match native UI/schema. Does not alter the source file. Optional auto_tone/reset. Photo revision from get_photos is required.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "auto_tone": {
+          "type": "boolean"
+        },
+        "changes": {
+          "type": "object"
+        },
+        "photo": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "photo_revision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reset": {
+          "type": "boolean"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "photo",
+        "photo_revision",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "develop_photo"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Select a Photo filmstrip image for the user and snapshots.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "photo": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "photo",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "select_photo"
+  },
+  {
+    "annotations": {
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "description": "Save the live editable document or export through native codecs to an absolute path (.oma, png, jpg, svg, pdf, psd/psb, ora). format=animated_svg/lottie/dotlottie exports motion. Source=photo exports selected developed image or .omaphoto settings. Existing files require overwrite:true. Saving a copy does not replace the current tab.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "enum": [
+            "auto",
+            "animated_svg",
+            "lottie",
+            "dotlottie"
+          ]
+        },
+        "overwrite": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "photo": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "photo_revision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "revision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source": {
+          "enum": [
+            "canvas",
+            "photo"
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "name": "save_document"
+  }
+]
