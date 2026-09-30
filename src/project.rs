@@ -68,29 +68,30 @@ pub fn decode(s: &str) -> Result<Document, String> {
     }
     let mut doc = file.doc;
     for layer in &mut doc.layers {
-        if file.version < 7 {
-            layer.filters.migrate_legacy(layer.blend);
-        }
-        if let Some(px) = layer.kind.pixels_mut() {
-            *px = decompress_pixels(px)?;
-        }
-        if let Some(mask) = layer.mask.as_mut() {
-            *mask = decompress_pixels(mask)?;
-        }
+        if let Some(px) = layer.kind.pixels_mut() { *px = decompress_pixels(px)?; }
+        if let Some(mask) = layer.mask.as_mut() { *mask = decompress_pixels(mask)?; }
         if let Some(shapes) = layer.kind.shapes_mut() {
-            for s in shapes {
-                if file.version < 7 {
-                    s.filters.migrate_legacy(s.blend);
-                }
-                if file.version < 8 {
-                    if let crate::geom::Geom::Text(t)=&mut s.geom && t.wrap_width.is_some() {
-                        t.update_paragraphs(0,t.content.chars().count(),|p|p.overflow_wrap=true);
+            for shape in shapes {
+                if let Some(mask) = shape.mask.as_mut() { *mask = decompress_pixels(mask)?; }
+            }
+        }
+    }
+    normalize_decoded_document(doc, file.version)
+}
+
+/// Shared normalization after pixels have been decoded under the caller's budgets.
+pub(crate) fn normalize_decoded_document(mut doc: Document, version: u32) -> Result<Document, String> {
+    for layer in &mut doc.layers {
+        if version < 7 { layer.filters.migrate_legacy(layer.blend); }
+        if let Some(shapes) = layer.kind.shapes_mut() {
+            for shape in shapes {
+                if version < 7 { shape.filters.migrate_legacy(shape.blend); }
+                if version < 8 {
+                    if let crate::geom::Geom::Text(t) = &mut shape.geom && t.wrap_width.is_some() {
+                        t.update_paragraphs(0, t.content.chars().count(), |p| p.overflow_wrap = true);
                     }
                 }
-                crate::text::fill_contours(&mut s.geom);
-                if let Some(mask) = s.mask.as_mut() {
-                    *mask = decompress_pixels(mask)?;
-                }
+                crate::text::fill_contours(&mut shape.geom);
             }
         }
     }

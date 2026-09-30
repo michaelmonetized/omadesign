@@ -691,7 +691,7 @@ fn oma_document(bytes: &[u8]) -> Result<crate::document::Document, String> {
     if !(1..=crate::project::VERSION).contains(&version) {
         return Err("Unsupported omadesign project version.".into());
     }
-    checked_preview_document(doc)
+    crate::project::normalize_decoded_document(checked_preview_document(doc)?, version)
 }
 
 /// Shared guarded decoder for file-browser previews. Recovery snapshots retain
@@ -719,14 +719,14 @@ fn load_preview_document_with_budget(path: &Path, recovery: bool, complex: bool)
         } else if let Some(original) = &meta.original {
             crate::typography::load_for_document(original)?;
         }
-        checked_preview_document_with_budget(meta.doc, complex)
+        crate::project::normalize_decoded_document(checked_preview_document_with_budget(meta.doc, complex)?, crate::project::VERSION)
     } else {
         crate::typography::load_for_document(path)?;
         #[derive(Deserialize)]
         struct Project { version: u32, doc: crate::document::Document }
         let Project { version, doc } = serde_json::from_slice(&bytes).map_err(|e| format!("Could not read project preview: {e}"))?;
         if !(1..=crate::project::VERSION).contains(&version) { return Err("Unsupported omadesign project version.".into()); }
-        checked_preview_document_with_budget(doc, complex)
+        crate::project::normalize_decoded_document(checked_preview_document_with_budget(doc, complex)?, version)
     }
 }
 
@@ -1198,4 +1198,23 @@ mod welcome_budget_tests {
         assert!(load_full_preview_document(&path, false).is_err());
         fs::remove_dir_all(root).unwrap();
     }
+    #[test]
+    fn complex_legacy_preview_matches_normal_native_decode() {
+        let root = std::env::temp_dir().join(format!("oma-legacy-preview-{}", crate::document::next_id()));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("legacy.oma");
+        let mut doc = crate::document::Document::new("legacy", 10., 10., 96.);
+        doc.layers.extend((0..260).map(|_| crate::document::Layer::vector("layer")));
+        doc.layers[1].filters.items.push(crate::filter::Fx::Blur { std: 2. });
+        let mut value: serde_json::Value = serde_json::from_str(&crate::project::encode(&doc).unwrap()).unwrap();
+        value["version"] = serde_json::json!(6);
+        let data = serde_json::to_string(&value).unwrap();
+        fs::write(&path, &data).unwrap();
+        assert!(load_preview_document(&path, false).is_err());
+        let preview = load_full_preview_document(&path, false).unwrap();
+        let native = crate::project::decode(&data).unwrap();
+        assert_eq!(crate::project::encode(&preview).unwrap(), crate::project::encode(&native).unwrap());
+        fs::remove_dir_all(root).unwrap();
+    }
+
 }
