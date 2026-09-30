@@ -282,3 +282,19 @@ fn animated_raster_import_and_frame_reparent_keep_tracks_and_undo() {
     s.undo();
     assert_eq!(crate::project::encode(&s.doc).unwrap(), before);
 }
+
+#[test]
+fn raster_nudges_and_first_opacity_property_key_use_layer_identity_and_rest_alpha() {
+    let mut s = fixture();
+    let id = s.doc.layers[0].id;
+    s.selection = vec![(0, RASTER_ID)];
+    s.doc.layers[0].opacity = 0.3;
+    s.playhead = 1.;
+    s.key_prop(id, Prop::Opacity, 0.7);
+    assert_eq!(s.doc.motion.pose(id, 0.).opacity, Some(0.3));
+    assert_eq!(s.doc.motion.pose(id, 1.).opacity, Some(0.7));
+    s.nudge(10., -5.);
+    assert_eq!(s.doc.motion.pose(id, 1.).dx, 10.);
+    assert_eq!(s.doc.motion.pose(id, 1.).dy, -5.);
+    assert!(!s.doc.motion.has_shape(RASTER_ID));
+}

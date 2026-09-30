@@ -1452,6 +1452,12 @@ impl Studio {
 
     pub fn key_prop(&mut self, id: u64, prop: Prop, value: f32) {
         let mut after = self.doc.motion.clone();
+        if prop == Prop::Opacity && self.playhead > 0.001 && after.value(id, prop, 0.0).is_none()
+            && let Some((layer, selected)) = crate::motion::selection(&self.doc, id)
+            && let Some(target) = crate::motion::target(&self.doc, layer, selected)
+        {
+            after.set_key(id, prop, 0.0, target.opacity, Ease::EaseInOut);
+        }
         after.set_key(id, prop, self.playhead, value, Ease::EaseInOut);
         self.commit_motion(after);
     }
@@ -2098,7 +2104,9 @@ impl Studio {
             let sel = self.selection.clone();
             let t = self.playhead;
             let mut after = self.doc.motion.clone();
-            for (_, id) in sel {
+            for (layer, selected) in sel {
+                let Some(target) = crate::motion::target(&self.doc, layer, selected) else { continue; };
+                let id = target.id;
                 let pose = self.live_pose(id);
                 after.set_key(id, Prop::X, t, pose.dx + dx, Ease::EaseInOut);
                 after.set_key(id, Prop::Y, t, pose.dy + dy, Ease::EaseInOut);
