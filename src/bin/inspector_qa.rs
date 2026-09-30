@@ -896,16 +896,18 @@ impl Qa {
             }
         }
         self.labels.clear();
+        let mut candidates = Vec::new();
         let layers = ctx.memory(|m| m.layer_ids().collect::<Vec<_>>());
         ctx.graphics(|g| {
             for layer in layers {
                 if let Some(list) = g.get(layer) {
-                    for s in list.all_entries() {
-                        visit(&s.shape, s.clip_rect, &mut self.labels);
-                    }
+                    let mut labels=Vec::new();
+                    for s in list.all_entries() { visit(&s.shape, s.clip_rect, &mut labels); }
+                    candidates.extend(labels.into_iter().map(|label|(layer,label)));
                 }
             }
         });
+        self.labels = candidates.into_iter().filter(|(layer,(_,rect))|ctx.layer_id_at(rect.center())==Some(*layer)).map(|(_,label)|label).collect();
         if let Some(response) = ctx.read_response(egui::Id::new("studio-agent-toggle")) {
             self.labels.push(("Agent".into(), response.rect));
         }
