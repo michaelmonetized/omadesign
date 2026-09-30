@@ -58,3 +58,24 @@ clip is an edited product film, rather than a continuous workflow replay.
 The player loads on demand, includes native play/pause/seek controls, keeps the
 full 16:9 frame on mobile and pauses when scrolled offscreen. It never autoplays,
 including for users who request reduced motion.
+
+## 0.6.1 product film
+
+`public/media/studio/film-0.6.1.{mp4,webm,webp,vtt,json}` is the September 29
+revision of the homepage ending film: 55 seconds, 1920 × 1080, 60 fps, silent.
+It uses 50 tight feature shots, including a 16-second built-in agent chapter.
+Michael supplied the September 28 recordings and updated 0.6.1 motion export;
+new installed-app captures replace the full-size 0.6.0 marquee scenes. The final
+two seconds retain the official logo ending. No simulated UI or agent outcomes.
+
+Coverage includes welcome, cloud review, sidebar tabs, typography, asset
+thumbnails and icons, plugins, lasso pen, pixel selection, theme sync, native
+motion, performance, and editable agent results. The 4× card explicitly refers
+to average brush p95 UI speedup across three machines (4.12× rounded), and the
+74× card to the selected 1,200-object M1 Pro drag UI benchmark (73.66× rounded),
+both versus issue #158. Neither is an all-workload or displayed-FPS claim.
+
+MP4 and WebM were fully decoded and verified at 3,300 frames; shot framing was
+visually reviewed. The poster and English scene captions belong to this cut.
+The JSON receipt records scope, format verification, and asset hashes. The
+player keeps its existing on-demand, no-autoplay, offscreen-pause behavior.
