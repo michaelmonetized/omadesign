@@ -44,34 +44,40 @@ pub fn dimensions(content: &ClipboardContent) -> Option<[f32; 2]> {
             dimensions(&read_file(&paths[0]).ok()?)
         }
         ClipboardContent::Text(text) if text.starts_with("omadesign-shapes:") => {
-            let shapes: Vec<crate::document::Shape> =
-                serde_json::from_str(text.strip_prefix("omadesign-shapes:")?).ok()?;
-            extent(
-                shapes
-                    .iter()
-                    .map(|s| s.world_bbox())
-                    .reduce(|a, b| a.union(b)),
-            )
+            let shapes = crate::project::decode_clipboard_shapes(text.strip_prefix("omadesign-shapes:")?).ok()?;
+            extent(native_bounds(&shapes, &[]))
         }
         ClipboardContent::Text(text) if text.starts_with("omadesign-objects:") => {
             let doc = crate::project::decode(text.strip_prefix("omadesign-objects:")?).ok()?;
-            extent(
-                doc.layers
-                    .iter()
-                    .flat_map(|layer| {
-                        layer
-                            .kind
-                            .shapes()
-                            .unwrap_or_default()
-                            .iter()
-                            .map(|s| s.world_bbox())
-                            .chain(layer.kind.raster_bounds())
-                    })
-                    .reduce(|a, b| a.union(b)),
-            )
+            let shapes: Vec<_> = doc.layers.iter().flat_map(|l| l.kind.shapes().unwrap_or_default()).cloned().collect();
+            extent(native_bounds(&shapes, &doc.layers))
         }
         _ => None,
     }
+}
+
+/// Conservative painted bounds shared by clipboard sizing and first paste.
+pub(crate) fn native_bounds(shapes: &[crate::document::Shape], layers: &[crate::document::Layer]) -> Option<crate::geom::Bounds> {
+    use crate::{document::StrokeAlignment, geom::{Bounds, Pt}};
+    let vectors = shapes.iter().filter(|s| s.visible && !s.guide).map(|shape| {
+        let stroke = shape.style.stroke.as_ref().map_or(0., |s| s.width.max(0.) * match s.alignment {
+            StrokeAlignment::Inside => 0., StrokeAlignment::Center => 0.5, StrokeAlignment::Outside => 1.,
+        });
+        let mut bounds = shape.world_bbox().inflate(stroke + crate::filter::svg_pad(&shape.filters));
+        let mut parent = shape.layout.parent;
+        let mut seen = std::collections::HashSet::new();
+        while let Some(id) = parent {
+            if !seen.insert(id) { break; }
+            let Some(frame) = shapes.iter().find(|s| s.id == id) else { break; };
+            let corners = [bounds.min, Pt::new(bounds.max.x, bounds.min.y), bounds.max, Pt::new(bounds.min.x, bounds.max.y)];
+            bounds = corners.into_iter().map(|p| Bounds::from_pt(p.rotate_about(frame.geom.bbox().center(), frame.rotation))).reduce(|a,b| a.union(b)).unwrap();
+            bounds = bounds.inflate(crate::filter::svg_pad(&frame.filters));
+            parent = frame.layout.parent;
+        }
+        bounds
+    });
+    let rasters = layers.iter().filter(|l| l.visible).filter_map(|l| l.kind.raster_bounds().map(|b| b.inflate(crate::filter::svg_pad(&l.filters))));
+    vectors.chain(rasters).reduce(|a,b| a.union(b))
 }
 
 // Prefer original vector/file data over preview images or a browser's URL text.
@@ -941,5 +947,42 @@ mod canvas_dimensions_tests {
             None
         );
         assert_eq!(dimensions(&ClipboardContent::Svg("broken".into())), None);
+    }
+}
+
+#[cfg(test)]
+mod sizing_review_tests {
+    use super::*;
+    use crate::{app::Studio, document::{Shape, Style, Stroke}, geom::{Geom, Pt}};
+    #[test]
+    fn clipboard_sized_first_paste_fits_offset_stroked_artwork_and_undo() {
+        let shape = Shape::new(Geom::Rect { origin: Pt::new(-80., 150.), size: Pt::new(120., 80.), radius: 0. }, Style { fill: crate::document::Fill::None, stroke: Some(Stroke { width: 20., ..Default::default() }) });
+        let payload = format!("omadesign-shapes:{}", serde_json::to_string(&vec![shape]).unwrap());
+        let dims = dimensions(&ClipboardContent::Text(payload.clone())).unwrap();
+        assert_eq!(dims, [140., 100.]);
+        let mut studio = Studio::new();
+        studio.custom_w = dims[0]; studio.custom_h = dims[1];
+        studio.new_custom();
+        let before = crate::project::encode(&studio.doc).unwrap();
+        studio.paste_clipboard(Some(&payload));
+        let shapes: Vec<_> = studio.doc.layers.iter().flat_map(|l| l.kind.shapes().unwrap_or_default()).cloned().collect();
+        let bounds = native_bounds(&shapes, &[]).unwrap();
+        assert_eq!(bounds.min, Pt::ZERO);
+        assert_eq!(bounds.size(), Pt::new(140., 100.));
+        studio.undo();
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+    }
+    #[test]
+    fn huge_blank_canvas_is_rejected_before_allocation_including_artboards() {
+        let mut studio = Studio::new();
+        let owner = studio.swap_id.clone();
+        studio.custom_w = 65535.; studio.custom_h = 65535.;
+        studio.new_custom();
+        assert_eq!(studio.swap_id, owner);
+        assert!(studio.status.contains("64 million"));
+        assert!(studio.new_canvas_size_valid(65535., 1.));
+        assert!(studio.new_canvas_size_valid(8000., 8000.));
+        studio.new_doc_artboards = 2;
+        assert!(!studio.new_canvas_size_valid(8000., 8000.));
     }
 }

@@ -724,7 +724,19 @@ impl Studio {
         s
     }
 
+    pub fn new_canvas_size_valid(&self, width: f32, height: f32) -> bool {
+        let art = self.new_doc_artboards.max(1) as f64;
+        let total_width = f64::from(width) * art + 48.0 * (art - 1.0);
+        width.is_finite() && height.is_finite()
+            && (1.0..=65535.0).contains(&width) && (1.0..=65535.0).contains(&height)
+            && total_width.round() * f64::from(height).round() <= 64_000_000.0
+    }
+
     pub fn new_from_preset(&mut self, p: Preset) {
+        if !self.new_canvas_size_valid(p.w, p.h) {
+            self.status = "Canvas size exceeds 64 million pixels including all artboards".into();
+            return;
+        }
         let art = self.new_doc_artboards.max(1);
         let mut doc = Document::new_with_options(
             p.name,
