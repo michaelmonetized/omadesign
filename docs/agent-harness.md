@@ -26,40 +26,55 @@ adapter or model does not change the host's native tool contract.
 
 ## Working on the canvas
 
-Send a brief in Create mode. The agent receives instructions to build with native
-tools in visible stages and inspect its result. Agents can read context, see the
-selected objects, and use these tools:
+Send a brief in Create mode. Native tools are available in all five workspaces:
+Design, Pixel, Photo, Layout and Motion. The current workspace changes the UI,
+not the agent's capabilities. `get_document` reports mode, project directory,
+revision, vector objects, raster layer transforms, masks and persistent IDs.
+`get_editor_capabilities` reports native operation names and property defaults.
 
-| Tool | Result |
+| Area | Tools |
 | --- | --- |
-| `get_document` | Canvas dimensions, layer and object summaries, selection, revision |
-| `get_objects` | Paginated native geometry and styling |
-| `add_shape` | Editable rectangle, ellipse, line, path, frame, or text |
-| `update_shape` | Position, size, typography, color, gradient, stroke, rotation, opacity |
-| `remove_shapes` | Undoable removal of validated objects and frame descendants |
-| `create_layer`, `update_layer` | Native vector layer organization |
-| `set_effects` | Native blur and drop shadow |
-| `select_objects` | Highlight objects in the editor |
-| `list_fonts` | Installed font names for editable text |
-| `get_canvas_snapshot` | Rendered PNG for visual inspection, at most 960 pixels per side |
-| `get_documentation` | Version-matched manual, Layout guide, or tool schemas |
+| Disk assets | `list_files`, `read_file`, `import_file`, `set_image_fill` |
+| Design | `get_objects`, `add_shape`, `update_shape`, `patch_object`, `remove_shapes`, `select_objects`, `list_fonts` |
+| Layers/effects | `create_layer` (vector/raster/group), `update_layer` (including group parent), `transform_raster`, `set_effects`, `set_filter_stack` |
+| Native commands | `editor_action` (undo/redo, duplicate/delete, ordering, paths, booleans, components, text paths, tracing) |
+| Pixel | `set_pixel_selection`, `paint_stroke`, `set_mask` |
+| Photo | `get_photos`, `select_photo`, `develop_photo` |
+| Layout | `set_layout`, frame/image placement and native component actions |
+| Motion | `get_motion`, `set_motion`, `set_keyframes`, `apply_motion_preset` |
+| Workspace/output | `configure_canvas`, `set_mode`, `get_canvas_snapshot`, `save_document`, `get_documentation` |
 
-The initial native tool set focuses on vector compositions, typography, and
-frames. It does not expose arbitrary code execution or file replacement as an
-editor tool. The standalone CLI creation skill remains a separate offline path.
+User-requested disk assets can come from outside the project directory. Tool paths
+are absolute or start with `~/`. Directory results are paginated; text and image
+previews are bounded. Import decoding runs on the MCP worker, then the UI checks
+revision, session, cancellation and live-edit permission again before placement.
+The native desktop codecs preserve supported editable geometry/layers and return
+conversion notes. A failed import does not change the canvas. Frame placement and
+image fills retain native Layout structure. Photo import retains the original
+and nondestructive adjustments. Source assets are not overwritten by placement.
 
-Writes require the exact current canvas revision. A stale request returns a
-recoverable error asking the agent to inspect the changed canvas. Locked or hidden
-objects, guides, and locked parents cannot be edited. Every validated mutation
-uses the editor's existing command history, dirty tracking, and renderer. At most
-one queued tool call is processed per UI frame, so successive edits can paint
-between calls. Tools reject edits during an active manual gesture.
+Attachments are references until `import_file` or `set_image_fill` places them.
+The harness permits file inspection/preparation through available provider tools;
+it does not prohibit disk assets or require a vector approximation of a photo.
+Pixel selections and masks support photographic cutouts while preserving pixels.
+Raster transforms, compatible motion presets and keys use persistent layer IDs;
+selection references use `{layer, id: 0}`. Draw stroke requires a vector outline.
 
-Learn sessions are read-only. Create sessions also become read-only when **Allow
-live canvas edits** is disabled. ACP permission requests are displayed with the
-agent's concrete options; Omadesign does not automatically approve unrelated
-terminal or filesystem requests. The ACP client advertises no terminal or file
-read/write delegation capabilities.
+Writes require the exact current canvas revision. Photo adjustment writes also
+require `photo_revision`. A stale request asks the agent to inspect the changed
+state. Hidden/locked artwork is protected; explicit layer metadata tools can
+show/unlock a layer when the user's request calls for it. Every artwork edit uses
+native command history, dirty tracking and rendering. Tools reject writes during
+manual gestures. Snapshot supports Photo and explicit motion times.
+
+Learn sessions and Create sessions with **Allow live canvas edits** disabled
+remain read-only. ACP permission requests still show the agent's concrete options.
+The ACP client delegates `fs/read_text_file` and `fs/write_text_file` during the
+matching active session, with 1-based line ranges and bounded UTF-8 content.
+Writes also require the live-edit gate. ACP terminal delegation is not advertised;
+providers may use their own terminal tools. Native import never needs a terminal.
+Local output is explicit through `save_document`, with an overwrite flag for
+existing paths and native codec warnings for unsupported export features.
 
 ## Cancellation and recovery
 
@@ -128,9 +143,9 @@ Provider delivery follows the agent's advertised ACP `promptCapabilities`:
 
 The harness instruction remains the first text block. Inline references remain in
 the brief and each attachment includes a text line resolving its reference. The
-chip tooltip records its delivery method. A provider must independently have file
-access to inspect a path fallback; the host does not claim to have delivered visual
-content to a provider that lacks image support.
+chip tooltip records its delivery method. A provider can inspect path fallbacks with `read_file` or ACP text-file
+delegation and place them with `import_file`. The host does not claim to have
+delivered visual content to a provider that lacks image support.
 
 New clipboard data lives in `.omadesign/agent-attachments/<thread-id>/` under the
 conversation's project folder. Copied existing files retain their absolute paths;

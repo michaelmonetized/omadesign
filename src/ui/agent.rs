@@ -21,7 +21,15 @@ fn tool_title(title: &str) -> String {
         Some("add_shape") => "Adding to the design",
         Some("update_shape") => "Refining an object",
         Some("create_layer" | "update_layer") => "Organizing layers",
-        Some("set_effects") => "Styling an object",
+        Some("set_effects"|"set_filter_stack") => "Styling the artwork",
+        Some("list_files"|"read_file") => "Inspecting disk assets",
+        Some("import_file"|"set_image_fill") => "Bringing in an asset",
+        Some("get_photos"|"develop_photo"|"select_photo") => "Working on the photograph",
+        Some("set_pixel_selection"|"paint_stroke"|"set_mask") => "Editing pixels and masks",
+        Some("get_motion"|"set_motion"|"set_keyframes"|"apply_motion_preset") => "Working on motion",
+        Some("set_layout") => "Refining the layout",
+        Some("save_document") => "Saving the result",
+        Some("get_editor_capabilities") => "Checking editor capabilities",
         Some("remove_shapes") => "Removing objects",
         Some("get_documentation") => "Reading the guide",
         _ if title == "Guardian Review" => "Checking the change",
@@ -297,7 +305,7 @@ fn body(ui: &mut egui::Ui, studio: &mut Studio, agent: &mut Workspace, height: f
                             _=>{ui.label(RichText::new(&entry.text).small().color(super::theme::fg_weak()));}
                         }
                     });}
-                }else{ui.add_space(12.0);ui.label("Describe a design. Watch it take shape here.");ui.small("Native shapes, editable typography, gradients and layers. Every canvas edit can be undone.");}
+                }else{ui.add_space(12.0);ui.label("Describe a design. Watch it take shape here.");ui.small("Bring in disk photos and files. Create and edit in Design, Pixel, Photo, Layout and Motion.");}
             });
 }
 

@@ -1628,8 +1628,25 @@ impl Document {
     }
 }
 
+/// Undoable canvas settings, shared by inspector/automation consumers.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CanvasSettings {
+    pub name: String,
+    pub width: f32,
+    pub height: f32,
+    pub dpi: f32,
+    pub transparent: bool,
+}
+impl CanvasSettings {
+    pub fn read(doc: &Document) -> Self {
+        Self { name: doc.name.clone(), width: doc.width, height: doc.height,
+            dpi: doc.dpi, transparent: doc.transparent }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum Cmd {
+    SetCanvas { before: CanvasSettings, after: CanvasSettings },
     SetFillOpacity {
         layer: usize,
         id: Option<u64>,
@@ -2077,6 +2094,7 @@ fn coalesce(prev: &mut Cmd, next: &Cmd) -> bool {
 
 fn invert_cmd(cmd: Cmd) -> Cmd {
     match cmd {
+        Cmd::SetCanvas { before, after } => Cmd::SetCanvas { before: after, after: before },
         Cmd::SetFillOpacity {
             layer,
             id,
@@ -2400,6 +2418,13 @@ fn invert_cmd(cmd: Cmd) -> Cmd {
 
 pub fn apply(doc: &mut Document, cmd: &Cmd) {
     match cmd {
+        Cmd::SetCanvas { after, .. } => {
+            doc.name = after.name.clone();
+            doc.width = after.width;
+            doc.height = after.height;
+            doc.dpi = after.dpi;
+            doc.transparent = after.transparent;
+        },
         Cmd::SetFillOpacity {
             layer, id, after, ..
         } => {

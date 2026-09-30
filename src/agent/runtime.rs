@@ -73,6 +73,7 @@ impl Connection {
         let (send, events) = mpsc::channel();
         let (commands, receive) = mpsc::channel();
         let accepting = bridge.accepting.clone();
+        let writable = bridge.writable.clone();
         let worker = std::thread::spawn(move || {
             let result = run(
                 profile,
@@ -83,6 +84,7 @@ impl Connection {
                 &send,
                 &ctx,
                 accepting.clone(),
+                writable,
             );
             accepting.store(false, Ordering::Release);
             if let Err(e) = result {
@@ -166,6 +168,7 @@ fn run(
     events: &Sender<Event>,
     ctx: &eframe::egui::Context,
     accepting: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    writable: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) -> Result<(), String> {
     let child = Process::new(&profile.command)
         .args(&profile.args)
@@ -221,7 +224,7 @@ fn run(
         &mut pending,
         &mut next,
         "initialize",
-        json!({"protocolVersion":1,"clientInfo":{"name":"omadesign","title":"Omadesign","version":env!("CARGO_PKG_VERSION")},"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false}}),
+        json!({"protocolVersion":1,"clientInfo":{"name":"omadesign","title":"Omadesign","version":env!("CARGO_PKG_VERSION")},"clientCapabilities":{"fs":{"readTextFile":true,"writeTextFile":true},"terminal":false}}),
         Pending::Initialize,
     )?;
     let mut session: Option<String> = None;
@@ -370,6 +373,25 @@ fn run(
                         let _ = events.send(Event::Update(message["params"]["update"].clone()));
                     }
                 }
+                "fs/read_text_file" | "fs/write_text_file" => {
+                    if let Some(id) = message.get("id") {
+                        let params = &message["params"];
+                        let result = filesystem_request(
+                            method,
+                            params,
+                            session.as_deref(),
+                            accepting.load(Ordering::Acquire) && cancelling.is_none(),
+                            writable.load(Ordering::Acquire),
+                        );
+                        let reply = match result {
+                            Ok(result) => json!({"jsonrpc":"2.0","id":id,"result":result}),
+                            Err(error) => {
+                                json!({"jsonrpc":"2.0","id":id,"error":{"code":-32000,"message":error}})
+                            }
+                        };
+                        bridge::write_message(&mut input, &reply)?;
+                    }
+                }
                 "session/request_permission" => {
                     if let Some(id) = message.get("id") {
                         if cancelling.is_some() || !accepting.load(Ordering::Acquire) {
@@ -499,5 +521,42 @@ fn run(
             }
         }
         ctx.request_repaint();
+    }
+}
+
+/// ACP file delegation follows the same active-turn/read-only gate as MCP.
+/// Text files are assets/context; live document edits use the native tool host.
+pub(crate) fn filesystem_request(
+    method: &str,
+    args: &Value,
+    session: Option<&str>,
+    active: bool,
+    writable: bool,
+) -> Result<Value, String> {
+    if !active || session.is_none() || args["sessionId"].as_str() != session {
+        return Err("No matching active agent turn".into());
+    }
+    let path = super::tools::files::path(args)?;
+    match method {
+        "fs/read_text_file" => Ok(json!({"content":super::tools::files::read_text(&path,args)?})),
+        "fs/write_text_file" => {
+            if !writable {
+                return Err(
+                    "This session is read-only. Enable live edits in Create to write files.".into(),
+                );
+            }
+            let content = args["content"]
+                .as_str()
+                .ok_or("content must be UTF-8 text")?;
+            if content.len() > 4 * 1024 * 1024 {
+                return Err("Text write exceeds 4 MiB".into());
+            }
+            if path.exists() {
+                super::tools::files::regular(&path, 8 * 1024 * 1024)?;
+            }
+            crate::formats::write_atomic(&path, content.as_bytes())?;
+            Ok(json!({}))
+        }
+        _ => Err("Unknown filesystem method".into()),
     }
 }
