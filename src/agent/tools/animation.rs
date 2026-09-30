@@ -159,6 +159,12 @@ pub fn execute(studio: &mut Studio, name: &str, args: &Value) -> Result<Value, S
             let time = number(args, "time", studio.playhead)?;
             let after =
                 crate::motion_presets::apply(&studio.doc.motion, preset, &targets, time, options)?;
+            if !(0.0..=3600.0).contains(&time)
+                || !(0.01..=3600.0).contains(&after.duration)
+                || after.tracks.iter().flat_map(|track| &track.keys).any(|key| !(0.0..=3600.0).contains(&key.t))
+            {
+                return Err("Preset and all staggered keys must fit within 0–3600 seconds".into());
+            }
             studio.commit(Cmd::Batch(vec![Cmd::SetMotion {
                 before: studio.doc.motion.clone(),
                 after,
@@ -171,4 +177,29 @@ pub fn execute(studio: &mut Studio, name: &str, args: &Value) -> Result<Value, S
     Ok(
         json!({"revision":studio.canvas_gen,"duration":studio.doc.motion.duration,"time":studio.playhead}),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn preset_time_limit_is_atomic_and_accepts_boundary() {
+        let mut studio = Studio::new();
+        studio.doc.layers.clear();
+        let mut layer = crate::document::Layer::vector("Target");
+        let shape = crate::layout::make_frame(crate::geom::Pt::ZERO, crate::geom::Pt::splat(10.));
+        let id = shape.id;
+        layer.kind.shapes_mut().unwrap().push(shape);
+        studio.doc.layers.push(layer);
+        let before = crate::project::encode(&studio.doc).unwrap();
+        let revision = studio.canvas_gen;
+        for time in [-1., 3599.5, 100000.] {
+            let args = json!({"preset":"Fade in","targets":[{"layer":0,"id":id}],"time":time,"duration":1.0});
+            assert!(execute(&mut studio, "apply_motion_preset", &args).is_err());
+            assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+            assert_eq!(studio.canvas_gen, revision);
+        }
+        execute(&mut studio, "apply_motion_preset", &json!({"preset":"Fade in","targets":[{"layer":0,"id":id}],"time":3599.,"duration":1.0})).unwrap();
+        assert_eq!(studio.doc.motion.duration, 3600.);
+    }
 }
