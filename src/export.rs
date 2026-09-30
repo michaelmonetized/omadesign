@@ -1,4 +1,5 @@
 //! Still-image export pipeline, shared by the dialog and real-model QA.
+pub mod target;
 use crate::{document::Document, ml::Progress, photo::PhotoImage, upscale};
 use image::{DynamicImage, RgbaImage};
 use std::{io::Write, path::Path};
@@ -22,7 +23,7 @@ impl Source {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Format {
     Png,
     Jpeg,
@@ -241,7 +242,11 @@ pub fn save(
     Ok(notes)
 }
 
-fn write_atomic(path: &Path, bytes: &[u8], progress: &dyn Progress) -> Result<(), String> {
+pub(crate) fn write_atomic(
+    path: &Path,
+    bytes: &[u8],
+    progress: &dyn Progress,
+) -> Result<(), String> {
     progress.check()?;
     let parent = path
         .parent()

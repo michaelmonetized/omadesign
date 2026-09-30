@@ -234,6 +234,24 @@ pub(crate) fn render_export(doc: &Document, scale: u32) -> Result<Pixmap, String
     Ok(pm)
 }
 
+/// Bounded still preview using exactly the still export's plates and scene.
+pub(crate) fn render_export_preview(doc: &Document, max_edge: u32) -> Result<Pixmap, String> {
+    let s = (max_edge.max(1) as f32 / doc.width.max(doc.height).max(1.)).min(1.);
+    let w = (doc.width * s).round().max(1.) as u32;
+    let h = (doc.height * s).round().max(1.) as u32;
+    let mut pm = Pixmap::new(w, h).ok_or("Could not allocate export preview")?;
+    draw_export_plates(&mut pm, doc, s);
+    groups::draw(
+        &mut pm,
+        doc,
+        Transform::from_scale(s, s),
+        &Draft::none(),
+        None,
+        None,
+    );
+    Ok(pm)
+}
+
 /// Export one frame at a motion time.
 ///
 /// Same plates and `groups::draw` as still export, with the pose evaluated at `time`.

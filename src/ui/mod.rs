@@ -232,7 +232,7 @@ pub fn scene_ready(ctx: &eframe::egui::Context, studio: &Studio) -> bool {
         && library::ready(ctx, studio)
         && raster::ready(ctx)
         && background_removal::ready(ctx)
-        && !export_dialog::busy(ctx)
+        && export_dialog::ready(ctx)
         && pixel_selection::ready(ctx)
         && (studio.persona != Persona::Photo || photo_detail::ready(ctx))
         && (!(studio.show_templates
