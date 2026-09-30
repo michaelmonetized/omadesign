@@ -1810,7 +1810,7 @@ impl Studio {
         let mut commands = Vec::new();
         let mut new_layers = 0;
         let mut ids = self.selection.clone();
-        let mut groups: Vec<_> = self.selected_layer.filter(|_| self.selection.is_empty()).into_iter().collect();
+        let mut groups: Vec<_> = self.selected_layer.filter(|_| self.selection.is_empty()).and_then(|id| self.doc.layers.iter().position(|l| l.id == id)).into_iter().collect();
         for &hit in &self.selection {
             if self.individual_object == Some(hit) {
                 continue;
