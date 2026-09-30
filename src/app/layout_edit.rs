@@ -341,6 +341,7 @@ impl Studio {
             });
 
             let mut after = self.doc.layout_snapshot();
+            after.motion = self.doc.motion.clone();
             let mut removed_rasters = Vec::new();
             let mut selection = Vec::new();
             for (li, id) in roots {
@@ -393,6 +394,11 @@ impl Studio {
                     shape.blend = layer.blend;
                     shape.filters = layer.filters.clone();
                     shape.layout.image = Some(fill);
+                    for track in &mut after.motion.tracks {
+                        if track.shape == layer.id {
+                            track.shape = shape.id;
+                        }
+                    }
                     removed_rasters.push(li);
                     vec![shape]
                 } else {
@@ -478,6 +484,12 @@ impl Studio {
                     })
                 })
                 .collect();
+            if after.motion != self.doc.motion {
+                commands.push(Cmd::SetMotion {
+                    before: self.doc.motion.clone(),
+                    after: after.motion,
+                });
+            }
             removed_rasters.sort_unstable();
             removed_rasters.dedup();
             for &index in removed_rasters.iter().rev() {

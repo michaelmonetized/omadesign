@@ -295,7 +295,7 @@ impl Studio {
         }
         let mut after = self.doc.motion.clone();
         for mut track in motion.tracks {
-            let Some(id) = ids.get(&track.shape) else {
+            let Some(id) = ids.get(&track.shape).or_else(|| layer_ids.get(&track.shape)) else {
                 continue;
             };
             track.shape = *id;

@@ -1410,6 +1410,10 @@ impl Studio {
             after.set_key(id, Prop::Scale, t, pose.scale, ease);
             after.set_key(id, Prop::Width, t, pose.width_scale, ease);
             after.set_key(id, Prop::Height, t, pose.height_scale, ease);
+            // Opacity is absolute; seed the designed alpha, not the generic identity.
+            if t > 0.001 && after.value(id, Prop::Opacity, 0.0).is_none() {
+                after.set_key(id, Prop::Opacity, 0.0, target.opacity, ease);
+            }
             after.set_key(
                 id,
                 Prop::Opacity,

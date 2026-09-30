@@ -218,3 +218,67 @@ fn raster_motion_duplicate_and_delete_preserve_undoable_tracks() {
     s.undo();
     assert!(s.doc.motion.has_shape(copy));
 }
+
+#[test]
+fn keying_translucent_raster_and_vector_later_preserves_rest_opacity() {
+    let mut s = fixture();
+    s.doc.layers[0].opacity = 0.3;
+    let mut layer = Layer::vector("Vector");
+    let mut shape = crate::layout::make_frame(Pt::ZERO, Pt::splat(20.0));
+    shape.opacity = 0.4;
+    let vector = shape.id;
+    layer.kind.shapes_mut().unwrap().push(shape);
+    s.doc.layers.push(layer);
+    s.selection = vec![(0, RASTER_ID), (2, vector)];
+    s.playhead = 1.0;
+    let before = s.doc.motion.clone();
+    s.key_selection(Ease::Linear);
+    for t in [0.0, 0.5, 1.0] {
+        assert_eq!(s.doc.motion.pose(s.doc.layers[0].id, t).opacity, Some(0.3));
+        assert_eq!(s.doc.motion.pose(vector, t).opacity, Some(0.4));
+    }
+    s.undo();
+    assert_eq!(s.doc.motion, before);
+}
+
+#[test]
+fn animated_raster_import_and_frame_reparent_keep_tracks_and_undo() {
+    let mut source = fixture();
+    source.doc.layers.truncate(1);
+    source.doc.layers[0].opacity = 0.3;
+    let original = source.doc.layers[0].id;
+    source.doc.motion.set_key(original, Prop::X, 1.0, 40.0, Ease::Linear);
+    source.doc.motion.set_key(original, Prop::Opacity, 0.0, 0.3, Ease::Linear);
+    let mut s = fixture();
+    s.doc.layers.clear();
+    let mut layer = Layer::vector("Destination");
+    let frame = crate::layout::make_frame(Pt::ZERO, Pt::new(240.0, 160.0));
+    let frame_id = frame.id;
+    layer.kind.shapes_mut().unwrap().push(frame);
+    s.doc.layers.push(layer);
+    s.selection.clear();
+    let before = crate::project::encode(&s.doc).unwrap();
+    let full = Bounds::from_min_size(Pt::ZERO, source.doc.size());
+    s.place_imported_at(crate::import::Imported::Document(source.doc.clone()), Pt::ZERO, Some((full, full))).unwrap();
+    let imported_id = s.doc.layers[1].id;
+    assert_eq!(s.doc.motion.pose(imported_id, 1.0).dx, 40.0);
+    let imported = crate::project::encode(&s.doc).unwrap();
+    s.selection = vec![(1, RASTER_ID)];
+    s.reparent_layout_selection(Some(frame_id));
+    let (_, moved) = s.selection[0];
+    assert_ne!(moved, RASTER_ID);
+    assert!(!s.doc.motion.has_shape(imported_id));
+    assert_eq!(s.doc.motion.pose(moved, 1.0).dx, 40.0);
+    s.undo();
+    assert_eq!(crate::project::encode(&s.doc).unwrap(), imported);
+    s.undo();
+    assert_eq!(crate::project::encode(&s.doc).unwrap(), before);
+    s.place_imported_in_frame(crate::import::Imported::Document(source.doc), Pt::new(120.0, 80.0), (0, frame_id), Some(full)).unwrap();
+    let track = s.doc.motion.tracks.iter().find(|t| t.prop == Prop::X).unwrap();
+    assert_eq!(s.doc.motion.pose(track.shape, 1.0).dx, 40.0);
+    let wrapper = s.doc.find_shape(0, track.shape).unwrap();
+    assert_eq!(wrapper.opacity, 0.3);
+    assert_eq!(wrapper.geom.bbox().size(), Pt::splat(20.0));
+    s.undo();
+    assert_eq!(crate::project::encode(&s.doc).unwrap(), before);
+}

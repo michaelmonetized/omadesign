@@ -1442,8 +1442,9 @@ fn raster_transform(ui: &mut Ui, studio: &mut Studio, li: usize) {
     let motion = studio.is_motion();
     let mut x = if motion { shown.min.x } else { origin.x };
     let mut y = if motion { shown.min.y } else { origin.y };
-    let mut w = if motion { shown.width() } else { size.x };
-    let mut h = if motion { shown.height() } else { size.y };
+    let local_size = crate::geom::Pt::new(size.x * pose.scale * pose.width_scale, size.y * pose.scale * pose.height_scale);
+    let mut w = if motion { local_size.x } else { size.x };
+    let mut h = if motion { local_size.y } else { size.y };
     let mut deg = (rot + pose.rotation).to_degrees();
     let mut changed = bounds_fields(ui, &mut x, &mut y, &mut w, &mut h, 1.0);
     changed |= number_field(ui, "Rotation", &mut deg, -180.0..=180.0, "°");
@@ -1455,12 +1456,12 @@ fn raster_transform(ui: &mut Ui, studio: &mut Studio, li: usize) {
                 (crate::motion::Prop::Y, pose.dy + y - shown.min.y, pose.dy),
                 (
                     crate::motion::Prop::Width,
-                    pose.width_scale * w / shown.width().max(1.0),
+                    pose.width_scale * w / local_size.x.max(1.0),
                     pose.width_scale,
                 ),
                 (
                     crate::motion::Prop::Height,
-                    pose.height_scale * h / shown.height().max(1.0),
+                    pose.height_scale * h / local_size.y.max(1.0),
                     pose.height_scale,
                 ),
                 (
