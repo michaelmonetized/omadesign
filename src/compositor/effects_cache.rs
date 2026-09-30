@@ -3,10 +3,10 @@
 use super::*;
 use std::{cell::RefCell, sync::Arc};
 
-// Cloud.oma needs more than 64 MiB of native filtered objects. Retain that
+// Cloud.oma uses 107 MiB per native plane set (214 MiB during fades). Retain that
 // working set, including prepared content used during fades, within a fixed
-// 192 MiB cap; cold scenes still compete through frequency admission.
-const MAX_BYTES: usize = 192 * 1024 * 1024;
+// 256 MiB cap; cold scenes still compete through frequency admission.
+const MAX_BYTES: usize = 256 * 1024 * 1024;
 const MAX_ENTRIES: usize = 256;
 
 #[derive(PartialEq)]

@@ -12,6 +12,63 @@ fn main() {
         scale: (1200. / doc.width).min(750. / doc.height),
         offset: Pt::new(24., 24.),
     };
+    if args.get(3).is_some_and(|arg| arg == "layers") {
+        for (index, layer) in doc.layers.iter().enumerate() {
+            eprintln!(
+                "layer {} {:?} opacity={} group={} pass={} filters={:?}",
+                index,
+                layer.blend,
+                layer.opacity,
+                layer.is_group,
+                layer.pass_through,
+                layer.filters
+            );
+            if let Some(shapes) = layer.kind.shapes() {
+                for s in shapes {
+                    eprintln!(
+                        "  {} {:?} {} alpha={} blend={:?} fx={:?}",
+                        s.name,
+                        s.world_bbox(),
+                        s.id,
+                        s.opacity,
+                        s.blend,
+                        s.filters
+                    );
+                }
+            }
+            let mut isolated = doc.clone();
+            isolated.layers = doc
+                .layers
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| *i == index || doc.layer_ancestors(*i).contains(&index))
+                .map(|(_, l)| l.clone())
+                .collect();
+            if let Some(root) = isolated.layers.iter_mut().find(|l| l.id == layer.id) {
+                root.parent = None;
+            }
+            for cycle in 0..2 {
+                let started = Instant::now();
+                std::hint::black_box(compositor::render_view_posed(
+                    &isolated,
+                    view,
+                    1248,
+                    798,
+                    Draft::none(),
+                    Some(1.5),
+                    None,
+                ));
+                if cycle == 1 {
+                    eprintln!(
+                        "{} {} {:.3}ms",
+                        index,
+                        layer.name,
+                        started.elapsed().as_secs_f64() * 1000.
+                    );
+                }
+            }
+        }
+    }
     let mut rows = vec![];
     for cycle in 0..2 {
         for frame in 0..12 {

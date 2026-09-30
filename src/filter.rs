@@ -1579,4 +1579,4 @@ mod tests {
     }
 }
 
-pub(crate) use appearance::composite_prepared;
+pub(crate) use appearance::composite_cached;

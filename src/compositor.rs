@@ -1069,8 +1069,8 @@ fn draw_shape_masked(
             Some(temp)
         });
         if let Some(temp) = prepared {
-            crate::filter::composite_prepared(
-                pm, (*temp).clone(), &shape.filters, xf, blend,
+            crate::filter::composite_cached(
+                pm, temp, &shape.filters, xf, blend,
                 opacity * alpha, shape.fill_opacity, shape.blend_interior, mask,
             );
         }
