@@ -1,0 +1,23 @@
+{
+  "checks": [
+    "raster key uses layer ID",
+    "raster drag writes keys",
+    "raster pop preset",
+    "raster preset undo",
+    "raster pop preset",
+    "raster independent preset",
+    "raster playback",
+    "save reopen",
+    "raster native export"
+  ],
+  "fps": 10,
+  "frames": 240,
+  "input": "actual egui pointer and keyboard events",
+  "issue": "raster-motion",
+  "renderer": "native WGPU",
+  "size": [
+    1600,
+    1000
+  ],
+  "wall_seconds": 335.120869347
+}

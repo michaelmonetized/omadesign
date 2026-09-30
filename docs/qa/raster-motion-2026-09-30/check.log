@@ -1,0 +1,8 @@
+    Blocking waiting for file lock on build directory
+    Checking winit v0.30.13 (/home/michael/Projects/omadesign/.worktrees/raster-motion/vendor/winit)
+    Checking accesskit_winit v0.32.2
+    Checking egui-wgpu v0.36.1
+    Checking egui-winit v0.36.1 (/home/michael/Projects/omadesign/.worktrees/raster-motion/vendor/egui-winit)
+    Checking eframe v0.36.1 (/home/michael/Projects/omadesign/.worktrees/raster-motion/vendor/eframe)
+    Checking omadesign v0.6.1 (/home/michael/Projects/omadesign/.worktrees/raster-motion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 10s

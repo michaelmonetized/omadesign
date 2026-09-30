@@ -1,0 +1,68 @@
+{
+  "checked_at": "2026-09-30T19:01:12.054496+00:00",
+  "architecture": "aarch64",
+  "application_source_commit": "7324d2bf",
+  "qa_harness_commit": "a6d9ef8c",
+  "baseline_commit": "b54f80d0",
+  "artifacts": {
+    "/home/michael/.local/bin/omadesign-raster-motion": "f9d1e83287a93507d6edd4d7f38b5f70bb6f1c473e7b11f4636cafc83084aa32",
+    "/home/michael/Projects/omadesign/target/release/omadesign": "f9d1e83287a93507d6edd4d7f38b5f70bb6f1c473e7b11f4636cafc83084aa32",
+    "/home/michael/Projects/omadesign/target/debug/inspector_qa": "49f4df2391f3fd1481f6e1bf15f30651ee27593ed23d23bb488a284b167e92d1"
+  },
+  "running": {
+    "pid": 3833957,
+    "address": "0xaaab71d7bd10",
+    "title": "omadesign",
+    "workspace": {
+      "id": 6,
+      "name": "6"
+    },
+    "size": [
+      3412,
+      2131
+    ],
+    "at": [
+      22,
+      81
+    ]
+  },
+  "running_executable": "/home/michael/.local/bin/omadesign-raster-motion",
+  "running_sha256": "f9d1e83287a93507d6edd4d7f38b5f70bb6f1c473e7b11f4636cafc83084aa32",
+  "native_checks": {
+    "checks": [
+      "raster key uses layer ID",
+      "raster drag writes keys",
+      "raster pop preset",
+      "raster preset undo",
+      "raster pop preset",
+      "raster independent preset",
+      "raster playback",
+      "save reopen",
+      "raster native export"
+    ],
+    "fps": 10,
+    "frames": 240,
+    "input": "actual egui pointer and keyboard events",
+    "issue": "raster-motion",
+    "renderer": "native WGPU",
+    "size": [
+      1600,
+      1000
+    ],
+    "wall_seconds": 335.120869347
+  },
+  "regressions": {
+    "passed": 918,
+    "failed": 2,
+    "ignored": 7,
+    "failures_also_reproduced_on_unmodified_baseline": true
+  },
+  "motion_tests_passed": 53,
+  "video_decoded_without_errors": true,
+  "evidence_sha256": {
+    "launched.png": "6545e9398965fd59a6f396768d0a46b172e011cef2a8f51f67804203acfa0442",
+    "native/issue-raster-motion.mp4": "26ca3e9b6a5d61727b1e8b249124a8c909de67f90445ef30343cc887f1f53b03",
+    "native/result.oma": "eaf130e6d265f38223261a1b647ebc2dfa3a8030cffb009fb1bb0634b6ff5e31",
+    "native/animated.svg": "cf3eb60a90ae543fdf6808d922555669fd07955c7bf591f0a7c2e8e4caf11373"
+  }
+}

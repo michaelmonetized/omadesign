@@ -1,0 +1,20 @@
+{
+  "pid": 3833957,
+  "address": "0xaaab71d7bd10",
+  "title": "omadesign",
+  "workspace": {
+    "id": 6,
+    "name": "6"
+  },
+  "size": [
+    1684,
+    2131
+  ],
+  "at": [
+    1750,
+    81
+  ],
+  "executable": "/home/michael/.local/bin/omadesign-raster-motion",
+  "sha256": "f9d1e83287a93507d6edd4d7f38b5f70bb6f1c473e7b11f4636cafc83084aa32",
+  "original_pid_still_running": true
+}
