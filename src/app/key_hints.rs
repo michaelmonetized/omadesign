@@ -322,7 +322,9 @@ impl Studio {
                 }
                 Some(Op::ArtboardResize { .. }) => {
                     context = "Resize artboard";
-                    add("Drag", "Resize with artwork", false);
+                    add("Drag", "Resize artboard", false);
+                    add("Ctrl at start", "Board only", command);
+                    add("Alt at start", "Toggle artwork clone", mods.alt);
                     snapping = true;
                 }
                 Some(Op::ArtboardRotate { .. }) => {
