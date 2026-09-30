@@ -86,10 +86,12 @@ mod tests {
         let ctx = egui::Context::default();
         let mut studio = Studio::new();
         open(&ctx, &studio, Pt::ZERO);
-        let _ = ctx.run_ui(Default::default(), |ui| show(ui.ctx(), &mut studio));
+        let mut output = ctx.run_ui(Default::default(), |ui| show(ui.ctx(), &mut studio));
+        output.textures_delta.clear();
         assert!(is_open(&ctx));
         let input = egui::RawInput { events: vec![egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }], ..Default::default() };
-        let _ = ctx.run_ui(input, |ui| show(ui.ctx(), &mut studio));
+        let mut output = ctx.run_ui(input, |ui| show(ui.ctx(), &mut studio));
+        output.textures_delta.clear();
         assert!(!is_open(&ctx));
     }
 }
