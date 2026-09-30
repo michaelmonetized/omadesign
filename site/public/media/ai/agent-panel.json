@@ -1,0 +1,24 @@
+{
+  "id": "agent-panel",
+  "source": "/home/michael/Videos/omadesign/promo-2026-09-29/pickups/marquee-agent-061.mp4",
+  "excerpt": {
+    "start": 55,
+    "duration": 32
+  },
+  "width": 1600,
+  "height": 900,
+  "fps": 30,
+  "mp4": {
+    "bytes": 684481,
+    "sha256": "14c30da7ae70e848632d675d5816ec64ddcf8465aa238839f73e681acbd0d873"
+  },
+  "webm": {
+    "bytes": 990765,
+    "sha256": "e73c1e4c79f01ad8dea3d7d3b79e2ffd6b3427c7fca8b4be27ce7076970be4a1"
+  },
+  "poster": {
+    "bytes": 92144,
+    "sha256": "93389a7f05b6355b1e8cf17c14344277afb5a0903b21bd9108fb9713e65fa3c9"
+  },
+  "note": "Native Agent panel recording from 0.6.1 promo pickups; excerpt covers live tool activity on canvas. No simulated UI."
+}

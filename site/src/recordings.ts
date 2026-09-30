@@ -52,13 +52,11 @@ export const recordings: Recording[] = [
   {
     id: "motion",
     name: "Motion",
-    duration: 30,
+    duration: 17,
     chapters: [
-      { name: "Presets", at: 0 },
-      { name: "Keyframes", at: 6 },
-      { name: "Pop in", at: 12 },
-      { name: "Slide up", at: 18 },
-      { name: "Layers", at: 24 },
+      { name: "Playback", at: 0 },
+      { name: "Timeline", at: 6 },
+      { name: "Continue", at: 12 },
     ],
   },
 ];

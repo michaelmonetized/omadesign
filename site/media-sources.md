@@ -79,3 +79,21 @@ MP4 and WebM were fully decoded and verified at 3,300 frames; shot framing was
 visually reviewed. The poster and English scene captions belong to this cut.
 The JSON receipt records scope, format verification, and asset hashes. The
 player keeps its existing on-demand, no-autoplay, offscreen-pause behavior.
+
+## 0.6.1 Agent panel and demo refresh
+
+`public/media/ai/agent-panel.{mp4,webm,webp,vtt,json}` is a 32-second 1600 × 900 /
+30 fps excerpt from Michael’s `promo-2026-09-29/pickups/marquee-agent-061.mp4`
+(seconds 55–87). It shows the native Agent panel with live canvas tool activity.
+The poster is derived from `marquee-agent-result.png`. No simulated UI.
+
+`public/media/recordings/motion.{mp4,webm,webp,vtt}` was refreshed from
+`promo-2026-09-29/pickups/motion.mp4` (installed-app 0.6.1 capture), scaled to
+1600 × 900 / 30 fps. Chapter offsets match the shorter clip.
+
+`public/media/cloud/review.{mp4,webm,webp,vtt}` is a 22-second native cloud
+review excerpt from `marquee-cloud-061.mp4` (from 16s). The homepage Cloud
+opening still uses the existing Grok Imagine `reveal` film.
+
+`public/media/refresh/motion-presets.webp`, `brand-library.webp`, and
+`welcome.webp` were regenerated from the same pickup stills at 1600 × 900.

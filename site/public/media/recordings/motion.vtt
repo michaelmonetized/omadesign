@@ -1,16 +1,10 @@
 WEBVTT
 
-00:00:00.000 --> 00:00:06.000
-Presets: Apply Draw stroke to the selected rings and play the actual animation.
+00:00.000 --> 00:06.000
+Native Motion playback in Omadesign 0.6.1.
 
-00:00:06.000 --> 00:00:12.000
-Keyframes: Add a key with the native keyboard shortcut and undo it.
+00:06.000 --> 00:12.000
+Timeline and canvas stay in sync while the clip plays.
 
-00:00:12.000 --> 00:00:18.000
-Pop in: Apply Pop in and play the resulting animation.
-
-00:00:18.000 --> 00:00:24.000
-Slide up: Apply Slide up and play the resulting animation.
-
-00:00:24.000 --> 00:00:30.000
-Layers: Compare blend modes and play the edited animation.
+00:12.000 --> 00:17.500
+Continue refining keys after playback.

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "provenance": "Native omadesign WGPU viewport recordings. Seeded example documents; actual egui pointer and keyboard input during replay. The only overlay is a pointer indicator. No audio.",
+  "provenance": "Native Omadesign recordings. Motion refreshed from promo-2026-09-29/pickups/motion.mp4 (0.6.1 installed-app capture). Other studio clips retain prior captures.",
   "recordings": [
     {
       "id": "graphics",
@@ -137,7 +137,7 @@
     },
     {
       "id": "motion",
-      "duration": 30,
+      "duration": 17,
       "width": 1600,
       "height": 900,
       "fps": 30,
@@ -145,37 +145,27 @@
       "webm": "media/recordings/motion.webm",
       "poster": "media/recordings/motion.webp",
       "captions": "media/recordings/motion.vtt",
-      "bytes": 757303,
-      "sha256": "3198718d0bfcbdf5bba784dd00d7553a096efc6a723e07dbc71ded53d41de6ff",
+      "bytes": 330164,
+      "sha256": "b911225d9b5432fb53e48569b5b91f2b622b07f29c222bff522d42386a3a820d",
       "chapters": [
         {
           "start": 0,
-          "label": "Presets",
-          "description": "Apply Draw stroke to the selected rings and play the actual animation."
+          "label": "Playback",
+          "description": "Play a motion clip in the native 0.6.1 workspace."
         },
         {
           "start": 6,
-          "label": "Keyframes",
-          "description": "Add a key with the native keyboard shortcut and undo it."
+          "label": "Timeline",
+          "description": "Scrub and watch the timeline stay with the canvas."
         },
         {
           "start": 12,
-          "label": "Pop in",
-          "description": "Apply Pop in and play the resulting animation."
-        },
-        {
-          "start": 18,
-          "label": "Slide up",
-          "description": "Apply Slide up and play the resulting animation."
-        },
-        {
-          "start": 24,
-          "label": "Layers",
-          "description": "Compare blend modes and play the edited animation."
+          "label": "Continue",
+          "description": "Return to editing keys after playback."
         }
       ],
-      "webm_sha256": "71989c5a9dcbbcdd5ed758c2f9717b713848a13dc20ed74fcfa7da1fffacd906",
-      "webm_bytes": 1424788
+      "webm_sha256": "52367058f25c381d571cc9c4fc4c542eaca1aa50abbccaf8826d77fa414387bc",
+      "webm_bytes": 426339
     },
     {
       "id": "brand-kit",
@@ -210,7 +200,7 @@
       "webm_bytes": 840410
     }
   ],
-  "captured": "2026-09-20",
-  "capture_version": "0.5.5-nightly.1",
+  "captured": "2026-09-29",
+  "capture_version": "0.6.1",
   "capture_binary_sha256": "042d45f8e7c67bbd23b8d544a86f04e596365d06a50f4861c3137d01c878d221"
 }

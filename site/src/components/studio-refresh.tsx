@@ -188,7 +188,7 @@ export function AiWorkflow() {
     <section className="section ai-section" id="ai">
       <div className="shell">
         <p className="refresh-eyebrow">
-          YOUR AGENT. YOUR FILES. YOUR CREATIVE DIRECTION.
+          AGENT PANEL · HARNESS · THREADS
         </p>
         <div className="ai-heading">
           <h2>
@@ -197,9 +197,11 @@ export function AiWorkflow() {
             <span>Keep the art direction.</span>
           </h2>
           <p>
-            Create a campaign. Revise a family of graphics. Export a folder in
-            one pass. Connect an external AI coding agent to Omadesign’s
-            existing file and command-line workflows. Start from “Create with agent” on the welcome screen; “Learn with AI” opens a question prompt with the app’s documentation.
+            Open the Agent panel beside the canvas. Connect Codex, Claude,
+            Gemini, OpenCode, or a custom ACP adapter. Create and Learn share
+            the same native conversation UI, with saved threads, attachments,
+            and live canvas tools when you allow edits. File and CLI workflows
+            remain available for headless conversion.
           </p>
         </div>
         <div className="ai-workbench">
@@ -238,35 +240,46 @@ export function AiWorkflow() {
           </div>
           <figure className="ai-output">
             <div className="ai-output-label">
-              <span>BRIEF → SVG → .OMA → PNG</span>
-              <span>Native-rendered outputs</span>
+              <span>AGENT PANEL · 0.6.1</span>
+              <span>Native screen recording · 0:32</span>
             </div>
-            <div className="ai-campaign">
-              {["poster", "square", "wide"].map((name) => (
-                <img
-                  key={name}
-                  className={`campaign-${name}`}
-                  width={
-                    name === "poster" ? 900 : name === "square" ? 1080 : 1600
-                  }
-                  height={
-                    name === "poster" ? 1125 : name === "square" ? 1080 : 900
-                  }
-                  src={sitePath(
-                    `media/ai/${name}${selected === 1 ? "-violet" : ""}.png`,
-                  )}
-                  alt={`AI-authored ${name} campaign design, imported and rendered through Omadesign${selected === 1 ? ", violet variation" : ""}.`}
-                  loading="lazy"
+            <div className="ai-demo">
+              <video
+                controls
+                playsInline
+                muted
+                preload="none"
+                width="1600"
+                height="900"
+                poster={sitePath("media/ai/agent-panel.webp")}
+                aria-label="Omadesign Agent panel native screen recording"
+              >
+                <source
+                  src={sitePath("media/ai/agent-panel.webm")}
+                  type="video/webm"
                 />
-              ))}
+                <source
+                  src={sitePath("media/ai/agent-panel.mp4")}
+                  type="video/mp4"
+                />
+                <track
+                  kind="captions"
+                  src={sitePath("media/ai/agent-panel.vtt")}
+                  srcLang="en"
+                  label="Panel descriptions"
+                />
+              </video>
             </div>
             <figcaption>
-              One visual identity. Three editable formats.
+              Built-in Agent harness with Create / Learn, History threads, and
+              live canvas tools.
               <br />
-              Example artwork made for this page with an AI agent and the native
-              converter.
+              Native app capture from Omadesign 0.6.1.
             </figcaption>
             <div className="ai-downloads">
+              <a href={sitePath("media/ai/agent-panel.mp4")} download>
+                Download recording ↓
+              </a>
               <a
                 href={sitePath(
                   `media/ai/poster${selected === 1 ? "-violet" : ""}.oma`,
@@ -275,35 +288,29 @@ export function AiWorkflow() {
               >
                 Editable poster ↓
               </a>
-              <a
-                href={sitePath(
-                  `media/ai/poster${selected === 1 ? "-violet" : ""}.svg`,
-                )}
-                download
-              >
-                SVG source ↓
-              </a>
               <a href={sitePath("media/ai/workflow.zip")} download>
-                Full example kit ↓
+                CLI example kit ↓
               </a>
             </div>
           </figure>
         </div>
         <div className="ai-footnotes">
           <p>
-            <strong>Efficient by design.</strong> Use structured files and
-            headless conversion for repetitive work. Render previews at
-            milestones, check import notes, and return to the canvas for visual
-            decisions.
+            <strong>Built-in Agent harness.</strong> 0.6.1 ships an in-app Agent
+            panel with thread history, attachments, and native design tools over
+            ACP. Bring your own authenticated agent process; Omadesign hosts the
+            conversation beside the canvas.
           </p>
           <p>
-            <strong>Bring your own agent.</strong> These workflows use an
-            external agent with local file and shell access. Omadesign does not
-            include an AI chat panel or a general-purpose prompt-to-edit API.
-            Native painting, filters and Layout controls remain desktop
-            workflows.
+            <strong>Files still matter.</strong> The CLI examples below remain a
+            headless path for SVG ↔ .oma ↔ PNG conversion. Native painting,
+            filters, and Layout controls stay desktop workflows.
           </p>
         </div>
+        <a className="text-link" href={`${sitePath("docs/manual")}#learn-and-create-with-your-agent`}>
+          Agent panel in the manual ↗
+        </a>
+        {" · "}
         <a className="text-link" href={sitePath("skills/omadesign-create/SKILL.md")} download>
           Get the Omadesign creation skill ↗
         </a>

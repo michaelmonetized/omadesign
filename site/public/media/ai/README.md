@@ -1,6 +1,13 @@
-# Drive Omadesign with an external AI agent
+# Agent panel and file workflows
 
-These original campaign examples were authored by an AI coding agent on 2026-09-20, then imported, inspected and rendered with Omadesign 0.5.4. They are executable file workflows, not an in-app AI chat demonstration.
+Omadesign 0.6.1 includes a built-in Agent harness: an in-app Agent panel with
+Create / Learn modes, History threads, attachments, and native canvas tools over
+ACP. `agent-panel.{mp4,webm,webp,vtt}` is a native screen recording excerpt from
+the 2026-09-29 promo pickups (`marquee-agent-061.mp4`, seconds 55–87).
+
+The campaign kit below remains a separate headless CLI path. Those examples were
+authored by an AI coding agent on 2026-09-20, then imported, inspected and
+rendered with Omadesign 0.5.4.
 
 ## Create and inspect
 
@@ -32,7 +39,9 @@ done
 exit "$failed"
 ```
 
-Conversion uses the native engine. Document output formats include OMA, SVG, PNG, JPEG, PSD, PSB, OpenRaster and PDF; support varies by format. See https://omadesign.app/docs/formats for limitations. An external agent needs local file and shell access. Omadesign 0.5.6 can launch Omarchy's configured agent from **Learn with AI** or **Create with agent** on the welcome screen; it has no general prompt-to-edit API. The [Markdown docs index](https://omadesign.app/llms.txt), `omadesign --agent-docs manual` and `omadesign --agent-skill` supply the documentation and creation instructions. Native photo folder adjustment batching, raster treatments and Layout interactions are desktop workflows.
+Conversion uses the native engine. Document output formats include OMA, SVG, PNG, JPEG, PSD, PSB, OpenRaster and PDF; support varies by format. See https://omadesign.app/docs/formats for limitations. File workflows still need local file and shell access for the CLI. The desktop
+Agent panel connects to your chosen ACP agent (Codex, Claude, Gemini, OpenCode,
+or custom) and hosts the conversation beside the canvas. The [Markdown docs index](https://omadesign.app/llms.txt), `omadesign --agent-docs manual` and `omadesign --agent-skill` supply the documentation and creation instructions. Native photo folder adjustment batching, raster treatments and Layout interactions are desktop workflows.
 
 ## Efficient agent brief
 
