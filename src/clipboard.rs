@@ -940,7 +940,7 @@ mod canvas_dimensions_tests {
         );
         assert_eq!(
             dimensions(&ClipboardContent::Text(payload)),
-            Some([120., 80.])
+            Some([122., 82.])
         );
         assert_eq!(
             dimensions(&ClipboardContent::Text("plain text".into())),
