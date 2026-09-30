@@ -1415,11 +1415,13 @@ fn artboard_transform(ui: &mut Ui, studio: &mut Studio) {
     let mut changed = bounds_fields(ui, &mut x, &mut y, &mut w, &mut h, 8.0);
     changed |= number_field(ui, "Rotation", &mut deg, -180.0..=180.0, "°");
     if changed {
-        let orig = a.clone();
         a.origin = crate::geom::Pt::new(x, y);
         a.size = crate::geom::Pt::new(w, h);
         a.rotation = crate::document::Artboard::snap_rotation(deg.to_radians());
-        studio.change_artboard(orig,a.clone(),studio.artboard_options);
+        studio.preview_inspector_artboard(a.clone());
+    }
+    if !ui.input(|i| i.pointer.primary_down()) {
+        studio.finish_inspector_artboard();
     }
     ui.horizontal(|ui| {
         if ui.button("Clone").clicked() {

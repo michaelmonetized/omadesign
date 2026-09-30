@@ -1129,13 +1129,14 @@ impl Studio {
                     .get(*li)
                     .and_then(|l| l.kind.raster_bounds())
                 {
+                    let rb = if self.is_motion() { self.live_pose(self.doc.layers[*li].id).map_bounds(rb) } else { rb };
                     b = Some(match b {
                         None => rb,
                         Some(acc) => acc.union(rb),
                     });
                 }
             } else if let Some(s) = self.doc.find_shape(*li, *id) {
-                let sb = s.world_bbox();
+                let sb = if self.is_motion() { self.live_pose(s.id).map_bounds(s.world_bbox()) } else { s.world_bbox() };
                 b = Some(match b {
                     None => sb,
                     Some(acc) => acc.union(sb),

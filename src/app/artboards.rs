@@ -191,6 +191,40 @@ impl Studio {
         true
     }
 
+    pub(crate) fn preview_inspector_artboard(&mut self, next: Artboard) {
+        if !matches!(&self.op, Some(Op::ArtboardResize { handle: usize::MAX, orig, .. }) if orig.id == next.id) {
+            self.cancel_artboard_gesture();
+            let Some(orig) = self.doc.artboards.iter().find(|a| a.id == next.id).cloned() else { return; };
+            self.op = Some(Op::ArtboardResize {
+                options: self.artboard_options, copies: None,
+                contents: self.snapshot_artboard_contents(&orig),
+                handle: usize::MAX, start_box: orig.local_bounds(), orig,
+            });
+        }
+        self.prepare_artboard_resize_copies();
+        let Some(Op::ArtboardResize { orig, contents, options, .. }) = &self.op else { return; };
+        let (orig, contents, options) = (orig.clone(), contents.clone(), *options);
+        self.apply_artboard_resize(&orig, &next, &contents, options.resize);
+        if let Some(board) = self.doc.artboards.iter_mut().find(|a| a.id == next.id) { *board = next; }
+        self.mark();
+    }
+
+    pub(crate) fn finish_inspector_artboard(&mut self) {
+        if !matches!(self.op, Some(Op::ArtboardResize { handle: usize::MAX, .. })) { return; }
+        let Some(Op::ArtboardResize { orig, contents, copies, .. }) = self.op.take() else { return; };
+        let after = self.doc.artboards.clone();
+        let changed = after.iter().find(|a| a.id == orig.id) != Some(&orig);
+        let mut commands = copies.clone().unwrap_or_default();
+        if changed { commands.extend(self.transform_commands(&contents)); }
+        self.restore_snaps(&contents);
+        self.discard_artboard_copies(copies.unwrap_or_default());
+        if let Some(board) = self.doc.artboards.iter_mut().find(|a| a.id == orig.id) { *board = orig; }
+        if changed {
+            commands.push(Cmd::SetArtboards { before: self.doc.artboards.clone(), after });
+            self.commit(Cmd::Batch(commands));
+        }
+    }
+
     pub(crate) fn change_artboard(
         &mut self,
         original: Artboard,
@@ -350,4 +384,44 @@ mod tests {
             .clone
         );
     }
+    #[test]
+    fn inspector_drag_clones_once_and_commits_one_undo_step() {
+        let (mut s, original, _, _) = fixture();
+        let before = crate::project::encode(&s.doc).unwrap();
+        let count = |s: &Studio| s.doc.layers.iter().map(|l| l.kind.shapes().map_or(1, |s| s.len())).sum::<usize>();
+        let original_count = count(&s);
+        s.artboard_options = ArtboardOptions { resize: ArtworkResize::Scale, clone: true };
+        for width in 101..=132 {
+            let mut next = original.clone(); next.size.x = width as f32;
+            s.preview_inspector_artboard(next);
+            assert_eq!(count(&s), original_count * 2);
+            assert_eq!(s.history.len(), 0);
+        }
+        s.finish_inspector_artboard();
+        assert_eq!(s.history.len(), 1);
+        let after = crate::project::encode(&s.doc).unwrap();
+        s.undo(); assert_eq!(crate::project::encode(&s.doc).unwrap(), before);
+        s.redo(); assert_eq!(crate::project::encode(&s.doc).unwrap(), after);
+        s.undo();
+        let mut next = original.clone(); next.size.x = 140.;
+        s.preview_inspector_artboard(next);
+        s.cancel_artboard_gesture();
+        assert_eq!(crate::project::encode(&s.doc).unwrap(), before);
+    }
+    #[test]
+    fn motion_wrap_uses_displayed_vector_and_raster_bounds() {
+        let (mut s, _, vector, raster_layer) = fixture();
+        s.persona = Persona::Motion; s.playhead = 1.;
+        for (layer, id) in [(0, vector), (raster_layer, RASTER_ID)] {
+            let target = crate::motion::target(&s.doc, layer, id).unwrap();
+            s.doc.motion.set_key(target.id, Prop::X, 1., 500., Ease::Linear);
+            s.doc.motion.set_key(target.id, Prop::Scale, 1., 2., Ease::Linear);
+            let rest = if id == RASTER_ID { s.doc.layers[layer].kind.raster_bounds().unwrap() } else { s.doc.find_shape(layer, id).unwrap().world_bbox() };
+            let expected = s.live_pose(target.id).map_bounds(rest);
+            s.selection = vec![(layer, id)];
+            s.wrap_selection_artboard_with_padding(0.);
+            assert_eq!(s.doc.artboards.last().unwrap().bounds(), expected);
+        }
+    }
+
 }
