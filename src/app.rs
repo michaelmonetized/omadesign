@@ -1858,7 +1858,9 @@ impl Studio {
                 let mut layer = self.doc.layers[i].clone();
                 let index = self.doc.layers.len() + new_layers;
                 layer.id = layer_ids[&layer.id];
-                layer.parent = layer.parent.and_then(|p| layer_ids.get(&p).copied());
+                if i != group {
+                    layer.parent = layer.parent.and_then(|p| layer_ids.get(&p).copied());
+                }
                 if i == group {
                     layer.name = format!("{} copy", layer.name);
                     copied_group = Some(layer.id);

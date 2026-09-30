@@ -547,6 +547,9 @@ fn action(studio: &mut Studio, args: &Value) -> Result<(), String> {
             "layer_backward" => studio.move_layer_tree(li, false),
             "duplicate_layer" => {
                 studio.activate_layer_tree(li);
+                // This command targets the entire layer tree, even an empty or
+                // nested group; object duplication has different selection rules.
+                studio.selection.clear();
                 studio.duplicate_selection();
             }
             _ => unreachable!(),

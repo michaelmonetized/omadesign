@@ -519,3 +519,20 @@ fn incompatible_canvas_import_dimensions_fail_without_changing_the_document() {
     assert!(error.contains("aspect ratio"), "{error}");
     assert_eq!(crate::project::encode(&s.doc).unwrap(), before);
 }
+
+#[test]
+fn duplicate_nested_layer_tree_keeps_external_parent_and_remaps_children() {
+    let mut s = studio();
+    let outer = Layer::group("outer");
+    let mut inner = Layer::group("inner"); inner.parent = Some(outer.id);
+    let mut child = Layer::vector("art"); child.parent = Some(inner.id);
+    child.kind.shapes_mut().unwrap().push(crate::layout::make_frame(Pt::ZERO, Pt::splat(10.)));
+    s.doc.layers = vec![outer, inner, child];
+    let before = crate::project::encode(&s.doc).unwrap();
+    call(&mut s, "editor_action", json!({"action":"duplicate_layer", "layer":1}));
+    assert_eq!(s.doc.layers.len(), 5);
+    assert_eq!(s.doc.layers[3].parent, Some(s.doc.layers[0].id));
+    assert_eq!(s.doc.layers[4].parent, Some(s.doc.layers[3].id));
+    assert_ne!(s.doc.layers[4].kind.shapes().unwrap()[0].id, s.doc.layers[2].kind.shapes().unwrap()[0].id);
+    s.undo(); assert_eq!(crate::project::encode(&s.doc).unwrap(), before);
+}
