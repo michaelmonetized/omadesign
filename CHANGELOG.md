@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.2 — Local QA candidate (not released)
+
+- Raster images support motion keys and presets, including import and frame placement.
+- In-app agents can import local files and use native editing tools across all five modes.
+- Saved agent conversations reopen and focus their documents; Stop cancels a pending reopen. (#178)
+- New canvases use clipboard dimensions, including native artwork bounds. (#176)
+- Complex document previews render on a worker and persist as bounded disk thumbnails. (#173)
+- Motion playback reuses effect pixels and reduces per-frame composition work. (#177)
+- Artboards support move/scale/keep artwork options, cloning, exact artwork wrapping, and explicit new sizes. (#175)
+- Export supports document, artboard, and selection scopes; live previews; presets; and per-file/session options. (#174)
+
+Packaging and release publication are held until Michael confirms this final local build passes QA.
+
 ## 2026-09-29 · 0.6.1 — More control. Less waiting.
 
 - Offline Pixel background removal creates editable masks, with edge refinement, original pixels preserved and one-step undo. Bundled models and runtime work without a network connection; optional models download on request.
