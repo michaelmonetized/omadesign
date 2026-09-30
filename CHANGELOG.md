@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.2 — Local QA candidate (not released)
+## 2026-09-30 · 0.6.2 — Local QA candidate (not released)
 
 - Raster images support motion keys and presets, including import and frame placement.
 - In-app agents can import local files and use native editing tools across all five modes.
