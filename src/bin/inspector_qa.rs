@@ -51,6 +51,7 @@ struct Qa {
     history: usize,
     checks: Vec<String>,
     started: Instant,
+    double_at: Option<Pos2>,
 }
 fn ctrl() -> Modifiers {
     Modifiers::CTRL | Modifiers::COMMAND
@@ -407,6 +408,7 @@ impl Qa {
             history,
             checks: vec![],
             started: Instant::now(),
+            double_at: None,
         }
     }
     fn point(&self, label: &str) -> Pos2 {
@@ -439,7 +441,7 @@ impl Qa {
                     let p = self.studio.view.to_screen(point);
                     let p = self.studio.canvas_rect.unwrap().min + egui::vec2(p.x,p.y);
                     self.pointer(p,PointerButton::Primary);
-                    self.pointer(p,PointerButton::Primary);
+                    self.double_at=Some(p);
                 }
                 Action::FitView => {
                     let p = self
@@ -865,6 +867,7 @@ impl eframe::App for Qa {
             .events
             .retain(|e| matches!(e, Event::Screenshot { .. }));
         input.focused = true;
+        if let Some(point)=self.double_at.take() { self.pointer(point,PointerButton::Primary); }
         input.time = Some(self.frame as f64 / FPS as f64);
         input.events.push(Event::ModifiersChanged(Modifiers::NONE));
         if self.warm >= 30 && !self.pending && self.step_ready {
