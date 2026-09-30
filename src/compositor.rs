@@ -1000,10 +1000,15 @@ fn draw_shape_masked(
     }
     if shape.filters.active() {
         let pad = crate::filter::svg_pad(&shape.filters).ceil().max(8.0);
+        // Keep filtered pixels in stable object-local coordinates. Translating
+        // into and out of large world coordinates introduces cancellation noise
+        // that invalidates blur/shadow caches during otherwise identical motion.
+        let translation = Pt::new(pose.dx, pose.dy);
+        let pose = Pose { dx: 0., dy: 0., ..pose };
         let b = pose.map_bounds(shape.world_bbox()).inflate(pad);
         let tw = b.width().ceil().max(1.0) as u32;
         let th = b.height().ceil().max(1.0) as u32;
-        let xf = t.pre_concat(Transform::from_translate(b.min.x, b.min.y));
+        let xf = t.pre_concat(Transform::from_translate(b.min.x + translation.x, b.min.y + translation.y));
         // These stacks already combine locally before one bilinear canvas blit.
         // Reuse those exact pixels; backdrop-dependent appearance keeps its full
         // compositing path below, including per-effect blend and group opacity.
@@ -1011,7 +1016,6 @@ fn draw_shape_masked(
             && !shape.blend_interior
             && (!shape.filters.independent()
                 || (blend == tiny_skia::BlendMode::SourceOver
-                    && opacity * alpha >= 1.0
                     && mask.is_none()
                     && shape.filters.items.iter().all(|fx| {
                         fx.appearance().is_none_or(|(blend, opacity)| {
@@ -1051,45 +1055,22 @@ fn draw_shape_masked(
             }
             return;
         }
-        if let Some(mut temp) = Pixmap::new(tw, th) {
+        let prepared = effects_cache::prepared(shape, pose, b, || {
+            let mut temp = Pixmap::new(tw, th)?;
             let local = Transform::from_translate(-b.min.x, -b.min.y);
-            let mut opaque_pose = pose;
-            opaque_pose.opacity = Some(1.0);
-            draw_shape_inner(
-                &mut temp,
-                shape,
-                local,
-                1.0,
-                tiny_skia::BlendMode::SourceOver,
-                opaque_pose,
-                None,
-            );
-            if shape.filters.independent() || shape.fill_opacity < 1. || shape.blend_interior {
-                crate::filter::composite(
-                    pm,
-                    temp,
-                    &shape.filters,
-                    xf,
-                    blend,
-                    opacity * alpha,
-                    shape.fill_opacity,
-                    shape.blend_interior,
-                    mask,
-                );
-                return;
+            let opaque_pose = Pose { opacity: Some(1.), ..pose };
+            draw_shape_inner(&mut temp, shape, local, 1., tiny_skia::BlendMode::SourceOver, opaque_pose, None);
+            if shape.filters.active() {
+                for fx in &shape.filters.items {
+                    if fx.appearance().is_none() { crate::filter::apply_one(&mut temp, fx); }
+                }
             }
-            crate::filter::apply(&mut temp, &shape.filters);
-            pm.draw_pixmap(
-                0,
-                0,
-                temp.as_ref(),
-                &PixmapPaint {
-                    opacity: (opacity * alpha).clamp(0.0, 1.0),
-                    blend_mode: blend,
-                    quality: tiny_skia::FilterQuality::Bilinear,
-                },
-                xf,
-                mask,
+            Some(temp)
+        });
+        if let Some(temp) = prepared {
+            crate::filter::composite_cached(
+                pm, temp, &shape.filters, xf, blend,
+                opacity * alpha, shape.fill_opacity, shape.blend_interior, mask,
             );
         }
         return;

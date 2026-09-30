@@ -1,0 +1,10 @@
+{
+  "sample_time_seconds": 0.5454545617103577,
+  "max_rgba_channel_difference": 3,
+  "mean_absolute_channel_difference": 0.019327666120429278,
+  "pixels_resized": false,
+  "render_resolution": [
+    1248,
+    798
+  ]
+}

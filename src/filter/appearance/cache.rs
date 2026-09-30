@@ -9,14 +9,29 @@ use std::{
     sync::Arc,
 };
 
-// Includes source snapshots and all effect planes. The measured independent
-// shadow needs about 6.5 MiB; do not duplicate the full native effect budget.
-const MAX_BYTES: usize = 16 * 1024 * 1024;
+// Includes source snapshots and all effect planes. A multi-cloud composition
+// uses about 214 MiB of source/shadow pairs; retain that measured working set
+// within a fixed cap instead of recomputing shadows throughout every fade.
+const MAX_BYTES: usize = 256 * 1024 * 1024;
 const MAX_ENTRIES: usize = 128;
 type Planes = Vec<(Fx, Pixmap)>;
 
+enum Source {
+    Bytes(Vec<u8>),
+    Shared(Arc<Pixmap>),
+}
+impl Source {
+    fn matches(&self, pixels: &Pixmap, shared: Option<&Arc<Pixmap>>) -> bool {
+        match (self, shared) {
+            (Self::Shared(before), Some(after)) => Arc::ptr_eq(before, after),
+            (Self::Bytes(before), None) => before == pixels.data(),
+            _ => false,
+        }
+    }
+}
+
 struct Entry {
-    source: Vec<u8>,
+    source: Source,
     width: u32,
     height: u32,
     planes: Arc<Planes>,
@@ -76,10 +91,18 @@ pub(super) fn reset_admission() {
 }
 
 fn key(source: &Pixmap, effects: &[Fx]) -> u64 {
+    key_with_identity(source, effects, None)
+}
+fn key_with_identity(source: &Pixmap, effects: &[Fx], identity: Option<usize>) -> u64 {
     let mut hash = std::collections::hash_map::DefaultHasher::new();
     source.width().hash(&mut hash);
     source.height().hash(&mut hash);
-    source.data().hash(&mut hash);
+    identity.is_some().hash(&mut hash);
+    if let Some(identity) = identity {
+        identity.hash(&mut hash);
+    } else {
+        source.data().hash(&mut hash);
+    }
     for fx in effects {
         std::mem::discriminant(fx).hash(&mut hash);
         let (blend, opacity, color, numbers, extra) = match *fx {
@@ -140,6 +163,16 @@ fn key(source: &Pixmap, effects: &[Fx]) -> u64 {
 }
 
 pub(super) fn render(source: &Pixmap, stack: &super::FilterStack) -> Arc<Planes> {
+    render_inner(source, None, stack)
+}
+pub(super) fn render_shared(source: &Arc<Pixmap>, stack: &super::FilterStack) -> Arc<Planes> {
+    render_inner(source, Some(source), stack)
+}
+fn render_inner(
+    source: &Pixmap,
+    shared: Option<&Arc<Pixmap>>,
+    stack: &super::FilterStack,
+) -> Arc<Planes> {
     let effects: Vec<_> = stack
         .items
         .iter()
@@ -156,17 +189,22 @@ pub(super) fn render(source: &Pixmap, stack: &super::FilterStack) -> Arc<Planes>
     if bytes > MAX_BYTES {
         return build(source, &effects);
     }
-    let key = key(source, &effects);
+    let key = if let Some(source) = shared {
+        key_with_identity(source, &effects, Some(Arc::as_ptr(source) as usize))
+    } else {
+        key(source, &effects)
+    };
     let hit = CACHE.with_borrow_mut(|cache| {
         cache.clock = cache.clock.wrapping_add(1);
         cache.admission.record(key);
         let entry = cache.entries.get_mut(&key)?;
-        // Hashing only narrows lookup. Every source byte and Fx value still
-        // participates in validation, including after a hash/key collision.
+        // Immutable shared pixels retain their allocation, so pointer equality
+        // proves identity without scanning megabytes on every animation frame.
+        // Mutable callers still validate every byte after hash lookup.
         if entry.width == source.width()
             && entry.height == source.height()
             && entry.planes.iter().map(|(fx, _)| fx).eq(effects.iter())
-            && entry.source == source.data()
+            && entry.source.matches(source, shared)
         {
             entry.touched = cache.clock;
             Some(entry.planes.clone())
@@ -179,7 +217,12 @@ pub(super) fn render(source: &Pixmap, stack: &super::FilterStack) -> Arc<Planes>
     }
     // Rejected scans and large surfaces get no extra source snapshot.
     let keep = CACHE.with_borrow_mut(|cache| cache.make_room(key, bytes));
-    let input = keep.then(|| source.data().to_vec());
+    let input = keep.then(|| {
+        shared.map_or_else(
+            || Source::Bytes(source.data().to_vec()),
+            |pixels| Source::Shared(Arc::clone(pixels)),
+        )
+    });
     let planes = build(source, &effects);
     CACHE.with_borrow_mut(|cache| {
         let Some(input) = input else {
@@ -300,6 +343,34 @@ mod tests {
     }
 
     #[test]
+    fn shared_source_identity_reuses_planes_and_rejects_pixel_and_effect_changes() {
+        clear();
+        let mut pixels = Arc::new(source(32, 24, 80));
+        let mut stack = FilterStack {
+            items: vec![Fx::ColorOverlay {
+                color: Rgba::WHITE,
+                blend: Blend::Normal,
+                opacity: 0.5,
+            }],
+            ..Default::default()
+        };
+        let first = render_shared(&pixels, &stack);
+        assert!(Arc::ptr_eq(&first, &render_shared(&pixels, &stack)));
+        Arc::make_mut(&mut pixels).fill(Rgba::new(30, 80, 160, 60).to_skia());
+        let changed = render_shared(&pixels, &stack);
+        assert!(!Arc::ptr_eq(&first, &changed));
+        assert_eq!(
+            changed[0].1.data(),
+            effect_pixels(&pixels, &stack.items[0]).unwrap().data()
+        );
+        stack.items[0] = Fx::ColorOverlay {
+            color: Rgba::BLACK,
+            blend: Blend::Normal,
+            opacity: 0.7,
+        };
+        assert!(!Arc::ptr_eq(&changed, &render_shared(&pixels, &stack)));
+    }
+    #[test]
     fn every_appearance_plane_matches_fresh_pixels_and_reuses_immutable_results() {
         clear();
         let source = source(31, 25, 132);
@@ -386,7 +457,7 @@ mod tests {
                     .sum::<usize>()
             );
         });
-        let oversized = source(2048, 1024, 141);
+        let oversized = source(4096, (MAX_BYTES / (4096 * 4 * 2) + 1) as u32, 141);
         let result = render(&oversized, &stack);
         assert_eq!(
             result[0].1.data(),

@@ -1,0 +1,157 @@
+{
+  "document": "Cloud.oma (supplied local fixture)",
+  "frames": [
+    {
+      "cycle": 0,
+      "frame": 0,
+      "render_ms": 4.245523,
+      "time": 0.0
+    },
+    {
+      "cycle": 0,
+      "frame": 1,
+      "render_ms": 334.97042700000003,
+      "time": 0.1818181872367859
+    },
+    {
+      "cycle": 0,
+      "frame": 2,
+      "render_ms": 652.1471760000001,
+      "time": 0.3636363744735718
+    },
+    {
+      "cycle": 0,
+      "frame": 3,
+      "render_ms": 809.892172,
+      "time": 0.5454545617103577
+    },
+    {
+      "cycle": 0,
+      "frame": 4,
+      "render_ms": 660.075344,
+      "time": 0.7272727489471436
+    },
+    {
+      "cycle": 0,
+      "frame": 5,
+      "render_ms": 488.179898,
+      "time": 0.9090909361839294
+    },
+    {
+      "cycle": 0,
+      "frame": 6,
+      "render_ms": 440.993818,
+      "time": 1.0909091234207153
+    },
+    {
+      "cycle": 0,
+      "frame": 7,
+      "render_ms": 338.86832300000003,
+      "time": 1.2727272510528564
+    },
+    {
+      "cycle": 0,
+      "frame": 8,
+      "render_ms": 309.570877,
+      "time": 1.454545497894287
+    },
+    {
+      "cycle": 0,
+      "frame": 9,
+      "render_ms": 312.89564399999995,
+      "time": 1.6363636255264282
+    },
+    {
+      "cycle": 0,
+      "frame": 10,
+      "render_ms": 309.997837,
+      "time": 1.8181818723678589
+    },
+    {
+      "cycle": 0,
+      "frame": 11,
+      "render_ms": 311.015468,
+      "time": 2.0
+    },
+    {
+      "cycle": 1,
+      "frame": 0,
+      "render_ms": 1.348382,
+      "time": 0.0
+    },
+    {
+      "cycle": 1,
+      "frame": 1,
+      "render_ms": 320.185432,
+      "time": 0.1818181872367859
+    },
+    {
+      "cycle": 1,
+      "frame": 2,
+      "render_ms": 476.304836,
+      "time": 0.3636363744735718
+    },
+    {
+      "cycle": 1,
+      "frame": 3,
+      "render_ms": 547.25875,
+      "time": 0.5454545617103577
+    },
+    {
+      "cycle": 1,
+      "frame": 4,
+      "render_ms": 490.44057699999996,
+      "time": 0.7272727489471436
+    },
+    {
+      "cycle": 1,
+      "frame": 5,
+      "render_ms": 435.120703,
+      "time": 0.9090909361839294
+    },
+    {
+      "cycle": 1,
+      "frame": 6,
+      "render_ms": 408.959066,
+      "time": 1.0909091234207153
+    },
+    {
+      "cycle": 1,
+      "frame": 7,
+      "render_ms": 305.26373,
+      "time": 1.2727272510528564
+    },
+    {
+      "cycle": 1,
+      "frame": 8,
+      "render_ms": 297.94043999999997,
+      "time": 1.454545497894287
+    },
+    {
+      "cycle": 1,
+      "frame": 9,
+      "render_ms": 302.503797,
+      "time": 1.6363636255264282
+    },
+    {
+      "cycle": 1,
+      "frame": 10,
+      "render_ms": 296.77001800000005,
+      "time": 1.8181818723678589
+    },
+    {
+      "cycle": 1,
+      "frame": 11,
+      "render_ms": 300.176452,
+      "time": 2.0
+    }
+  ],
+  "scale": 0.625,
+  "viewport": [
+    1248,
+    798
+  ],
+  "warm_max_ms": 547.25875,
+  "warm_median_ms": 312.724581,
+  "document_sha256": "11dde724eeee503ad2e09e6bad7a8ba2d65107b7f12e69977861b5e42416c161"
+}
