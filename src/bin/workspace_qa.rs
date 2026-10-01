@@ -721,7 +721,7 @@ impl eframe::App for Qa {
 }
 fn main() -> eframe::Result {
     let output = PathBuf::from(std::env::args().nth(1).expect("workspace_qa OUTPUT"));
-    fs::create_dir_all(&output).unwrap();
+    fs::create_dir(&output).expect("QA output must be a fresh directory");
     for (key, dir) in [
         ("XDG_CONFIG_HOME", "config"),
         ("XDG_DATA_HOME", "data"),
