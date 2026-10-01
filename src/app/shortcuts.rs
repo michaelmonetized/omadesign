@@ -204,6 +204,9 @@ impl Studio {
             previous
         });
         let focus = self.shortcut_focus(ctx);
+        if focus != ShortcutFocus::Text {
+            self.cancel_type_ime();
+        }
         if matches!(
             focus,
             ShortcutFocus::Inactive | ShortcutFocus::Modal | ShortcutFocus::Popup
@@ -213,6 +216,10 @@ impl Studio {
         let field_focused = focus == ShortcutFocus::Field;
         let mut consumed = Vec::new();
         for (index, event) in events.iter().enumerate() {
+            if focus == ShortcutFocus::Text && self.type_ime_event(event) {
+                consumed.push(index);
+                continue;
+            }
             let shortcut = match event {
                 Event::ModifiersChanged(m) => {
                     modifiers = *m;
@@ -297,6 +304,9 @@ impl Studio {
                     Event::Paste(text) => Some(text.as_str()),
                     _ => None,
                 };
+                if focus == ShortcutFocus::Text {
+                    self.cancel_type_ime();
+                }
                 if focus == ShortcutFocus::Text && !shortcut.global() {
                     self.type_shortcut(ctx, shortcut, payload);
                 } else {

@@ -1,0 +1,20 @@
+[
+  {
+    "mode": "Pixel",
+    "commit": [
+      "你好"
+    ],
+    "clipboard": "你好",
+    "saved": true,
+    "native_ime_events": 13
+  },
+  {
+    "mode": "Layout",
+    "commit": [
+      "你好"
+    ],
+    "clipboard": "你好",
+    "saved": true,
+    "native_ime_events": 13
+  }
+]

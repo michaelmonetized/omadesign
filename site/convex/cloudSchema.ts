@@ -10,6 +10,32 @@ export const fileKind = v.union(
   v.literal("asset"),
   v.literal("snapshot"),
 );
+export const annotationShape = v.union(
+  v.literal("pin"),
+  v.literal("rectangle"),
+  v.literal("stamp"),
+  v.literal("highlight"),
+  v.literal("brush"),
+);
+export const stampKind = v.union(
+  v.literal("check"),
+  v.literal("x"),
+  v.literal("heart"),
+  v.literal("question"),
+  v.literal("exclaim"),
+);
+export const annotationGeometry = {
+  x: v.number(),
+  y: v.number(),
+  endX: v.optional(v.number()),
+  endY: v.optional(v.number()),
+  shape: annotationShape,
+  stamp: v.optional(stampKind),
+  points: v.optional(v.array(v.object({ x: v.number(), y: v.number() }))),
+  strokeWidth: v.optional(v.number()),
+  color: v.optional(v.string()),
+  opacity: v.optional(v.number()),
+};
 export const cloudTables = {
   cloudLimits: defineTable({
     key: v.string(),
@@ -73,11 +99,7 @@ export const cloudTables = {
   cloudAnnotations: defineTable({
     projectId: v.id("cloudProjects"),
     snapshotId: v.id("cloudFiles"),
-    x: v.number(),
-    y: v.number(),
-    endX: v.optional(v.number()),
-    endY: v.optional(v.number()),
-    shape: v.union(v.literal("pin"), v.literal("rectangle")),
+    ...annotationGeometry,
     body: v.string(),
     author: v.string(),
     authorName: v.string(),

@@ -1,8 +1,9 @@
 import { useAuth } from "@clerk/tanstack-react-start";
 import { useConvex, useQuery, useMutation } from "convex/react";
-import { useEffect, useState, type PointerEvent } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
+import { ReviewCanvas, type Geometry } from "./review-canvas";
 import { upload, downloadBlob, saveBlob, message } from "./files";
 export function ProjectView({
   id,
@@ -107,7 +108,7 @@ export function ProjectView({
           </select>
         </div>
         {selected ? (
-          <Review key={selected._id} file={selected} />
+          <Review key={selected._id} file={selected} role={project.role} />
         ) : (
           <p className="cloud-empty">
             Add a flat export to start a review. Comments stay attached to that
@@ -182,8 +183,14 @@ export function ProjectView({
     </>
   );
 }
-function Review({ file }: { file: Doc<"cloudFiles"> }) {
-  const { getToken } = useAuth();
+function Review({
+  file,
+  role,
+}: {
+  file: Doc<"cloudFiles">;
+  role: "owner" | "editor" | "reviewer";
+}) {
+  const { getToken, userId } = useAuth();
   const threads = useQuery(api.review.list, {
     projectId: file.projectId,
     snapshotId: file._id,
@@ -191,15 +198,10 @@ function Review({ file }: { file: Doc<"cloudFiles"> }) {
   const annotate = useMutation(api.review.annotate);
   const reply = useMutation(api.review.reply);
   const resolve = useMutation(api.review.resolve);
+  const remove = useMutation(api.review.remove);
   const [url, setUrl] = useState("");
   const [notice, setNotice] = useState("");
-  const [mode, setMode] = useState<"pin" | "rectangle">("pin");
-  const [draft, setDraft] = useState<{
-    x: number;
-    y: number;
-    endX?: number;
-    endY?: number;
-  }>();
+  const [draft, setDraft] = useState<Geometry>();
   const [body, setBody] = useState("");
   const [selected, setSelected] = useState<Id<"cloudAnnotations">>();
   const [replies, setReplies] = useState<Record<string, string>>({});
@@ -223,13 +225,6 @@ function Review({ file }: { file: Doc<"cloudFiles"> }) {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [file._id, getToken]);
-  function point(e: PointerEvent<HTMLDivElement>) {
-    const r = e.currentTarget.getBoundingClientRect();
-    return {
-      x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
-      y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
-    };
-  }
   async function perform(fn: () => Promise<unknown>) {
     setBusy(true);
     setNotice("");
@@ -244,24 +239,6 @@ function Review({ file }: { file: Doc<"cloudFiles"> }) {
   return (
     <>
       <div className="cloud-review-tools">
-        <button
-          aria-pressed={mode === "pin"}
-          onClick={() => {
-            setMode("pin");
-            setDraft(undefined);
-          }}
-        >
-          Pin comment
-        </button>
-        <button
-          aria-pressed={mode === "rectangle"}
-          onClick={() => {
-            setMode("rectangle");
-            setDraft(undefined);
-          }}
-        >
-          Draw annotation
-        </button>
         <button
           onClick={() =>
             void perform(async () =>
@@ -280,73 +257,46 @@ function Review({ file }: { file: Doc<"cloudFiles"> }) {
       </div>
       <div className="cloud-review-grid">
         <div>
-          <div
-            className="cloud-review-image"
-            style={{ aspectRatio: `${file.width || 1}/${file.height || 1}` }}
-            onPointerDown={(e) => {
-              if ((e.target as HTMLElement).closest("button")) return;
-              e.currentTarget.setPointerCapture(e.pointerId);
-              setDraft(point(e));
+          <ReviewCanvas
+            url={url}
+            name={file.name}
+            width={file.width || 1}
+            height={file.height || 1}
+            annotations={threads || []}
+            selected={selected}
+            onSelect={(id) => {
+              setSelected(id);
+              document
+                .getElementById(`thread-${id}`)
+                ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
             }}
-            onPointerUp={(e) => {
-              if (mode === "rectangle" && draft) {
-                const p = point(e);
-                setDraft({ ...draft, endX: p.x, endY: p.y });
-              }
-            }}
-          >
-            {url ? (
-              <img
-                src={url}
-                alt={`Review export: ${file.name}`}
-                draggable={false}
-              />
-            ) : (
-              <p>Loading export…</p>
-            )}
-            {threads?.map((t, i) => (
-              <button
-                key={t._id}
-                className={`cloud-pin ${t.resolved ? "resolved" : ""}`}
-                style={{
-                  left: `${t.x * 100}%`,
-                  top: `${t.y * 100}%`,
-                  ...(t.shape === "rectangle"
-                    ? {
-                        width: `${Math.abs((t.endX ?? t.x) - t.x) * 100}%`,
-                        height: `${Math.abs((t.endY ?? t.y) - t.y) * 100}%`,
-                        left: `${Math.min(t.x, t.endX ?? t.x) * 100}%`,
-                        top: `${Math.min(t.y, t.endY ?? t.y) * 100}%`,
-                      }
-                    : {}),
-                }}
-                onClick={() => setSelected(t._id)}
-                aria-label={`Comment ${i + 1}: ${t.body}`}
-              >
-                {i + 1}
-              </button>
-            ))}
-            {draft && (
-              <span
-                className="cloud-pin draft"
-                style={{ left: `${draft.x * 100}%`, top: `${draft.y * 100}%` }}
-              >
-                +
-              </span>
-            )}
-          </div>
+            draft={draft}
+            onDraft={setDraft}
+            onCreate={(geometry) =>
+              void perform(async () => {
+                const id = await annotate({
+                  snapshotId: file._id,
+                  ...geometry,
+                  body: "",
+                });
+                setSelected(id);
+                setDraft(undefined);
+              })
+            }
+            disabled={busy}
+          />
           <form
             className="cloud-comment-form"
             onSubmit={(e) => {
               e.preventDefault();
               if (!draft) return;
               void perform(async () => {
-                await annotate({
+                const id = await annotate({
                   snapshotId: file._id,
                   ...draft,
-                  shape: mode,
                   body,
                 });
+                setSelected(id);
                 setDraft(undefined);
                 setBody("");
               });
@@ -354,7 +304,9 @@ function Review({ file }: { file: Doc<"cloudFiles"> }) {
           >
             <label htmlFor="review-comment">
               {draft
-                ? "Add your feedback"
+                ? draft.shape === "stamp" || draft.points
+                  ? "Optional comment for this mark"
+                  : "Add your feedback"
                 : "Select a point on the export to comment"}
             </label>
             <textarea
@@ -362,11 +314,11 @@ function Review({ file }: { file: Doc<"cloudFiles"> }) {
               value={body}
               onChange={(e) => setBody(e.target.value)}
               maxLength={4000}
-              required
+              required={draft?.shape === "pin" || draft?.shape === "rectangle"}
               disabled={!draft}
             />
             <button className="button" disabled={!draft || busy}>
-              Post comment
+              Post annotation
             </button>
             {draft && (
               <button type="button" onClick={() => setDraft(undefined)}>
@@ -377,14 +329,21 @@ function Review({ file }: { file: Doc<"cloudFiles"> }) {
         </div>
         <div className="cloud-threads">
           {threads?.map((t, i) => (
-            <article key={t._id} data-selected={selected === t._id}>
+            <article
+              id={`thread-${t._id}`}
+              key={t._id}
+              data-selected={selected === t._id}
+            >
               <div className="cloud-thread-heading">
                 <strong>
                   {i + 1} · {t.authorName}
                 </strong>
                 <span>{t.resolved ? "Resolved" : "Open"}</span>
               </div>
-              <p>{t.body}</p>
+              <p>
+                {t.body ||
+                  `${t.shape === "stamp" ? t.stamp : t.shape} annotation`}
+              </p>
               {t.replies.map((r) => (
                 <div className="cloud-reply" key={r._id}>
                   <strong>{r.authorName}</strong>
@@ -412,23 +371,37 @@ function Review({ file }: { file: Doc<"cloudFiles"> }) {
                 />
                 <button disabled={busy}>Reply</button>
               </form>
-              <button
-                disabled={busy}
-                className="text-link"
-                onClick={() =>
-                  void perform(() =>
-                    resolve({ id: t._id, resolved: !t.resolved }),
-                  )
-                }
-              >
-                {t.resolved ? "Reopen" : "Resolve"}
-              </button>
+              {(role !== "reviewer" || t.author === userId) && (
+                <>
+                  <button
+                    disabled={busy}
+                    className="text-link"
+                    onClick={() =>
+                      void perform(() =>
+                        resolve({ id: t._id, resolved: !t.resolved }),
+                      )
+                    }
+                  >
+                    {t.resolved ? "Reopen" : "Resolve"}
+                  </button>
+                  <button
+                    disabled={busy}
+                    className="text-link"
+                    onClick={() =>
+                      void perform(async () => {
+                        await remove({ id: t._id });
+                        if (selected === t._id) setSelected(undefined);
+                      })
+                    }
+                  >
+                    Delete annotation
+                  </button>
+                </>
+              )}
             </article>
           ))}
           {threads?.length === 0 && (
-            <p>
-              No comments yet. Select a point or draw a rectangle on the export.
-            </p>
+            <p>No annotations yet. Choose a tool and mark the export.</p>
           )}
         </div>
       </div>

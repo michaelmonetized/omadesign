@@ -24,6 +24,9 @@ concurrency:
 
 jobs:
   ship:
+    # Personal repositories use the same local prebuilt Vercel sequence below.
+    # Blacksmith currently supports GitHub organizations only.
+    if: github.event.repository.owner.type == 'Organization'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     permissions:

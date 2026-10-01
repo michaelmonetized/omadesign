@@ -1,0 +1,20 @@
+{
+  "commit": [
+    "你好"
+  ],
+  "cancel": [
+    "你好"
+  ],
+  "clipboard": "你好",
+  "paste": [
+    "粘贴測試 🎨"
+  ],
+  "undo": [
+    "Type"
+  ],
+  "redo": [
+    "粘贴測試 🎨"
+  ],
+  "saved": true,
+  "status": "saved /home/michael/Projects/omadesign/artifacts/issue-83-native/canvas/manual-save.oma"
+}

@@ -1,0 +1,46 @@
+{
+  "version": "omadesign 0.6.2",
+  "archive_sha256": "e88169b848360b58032aeba546c516db71f629f1e782e72d181445a03cdd0121",
+  "installed_sha256": "e8946ae1cfa9acd396057a910c72449dc98c54402ebcc39781266a621aebb1df",
+  "observed_executables": [
+    "/home/michael/Projects/omadesign/artifacts/issue-83-investigation/arm-final/prefix/bin/omadesign",
+    "/usr/bin/unshare"
+  ],
+  "gpu": [
+    [
+      "/dev/dri/renderD128",
+      "asahi"
+    ]
+  ],
+  "native_save_reopen": {
+    "height": 800.0,
+    "layers": [
+      {
+        "id": 2,
+        "kind": "Px",
+        "mask": false,
+        "name": "Background",
+        "objects": 0,
+        "opacity": 1.0,
+        "parent": null,
+        "visible": true
+      },
+      {
+        "id": 3,
+        "kind": "V",
+        "mask": false,
+        "name": "Layer 1",
+        "objects": 1,
+        "opacity": 1.0,
+        "parent": null,
+        "visible": true
+      }
+    ],
+    "name": "Untitled",
+    "notes": [],
+    "pages": 1,
+    "width": 1280.0
+  },
+  "screenshot_sha256": "a0fe213d1e62de2e0470526b79532ce16ee5269fc354f4eb82eb15ad98a0608e",
+  "success": true
+}

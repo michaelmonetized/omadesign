@@ -30,6 +30,9 @@ concurrency:
   cancel-in-progress: true
 jobs:
   site:
+    # Blacksmith does not serve personal GitHub accounts. Keep hosted execution
+    # on Blacksmith; personal repositories validate locally instead of queuing forever.
+    if: github.event.repository.owner.type == 'Organization'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     defaults:

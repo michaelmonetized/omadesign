@@ -240,9 +240,16 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
             },
             _ => Draft::none(),
         };
-        let pm = if studio.is_motion() {
+        let is_motion = studio.is_motion();
+        let composing = studio
+            .type_edit
+            .as_ref()
+            .is_some_and(|e| e.ime.preedit.is_some());
+        let preview =
+            crate::app::type_ime::Preview::new(&mut studio.doc, studio.type_edit.as_ref());
+        let pm = if is_motion {
             compositor::render_view_posed(
-                &studio.doc,
+                &preview,
                 studio.view,
                 w,
                 h,
@@ -250,13 +257,16 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
                 Some(studio.playhead),
                 Some(&studio.pose_drag),
             )
-        } else if let Some(changing) = &changing {
-            studio.interaction_render.render(
-                &studio.doc, studio.view, w, h, draft, changing,
-            )
+        } else if let Some(changing) = &changing
+            && !composing
+        {
+            studio
+                .interaction_render
+                .render(&preview, studio.view, w, h, draft, changing)
         } else {
-            compositor::render_view(&studio.doc, studio.view, w, h, draft)
+            compositor::render_view(&preview, studio.view, w, h, draft)
         };
+        drop(preview);
         if let Some(pm) = pm {
             let image = eframe::egui::ColorImage::from_rgba_premultiplied(
                 [pm.width() as usize, pm.height() as usize],
@@ -3027,7 +3037,12 @@ fn paint_brush_ring(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
     p.circle_stroke(center, radius, Stroke::new(1.0, Color32::WHITE));
 }
 
-fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio, pen_preview: Option<Pt>) {
+fn draw_overlays(
+    p: &eframe::egui::Painter,
+    rect: Rect,
+    studio: &mut Studio,
+    pen_preview: Option<Pt>,
+) {
     paint_brush_ring(p, rect, studio);
     let v = studio.view;
     if let Some(Op::Create {
@@ -3232,15 +3247,65 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio, pen_pre
             Stroke::new(1.0, select()),
         ));
     }
-    if let Some(edit) = &studio.type_edit
-        && let Some(s) = studio.doc.find_shape(edit.layer, edit.id)
-        && let Geom::Text(run) = &s.geom
-    {
-        draw_type_caret(p, rect, studio, edit.layer, s, edit.caret, edit.anchor);
-        if run.thread.is_some() {
-            for (layer_index, layer) in studio.doc.layers.iter().enumerate() { for shape in layer.kind.shapes().unwrap_or(&[]) {
-                if shape.id != edit.id && let Geom::Text(other)=&shape.geom && other.thread.as_ref().is_some_and(|t|t.story==edit.id) { draw_type_caret(p,rect,studio,layer_index,shape,edit.caret,edit.anchor); }
-            }}
+    let owns_ime = studio.owns_type_ime(p.ctx());
+    if !owns_ime {
+        studio.cancel_type_ime();
+    }
+    let edit = studio.type_edit.clone();
+    if let Some(edit) = edit {
+        let preview = crate::app::type_ime::Preview::new(&mut studio.doc, Some(&edit));
+        let start = edit.caret.min(edit.anchor);
+        let composition = edit
+            .ime
+            .preedit
+            .as_ref()
+            .map(|pre| start..start + pre.text.chars().count());
+        let (caret, anchor) = if let Some(pre) = &edit.ime.preedit {
+            let active = pre
+                .active
+                .clone()
+                .unwrap_or(pre.text.chars().count()..pre.text.chars().count());
+            (start + active.end, start + active.start)
+        } else {
+            (edit.caret, edit.anchor)
+        };
+        let mut candidate = None;
+        for (li, layer) in preview.layers.iter().enumerate() {
+            for shape in layer.kind.shapes().unwrap_or(&[]) {
+                if shape.id == edit.id
+                    || matches!(&shape.geom, Geom::Text(run) if run.thread.as_ref().is_some_and(|t|t.story == edit.id))
+                {
+                    if let Some(area) = draw_type_caret(
+                        p,
+                        rect,
+                        &preview,
+                        studio.view,
+                        li,
+                        shape,
+                        caret,
+                        anchor,
+                        composition.clone(),
+                    ) {
+                        if candidate.is_none() || (li, shape.id) == edit.frame {
+                            candidate = Some(area);
+                        }
+                    }
+                }
+            }
+        }
+        if owns_ime && let Some(area) = candidate {
+            p.ctx().output_mut(|out| {
+                out.ime = Some(eframe::egui::output::IMEOutput {
+                    purpose: eframe::egui::IMEPurpose::Normal,
+                    rect: area,
+                    cursor_rect: area,
+                    should_interrupt_composition: edit.ime.interrupt,
+                })
+            });
+        }
+        drop(preview);
+        if let Some(edit) = &mut studio.type_edit {
+            edit.ime.interrupt = false;
         }
     }
 }
@@ -3248,47 +3313,101 @@ fn draw_overlays(p: &eframe::egui::Painter, rect: Rect, studio: &Studio, pen_pre
 fn draw_type_caret(
     p: &eframe::egui::Painter,
     rect: Rect,
-    studio: &Studio,
+    doc: &crate::document::Document,
+    v: crate::compositor::View,
     layer: usize,
     shape: &crate::document::Shape,
     caret: usize,
     anchor: usize,
-) {
-    let Geom::Text(run) = &shape.geom else { return; };
-    let v = studio.view;
+    composition: Option<std::ops::Range<usize>>,
+) -> Option<Rect> {
+    let Geom::Text(run) = &shape.geom else {
+        return None;
+    };
     let screen = |point| {
         let mut point = shape.world_point(point);
         let mut parent = shape.layout.parent;
         let mut visited = std::collections::HashSet::new();
         while let Some(id) = parent {
-            if !visited.insert(id) || visited.len() > 64 { break; }
-            let Some(frame) = studio.doc.find_shape(layer, id) else { break; };
+            if !visited.insert(id) || visited.len() > 64 {
+                break;
+            }
+            let Some(frame) = doc.find_shape(layer, id) else {
+                break;
+            };
             point = frame.world_point(point);
             parent = frame.layout.parent;
         }
         win(rect, v, point)
     };
     if let Some(quads) = crate::text_geometry::selection_quads(run, caret, anchor) {
-        for quad in quads { p.add(eframe::egui::Shape::convex_polygon(quad.into_iter().map(|point| screen(point)).collect(), select_fill(), Stroke::NONE)); }
+        for quad in quads {
+            p.add(eframe::egui::Shape::convex_polygon(
+                quad.into_iter().map(|point| screen(point)).collect(),
+                select_fill(),
+                Stroke::NONE,
+            ));
+        }
     } else {
-    for (a, b) in crate::text::selection_rects(run, caret, anchor) {
-        let points = [a, Pt::new(b.x, a.y), b, Pt::new(a.x, b.y)].into_iter().map(screen).collect();
-        p.add(eframe::egui::Shape::convex_polygon(points, select_fill(), Stroke::NONE));
+        for (a, b) in crate::text::selection_rects(run, caret, anchor) {
+            let points = [a, Pt::new(b.x, a.y), b, Pt::new(a.x, b.y)]
+                .into_iter()
+                .map(screen)
+                .collect();
+            p.add(eframe::egui::Shape::convex_polygon(
+                points,
+                select_fill(),
+                Stroke::NONE,
+            ));
+        }
     }
+    if let Some(range) = composition {
+        if let Some(quads) = crate::text_geometry::selection_quads(run, range.start, range.end) {
+            for quad in quads {
+                p.line_segment(
+                    [screen(quad[3]), screen(quad[2])],
+                    Stroke::new(1.5, select()),
+                );
+            }
+        } else {
+            for (a, b) in crate::text::selection_rects(run, range.start, range.end) {
+                p.line_segment(
+                    [screen(Pt::new(a.x, b.y)), screen(b)],
+                    Stroke::new(1.5, select()),
+                );
+            }
+        }
     }
+    let visible = run.layout.as_ref().is_none_or(|l| {
+        run.frame.is_none() || (caret >= l.visible_start && caret <= l.visible_end)
+    });
+    let c = crate::text::caret_pt(run, caret);
+    let height = crate::text::caret_height(run, caret);
+    let tangent = crate::text_geometry::caret_frame(run, caret)
+        .map(|(_, t)| t)
+        .unwrap_or(Pt::new(1., 0.));
+    let top = screen(c - tangent.perp() * height * 0.9);
+    let bot = screen(c + tangent.perp() * height * 0.2);
+    let area = Rect::from_two_pos(top, bot).expand(1.0);
     let phase = (p.ctx().input(|i| i.time) * 2.0).fract();
-    let on = phase < 0.5 && run.layout.as_ref().is_none_or(|l| run.frame.is_none() || (caret>=l.visible_start&&caret<=l.visible_end));
+    let on = phase < 0.5
+        && run.layout.as_ref().is_none_or(|l| {
+            run.frame.is_none() || (caret >= l.visible_start && caret <= l.visible_end)
+        });
     let next = if on { 0.5 - phase } else { 1.0 - phase };
     p.ctx()
         .request_repaint_after(std::time::Duration::from_secs_f64(next * 0.5 + 0.001));
     if on {
         let c = crate::text::caret_pt(run, caret);
-        let height=crate::text::caret_height(run,caret);
-        let tangent = crate::text_geometry::caret_frame(run, caret).map(|(_,t)|t).unwrap_or(Pt::new(1.,0.));
+        let height = crate::text::caret_height(run, caret);
+        let tangent = crate::text_geometry::caret_frame(run, caret)
+            .map(|(_, t)| t)
+            .unwrap_or(Pt::new(1., 0.));
         let top = screen(c - tangent.perp() * height * 0.9);
         let bot = screen(c + tangent.perp() * height * 0.2);
         p.line_segment([top, bot], Stroke::new(1.5, select()));
     }
+    visible.then_some(area)
 }
 
 fn draw_pixel_sel(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {

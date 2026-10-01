@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-09-30 · 0.6.2 — Local QA candidate (not released)
+## 2026-09-30 · 0.6.2 — Review, compose, and keep moving
 
 - Raster images support motion keys and presets, including import and frame placement.
 - In-app agents can import local files and use native editing tools across all five modes.
@@ -11,7 +11,9 @@
 - Artboards support move/scale/keep artwork options, cloning, exact artwork wrapping, and explicit new sizes. (#175)
 - Export supports document, artboard, and selection scopes; live previews; presets; and per-file/session options. (#174)
 
-Packaging and release publication are held until Michael confirms this final local build passes QA.
+- Cloud review adds five reaction stamps, highlighter and brush strokes, a floating tool rail, and thread deletion. The native review window renders the same marks. (#62)
+- Wayland canvas text accepts IME composition and commits, positions the candidate window at the caret, and keeps draft composition out of saved documents and undo history. Native fcitx5/Rime and CJK clipboard checks cover #83.
+- Historical cloud release gates are reconciled with accepted human QA, Layout integration and physical x86_64 runtime evidence. (#67)
 
 ## 2026-09-29 · 0.6.1 — More control. Less waiting.
 

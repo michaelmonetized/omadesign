@@ -9,6 +9,7 @@ mod canvas;
 mod chrome;
 mod credits;
 mod cloud;
+mod cloud_annotations;
 mod color_picker;
 mod deform;
 pub(crate) mod export_dialog;
