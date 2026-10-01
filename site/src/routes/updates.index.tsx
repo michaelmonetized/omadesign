@@ -1,4 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import workspace from "../../../docs/blog/0.6.3-a-workspace-that-moves.md?raw";
+import reviewCompose from "../../../docs/blog/0.6.2-review-compose-keep-moving.md?raw";
 import moreControl from "../../../docs/blog/0.6.1-more-control-less-waiting.md?raw";
 import keyTheDesign from "../../../docs/blog/0.6.0-key-the-design.md?raw";
 import pixelYouMean from "../../../docs/blog/0.5.9-click-the-pixel.md?raw";
@@ -14,6 +16,11 @@ import { CURL } from "../site";
 import { latestUpdate, updates } from "../updates";
 
 const bodies: Record<string, { markdown: string; path: string }> = {
+  "0.6.3": { markdown: workspace, path: "docs/blog/0.6.3-a-workspace-that-moves.md" },
+  "0.6.2": {
+    markdown: reviewCompose,
+    path: "docs/blog/0.6.2-review-compose-keep-moving.md",
+  },
   "0.6.1": { markdown: moreControl, path: "docs/blog/0.6.1-more-control-less-waiting.md" },
   "0.6.0": { markdown: keyTheDesign, path: "docs/blog/0.6.0-key-the-design.md" },
   "0.5.9": { markdown: pixelYouMean, path: "docs/blog/0.5.9-click-the-pixel.md" },
@@ -33,7 +40,7 @@ export const Route = createFileRoute("/updates/")({
       {
         name: "description",
         content:
-          "Studio notes from omadesign. 0.6.1 brings offline AI tools, live agents, editable typography and faster canvas work.",
+          "Studio notes from omadesign. 0.6.3 makes Welcome a workspace for organizing and opening your documents.",
       },
     ],
   }),
