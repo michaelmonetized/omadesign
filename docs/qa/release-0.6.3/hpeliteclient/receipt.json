@@ -3,26 +3,26 @@
   "host": "hpeliteclient",
   "architecture": "x86_64",
   "archive": {
-    "bytes": 39226003,
-    "sha256": "d6a3d2badef29482ff014abfe7dbd1626fa5339aa95a1a78851b8bec4b3c5ec3"
+    "bytes": 39225709,
+    "sha256": "b8642376a8ab977988830cec853c2870a6a468b5c337f19e4edb576401247960"
   },
   "script": {
     "bytes": 16893,
     "sha256": "efd2feafe51e9a51a88573dd67767c627ec7b715f8d6ac1112ad8b8597517d0e"
   },
-  "started_utc": "2026-10-01T04:15:11Z",
+  "started_utc": "2026-10-01T04:53:38Z",
   "steps": [
     {
       "name": "install",
       "command": [
         "sh",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/archive/omadesign-0.6.3-x86_64-unknown-linux-gnu/install.sh",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/archive/omadesign-0.6.3-x86_64-unknown-linux-gnu/install.sh",
         "--prefix",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix"
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix"
       ],
       "exit_code": 0,
       "timed_out": false,
-      "wall_seconds": 0.15261989796999842,
+      "wall_seconds": 0.5594138950109482,
       "observed_executables": [
         "/usr/bin/bash"
       ],
@@ -34,12 +34,12 @@
       "command": [
         "/usr/bin/unshare",
         "-Urn",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/bin/omadesign",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/bin/omadesign",
         "--version"
       ],
       "exit_code": 0,
       "timed_out": false,
-      "wall_seconds": 0.026014123926870525,
+      "wall_seconds": 0.026611414970830083,
       "observed_executables": [
         "/usr/bin/unshare"
       ],
@@ -51,15 +51,15 @@
       "command": [
         "/usr/bin/unshare",
         "-Urn",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/bin/omadesign",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/bin/omadesign",
         "--inspect",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/inputs/infographic-seed.oma"
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/inputs/infographic-seed.oma"
       ],
       "exit_code": 0,
       "timed_out": false,
-      "wall_seconds": 0.07688949501607567,
+      "wall_seconds": 0.07721134996972978,
       "observed_executables": [
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/bin/omadesign",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/bin/omadesign",
         "/usr/bin/unshare"
       ],
       "gpu_handles": [],
@@ -70,17 +70,17 @@
       "command": [
         "/usr/bin/unshare",
         "-Urn",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/bin/omadesign",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/bin/omadesign",
         "--convert",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/inputs/infographic-seed.oma",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/inputs/infographic-seed.oma",
         "--output",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/converted.png"
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/converted.png"
       ],
       "exit_code": 0,
       "timed_out": false,
-      "wall_seconds": 0.20421638491097838,
+      "wall_seconds": 0.2037823919672519,
       "observed_executables": [
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/bin/omadesign",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/bin/omadesign",
         "/usr/bin/unshare"
       ],
       "gpu_handles": [],
@@ -91,14 +91,15 @@
       "command": [
         "/usr/bin/unshare",
         "-Urn",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/bin/omadesign",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/bin/omadesign",
         "--inspect",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/converted.png"
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/converted.png"
       ],
       "exit_code": 0,
       "timed_out": false,
-      "wall_seconds": 0.025961742037907243,
+      "wall_seconds": 0.05183808505535126,
       "observed_executables": [
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/bin/omadesign",
         "/usr/bin/unshare"
       ],
       "gpu_handles": [],
@@ -109,17 +110,17 @@
       "command": [
         "/usr/bin/unshare",
         "-Urn",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/bin/omadesign",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/bin/omadesign",
         "--convert",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/inputs/infographic-seed.oma",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/inputs/infographic-seed.oma",
         "--output",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/roundtrip.oma"
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/roundtrip.oma"
       ],
       "exit_code": 0,
       "timed_out": false,
-      "wall_seconds": 0.20376716298051178,
+      "wall_seconds": 0.3821361329173669,
       "observed_executables": [
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/bin/omadesign",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/bin/omadesign",
         "/usr/bin/unshare"
       ],
       "gpu_handles": [],
@@ -130,15 +131,15 @@
       "command": [
         "/usr/bin/unshare",
         "-Urn",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/bin/omadesign",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/bin/omadesign",
         "--inspect",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/roundtrip.oma"
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/roundtrip.oma"
       ],
       "exit_code": 0,
       "timed_out": false,
-      "wall_seconds": 0.10517675394657999,
+      "wall_seconds": 0.07710554101504385,
       "observed_executables": [
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/bin/omadesign",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/bin/omadesign",
         "/usr/bin/unshare"
       ],
       "gpu_handles": [],
@@ -149,19 +150,19 @@
       "command": [
         "/usr/bin/unshare",
         "-Urn",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/bin/omadesign",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/bin/omadesign",
         "--shot-file",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/roundtrip.oma",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/roundtrip.oma",
         "--size",
         "1440x900",
         "--out",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/native-editor.png"
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/native-editor.png"
       ],
       "exit_code": 0,
       "timed_out": false,
-      "wall_seconds": 6.940682315034792,
+      "wall_seconds": 5.680187268997543,
       "observed_executables": [
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/bin/omadesign",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/bin/omadesign",
         "/usr/bin/unshare"
       ],
       "gpu_handles": [
@@ -179,15 +180,15 @@
       "command": [
         "/usr/bin/unshare",
         "-Urn",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/bin/omadesign",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/bin/omadesign",
         "--inspect",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/native-editor.png"
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/native-editor.png"
       ],
       "exit_code": 0,
       "timed_out": false,
-      "wall_seconds": 0.05222261697053909,
+      "wall_seconds": 0.05134172202087939,
       "observed_executables": [
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/bin/omadesign",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/bin/omadesign",
         "/usr/bin/unshare"
       ],
       "gpu_handles": [],
@@ -198,20 +199,20 @@
       "command": [
         "/usr/bin/unshare",
         "-Urn",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/bin/background_removal_qa-supplemental",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/inputs/cat-320.png",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/background"
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/bin/background_removal_qa-supplemental",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/inputs/cat-320.png",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/background"
       ],
       "exit_code": 0,
       "timed_out": false,
-      "wall_seconds": 1.1760275590931997,
+      "wall_seconds": 1.2719959570094943,
       "observed_executables": [
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/bin/background_removal_qa-supplemental",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/bin/background_removal_qa-supplemental",
         "/usr/bin/unshare"
       ],
       "gpu_handles": [],
       "observed_ort_mappings": [
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/share/omadesign/lib/libonnxruntime.so.1"
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/share/omadesign/lib/libonnxruntime.so.1"
       ]
     },
     {
@@ -219,21 +220,21 @@
       "command": [
         "/usr/bin/unshare",
         "-Urn",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/bin/upscale_qa-supplemental",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/inputs/cat-320.png",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/upscaled.png",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/bin/upscale_qa-supplemental",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/inputs/cat-320.png",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/upscaled.png",
         "2"
       ],
       "exit_code": 0,
       "timed_out": false,
-      "wall_seconds": 7.510080849984661,
+      "wall_seconds": 8.236798992962576,
       "observed_executables": [
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/bin/upscale_qa-supplemental",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/bin/upscale_qa-supplemental",
         "/usr/bin/unshare"
       ],
       "gpu_handles": [],
       "observed_ort_mappings": [
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/share/omadesign/lib/libonnxruntime.so.1"
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/share/omadesign/lib/libonnxruntime.so.1"
       ]
     },
     {
@@ -241,15 +242,14 @@
       "command": [
         "/usr/bin/unshare",
         "-Urn",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/bin/omadesign",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/bin/omadesign",
         "--inspect",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/background/tiled-guided-cutout.png"
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/background/tiled-guided-cutout.png"
       ],
       "exit_code": 0,
       "timed_out": false,
-      "wall_seconds": 0.07721551705617458,
+      "wall_seconds": 0.026321575045585632,
       "observed_executables": [
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/bin/omadesign",
         "/usr/bin/unshare"
       ],
       "gpu_handles": [],
@@ -260,13 +260,13 @@
       "command": [
         "/usr/bin/unshare",
         "-Urn",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/prefix/bin/omadesign",
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/prefix/bin/omadesign",
         "--inspect",
-        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package/upscaled.png"
+        "/home/michael/.local/state/omadesign/qa/release-0.6.3/package-frozen/upscaled.png"
       ],
       "exit_code": 0,
       "timed_out": false,
-      "wall_seconds": 0.026247186004184186,
+      "wall_seconds": 0.02620158705394715,
       "observed_executables": [
         "/usr/bin/unshare"
       ],
@@ -287,12 +287,12 @@
     }
   },
   "archive_binary": {
-    "bytes": 57344168,
-    "sha256": "419895fcedad36db982ec0e6b9a6bd49f2607cef78b655ec2eb83a64aa84b117"
+    "bytes": 57344808,
+    "sha256": "2ef497d83ad65574139b55b02fa0089254ece37d835b5cab6638c5b0ee3e7bca"
   },
   "installed_binary": {
-    "bytes": 57344168,
-    "sha256": "419895fcedad36db982ec0e6b9a6bd49f2607cef78b655ec2eb83a64aa84b117"
+    "bytes": 57344808,
+    "sha256": "2ef497d83ad65574139b55b02fa0089254ece37d835b5cab6638c5b0ee3e7bca"
   },
   "installed_runtime": {
     "libonnxruntime.so": {
@@ -367,7 +367,7 @@
     }
   },
   "display": {
-    "pid": 323223,
+    "pid": 337479,
     "sway": {
       "bytes": 616664,
       "sha256": "7ba78b7531a3b3cb1852b3b1e464b4458cce1749c6c0fe3c6fb4b16ece9d5b9c"
@@ -453,14 +453,14 @@
       }
     ],
     "env": {
-      "XDG_RUNTIME_DIR": "/run/user/1000/oma061-smoke-323147",
+      "XDG_RUNTIME_DIR": "/run/user/1000/oma061-smoke-337380",
       "WAYLAND_DISPLAY": "wayland-1",
-      "SWAYSOCK": "/run/user/1000/oma061-smoke-323147/sway-ipc.1000.323223.sock"
+      "SWAYSOCK": "/run/user/1000/oma061-smoke-337380/sway-ipc.1000.337479.sock"
     },
     "renderer_lines": [
-      "00:00:00.136 [INFO] [wlr] [render/egl.c:374] EGL vendor: Mesa Project",
-      "00:00:00.151 [INFO] [wlr] [render/gles2/renderer.c:540] GL vendor: AMD",
-      "00:00:00.151 [INFO] [wlr] [render/gles2/renderer.c:541] GL renderer: AMD Radeon Graphics (radeonsi, raven, ACO, DRM 3.64, 7.2.3-arch1-3)"
+      "00:00:00.221 [INFO] [wlr] [render/egl.c:374] EGL vendor: Mesa Project",
+      "00:00:00.237 [INFO] [wlr] [render/gles2/renderer.c:540] GL vendor: AMD",
+      "00:00:00.237 [INFO] [wlr] [render/gles2/renderer.c:541] GL renderer: AMD Radeon Graphics (radeonsi, raven, ACO, DRM 3.64, 7.2.3-arch1-3)"
     ]
   },
   "supplemental_helper_scope": "Retained benchmark helper source8ee01b4; real-model inference verifies exact installed runtime auto-discovery, not current shipped UI code. ORT overrides and LD_LIBRARY_PATH are unset.",
@@ -479,9 +479,9 @@
       "edge_tiles": 0,
       "height": 212,
       "inference_calls": 1,
-      "inference_seconds": 1.10149878,
+      "inference_seconds": 1.1595817099999999,
       "model": "u2netp.onnx",
-      "refinement_seconds": 0.011264967,
+      "refinement_seconds": 0.010414411,
       "runtime": "ONNX Runtime 1.28 CPU",
       "settings": {
         "contrast": 1,
@@ -502,7 +502,7 @@
         424
       ],
       "runtime": "ONNX Runtime 1.28 CPU",
-      "seconds": 7.38281968,
+      "seconds": 8.11959795,
       "sha256": "74b0bf4bdad2868e256ef722980586b7ff1a8b2c9ba0b8e526498cd28acf5b80",
       "source": [
         320,
@@ -555,7 +555,7 @@
     }
   },
   "existing_install_unchanged": true,
-  "compositor_cleanup_fallback": "Command '['/home/michael/.local/state/omadesign/qa/fleet-performance-0.6.1/sway-prefix/usr/bin/swaymsg', '-s', '/run/user/1000/oma061-smoke-323147/sway-ipc.1000.323223.sock', 'exit']' returned non-zero exit status 1.",
+  "compositor_cleanup_fallback": "Command '['/home/michael/.local/state/omadesign/qa/fleet-performance-0.6.1/sway-prefix/usr/bin/swaymsg', '-s', '/run/user/1000/oma061-smoke-337380/sway-ipc.1000.337479.sock', 'exit']' returned non-zero exit status 1.",
   "private_compositor_exit": 0,
-  "finished_utc": "2026-10-01T04:15:31Z"
+  "finished_utc": "2026-10-01T04:53:59Z"
 }

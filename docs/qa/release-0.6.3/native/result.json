@@ -17,7 +17,7 @@
     "context moves file to trash",
     "personal template opens editable unsaved copy"
   ],
-  "elapsed_seconds": 30.815941011,
+  "elapsed_seconds": 29.757983213,
   "input": "egui pointer and keyboard events",
   "renderer": "native WGPU",
   "version": "0.6.3"

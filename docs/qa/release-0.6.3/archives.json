@@ -1,16 +1,17 @@
 {
   "version": "0.6.3",
   "local_build": true,
+  "source_application_commit": "d20ba4c0f44f65f041856c982ad7539de3a0847a",
   "archives": [
     {
       "architecture": "aarch64",
       "archive": "omadesign-0.6.3-aarch64-unknown-linux-gnu.tar.gz",
-      "bytes": 36908687,
-      "sha256": "dc90539b55eeb3167399cfcaf6293480f32e041a2167f5af7f28dcae5c610b36",
+      "bytes": 36909924,
+      "sha256": "3cac3ace9c737cc12454e29f90bfb705b6389de259a459e9ec3600494cc2c776",
       "objects": [
         {
           "file": "omadesign",
-          "sha256": "b76dca1bc4987ad1e4d99cc501e2f8450170f0909d5d5e5737b3bffd3bc05011",
+          "sha256": "8d90d163331eb14112466883a0af64d18d7a650d2e9f77aed0ff9a874107d195",
           "maximum_glibc": "2.35"
         },
         {
@@ -39,12 +40,12 @@
     {
       "architecture": "x86_64",
       "archive": "omadesign-0.6.3-x86_64-unknown-linux-gnu.tar.gz",
-      "bytes": 39226003,
-      "sha256": "d6a3d2badef29482ff014abfe7dbd1626fa5339aa95a1a78851b8bec4b3c5ec3",
+      "bytes": 39225709,
+      "sha256": "b8642376a8ab977988830cec853c2870a6a468b5c337f19e4edb576401247960",
       "objects": [
         {
           "file": "omadesign",
-          "sha256": "419895fcedad36db982ec0e6b9a6bd49f2607cef78b655ec2eb83a64aa84b117",
+          "sha256": "2ef497d83ad65574139b55b02fa0089254ece37d835b5cab6638c5b0ee3e7bca",
           "maximum_glibc": "2.35"
         },
         {
