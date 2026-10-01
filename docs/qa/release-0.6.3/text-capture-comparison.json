@@ -1,0 +1,82 @@
+[
+  {
+    "file": "hpeliteclient/native-editor.png",
+    "comparison": [
+      {
+        "region": "menu",
+        "bbox": null,
+        "changed_pixels": 0
+      },
+      {
+        "region": "inspector",
+        "bbox": null,
+        "changed_pixels": 0
+      }
+    ]
+  },
+  {
+    "file": "hpeliteclient/native-settled.png",
+    "comparison": [
+      {
+        "region": "menu",
+        "bbox": null,
+        "changed_pixels": 0
+      },
+      {
+        "region": "inspector",
+        "bbox": null,
+        "changed_pixels": 0
+      }
+    ]
+  },
+  {
+    "file": "intelpro/native-editor.png",
+    "comparison": [
+      {
+        "region": "menu",
+        "bbox": [
+          14,
+          11,
+          371,
+          25
+        ],
+        "changed_pixels": 0
+      },
+      {
+        "region": "inspector",
+        "bbox": [
+          17,
+          2,
+          266,
+          100
+        ],
+        "changed_pixels": 0
+      }
+    ]
+  },
+  {
+    "file": "intelpro/native-settled.png",
+    "comparison": [
+      {
+        "region": "menu",
+        "bbox": [
+          14,
+          11,
+          371,
+          25
+        ],
+        "changed_pixels": 0
+      },
+      {
+        "region": "inspector",
+        "bbox": [
+          17,
+          2,
+          266,
+          100
+        ],
+        "changed_pixels": 0
+      }
+    ]
+  }
+]

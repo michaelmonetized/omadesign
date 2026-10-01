@@ -1,0 +1,15 @@
+{
+  "version": "0.6.3",
+  "library_tests": {
+    "passed": 987,
+    "failed": 0,
+    "ignored": 8,
+    "seconds": 359.48,
+    "log_sha256": "2c9935690ea53c822421d4159d0212438a0b8a3ac305034efaa10b18ed24032d"
+  },
+  "native_acceptance_checks": 16,
+  "site_tests": 21,
+  "source_application_commit": "01b26ce1",
+  "source_with_final_test_fixtures": "e7c268f06d7f7cd0a5f7ac7bdb6a32556bcfe58e",
+  "notes": "Subsequent fixture and harness changes do not alter production code."
+}

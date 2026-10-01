@@ -1,0 +1,60 @@
+{
+  "version": "0.6.3",
+  "success": true,
+  "archive_sha256": "dc90539b55eeb3167399cfcaf6293480f32e041a2167f5af7f28dcae5c610b36",
+  "binary_sha256": "b76dca1bc4987ad1e4d99cc501e2f8450170f0909d5d5e5737b3bffd3bc05011",
+  "checks": [
+    {
+      "name": "install",
+      "exit_code": 0,
+      "seconds": 0.29428255699167494
+    },
+    {
+      "name": "version",
+      "exit_code": 0,
+      "seconds": 0.005275982999592088
+    },
+    {
+      "name": "binary-ldd",
+      "exit_code": 0,
+      "seconds": 0.005068446000223048
+    },
+    {
+      "name": "runtime-ldd",
+      "exit_code": 0,
+      "seconds": 0.007774429002893157
+    },
+    {
+      "name": "inspect",
+      "exit_code": 0,
+      "seconds": 0.13978573700296693
+    },
+    {
+      "name": "convert",
+      "exit_code": 0,
+      "seconds": 0.1473898440017365
+    },
+    {
+      "name": "save",
+      "exit_code": 0,
+      "seconds": 0.1946844100020826
+    },
+    {
+      "name": "reopen",
+      "exit_code": 0,
+      "seconds": 0.11136880599951837
+    },
+    {
+      "name": "native-capture",
+      "exit_code": 0,
+      "seconds": 5.043719050998334
+    },
+    {
+      "name": "inspect-capture",
+      "exit_code": 0,
+      "seconds": 0.02817104999849107
+    }
+  ],
+  "converted_sha256": "3cdce7cb10fc90dff5db55b2fc50ad0f7ba28eebc51ec5deab0071c4d3fe08df",
+  "scope": "Shipped ARM64 executable; isolated prefix/profile; offline workloads and native WGPU capture"
+}
