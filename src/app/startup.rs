@@ -153,6 +153,19 @@ impl Studio {
         }
     }
 
+    pub fn show_welcome_screen(&mut self) {
+        if self.show_welcome { return; }
+        self.end_deform(true);
+        self.end_pixel_stroke(true);
+        self.commit_type_edit();
+        self.finish_free_transform(true);
+        self.reset_snap_gesture();
+        self.op = None;
+        self.playing = false;
+        self.photo.crop_drag = None;
+        self.show_welcome = true;
+    }
+
     pub fn switch_persona(&mut self, persona: Persona) {
         if self.persona == persona && !self.show_welcome {
             return;

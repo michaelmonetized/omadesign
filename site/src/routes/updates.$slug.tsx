@@ -1,3 +1,4 @@
+import workspace from "../../../docs/blog/0.6.3-a-workspace-that-moves.md?raw";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import reviewCompose from "../../../docs/blog/0.6.2-review-compose-keep-moving.md?raw";
 import moreControl from "../../../docs/blog/0.6.1-more-control-less-waiting.md?raw";
@@ -14,6 +15,7 @@ import { Markdown } from "../md";
 import { updateBySlug } from "../updates";
 
 const bodies: Record<string, { markdown: string; path: string }> = {
+  "0.6.3": { markdown: workspace, path: "docs/blog/0.6.3-a-workspace-that-moves.md" },
   "0.6.2": {
     markdown: reviewCompose,
     path: "docs/blog/0.6.2-review-compose-keep-moving.md",

@@ -340,26 +340,45 @@ pub fn tick(ctx: &egui::Context, studio: &mut Studio) {
     close::show(ctx, studio);
 }
 
+pub(super) fn saving(ctx: &egui::Context) -> bool {
+    jobs::is_running::<PaletteResult>(ctx, PALETTE_ACTION)
+        || jobs::is_running::<BrandResult>(ctx, BRAND_ACTION)
+        || typography::busy(ctx)
+}
+
 pub fn tabs(ui: &mut Ui, studio: &mut Studio) {
-    ui.horizontal(|ui| {
-        for (tab, name) in [
-            (Sidebar::Inspector, "Inspect"),
-            (Sidebar::Palettes, "Palettes"),
-            (Sidebar::Brand, "Brand"),
+    let width = 4.0 * 30.0 + 3.0 * ui.spacing().item_spacing.x;
+    ui.allocate_ui_with_layout(egui::vec2(width, 28.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+        for (tab, glyph, name) in [
+            (Sidebar::Inspector, super::icons::ph::INFO, "Inspect"),
+            (Sidebar::Typography, super::icons::ph::TEXT_AA, "Typography"),
+            (Sidebar::Palettes, super::icons::ph::PALETTE, "Palettes"),
+            (Sidebar::Brand, super::icons::ph::TOOLBOX, "Brand assets"),
         ] {
-            ui.selectable_value(&mut studio.libraries.sidebar, tab, name);
+            if super::icons::icon_button(ui, glyph, name, studio.libraries.sidebar == tab) {
+                studio.libraries.sidebar = tab;
+            }
         }
     });
-    ui.add_space(10.);
 }
 pub fn show(ui: &mut Ui, studio: &mut Studio) {
+    if studio.libraries.sidebar == Sidebar::Typography {
+        egui::ScrollArea::vertical().id_salt("type-content").auto_shrink([false,false]).show(ui, |ui| {
+            super::studios::character_studio(ui, studio);
+            ui.collapsing("Project typography", |ui| {
+                let mut state = std::mem::take(&mut studio.libraries);
+                project_picker(ui, studio, &mut state);
+                typography::show(ui, studio, &mut state);
+                studio.libraries = state;
+            });
+        });
+        return;
+    }
     let mut state = std::mem::take(&mut studio.libraries);
     match state.sidebar {
         Sidebar::Palettes => palettes(ui, studio, &mut state),
         Sidebar::Brand => {
-            egui::ScrollArea::vertical()
-                .id_salt("brand-content")
-                .auto_shrink([false, false])
+            egui::ScrollArea::vertical().id_salt("brand-content").auto_shrink([false, false])
                 .show(ui, |ui| brand(ui, studio, &mut state));
         }
         _ => {}

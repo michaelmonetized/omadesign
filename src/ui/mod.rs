@@ -92,7 +92,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         preferences::show(&ctx, studio);
         return;
     }
-    if studio.file_dialog_pending() || studio.updates.freezing {
+    if studio.file_dialog_pending() || studio.updates.freezing || welcome::file_action_busy(&ctx) {
         ui.disable();
     }
     ctx.options_mut(|o| o.zoom_with_keyboard = false);
@@ -102,6 +102,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     }
     // Give cancellable library loads Escape before canvas shortcuts consume it.
     library::tick(&ctx, studio);
+    welcome::tick(&ctx, studio);
     plugins::tick(&ctx, studio);
     canvas::poll_screen_pick(&ctx, studio);
     theme::poll(&ctx);

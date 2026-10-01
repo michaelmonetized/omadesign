@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-01 · 0.6.3 — A workspace that moves with you
+
+- Hover and move across motion thumbnails to scrub their keyframes without opening a document.
+- Ctrl-click toggles selections; Shift-click selects a range in browser order. Alt-click and Return open documents in background tabs while Welcome stays focused.
+- Document context menus reveal, move to a project, clone, save personal templates, and move files to Trash. Drag documents onto projects; hold Alt to copy.
+- Project context menus create Vector, Raster, or Layout documents, reveal folders, move projects, and move projects to Trash. Open tabs follow moved paths.
+- Typography has its own sidebar tab. Inspect, Typography, Palettes, and Brand use icon controls at the top right.
+- The center mode group runs red Vector, orange Raster, yellow Layout, green Welcome, blue Photo, indigo Motion, and violet Agent.
+
 ## 2026-09-30 · 0.6.2 — Review, compose, and keep moving
 
 - Raster images support motion keys and presets, including import and frame placement.

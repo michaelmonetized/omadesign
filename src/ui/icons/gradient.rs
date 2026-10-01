@@ -1,6 +1,6 @@
 use crate::ui::theme;
 use eframe::egui::{
-    self, Color32, Rect, Response, Sense, TextureHandle, Ui, WidgetInfo, WidgetType, vec2,
+    self, Color32, TextureHandle, Ui,
 };
 const SPARKLE: &[u8] = include_bytes!("../../../assets/phosphor/welcome/sparkle.svg");
 
@@ -38,44 +38,6 @@ pub fn gradient_svg_icon(
 pub fn sparkle_texture(ui: &Ui) -> Option<TextureHandle> {
     let [from, to] = theme::agent_gradient(theme::p().dark);
     gradient_svg_icon(ui, "agent-sparkle", SPARKLE, from, to)
-}
-
-pub fn sparkle_button(ui: &mut Ui, selected: bool) -> Response {
-    let (rect, _) = ui.allocate_exact_size(vec2(30., 28.), Sense::hover());
-    let response = ui.interact(rect, egui::Id::new("studio-agent-toggle"), Sense::click());
-    response.widget_info(|| {
-        WidgetInfo::selected(WidgetType::Button, ui.is_enabled(), selected, "Agent")
-    });
-    if ui.is_rect_visible(rect) {
-        if selected || response.hovered() || response.has_focus() {
-            ui.painter().rect_filled(
-                rect.shrink(1.),
-                6.,
-                if selected {
-                    theme::accent_soft()
-                } else {
-                    theme::bg_widget_hover()
-                },
-            );
-        }
-        if response.has_focus() {
-            ui.painter().rect_stroke(
-                rect.shrink(1.),
-                6.,
-                egui::Stroke::new(1., theme::accent()),
-                egui::StrokeKind::Inside,
-            );
-        }
-        if let Some(texture) = sparkle_texture(ui) {
-            ui.painter().image(
-                texture.id(),
-                Rect::from_center_size(rect.center(), vec2(19., 19.)),
-                Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1., 1.)),
-                Color32::WHITE,
-            );
-        }
-    }
-    response.on_hover_text("Design with agent")
 }
 
 #[cfg(test)]

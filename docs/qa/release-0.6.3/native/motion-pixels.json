@@ -1,0 +1,11 @@
+{
+  "region": [
+    94,
+    126,
+    277,
+    252
+  ],
+  "changed_pixels": 3961,
+  "total_pixels": 23058,
+  "meaning": "Visible motion thumbnail changes between left and right hover positions"
+}

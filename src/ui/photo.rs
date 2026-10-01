@@ -53,7 +53,6 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         .size_range(256.0..=420.0)
         .frame(Frame::new().fill(bg_panel()).inner_margin(Margin::same(14)))
         .show(ui, |ui| {
-            super::library::tabs(ui, studio);
             if studio.libraries.sidebar == crate::app::libraries::Sidebar::Inspector {
                 ui.add_enabled_ui(!studio.photo.is_batching(), |ui| develop_panel(ui, studio));
             } else {
@@ -1193,6 +1192,7 @@ mod tests {
         for key in [Key::Enter, Key::Escape] {
             let (ctx, mut studio) = fixture();
             studio.persona = crate::tools::Persona::Photo;
+            studio.show_welcome = false;
             studio.tool = crate::tools::Tool::Crop;
             studio.photo.images.push(photo::PhotoImage::from_full(
                 "Crop fixture".into(),

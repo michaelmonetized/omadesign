@@ -42,7 +42,15 @@ pub(super) struct TabState {
 
 impl TabState {
     pub(super) fn new(doc: Document, path: Option<PathBuf>) -> Self {
-        let active_layer = doc.layers.len().checked_sub(1);
+        let active_layer = if doc.workspace == Some(Persona::Pixel) {
+            doc.layers.iter().enumerate().rev()
+                .find(|(index, layer)| layer.visible && !layer.locked
+                    && layer.kind.pixels().is_some() && doc.layer_editable(*index))
+                .map(|(index, _)| index)
+                .or_else(|| doc.layers.len().checked_sub(1))
+        } else {
+            doc.layers.len().checked_sub(1)
+        };
         Self {
             doc,
             path,
@@ -238,6 +246,48 @@ impl Studio {
         staging.doc.layers.clear();
         self.tabs[self.active_tab] = staging;
         self.activate_tab();
+    }
+
+    /// Keep open documents and recent-file links attached after browser moves.
+    /// Trashed documents remain editable and require Save As to keep changes.
+    pub(crate) fn relocate_browser_paths(&mut self, old: &std::path::Path, new: Option<&std::path::Path>) {
+        self.ensure_tabs();
+        let update = |path: &mut Option<PathBuf>, dirty: &mut bool| {
+            if let Some(current) = path.as_ref() && let Ok(relative) = current.strip_prefix(old) {
+                *path = new.map(|root| if relative.as_os_str().is_empty() { root.to_owned() } else { root.join(relative) });
+                if new.is_none() { *dirty = true; }
+            }
+        };
+        update(&mut self.path, &mut self.dirty);
+        for (index, tab) in self.tabs.iter_mut().enumerate() {
+            if index != self.active_tab { update(&mut tab.path, &mut tab.dirty); }
+        }
+        for recent in crate::project::load_recents_all() {
+            if let Ok(relative) = recent.strip_prefix(old) {
+                crate::project::remove_recent(&recent);
+                if let Some(root) = new {
+                    crate::project::push_recent(&if relative.as_os_str().is_empty() { root.to_owned() } else { root.join(relative) });
+                }
+            }
+        }
+        self.recents = crate::project::load_recents();
+        self.libraries.folders.retain(|_, folder| {
+            if let Ok(relative) = folder.strip_prefix(old) {
+                if let Some(root) = new {
+                    *folder = if relative.as_os_str().is_empty() { root.to_owned() } else { root.join(relative) };
+                } else { return false; }
+            }
+            true
+        });
+        let drafts = std::mem::take(&mut self.libraries.projects);
+        for (path, draft) in drafts {
+            let path = if let Ok(relative) = path.strip_prefix(old) {
+                new.map(|root| if relative.as_os_str().is_empty() { root.to_owned() } else { root.join(relative) }).unwrap_or(path)
+            } else { path };
+            self.libraries.projects.insert(path, draft);
+        }
+        self.libraries.source = None;
+        self.photo.relocate_browser_paths(old, new);
     }
 
     pub fn new_tab(&mut self) {

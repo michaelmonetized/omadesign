@@ -34,6 +34,12 @@ That installs `~/.local/bin/omadesign` and a desktop entry under your home direc
 4. **Pixel** (`B`) paints on a raster layer.
 5. **Photo** opens a folder of pictures and grades them.
 
+The centered mode icons are red Vector, orange Raster, yellow Layout, green
+Welcome (the Omadesign mark), blue Photo, indigo Motion, and violet Agent.
+The top-right icons select **Inspect** (info), **Typography** (Aa), **Palettes**,
+and **Brand** (toolbox). Typography holds font, spacing, paragraph, OpenType,
+text frame and text path controls independently of Inspect.
+
 Chrome follows your desktop: Omarchy theme colors and the font from `omarchy font current` / fontconfig. Icons are Phosphor Light.
 
 ## Welcome: your work and projects
@@ -46,9 +52,20 @@ Use **Refresh** after moving or adding work outside the app.
 
 Both file browsers show masonry thumbnails at their natural aspect ratio, with
 at most three columns each. Names appear on hover. Click a document to open it.
-**Shift-click** the first item to begin selecting several; subsequent clicks
-add or remove selections. Choose **Open selected** (or **Recover selected**) to
-open them, and **Clear** or Escape to leave selection. The funnel filters by
+**Ctrl-click** toggles individual selections. **Shift-click** selects the range
+from the last selection anchor in the displayed order; Ctrl+Shift adds a range.
+**Alt-click** opens a document in a background tab. **Return**, **Open selected**,
+and **Recover selected** open selected files in browser order without leaving
+Welcome. Use **Clear** or Escape to leave selection. Animated documents have a
+play badge: move across their thumbnail to scrub from the first to last frame.
+
+Right-click documents to **Reveal**, **Move to project**, **Clone**, **Make template**,
+or **Delete · Move to Trash**. A context action applies to the current selection
+when you right-click one of its documents. Drag selected documents onto a project
+to move them; hold **Alt** at release to copy. Existing files are never overwritten;
+name collisions receive a numbered suffix. Portable fonts travel with the document.
+Personal templates appear under **Your templates** in the Template library and
+open as unsaved editable copies. The funnel filters by
 Vector, Raster, Layout, Photo or Motion; **All modes** clears the filter.
 
 **Projects → recent** finds directories containing `.omabrand` anywhere beneath
@@ -56,7 +73,10 @@ home. A project needs no account. Click a folder card to browse its subprojects
 first, followed by every descendant `.oma` sorted by modification time. Folder
 cards contain stacked asset previews. Enter a subproject to browse deeper;
 **← Projects** returns to the project list. **Edit brand…** opens the current
-project's brand editor. **Team** appears only while signed into cloud and shared
+project's brand editor. Right-click a project to create a new **Vector**, **Raster**,
+or **Layout** document inside it, reveal its folder, move it to a chosen parent
+folder, or send it to Trash. Project moves preserve their folder contents and
+update open document paths. **Team** appears only while signed into cloud and shared
 team projects are available.
 
 | Center action | What opens |

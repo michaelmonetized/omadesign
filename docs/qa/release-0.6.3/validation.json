@@ -1,0 +1,16 @@
+{
+  "version": "0.6.3",
+  "library_tests": {
+    "passed": 989,
+    "failed": 0,
+    "ignored": 8,
+    "seconds": 442.04,
+    "log_sha256": "5484ffc3421a1a0a1e91e9483a3f1da2263e7aeb20e8fcd11d2aa3af6dcbc7ae",
+    "raw_log_sha256": "0c865111c8f72db7c7de771706318db8c446a5af0f9ace712cbdb52324f1d533"
+  },
+  "native_acceptance_checks": 16,
+  "site_tests": 21,
+  "source_application_commit": "d20ba4c0f44f65f041856c982ad7539de3a0847a",
+  "source_with_final_test_fixtures": "f51aa8d503fdec5219825da554f84c7eab12b823",
+  "notes": "Final reviewed production code, fresh native acceptance fixtures, and rebuilt archive receipts."
+}

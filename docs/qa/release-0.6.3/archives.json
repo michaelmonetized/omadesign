@@ -1,0 +1,75 @@
+{
+  "version": "0.6.3",
+  "local_build": true,
+  "source_application_commit": "d20ba4c0f44f65f041856c982ad7539de3a0847a",
+  "archives": [
+    {
+      "architecture": "aarch64",
+      "archive": "omadesign-0.6.3-aarch64-unknown-linux-gnu.tar.gz",
+      "bytes": 36909924,
+      "sha256": "3cac3ace9c737cc12454e29f90bfb705b6389de259a459e9ec3600494cc2c776",
+      "objects": [
+        {
+          "file": "omadesign",
+          "sha256": "8d90d163331eb14112466883a0af64d18d7a650d2e9f77aed0ff9a874107d195",
+          "maximum_glibc": "2.35"
+        },
+        {
+          "file": "lib/libonnxruntime.so",
+          "sha256": "f1ec1a08eb99bd6e5401340f0a2b101381bf4694415480291dc13bcaa30f9ec7",
+          "maximum_glibc": "2.27"
+        },
+        {
+          "file": "lib/libonnxruntime.so.1",
+          "sha256": "f1ec1a08eb99bd6e5401340f0a2b101381bf4694415480291dc13bcaa30f9ec7",
+          "maximum_glibc": "2.27"
+        },
+        {
+          "file": "lib/libonnxruntime.so.1.28.0",
+          "sha256": "f1ec1a08eb99bd6e5401340f0a2b101381bf4694415480291dc13bcaa30f9ec7",
+          "maximum_glibc": "2.27"
+        },
+        {
+          "file": "lib/libonnxruntime_providers_shared.so",
+          "sha256": "3b6be288fbfb7dff8770d08a23defdde18e8f7e0f5a2b344a0e5e238c999ea88",
+          "maximum_glibc": "2.17"
+        }
+      ],
+      "stripped": true
+    },
+    {
+      "architecture": "x86_64",
+      "archive": "omadesign-0.6.3-x86_64-unknown-linux-gnu.tar.gz",
+      "bytes": 39225709,
+      "sha256": "b8642376a8ab977988830cec853c2870a6a468b5c337f19e4edb576401247960",
+      "objects": [
+        {
+          "file": "omadesign",
+          "sha256": "2ef497d83ad65574139b55b02fa0089254ece37d835b5cab6638c5b0ee3e7bca",
+          "maximum_glibc": "2.35"
+        },
+        {
+          "file": "lib/libonnxruntime.so",
+          "sha256": "1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab",
+          "maximum_glibc": "2.27"
+        },
+        {
+          "file": "lib/libonnxruntime.so.1",
+          "sha256": "1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab",
+          "maximum_glibc": "2.27"
+        },
+        {
+          "file": "lib/libonnxruntime.so.1.28.0",
+          "sha256": "1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab",
+          "maximum_glibc": "2.27"
+        },
+        {
+          "file": "lib/libonnxruntime_providers_shared.so",
+          "sha256": "086ec1d5388f64153d9c63470d126693db9a182c8ce236d3a1119068471b8a0d",
+          "maximum_glibc": "2.2.5"
+        }
+      ],
+      "stripped": true
+    }
+  ]
+}

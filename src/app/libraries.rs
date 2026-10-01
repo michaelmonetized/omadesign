@@ -11,6 +11,7 @@ use std::{
 pub enum Sidebar {
     #[default]
     Inspector,
+    Typography,
     Palettes,
     Brand,
 }

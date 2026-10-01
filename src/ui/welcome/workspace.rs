@@ -1,4 +1,4 @@
-use super::{catalog, team};
+use super::{actions::{self, Action}, catalog, scrub, team};
 use crate::app::{Studio, WelcomePage};
 use crate::tools::Persona;
 use crate::ui::{agent, icons, theme::*};
@@ -14,19 +14,46 @@ const STATE: &str = "welcome-workspace";
 #[derive(Clone, Default)]
 struct Selection {
     paths: BTreeSet<PathBuf>,
+    anchor: Option<PathBuf>,
+    order: Vec<PathBuf>,
 }
 impl Selection {
-    fn click(&mut self, path: &Path, shift: bool) -> bool {
-        if shift || !self.paths.is_empty() {
-            if !self.paths.remove(path) {
+    fn click(&mut self, path: &Path, modifiers: egui::Modifiers) -> bool {
+        if modifiers.shift {
+            let to = self.order.iter().position(|p| p == path);
+            let from = self.anchor.as_ref().and_then(|p| self.order.iter().position(|v| v == p));
+            if !modifiers.ctrl && !modifiers.command { self.paths.clear(); }
+            if let (Some(from), Some(to)) = (from, to) {
+                self.paths.extend(self.order[from.min(to)..=from.max(to)].iter().cloned());
+            } else {
                 self.paths.insert(path.to_owned());
+                self.anchor = Some(path.to_owned());
             }
             false
+        } else if modifiers.ctrl || modifiers.command {
+            if !self.paths.remove(path) { self.paths.insert(path.to_owned()); }
+            self.anchor = Some(path.to_owned());
+            false
         } else {
+            self.paths.clear();
+            self.anchor = Some(path.to_owned());
             true
         }
     }
+    fn selected(&self) -> Vec<PathBuf> {
+        self.order.iter().filter(|p| self.paths.contains(*p)).cloned().collect()
+    }
+    fn target(&mut self, path: &Path) -> Vec<PathBuf> {
+        if !self.paths.contains(path) {
+            self.paths.clear();
+            self.paths.insert(path.to_owned());
+            self.anchor = Some(path.to_owned());
+        }
+        self.selected()
+    }
 }
+#[derive(Clone)]
+struct DocumentDrag { paths: Vec<PathBuf> }
 
 #[derive(Clone, Default)]
 struct State {
@@ -41,6 +68,20 @@ struct State {
     brand: bool,
     entered: bool,
     narrow_panel: usize,
+    focus_right: bool,
+}
+
+pub(super) fn relocate(ctx: &egui::Context, old: &Path, new: Option<&Path>) {
+    ctx.data_mut(|d| {
+        if let Some(mut state) = d.get_temp::<State>(Id::new(STATE)) {
+            if let Some(path) = &state.project && let Ok(relative) = path.strip_prefix(old) {
+                state.project = new.map(|p| if relative.as_os_str().is_empty() { p.to_owned() } else { p.join(relative) });
+            }
+            state.left = Selection::default();
+            state.right = Selection::default();
+            d.insert_temp(Id::new(STATE), state);
+        }
+    });
 }
 
 pub(super) fn modal_open(ctx: &egui::Context) -> bool {
@@ -84,6 +125,18 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
     {
         state.left.paths.clear();
         state.right.paths.clear();
+    }
+    if ui.is_enabled() && !studio.show_preferences && !studio.file_dialog_pending()
+        && !egui::Popup::is_any_open(&ctx)
+        && !agent::is_open(&ctx) && !studio.show_templates && !state.brand && state.size.is_none()
+        && ctx.memory(|m| m.focused()).and_then(|id| egui::TextEdit::load_state(&ctx, id)).is_none()
+        && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter))
+    {
+        let selection = if state.focus_right { &state.right } else { &state.left };
+        let paths = selection.selected();
+        if !paths.is_empty() {
+            studio.open_paths_background(paths, !state.focus_right && studio.welcome_page == WelcomePage::Recovered);
+        }
     }
     let snapshot = catalog::snapshot(&ctx);
     let has_team = team::has_shared(&ctx, studio);
@@ -134,6 +187,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
             egui::UiBuilder::new().id_salt("your-work").max_rect(left),
             |ui| {
                 ui.set_width(left.width());
+                if ui.rect_contains_pointer(left) && ui.input(|i| i.pointer.any_pressed()) { state.focus_right = false; }
                 ui.horizontal_wrapped(|ui| {
                     ui.add_space(4.);
                     ui.label(RichText::new("Your Work").strong().size(19.));
@@ -196,7 +250,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                             .iter()
                             .filter(|d| state.filter.is_none_or(|m| d.matches_mode(m)))
                             .collect();
-                        document_grid(ui, studio, &documents, &mut state.left, &mut previews, true);
+                        document_grid(ui, studio, &documents, &mut state.left, &mut previews, true, &snapshot.catalog.projects);
                         if documents.is_empty() {
                             quiet(ui, "No recovered documents.");
                         }
@@ -215,6 +269,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                             &mut state.left,
                             &mut previews,
                             false,
+                            &snapshot.catalog.projects,
                         );
                         if documents.is_empty() && !snapshot.scanning {
                             quiet(ui, "Your .oma documents will appear here.");
@@ -268,6 +323,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                 .max_rect(right),
             |ui| {
                 ui.set_width(right.width());
+                if ui.rect_contains_pointer(right) && ui.input(|i| i.pointer.any_pressed()) { state.focus_right = true; }
                 ui.horizontal(|ui| {
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         ui.add_space(14.);
@@ -316,11 +372,11 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                                     .and_then(|n| n.to_str())
                                     .unwrap_or("Project")
                             });
-                        ui.label(RichText::new(name).strong())
-                            .on_hover_text(path.display().to_string());
+                        let folder = ui.label(RichText::new(name).strong()).on_hover_text(path.display().to_string());
+                        project_drop(ui, studio, &folder, &path);
                         ui.add_space(10.);
                         let projects = snapshot.catalog.subprojects(&path);
-                        project_grid(ui, &projects, &mut state, &mut previews);
+                        project_grid(ui, studio, &projects, &mut state, &mut previews);
                         selection_bar(ui, studio, &mut state.right, false);
                         let documents = snapshot.catalog.documents_in(&path);
                         document_grid(
@@ -330,6 +386,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                             &mut state.right,
                             &mut previews,
                             false,
+                            &snapshot.catalog.projects,
                         );
                         if documents.is_empty() && projects.is_empty() {
                             quiet(ui, "This project's artwork will appear here.");
@@ -340,7 +397,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                         }
                     } else {
                         let projects: Vec<_> = snapshot.catalog.projects.iter().collect();
-                        project_grid(ui, &projects, &mut state, &mut previews);
+                        project_grid(ui, studio, &projects, &mut state, &mut previews);
                         if projects.is_empty() && !snapshot.scanning {
                             quiet(ui, "Folders with .omabrand appear here.");
                         }
@@ -767,12 +824,7 @@ fn selection_bar(ui: &mut Ui, studio: &mut Studio, selection: &mut Selection, re
             })
             .clicked()
         {
-            let paths = std::mem::take(&mut selection.paths).into_iter().collect();
-            if recovered {
-                studio.recover_paths(paths);
-            } else {
-                studio.open_paths(paths);
-            }
+            studio.open_paths_background(selection.selected(), recovered);
         }
         if ui.small_button("Clear").clicked() {
             selection.paths.clear();
@@ -788,7 +840,10 @@ fn document_grid(
     selection: &mut Selection,
     previews: &mut catalog::Previews,
     recovered: bool,
+    projects: &[catalog::ProjectEntry],
 ) {
+    selection.order = entries.iter().map(|e| e.path.clone()).collect();
+    selection.paths.retain(|path| selection.order.contains(path));
     let gap = 10.;
     let columns = ((ui.available_width() + gap) / 150.).floor().clamp(1., 3.) as usize;
     let width = (ui.available_width() - gap * (columns - 1) as f32) / columns as f32;
@@ -812,12 +867,18 @@ fn document_grid(
         let response = ui.interact(
             rect,
             Id::new(("welcome-file", recovered, &entry.path, ui.id())),
-            Sense::click(),
+            Sense::click_and_drag(),
         );
+        if !recovered && response.drag_started() {
+            response.dnd_set_drag_payload(DocumentDrag { paths: selection.target(&entry.path) });
+        }
         let selected = selection.paths.contains(&entry.path);
         ui.painter().rect_filled(rect, 6., bg_window());
         let mut preview_error = entry.error.clone();
-        match previews.image(ui.ctx(), entry) {
+        let fraction = response.hover_pos().map(|p| ((p.x-rect.left())/rect.width()).clamp(0.,1.));
+        let motion = if entry.has_motion { fraction.and_then(|f| scrub::image(ui.ctx(), entry, f)) } else { None };
+        let still = previews.image(ui.ctx(), entry);
+        match motion.map(Ok).or(still) {
             Some(Ok(texture)) => {
                 ui.painter().image(
                     texture.id(),
@@ -874,16 +935,44 @@ fn document_grid(
         response.widget_info(|| {
             egui::WidgetInfo::selected(egui::WidgetType::Button, true, selected, &entry.name)
         });
+        if entry.has_motion {
+            let badge = Rect::from_min_size(rect.min + vec2(6.,6.), vec2(24.,24.));
+            ui.painter().rect_filled(badge, 4., bg_panel().gamma_multiply(0.94));
+            ui.painter().text(badge.center(), Align2::CENTER_CENTER, icons::ph::PLAY, icons::font(14.), fg());
+            if let Some(fraction) = fraction {
+                ui.painter().line_segment([pos2(rect.left(),rect.bottom()-2.),pos2(rect.left()+rect.width()*fraction,rect.bottom()-2.)], Stroke::new(3.,accent()));
+            }
+        }
+        response.context_menu(|ui| {
+            let paths = selection.target(&entry.path);
+            ui.add_enabled_ui(!actions::busy(ui.ctx()), |ui| {
+                if ui.button("Reveal").clicked() { actions::start(ui.ctx(), studio, Action::Reveal(entry.path.clone())); ui.close(); }
+                if !recovered {
+                    ui.menu_button("Move to project", |ui| {
+                        if projects.is_empty() { ui.weak("Create a project first"); }
+                        for project in projects {
+                            if ui.button(&project.name).on_hover_text(project.path.display().to_string()).clicked() {
+                                actions::start(ui.ctx(), studio, Action::Transfer { paths: paths.clone(), destination: project.path.clone(), copy: false }); ui.close();
+                            }
+                        }
+                    });
+                    if ui.button("Clone").clicked() { actions::start(ui.ctx(), studio, Action::Clone(paths.clone())); ui.close(); }
+                    if ui.button("Make template").clicked() { actions::start(ui.ctx(), studio, Action::Template(paths.clone())); ui.close(); }
+                }
+                if ui.button("Delete · Move to Trash").clicked() { actions::start(ui.ctx(), studio, Action::Trash(paths)); ui.close(); }
+            });
+        });
         let clicked = response.clicked();
         response.on_hover_text(match preview_error {
             Some(error) => format!("{}\n{error}", entry.path.display()),
-            None => entry.path.display().to_string(),
+            None => format!("{}\nCtrl-click: select · Shift-click: range · Alt-click: open in background{}", entry.path.display(), if entry.has_motion { "\nMove across the preview to scrub motion" } else { "" }),
         });
-        if clicked && selection.click(&entry.path, ui.input(|i| i.modifiers.shift)) {
-            if recovered {
-                studio.recover_swap(entry.path.clone());
-            } else {
-                studio.open_path(entry.path.clone());
+        if clicked {
+            let modifiers = ui.input(|i| i.modifiers);
+            if modifiers.alt {
+                studio.open_paths_background(vec![entry.path.clone()], recovered);
+            } else if selection.click(&entry.path, modifiers) {
+                if recovered { studio.recover_swap(entry.path.clone()); } else { studio.open_path(entry.path.clone()); }
             }
         }
     }
@@ -896,6 +985,7 @@ fn document_grid(
 
 fn project_grid(
     ui: &mut Ui,
+    studio: &mut Studio,
     projects: &[&catalog::ProjectEntry],
     state: &mut State,
     previews: &mut catalog::Previews,
@@ -981,6 +1071,25 @@ fn project_grid(
                 response.widget_info(|| {
                     egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &project.name)
                 });
+                project_drop(ui, studio, &response, &project.path);
+                response.context_menu(|ui| {
+                    ui.add_enabled_ui(!actions::busy(ui.ctx()), |ui| {
+                        ui.menu_button("New", |ui| {
+                            for (mode, label) in modes().into_iter().take(3) {
+                                if ui.button(label).clicked() { actions::start(ui.ctx(), studio, Action::New { project: project.path.clone(), mode }); ui.close(); }
+                            }
+                        });
+                        if ui.button("Reveal").clicked() { actions::start(ui.ctx(), studio, Action::Reveal(project.path.clone())); ui.close(); }
+                        if ui.button("Move…").clicked() {
+                            let source = project.path.clone();
+                            studio.request_file_dialog(crate::project::dialog_folder, move |ctx, studio, destination| {
+                                actions::start(ctx, studio, Action::MoveProject { source, destination });
+                            });
+                            ui.close();
+                        }
+                        if ui.button("Delete · Move to Trash").clicked() { actions::start(ui.ctx(), studio, Action::Trash(vec![project.path.clone()])); ui.close(); }
+                    });
+                });
                 if response
                     .on_hover_text(project.path.display().to_string())
                     .clicked()
@@ -991,6 +1100,16 @@ fn project_grid(
             }
         });
         ui.add_space(10.);
+    }
+}
+
+fn project_drop(ui: &mut Ui, studio: &mut Studio, response: &egui::Response, path: &Path) {
+    if response.dnd_hover_payload::<DocumentDrag>().is_some() {
+        ui.painter().rect_stroke(response.rect, 6., Stroke::new(2., accent()), egui::StrokeKind::Inside);
+        response.clone().on_hover_text(if ui.input(|i| i.modifiers.alt) { "Copy to project" } else { "Move to project · Hold Alt to copy" });
+    }
+    if let Some(payload) = response.dnd_release_payload::<DocumentDrag>() {
+        actions::start(ui.ctx(), studio, Action::Transfer { paths: payload.paths.clone(), destination: path.to_owned(), copy: ui.input(|i| i.modifiers.alt) });
     }
 }
 
@@ -1245,17 +1364,56 @@ mod tests {
     }
 
     #[test]
-    fn shift_starts_selection_and_following_clicks_toggle_without_opening() {
-        let a = Path::new("/tmp/a.oma");
-        let b = Path::new("/tmp/b.oma");
-        let mut selection = Selection::default();
-        assert!(selection.click(a, false));
-        assert!(!selection.click(a, true));
-        assert!(!selection.click(b, false));
-        assert_eq!(selection.paths.len(), 2);
-        assert!(!selection.click(a, false));
-        assert!(!selection.click(b, false));
+    fn modified_selection_uses_visible_order_and_anchor() {
+        let paths: Vec<_> = ["c.oma", "a.oma", "d.oma", "b.oma"].into_iter().map(PathBuf::from).collect();
+        let mut selection = Selection { order: paths.clone(), ..Default::default() };
+        assert!(!selection.click(&paths[1], egui::Modifiers::CTRL));
+        assert!(!selection.click(&paths[3], egui::Modifiers::SHIFT));
+        assert_eq!(selection.selected(), paths[1..=3]);
+        assert!(!selection.click(&paths[2], egui::Modifiers::CTRL));
+        assert_eq!(selection.selected(), vec![paths[1].clone(), paths[3].clone()]);
+        assert!(!selection.click(&paths[0], egui::Modifiers::CTRL | egui::Modifiers::SHIFT));
+        assert_eq!(selection.selected(), paths);
+        assert!(selection.click(&paths[0], egui::Modifiers::NONE));
         assert!(selection.paths.is_empty());
-        assert!(selection.click(b, false));
     }
+    fn browser_frame(ctx: &egui::Context, studio: &mut Studio, selection: &mut Selection, entries: &[catalog::DocumentEntry], events: Vec<egui::Event>, _modifiers: egui::Modifiers) -> Vec<Rect> {
+        let mut rects = vec![];
+        let mut output = ctx.run_ui(egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(520.,700.))), events, ..Default::default() }, |ui| {
+            let mut previews = catalog::Previews::begin(ctx);
+            let refs: Vec<_> = entries.iter().collect();
+            let parent = ui.id();
+            document_grid(ui, studio, &refs, selection, &mut previews, false, &[]);
+            for entry in entries {
+                if let Some(response) = ctx.read_response(Id::new(("welcome-file", false, &entry.path, parent))) { rects.push(response.rect); }
+            }
+            previews.finish(ctx);
+        });
+        output.textures_delta.clear();
+        rects
+    }
+
+    #[test]
+    fn browser_pointer_chords_select_ranges_and_alt_opens_without_leaving_welcome() {
+        let ctx = egui::Context::default();
+        crate::ui::theme::apply(&ctx);
+        let mut studio = Studio::new();
+        let mut selection = Selection::default();
+        let entries: Vec<_> = (0..4).map(|i| catalog::DocumentEntry {
+            path: PathBuf::from(format!("/nonexistent/browser-fixture-{i}.oma")), name: format!("Work {i}"), modified_ns:0, size:0, aspect:1., modes:vec![Persona::Design], inferred_modes:false, error:None, recovered:false, has_motion:false,
+        }).collect();
+        let mut rects = vec![];
+        for _ in 0..3 { rects = browser_frame(&ctx, &mut studio, &mut selection, &entries, vec![], egui::Modifiers::NONE); }
+        assert_eq!(rects.len(),4);
+        for (index, modifiers, expected) in [(0,egui::Modifiers::CTRL,1),(2,egui::Modifiers::SHIFT,3),(1,egui::Modifiers::CTRL,2),(3,egui::Modifiers::ALT,2)] {
+            let pos = rects[index].center();
+            for pressed in [true,false] {
+                rects = browser_frame(&ctx, &mut studio, &mut selection, &entries, vec![egui::Event::ModifiersChanged(modifiers), egui::Event::PointerMoved(pos),egui::Event::PointerButton{pos,button:egui::PointerButton::Primary,pressed,modifiers}],modifiers);
+            }
+            assert_eq!(selection.paths.len(),expected);
+            assert!(studio.show_welcome);
+        }
+        assert!(studio.status.starts_with("Opening browser-fixture-3"), "{}", studio.status);
+    }
+
 }

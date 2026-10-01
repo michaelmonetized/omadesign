@@ -185,7 +185,7 @@ impl Studio {
             })
         }) {
             ShortcutFocus::Field
-        } else if self.type_edit.is_some() && self.persona != Persona::Photo {
+        } else if !self.show_welcome && self.type_edit.is_some() && self.persona != Persona::Photo {
             ShortcutFocus::Text
         } else {
             ShortcutFocus::Canvas
@@ -326,7 +326,7 @@ impl Studio {
                 if self.type_event(event) {
                     consumed.push(index);
                 }
-            } else if !field_focused
+            } else if !field_focused && !self.show_welcome
                 && let Event::Key {
                     key,
                     modifiers,
@@ -813,6 +813,17 @@ mod tests {
         );
         output.textures_delta.clear();
         output.platform_output.commands
+    }
+
+    #[test]
+    fn welcome_keeps_return_and_escape_for_the_browser() {
+        let ctx = egui::Context::default();
+        let mut studio = Studio::new();
+        assert!(studio.show_welcome);
+        for keycode in [Key::Enter, Key::Escape, Key::Delete] {
+            frame(&ctx, &mut studio, vec![key(keycode, Modifiers::NONE)]);
+            assert!(ctx.input(|i| i.events.iter().any(|e| matches!(e, Event::Key {key, pressed:true,..} if *key==keycode))));
+        }
     }
 
     fn add_rectangle(studio: &mut Studio, x: f32) -> u64 {
@@ -1635,6 +1646,7 @@ mod tests {
     fn type_editor_uses_native_clipboard_and_per_event_shift_selection() {
         let ctx = context();
         let mut studio = Studio::new();
+        studio.show_welcome = false;
         studio.place_text(Pt::new(40.0, 80.0));
         frame(&ctx, &mut studio, vec![Event::Text("héllo".into())]);
         frame(
@@ -1683,6 +1695,7 @@ mod tests {
     fn history_paste_edits_active_type_once_and_preserves_inspector_focus() {
         let ctx = context();
         let mut studio = Studio::new();
+        studio.show_welcome = false;
         studio.place_text(Pt::new(40.0, 80.0));
         frame(
             &ctx,
@@ -1885,6 +1898,7 @@ mod tests {
     fn every_advertised_tool_and_motion_transport_key_works() {
         let ctx = context();
         let mut studio = Studio::new();
+        studio.show_welcome = false;
         for (persona, tools) in [
             (Persona::Design, Tool::design_well()),
             (Persona::Pixel, Tool::pixel_well()),

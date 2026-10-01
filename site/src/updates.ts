@@ -8,6 +8,13 @@ export type UpdatePost = {
 
 export const updates: UpdatePost[] = [
   {
+    slug: "0.6.3",
+    version: "0.6.3",
+    date: "2026-10-01",
+    title: "A workspace that moves with you",
+    dek: "Scrub motion previews, select and open documents in the background, organize projects with drag and drop, save personal templates, and reach typography from its own icon tab.",
+  },
+  {
     slug: "0.6.2",
     version: "0.6.2",
     date: "2026-09-30",

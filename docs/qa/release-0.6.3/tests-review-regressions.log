@@ -1,0 +1,9 @@
+
+running 5 tests
+test ui::welcome::actions::tests::copies_and_moves_preserve_documents_and_never_replace_existing_files ... ok
+test ui::welcome::actions::tests::project_move_across_filesystems_preserves_hidden_assets_and_links ... ok
+test ui::welcome::actions::tests::project_move_through_symlink_relocates_lexical_and_canonical_tabs ... ok
+test ui::welcome::actions::tests::project_moves_reject_self_and_existing_destinations ... ok
+test ui::welcome::actions::tests::new_documents_use_each_requested_mode_and_project_moves_relocate_every_file ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 992 filtered out; finished in 32.56s
