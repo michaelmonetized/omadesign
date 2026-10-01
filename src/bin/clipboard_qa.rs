@@ -221,10 +221,18 @@ fn main() -> eframe::Result {
         studio.need_fit = false;
     }
     if args.iter().any(|arg| arg == "--ime") {
+        let font = std::env::var_os("QA_CJK_FONT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc".into());
+        assert!(
+            font.is_file(),
+            "CJK QA font does not exist: {}",
+            font.display()
+        );
         studio.active_layer = Some(1);
         studio.place_text(Pt::new(120., 180.));
         studio.patch_type(|run| {
-            run.font = "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc".into();
+            run.font = font.to_string_lossy().into_owned();
             run.px = 48.;
         });
     }
