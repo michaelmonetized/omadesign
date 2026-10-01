@@ -1192,6 +1192,7 @@ mod tests {
         for key in [Key::Enter, Key::Escape] {
             let (ctx, mut studio) = fixture();
             studio.persona = crate::tools::Persona::Photo;
+            studio.show_welcome = false;
             studio.tool = crate::tools::Tool::Crop;
             studio.photo.images.push(photo::PhotoImage::from_full(
                 "Crop fixture".into(),

@@ -566,7 +566,7 @@ impl Qa {
                 self.click(
                     self.labels
                         .iter()
-                        .filter(|(label, _)| label == "Project")
+                        .filter(|(label, _)| label == "QA Project")
                         .min_by(|(_, a), (_, b)| {
                             a.center()
                                 .distance_sq(self.cursor)
