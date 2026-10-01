@@ -5,6 +5,7 @@ mod artboards;
 pub use artboards::{ArtboardOptions, ArtworkResize};
 mod clipboard;
 mod type_clipboard;
+pub(crate) mod type_ime;
 mod clipboard_insert;
 mod cloud;
 pub mod deform;
@@ -286,6 +287,7 @@ pub enum Op {
 /// On-canvas type session. History is one SetGeom at commit, not per key.
 #[derive(Clone)]
 pub struct TypeEdit {
+    pub ime: type_ime::TypeIme,
     pub layer: usize,
     pub id: u64,
     /// Pointer geometry follows the active frame; edits still target the story head.
@@ -299,9 +301,14 @@ pub struct TypeEdit {
 impl TypeEdit {
     /// Pointer moves start a new insertion context, just like keyboard navigation.
     pub fn pointer_caret(&mut self, caret: usize, extend: bool) {
-        self.caret=caret;
-        if !extend { self.anchor=caret; }
-        self.pending_style=None;
+        self.caret = caret;
+        if !extend {
+            self.anchor = caret;
+        }
+        self.pending_style = None;
+        if self.ime.preedit.take().is_some() {
+            self.ime.interrupt = true;
+        }
     }
 }
 
@@ -2204,6 +2211,7 @@ impl Studio {
             .unwrap_or(geom);
         let n = 4; // "Type"
         self.type_edit = Some(TypeEdit {
+            ime: Default::default(),
             layer: li,
             id,
             frame: (li, id),
@@ -2239,6 +2247,7 @@ impl Studio {
         self.selection = vec![frame_hit];
         self.active_layer = Some(hit.0);
         self.type_edit = Some(TypeEdit {
+            ime: Default::default(),
             layer: hit.0,
             id: hit.1,
             frame: frame_hit,
@@ -2253,14 +2262,21 @@ impl Studio {
     fn type_frame_caret(&self, frame: (usize, u64), world: Pt) -> Option<usize> {
         let point = self.doc.layout_hit_point(frame.0, frame.1, world)?;
         let shape = self.doc.find_shape(frame.0, frame.1)?;
-        let Geom::Text(run) = &shape.geom else { return None; };
+        let Geom::Text(run) = &shape.geom else {
+            return None;
+        };
         Some(crate::text::hit_char(run, shape.local_point(point)))
     }
 
     /// Hit-test a story frame in its unrotated layout coordinates.
     pub fn type_pointer_caret(&mut self, frame: (usize, u64), world: Pt, extend: bool) -> bool {
-        if !self.editing_text(frame.0, frame.1) { return false; }
-        let Some(caret) = self.type_frame_caret(frame, world) else { return false; };
+        if !self.editing_text(frame.0, frame.1) {
+            return false;
+        }
+        let Some(caret) = self.type_frame_caret(frame, world) else {
+            return false;
+        };
+        self.cancel_type_ime();
         let edit = self.type_edit.as_mut().unwrap();
         edit.frame = frame;
         edit.pointer_caret(caret, extend);
@@ -2270,10 +2286,11 @@ impl Studio {
     pub fn editing_text(&self, layer: usize, id: u64) -> bool {
         self.type_edit
             .as_ref()
-            .is_some_and(|e| (e.layer,e.id) == self.story_head((layer,id)))
+            .is_some_and(|e| (e.layer, e.id) == self.story_head((layer, id)))
     }
 
     pub fn commit_type_edit(&mut self) {
+        self.cancel_type_ime();
         let Some(edit) = self.type_edit.take() else {
             return;
         };

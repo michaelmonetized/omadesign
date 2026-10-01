@@ -59,6 +59,7 @@ impl Studio {
                     (e.layer, e.id, e.caret, e.anchor)
                         == (job.edit.layer, job.edit.id, job.edit.caret, job.edit.anchor)
                         && e.pending_style == job.edit.pending_style
+                        && e.ime.preedit.is_none()
                 })
                 && self
                     .selected_type()

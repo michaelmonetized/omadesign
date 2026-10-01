@@ -1253,6 +1253,7 @@ mod tests {
     #[test]
     fn visible_clip_ellipsis_and_max_lines_never_truncate_source() {
         let mut text = run();
+        text.font = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/assets/fonts/EBGaramond.ttf").into();
         let source = text.content.clone();
         let clip = layout_frame(&text, &text, 0, &[], false);
         assert!(clip.overflow);
@@ -1272,7 +1273,8 @@ mod tests {
     }
     #[test]
     fn ellipsis_respects_graphemes_and_word_boundary() {
-        let text = run();
+        let mut text = run();
+        text.font = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/assets/fonts/EBGaramond.ttf").into();
         let style = ParagraphStyle {
             break_mode: BreakMode::Word,
             ..Default::default()

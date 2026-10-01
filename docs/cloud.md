@@ -21,10 +21,14 @@ Owners invite verified email addresses as editors or reviewers. Invitations arri
 | Role | Access |
 | --- | --- |
 | Owner | Project files, uploads, review, team management, archive and publishing |
-| Editor | Source and asset downloads, uploads, comments, replies and resolving threads |
-| Reviewer | Flat exports, pins, rectangular annotations, comments and replies; can resolve their own threads |
+| Editor | Source and asset downloads, uploads, all review tools, replies, resolving and deleting threads |
+| Reviewer | Flat exports, stamps, rectangles, highlighter, brush, comments and replies; can resolve or delete their own threads |
 
-Select an export version in the web project. Click to pin a comment or drag a rectangular annotation, then post the thread. Coordinates scale with the image, including on mobile. Review threads, replies and resolved status persist in Convex. The desktop's **Review annotations…** window loads the same versioned exports and threads, with replies and resolve/reopen controls.
+Select an export version in the web project. The floating rail offers five stamp reactions (approve, problem, like, question and note), rectangles, a translucent highlighter, an opaque brush and comment pins. Choose a stamp then click to place it; drag to draw a stroke. Stamps and strokes save immediately and open a thread with an optional reply. Pins and rectangles ask for a comment before posting. Stroke color and width are adjustable. Press Escape to cancel a draft; keys 1–5 choose a stamp while the stamp tool is active.
+
+Click a mark to select its thread. Reply, resolve or reopen it, and hide resolved marks when reviewing outstanding work. Authors and the project team can delete annotations and their replies. Coordinates and stroke widths scale with the image, including on mobile; long strokes are reduced to at most 512 points. Every mark stays on the original snapshot version when a new export is uploaded.
+
+The desktop's **Review annotations…** window renders the same stamps, strokes, rectangles and pins over the selected export, with replies and resolve/reopen controls. Mark placement stays in the web review canvas.
 
 Private downloads recheck membership on every request. Revoking a member or desktop blocks future requests. Previously downloaded files are still held by the recipient.
 

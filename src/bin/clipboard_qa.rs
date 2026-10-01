@@ -81,6 +81,7 @@ impl ClipboardQa {
             "artboards": self.studio.doc.artboards,
             "selected_artboards": self.studio.artboard_sel,
             "selected_shapes": self.studio.selection,
+            "type_edit": self.studio.type_edit.as_ref().map(|e|json!({"caret":e.caret,"anchor":e.anchor,"preedit":e.ime.preedit.as_ref().map(|p|&p.text)})),
             "active_layer": self.studio.active_layer,
             "selected_layer": self.studio.selected_layer,
             "text_editing": self.studio.type_edit.is_some(),
@@ -145,6 +146,7 @@ impl eframe::App for ClipboardQa {
                     "key": format!("{key:?}"), "ctrl": modifiers.ctrl,
                     "command": modifiers.command, "shift": modifiers.shift,
                 })),
+                egui::Event::Ime(event) => Some(json!({"ime":format!("{event:?}")})),
                 egui::Event::Paste(text) => Some(json!({"paste_bytes": text.len()})),
                 egui::Event::Copy => Some(json!({"copy": true})),
                 egui::Event::Cut => Some(json!({"cut": true})),
@@ -161,6 +163,11 @@ impl eframe::App for ClipboardQa {
 
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         eframe::App::ui(&mut self.studio, ui, frame);
+        if self.studio.cloud_modal == omadesign::app::CloudModal::Review
+            && !self.studio.cloud_busy() && !self.studio.cloud_panel.selected_snapshot.is_empty()
+            && self.studio.cloud_panel.preview_file != self.studio.cloud_panel.selected_snapshot {
+            self.studio.load_cloud_preview();
+        }
         if self.checked.elapsed() >= Duration::from_millis(200) {
             self.checked = Instant::now();
             if let Err(error) = self.record() {
@@ -189,8 +196,11 @@ fn main() -> eframe::Result {
         studio.active_layer = studio.doc.layers.len().checked_sub(1);
     }
     studio.show_welcome = false;
-    studio.allow_close = true;
+    studio.allow_close = false;
     studio.path = Some(output.join("manual-save.oma"));
+    if args.iter().any(|arg| arg == "--pixel") {
+        studio.persona = omadesign::tools::Persona::Pixel;
+    }
     if args.iter().any(|arg| arg == "--layout") {
         studio.persona = omadesign::tools::Persona::Layout;
     }
@@ -205,6 +215,19 @@ fn main() -> eframe::Result {
         assert!(studio.view.scale.is_finite() && studio.view.scale > 0.0);
         studio.view.offset = Pt::new(value(2), value(3));
         studio.need_fit = false;
+    }
+    if args.iter().any(|arg| arg == "--ime") {
+        studio.active_layer = Some(1);
+        studio.place_text(Pt::new(120., 180.));
+        studio.patch_type(|run| {
+            run.font = "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc".into();
+            run.px = 48.;
+        });
+    }
+    if let Some(index) = args.iter().position(|arg| arg == "--cloud-review") {
+        studio.cloud_identity = serde_json::from_str(&fs::read_to_string(&args[index + 1]).expect("read QA cloud identity")).expect("decode QA identity");
+        studio.doc.cloud = Some(omadesign::cloud::CloudLink {project_id:args[index+2].clone(),enabled:true,..Default::default()});
+        studio.refresh_cloud_review();
     }
     let options = eframe::NativeOptions {
         viewport: ViewportBuilder::default()

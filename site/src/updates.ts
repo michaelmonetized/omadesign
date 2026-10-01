@@ -8,6 +8,11 @@ export type UpdatePost = {
 
 export const updates: UpdatePost[] = [
   {
+    slug: "0.6.2", version: "0.6.2", date: "2026-09-30",
+    title: "Review, compose, and keep moving",
+    dek: "Cloud reaction stamps, highlighter and brush. Wayland input-method composition. Raster motion, saved agent conversations, clipboard canvas sizes, artboard controls and export previews.",
+  },
+  {
     slug: "0.6.1", version: "0.6.1", date: "2026-09-29",
     title: "More control. Less waiting.",
     dek: "Offline cutouts and AI upscaling. Live canvas agents with durable references. Paragraphs, OpenType ranges, text on paths and linked area frames. Independent effects, direct selection controls, faster brushing and motion, and fixes for font search and new pixel layers.",

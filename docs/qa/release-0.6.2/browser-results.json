@@ -1,0 +1,28 @@
+{
+  "projectId": "m979sxs4wpa2ezmkvwm5bywv9h8ffqfm",
+  "snapshotId": "kx72njnd4t3fv8cjrf926ek20s8fe2y4",
+  "annotations": 9,
+  "shapes": [
+    "stamp",
+    "stamp",
+    "stamp",
+    "stamp",
+    "stamp",
+    "highlight",
+    "brush",
+    "rectangle",
+    "pin"
+  ],
+  "fiveStamps": true,
+  "highlight": true,
+  "brush": true,
+  "rectangle": true,
+  "pin": true,
+  "reply": true,
+  "resolveReopen": true,
+  "reload": true,
+  "versionIsolation": true,
+  "mobile": true,
+  "deletion": true,
+  "errors": []
+}

@@ -163,7 +163,7 @@
 }
 .cloud-review-image {
   position: relative;
-  touch-action: none;
+  touch-action: pinch-zoom;
   background: var(--panel-deep);
   border: 1px solid var(--line);
   user-select: none;
@@ -343,3 +343,201 @@
 .cloud-app summary {
   cursor: pointer;
 }
+
+.review-workspace {
+  position: relative;
+  padding: 16px 0 0 118px;
+}
+.review-rail {
+  position: absolute;
+  left: 8px;
+  top: 28px;
+  z-index: 3;
+  width: 48px;
+  padding: 8px 0;
+  display: grid;
+  gap: 4px;
+  background: linear-gradient(140deg, #36333c, #19171e);
+  color: #b9b5c2;
+  border: 1px solid #514b5c;
+  border-radius: 22px;
+  box-shadow:
+    inset 1px 1px 2px #ffffff18,
+    0 8px 22px #0005;
+}
+.review-rail > button,
+.review-brand {
+  width: 46px;
+  height: 43px;
+  display: grid;
+  place-items: center;
+  position: relative;
+  border-radius: 12px;
+}
+.review-brand {
+  font:
+    italic 36px Georgia,
+    serif;
+  color: #e2deeb;
+  padding-bottom: 7px;
+}
+.review-rail svg {
+  width: 24px;
+  height: 24px;
+}
+.review-rail > button[aria-pressed="true"] {
+  background: #b9b6c0;
+  color: #27232f;
+}
+.review-rail > button:first-of-type[aria-pressed="true"] {
+  border-radius: 12px 0 0 12px;
+}
+.review-rail > button:first-of-type[aria-pressed="true"]::after {
+  content: "";
+  position: absolute;
+  right: -9px;
+  width: 10px;
+  height: 100%;
+  background: #b9b6c0;
+}
+.review-flyout {
+  position: absolute;
+  left: 54px;
+  top: 55px;
+  width: 49px;
+  display: grid;
+  padding: 5px;
+  gap: 3px;
+  background: #b9b6c0;
+  border-radius: 0 18px 18px 18px;
+  box-shadow: 4px 8px 18px #0003;
+}
+.review-flyout button {
+  width: 39px;
+  height: 40px;
+  border-radius: 10px;
+}
+.review-flyout button[aria-pressed="true"] {
+  background: #ffffff80;
+  box-shadow: inset 0 0 0 1px #fff;
+}
+.review-flyout img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.review-ink-options {
+  position: absolute;
+  left: 54px;
+  top: 138px;
+  width: 96px;
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+  color: #eee;
+  background: #302c38;
+  border: 1px solid #514b5c;
+  border-radius: 12px;
+  font-size: 11px;
+}
+.review-ink-options label {
+  display: grid;
+  gap: 5px;
+}
+.review-ink-options input {
+  width: 100%;
+  min-width: 0;
+}
+.review-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.review-mark {
+  cursor: pointer;
+}
+.review-mark:focus {
+  outline: none;
+  filter: drop-shadow(0 0 3px #fff);
+}
+.review-mark.selected {
+  filter: drop-shadow(0 0 2px #15121b);
+}
+.review-stroke-hit {
+  pointer-events: stroke;
+}
+.review-canvas-options {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.review-canvas-options label {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+.cloud-review-image:focus-visible,
+.review-rail button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.cloud-thread-heading + p {
+  overflow-wrap: anywhere;
+}
+.cloud-threads .text-link + .text-link {
+  margin-left: 15px;
+}
+@media (max-width: 600px) {
+  .review-workspace {
+    padding: 116px 0 0;
+  }
+  .review-rail {
+    top: 4px;
+  }
+  .review-rail {
+    grid-template-columns: repeat(6, 43px);
+    width: max-content;
+    padding: 5px;
+    gap: 0;
+    border-radius: 18px;
+  }
+  .review-rail > button,
+  .review-brand {
+    width: 43px;
+  }
+  .review-flyout {
+    left: 48px;
+    top: 49px;
+    width: max-content;
+    grid-template-columns: repeat(5, 39px);
+  }
+  .review-rail > button:first-of-type[aria-pressed="true"] {
+    border-radius: 12px 12px 0 0;
+  }
+  .review-rail > button:first-of-type[aria-pressed="true"]::after {
+    right: 0;
+    bottom: -8px;
+    width: 100%;
+    height: 10px;
+  }
+  .review-ink-options {
+    top: 54px;
+    left: 130px;
+  }
+}
+
+.review-brand img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+.review-brand span { width:34px; height:34px; display:grid; place-items:center; background:linear-gradient(#100c0c,#25212d); border-radius:8px; color:#c9c4d7; font:bold italic 36px/30px Arial,sans-serif; padding:0 3px 3px 0; }
+.review-stamp-tool { width:42px; height:42px; object-fit:contain; }
