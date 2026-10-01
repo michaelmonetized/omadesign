@@ -35,6 +35,11 @@ impl Studio {
 
     /// Consume composition before ordinary typing and keyboard shortcuts.
     pub(super) fn type_ime_event(&mut self, event: &Event) -> bool {
+        if matches!(event, Event::Ime(ImeEvent::Preedit { text, .. }) if !text.is_empty()) {
+            // A clipboard read started before composition must not arrive after
+            // a cancelled preedit and replace text at the unchanged caret.
+            self.type_paste_jobs.clear();
+        }
         let Some(edit) = self.type_edit.as_mut() else {
             return false;
         };

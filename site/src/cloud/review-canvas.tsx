@@ -95,12 +95,22 @@ export function ReviewCanvas({
   useEffect(() => {
     const element = canvas.current;
     if (!element) return;
-    const observer = new ResizeObserver(([entry]) => setDisplaySize(Math.min(entry.contentRect.width, entry.contentRect.height)));
+    const observer = new ResizeObserver(([entry]) =>
+      setDisplaySize(
+        Math.min(entry.contentRect.width, entry.contentRect.height),
+      ),
+    );
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
-  const stampSize = Math.max(size * 0.12, 42 * size / Math.max(1, displaySize));
-  const pinRadius = Math.max(size * 0.016, 13 * size / Math.max(1, displaySize));
+  const stampSize = Math.max(
+    size * 0.12,
+    (42 * size) / Math.max(1, displaySize),
+  );
+  const pinRadius = Math.max(
+    size * 0.016,
+    (13 * size) / Math.max(1, displaySize),
+  );
   function cancel() {
     drawing.current = null;
     onDraft(undefined);
@@ -276,7 +286,15 @@ export function ReviewCanvas({
               aria-pressed={tool === t}
               onClick={() => choose(t)}
             >
-              {t === "stamp" ? <img className="review-stamp-tool" src={`/media/review/${stamp}.svg`} alt="" /> : <Icon tool={t} />}
+              {t === "stamp" ? (
+                <img
+                  className="review-stamp-tool"
+                  src={`/media/review/${stamp}.svg`}
+                  alt=""
+                />
+              ) : (
+                <Icon tool={t} />
+              )}
             </button>
           ),
         )}
@@ -361,7 +379,10 @@ export function ReviewCanvas({
                 : tool === "highlight" || tool === "brush"
                   ? {
                       points: [p],
-                      strokeWidth: tool === "brush" ? Math.max(0.001, thickness / 3) : thickness,
+                      strokeWidth:
+                        tool === "brush"
+                          ? Math.max(0.001, thickness / 3)
+                          : thickness,
                       color: tool === "brush" ? brushColor : color,
                       opacity: tool === "brush" ? 1 : 0.3,
                     }

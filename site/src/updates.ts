@@ -8,27 +8,37 @@ export type UpdatePost = {
 
 export const updates: UpdatePost[] = [
   {
-    slug: "0.6.2", version: "0.6.2", date: "2026-09-30",
+    slug: "0.6.2",
+    version: "0.6.2",
+    date: "2026-09-30",
     title: "Review, compose, and keep moving",
     dek: "Cloud reaction stamps, highlighter and brush. Wayland input-method composition. Raster motion, saved agent conversations, clipboard canvas sizes, artboard controls and export previews.",
   },
   {
-    slug: "0.6.1", version: "0.6.1", date: "2026-09-29",
+    slug: "0.6.1",
+    version: "0.6.1",
+    date: "2026-09-29",
     title: "More control. Less waiting.",
     dek: "Offline cutouts and AI upscaling. Live canvas agents with durable references. Paragraphs, OpenType ranges, text on paths and linked area frames. Independent effects, direct selection controls, faster brushing and motion, and fixes for font search and new pixel layers.",
   },
   {
-    slug: "0.6.0", version: "0.6.0", date: "2026-09-25",
+    slug: "0.6.0",
+    version: "0.6.0",
+    date: "2026-09-25",
     title: "Key the design you already made",
     dek: "Motion keys position, width, height, rotation, opacity, gradient angle, fill, stroke width, dash, gap, and dash length. Blend stays a design edit. The brush draws its edge. Clone has size, edge, opacity, flow, and an aligned source. A selection can move, resize, feather, and distort. Apple glass displaces through turbulence. Simplify drops extra nodes. Libraries show thumbnails. Pickers and zoom sit at the edges. Color pickers sample the screen and copy hex.",
   },
   {
-    slug: "0.5.9", version: "0.5.9", date: "2026-09-24",
+    slug: "0.5.9",
+    version: "0.5.9",
+    date: "2026-09-24",
     title: "Click the pixel you mean",
     dek: "The eyedropper samples any pixel on the screen. Alt subtracts from a selection. Dilate and erode hold a hard cutout. Welcome links come forward. Cloud sign-in tells you you're in. Midnight Duotone bakes a vector page. The pen drops its forward handle.",
   },
   {
-    slug: "0.5.8", version: "0.5.8", date: "2026-09-22",
+    slug: "0.5.8",
+    version: "0.5.8",
+    date: "2026-09-22",
     title: "Make it your studio",
     dek: "Lua plugins with working examples, editable compound paths, shared corner-radius controls, guide locking and a steadier welcome screen with the transparent mark.",
   },

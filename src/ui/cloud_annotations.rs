@@ -64,7 +64,10 @@ pub fn paint(ui: &Ui, area: Rect, annotation: &Value, index: usize) {
                 });
             if let Some(texture) = texture {
                 let size = (unit * 0.12).max(42.);
-                let rect = Rect::from_min_size(origin - egui::vec2(size * (0.028 / 0.075), size * (0.068 / 0.075)), egui::vec2(size, size));
+                let rect = Rect::from_min_size(
+                    origin - egui::vec2(size * (0.028 / 0.075), size * (0.068 / 0.075)),
+                    egui::vec2(size, size),
+                );
                 ui.painter().image(
                     texture.id(),
                     rect,
@@ -113,7 +116,8 @@ pub fn paint(ui: &Ui, area: Rect, annotation: &Value, index: usize) {
         _ => {}
     }
     if shape == "pin" || shape == "rectangle" {
-        ui.painter().circle_filled(origin, (unit * 0.016).max(13.), accent);
+        ui.painter()
+            .circle_filled(origin, (unit * 0.016).max(13.), accent);
         ui.painter().text(
             origin,
             egui::Align2::CENTER_CENTER,

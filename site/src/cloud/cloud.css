@@ -539,5 +539,21 @@
   object-fit: contain;
 }
 
-.review-brand span { width:34px; height:34px; display:grid; place-items:center; background:linear-gradient(#100c0c,#25212d); border-radius:8px; color:#c9c4d7; font:bold italic 36px/30px Arial,sans-serif; padding:0 3px 3px 0; }
-.review-stamp-tool { width:42px; height:42px; object-fit:contain; }
+.review-brand span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(#100c0c, #25212d);
+  border-radius: 8px;
+  color: #c9c4d7;
+  font:
+    bold italic 36px/30px Arial,
+    sans-serif;
+  padding: 0 3px 3px 0;
+}
+.review-stamp-tool {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+}

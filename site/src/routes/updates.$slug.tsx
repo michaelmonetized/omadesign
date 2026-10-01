@@ -14,15 +14,36 @@ import { Markdown } from "../md";
 import { updateBySlug } from "../updates";
 
 const bodies: Record<string, { markdown: string; path: string }> = {
-  "0.6.2": { markdown: reviewCompose, path: "docs/blog/0.6.2-review-compose-keep-moving.md" },
-  "0.6.1": { markdown: moreControl, path: "docs/blog/0.6.1-more-control-less-waiting.md" },
-  "0.6.0": { markdown: keyTheDesign, path: "docs/blog/0.6.0-key-the-design.md" },
-  "0.5.9": { markdown: pixelYouMean, path: "docs/blog/0.5.9-click-the-pixel.md" },
-  "0.5.8": { markdown: plugins, path: "docs/blog/0.5.8-make-it-your-studio.md" },
+  "0.6.2": {
+    markdown: reviewCompose,
+    path: "docs/blog/0.6.2-review-compose-keep-moving.md",
+  },
+  "0.6.1": {
+    markdown: moreControl,
+    path: "docs/blog/0.6.1-more-control-less-waiting.md",
+  },
+  "0.6.0": {
+    markdown: keyTheDesign,
+    path: "docs/blog/0.6.0-key-the-design.md",
+  },
+  "0.5.9": {
+    markdown: pixelYouMean,
+    path: "docs/blog/0.5.9-click-the-pixel.md",
+  },
+  "0.5.8": {
+    markdown: plugins,
+    path: "docs/blog/0.5.8-make-it-your-studio.md",
+  },
   "0.5.7": { markdown: identity, path: "docs/blog/0.5.7-a-new-mark.md" },
   "0.5.6": { markdown: welcome, path: "docs/blog/0.5.6-your-work-ready.md" },
-  "0.5.4": { markdown: graphics, path: "docs/blog/0.5.4-more-control-on-the-canvas.md" },
-  "0.5.3": { markdown: clipboard, path: "docs/blog/0.5.3-paste-onto-the-canvas.md" },
+  "0.5.4": {
+    markdown: graphics,
+    path: "docs/blog/0.5.4-more-control-on-the-canvas.md",
+  },
+  "0.5.3": {
+    markdown: clipboard,
+    path: "docs/blog/0.5.3-paste-onto-the-canvas.md",
+  },
   "0.5.1": { markdown: pixel, path: "docs/blog/0.5.1-pixel-is-real.md" },
   "0.5.0": { markdown: layout, path: "docs/blog/0.5.0-layout-cloud.md" },
 };
@@ -66,8 +87,7 @@ function UpdatePost() {
     <main id="main" className="section shell updates-page">
       <p className="gallery-kicker">
         <Link to="/updates">Updates</Link>
-        <span aria-hidden="true"> · </span>
-        v{post.version}
+        <span aria-hidden="true"> · </span>v{post.version}
       </p>
       <p className="update-meta">
         <time dateTime={post.date}>{post.date}</time>

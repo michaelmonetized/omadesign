@@ -130,6 +130,7 @@ export const annotate = mutation({
       (a.endX !== undefined || a.endY !== undefined)
     )
       fail("Rectangle bounds require a rectangle annotation.");
+    if (a.body.length > 4000) fail("Keep annotation comments under 4001 characters.");
     const body =
       (drawing || a.shape === "stamp") && !a.body.trim()
         ? ""

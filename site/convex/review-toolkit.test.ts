@@ -141,6 +141,7 @@ it("rejects out-of-bounds, malformed, oversized, and non-finite geometry", async
     body: "",
   };
   const invalid = [
+    { body: " ".repeat(4001) },
     { x: -0.1 },
     { y: 1.1 },
     { strokeWidth: 0 },

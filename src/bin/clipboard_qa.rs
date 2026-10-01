@@ -22,6 +22,7 @@ struct ClipboardQa {
     checked: Instant,
     started: Instant,
     native_events: Vec<Value>,
+    cloud_requested: String,
 }
 
 fn bounds(bounds: Bounds) -> Value {
@@ -164,8 +165,11 @@ impl eframe::App for ClipboardQa {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         eframe::App::ui(&mut self.studio, ui, frame);
         if self.studio.cloud_modal == omadesign::app::CloudModal::Review
-            && !self.studio.cloud_busy() && !self.studio.cloud_panel.selected_snapshot.is_empty()
-            && self.studio.cloud_panel.preview_file != self.studio.cloud_panel.selected_snapshot {
+            && !self.studio.cloud_busy()
+            && !self.studio.cloud_panel.selected_snapshot.is_empty()
+            && self.cloud_requested != self.studio.cloud_panel.selected_snapshot
+        {
+            self.cloud_requested = self.studio.cloud_panel.selected_snapshot.clone();
             self.studio.load_cloud_preview();
         }
         if self.checked.elapsed() >= Duration::from_millis(200) {
@@ -225,8 +229,15 @@ fn main() -> eframe::Result {
         });
     }
     if let Some(index) = args.iter().position(|arg| arg == "--cloud-review") {
-        studio.cloud_identity = serde_json::from_str(&fs::read_to_string(&args[index + 1]).expect("read QA cloud identity")).expect("decode QA identity");
-        studio.doc.cloud = Some(omadesign::cloud::CloudLink {project_id:args[index+2].clone(),enabled:true,..Default::default()});
+        studio.cloud_identity = serde_json::from_str(
+            &fs::read_to_string(&args[index + 1]).expect("read QA cloud identity"),
+        )
+        .expect("decode QA identity");
+        studio.doc.cloud = Some(omadesign::cloud::CloudLink {
+            project_id: args[index + 2].clone(),
+            enabled: true,
+            ..Default::default()
+        });
         studio.refresh_cloud_review();
     }
     let options = eframe::NativeOptions {
@@ -250,6 +261,7 @@ fn main() -> eframe::Result {
                 checked: Instant::now(),
                 started: Instant::now(),
                 native_events: vec![],
+                cloud_requested: String::new(),
             }))
         }),
     )

@@ -142,4 +142,28 @@ mod tests {
         assert_eq!(studio.selected_type().unwrap().content, original);
         assert!(studio.status.contains("destination changed"));
     }
+    #[test]
+    fn delayed_paste_is_invalidated_even_when_composition_cancels_at_the_same_caret() {
+        let mut studio = Studio::new();
+        studio.active_layer = Some(1);
+        studio.place_text(Pt::ZERO);
+        studio.type_insert("original");
+        let original = studio.selected_type().unwrap().content;
+        let (sender, receiver) = mpsc::channel();
+        studio.type_paste_jobs.push(TypePasteJob {
+            receiver, owner: studio.swap_id.clone(),
+            edit: studio.type_edit.clone().unwrap(), source: original.clone(),
+        });
+        studio.type_ime_event(&egui::Event::Ime(egui::ImeEvent::Preedit {
+            text: "ni".into(), active_range_chars: Some(0..2),
+        }));
+        studio.type_ime_event(&egui::Event::Ime(egui::ImeEvent::Preedit {
+            text: String::new(), active_range_chars: None,
+        }));
+        assert!(studio.type_paste_jobs.is_empty());
+        assert!(sender.send(Ok(Paste { text: "late".into(), rich: None })).is_err());
+        studio.poll_type_clipboard_jobs(&egui::Context::default());
+        assert_eq!(studio.selected_type().unwrap().content, original);
+    }
+
 }
