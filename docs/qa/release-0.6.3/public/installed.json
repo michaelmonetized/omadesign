@@ -1,0 +1,29 @@
+{
+  "version": "omadesign 0.6.3",
+  "binary_sha256": "8d90d163331eb14112466883a0af64d18d7a650d2e9f77aed0ff9a874107d195",
+  "matches_public_archive": true,
+  "runtime": [
+    {
+      "file": "lib/libonnxruntime.so",
+      "sha256": "f1ec1a08eb99bd6e5401340f0a2b101381bf4694415480291dc13bcaa30f9ec7"
+    },
+    {
+      "file": "lib/libonnxruntime.so.1",
+      "sha256": "f1ec1a08eb99bd6e5401340f0a2b101381bf4694415480291dc13bcaa30f9ec7"
+    },
+    {
+      "file": "lib/libonnxruntime.so.1.28.0",
+      "sha256": "f1ec1a08eb99bd6e5401340f0a2b101381bf4694415480291dc13bcaa30f9ec7"
+    },
+    {
+      "file": "lib/libonnxruntime_providers_shared.so",
+      "sha256": "3b6be288fbfb7dff8770d08a23defdde18e8f7e0f5a2b344a0e5e238c999ea88"
+    }
+  ],
+  "installer_unmodified": true,
+  "latest_resolver_used": true,
+  "tag_override": false,
+  "prefix_override": false,
+  "native_capture": "installed-native.png",
+  "backup": "preinstall-backup.json"
+}

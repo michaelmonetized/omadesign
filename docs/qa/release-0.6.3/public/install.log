@@ -1,0 +1,30 @@
+downloading https://github.com/michaelmonetized/omadesign/releases/download/v0.6.3/omadesign-0.6.3-aarch64-unknown-linux-gnu.tar.gz
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+
+  0      0   0      0   0      0      0      0                              0
+  0      0   0      0   0      0      0      0                              0
+  0      0   0      0   0      0      0      0                              0
+
+  0      0   0      0   0      0      0      0                              0
+ 42 35.19M  42 15.03M   0      0 11.49M      0   00:03   00:01   00:02 15.00M
+100 35.19M 100 35.19M   0      0 17.03M      0   00:02   00:02         15.00M
+100 35.19M 100 35.19M   0      0 17.02M      0   00:02   00:02         15.00M
+100 35.19M 100 35.19M   0      0 17.02M      0   00:02   00:02         15.00M
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+
+  0      0   0      0   0      0      0      0                              0
+  0      0   0      0   0      0      0      0                              0
+  0      0   0      0   0      0      0      0                              0
+
+  0      0   0      0   0      0      0      0                              0
+100    115 100    115   0      0    336      0                              0
+100    115 100    115   0      0    336      0                              0
+100    115 100    115   0      0    336      0                              0
+omadesign-0.6.3-aarch64-unknown-linux-gnu.tar.gz: OK
+installed /home/michael/.local/bin/omadesign
+files stay under your home directory; nothing is written to /usr
+relaunch it from your app launcher, or run: omadesign
+
+omadesign 0.6.3 is installed

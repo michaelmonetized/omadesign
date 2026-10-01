@@ -1,0 +1,8 @@
+{
+  "hostname": "clerk.omadesign.app",
+  "https_error": "TLS wrong version number",
+  "http_status": 302,
+  "http_redirect_host": "block.charter-prod.hosted.cujo.io",
+  "public_dns_matches_local": true,
+  "scope": "Observed ISP interception on this connection. Site routes and media remain available. No authentication success is claimed."
+}

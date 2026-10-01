@@ -1,0 +1,119 @@
+{
+  "version": "0.6.3",
+  "checkedAt": "2026-10-01T05:00:51.582Z",
+  "scope": "Public release routes, responsive layout, release links, and real video playback. Authentication is not validated: this connection redirects the Clerk hostname to Spectrum Security Shield.",
+  "results": [
+    {
+      "route": "/updates/0.6.3/",
+      "width": 1440,
+      "status": 200,
+      "scrollWidth": 1440,
+      "title": "A workspace that moves with you · omadesign 0.6.3",
+      "releaseLinks": [
+        {
+          "text": "Omadesign 0.6.3",
+          "href": "https://github.com/michaelmonetized/omadesign/releases/tag/v0.6.3"
+        }
+      ],
+      "pageErrors": []
+    },
+    {
+      "route": "/updates/",
+      "width": 1440,
+      "status": 200,
+      "scrollWidth": 1440,
+      "title": "Updates · omadesign",
+      "releaseLinks": [],
+      "pageErrors": []
+    },
+    {
+      "route": "/",
+      "width": 1440,
+      "status": 200,
+      "scrollWidth": 1440,
+      "title": "omadesign — native Linux creative suite",
+      "releaseLinks": [
+        {
+          "text": "Omarchy ↓",
+          "href": "https://github.com/michaelmonetized/omadesign/releases/download/v0.6.3/omadesign-0.6.3-x86_64-unknown-linux-gnu.tar.gz"
+        },
+        {
+          "text": "Omarchy MX Mac ↓",
+          "href": "https://github.com/michaelmonetized/omadesign/releases/download/v0.6.3/omadesign-0.6.3-aarch64-unknown-linux-gnu.tar.gz"
+        },
+        {
+          "text": "Download src ↗",
+          "href": "https://github.com/michaelmonetized/omadesign/archive/refs/tags/v0.6.3.zip"
+        },
+        {
+          "text": "Release notes",
+          "href": "https://github.com/michaelmonetized/omadesign/releases/tag/v0.6.3"
+        }
+      ],
+      "video": {
+        "src": "https://omadesign.app/media/recordings/graphics.webm",
+        "duration": 17,
+        "start": 0.255644,
+        "end": 2.443982
+      },
+      "pageErrors": [
+        "K0: Clerk: Failed to load Clerk JS, failed to load script: https://clerk.omadesign.app/npm/@clerk/clerk-js@6/dist/clerk.browser.js\n\n(code=\"failed_to_load_clerk_js\")\n\n"
+      ]
+    },
+    {
+      "route": "/updates/0.6.3/",
+      "width": 390,
+      "status": 200,
+      "scrollWidth": 390,
+      "title": "A workspace that moves with you · omadesign 0.6.3",
+      "releaseLinks": [
+        {
+          "text": "Omadesign 0.6.3",
+          "href": "https://github.com/michaelmonetized/omadesign/releases/tag/v0.6.3"
+        }
+      ],
+      "pageErrors": []
+    },
+    {
+      "route": "/updates/",
+      "width": 390,
+      "status": 200,
+      "scrollWidth": 390,
+      "title": "Updates · omadesign",
+      "releaseLinks": [],
+      "pageErrors": []
+    },
+    {
+      "route": "/",
+      "width": 390,
+      "status": 200,
+      "scrollWidth": 390,
+      "title": "omadesign — native Linux creative suite",
+      "releaseLinks": [
+        {
+          "text": "Omarchy ↓",
+          "href": "https://github.com/michaelmonetized/omadesign/releases/download/v0.6.3/omadesign-0.6.3-x86_64-unknown-linux-gnu.tar.gz"
+        },
+        {
+          "text": "Omarchy MX Mac ↓",
+          "href": "https://github.com/michaelmonetized/omadesign/releases/download/v0.6.3/omadesign-0.6.3-aarch64-unknown-linux-gnu.tar.gz"
+        },
+        {
+          "text": "Download src ↗",
+          "href": "https://github.com/michaelmonetized/omadesign/archive/refs/tags/v0.6.3.zip"
+        },
+        {
+          "text": "Release notes",
+          "href": "https://github.com/michaelmonetized/omadesign/releases/tag/v0.6.3"
+        }
+      ],
+      "video": {
+        "src": "https://omadesign.app/media/recordings/graphics.webm",
+        "duration": 17,
+        "start": 0.116898,
+        "end": 1.447669
+      },
+      "pageErrors": []
+    }
+  ]
+}

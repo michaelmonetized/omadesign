@@ -1,0 +1,35 @@
+{
+  "url": "https://omadesign.app/#film",
+  "results": [
+    {
+      "width": 1440,
+      "before": {
+        "src": "https://omadesign.app/media/studio/film-0.6.1.webm",
+        "duration": 55,
+        "time": 0.000375,
+        "width": 1920,
+        "height": 1080
+      },
+      "after": {
+        "time": 1.012881,
+        "error": null,
+        "paused": false
+      }
+    },
+    {
+      "width": 390,
+      "before": {
+        "src": "https://omadesign.app/media/studio/film-0.6.1.webm",
+        "duration": 55,
+        "time": 0.000688,
+        "width": 1920,
+        "height": 1080
+      },
+      "after": {
+        "time": 1.023435,
+        "error": null,
+        "paused": false
+      }
+    }
+  ]
+}
