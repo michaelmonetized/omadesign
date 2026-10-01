@@ -558,13 +558,23 @@ impl Qa {
                 self.next();
             }
             42 => {
-                self.events
-                    .push(Event::PointerMoved(self.label("Move to project")));
+                self.cursor = self.label("Move to project");
+                self.events.push(Event::PointerMoved(self.cursor));
                 self.next();
             }
             43 => {
                 self.click(
-                    self.label("Project"),
+                    self.labels
+                        .iter()
+                        .filter(|(label, _)| label == "Project")
+                        .min_by(|(_, a), (_, b)| {
+                            a.center()
+                                .distance_sq(self.cursor)
+                                .total_cmp(&b.center().distance_sq(self.cursor))
+                        })
+                        .unwrap()
+                        .1
+                        .center(),
                     Modifiers::NONE,
                     PointerButton::Primary,
                 );
