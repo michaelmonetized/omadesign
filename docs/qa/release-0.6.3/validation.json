@@ -5,7 +5,8 @@
     "failed": 0,
     "ignored": 8,
     "seconds": 359.48,
-    "log_sha256": "2c9935690ea53c822421d4159d0212438a0b8a3ac305034efaa10b18ed24032d"
+    "log_sha256": "7a730d6fd12d8faaa625de39fb8c0fbbd6b022a08cea1a014e6381d484d20517",
+    "raw_log_sha256": "2c9935690ea53c822421d4159d0212438a0b8a3ac305034efaa10b18ed24032d"
   },
   "native_acceptance_checks": 16,
   "site_tests": 21,

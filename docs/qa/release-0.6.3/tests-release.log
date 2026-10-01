@@ -997,4 +997,3 @@ test ui::welcome::workspace::tests::clipboard_size_fills_all_blank_modes_without
 test ui::welcome::workspace::tests::creation_targets_choose_templates_sizes_or_photo_without_a_motion_start ... ok
 
 test result: ok. 987 passed; 0 failed; 8 ignored; 0 measured; 0 filtered out; finished in 359.48s
-
