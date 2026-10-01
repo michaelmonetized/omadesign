@@ -1,0 +1,13 @@
+{
+  "version": "omadesign 0.6.1",
+  "binary_sha256": "2e48e869ec4be2960ffcf389c34b82782a7a8688c49e016eafcbbf55886c8635",
+  "backed_up": [
+    "/home/michael/.local/bin/omadesign",
+    "/home/michael/.local/share/omadesign",
+    "/home/michael/.local/share/applications/omadesign.desktop",
+    "/home/michael/.local/share/mime/packages/omadesign.xml",
+    "/home/michael/.local/share/icons/hicolor/scalable/apps/omadesign.svg"
+  ],
+  "backup": "/home/michael/Projects/omadesign/artifacts/release-063/preinstall-backup",
+  "scope": "Backup metadata only; original installation bytes are retained locally."
+}
