@@ -146,6 +146,22 @@ impl Qa {
         files.sort();
         files
     }
+    fn document_card(&self, path: &std::path::Path) -> Rect {
+        let mut files = self.files("");
+        files.extend(self.files("Project"));
+        files.sort_by(|a, b| {
+            fs::metadata(b)
+                .unwrap()
+                .modified()
+                .unwrap()
+                .cmp(&fs::metadata(a).unwrap().modified().unwrap())
+                .then(a.cmp(b))
+        });
+        self.cards[files
+            .iter()
+            .position(|candidate| candidate == path)
+            .unwrap()]
+    }
     fn inspect(&mut self, ctx: &egui::Context) {
         fn visit(
             shape: &egui::Shape,
@@ -482,13 +498,7 @@ impl Qa {
                 let original = self
                     .root
                     .join(format!("{}.oma", self.studio.tab_title(1).0));
-                let mut files = self.files("");
-                files.extend(self.files("Project"));
-                files.sort_by_key(|path| {
-                    std::cmp::Reverse(fs::metadata(path).unwrap().modified().unwrap())
-                });
-                let index = files.iter().position(|path| path == &original).unwrap();
-                let pos = self.cards[index].center();
+                let pos = self.document_card(&original).center();
                 self.cursor = pos;
                 self.held = Modifiers::NONE;
                 self.events.extend([
@@ -541,7 +551,7 @@ impl Qa {
             }
             41 => {
                 self.click(
-                    self.cards[0].center(),
+                    self.document_card(&self.files("")[0]).center(),
                     Modifiers::NONE,
                     PointerButton::Secondary,
                 );
@@ -569,7 +579,7 @@ impl Qa {
             }
             45 => {
                 self.click(
-                    self.cards[0].center(),
+                    self.document_card(&self.files("")[0]).center(),
                     Modifiers::NONE,
                     PointerButton::Secondary,
                 );

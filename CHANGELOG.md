@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-09-30 · 0.6.3 — A workspace that moves with you
+## 2026-10-01 · 0.6.3 — A workspace that moves with you
 
 - Hover and move across motion thumbnails to scrub their keyframes without opening a document.
 - Ctrl-click toggles selections; Shift-click selects a range in browser order. Alt-click and Return open documents in background tabs while Welcome stays focused.
