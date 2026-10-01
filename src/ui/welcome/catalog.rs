@@ -38,7 +38,8 @@ pub(super) struct DocumentEntry {
     pub inferred_modes: bool,
     pub error: Option<String>,
     pub recovered: bool,
-    #[serde(default)]
+    // Required in the disk index: older caches must be rescanned even when
+    // source size and mtime are unchanged, or motion would stay undiscovered.
     pub has_motion: bool,
 }
 
@@ -1178,6 +1179,28 @@ mod tests {
         assert_eq!((start.w,start.h),(end.w,end.h));
         assert_ne!(start.data,end.data);
         assert_eq!(fs::read(path).unwrap(),before);
+    }
+
+    #[test]
+    fn legacy_index_is_rejected_and_unchanged_motion_documents_are_rescanned() {
+        let temp = Temp::new();
+        let path = temp.0.join("animated.oma");
+        let mut doc = crate::document::Document::new("Motion", 160., 100., 72.);
+        doc.motion.set_key(1, crate::motion::Prop::X, 0., 10., crate::motion::Ease::Linear);
+        document(&path, &doc);
+        let before = fs::read(&path).unwrap();
+        let catalog = collect(&temp.0, &Catalog::default());
+        let mut legacy = serde_json::to_value(&catalog).unwrap();
+        legacy["documents"][0].as_object_mut().unwrap().remove("has_motion");
+        let index = serde_json::from_value::<Catalog>(legacy);
+        assert!(index.is_err(), "Old metadata cannot suppress a fresh header read");
+        let refreshed = collect(&temp.0, &index.unwrap_or_default());
+        assert!(refreshed.documents[0].has_motion);
+        assert_eq!(refreshed.documents[0].modified_ns, catalog.documents[0].modified_ns);
+        assert_eq!(refreshed.documents[0].size, catalog.documents[0].size);
+        assert_eq!(fs::read(path).unwrap(), before);
+        let current = serde_json::to_vec(&refreshed).unwrap();
+        assert!(serde_json::from_slice::<Catalog>(&current).unwrap().documents[0].has_motion);
     }
 
     #[test]

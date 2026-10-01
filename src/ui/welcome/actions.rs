@@ -103,18 +103,24 @@ fn execute(action: Action) -> Result<Done, String> {
             source,
             destination,
         } => {
-            let source = source.canonicalize().map_err(|e| e.to_string())?;
-            let destination = destination.canonicalize().map_err(|e| e.to_string())?;
-            if destination.starts_with(&source) {
+            let physical_source = source.canonicalize().map_err(|e| e.to_string())?;
+            let physical_destination = destination.canonicalize().map_err(|e| e.to_string())?;
+            if physical_destination.starts_with(&physical_source) {
                 return Err("A project cannot move inside itself".into());
             }
-            let target = destination.join(source.file_name().ok_or("No project name")?);
-            if let Some(backup) = move_project(&source, &target)? {
+            let name = physical_source.file_name().ok_or("No project name")?;
+            let target = destination.join(name);
+            if let Some(backup) = move_project(&physical_source, &physical_destination.join(name))? {
                 done.messages
                     .push(format!("Source backup kept at {}", backup.display()));
             }
             done.messages
                 .push(format!("Moved project to {}", target.display()));
+            // Tabs and catalog selections retain the caller's lexical paths.
+            // Also cover tabs originally opened through the canonical root.
+            if physical_source != source {
+                done.changes.push((physical_source, Some(target.clone())));
+            }
             done.changes.push((source, Some(target)));
         }
         Action::New { project, mode } => {
@@ -454,6 +460,35 @@ mod tests {
             .is_err()
         );
         assert!(source.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn project_move_through_symlink_relocates_lexical_and_canonical_tabs() {
+        let root = std::env::temp_dir().join(format!("oma-project-alias-{}", crate::document::next_id()));
+        let physical = root.join("physical");
+        let alias = root.join("alias");
+        fs::create_dir_all(physical.join("source")).unwrap();
+        fs::create_dir_all(physical.join("destination")).unwrap();
+        std::os::unix::fs::symlink(&physical, &alias).unwrap();
+        let doc = Document::new("Open work", 80., 60., 72.);
+        crate::project::save_to(&doc, &physical.join("source/art.oma")).unwrap();
+        let mut studio = Studio::new();
+        studio.open_document(doc.clone(), Some(alias.join("source/art.oma")));
+        studio.open_document(doc, Some(physical.join("source/art.oma")));
+        let done = execute(Action::MoveProject {
+            source: alias.join("source"),
+            destination: alias.join("destination"),
+        }).unwrap();
+        for (old, new) in done.changes {
+            studio.relocate_browser_paths(&old, new.as_deref());
+        }
+        let target = alias.join("destination/source/art.oma");
+        assert!(target.is_file());
+        assert!(!physical.join("source").exists());
+        assert_eq!(studio.tab_count(), 2);
+        assert_eq!(studio.tab_path(0), Some(target.as_path()));
+        assert_eq!(studio.tab_path(1), Some(target.as_path()));
         fs::remove_dir_all(root).unwrap();
     }
     #[test]

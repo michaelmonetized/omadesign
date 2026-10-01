@@ -231,7 +231,7 @@ impl Studio {
                         continue;
                     }
                     match imported {
-                        crate::import::Imported::Document(doc) => {
+                        crate::import::Imported::Document(mut doc) => {
                             self.transfer_notes = doc.import_notes.clone();
                             if matches!(job.mode, ImportMode::PhotoToDesign) {
                                 if job.owner != self.swap_id {
@@ -272,6 +272,7 @@ impl Studio {
                                 self.show_welcome = false;
                                 self.need_fit = true;
                             } else if matches!(job.mode, ImportMode::OpenBackground) {
+                                doc.ensure_ids();
                                 self.ensure_tabs();
                                 self.tabs.push(TabState::new(doc, Some(job.path.clone())));
                                 self.remember_path(&job.path);
