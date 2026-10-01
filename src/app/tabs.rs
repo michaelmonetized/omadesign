@@ -240,6 +240,48 @@ impl Studio {
         self.activate_tab();
     }
 
+    /// Keep open documents and recent-file links attached after browser moves.
+    /// Trashed documents remain editable and require Save As to keep changes.
+    pub(crate) fn relocate_browser_paths(&mut self, old: &std::path::Path, new: Option<&std::path::Path>) {
+        self.ensure_tabs();
+        let update = |path: &mut Option<PathBuf>, dirty: &mut bool| {
+            if let Some(current) = path.as_ref() && let Ok(relative) = current.strip_prefix(old) {
+                *path = new.map(|root| if relative.as_os_str().is_empty() { root.to_owned() } else { root.join(relative) });
+                if new.is_none() { *dirty = true; }
+            }
+        };
+        update(&mut self.path, &mut self.dirty);
+        for (index, tab) in self.tabs.iter_mut().enumerate() {
+            if index != self.active_tab { update(&mut tab.path, &mut tab.dirty); }
+        }
+        for recent in crate::project::load_recents_all() {
+            if let Ok(relative) = recent.strip_prefix(old) {
+                crate::project::remove_recent(&recent);
+                if let Some(root) = new {
+                    crate::project::push_recent(&if relative.as_os_str().is_empty() { root.to_owned() } else { root.join(relative) });
+                }
+            }
+        }
+        self.recents = crate::project::load_recents();
+        self.libraries.folders.retain(|_, folder| {
+            if let Ok(relative) = folder.strip_prefix(old) {
+                if let Some(root) = new {
+                    *folder = if relative.as_os_str().is_empty() { root.to_owned() } else { root.join(relative) };
+                } else { return false; }
+            }
+            true
+        });
+        let drafts = std::mem::take(&mut self.libraries.projects);
+        for (path, draft) in drafts {
+            let path = if let Ok(relative) = path.strip_prefix(old) {
+                new.map(|root| if relative.as_os_str().is_empty() { root.to_owned() } else { root.join(relative) }).unwrap_or(path)
+            } else { path };
+            self.libraries.projects.insert(path, draft);
+        }
+        self.libraries.source = None;
+        self.photo.relocate_browser_paths(old, new);
+    }
+
     pub fn new_tab(&mut self) {
         if self.show_welcome && self.current_is_blank() && self.tab_count() <= 1 {
             self.show_welcome = false;

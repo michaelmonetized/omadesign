@@ -459,7 +459,7 @@ pub struct Studio {
     pub shape_rename: Option<(usize, u64, String)>,
     pub clipboard_rasters: Vec<Layer>,
     file_jobs: Vec<file_io::ImportJob>,
-    pending_open_files: std::collections::VecDeque<(PathBuf, bool)>,
+    pending_open_files: std::collections::VecDeque<(PathBuf, file_io::ImportMode)>,
     file_dialog: Option<file_dialogs::FileDialogJob>,
     clipboard_jobs: Vec<clipboard::PasteJob>,
     pub show_import_notes: bool,

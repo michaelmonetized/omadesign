@@ -17,7 +17,7 @@ use std::sync::{
 };
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
-const SCAN_ID: &str = "welcome-home-catalog-v3";
+const SCAN_ID: &str = "welcome-home-catalog-v4";
 const PREVIEW_ID: &str = "welcome-home-previews-v4";
 const CAPTURE_ROOT_ID: &str = "welcome-capture-catalog-root";
 const REFRESH: Duration = Duration::from_secs(30);
@@ -38,6 +38,8 @@ pub(super) struct DocumentEntry {
     pub inferred_modes: bool,
     pub error: Option<String>,
     pub recovered: bool,
+    #[serde(default)]
+    pub has_motion: bool,
 }
 
 impl DocumentEntry {
@@ -630,7 +632,13 @@ struct LayoutHeader {
 #[derive(Deserialize, Default)]
 struct MotionHeader {
     #[serde(default)]
-    tracks: Vec<serde::de::IgnoredAny>,
+    tracks: Vec<MotionTrackHeader>,
+}
+
+#[derive(Deserialize)]
+struct MotionTrackHeader {
+    #[serde(default)]
+    keys: Vec<serde::de::IgnoredAny>,
 }
 
 fn index_entry(
@@ -662,6 +670,7 @@ fn index_entry(
         inferred_modes: true,
         error: None,
         recovered,
+        has_motion: false,
     };
     let read = || -> Result<Header, String> {
         let reader = CancellableReader {
@@ -684,6 +693,7 @@ fn index_entry(
                 entry.name = header.name;
             }
             let doc = header.doc;
+            entry.has_motion = doc.motion.tracks.iter().any(|track| !track.keys.is_empty());
             let dimensions = match &doc.artboards {
                 ArtboardsHeader::Boards(boards) => boards
                     .iter()
@@ -1064,6 +1074,10 @@ fn prune_disk_previews(directory: &Path) {
 }
 
 fn render_document(doc: &crate::document::Document) -> Result<crate::photo::RgbaImage, String> {
+    render_document_at(doc, None)
+}
+
+pub(super) fn render_document_at(doc: &crate::document::Document, time: Option<f32>) -> Result<crate::photo::RgbaImage, String> {
     use crate::geom::{Bounds, Pt};
     let mut bounds = doc
         .artboards
@@ -1094,7 +1108,7 @@ fn render_document(doc: &crate::document::Document) -> Result<crate::photo::Rgba
         scale,
         offset: -bounds.min * scale,
     };
-    let pixels = crate::compositor::render_view(doc, view, w, h, crate::compositor::Draft::none())
+    let pixels = crate::compositor::render_view_posed(doc, view, w, h, crate::compositor::Draft::none(), time, None)
         .ok_or("Could not render document")?;
     let data = pixels
         .pixels()
@@ -1139,6 +1153,31 @@ mod tests {
             &mut |_, _, _| {},
             None,
         )
+    }
+
+    #[test]
+    fn motion_detection_and_scrub_frames_follow_keys_even_in_vector_documents() {
+        let temp = Temp::new();
+        let path = temp.0.join("animated.oma");
+        let mut doc = crate::document::Document::new("Motion", 160.,100.,72.);
+        doc.workspace = Some(Persona::Design);
+        let mut layer = crate::document::Layer::vector("Moving shape");
+        let shape = crate::document::Shape::new(crate::geom::Geom::Rect { origin: crate::geom::Pt::new(20.,20.), size: crate::geom::Pt::new(25.,25.), radius:0. }, crate::document::Style::default());
+        let id = shape.id;
+        layer.kind.shapes_mut().unwrap().push(shape);
+        doc.layers.push(layer);
+        doc.motion.set_key(id, crate::motion::Prop::X, 0.,0.,crate::motion::Ease::Linear);
+        doc.motion.set_key(id, crate::motion::Prop::X, 2.,90.,crate::motion::Ease::Linear);
+        document(&path,&doc);
+        let before = fs::read(&path).unwrap();
+        let catalog = collect(&temp.0,&Catalog::default());
+        assert!(catalog.documents[0].has_motion);
+        assert_eq!(catalog.documents[0].modes,vec![Persona::Design]);
+        let start = render_document_at(&doc,Some(0.)).unwrap();
+        let end = render_document_at(&doc,Some(2.)).unwrap();
+        assert_eq!((start.w,start.h),(end.w,end.h));
+        assert_ne!(start.data,end.data);
+        assert_eq!(fs::read(path).unwrap(),before);
     }
 
     #[test]

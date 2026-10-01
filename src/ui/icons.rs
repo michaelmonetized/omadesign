@@ -7,9 +7,13 @@ use eframe::egui::{
 };
 
 mod gradient;
-pub use gradient::{sparkle_button, sparkle_texture};
+pub use gradient::sparkle_texture;
 
 pub mod ph {
+    pub const INFO: &str = "\u{E2CE}";
+    pub const TEXT_AA: &str = "\u{E6EE}";
+    pub const PALETTE: &str = "\u{E6C8}";
+    pub const TOOLBOX: &str = "\u{ECA0}";
     pub const CURSOR: &str = "\u{E1DC}";
     pub const PATH: &str = "\u{E39C}";
     // Official Phosphor Light code points; the bundled font includes these glyphs.
@@ -136,15 +140,46 @@ pub fn persona_glyph(persona: Persona) -> &'static str {
     }
 }
 
+pub fn mode_color(persona: Persona) -> eframe::egui::Color32 {
+    let (r, g, b) = match persona {
+        Persona::Design => (243, 92, 106),
+        Persona::Pixel => (244, 156, 72),
+        Persona::Layout => (225, 190, 58),
+        Persona::Photo => (71, 158, 242),
+        Persona::Motion => (125, 119, 242),
+    };
+    eframe::egui::Color32::from_rgb(r, g, b)
+}
+
+pub fn colored_button(ui: &mut Ui, icon: &str, tip: &str, selected: bool, color: eframe::egui::Color32) -> Response {
+    let (rect, allocated) = ui.allocate_exact_size(vec2(36., 30.), Sense::hover());
+    let id = match tip {
+        "Agent" => eframe::egui::Id::new("studio-agent-toggle"),
+        "Welcome" => eframe::egui::Id::new("studio-welcome-toggle"),
+        _ => allocated.id,
+    };
+    let response = ui.interact(rect, id, Sense::click());
+    response.widget_info(|| WidgetInfo::selected(WidgetType::Button, ui.is_enabled(), selected, tip));
+    if selected || response.hovered() || response.has_focus() {
+        ui.painter().rect_filled(rect.shrink(1.), 6., color.gamma_multiply(0.18));
+    }
+    if response.has_focus() {
+        ui.painter().rect_stroke(rect.shrink(1.), 6., Stroke::new(1., color), eframe::egui::StrokeKind::Inside);
+    }
+    ui.painter().text(rect.center(), eframe::egui::Align2::CENTER_CENTER, icon, font(22.), color);
+    response.on_hover_text(tip)
+}
+
 pub fn persona_button(ui: &mut Ui, persona: Persona, selected: bool) -> Response {
-    glyph_button(
-        ui,
-        persona_glyph(persona),
-        &format!("{} — {}", persona.name(), persona.hint()),
-        selected,
-        vec2(36.0, 30.0),
-        22.0,
-    )
+    colored_button(ui, persona_glyph(persona), &format!("{} — {}", persona.name(), persona.hint()), selected, mode_color(persona))
+}
+
+pub fn welcome_button(ui: &mut Ui, selected: bool) -> Response {
+    let response = colored_button(ui, "", "Welcome", selected, eframe::egui::Color32::from_rgb(90, 195, 114));
+    if let Some(texture) = svg_texture(ui, "welcome-omadesign-mark", include_bytes!("../../assets/omadesign-mark.svg")) {
+        ui.painter().image(texture.id(), eframe::egui::Rect::from_center_size(response.rect.center(), vec2(24.,24.)), eframe::egui::Rect::from_min_max(eframe::egui::Pos2::ZERO, eframe::egui::pos2(1.,1.)), eframe::egui::Color32::from_rgb(90, 195, 114));
+    }
+    response
 }
 
 pub fn tiny_icon(ui: &mut Ui, icon: &str, tip: &str, selected: bool) -> bool {

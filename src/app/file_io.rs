@@ -5,6 +5,9 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 #[derive(Clone, Copy)]
 pub(super) enum ImportMode {
     Open,
+    OpenBackground,
+    Template,
+    RecoverBackground,
     Place,
     Drop(Option<Pt>),
     PhotoToDesign,
@@ -26,32 +29,43 @@ enum Completed {
 }
 
 impl Studio {
+    pub(crate) fn browser_file_activity(&self) -> bool {
+        self.file_dialog_pending() || !self.file_jobs.is_empty() || !self.pending_open_files.is_empty()
+            || self.photo.is_loading() || self.photo.is_loading_previews() || self.photo.is_saving()
+    }
+
     /// Queue the entire selection without dropping files beyond the four-worker
     /// limit. Ordered, one-at-a-time decoding also bounds peak raster memory.
     pub fn open_paths(&mut self, paths: Vec<PathBuf>) {
         self.pending_open_files
-            .extend(paths.into_iter().map(|path| (path, false)));
+            .extend(paths.into_iter().map(|path| (path, ImportMode::Open)));
+        self.start_next_open();
+    }
+
+    pub(crate) fn open_personal_template(&mut self, path: PathBuf) {
+        self.pending_open_files.push_back((path, ImportMode::Template));
         self.start_next_open();
     }
 
     pub fn recover_paths(&mut self, paths: Vec<PathBuf>) {
         self.pending_open_files
-            .extend(paths.into_iter().map(|path| (path, true)));
+            .extend(paths.into_iter().map(|path| (path, ImportMode::Recover)));
+        self.start_next_open();
+    }
+
+    /// Background opens append real document tabs without replacing or activating
+    /// the welcome tab, even if the user switches tabs while decoding.
+    pub fn open_paths_background(&mut self, paths: Vec<PathBuf>, recovered: bool) {
+        let mode = if recovered { ImportMode::RecoverBackground } else { ImportMode::OpenBackground };
+        self.pending_open_files.extend(paths.into_iter().map(|path| (path, mode)));
         self.start_next_open();
     }
 
     fn start_next_open(&mut self) {
         if self.file_jobs.is_empty()
-            && let Some((path, recover)) = self.pending_open_files.pop_front()
+            && let Some((path, mode)) = self.pending_open_files.pop_front()
         {
-            self.queue_import(
-                path,
-                if recover {
-                    ImportMode::Recover
-                } else {
-                    ImportMode::Open
-                },
-            );
+            self.queue_import(path, mode);
         }
     }
 
@@ -90,7 +104,7 @@ impl Studio {
         let (tx, receiver) = mpsc::channel();
         let input = path.clone();
         std::thread::spawn(move || {
-            if matches!(mode, ImportMode::Recover) {
+            if matches!(mode, ImportMode::Recover | ImportMode::RecoverBackground) {
                 let _ = tx.send(crate::project::load_swap(&input).map(Completed::Recovered));
                 return;
             }
@@ -173,7 +187,7 @@ impl Studio {
                     let action = match job.mode {
                         ImportMode::Place | ImportMode::Drop(_) => "place",
                         ImportMode::Export => "export",
-                        ImportMode::Recover => "recover",
+                        ImportMode::Recover | ImportMode::RecoverBackground => "recover",
                         _ => "open",
                     };
                     self.status = format!(
@@ -199,7 +213,12 @@ impl Studio {
                     let mut tab = TabState::new(meta.doc, meta.original);
                     tab.dirty = true;
                     tab.swap_id = meta.id;
-                    self.push_tab(tab);
+                    if matches!(job.mode, ImportMode::RecoverBackground) {
+                        self.ensure_tabs();
+                        self.tabs.push(tab);
+                    } else {
+                        self.push_tab(tab);
+                    }
                     self.status = format!("recovered {}", meta.name);
                 }
                 Ok(Completed::Imported(imported)) => {
@@ -246,6 +265,17 @@ impl Studio {
                                     job.frame,
                                 );
                                 self.show_import_notes = !self.transfer_notes.is_empty();
+                            } else if matches!(job.mode, ImportMode::Template) {
+                                self.open_document(doc, None);
+                                self.dirty = true;
+                                self.show_templates = false;
+                                self.show_welcome = false;
+                                self.need_fit = true;
+                            } else if matches!(job.mode, ImportMode::OpenBackground) {
+                                self.ensure_tabs();
+                                self.tabs.push(TabState::new(doc, Some(job.path.clone())));
+                                self.remember_path(&job.path);
+                                self.status = format!("Opened {} in a new tab", job.path.display());
                             } else {
                                 self.open_document(doc, Some(job.path));
                             }
@@ -420,6 +450,48 @@ mod tests {
             );
             std::thread::sleep(std::time::Duration::from_millis(2));
         }
+    }
+
+    #[test]
+    fn background_open_preserves_welcome_and_later_focus_for_the_entire_queue() {
+        let folder = TestFolder::new();
+        let mut studio = Studio::new();
+        let welcome = studio.swap_id.clone();
+        let mut paths = Vec::new();
+        for index in 0..6 {
+            let path = folder.0.join(format!("{index}.oma"));
+            crate::project::save_to(&Document::new(&format!("Work {index}"), 8.,8.,72.), &path).unwrap();
+            paths.push(path);
+        }
+        studio.open_paths_background(paths.clone(), false);
+        finish_jobs(&mut studio);
+        assert!(studio.show_welcome);
+        assert_eq!(studio.swap_id, welcome);
+        assert_eq!(studio.active_tab, 0);
+        assert_eq!(studio.tab_count(), 7);
+        for (index, path) in paths.iter().enumerate() { assert_eq!(studio.tab_path(index+1), Some(path.as_path())); }
+        studio.switch_tab(2);
+        let active = studio.swap_id.clone();
+        studio.open_paths_background(paths, false);
+        finish_jobs(&mut studio);
+        assert_eq!(studio.swap_id, active);
+        assert_eq!(studio.tab_count(), 13);
+    }
+
+    #[test]
+    fn personal_template_opens_unsaved_without_reusing_the_template_path() {
+        let folder = TestFolder::new();
+        let path = folder.0.join("template.oma");
+        let doc = Document::new("Template", 90., 60., 72.);
+        crate::project::save_to(&doc, &path).unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        let mut studio = Studio::new();
+        studio.open_personal_template(path.clone());
+        finish_jobs(&mut studio);
+        assert!(studio.path.is_none());
+        assert!(studio.dirty && !studio.show_welcome);
+        assert_eq!(studio.doc.width,90.);
+        assert_eq!(std::fs::read(path).unwrap(), bytes);
     }
 
     #[test]

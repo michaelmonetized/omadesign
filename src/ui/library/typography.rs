@@ -435,9 +435,8 @@ mod tests {
                         ..Default::default()
                     },
                     |ui| {
-                        egui::Panel::top("test-chrome")
-                            .exact_size(82.0)
-                            .show(ui, |_| {});
+                        studio.show_welcome = false;
+                        crate::ui::chrome::top_bar(ui, &mut studio);
                         egui::Panel::bottom("test-hud")
                             .exact_size(58.0)
                             .show(ui, |_| {});
@@ -455,7 +454,7 @@ mod tests {
                 })
                 };
                 assert!(
-                    visible("Brand"),
+                    visible(crate::ui::icons::ph::TOOLBOX),
                     "the sidebar tabs stay fixed while scrolling"
                 );
                 save_seen |= visible("Save role");

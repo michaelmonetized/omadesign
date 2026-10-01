@@ -38,7 +38,6 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
         )
         .show(ui, |ui| {
             ui.spacing_mut().item_spacing = vec2(8.0, 6.0);
-            super::library::tabs(ui, studio);
             if studio.libraries.sidebar != crate::app::libraries::Sidebar::Inspector {
                 super::library::show(ui, studio);
                 return;
@@ -70,10 +69,6 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                     }
                     if reshaping {
                         super::deform::inspector(ui, studio);
-                        section_gap(ui);
-                    }
-                    if design && typing && !reshaping {
-                        character_studio(ui, studio);
                         section_gap(ui);
                     }
                     if layout {
@@ -930,7 +925,7 @@ fn apply_stroke(studio: &mut Studio, stroke: Option<DocStroke>) {
     }
 }
 
-fn character_studio(ui: &mut Ui, studio: &mut Studio) {
+pub(super) fn character_studio(ui: &mut Ui, studio: &mut Studio) {
     heading(ui, "Typography");
     super::text_geometry::frame_inspector(ui, studio);
     super::text_geometry::path_inspector(ui, studio);

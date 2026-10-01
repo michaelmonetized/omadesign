@@ -490,6 +490,38 @@ impl PhotoSession {
         }
     }
 
+    pub(crate) fn relocate_browser_paths(&mut self, old: &Path, new: Option<&Path>) {
+        let relocate = |path: &Path| -> Option<PathBuf> {
+            match path.strip_prefix(old) {
+                Ok(relative) => new.map(|root| if relative.as_os_str().is_empty() { root.to_owned() } else { root.join(relative) }),
+                Err(_) => Some(path.to_owned()),
+            }
+        };
+        for image in &mut self.images {
+            image.source = image.source.as_deref().and_then(relocate);
+            image.settings_path = image.settings_path.as_deref().and_then(relocate);
+        }
+        for edit in self.undo_edits.iter_mut().chain(&mut self.redo_edits) {
+            for image in &mut edit.images { image.source = image.source.as_deref().and_then(relocate); }
+            edit.disk.retain_mut(|change| {
+                if let (Some(source), Some(path)) = (relocate(&change.source), relocate(&change.path)) {
+                    change.source = source; change.path = path; true
+                } else { false }
+            });
+        }
+        let mut changed = false;
+        if !self.folder.is_empty() && Path::new(&self.folder).starts_with(old) {
+            self.folder = relocate(Path::new(&self.folder)).map(|p|p.to_string_lossy().into_owned()).unwrap_or_default();
+            changed = true;
+        }
+        self.folder_files.retain_mut(|(_,path)| {
+            if !Path::new(path).starts_with(old) { return true; }
+            changed = true;
+            if let Some(next) = relocate(Path::new(path)) { *path = next.to_string_lossy().into_owned(); true } else { false }
+        });
+        if changed { self.gallery.load(&self.folder_files); }
+    }
+
     pub fn is_loading(&self) -> bool {
         !self.import_jobs.is_empty() || !self.import_queue.is_empty()
     }
@@ -1662,4 +1694,30 @@ impl PhotoSession {
         s.sel_version = 1;
         Ok(s)
     }
+}
+
+#[cfg(test)]
+mod browser_relocation_tests {
+    use super::*;
+    #[test]
+    fn browser_moves_rebase_loaded_photo_and_edit_history_paths() {
+        let mut session = PhotoSession::new();
+        let mut photo = PhotoImage::from_full("Photo".into(), RgbaImage::new(1,1,vec![20,40,60,255]).unwrap());
+        photo.source = Some(PathBuf::from("/old/project/photo.png"));
+        photo.settings_path = Some(PathBuf::from("/old/project/photo.omaphoto"));
+        session.images.push(photo);
+        session.folder = "/old/project".into();
+        session.undo_edits.push(PhotoEdit { images:vec![ImageChange {index:0,source:Some(PathBuf::from("/old/project/photo.png")),before:DevelopParams::default(),after:DevelopParams::default()}],disk:vec![] });
+        session.relocate_browser_paths(Path::new("/old/project"),Some(Path::new("/new/project")));
+        assert_eq!(session.images[0].source.as_deref(),Some(Path::new("/new/project/photo.png")));
+        assert_eq!(session.images[0].settings_path.as_deref(),Some(Path::new("/new/project/photo.omaphoto")));
+        assert_eq!(session.undo_edits[0].images[0].source,session.images[0].source);
+        assert_eq!(session.folder,"/new/project");
+        session.relocate_browser_paths(Path::new("/new/project"),None);
+        assert!(session.images[0].source.is_none());
+        assert!(session.images[0].settings_path.is_none());
+        assert!(session.folder.is_empty());
+        assert_eq!(session.images[0].full.data,vec![20,40,60,255]);
+    }
+
 }

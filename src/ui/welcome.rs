@@ -1,6 +1,8 @@
 mod catalog;
 mod team;
 mod workspace;
+pub(crate) mod actions;
+mod scrub;
 
 use crate::app::{Studio, WelcomePage};
 use crate::presets;
@@ -16,6 +18,10 @@ const GROUPS: &[(&str, Option<&str>)] = &[
     ("Identity", Some("Identity")),
 ];
 
+pub(super) fn file_action_busy(ctx: &eframe::egui::Context) -> bool { actions::busy(ctx) }
+
+pub(super) fn tick(ctx: &eframe::egui::Context, studio: &mut Studio) { actions::tick(ctx, studio); }
+
 pub fn show(ui: &mut Ui, studio: &mut Studio) {
     workspace::show(ui, studio);
 }
@@ -26,7 +32,7 @@ pub(super) fn ready(ctx: &eframe::egui::Context) -> bool {
     workspace::ready(ctx)
 }
 pub(super) fn modal_open(ctx: &eframe::egui::Context) -> bool {
-    workspace::modal_open(ctx)
+    workspace::modal_open(ctx) || actions::busy(ctx)
 }
 pub(super) fn cancel(ctx: &eframe::egui::Context) {
     catalog::cancel(ctx);

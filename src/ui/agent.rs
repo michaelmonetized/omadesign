@@ -90,7 +90,7 @@ pub(super) fn tick(ctx: &egui::Context, studio: &mut Studio) {
 }
 
 pub(super) fn button(ui: &mut egui::Ui, studio: &mut Studio) {
-    if super::icons::sparkle_button(ui, studio.agent.visible).clicked() {
+    if super::icons::colored_button(ui, "\u{E6A2}", "Agent", studio.agent.visible, egui::Color32::from_rgb(188, 119, 238)).clicked() {
         if studio.agent.visible {
             studio.agent.visible = false;
             ui.ctx()

@@ -66,7 +66,7 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
                 ui.scope_builder(eframe::egui::UiBuilder::new().max_rect(right), |ui| {
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         let photo = studio.persona == Persona::Photo;
-                        super::agent::button(ui, studio);
+                        super::library::tabs(ui, studio);
                         if photo {
                             library_buttons(ui, studio);
                         }
@@ -130,7 +130,7 @@ fn main_menus(ui: &mut Ui, studio: &mut Studio) {
 }
 
 fn mode_tabs_rect(row: eframe::egui::Rect) -> eframe::egui::Rect {
-    eframe::egui::Rect::from_center_size(row.center(), vec2(5.0 * 36.0 + 4.0 * 6.0, 30.0))
+    eframe::egui::Rect::from_center_size(row.center(), vec2(7.0 * 36.0 + 6.0 * 6.0, 30.0))
 }
 
 fn file_menu(ui: &mut Ui, studio: &mut Studio) {
@@ -626,7 +626,7 @@ fn view_menu(ui: &mut Ui, studio: &mut Studio) {
             studio.show_import_notes = true;
             ui.close();
         }
-        for (label, tab) in [("Inspector", crate::app::libraries::Sidebar::Inspector), ("Palette library", crate::app::libraries::Sidebar::Palettes), ("Brand assets", crate::app::libraries::Sidebar::Brand)] {
+        for (label, tab) in [("Inspector", crate::app::libraries::Sidebar::Inspector), ("Typography", crate::app::libraries::Sidebar::Typography), ("Palette library", crate::app::libraries::Sidebar::Palettes), ("Brand assets", crate::app::libraries::Sidebar::Brand)] {
             if ui.selectable_label(studio.libraries.sidebar == tab, label).clicked() {
                 studio.libraries.sidebar=tab; studio.show_welcome=false; ui.close();
             }
@@ -778,6 +778,9 @@ fn persona_picker(ui: &mut Ui, studio: &mut Studio) {
             Persona::Photo,
             Persona::Motion,
         ] {
+            if persona == Persona::Photo && icons::welcome_button(ui, studio.show_welcome).clicked() {
+                studio.show_welcome_screen();
+            }
             if icons::persona_button(
                 ui,
                 persona,
@@ -788,6 +791,7 @@ fn persona_picker(ui: &mut Ui, studio: &mut Studio) {
                 switch_persona(studio, persona);
             }
         }
+        super::agent::button(ui, studio);
     });
 }
 
@@ -1222,7 +1226,7 @@ mod tests {
                     if let eframe::egui::Shape::Text(text) = &shape.shape {
                         let center = text.galley.rect.translate(text.pos.to_vec2()).center();
                         if center.y < 44.0
-                            && (center.x - size.x * 0.5).abs() < 102.0
+                            && (center.x - size.x * 0.5).abs() < 150.0
                             && [
                                 Persona::Design,
                                 Persona::Pixel,
@@ -1240,7 +1244,7 @@ mod tests {
                 })
                 .collect();
             assert_eq!(modes.len(), 5, "all modes must remain directly available");
-            let center = (modes[0].x + modes[4].x) * 0.5;
+            let center = modes[0].x + 3.0 * 42.0;
             assert!(
                 (center - size.x * 0.5).abs() < 1.0,
                 "mode group at {center} on {size:?}"

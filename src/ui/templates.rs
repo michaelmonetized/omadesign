@@ -1,4 +1,7 @@
 //! Editable starts, with previews rendered once off the drawing thread.
+#[path = "personal_templates.rs"]
+mod personal;
+
 use crate::app::Studio;
 use crate::compositor::{Draft, View};
 use crate::geom::Pt;
@@ -242,6 +245,7 @@ fn reset_scope(ctx: &egui::Context) {
 }
 
 pub fn library(ui: &mut Ui, studio: &mut Studio) {
+    personal::show(ui, studio);
     let state_id = Id::new("template-browser-state");
     let mut state = ui
         .ctx()
