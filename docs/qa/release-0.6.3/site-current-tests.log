@@ -1,0 +1,8 @@
+
+ RUN  v5.0.1 /home/michael/Projects/omadesign/.worktrees/release-063/site
+
+
+ Test Files  5 passed (5)
+      Tests  21 passed (21)
+   Start at  01:05:31
+   Duration  294ms (transform 45%, tests 40%, import 13%, worker 1%)

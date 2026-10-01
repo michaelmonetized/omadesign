@@ -1,11 +1,11 @@
 {
-  "id": "dpl_DkY7axup4PdNLcTTsEiSTq2BFY2N",
-  "url": "https://omadesign-kuvdgmphs-hustle-launch.vercel.app",
+  "id": "dpl_5H66rsFTsRbyTLcdFsEVimQbMgfF",
+  "url": "https://omadesign-f28x4byzr-hustle-launch.vercel.app",
   "productionUrl": "https://omadesign.app",
-  "inspectorUrl": "https://vercel.com/hustle-launch/omadesign/DkY7axup4PdNLcTTsEiSTq2BFY2N",
+  "inspectorUrl": "https://vercel.com/hustle-launch/omadesign/5H66rsFTsRbyTLcdFsEVimQbMgfF",
   "readyState": "READY",
   "target": "production",
-  "deploymentApiUrl": "https://api.vercel.com/v13/deployments/dpl_DkY7axup4PdNLcTTsEiSTq2BFY2N",
+  "deploymentApiUrl": "https://api.vercel.com/v13/deployments/dpl_5H66rsFTsRbyTLcdFsEVimQbMgfF",
   "buildMachine": {
     "cores": 2,
     "memory": 8192,
@@ -15,5 +15,7 @@
   },
   "deploymentProtection": [
     "vercel_authentication"
-  ]
+  ],
+  "source_commit": "727580d4cc544c1d4a5184314635fcc816ed071d",
+  "included_site_fix_pr": 191
 }

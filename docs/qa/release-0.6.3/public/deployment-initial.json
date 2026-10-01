@@ -1,0 +1,19 @@
+{
+  "id": "dpl_DkY7axup4PdNLcTTsEiSTq2BFY2N",
+  "url": "https://omadesign-kuvdgmphs-hustle-launch.vercel.app",
+  "productionUrl": "https://omadesign.app",
+  "inspectorUrl": "https://vercel.com/hustle-launch/omadesign/DkY7axup4PdNLcTTsEiSTq2BFY2N",
+  "readyState": "READY",
+  "target": "production",
+  "deploymentApiUrl": "https://api.vercel.com/v13/deployments/dpl_DkY7axup4PdNLcTTsEiSTq2BFY2N",
+  "buildMachine": {
+    "cores": 2,
+    "memory": 8192,
+    "machine": "basic",
+    "selectionType": "fixed",
+    "selectionSource": "plan-default"
+  },
+  "deploymentProtection": [
+    "vercel_authentication"
+  ]
+}
