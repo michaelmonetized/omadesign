@@ -42,7 +42,15 @@ pub(super) struct TabState {
 
 impl TabState {
     pub(super) fn new(doc: Document, path: Option<PathBuf>) -> Self {
-        let active_layer = doc.layers.len().checked_sub(1);
+        let active_layer = if doc.workspace == Some(Persona::Pixel) {
+            doc.layers.iter().enumerate().rev()
+                .find(|(index, layer)| layer.visible && !layer.locked
+                    && layer.kind.pixels().is_some() && doc.layer_editable(*index))
+                .map(|(index, _)| index)
+                .or_else(|| doc.layers.len().checked_sub(1))
+        } else {
+            doc.layers.len().checked_sub(1)
+        };
         Self {
             doc,
             path,

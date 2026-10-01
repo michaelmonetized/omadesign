@@ -411,6 +411,7 @@ impl Qa {
                     return;
                 }
                 assert_eq!(self.studio.persona, Persona::Pixel);
+                assert!(self.studio.raster_target().is_some());
                 assert!(
                     self.studio
                         .path

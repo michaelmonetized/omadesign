@@ -422,8 +422,16 @@ mod tests {
                 mode,
             })
             .unwrap();
-            let doc = crate::project::load_from(&done.open.unwrap()).unwrap();
+            let path = done.open.unwrap();
+            let doc = crate::project::load_from(&path).unwrap();
             assert_eq!(doc.workspace, Some(mode));
+            let mut studio = Studio::new();
+            studio.open_document(doc, Some(path));
+            assert_eq!(studio.persona, mode);
+            if mode == Persona::Pixel {
+                assert_eq!(studio.tool, crate::tools::Tool::Brush);
+                assert!(studio.raster_target().is_some(), "A new Raster file must be immediately paintable");
+            }
         }
         let done = execute(Action::MoveProject {
             source: source.clone(),
