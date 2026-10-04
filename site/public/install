@@ -2,10 +2,15 @@
 # One-liner: curl -fsSL https://omadesign.app/install | sh
 set -eu
 LAUNCH=0
+PROMPT_UPDATE=0
+case "${0##*/}" in
+  omadesign-install) LAUNCH=1; PROMPT_UPDATE=1 ;;
+esac
 case "${1:-}" in
-  --launch) LAUNCH=1; shift; if [ "${1:-}" = -- ]; then shift; fi ;;
+  --launch) LAUNCH=1; PROMPT_UPDATE=0; shift; if [ "${1:-}" = -- ]; then shift; fi ;;
+  --) [ "$LAUNCH" = 1 ] || { echo "omadesign: -- requires launch mode" >&2; exit 1; }; shift ;;
   '') ;;
-  *) echo "usage: $0 [--launch [-- APP_ARGUMENTS...]]" >&2; exit 1 ;;
+  *) [ "$LAUNCH" = 1 ] || { echo "usage: $0 [--launch [-- APP_ARGUMENTS...]]" >&2; exit 1; } ;;
 esac
 LAUNCH_DIR="$PWD"
 INSTALL_PREFIX="${OMADESIGN_INSTALL_PREFIX:-}"
@@ -75,6 +80,35 @@ version_is_current() {
     }
   '
 }
+
+# Offer an update before opening an older installed app.
+# Args: installed version, available version. Returns success only for Update.
+confirm_update() {
+  message="omadesign $2 is available. You have $1. Update now?"
+  if [ -t 0 ]; then
+    printf '%s [y/N] ' "$message" >&2
+    IFS= read -r answer || return 1
+    case "$answer" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
+  fi
+  if command -v notify-send >/dev/null 2>&1; then
+    if choice="$(notify-send --app-name=omadesign --icon=omadesign \
+      --expire-time=45000 --action=update=Update --action=later=Later \
+      'Update omadesign' "$message")"; then
+      [ "$choice" = update ]
+      return
+    fi
+  fi
+  if command -v zenity >/dev/null 2>&1; then
+    zenity --question --title='Update omadesign' --text="$message" --ok-label=Update --cancel-label=Later
+    return
+  fi
+  if command -v kdialog >/dev/null 2>&1; then
+    kdialog --title 'Update omadesign' --yesno "$message" --yes-label Update --no-label Later
+    return
+  fi
+  echo "omadesign: $message Run omadesign-install --launch to update." >&2
+  return 1
+}
 REPO="michaelmonetized/omadesign"
 if [ "$(uname -s)" != Linux ]; then
   echo "omadesign: this installer requires Linux" >&2
@@ -127,6 +161,11 @@ if [ -n "$INSTALLED" ] && version_is_current "$INSTALLED" "$VER"; then
   if ! version_is_current "$VER" "$INSTALLED"; then
     echo "omadesign: repair installed $INSTALLED with a matching or newer package; latest stable is $VER" >&2
     exit 1
+  fi
+fi
+if [ "$PROMPT_UPDATE" = 1 ] && [ -n "$INSTALLED" ] && installation_complete; then
+  if ! confirm_update "$INSTALLED" "$VER"; then
+    exec "$BIN/omadesign" "$@"
   fi
 fi
 for tool in sha256sum tar; do

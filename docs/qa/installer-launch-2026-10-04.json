@@ -3,11 +3,11 @@
   "base_commit": "5aee0e2851fa862386618566319cd6c8bfb23bae",
   "installer_sha256": {
     "scripts/install.sh": "9f617f4ff1840e627f4bc9361d40ac4de200ebf3a5efca374ebea6ee3e649280",
-    "scripts/install-remote.sh": "375b3d4f1ea84e017f4ebdd9c93d650ab4ab871eab241983afe93297f53786a5"
+    "scripts/install-remote.sh": "72275c0b1a54118431d7c57a29c4addede24d162c85853c615d4e5f4ead394e3"
   },
   "installer_tests": {
-    "passed": 22,
-    "command": "python scripts/test_installers.py -v"
+    "passed": 29,
+    "command": "bash scripts/test-installers.sh"
   },
   "shellcheck": "passed",
   "shell_syntax": "passed",
@@ -26,9 +26,10 @@
   "limits": [
     "No new GUI or x86_64 runtime pass",
     "No Rust changes; fresh Cargo invocation failed in the session rustup proxy before compilation",
-    "Not yet deployed to omadesign.app/install or included in a published archive",
-    "PR #194 still requires OmaStore ownership and removal support for setup files",
-    "Page preview returned HTTP 500 because its Clerk secret key is not configured; the static installer route was verified separately"
+    "Updated public /install script is not deployed to production; updated bundled install.sh is not in the existing native archives",
+    "Page preview returned HTTP 500 because its Clerk secret key is not configured; the static installer route was verified separately",
+    "OmaStore manages the installer entry; removing that entry leaves the native installation intact",
+    "Update/Later UI choices tested with controlled notification helpers; no new physical GUI pass"
   ],
   "site_checks": {
     "tests_passed": 21,
@@ -39,5 +40,49 @@
     "react_router": "1.170.41",
     "advisory": "https://github.com/TanStack/router/security/advisories/GHSA-qx66-fv34-fjm8",
     "initial_preview_blocker": "Vercel BLOCKED_PACKAGE for react-start 1.168.49"
-  }
+  },
+  "omastore_checks": {
+    "source_commit": "9bcc8012b1ff121a61d93512be65652b769ec676",
+    "manifest": "strict parse passed",
+    "asset_and_entry_selection": [
+      "arm64",
+      "amd64"
+    ],
+    "native_arm64": [
+      "fresh install and --version launch",
+      "current launch without rewriting binary",
+      "Later opened installed 0.6.2",
+      "Update installed 0.6.3 and opened it",
+      "native metadata, runtime, docs, skill and plugin assets present",
+      "edited starter plugin and store launcher preserved"
+    ],
+    "uninstall": "store-owned installer removed; native installation retained",
+    "live_published_archives": "passed: both architectures selected and installed; ARM64 fresh/current/Later/Update verified against real release downloads"
+  },
+  "published_installer_assets": [
+    {
+      "name": "omadesign-installer-0.6.3-aarch64-linux.tar.gz",
+      "size": 184850,
+      "digest": "sha256:137b6d2733dba3e53fc79cff50ba7a7e5570018b149f2a97171e1c5469bff70c",
+      "url": "https://github.com/michaelmonetized/omadesign/releases/download/v0.6.3/omadesign-installer-0.6.3-aarch64-linux.tar.gz"
+    },
+    {
+      "name": "omadesign-installer-0.6.3-aarch64-linux.tar.gz.sha256",
+      "size": 113,
+      "digest": "sha256:89a78387e134f9c11eab76c99b38264f00db5a11f0313740479417926ee572aa",
+      "url": "https://github.com/michaelmonetized/omadesign/releases/download/v0.6.3/omadesign-installer-0.6.3-aarch64-linux.tar.gz.sha256"
+    },
+    {
+      "name": "omadesign-installer-0.6.3-x86_64-linux.tar.gz",
+      "size": 184852,
+      "digest": "sha256:0608fd8eef683a221c0da3fcaae2d4070b26946fbcca7f38d6ab01faf673e398",
+      "url": "https://github.com/michaelmonetized/omadesign/releases/download/v0.6.3/omadesign-installer-0.6.3-x86_64-linux.tar.gz"
+    },
+    {
+      "name": "omadesign-installer-0.6.3-x86_64-linux.tar.gz.sha256",
+      "size": 112,
+      "digest": "sha256:9b36cab101e3a696ce011115c0e939556d7edb2d8586bed5418c133fd15cebb1",
+      "url": "https://github.com/michaelmonetized/omadesign/releases/download/v0.6.3/omadesign-installer-0.6.3-x86_64-linux.tar.gz.sha256"
+    }
+  ]
 }

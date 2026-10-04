@@ -6,8 +6,9 @@
 - The public installer checks the latest stable release. A failed release check still opens a complete installed app. File arguments and the app's exit status pass through, and edited starter plugins stay intact during updates.
 - Update archives are checked against the release version before replacing an installed app.
 - Missing starter-plugin files are restored without overwriting edits. An incomplete installation cannot launch.
-- OmaStore-owned launchers cannot be overwritten. Its integration remains unready until setup files are tracked for update and removal.
-- Verified with 22 installer tests, ShellCheck, shell syntax checks, and real ARM64 0.6.2/0.6.3 install, update, and `--version` launch checks. Rust source and release version are unchanged; this does not claim a new GUI or x86_64 runtime pass.
+- OmaStore launches the official `omadesign-install` entry from a small installer archive. It installs a missing app, opens a current app, and offers Update/Later before opening an older app. The store's command remains intact.
+- Installer archives can be built independently and are included in future release packaging. Tests and generated files stay inside the project; installer tests use Bash.
+- Verified with 29 installer tests, ShellCheck, shell syntax checks, and real ARM64 0.6.2/0.6.3 install, update, and `--version` launch checks. Rust source and release version are unchanged; this does not claim a new GUI or x86_64 runtime pass.
 
 - Updated TanStack Start to the first patched XSS release and matched its router dependency after Vercel blocked the preview. All 21 site tests, type checking, and the production build passed.
 

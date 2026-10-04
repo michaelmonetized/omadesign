@@ -140,6 +140,7 @@ package() {
 
 package "aarch64-unknown-linux-gnu/" "aarch64-unknown-linux-gnu"
 package "x86_64-unknown-linux-gnu/" "x86_64-unknown-linux-gnu"
+sh scripts/package-installer.sh "$VERSION"
 
 echo
 ls -lh "$DIST"/*.tar.gz

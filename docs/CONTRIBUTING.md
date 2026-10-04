@@ -97,8 +97,7 @@ compares the installed app with the binary beside it and works without a network
 For the latest published release, use:
 
 ```sh
-curl -fsSL https://omadesign.app/install -o /tmp/omadesign-install.sh
-sh /tmp/omadesign-install.sh --launch -- document.oma
+curl -fsSL https://omadesign.app/install | sh -s -- --launch -- document.oma
 ```
 
 Launch mode checks the latest stable release, installs it when needed, and forwards
@@ -107,9 +106,23 @@ an existing complete installation still opens. `OMADESIGN_INSTALL_PREFIX` select
 an isolated destination; a relative path is resolved from the caller's directory.
 The normal command without `--launch` still reinstalls the requested release.
 
-Both installers refuse to replace an OmaStore-owned launcher. OmaStore must retain
-ownership of its launchers and track every file created by setup before #194 can
-use this mode. A launch wrapper alone does not make that integration ready.
+OmaStore targets `omadesign-install` in the small installer release archive.
+That entry checks the latest version on every launch. It installs a missing app,
+opens a current app directly, and offers Update or Later for an older complete
+installation. Later opens the installed version; Update runs full native setup
+before opening. An explicit `omadesign-install --launch` accepts the update.
+
+The prompt uses terminal input or desktop notification actions, with Zenity and
+KDialog fallbacks. If no prompt can be shown, the existing app opens and the
+installer prints the update command. OmaStore owns `omadesign-install`; the native
+installer owns `omadesign` and its setup files. Removing the store entry removes
+its installer shortcut and leaves the native installation intact. Neither
+installer overwrites an OmaStore-owned command.
+
+Run `sh scripts/package-installer.sh` to build both installer archives without a
+Rust build. Normal releases include them through `scripts/release.sh`. Run
+`bash scripts/test-installers.sh` for the installer checks; their files stay in
+the project's ignored `.artifacts` directory.
 
 ### Releasing
 
