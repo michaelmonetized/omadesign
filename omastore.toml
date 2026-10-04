@@ -1,0 +1,14 @@
+# OmaStore (https://github.com/KitsuneForgering/OmaStore): lists omadesign in the
+# Omarchy app store and installs the release tarball into the user's $HOME.
+kind = "app"
+name = "omadesign"
+icon = "assets/omadesign.svg"
+categories = ["Graphics", "Photography"]
+
+[linux.x86_64]
+asset = "omadesign-{version}-x86_64-unknown-linux-gnu.tar.gz"
+exec = "omadesign-{version}-x86_64-unknown-linux-gnu/omadesign"
+
+[linux.aarch64]
+asset = "omadesign-{version}-aarch64-unknown-linux-gnu.tar.gz"
+exec = "omadesign-{version}-aarch64-unknown-linux-gnu/omadesign"
