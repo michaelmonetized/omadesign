@@ -86,7 +86,9 @@ class InstallerTests(unittest.TestCase):
             "licenses/native-notices/NOTICE", "licenses/lua/NOTICE",
             "licenses/ml/ONNXRuntime-ThirdPartyNotices.txt", "licenses/rust/licenses.json",
             "lib/libonnxruntime.so.1", "skills/omadesign-create/SKILL.md",
-            "plugins/studio-starter/main.lua", "docs/llms.txt", "docs/MANUAL.md",
+            "plugins/studio-starter/main.lua", "plugins/studio-starter/orbit.svg",
+            "plugins/studio-starter/README.md", "plugins/studio-starter/LICENSE",
+            "docs/llms.txt", "docs/MANUAL.md",
             "docs/layout.md", "docs/format-support.md", "docs/cloud.md",
             "docs/plugins.md", "docs/CONTRIBUTING.md",
         ):
@@ -196,6 +198,21 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse(plugin.exists())
         self.assertFalse(self.record.exists())
         self.assertEqual(list(self.temporary.iterdir()), [])
+
+    def test_launch_repairs_each_starter_asset_and_icon_while_preserving_edited_main(self):
+        self.assert_success(self.local())
+        plugin = self.prefix / "share/omadesign/plugins/org.omadesign.studio-starter"
+        self.write(plugin / "main.lua", "edited by user\n")
+        files = [plugin / name for name in ("orbit.svg", "README.md", "LICENSE")]
+        files.append(self.prefix / "share/icons/hicolor/scalable/apps/omadesign.svg")
+        for file in files:
+            for action in (self.local, self.remote):
+                with self.subTest(missing=file.name, entry=action.__name__):
+                    file.unlink()
+                    self.assert_success(action("--launch"))
+                    self.assertEqual(file.read_text(), "fixture\n")
+                    self.assertEqual((plugin / "main.lua").read_text(), "edited by user\n")
+                    self.assertEqual(self.launched()[0], b"0.6.3")
 
     def test_local_install_and_launch_refuse_store_owned_launcher(self):
         target = self.prefix / "bin/omadesign"

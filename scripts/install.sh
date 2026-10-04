@@ -38,9 +38,13 @@ read_version() {
 installation_complete() {
   [ -x "$BIN/omadesign" ] || return 1
   for file in "$DATA/applications/omadesign.desktop" "$DATA/mime/packages/omadesign.xml" \
+    "$DATA/icons/hicolor/scalable/apps/omadesign.svg" \
     "$DATA/omadesign/lib/libonnxruntime.so.1" "$DATA/omadesign/docs/MANUAL.md" \
     "$DATA/omadesign/skills/omadesign-create/SKILL.md" \
-    "$DATA/omadesign/plugins/org.omadesign.studio-starter/main.lua"; do
+    "$DATA/omadesign/plugins/org.omadesign.studio-starter/main.lua" \
+    "$DATA/omadesign/plugins/org.omadesign.studio-starter/orbit.svg" \
+    "$DATA/omadesign/plugins/org.omadesign.studio-starter/README.md" \
+    "$DATA/omadesign/plugins/org.omadesign.studio-starter/LICENSE"; do
     [ -f "$file" ] || return 1
   done
 }

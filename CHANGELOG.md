@@ -7,7 +7,7 @@
 - Update archives are checked against the release version before replacing an installed app.
 - Missing starter-plugin files are restored without overwriting edits. An incomplete installation cannot launch.
 - OmaStore-owned launchers cannot be overwritten. Its integration remains unready until setup files are tracked for update and removal.
-- Verified with 21 installer tests, ShellCheck, shell syntax checks, and real ARM64 0.6.2/0.6.3 install, update, and `--version` launch checks. Rust source and release version are unchanged; this does not claim a new GUI or x86_64 runtime pass.
+- Verified with 22 installer tests, ShellCheck, shell syntax checks, and real ARM64 0.6.2/0.6.3 install, update, and `--version` launch checks. Rust source and release version are unchanged; this does not claim a new GUI or x86_64 runtime pass.
 
 - Updated TanStack Start to the first patched XSS release and matched its router dependency after Vercel blocked the preview. All 21 site tests, type checking, and the production build passed.
 
