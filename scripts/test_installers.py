@@ -284,6 +284,25 @@ class InstallerTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("expected 0.6.3", result.stderr)
         self.assertFalse(self.record.exists())
+        self.assertFalse((self.prefix / "bin/omadesign").exists())
+        self.assertEqual(list(self.temporary.iterdir()), [])
+
+    def test_wrong_release_binary_version_preserves_existing_installation(self):
+        self.assert_success(self.local())
+        target = self.prefix / "bin/omadesign"
+        self.binary(target, "0.6.2")
+        previous = target.read_bytes()
+        plugin = self.prefix / "share/omadesign/plugins/org.omadesign.studio-starter/main.lua"
+        self.write(plugin, "edited by user\n")
+        self.binary(self.package / "omadesign", "0.6.1")
+        self.publish()
+        result = self.remote("--launch")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("expected 0.6.3", result.stderr)
+        self.assertEqual(target.read_bytes(), previous)
+        self.assertEqual(plugin.read_text(), "edited by user\n")
+        self.assertFalse(self.record.exists())
+        self.assertEqual(list(self.temporary.iterdir()), [])
 
     def test_relative_remote_prefix_is_relative_to_caller(self):
         self.env["OMADESIGN_INSTALL_PREFIX"] = "relative prefix"

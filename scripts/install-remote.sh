@@ -153,6 +153,16 @@ if [ ! -f "$DIR/install.sh" ] || [ -L "$DIR/install.sh" ]; then
   exit 1
 fi
 cd "$DIR"
+if [ "$LAUNCH" = 1 ]; then
+  archive_version="$(read_version "$DIR/omadesign")" || {
+    echo "omadesign: could not verify the release archive version" >&2
+    exit 1
+  }
+  if [ "$archive_version" != "$VER" ]; then
+    echo "omadesign: expected $VER in release archive, got $archive_version" >&2
+    exit 1
+  fi
+fi
 if [ -n "$INSTALL_PREFIX" ]; then
   ./install.sh --prefix "$INSTALL_PREFIX"
 else

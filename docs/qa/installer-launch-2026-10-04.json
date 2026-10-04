@@ -3,10 +3,10 @@
   "base_commit": "5aee0e2851fa862386618566319cd6c8bfb23bae",
   "installer_sha256": {
     "scripts/install.sh": "aef99b004af03c553333efc181bf7aa99b8394ab557dc231bb2ef4b9c9abc70a",
-    "scripts/install-remote.sh": "69933915c0ad341fa2442c4666dbd0fab394b0a317c199036ca1e77a2f7353f0"
+    "scripts/install-remote.sh": "ff76069b7addab7021a47d5c9a9d411f8afd23b70b32386346340ff20651c794"
   },
   "installer_tests": {
-    "passed": 20,
+    "passed": 21,
     "command": "python scripts/test_installers.py -v"
   },
   "shellcheck": "passed",
@@ -19,7 +19,8 @@
     "Published v0.6.2 to v0.6.3 update and --version launch preserved an edited starter plugin",
     "Updated bundled installer: fresh install and --version launch",
     "Updated bundled installer: current-version launch left binary hash and modification time unchanged",
-    "Updated bundled installer: restored missing starter main.lua, preserved an added user file, and launched --version"
+    "Updated bundled installer: restored missing starter main.lua, preserved an added user file, and launched --version",
+    "Final remote installer: authenticated v0.6.3 archive version checked before fresh installation and --version launch"
   ],
   "limits": [
     "No new GUI or x86_64 runtime pass",
