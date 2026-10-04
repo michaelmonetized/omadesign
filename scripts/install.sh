@@ -187,10 +187,8 @@ install -Dm644 "$DOCS_INDEX" "$DATA/omadesign/docs/llms.txt"
 mkdir -p "$DATA/omadesign/licenses/lua" "$DATA/omadesign/plugin-examples" "$DATA/omadesign/plugins"
 cp "$LUA_LICENSE_DIR/"* "$DATA/omadesign/licenses/lua/"
 cp -R "$PLUGIN_DIR/studio-starter" "$DATA/omadesign/plugin-examples/"
-# Preserve installed plugins, including locally edited starter actions.
-if [ ! -e "$DATA/omadesign/plugins/org.omadesign.studio-starter" ]; then
-  cp -R "$PLUGIN_DIR/studio-starter" "$DATA/omadesign/plugins/org.omadesign.studio-starter"
-fi
+mkdir -p "$DATA/omadesign/plugins/org.omadesign.studio-starter"
+cp -Rn "$PLUGIN_DIR/studio-starter/." "$DATA/omadesign/plugins/org.omadesign.studio-starter/"
 # Rename into place so an existing session can keep running until QA relaunches.
 STAGED_BIN="$(mktemp "$BIN/.omadesign.XXXXXX")"
 STAGED_APP="$(mktemp "$APP/.omadesign.XXXXXX")"
@@ -231,6 +229,10 @@ case ":${PATH}:" in
     ;;
 esac
 if [ "$LAUNCH" = 1 ]; then
+  if ! installation_complete; then
+    echo "omadesign: installation is incomplete; repair it before launching" >&2
+    exit 1
+  fi
   trap - EXIT HUP INT TERM
   exec "$BIN/omadesign" "$@"
 fi

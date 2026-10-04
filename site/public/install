@@ -169,6 +169,10 @@ if [ "$LAUNCH" = 1 ]; then
     echo "omadesign: expected $VER after installation, got $installed" >&2
     exit 1
   fi
+  if ! installation_complete; then
+    echo "omadesign: installation is incomplete; repair it with an updated package before launching" >&2
+    exit 1
+  fi
   cd "$LAUNCH_DIR"
   rm -rf "$TMP"
   trap - 0 HUP INT TERM

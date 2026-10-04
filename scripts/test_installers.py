@@ -170,6 +170,33 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue(mime.is_file())
         self.assertEqual(plugin.read_text(), "edited by user\n")
 
+    def test_launch_restores_missing_plugin_files_without_overwriting_edits(self):
+        self.write(self.package / "plugins/studio-starter/actions.lua", "stock actions\n")
+        self.publish()
+        self.assert_success(self.local())
+        plugin = self.prefix / "share/omadesign/plugins/org.omadesign.studio-starter"
+        self.write(plugin / "actions.lua", "edited by user\n")
+        for action in (self.local, self.remote):
+            with self.subTest(entry=action.__name__):
+                (plugin / "main.lua").unlink()
+                self.assert_success(action("--launch"))
+                self.assertEqual((plugin / "main.lua").read_text(), "fixture\n")
+                self.assertEqual((plugin / "actions.lua").read_text(), "edited by user\n")
+                self.assertEqual(self.launched()[0], b"0.6.3")
+
+    def test_remote_does_not_launch_if_older_installer_leaves_setup_incomplete(self):
+        self.assert_success(self.local())
+        plugin = self.prefix / "share/omadesign/plugins/org.omadesign.studio-starter/main.lua"
+        plugin.unlink()
+        self.write(self.package / "install.sh", "#!/bin/sh\nexit 0\n", executable=True)
+        self.publish()
+        result = self.remote("--launch")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("installation is incomplete", result.stderr)
+        self.assertFalse(plugin.exists())
+        self.assertFalse(self.record.exists())
+        self.assertEqual(list(self.temporary.iterdir()), [])
+
     def test_local_install_and_launch_refuse_store_owned_launcher(self):
         target = self.prefix / "bin/omadesign"
         content = "#!/bin/sh\n# omastore-launcher michaelmonetized/omadesign\nexit 99\n"
