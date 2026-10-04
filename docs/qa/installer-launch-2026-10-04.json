@@ -1,0 +1,29 @@
+{
+  "date": "2026-10-04",
+  "base_commit": "5aee0e2851fa862386618566319cd6c8bfb23bae",
+  "installer_sha256": {
+    "scripts/install.sh": "44a82a85c5f52d0172f04911f7cf6d2d65bd263ca379bb4c809963ce778e6045",
+    "scripts/install-remote.sh": "d4e2ea3a4949b0dac7125075ab03114afcb6559c0e600c661c3481305e4849ad"
+  },
+  "installer_tests": {
+    "passed": 18,
+    "command": "python scripts/test_installers.py -v"
+  },
+  "shellcheck": "passed",
+  "shell_syntax": "passed",
+  "published_installer_matches_source": true,
+  "native_architecture": "aarch64",
+  "native_checks": [
+    "Published v0.6.3 package: remote fresh install and --version launch",
+    "Remote current-version launch left binary hash and modification time unchanged",
+    "Published v0.6.2 to v0.6.3 update and --version launch preserved an edited starter plugin",
+    "Updated bundled installer: fresh install and --version launch",
+    "Updated bundled installer: current-version launch left binary hash and modification time unchanged"
+  ],
+  "limits": [
+    "No new GUI or x86_64 runtime pass",
+    "No Rust changes; fresh Cargo invocation failed in the session rustup proxy before compilation",
+    "Not yet deployed to omadesign.app/install or included in a published archive",
+    "PR #194 still requires OmaStore ownership and removal support for setup files"
+  ]
+}

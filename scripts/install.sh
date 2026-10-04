@@ -2,17 +2,81 @@
 # Install into ~/.local, or stage an isolated installation with --prefix DIR.
 set -eu
 INSTALL_PREFIX=''
-case "$#" in
-  0) ;;
-  2)
-    if [ "$1" != --prefix ] || [ -z "$2" ]; then
-      echo "usage: $0 [--prefix DIRECTORY]" >&2
-      exit 1
-    fi
-    INSTALL_PREFIX="$2"
-    ;;
-  *) echo "usage: $0 [--prefix DIRECTORY]" >&2; exit 1 ;;
-esac
+LAUNCH=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --launch) LAUNCH=1; shift ;;
+    --prefix)
+      if [ "$#" -lt 2 ] || [ -z "$2" ]; then
+        echo "usage: $0 [--prefix DIRECTORY] [--launch [-- APP_ARGUMENTS...]]" >&2
+        exit 1
+      fi
+      INSTALL_PREFIX="$2"
+      shift 2
+      ;;
+    --) shift; break ;;
+    *) echo "usage: $0 [--prefix DIRECTORY] [--launch [-- APP_ARGUMENTS...]]" >&2; exit 1 ;;
+  esac
+done
+if [ "$LAUNCH" = 0 ] && [ "$#" -gt 0 ]; then
+  echo "omadesign: app arguments require --launch" >&2
+  exit 1
+fi
+
+# Read an installed version.
+# Args: executable path. Prints its version; returns failure for invalid output.
+read_version() {
+  output="$("$1" --version 2>/dev/null)" || return 1
+  printf '%s\n' "$output" | awk '
+    NF == 2 && $1 == "omadesign" && $2 ~ /^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/ { version = $2; valid++ }
+    END { if (NR != 1 || valid != 1) exit 1; print version }
+  '
+}
+
+# Check the files needed by an installed app.
+# Args: none; uses BIN and DATA. Returns failure when setup needs repair.
+installation_complete() {
+  [ -x "$BIN/omadesign" ] || return 1
+  for file in "$DATA/applications/omadesign.desktop" "$DATA/mime/packages/omadesign.xml" \
+    "$DATA/omadesign/lib/libonnxruntime.so.1" "$DATA/omadesign/docs/MANUAL.md" \
+    "$DATA/omadesign/skills/omadesign-create/SKILL.md" \
+    "$DATA/omadesign/plugins/org.omadesign.studio-starter/main.lua"; do
+    [ -f "$file" ] || return 1
+  done
+}
+
+# Keep the installed version when it is current or newer.
+# Args: installed version, available version. Returns success without a downgrade.
+version_is_current() {
+  awk -v installed="$1" -v available="$2" '
+    function number(a, b) {
+      if (length(a) != length(b)) return length(a) > length(b) ? 1 : -1
+      return "x" a == "x" b ? 0 : ("x" a > "x" b ? 1 : -1)
+    }
+    function pre(v, pos) {
+      sub(/\+.*/, "", v); pos = index(v, "-")
+      return pos ? substr(v, pos + 1) : ""
+    }
+    BEGIN {
+      a = installed; b = available; sub(/[-+].*/, "", a); sub(/[-+].*/, "", b)
+      split(a, ac, "."); split(b, bc, ".")
+      for (i = 1; i <= 3; i++) { c = number(ac[i], bc[i]); if (c) exit c < 0 }
+      a = pre(installed); b = pre(available)
+      if (a == b || a == "") exit 0
+      if (b == "") exit 1
+      na = split(a, ap, "."); nb = split(b, bp, ".")
+      for (i = 1; i <= na && i <= nb; i++) {
+        if ("x" ap[i] == "x" bp[i]) continue
+        an = ap[i] ~ /^[0-9]+$/; bn = bp[i] ~ /^[0-9]+$/
+        if (an && bn) c = number(ap[i], bp[i])
+        else if (an != bn) c = an ? -1 : 1
+        else c = "x" ap[i] > "x" bp[i] ? 1 : -1
+        exit c < 0
+      }
+      exit na < nb
+    }
+  '
+}
 SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 if [ -f "$SCRIPT_DIR/../Cargo.toml" ]; then
   ROOT_DIR="$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)"
@@ -47,6 +111,30 @@ else
   RUST_LICENSE_DIR="$SCRIPT_DIR/licenses/rust"
   PHOSPHOR_LICENSE="$SCRIPT_DIR/LICENSE-Phosphor"
 fi
+if [ -n "$INSTALL_PREFIX" ]; then
+  mkdir -p "$INSTALL_PREFIX"
+  INSTALL_PREFIX="$(CDPATH='' cd -- "$INSTALL_PREFIX" && pwd)"
+  BIN="$INSTALL_PREFIX/bin"
+  DATA="$INSTALL_PREFIX/share"
+else
+  BIN="${HOME}/.local/bin"
+  DATA="${XDG_DATA_HOME:-${HOME}/.local/share}"
+fi
+if [ -f "$BIN/omadesign" ] && head -c 256 "$BIN/omadesign" | grep -q '^# omastore-launcher '; then
+  echo "omadesign: this launcher belongs to OmaStore; update it through OmaStore or choose a separate --prefix" >&2
+  exit 1
+fi
+if [ "$LAUNCH" = 1 ] && [ -x "$BIN/omadesign" ] &&
+   installed="$(read_version "$BIN/omadesign")" && available="$(read_version "$SOURCE_BIN")" &&
+   version_is_current "$installed" "$available"; then
+  if installation_complete; then
+    exec "$BIN/omadesign" "$@"
+  fi
+  if ! version_is_current "$available" "$installed"; then
+    echo "omadesign: repair installed $installed with a matching or newer package; this package is $available" >&2
+    exit 1
+  fi
+fi
 if [ ! -f "$ML_LIB_DIR/libonnxruntime.so.1" ] || [ ! -f "$ML_LICENSE_DIR/ONNXRuntime-ThirdPartyNotices.txt" ] || [ ! -f "$RUST_LICENSE_DIR/licenses.json" ]; then
   echo "omadesign: installation is missing ONNX Runtime or third-party notices (source builds: run scripts/prepare-ml-runtime.sh)" >&2
   exit 1
@@ -72,15 +160,6 @@ fi
 if [ ! -f "$PLUGIN_DIR/studio-starter/main.lua" ] || [ ! -d "$LUA_LICENSE_DIR" ] || [ ! -f "$DOCS_DIR/plugins.md" ]; then
   echo "omadesign: installation is missing Lua plugins, documentation or licenses" >&2
   exit 1
-fi
-if [ -n "$INSTALL_PREFIX" ]; then
-  mkdir -p "$INSTALL_PREFIX"
-  INSTALL_PREFIX="$(CDPATH='' cd -- "$INSTALL_PREFIX" && pwd)"
-  BIN="$INSTALL_PREFIX/bin"
-  DATA="$INSTALL_PREFIX/share"
-else
-  BIN="${HOME}/.local/bin"
-  DATA="${XDG_DATA_HOME:-${HOME}/.local/share}"
 fi
 APP="$DATA/applications"
 MIME="$DATA/mime"
@@ -151,3 +230,7 @@ case ":${PATH}:" in
     echo "add ${BIN} to PATH if you want the short command"
     ;;
 esac
+if [ "$LAUNCH" = 1 ]; then
+  trap - EXIT HUP INT TERM
+  exec "$BIN/omadesign" "$@"
+fi

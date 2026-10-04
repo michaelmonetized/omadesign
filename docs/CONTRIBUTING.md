@@ -88,6 +88,29 @@ The installer also works inside a release tarball. It replaces the binary
 atomically, so an open session can finish safely. Relaunch omadesign before
 testing the new build; an already running window still uses the previous one.
 
+Use `./scripts/install.sh --launch -- document.oma` to install a missing or older
+build and open it. An installation at the same or a newer version opens directly;
+missing desktop, MIME, runtime, documentation, skill, or starter-plugin files trigger
+a repair first. `--prefix DIRECTORY` works with this mode too. The bundled installer
+compares the installed app with the binary beside it and works without a network.
+
+For the latest published release, use:
+
+```sh
+curl -fsSL https://omadesign.app/install -o /tmp/omadesign-install.sh
+sh /tmp/omadesign-install.sh --launch -- document.oma
+```
+
+Launch mode checks the latest stable release, installs it when needed, and forwards
+the app arguments. It keeps a newer installed build. If the release check fails,
+an existing complete installation still opens. `OMADESIGN_INSTALL_PREFIX` selects
+an isolated destination; a relative path is resolved from the caller's directory.
+The normal command without `--launch` still reinstalls the requested release.
+
+Both installers refuse to replace an OmaStore-owned launcher. OmaStore must retain
+ownership of its launchers and track every file created by setup before #194 can
+use this mode. A launch wrapper alone does not make that integration ready.
+
 ### Releasing
 
 On the build machine:
