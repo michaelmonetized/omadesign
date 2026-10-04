@@ -15,6 +15,7 @@ binary() {
   cat >> "$1" <<'SH'
 if [ "${1:-}" = --version ]; then echo "omadesign $version"; exit 0; fi
 printf '%s\0' "$version" "$PWD" "$@" > "$TEST_LAUNCH_RECORD"
+printf '%s' "${XDG_DATA_HOME:-}" > "$TEST_DATA_RECORD"
 exit "${TEST_APP_EXIT:-0}"
 SH
   chmod +x "$1"
@@ -49,6 +50,7 @@ fixture() {
   mkdir -p "$PACKAGE" "$CALLER" "$TOOLS" "$DOWNLOADS" "$TEMPORARY"
   export PATH="$TOOLS:$BASE_PATH" TMPDIR="$TEMPORARY"
   export OMADESIGN_INSTALL_PREFIX="$PREFIX" TEST_LAUNCH_RECORD="$RECORD"
+  export TEST_DATA_RECORD="$CASE_DIR/data-root"
   export TEST_DOWNLOADS="$DOWNLOADS" TEST_CURL_LOG="$CURL_LOG" TEST_PROMPT_LOG="$PROMPT_LOG"
   unset OMADESIGN_TAG TEST_CURL_FAIL TEST_APP_EXIT TEST_NOTIFICATION_FAIL
   export TEST_PROMPT_CHOICE=later
@@ -130,7 +132,12 @@ store_launch() { invoke "$TOOLS/omadesign-install" "$@"; }
 success() { if [ "$STATUS" != 0 ]; then cat "$CASE_DIR/stdout" "$CASE_DIR/stderr"; return 1; fi; }
 # Read app arguments without losing their boundaries.
 # Args: none; reads RECORD. Returns success and fills ARGS.
-launched() { mapfile -d '' -t ARGS < "$RECORD"; }
+launched() {
+  mapfile -d '' -t ARGS < "$RECORD"
+  local prefix="$OMADESIGN_INSTALL_PREFIX"
+  case "$prefix" in /*) ;; *) prefix="$CALLER/$prefix" ;; esac
+  [ "$(cat "$TEST_DATA_RECORD")" = "$prefix/share" ]
+}
 # Require a download count.
 # Args: expected count. Returns failure when the request count differs.
 downloads() { mapfile -t URLS < "$CURL_LOG"; [ "${#URLS[@]}" = "$1" ]; }
@@ -313,6 +320,24 @@ test_offline_missing() {
   [ ! -f "$RECORD" ]
 }
 
+test_missing_curl() {
+  local_install; success
+  local tool
+  mkdir "$TOOLS/no-curl"
+  for tool in uname dirname awk head grep; do
+    ln -s "$(command -v "$tool")" "$TOOLS/no-curl/$tool"
+  done
+  invoke env PATH="$TOOLS/no-curl" "$TOOLS/omadesign-install" 'a file.oma'
+  success; launched
+  [ "${ARGS[2]}" = 'a file.oma' ]
+  [ ! -f "$CURL_LOG" ]
+  rm "$PREFIX/bin/omadesign" "$RECORD"
+  invoke env PATH="$TOOLS/no-curl" "$TOOLS/omadesign-install"
+  [ "$STATUS" != 0 ]
+  grep -q 'missing curl' "$CASE_DIR/stderr"
+  [ ! -f "$RECORD" ]
+}
+
 test_bad_checksum() {
   local_install; success
   binary "$PREFIX/bin/omadesign" 0.6.2
@@ -349,6 +374,39 @@ test_wrong_archive_preserves_install() {
   temporary_empty
 }
 
+test_wrong_archive_install_only() {
+  local_install; success
+  cp "$PREFIX/bin/omadesign" "$CASE_DIR/old"
+  binary "$PACKAGE/omadesign" 0.6.2
+  publish
+  remote_install
+  [ "$STATUS" != 0 ]
+  grep -q 'expected 0.6.3' "$CASE_DIR/stderr"
+  cmp "$CASE_DIR/old" "$PREFIX/bin/omadesign"
+  [ ! -f "$RECORD" ]
+  temporary_empty
+}
+
+test_portable_plugin_copy() {
+  local_install; success
+  local plugin="$PREFIX/share/omadesign/plugins/org.omadesign.studio-starter"
+  printf 'user edit\n' > "$plugin/main.lua"
+  rm "$plugin/orbit.svg"
+  export TEST_REAL_CP
+  TEST_REAL_CP="$(command -v cp)"
+  cat > "$TOOLS/cp" <<'SH'
+#!/bin/sh
+for argument do
+  case "$argument" in -n|-Rn|--no-clobber) exit 1 ;; esac
+done
+exec "$TEST_REAL_CP" "$@"
+SH
+  chmod +x "$TOOLS/cp"
+  local_install --launch; success; launched
+  grep -qx fixture "$plugin/orbit.svg"
+  grep -qx 'user edit' "$plugin/main.lua"
+}
+
 test_relative_prefix() {
   export OMADESIGN_INSTALL_PREFIX='relative prefix'
   remote_install --launch; success; launched
@@ -373,6 +431,34 @@ test_invalid_release() {
 }
 
 test_public_parity() { cmp "$REPO/scripts/install-remote.sh" "$REPO/site/public/install"; }
+
+test_payload_setup() {
+  invoke sh "$REPO/scripts/install.sh" --package "$PACKAGE" --prefix "$PREFIX" --launch -- 'a file.oma'
+  success; launched
+  [ "${#ARGS[@]}" = 3 ]
+  [ "${ARGS[2]}" = 'a file.oma' ]
+  [ -f "$PREFIX/share/mime/packages/omadesign.xml" ]
+}
+
+test_store_packaged_repair() {
+  local_install; success
+  local plugin="$PREFIX/share/omadesign/plugins/org.omadesign.studio-starter" arch entry
+  printf 'user edit\n' > "$plugin/main.lua"
+  rm "$plugin/orbit.svg"
+  printf '#!/bin/sh\nexit 0\n' > "$PACKAGE/install.sh"
+  publish
+  arch="$(uname -m)"
+  case "$arch" in arm64) arch=aarch64 ;; amd64) arch=x86_64 ;; esac
+  entry="$CASE_DIR/omadesign-installer-0.6.3-$arch-linux"
+  mkdir -p "$entry"
+  cp "$REPO/scripts/install-remote.sh" "$entry/omadesign-install"
+  cp "$REPO/scripts/install.sh" "$entry/install.sh"
+  invoke "$entry/omadesign-install" 'a file.oma'; success; launched
+  grep -qx fixture "$plugin/orbit.svg"
+  grep -qx 'user edit' "$plugin/main.lua"
+  [ "${ARGS[2]}" = 'a file.oma' ]
+  temporary_empty
+}
 
 test_store_fresh() {
   store_launch 'a file.oma'; success; launched
@@ -443,9 +529,10 @@ test_store_launcher_preserved() {
 TESTS=(test_local_arguments test_version_ordering test_current_local test_metadata_repair \
   test_plugin_main_repair test_plugin_assets_repair test_incomplete_legacy_install test_store_owned_guard \
   test_remote_fresh test_remote_current test_remote_upgrade test_remote_newer test_repair_no_downgrade \
-  test_offline_current test_offline_missing test_bad_checksum test_wrong_archive_fresh \
-  test_wrong_archive_preserves_install test_relative_prefix test_install_only test_invalid_release \
-  test_public_parity test_store_fresh test_store_current test_store_later test_store_update \
+  test_offline_current test_offline_missing test_missing_curl test_bad_checksum test_wrong_archive_fresh \
+  test_wrong_archive_preserves_install test_wrong_archive_install_only test_portable_plugin_copy \
+  test_relative_prefix test_install_only test_invalid_release \
+  test_public_parity test_payload_setup test_store_packaged_repair test_store_fresh test_store_current test_store_later test_store_update \
   test_store_prompt_fallback test_store_explicit_update test_store_launcher_preserved)
 for test in "${TESTS[@]}"; do
   COUNT=$((COUNT + 1))

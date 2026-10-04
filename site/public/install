@@ -13,6 +13,10 @@ case "${1:-}" in
   *) [ "$LAUNCH" = 1 ] || { echo "usage: $0 [--launch [-- APP_ARGUMENTS...]]" >&2; exit 1; } ;;
 esac
 LAUNCH_DIR="$PWD"
+ENTRY_DIR=''
+if [ "${0##*/}" = omadesign-install ]; then
+  ENTRY_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+fi
 INSTALL_PREFIX="${OMADESIGN_INSTALL_PREFIX:-}"
 if [ -n "$INSTALL_PREFIX" ]; then
   case "$INSTALL_PREFIX" in /*) ;; *) INSTALL_PREFIX="$PWD/$INSTALL_PREFIX" ;; esac
@@ -21,6 +25,9 @@ if [ -n "$INSTALL_PREFIX" ]; then
 else
   BIN="${HOME}/.local/bin"
   DATA="${XDG_DATA_HOME:-${HOME}/.local/share}"
+fi
+if [ "$LAUNCH" = 1 ] && [ -n "$INSTALL_PREFIX" ]; then
+  export XDG_DATA_HOME="$DATA"
 fi
 # Read an installed version.
 # Args: executable path. Prints its version; returns failure for invalid output.
@@ -109,12 +116,27 @@ confirm_update() {
   echo "omadesign: $message Run omadesign-install --launch to update." >&2
   return 1
 }
+
+# Run setup for the verified release payload.
+# Args: none; uses DIR, VER, TRIPLE, ENTRY_DIR and INSTALL_PREFIX. Returns setup status.
+install_payload() {
+  installer="$DIR/install.sh"
+  set --
+  if [ "${ENTRY_DIR##*/}" = "omadesign-installer-${VER}-${TRIPLE%%-*}-linux" ] &&
+     [ -x "$ENTRY_DIR/install.sh" ] && [ ! -L "$ENTRY_DIR/install.sh" ]; then
+    installer="$ENTRY_DIR/install.sh"
+    set -- --package "$DIR"
+  fi
+  if [ -n "$INSTALL_PREFIX" ]; then
+    set -- "$@" --prefix "$INSTALL_PREFIX"
+  fi
+  "$installer" "$@"
+}
 REPO="michaelmonetized/omadesign"
 if [ "$(uname -s)" != Linux ]; then
   echo "omadesign: this installer requires Linux" >&2
   exit 1
 fi
-command -v curl >/dev/null || { echo "omadesign: missing curl" >&2; exit 1; }
 ARCH="$(uname -m)"
 case "$ARCH" in
   aarch64|arm64) TRIPLE="aarch64-unknown-linux-gnu" ;;
@@ -129,6 +151,14 @@ fi
 INSTALLED=''
 if [ "$LAUNCH" = 1 ] && [ -x "$BIN/omadesign" ]; then
   INSTALLED="$(read_version "$BIN/omadesign")" || INSTALLED=''
+fi
+if ! command -v curl >/dev/null 2>&1; then
+  if [ -n "$INSTALLED" ] && installation_complete; then
+    echo "omadesign: curl is unavailable; launching installed $INSTALLED" >&2
+    exec "$BIN/omadesign" "$@"
+  fi
+  echo "omadesign: missing curl" >&2
+  exit 1
 fi
 TAG="${OMADESIGN_TAG:-}"
 if [ -z "$TAG" ]; then
@@ -196,21 +226,15 @@ if [ ! -f "$DIR/install.sh" ] || [ -L "$DIR/install.sh" ]; then
   exit 1
 fi
 cd "$DIR"
-if [ "$LAUNCH" = 1 ]; then
-  archive_version="$(read_version "$DIR/omadesign")" || {
-    echo "omadesign: could not verify the release archive version" >&2
-    exit 1
-  }
-  if [ "$archive_version" != "$VER" ]; then
-    echo "omadesign: expected $VER in release archive, got $archive_version" >&2
-    exit 1
-  fi
+archive_version="$(read_version "$DIR/omadesign")" || {
+  echo "omadesign: could not verify the release archive version" >&2
+  exit 1
+}
+if [ "$archive_version" != "$VER" ]; then
+  echo "omadesign: expected $VER in release archive, got $archive_version" >&2
+  exit 1
 fi
-if [ -n "$INSTALL_PREFIX" ]; then
-  ./install.sh --prefix "$INSTALL_PREFIX"
-else
-  ./install.sh
-fi
+install_payload
 echo
 echo "omadesign ${VER} is installed"
 if [ "$LAUNCH" = 1 ]; then

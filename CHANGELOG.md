@@ -7,8 +7,9 @@
 - Update archives are checked against the release version before replacing an installed app.
 - Missing starter-plugin files are restored without overwriting edits. An incomplete installation cannot launch.
 - OmaStore launches the official `omadesign-install` entry from a small installer archive. It installs a missing app, opens a current app, and offers Update/Later before opening an older app. The store's command remains intact.
-- Installer archives can be built independently and are included in future release packaging. Tests and generated files stay inside the project; installer tests use Bash.
-- Verified with 29 installer tests, ShellCheck, shell syntax checks, and real ARM64 0.6.2/0.6.3 install, update, and `--version` launch checks. Rust source and release version are unchanged; this does not claim a new GUI or x86_64 runtime pass.
+- Installer archives include setup for their matching native release and can repair existing packages. They can be built independently and are included in the documented release upload. Tests and generated files stay inside the project; installer tests use Bash.
+- Prefixed launches use their own data folder. Complete apps still open when curl is absent, and install-only runs verify the archive version before replacing the binary.
+- Verified with 34 installer tests, ShellCheck, shell syntax checks, and real ARM64 0.6.2/0.6.3 install, update, and `--version` launch checks. Rust source and release version are unchanged; this does not claim a new GUI or x86_64 runtime pass.
 
 - Updated TanStack Start to the first patched XSS release and matched its router dependency after Vercel blocked the preview. All 21 site tests, type checking, and the production build passed.
 
