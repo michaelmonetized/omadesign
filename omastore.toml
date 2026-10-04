@@ -1,0 +1,14 @@
+# OmaStore installs the official launch-and-install entry; native setup stays
+# with omadesign's installer.
+kind = "app"
+name = "omadesign"
+icon = "assets/omadesign.svg"
+categories = ["Graphics", "Photography"]
+
+[linux.x86_64]
+asset = "omadesign-installer-{version}-x86_64-linux.tar.gz"
+exec = "omadesign-installer-{version}-x86_64-linux/omadesign-install"
+
+[linux.aarch64]
+asset = "omadesign-installer-{version}-aarch64-linux.tar.gz"
+exec = "omadesign-installer-{version}-aarch64-linux/omadesign-install"
