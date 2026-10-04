@@ -1,5 +1,7 @@
 /target
 /dist
+/.worktrees/
+/.artifacts/
 /remotion/node_modules
 /remotion/out
 site/node_modules

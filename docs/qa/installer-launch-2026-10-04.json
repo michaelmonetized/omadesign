@@ -1,0 +1,97 @@
+{
+  "date": "2026-10-04",
+  "base_commit": "5aee0e2851fa862386618566319cd6c8bfb23bae",
+  "installer_sha256": {
+    "scripts/install.sh": "700344e7ca0b2e05bdfbfa936ad5de00e4a37f53a3d7f3762b3c7e12f6918f8b",
+    "scripts/install-remote.sh": "a94878d0fdc742e1f3e7ae9300fe336b2b0b5f5cb46b2d3eb6016b7a70a4be6e"
+  },
+  "installer_tests": {
+    "passed": 34,
+    "command": "bash scripts/test-installers.sh"
+  },
+  "shellcheck": "passed",
+  "shell_syntax": "passed",
+  "published_installer_matches_source": true,
+  "native_architecture": "aarch64",
+  "native_checks": [
+    "Published v0.6.3 package: remote fresh install and --version launch",
+    "Remote current-version launch left binary hash and modification time unchanged",
+    "Published v0.6.2 to v0.6.3 update and --version launch preserved an edited starter plugin",
+    "Updated bundled installer: fresh install and --version launch",
+    "Updated bundled installer: current-version launch left binary hash and modification time unchanged",
+    "Updated bundled installer: restored missing starter main.lua, preserved an added user file, and launched --version",
+    "Final remote installer: authenticated v0.6.3 archive version checked before fresh installation and --version launch",
+    "Final bundled installer: repaired missing orbit.svg while preserving edited main.lua; final remote current launch preserved binary hash and modification time",
+    "Published OmaStore bootstrap: restored missing orbit.svg using matching bundled setup from the new installer archive, preserved edited main.lua, and launched authentic v0.6.3"
+  ],
+  "limits": [
+    "No new GUI or x86_64 runtime pass",
+    "No Rust changes; fresh Cargo invocation failed in the session rustup proxy before compilation",
+    "Updated public /install script is not deployed to production; updated setup is published in installer archives, while existing native archives retain their original scripts",
+    "Page preview returned HTTP 500 because its Clerk secret key is not configured; the static installer route was verified separately",
+    "OmaStore manages the installer entry; removing that entry leaves the native installation intact",
+    "Update/Later UI choices tested with controlled notification helpers; no new physical GUI pass"
+  ],
+  "site_checks": {
+    "tests_passed": 21,
+    "typecheck": "passed after build generated the route tree",
+    "production_build": "passed",
+    "react_start": "1.168.60",
+    "start_server_core": "1.169.39",
+    "react_router": "1.170.41",
+    "advisory": "https://github.com/TanStack/router/security/advisories/GHSA-qx66-fv34-fjm8",
+    "initial_preview_blocker": "Vercel BLOCKED_PACKAGE for react-start 1.168.49"
+  },
+  "omastore_checks": {
+    "source_commit": "9bcc8012b1ff121a61d93512be65652b769ec676",
+    "manifest": "strict parse passed",
+    "asset_and_entry_selection": [
+      "arm64",
+      "amd64"
+    ],
+    "native_arm64": [
+      "fresh install and --version launch",
+      "current launch without rewriting binary",
+      "Later opened installed 0.6.2",
+      "Update installed 0.6.3 and opened it",
+      "native metadata, runtime, docs, skill and plugin assets present",
+      "edited starter plugin and store launcher preserved",
+      "current-release repair restored missing orbit.svg without overwriting edited main.lua"
+    ],
+    "uninstall": "store-owned installer removed; native installation retained",
+    "live_published_archives": "passed: both architectures selected and installed; ARM64 fresh/current/Later/Update/repair verified against real release downloads"
+  },
+  "published_installer_assets": [
+    {
+      "name": "omadesign-installer-0.6.3-aarch64-linux.tar.gz",
+      "size": 187295,
+      "digest": "sha256:fd59c517415faeb51b60eb811fbeb1cf72a3db2669075ce0dca9d027ce999212",
+      "url": "https://github.com/michaelmonetized/omadesign/releases/download/v0.6.3/omadesign-installer-0.6.3-aarch64-linux.tar.gz"
+    },
+    {
+      "name": "omadesign-installer-0.6.3-aarch64-linux.tar.gz.sha256",
+      "size": 113,
+      "digest": "sha256:a91b6872e004ed8618790baf250c1df10818f070b025663e3869effe39055568",
+      "url": "https://github.com/michaelmonetized/omadesign/releases/download/v0.6.3/omadesign-installer-0.6.3-aarch64-linux.tar.gz.sha256"
+    },
+    {
+      "name": "omadesign-installer-0.6.3-x86_64-linux.tar.gz",
+      "size": 187299,
+      "digest": "sha256:a48b82c7eb9416505c70560b8f0032c560502ca417a2adfd17462a7bf9a13999",
+      "url": "https://github.com/michaelmonetized/omadesign/releases/download/v0.6.3/omadesign-installer-0.6.3-x86_64-linux.tar.gz"
+    },
+    {
+      "name": "omadesign-installer-0.6.3-x86_64-linux.tar.gz.sha256",
+      "size": 112,
+      "digest": "sha256:96045b6a89562e77c5f155d83084ae6b68e799af7b1e87e381a810382b350d9f",
+      "url": "https://github.com/michaelmonetized/omadesign/releases/download/v0.6.3/omadesign-installer-0.6.3-x86_64-linux.tar.gz.sha256"
+    }
+  ],
+  "installer_checks": [
+    "Prefixed launch exposes matching XDG_DATA_HOME",
+    "Complete store app opens without curl",
+    "Install-only archive version mismatch rejected before replacing existing binary",
+    "Missing stock copy preserves edits without depending on cp -n exit status",
+    "Documented release upload includes native and installer archives with checksums"
+  ]
+}

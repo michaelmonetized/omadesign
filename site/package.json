@@ -14,8 +14,8 @@
   "dependencies": {
     "@clerk/tanstack-react-start": "^1.5.15",
     "@convex-dev/resend": "^0.2.8",
-    "@tanstack/react-router": "^1.132.0",
-    "@tanstack/react-start": "^1.132.0",
+    "@tanstack/react-router": "^1.170.41",
+    "@tanstack/react-start": "^1.168.60",
     "convex": "^1.46.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

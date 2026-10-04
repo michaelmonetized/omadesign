@@ -88,6 +88,45 @@ The installer also works inside a release tarball. It replaces the binary
 atomically, so an open session can finish safely. Relaunch omadesign before
 testing the new build; an already running window still uses the previous one.
 
+Use `./scripts/install.sh --launch -- document.oma` to install a missing or older
+build and open it. An installation at the same or a newer version opens directly;
+missing desktop, MIME, runtime, documentation, skill, or starter-plugin files trigger
+a repair first. `--prefix DIRECTORY` works with this mode too. The bundled installer
+compares the installed app with the binary beside it and works without a network.
+
+For the latest published release, use:
+
+```sh
+curl -fsSL https://omadesign.app/install | sh -s -- --launch -- document.oma
+```
+
+Launch mode checks the latest stable release, installs it when needed, and forwards
+the app arguments. It keeps a newer installed build. If the release check fails,
+an existing complete installation still opens. `OMADESIGN_INSTALL_PREFIX` selects
+an isolated destination; a relative path is resolved from the caller's directory.
+The normal command without `--launch` still reinstalls the requested release.
+
+OmaStore targets `omadesign-install` in the small installer release archive.
+That entry checks the latest version on every launch. It installs a missing app,
+opens a current app directly, and offers Update or Later for an older complete
+installation. Later opens the installed version; Update runs full native setup
+before opening. An explicit `omadesign-install --launch` accepts the update.
+
+The prompt uses terminal input or desktop notification actions, with Zenity and
+KDialog fallbacks. If no prompt can be shown, the existing app opens and the
+installer prints the update command. OmaStore owns `omadesign-install`; the native
+installer owns `omadesign` and its setup files. Removing the store entry removes
+its installer shortcut and leaves the native installation intact. Neither
+installer overwrites an OmaStore-owned command.
+
+Run `sh scripts/package-installer.sh` to build both installer archives without a
+Rust build. Each includes native setup for its matching release, so missing
+setup files can be repaired without replacing existing plugin edits. Newer
+releases use their own setup script. Normal releases include the archives
+through `scripts/release.sh`. Run
+`bash scripts/test-installers.sh` for the installer checks; their files stay in
+the project's ignored `.artifacts` directory.
+
 ### Releasing
 
 On the build machine:
@@ -96,7 +135,7 @@ On the build machine:
 # bump version in Cargo.toml
 ./scripts/release.sh
 git tag vX.Y.Z
-gh release create vX.Y.Z dist/omadesign-X.Y.Z-*.tar.gz*
+gh release create vX.Y.Z dist/omadesign-X.Y.Z-*.tar.gz* dist/omadesign-installer-X.Y.Z-*.tar.gz*
 ```
 
 Refuse to ship if `objdump -T` shows GLIBC newer than 2.35.
