@@ -2,20 +2,29 @@
 # Install into ~/.local, or stage an isolated installation with --prefix DIR.
 set -eu
 INSTALL_PREFIX=''
+PACKAGE_DIR=''
 LAUNCH=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --launch) LAUNCH=1; shift ;;
     --prefix)
       if [ "$#" -lt 2 ] || [ -z "$2" ]; then
-        echo "usage: $0 [--prefix DIRECTORY] [--launch [-- APP_ARGUMENTS...]]" >&2
+        echo "usage: $0 [--package DIRECTORY] [--prefix DIRECTORY] [--launch [-- APP_ARGUMENTS...]]" >&2
         exit 1
       fi
       INSTALL_PREFIX="$2"
       shift 2
       ;;
+    --package)
+      if [ "$#" -lt 2 ] || [ -z "$2" ]; then
+        echo "omadesign: --package requires a directory" >&2
+        exit 1
+      fi
+      PACKAGE_DIR="$2"
+      shift 2
+      ;;
     --) shift; break ;;
-    *) echo "usage: $0 [--prefix DIRECTORY] [--launch [-- APP_ARGUMENTS...]]" >&2; exit 1 ;;
+    *) echo "usage: $0 [--package DIRECTORY] [--prefix DIRECTORY] [--launch [-- APP_ARGUMENTS...]]" >&2; exit 1 ;;
   esac
 done
 if [ "$LAUNCH" = 0 ] && [ "$#" -gt 0 ]; then
@@ -82,7 +91,7 @@ version_is_current() {
   '
 }
 SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
-if [ -f "$SCRIPT_DIR/../Cargo.toml" ]; then
+if [ -z "$PACKAGE_DIR" ] && [ -f "$SCRIPT_DIR/../Cargo.toml" ]; then
   ROOT_DIR="$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)"
   SOURCE_BIN="$ROOT_DIR/target/release/omadesign"
   DESKTOP_FILE="$ROOT_DIR/omadesign.desktop"
@@ -100,6 +109,9 @@ if [ -f "$SCRIPT_DIR/../Cargo.toml" ]; then
   RUST_LICENSE_DIR="$ROOT_DIR/vendor/rust-notices"
   PHOSPHOR_LICENSE="$ROOT_DIR/assets/phosphor/LICENSE-MIT"
 else
+  if [ -n "$PACKAGE_DIR" ]; then
+    SCRIPT_DIR="$(CDPATH='' cd -- "$PACKAGE_DIR" && pwd)"
+  fi
   SOURCE_BIN="$SCRIPT_DIR/omadesign"
   DESKTOP_FILE="$SCRIPT_DIR/omadesign.desktop"
   MIME_FILE="$SCRIPT_DIR/omadesign-mime.xml"
@@ -123,6 +135,9 @@ if [ -n "$INSTALL_PREFIX" ]; then
 else
   BIN="${HOME}/.local/bin"
   DATA="${XDG_DATA_HOME:-${HOME}/.local/share}"
+fi
+if [ "$LAUNCH" = 1 ] && [ -n "$INSTALL_PREFIX" ]; then
+  export XDG_DATA_HOME="$DATA"
 fi
 if [ -f "$BIN/omadesign" ] && head -c 256 "$BIN/omadesign" | grep -q '^# omastore-launcher '; then
   echo "omadesign: this launcher belongs to OmaStore; update it through OmaStore or choose a separate --prefix" >&2
@@ -192,7 +207,12 @@ mkdir -p "$DATA/omadesign/licenses/lua" "$DATA/omadesign/plugin-examples" "$DATA
 cp "$LUA_LICENSE_DIR/"* "$DATA/omadesign/licenses/lua/"
 cp -R "$PLUGIN_DIR/studio-starter" "$DATA/omadesign/plugin-examples/"
 mkdir -p "$DATA/omadesign/plugins/org.omadesign.studio-starter"
-cp -Rn "$PLUGIN_DIR/studio-starter/." "$DATA/omadesign/plugins/org.omadesign.studio-starter/"
+for stock in "$PLUGIN_DIR/studio-starter/"*; do
+  destination="$DATA/omadesign/plugins/org.omadesign.studio-starter/$(basename "$stock")"
+  if [ ! -e "$destination" ] && [ ! -L "$destination" ]; then
+    cp -R "$stock" "$destination"
+  fi
+done
 # Rename into place so an existing session can keep running until QA relaunches.
 STAGED_BIN="$(mktemp "$BIN/.omadesign.XXXXXX")"
 STAGED_APP="$(mktemp "$APP/.omadesign.XXXXXX")"

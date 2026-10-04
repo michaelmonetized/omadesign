@@ -12,6 +12,7 @@ for ARCH in x86_64 aarch64; do
   rm -rf "$STAGE"
   mkdir -p "$STAGE"
   install -Dm755 scripts/install-remote.sh "$STAGE/omadesign-install"
+  install -Dm755 scripts/install.sh "$STAGE/install.sh"
   install -Dm644 assets/omadesign.svg "$STAGE/omadesign.svg"
   install -Dm644 LICENSE "$STAGE/LICENSE"
   tar -C dist -czf "dist/$NAME.tar.gz" "$NAME"

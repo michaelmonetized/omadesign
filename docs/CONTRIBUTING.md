@@ -120,7 +120,10 @@ its installer shortcut and leaves the native installation intact. Neither
 installer overwrites an OmaStore-owned command.
 
 Run `sh scripts/package-installer.sh` to build both installer archives without a
-Rust build. Normal releases include them through `scripts/release.sh`. Run
+Rust build. Each includes native setup for its matching release, so missing
+setup files can be repaired without replacing existing plugin edits. Newer
+releases use their own setup script. Normal releases include the archives
+through `scripts/release.sh`. Run
 `bash scripts/test-installers.sh` for the installer checks; their files stay in
 the project's ignored `.artifacts` directory.
 
@@ -132,7 +135,7 @@ On the build machine:
 # bump version in Cargo.toml
 ./scripts/release.sh
 git tag vX.Y.Z
-gh release create vX.Y.Z dist/omadesign-X.Y.Z-*.tar.gz*
+gh release create vX.Y.Z dist/omadesign-X.Y.Z-*.tar.gz* dist/omadesign-installer-X.Y.Z-*.tar.gz*
 ```
 
 Refuse to ship if `objdump -T` shows GLIBC newer than 2.35.
