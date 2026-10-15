@@ -233,7 +233,10 @@ pub struct Shape {
     pub artwork_masks: Vec<crate::artwork_mask::ArtworkMask>,
     #[serde(default, skip_serializing_if = "FrameLayout::is_empty")]
     pub layout: FrameLayout,
-    #[serde(default, skip_serializing_if = "crate::text_geometry::TextWrap::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "crate::text_geometry::TextWrap::is_none"
+    )]
     pub text_wrap: crate::text_geometry::TextWrap,
     #[serde(skip)]
     cached_path: RefCell<Option<Arc<CachedPath>>>,
@@ -500,13 +503,16 @@ impl Shape {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Pixels {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native: Option<crate::deep_color::NativePixels>,
     pub w: u32,
     pub h: u32,
-    pub data: Vec<u8>,
+    #[serde(with = "crate::deep_color::storage::bytes")]
+    pub data: Arc<crate::resources::Allocation<u8>>,
     #[serde(skip)]
     pub version: u64,
     #[serde(skip)]
-    pub(crate) cached_pm: RefCell<Option<(u64, tiny_skia::Pixmap)>>,
+    pub(crate) cached_pm: RefCell<Option<(u64, crate::deep_color::surface::Surface)>>,
     #[serde(skip)]
     pub(crate) cached_uniform: RefCell<Option<(u64, Option<Rgba>)>>,
 }
@@ -517,6 +523,7 @@ impl Clone for Pixels {
             w: self.w,
             h: self.h,
             data: self.data.clone(),
+            native: self.native.clone(),
             version: self.version,
             cached_pm: RefCell::new(None),
             cached_uniform: RefCell::new(*self.cached_uniform.borrow()),
@@ -525,29 +532,57 @@ impl Clone for Pixels {
 }
 
 impl Pixels {
-    pub fn new(w: u32, h: u32) -> Self {
-        Self {
-            w: w.max(1),
-            h: h.max(1),
-            data: vec![0u8; w.max(1) as usize * h.max(1) as usize * 4],
-            version: 0,
-            cached_pm: RefCell::new(None),
-            cached_uniform: RefCell::new(Some((0, Some(Rgba::TRANSPARENT)))),
-        }
+    /// Allocate an explicit pixel canvas under shared working-memory admission.
+    /// Args: positive dimensions. Returns transparent pixels or an allocation error.
+    pub fn new(w: u32, h: u32) -> Result<Self, String> {
+        let count = crate::deep_color::storage::count(w, h, 4)?;
+        let data = crate::resources::global()
+            .allocate_now::<u8, _>(count, &crate::deep_color::storage::check)?;
+        Self::from_byte_allocation(w, h, Arc::new(data))
     }
 
     pub fn from_rgba(w: u32, h: u32, data: Vec<u8>) -> Option<Self> {
-        if data.len() != w as usize * h as usize * 4 {
-            return None;
+        Self::from_byte_allocation(w, h, crate::deep_color::storage::adopt(data).ok()?).ok()
+    }
+
+    pub fn from_byte_allocation(
+        w: u32,
+        h: u32,
+        data: Arc<crate::resources::Allocation<u8>>,
+    ) -> Result<Self, String> {
+        if data.len() != crate::deep_color::storage::count(w, h, 4)? {
+            return Err("Pixel dimensions do not match byte storage".into());
         }
-        Some(Self {
+        Ok(Self {
             w,
             h,
+            native: None,
             data,
             version: 1,
             cached_pm: RefCell::new(None),
             cached_uniform: RefCell::new(None),
         })
+    }
+
+    /// Admit a cache copy before mutating legacy byte pixels.
+    /// Args: self. Returns writable RGBA8 only for an image whose bytes are authoritative.
+    pub fn bytes_mut(&mut self) -> Result<&mut [u8], String> {
+        if self.native.is_some() {
+            return Err("Edit authoritative native samples instead of the display cache".into());
+        }
+        crate::deep_color::storage::make_mut(&mut self.data, &crate::deep_color::storage::check)
+    }
+
+    pub fn replace_bytes(&mut self, data: Vec<u8>) -> Result<(), String> {
+        if self.native.is_some() {
+            return Err("Edit authoritative native samples instead of the display cache".into());
+        }
+        if data.len() != crate::deep_color::storage::count(self.w, self.h, 4)? {
+            return Err("Invalid replacement pixel dimensions".into());
+        }
+        self.data = crate::deep_color::storage::adopt(data)?;
+        self.touch();
+        Ok(())
     }
 
     pub fn touch(&mut self) {
@@ -556,34 +591,34 @@ impl Pixels {
         self.cached_uniform.borrow_mut().take();
     }
 
-    fn build_pm(&self) -> Option<tiny_skia::Pixmap> {
-        crate::color::rgba_to_pixmap(self.w, self.h, &self.data)
-    }
-
-    fn ensure_pm(&self) {
+    fn ensure_pm(&self) -> Result<(), String> {
         let mut slot = self.cached_pm.borrow_mut();
-        if let Some((v, pm)) = slot.as_ref()
-            && *v == self.version
-            && pm.width() == self.w
-            && pm.height() == self.h
-        {
-            return;
+        if slot.as_ref().is_some_and(|(version, pixels)| {
+            *version == self.version && pixels.width() == self.w && pixels.height() == self.h
+        }) {
+            return Ok(());
         }
-        *slot = self.build_pm().map(|pm| (self.version, pm));
+        let pixels = crate::deep_color::surface::Surface::from_rgba(self.w, self.h, &self.data)?;
+        *slot = Some((self.version, pixels));
+        Ok(())
     }
-
     pub fn with_pm<R>(&self, f: impl FnOnce(&tiny_skia::Pixmap) -> R) -> Option<R> {
-        self.ensure_pm();
-        let slot = self.cached_pm.borrow();
-        slot.as_ref().map(|(_, pm)| f(pm))
+        self.ensure_pm().ok()?;
+        self.cached_pm.borrow().as_ref().map(|(_, pm)| f(pm))
     }
-
-    pub fn to_pixmap(&self) -> Option<tiny_skia::Pixmap> {
-        self.with_pm(|pm| pm.clone())
+    pub fn try_to_pixmap(&self) -> Result<crate::deep_color::surface::Surface, String> {
+        self.ensure_pm()?;
+        self.cached_pm.borrow().as_ref().unwrap().1.try_clone()
+    }
+    pub fn to_pixmap(&self) -> Option<crate::deep_color::surface::Surface> {
+        self.try_to_pixmap().ok()
     }
 
     /// Every pixel has alpha 0.
     pub fn is_invisible(&self) -> bool {
+        if let Some(native) = &self.native {
+            return native.samples.chunks_exact(4).all(|p| p[3] <= 0.);
+        }
         self.data.is_empty() || self.data.chunks_exact(4).all(|p| p[3] == 0)
     }
 
@@ -604,20 +639,17 @@ impl Pixels {
         color
     }
 
-    pub fn from_pixmap(pm: &tiny_skia::Pixmap) -> Self {
-        let mut data = vec![0u8; pm.data().len()];
-        for (dst, src) in data.chunks_exact_mut(4).zip(pm.pixels()) {
+    pub fn from_pixmap(pm: &tiny_skia::Pixmap) -> Result<Self, String> {
+        Self::try_from_pixmap(pm)
+    }
+    pub fn try_from_pixmap(pm: &tiny_skia::Pixmap) -> Result<Self, String> {
+        let mut data = crate::resources::global()
+            .allocate_now::<u8, _>(pm.data().len(), &crate::deep_color::storage::check)?;
+        for (dst, src) in data.as_mut_slice().chunks_exact_mut(4).zip(pm.pixels()) {
             let color = src.demultiply();
             dst.copy_from_slice(&[color.red(), color.green(), color.blue(), color.alpha()]);
         }
-        Self {
-            w: pm.width(),
-            h: pm.height(),
-            data,
-            version: 1,
-            cached_pm: RefCell::new(Some((1, pm.clone()))),
-            cached_uniform: RefCell::new(None),
-        }
+        Self::from_byte_allocation(pm.width(), pm.height(), Arc::new(data))
     }
 }
 
@@ -794,7 +826,13 @@ impl LayerKind {
 pub struct Layer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub svg_filter: Option<crate::svg_source::SvgFilterGraph>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub psd_smart: Option<crate::formats::psd::smart::SmartObject>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub psd_type: Option<crate::formats::psd::type_layer::TypeData>,
     pub id: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_attachment: Option<String>,
     pub name: String,
     pub visible: bool,
     pub locked: bool,
@@ -820,7 +858,10 @@ pub struct Layer {
     pub is_group: bool,
     #[serde(default)]
     pub pass_through: bool,
-    #[serde(default, skip_serializing_if = "crate::text_geometry::TextWrap::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "crate::text_geometry::TextWrap::is_none"
+    )]
     pub text_wrap: crate::text_geometry::TextWrap,
     #[serde(default)]
     pub filters: crate::filter::FilterStack,
@@ -837,6 +878,7 @@ impl Layer {
     pub fn vector(name: impl Into<String>) -> Self {
         Self {
             id: next_id(),
+            source_attachment: None,
             name: name.into(),
             visible: true,
             locked: false,
@@ -848,6 +890,8 @@ impl Layer {
             parent: None,
             is_group: false,
             pass_through: false,
+            psd_type: None,
+            psd_smart:None,
             text_wrap: Default::default(),
             mask: None,
             artwork_masks: Vec::new(),
@@ -858,39 +902,21 @@ impl Layer {
         }
     }
 
-    pub fn raster(name: impl Into<String>, w: u32, h: u32) -> Self {
-        Self {
-            id: next_id(),
-            name: name.into(),
-            visible: true,
-            locked: false,
-            opacity: 1.0,
-            fill_opacity: 1.0,
-            blend_interior: false,
-            blend: Blend::Normal,
-            svg_filter: None,
-            parent: None,
-            is_group: false,
-            pass_through: false,
-            text_wrap: Default::default(),
-            mask: None,
-            artwork_masks: Vec::new(),
-            mask_origin: Pt::ZERO,
-            mask_size: Pt::ZERO,
-            kind: LayerKind::Raster {
-                pixels: Pixels::new(w, h),
-                origin: Pt::ZERO,
-                size: Pt::ZERO,
-                rotation: 0.0,
-                shear: 0.0,
-            },
-            filters: crate::filter::FilterStack::default(),
-        }
+    /// Allocate an explicit pixel layer without imposing a megapixel ceiling.
+    /// Args: layer name and dimensions. Returns a layer or a shared-memory admission error.
+    pub fn raster(name: impl Into<String>, w: u32, h: u32) -> Result<Self, String> {
+        Ok(Self::placed_raster(
+            name,
+            Pixels::new(w, h)?,
+            Pt::ZERO,
+            Pt::ZERO,
+        ))
     }
 
     pub fn placed_raster(name: impl Into<String>, pixels: Pixels, origin: Pt, size: Pt) -> Self {
         Self {
             id: next_id(),
+            source_attachment: None,
             name: name.into(),
             visible: true,
             locked: false,
@@ -902,6 +928,8 @@ impl Layer {
             parent: None,
             is_group: false,
             pass_through: false,
+            psd_type:None,
+            psd_smart:None,
             text_wrap: Default::default(),
             mask: None,
             artwork_masks: Vec::new(),
@@ -1207,6 +1235,8 @@ pub struct Document {
     #[serde(default, skip_serializing_if = "crate::publishing::Publishing::is_empty")]
     pub publishing: crate::publishing::Publishing,
     #[serde(default)]
+    pub color: crate::deep_color::cms::DocumentColor,
+    #[serde(default)]
     pub text_wrap_above_only: bool,
     pub name: String,
     /// Last editing workspace, used by the file browser and when reopening.
@@ -1219,6 +1249,8 @@ pub struct Document {
     /// Conversion changes stay with the saved project for later inspection.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub import_notes: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sources: Vec<crate::source_attachment::SourceAttachment>,
     pub guides: Vec<Guide>,
     #[serde(default)]
     pub ruler: RulerSettings,
@@ -1248,6 +1280,38 @@ pub struct Document {
 }
 
 impl Document {
+    /// Retain original format data once for all referencing objects.
+    /// Args: source attachment. Returns its stable UUID.
+    pub fn retain_source(&mut self, source: crate::source_attachment::SourceAttachment) -> String {
+        let id = source.id.clone();
+        if self.source(&id).is_none() { self.sources.push(source); }
+        id
+    }
+
+    /// Find the original data referenced by an imported object.
+    /// Args: attachment UUID. Returns the retained source if present.
+    pub fn source(&self, id: &str) -> Option<&crate::source_attachment::SourceAttachment> {
+        self.sources.iter().find(|s| s.id == id)
+    }
+
+    /// Validate retained original data and object references.
+    /// Args: none. Returns an error for damaged, duplicate, missing or oversized sources.
+    pub fn validate_sources(&self) -> Result<(), String> {
+        let mut bytes = 0usize;
+        let mut ids = std::collections::HashSet::new();
+        for source in &self.sources {
+            source.validate()?;
+            bytes = bytes.checked_add(source.bytes().len()).ok_or("Retained sources exceed 512 MiB")?;
+            if bytes > 512 * 1024 * 1024 { return Err("Retained sources exceed 512 MiB".into()); }
+            if !ids.insert(&source.id) { return Err("Duplicate retained source UUID".into()); }
+        }
+        for layer in &self.layers {
+            if let Some(id) = &layer.source_attachment && self.source(id).is_none() {
+                return Err(format!("Layer {} references a missing original source", layer.name));
+            }
+        }
+        Ok(())
+    }
     /// Editing layout needs vector state only. Preserve layer indices without
     /// copying image buffers or mask data into temporary solver documents.
     pub fn layout_snapshot(&self) -> Self {
@@ -1259,6 +1323,7 @@ impl Document {
         mut clone_shape: impl FnMut(&Shape) -> Shape,
     ) -> Self {
         let mut copy = Self::new(&self.name, 1.0, 1.0, self.dpi);
+        copy.color = self.color.clone();
         copy.width = self.width;
         copy.height = self.height;
         copy.artboards = self.artboards.clone();
@@ -1280,8 +1345,12 @@ impl Document {
                 out.opacity = layer.opacity;
                 out.blend = layer.blend;
                 out.artwork_masks = layer.artwork_masks.clone();
-                out.text_wrap = layer.text_wrap.clone();                if let Some(shapes) = layer.kind.shapes() {
-                    out.kind.shapes_mut().unwrap().extend(shapes.iter().map(&mut clone_shape));
+                out.text_wrap = layer.text_wrap.clone();
+                if let Some(shapes) = layer.kind.shapes() {
+                    out.kind
+                        .shapes_mut()
+                        .unwrap()
+                        .extend(shapes.iter().map(&mut clone_shape));
                 }
                 out
             })
@@ -1377,18 +1446,32 @@ impl Document {
         } else {
             page_w
         };
-        let w = total_w.round().max(1.0) as u32;
-        let h = page_h.round().max(1.0) as u32;
+        let mut background = Layer::vector("Background");
+        if !transparent {
+            background.kind.shapes_mut().unwrap().push(Shape::new(
+                Geom::Rect {
+                    origin: Pt::ZERO,
+                    size: Pt::new(total_w, page_h),
+                    radius: 0.0,
+                },
+                Style {
+                    fill: Fill::Solid(Rgba::WHITE),
+                    stroke: None,
+                },
+            ));
+        }
         let mut doc = Self {
             publishing: Default::default(),
+            color: Default::default(),
             text_wrap_above_only: false,
             name: name.into(),
             workspace: None,
             width: total_w,
             height: page_h,
             dpi,
-            layers: vec![Layer::raster("Background", w, h), Layer::vector("Layer 1")],
+            layers: vec![background, Layer::vector("Layer 1")],
             import_notes: vec![],
+            sources: vec![],
             guides: vec![],
             ruler: RulerSettings::default(),
             grid: Grid::default(),
@@ -1403,17 +1486,6 @@ impl Document {
             comments: vec![],
             layout_tokens: vec![],
         };
-        // Fill background white when not transparent
-        if !transparent && let Some(px) = doc.layers[0].kind.pixels_mut() {
-            let white = crate::color::Rgba::WHITE;
-            for chunk in px.data.chunks_mut(4) {
-                chunk[0] = white.r;
-                chunk[1] = white.g;
-                chunk[2] = white.b;
-                chunk[3] = 255;
-            }
-            px.touch();
-        }
         if show_bleed {
             // Outer bleed rect guides
             let b = doc.bleed;
@@ -1575,13 +1647,14 @@ impl Document {
     pub fn hit_test(&self, p: Pt, stroke_slack: f32) -> Option<(usize, u64)> {
         let mask_sources = self.mask_sources();
         for (li, layer) in self.layers.iter().enumerate().rev() {
-            if !self.layer_editable(li) || self.mask_source_member(li,None,&mask_sources) {
+            if !self.layer_editable(li) || self.mask_source_member(li, None, &mask_sources) {
                 continue;
             }
             if let Some(shapes) = layer.kind.shapes() {
                 for index in self.layout_paint_order(li).into_iter().rev() {
                     let shape = &shapes[index];
-                    if self.mask_source_member(li,Some(shape.id),&mask_sources) || !shape.visible
+                    if self.mask_source_member(li, Some(shape.id), &mask_sources)
+                        || !shape.visible
                         || shape.locked
                         || (shape.guide && (!self.ruler.guides_visible || self.ruler.guides_locked))
                     {
@@ -1608,12 +1681,13 @@ impl Document {
         let mask_sources = self.mask_sources();
         let mut out = vec![];
         for (li, layer) in self.layers.iter().enumerate() {
-            if !self.layer_editable(li) || self.mask_source_member(li,None,&mask_sources) {
+            if !self.layer_editable(li) || self.mask_source_member(li, None, &mask_sources) {
                 continue;
             }
             if let Some(shapes) = layer.kind.shapes() {
                 for shape in shapes {
-                    if self.mask_source_member(li,Some(shape.id),&mask_sources) || !shape.visible
+                    if self.mask_source_member(li, Some(shape.id), &mask_sources)
+                        || !shape.visible
                         || shape.locked
                         || (shape.guide && (!self.ruler.guides_visible || self.ruler.guides_locked))
                     {
@@ -1675,8 +1749,13 @@ pub struct CanvasSettings {
 }
 impl CanvasSettings {
     pub fn read(doc: &Document) -> Self {
-        Self { name: doc.name.clone(), width: doc.width, height: doc.height,
-            dpi: doc.dpi, transparent: doc.transparent }
+        Self {
+            name: doc.name.clone(),
+            width: doc.width,
+            height: doc.height,
+            dpi: doc.dpi,
+            transparent: doc.transparent,
+        }
     }
 }
 
@@ -1712,7 +1791,15 @@ impl RasterState {
 #[derive(Clone, Debug)]
 pub enum Cmd {
     SetSvgFilter { index: usize, before: Option<crate::svg_source::SvgFilterGraph>, after: Option<crate::svg_source::SvgFilterGraph> },
-    SetCanvas { before: CanvasSettings, after: CanvasSettings },
+    SetSmartLayer {index:usize,before:Box<Layer>,after:Box<Layer>},
+    SetDocumentColor {
+        before: crate::deep_color::cms::DocumentColor,
+        after: crate::deep_color::cms::DocumentColor,
+    },
+    SetCanvas {
+        before: CanvasSettings,
+        after: CanvasSettings,
+    },
     SetFillOpacity {
         layer: usize,
         id: Option<u64>,
@@ -1740,13 +1827,25 @@ pub enum Cmd {
         before: Vec<String>,
         after: Vec<String>,
     },
+    SetSources {
+        before: Vec<crate::source_attachment::SourceAttachment>,
+        after: Vec<crate::source_attachment::SourceAttachment>,
+    },
     SetGroupPassThrough {
         index: usize,
         before: bool,
         after: bool,
     },
-    SetTextWrap { layer:usize, id:Option<u64>, before:crate::text_geometry::TextWrap, after:crate::text_geometry::TextWrap },
-    SetTextWrapAbove {before:bool,after:bool},
+    SetTextWrap {
+        layer: usize,
+        id: Option<u64>,
+        before: crate::text_geometry::TextWrap,
+        after: crate::text_geometry::TextWrap,
+    },
+    SetTextWrapAbove {
+        before: bool,
+        after: bool,
+    },
     SetShapeGuide {
         layer: usize,
         id: u64,
@@ -1846,11 +1945,17 @@ pub enum Cmd {
         blend: Blend,
         before: (String, bool, bool, f32, Blend),
     },
+    NativePixels {
+        layer: usize,
+        mask: bool,
+        before: Pixels,
+        after: Pixels,
+    },
     Pixels {
         layer: usize,
         mask: bool,
-        before: Vec<u8>,
-        after: Vec<u8>,
+        before: Arc<crate::resources::Allocation<u8>>,
+        after: Arc<crate::resources::Allocation<u8>>,
     },
     PaintRaster {
         layer: usize,
@@ -2171,7 +2276,15 @@ fn coalesce(prev: &mut Cmd, next: &Cmd) -> bool {
 
 pub(crate) fn invert_cmd(cmd: Cmd) -> Cmd {
     match cmd {
-        Cmd::SetCanvas { before, after } => Cmd::SetCanvas { before: after, after: before },
+        Cmd::SetSmartLayer{index,before,after}=>Cmd::SetSmartLayer{index,before:after,after:before},
+        Cmd::SetDocumentColor { before, after } => Cmd::SetDocumentColor {
+            before: after,
+            after: before,
+        },
+        Cmd::SetCanvas { before, after } => Cmd::SetCanvas {
+            before: after,
+            after: before,
+        },
         Cmd::SetFillOpacity {
             layer,
             id,
@@ -2219,6 +2332,7 @@ pub(crate) fn invert_cmd(cmd: Cmd) -> Cmd {
             before: after,
             after: before,
         },
+        Cmd::SetSources { before, after } => Cmd::SetSources { before: after, after: before },
         Cmd::SetGroupPassThrough {
             index,
             before,
@@ -2228,8 +2342,21 @@ pub(crate) fn invert_cmd(cmd: Cmd) -> Cmd {
             before: after,
             after: before,
         },
-        Cmd::SetTextWrap {layer,id,before,after} => Cmd::SetTextWrap {layer,id,before:after,after:before},
-        Cmd::SetTextWrapAbove {before,after} => Cmd::SetTextWrapAbove {before:after,after:before},
+        Cmd::SetTextWrap {
+            layer,
+            id,
+            before,
+            after,
+        } => Cmd::SetTextWrap {
+            layer,
+            id,
+            before: after,
+            after: before,
+        },
+        Cmd::SetTextWrapAbove { before, after } => Cmd::SetTextWrapAbove {
+            before: after,
+            after: before,
+        },
         Cmd::SetShapeGuide {
             layer,
             id,
@@ -2241,7 +2368,17 @@ pub(crate) fn invert_cmd(cmd: Cmd) -> Cmd {
             before: after,
             after: before,
         },
-        Cmd::SetArtworkMasks { layer, id, before, after } => Cmd::SetArtworkMasks { layer, id, before: after, after: before },
+        Cmd::SetArtworkMasks {
+            layer,
+            id,
+            before,
+            after,
+        } => Cmd::SetArtworkMasks {
+            layer,
+            id,
+            before: after,
+            after: before,
+        },
         Cmd::SetShapeMask {
             layer,
             id,
@@ -2358,6 +2495,17 @@ pub(crate) fn invert_cmd(cmd: Cmd) -> Cmd {
             blend: before.4,
             before: (name, visible, locked, opacity, blend),
         },
+        Cmd::NativePixels {
+            layer,
+            mask,
+            before,
+            after,
+        } => Cmd::NativePixels {
+            layer,
+            mask,
+            before: after,
+            after: before,
+        },
         Cmd::Pixels {
             layer,
             mask,
@@ -2369,7 +2517,11 @@ pub(crate) fn invert_cmd(cmd: Cmd) -> Cmd {
             before: after,
             after: before,
         },
-        Cmd::PaintRaster { layer, before, after } => Cmd::PaintRaster {
+        Cmd::PaintRaster {
+            layer,
+            before,
+            after,
+        } => Cmd::PaintRaster {
             layer,
             before: after,
             after: before,
@@ -2502,13 +2654,15 @@ pub(crate) fn invert_cmd(cmd: Cmd) -> Cmd {
 
 pub fn apply(doc: &mut Document, cmd: &Cmd) {
     match cmd {
+        Cmd::SetSmartLayer{index,after,..}=>{if let Some(layer)=doc.layers.get_mut(*index){*layer=(**after).clone();}}
+        Cmd::SetDocumentColor { after, .. } => doc.color = after.clone(),
         Cmd::SetCanvas { after, .. } => {
             doc.name = after.name.clone();
             doc.width = after.width;
             doc.height = after.height;
             doc.dpi = after.dpi;
             doc.transparent = after.transparent;
-        },
+        }
         Cmd::SetFillOpacity {
             layer, id, after, ..
         } => {
@@ -2545,13 +2699,24 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
             }
         }
         Cmd::SetImportNotes { after, .. } => doc.import_notes = after.clone(),
+        Cmd::SetSources { after, .. } => doc.sources = after.clone(),
         Cmd::SetGroupPassThrough { index, after, .. } => {
             if let Some(layer) = doc.layers.get_mut(*index) {
                 layer.pass_through = *after;
             }
         }
-        Cmd::SetTextWrap {layer,id,after,..} => { if let Some(id)=id {if let Some(s)=doc.find_shape_mut(*layer,*id){s.text_wrap=after.clone();}}else if let Some(l)=doc.layers.get_mut(*layer){l.text_wrap=after.clone();} },
-        Cmd::SetTextWrapAbove {after,..} => doc.text_wrap_above_only=*after,
+        Cmd::SetTextWrap {
+            layer, id, after, ..
+        } => {
+            if let Some(id) = id {
+                if let Some(s) = doc.find_shape_mut(*layer, *id) {
+                    s.text_wrap = after.clone();
+                }
+            } else if let Some(l) = doc.layers.get_mut(*layer) {
+                l.text_wrap = after.clone();
+            }
+        }
+        Cmd::SetTextWrapAbove { after, .. } => doc.text_wrap_above_only = *after,
         Cmd::SetShapeGuide {
             layer, id, after, ..
         } => {
@@ -2559,10 +2724,16 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
                 shape.guide = *after;
             }
         }
-        Cmd::SetArtworkMasks { layer, id, after, .. } => {
+        Cmd::SetArtworkMasks {
+            layer, id, after, ..
+        } => {
             if let Some(id) = id {
-                if let Some(shape) = doc.find_shape_mut(*layer, *id) { shape.artwork_masks = after.clone(); }
-            } else if let Some(layer) = doc.layers.get_mut(*layer) { layer.artwork_masks = after.clone(); }
+                if let Some(shape) = doc.find_shape_mut(*layer, *id) {
+                    shape.artwork_masks = after.clone();
+                }
+            } else if let Some(layer) = doc.layers.get_mut(*layer) {
+                layer.artwork_masks = after.clone();
+            }
         }
         Cmd::SetShapeMask {
             layer, id, after, ..
@@ -2590,7 +2761,17 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
             for command in commands {
                 apply(doc, command);
             }
-            if commands.iter().any(|cmd| matches!(cmd,Cmd::SetVectorShapes{..}|Cmd::AddLayer{..}|Cmd::RemoveLayer{..}|Cmd::MoveShapes{..})) {doc.refresh_artwork_mask_layers();}
+            if commands.iter().any(|cmd| {
+                matches!(
+                    cmd,
+                    Cmd::SetVectorShapes { .. }
+                        | Cmd::AddLayer { .. }
+                        | Cmd::RemoveLayer { .. }
+                        | Cmd::MoveShapes { .. }
+                )
+            }) {
+                doc.refresh_artwork_mask_layers();
+            }
         }
         Cmd::AddShape { layer, shape } => {
             if let Some(vs) = doc.layers.get_mut(*layer).and_then(|l| l.kind.shapes_mut()) {
@@ -2708,8 +2889,17 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
             }
             let destination = doc.layers[*to_layer].id;
             for layer in &mut doc.layers {
-                for mask in layer.artwork_masks.iter_mut().chain(layer.kind.shapes_mut().into_iter().flatten().flat_map(|s| &mut s.artwork_masks)) {
-                    if mask.source.shape.is_some_and(|id| moved_ids.contains(&id)) { mask.source.layer = destination; }
+                for mask in layer.artwork_masks.iter_mut().chain(
+                    layer
+                        .kind
+                        .shapes_mut()
+                        .into_iter()
+                        .flatten()
+                        .flat_map(|s| &mut s.artwork_masks),
+                ) {
+                    if mask.source.shape.is_some_and(|id| moved_ids.contains(&id)) {
+                        mask.source.layer = destination;
+                    }
                 }
             }
         }
@@ -2743,12 +2933,30 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
                 after.clone().restore(layer);
             }
         }
+        Cmd::NativePixels {
+            layer, mask, after, ..
+        } => {
+            if let Some(l) = doc.layers.get_mut(*layer) {
+                let target = if *mask {
+                    l.mask.as_mut()
+                } else {
+                    l.kind.pixels_mut()
+                };
+                if let Some(target) = target {
+                    *target = after.clone();
+                    target.touch();
+                }
+            }
+        }
         Cmd::Pixels {
             layer, mask, after, ..
         } => {
             let apply_px = |px: &mut Pixels| {
                 if px.data.len() == after.len() {
-                    px.data.copy_from_slice(after);
+                    if px.native.is_some() {
+                        return;
+                    }
+                    px.data = after.clone();
                     px.touch();
                 }
             };
@@ -2863,20 +3071,20 @@ mod tests {
         let pixels = Pixels::from_rgba(3, 1, rgba.clone()).unwrap();
         let pm = pixels.to_pixmap().unwrap();
         assert_eq!(&pm.data()[..8], &[128, 0, 0, 128, 0, 64, 0, 64]);
-        let mut restored = Pixels::from_pixmap(&pm);
-        assert_eq!(restored.data, rgba);
+        let mut restored = Pixels::from_pixmap(&pm).unwrap();
+        assert_eq!(restored.data.as_slice(), rgba);
         restored.touch();
         assert_eq!(restored.to_pixmap().unwrap().data(), pm.data());
     }
 
     #[test]
     fn raster_uniform_cache_follows_edits_and_clones_without_render_cache() {
-        let mut pixels = Pixels::new(2, 1);
+        let mut pixels = Pixels::new(2, 1).unwrap();
         assert_eq!(pixels.is_uniform(), Some(Rgba::TRANSPARENT));
-        pixels.data[..4].copy_from_slice(&[255, 0, 0, 255]);
+        pixels.bytes_mut().unwrap()[..4].copy_from_slice(&[255, 0, 0, 255]);
         pixels.touch();
         assert_eq!(pixels.is_uniform(), None);
-        pixels.data[4..].copy_from_slice(&[255, 0, 0, 255]);
+        pixels.bytes_mut().unwrap()[4..].copy_from_slice(&[255, 0, 0, 255]);
         pixels.touch();
         pixels.to_pixmap().unwrap();
         assert_eq!(pixels.is_uniform(), Some(Rgba::rgb(255, 0, 0)));
@@ -3233,12 +3441,50 @@ mod id_migration_regression {
     #[test]
     fn legacy_artboards_allocate_ids_after_loaded_shapes() {
         let mut doc = Document::new("Legacy IDs", 64., 64., 72.);
-        let mut shape = Shape::new(Geom::Rect { origin: Pt::ZERO, size: Pt::splat(10.), radius: 0. }, Style::default());
+        let mut shape = Shape::new(
+            Geom::Rect {
+                origin: Pt::ZERO,
+                size: Pt::splat(10.),
+                radius: 0.,
+            },
+            Style::default(),
+        );
         doc.artboards[0].id = 0;
         let loaded_id = next_id() + 1;
         shape.id = loaded_id;
         doc.layers[1].kind.shapes_mut().unwrap().push(shape);
         doc.ensure_ids().unwrap();
         assert_ne!(doc.artboards[0].id, loaded_id);
+    }
+}
+
+#[cfg(test)]
+mod canvas_storage_tests {
+    use super::*;
+    #[test]
+    fn large_vector_canvas_retains_geometry_without_a_pixel_background() {
+        for transparent in [false, true] {
+            let doc = Document::new_with_options(
+                "Large",
+                3_000_000.,
+                2_000_000.,
+                72.,
+                transparent,
+                1,
+                false,
+                false,
+            );
+            assert_eq!((doc.width, doc.height), (3_000_000., 2_000_000.));
+            assert!(doc.layers.iter().all(|l| l.kind.pixels().is_none()));
+            let shapes = doc.layers[0].kind.shapes().unwrap();
+            assert_eq!(shapes.len(), usize::from(!transparent));
+            if let Some(shape) = shapes.first() {
+                assert_eq!(shape.geom.bbox().size(), Pt::new(3_000_000., 2_000_000.));
+            }
+            let encoded = crate::project::encode(&doc).unwrap();
+            assert!(encoded.len() < 16_384);
+            let reopened = crate::project::decode(&encoded).unwrap();
+            assert_eq!(reopened.width, doc.width);
+        }
     }
 }

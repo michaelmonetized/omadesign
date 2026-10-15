@@ -1,4 +1,10 @@
 use crate::app::Studio;
+#[path = "photo_catalog.rs"]
+mod catalog;
+#[path = "photo_local.rs"]
+mod local;
+#[path = "photo_optics.rs"]
+mod optics;
 #[path = "photo_workflow.rs"]
 mod workflow;
 use crate::photo::{self, DevelopParams, HSL_NAMES, Histogram};
@@ -161,6 +167,14 @@ fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
         eframe::egui::Label::new(RichText::new(&studio.photo.status).small().color(fg_weak()))
             .wrap(),
     );
+    ui.horizontal(|ui| {
+        ui.selectable_value(&mut studio.photo.catalog.visible, false, "Folder");
+        ui.selectable_value(&mut studio.photo.catalog.visible, true, "Catalog");
+    });
+    if studio.photo.catalog.visible {
+        catalog::show(ui, studio);
+        return;
+    }
     workflow::progress(ui, studio);
     if studio.photo.queued_imports() > 0 {
         ui.horizontal(|ui| {
@@ -275,24 +289,32 @@ fn library_cards(ui: &mut Ui, studio: &mut Studio) {
                         .get(&index)
                         .is_none_or(|(_, params)| *params != image.develop)
                     {
-                        let pixels = image.render_thumbnail(256);
-                        let color = ColorImage::from_rgba_unmultiplied(
-                            [pixels.w as usize, pixels.h as usize],
-                            &pixels.data,
-                        );
-                        if let Some((texture, params)) = studio.photo.thumbs.get_mut(&index) {
-                            texture.set(color, TextureOptions::LINEAR);
-                            *params = image.develop.clone();
-                        } else {
-                            let texture = ui.ctx().load_texture(
-                                format!("live-photo-{index}"),
-                                color,
-                                TextureOptions::LINEAR,
-                            );
-                            studio
-                                .photo
-                                .thumbs
-                                .insert(index, (texture, image.develop.clone()));
+                        match image.render_thumbnail(256) {
+                            Ok(pixels) => {
+                                let color = ColorImage::from_rgba_unmultiplied(
+                                    [pixels.w as usize, pixels.h as usize],
+                                    &pixels.data,
+                                );
+                                if let Some((texture, params)) = studio.photo.thumbs.get_mut(&index)
+                                {
+                                    texture.set(color, TextureOptions::LINEAR);
+                                    *params = image.develop.clone();
+                                } else {
+                                    let texture = ui.ctx().load_texture(
+                                        format!("live-photo-{index}"),
+                                        color,
+                                        TextureOptions::LINEAR,
+                                    );
+                                    studio
+                                        .photo
+                                        .thumbs
+                                        .insert(index, (texture, image.develop.clone()));
+                                }
+                            }
+                            Err(error) => {
+                                studio.photo.status = error;
+                                studio.photo.thumbs.remove(&index);
+                            }
                         }
                     }
                     studio
@@ -486,8 +508,8 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
     ui.add_space(12.0);
     let tab_id = ui.id().with("develop-tab");
     let mut tab = ui.data_mut(|data| data.get_temp::<usize>(tab_id).unwrap_or(0));
-    ui.columns(3, |columns| {
-        for (i, label) in ["Light", "Color", "Detail"].iter().enumerate() {
+    ui.columns(4, |columns| {
+        for (i, label) in ["Light", "Color", "Detail", "Local"].iter().enumerate() {
             if columns[i]
                 .add_sized(
                     [columns[i].available_width(), 28.0],
@@ -563,11 +585,12 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
                     changed |= slider(ui, "Balance", &mut p.split_balance, -1.0, 1.0);
                 });
             }
-            _ => {
+            2 => {
                 changed |= slider(ui, "Clarity", &mut p.clarity, -1.0, 1.0);
                 changed |= slider(ui, "Dehaze", &mut p.dehaze, -1.0, 1.0);
                 changed |= slider(ui, "Grain", &mut p.grain, 0.0, 1.0);
                 changed |= slider(ui, "Vignette", &mut p.vignette, -1.0, 1.0);
+                changed |= optics::controls(ui, &mut p.optics);
                 ui.add_space(10.0);
                 ui.label(RichText::new("Orientation").small().color(fg_weak()));
                 ui.horizontal(|ui| {
@@ -584,6 +607,9 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
                     p.crop = None;
                     changed = true;
                 }
+            }
+            _ => {
+                changed |= local::controls(ui, &mut p.local_adjustments);
             }
         });
     if changed && let Some(img) = studio.photo.selected_mut() {
@@ -783,7 +809,12 @@ fn viewer(ui: &mut Ui, studio: &mut Studio) {
 
     let panning = ui.ctx().input(|i| i.key_down(eframe::egui::Key::Space))
         || studio.tool == crate::tools::Tool::Hand;
-    if studio.tool == crate::tools::Tool::Crop && !panning && !studio.photo.show_original {
+    let painting_mask = local::viewer(ui, studio, dest, &resp, panning);
+    if studio.tool == crate::tools::Tool::Crop
+        && !panning
+        && !painting_mask
+        && !studio.photo.show_original
+    {
         if resp.ctx.input(|i| i.pointer.primary_pressed())
             && let Some(a) = resp.interact_pointer_pos()
         {
@@ -869,7 +900,11 @@ fn handle_drops(ui: &mut Ui, studio: &mut Studio) {
 }
 
 pub(crate) fn export_developed(ctx: &eframe::egui::Context, studio: &mut Studio, extension: &str) {
-    let format = match extension { "jpg" | "jpeg" => crate::export::Format::Jpeg, "tif" | "tiff" => crate::export::Format::Tiff, _ => crate::export::Format::Png };
+    let format = match extension {
+        "jpg" | "jpeg" => crate::export::Format::Jpeg,
+        "tif" | "tiff" => crate::export::Format::Tiff,
+        _ => crate::export::Format::Png,
+    };
     super::export_dialog::open(ctx, studio, format, false);
 }
 

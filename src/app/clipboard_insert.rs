@@ -359,7 +359,7 @@ mod tests {
         let restored = crate::project::decode(&encoded).unwrap();
         assert_center(restored.layers[1].kind.raster_bounds().unwrap(), center);
         assert_eq!(
-            restored.layers[1].kind.pixels().unwrap().data,
+            restored.layers[1].kind.pixels().unwrap().data.as_slice(),
             [231, 42, 80, 255].repeat(300 * 160)
         );
         studio.undo();

@@ -770,7 +770,7 @@ pub fn execute_prepared(
                     if w == 0 || h == 0 || w > 32768 || h > 32768 || w * h > 64_000_000 {
                         return Err("Raster dimensions must be positive, at most 32768 per edge and 64 megapixels".into());
                     }
-                    Layer::raster(name, w as u32, h as u32)
+                    Layer::raster(name, w as u32, h as u32)?
                 }
                 _ => return Err("Choose vector, raster or group".into()),
             };
@@ -877,7 +877,7 @@ pub fn execute_prepared(
                     .photo
                     .selected()
                     .ok_or("Select/import a photo first")?;
-                let preview = p.render_thumbnail(960);
+                let preview = p.render_thumbnail(960)?;
                 let bytes = preview.encode_png().ok_or("Could not render photo")?;
                 return Ok(
                     json!({"content":[{"type":"image","mimeType":"image/png","data":base64::engine::general_purpose::STANDARD.encode(bytes)},{"type":"text","text":format!("Photo revision {} · {}",studio.photo.edit_revision,p.name)}]}),

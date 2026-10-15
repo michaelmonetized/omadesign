@@ -201,7 +201,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     let h = rect.height().max(1.0) as u32;
     let op_tag: u8 = match &studio.op {
         Some(Op::Brush { .. }) => 1,
-        Some(Op::Smudge { .. } | Op::Clone { .. } | Op::Retouch { .. }) => 2,
+        Some(Op::Smudge { .. } | Op::Clone { .. } | Op::NativeStroke { .. } | Op::NativeRetouch { .. } | Op::Retouch { .. }) => 2,
         _ => 0,
     };
     let play_bits = if studio.is_motion() {
@@ -336,7 +336,7 @@ fn interaction_objects(studio: &Studio) -> Option<Vec<(usize, u64)>> {
         // Resizing can move constrained siblings outside the selection; those
         // operations continue to invalidate and render the complete scene.
         Some(Op::Node { layer, id, .. } | Op::Corner { layer, id, .. }) => Some(vec![(*layer, *id)]),
-        Some(Op::Brush { layer, .. } | Op::Smudge { layer, .. } | Op::Clone { layer, .. } | Op::Retouch { layer, .. }) => Some(vec![(*layer, RASTER_ID)]),
+        Some(Op::Brush { layer, .. } | Op::NativeStroke { layer, .. } | Op::NativeRetouch { layer, .. } | Op::Smudge { layer, .. } | Op::Clone { layer, .. } | Op::Retouch { layer, .. }) => Some(vec![(*layer, RASTER_ID)]),
         _ => None,
     }
 }
@@ -810,7 +810,7 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
 }
 
 fn pixel_stroke_active(studio: &Studio) -> bool {
-    matches!(studio.op, Some(Op::Brush { .. } | Op::Retouch { .. } | Op::Smudge { .. } | Op::Clone { .. }))
+    matches!(studio.op, Some(Op::Brush { .. } | Op::NativeStroke { .. } | Op::NativeRetouch { .. } | Op::Retouch { .. } | Op::Smudge { .. } | Op::Clone { .. }))
 }
 
 // Egui can receive several pointer positions between paints. Processing only
@@ -2288,6 +2288,8 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
             }
         }
         Some(Op::Brush { .. }) => super::retouch::brush_drag(studio, world),
+        Some(Op::NativeRetouch { .. }) => super::retouch::native_retouch_drag(studio, world),
+        Some(Op::NativeStroke { .. }) => super::retouch::native_drag(studio, world),
         Some(Op::Retouch { .. }) => super::retouch::drag(studio, world),
         Some(Op::Smudge { .. }) => super::retouch::smudge_drag(studio, world),
         Some(Op::Clone { .. }) => super::retouch::clone_drag(studio, world),
@@ -2498,7 +2500,7 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
 fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) {
     studio.reset_snap_gesture();
     match studio.op.take() {
-        Some(op @ (Op::Brush { .. } | Op::Retouch { .. } | Op::Smudge { .. } | Op::Clone { .. })) => {
+        Some(op @ (Op::Brush { .. } | Op::NativeStroke { .. } | Op::NativeRetouch { .. } | Op::Retouch { .. } | Op::Smudge { .. } | Op::Clone { .. })) => {
             studio.op = Some(op);
             studio.end_pixel_stroke(false);
         }
@@ -4742,7 +4744,7 @@ mod tests {
     fn new_brush_strokes_get_independent_random_patterns() {
         let (_, mut s) = pen_input_studio();
         s.tool = Tool::Brush;
-        s.doc.layers = vec![crate::document::Layer::raster("Paint", 400, 300)];
+        s.doc.layers = vec![crate::document::Layer::raster("Paint", 400, 300).unwrap()];
         s.active_layer = Some(0);
         s.brush.size = 30.;
         s.brush.scatter = 2.;
@@ -4765,7 +4767,7 @@ mod tests {
         use eframe::egui::{Event, Modifiers, TouchDeviceId, TouchId, TouchPhase};
         let (ctx, mut s) = pen_input_studio();
         s.tool = Tool::Brush;
-        s.doc.layers = vec![crate::document::Layer::raster("Paint", 400, 300)];
+        s.doc.layers = vec![crate::document::Layer::raster("Paint", 400, 300).unwrap()];
         s.active_layer = Some(0);
         s.view.offset = Pt::ZERO;
         s.view.scale = 1.;
@@ -4895,7 +4897,7 @@ mod tests {
         use eframe::egui::{Event, Modifiers, TouchDeviceId, TouchId, TouchPhase};
         let (ctx, mut s) = pen_input_studio();
         s.tool = Tool::Brush;
-        s.doc.layers = vec![crate::document::Layer::raster("Paint", 400, 300)];
+        s.doc.layers = vec![crate::document::Layer::raster("Paint", 400, 300).unwrap()];
         s.active_layer = Some(0);
         s.view.offset = Pt::ZERO;
         canvas_frame(&ctx, &mut s, vec![]);

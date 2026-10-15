@@ -435,15 +435,19 @@ impl Exporter<'_> {
         }
     }
     fn shape(&mut self, s: &Shape, l: &Layer, offset: Pt) -> Result<String, String> {
+        let transform = match &s.geom {
+            Geom::Text(run) => Matrix(run.transform.unwrap_or(Matrix::ID.0)),
+            _ => Matrix::ID,
+        }
+        .then(Matrix::translated(offset));
+        let [a, b, c, d, x, y] = transform.0;
         let mut common = format!(
-            "Self=\"item{}\" Name=\"{}\" ItemLayer=\"{}\" Visible=\"{}\" Locked=\"{}\" ItemTransform=\"1 0 0 1 {} {}\"",
+            "Self=\"item{}\" Name=\"{}\" ItemLayer=\"{}\" Visible=\"{}\" Locked=\"{}\" ItemTransform=\"{a} {b} {c} {d} {x} {y}\"",
             s.id,
             xml(&s.name),
             self.layer_id(l.id),
             s.visible,
-            s.locked,
-            offset.x,
-            offset.y
+            s.locked
         );
         let fill = self.color(&s.style.fill);
         let frame_fill = if matches!(s.geom, Geom::Text(_)) {
@@ -477,7 +481,15 @@ impl Exporter<'_> {
                 let xml = self.story(story, t, &fill)?;
                 self.stories.insert(story, xml);
             }
-            let b = shape_bounds(s);
+            let b = if let Some(frame) = &t.frame {
+                Bounds::from_min_size(t.origin - Pt::new(0., t.px * 0.85), frame.size)
+            } else {
+                let mut local = t.clone();
+                local.transform = None;
+                local.layout = None;
+                local.contours = crate::text::shape(&local);
+                Geom::Text(local).bbox()
+            };
             let prev = t
                 .thread
                 .as_ref()
@@ -610,7 +622,7 @@ impl Exporter<'_> {
             l.opacity * 100.
         ))
     }
-    fn story(&self, id: u64, t: &TypeRun, color: &str) -> Result<String, String> {
+    fn story(&mut self, id: u64, t: &TypeRun, color: &str) -> Result<String, String> {
         let mut out = format!(
             "<Story Self=\"story{id}\" TrackChanges=\"false\"><StoryPreference OpticalMarginAlignment=\"false\" FrameType=\"TextFrameType\" StoryOrientation=\"Horizontal\" StoryDirection=\"LeftToRightDirection\"/>"
         );
@@ -638,6 +650,12 @@ impl Exporter<'_> {
                 style.hyphenate
             );
             for s in t.character_style_runs(start, start + count) {
+                let color = s
+                    .fill
+                    .as_ref()
+                    .map(|fill| self.color(fill))
+                    .unwrap_or_else(|| color.to_owned());
+                let px = s.px.unwrap_or(t.px);
                 let font = self.fonts.get(s.font.as_deref().unwrap_or(&t.font));
                 let face_attr = font.map_or(String::new(), |(_, style)| {
                     format!(" FontStyle=\"{}\"", xml(style))
@@ -645,15 +663,15 @@ impl Exporter<'_> {
                 let face_prop = font.map_or(String::new(), |(family, _)| {
                     format!("<AppliedFont type=\"string\">{}</AppliedFont>", xml(family))
                 });
-                let leading = s.leading.map_or(t.line_height(), |l| l.pixels(t.px));
+                let leading = s.leading.map_or(t.line_height(), |l| l.pixels(px));
                 out += &format!(
                     "<CharacterStyleRange AppliedCharacterStyle=\"{}\" FillColor=\"{color}\" PointSize=\"{}\" Tracking=\"{}\" HorizontalScale=\"{}\" VerticalScale=\"{}\" BaselineShift=\"{}\" NoBreak=\"{}\"{face_attr}><Properties>{face_prop}<Leading type=\"unit\">{leading}</Leading></Properties>",
                     xml(s
                         .publishing_style
                         .as_deref()
                         .unwrap_or("CharacterStyle/$ID/[No character style]")),
-                    t.px,
-                    s.tracking.unwrap_or(t.tracking / t.px.max(1.) * 1000.),
+                    px,
+                    s.tracking.unwrap_or(t.tracking / px.max(1.) * 1000.),
                     s.hscale.unwrap_or(100.),
                     s.vscale.unwrap_or(100.),
                     s.baseline_shift.unwrap_or(0.),

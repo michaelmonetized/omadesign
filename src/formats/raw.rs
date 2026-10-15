@@ -7,6 +7,9 @@
 //! JPEG previews are used. The source buffer is borrowed and never modified.
 
 use std::{ffi::c_void, os::raw::c_char};
+mod cancellation;
+pub use cancellation::Cancellation;
+pub mod resources;
 
 // These crates provide the statically built decompression libraries consumed by
 // the C++ bridge. Referencing them retains their native link metadata.
@@ -15,7 +18,8 @@ use mozjpeg_sys as _;
 use serde::{Deserialize, Serialize};
 
 pub const VERSION: &str = "LibRaw 0.22.2";
-pub const MAX_INPUT_BYTES: usize = 512 * 1024 * 1024;
+
+/// Legacy general-document bitmap budget; RAW admission uses resource demand.
 pub const MAX_PIXELS: u64 = 64_000_000;
 pub const EXTENSIONS: &[&str] = &[
     "3fr", "arw", "bay", "cap", "cr2", "cr3", "crw", "dcr", "dcs", "dng", "drf", "erf", "fff",
@@ -54,9 +58,84 @@ pub struct RawImage {
     pub width: u32,
     pub height: u32,
     /// Interleaved, oriented, linear sRGB. Every pixel has exactly 3 channels.
-    pub pixels: Vec<u16>,
+    #[serde(deserialize_with = "restore_samples")]
+    pub pixels: std::sync::Arc<Vec<u16>>,
+    #[serde(skip)]
+    pub(crate) memory: Option<std::sync::Arc<resources::Lease>>,
     pub metadata: RawMetadata,
     pub warnings: Vec<String>,
+}
+
+impl RawImage {
+    /// Admit restored or constructed linear samples to the shared memory pool.
+    /// Args: owning job token. Returns after accounting for samples and bounded previews.
+    pub(crate) fn admit_memory(&mut self, cancel: &Cancellation) -> Result<(), String> {
+        if self.memory.is_none() {
+            let count = u64::from(self.width)
+                .checked_mul(u64::from(self.height))
+                .ok_or("RAW dimensions overflow")?;
+            if count == 0 || count.checked_mul(3) != Some(self.pixels.len() as u64) {
+                return Err("Invalid linear RAW samples".into());
+            }
+            if let Some(lease) = resources::global().retained(&self.pixels) {
+                self.memory = Some(lease);
+                return Ok(());
+            }
+            let lease = resources::global().reserve(
+                resources::retained_demand(count).ok_or("RAW memory demand overflow")?,
+                cancel,
+            )?;
+            resources::global().retain(&self.pixels, lease.clone());
+            self.memory = Some(lease);
+        }
+        Ok(())
+    }
+}
+
+/// Restore the existing JSON sample array with admission before each allocation.
+/// Args: serde array deserializer. Returns shared samples whose lease follows their last clone.
+fn restore_samples<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<std::sync::Arc<Vec<u16>>, D::Error> {
+    struct Samples;
+    impl<'de> serde::de::Visitor<'de> for Samples {
+        type Value = std::sync::Arc<Vec<u16>>;
+        fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("an admitted array of linear RGB16 samples")
+        }
+        fn visit_seq<A: serde::de::SeqAccess<'de>>(
+            self,
+            mut seq: A,
+        ) -> Result<Self::Value, A::Error> {
+            use serde::de::Error;
+            let cancel = Cancellation::default();
+            let lease = resources::global()
+                .reserve(40 * 1024 * 1024, &cancel)
+                .map_err(A::Error::custom)?;
+            let mut values = Vec::new();
+            while let Some(sample) = seq.next_element::<u16>()? {
+                if values.len() == values.capacity() {
+                    let capacity = values
+                        .len()
+                        .checked_add(65536)
+                        .ok_or_else(|| A::Error::custom("RAW sample count overflow"))?;
+                    let bytes = (capacity as u64)
+                        .checked_mul(2)
+                        .and_then(|bytes| bytes.checked_add(40 * 1024 * 1024))
+                        .ok_or_else(|| A::Error::custom("RAW memory demand overflow"))?;
+                    lease.resize(bytes, &cancel).map_err(A::Error::custom)?;
+                    values
+                        .try_reserve_exact(capacity - values.len())
+                        .map_err(A::Error::custom)?;
+                }
+                values.push(sample);
+            }
+            let values = std::sync::Arc::new(values);
+            resources::global().retain(&values, lease);
+            Ok(values)
+        }
+    }
+    deserializer.deserialize_seq(Samples)
 }
 
 #[repr(C)]
@@ -86,7 +165,18 @@ struct NativeImage {
 }
 
 unsafe extern "C" {
-    fn oma_raw_decode(bytes: *const u8, length: usize, image: *mut NativeImage) -> i32;
+    fn oma_raw_decode(
+        bytes: *const u8,
+        length: usize,
+        image: *mut NativeImage,
+        cancelled: unsafe extern "C" fn(*const c_void) -> i32,
+        context: *const c_void,
+        progress: unsafe extern "C" fn(*const c_void, u32),
+        reserve: unsafe extern "C" fn(*const c_void, u64) -> i32,
+        memory_context: *const c_void,
+        memory_limit: u64,
+        sensor_only: i32,
+    ) -> i32;
     fn oma_raw_free(owner: *mut c_void);
 }
 
@@ -98,24 +188,104 @@ impl Drop for NativeImage {
     }
 }
 
+/// Release native pixels before their reservation and decoder lock.
+/// Args: completed native image, admitted memory and exclusive decoder guard.
+/// Returns an owner that preserves this cleanup order on every error path.
+struct NativeDecoded {
+    image: NativeImage,
+    lease: std::sync::Arc<resources::Lease>,
+    _decoder: std::sync::MutexGuard<'static, ()>,
+}
+
 pub fn decode(bytes: &[u8]) -> Result<RawImage, String> {
-    if bytes.is_empty() || bytes.len() > MAX_INPUT_BYTES {
-        return Err("RAW input must contain between 1 byte and 512 MiB".into());
+    decode_cancellable(bytes, &Cancellation::default())
+}
+
+/// Decode untouched camera bytes with active cancellation.
+/// Args: encoded source and a job-owned token. Returns oriented linear RGB16 or a decoding/cancellation error.
+pub fn decode_cancellable(bytes: &[u8], cancel: &Cancellation) -> Result<RawImage, String> {
+    let input = resources::global().reserve(bytes.len() as u64, cancel)?;
+    decode_reserved(bytes, cancel, &input)
+}
+
+fn native_decode(
+    bytes: &[u8],
+    cancel: &Cancellation,
+    sensor_only: bool,
+) -> Result<NativeDecoded, String> {
+    cancel.check()?;
+    if bytes.is_empty() {
+        return Err("RAW input must not be empty".into());
     }
+    let _decoder = resources::decoder(cancel)?;
+    let admission = Admission {
+        cancel,
+        lease: resources::global().reserve(64 * 1024 * 1024, cancel)?,
+        error: std::sync::Mutex::new(None),
+    };
     // SAFETY: Every field is a plain number, fixed byte array, or nullable raw
     // pointer. All-zero initialization is valid, including the Drop owner.
     let mut native: NativeImage = unsafe { std::mem::zeroed() };
     // SAFETY: The borrowed byte buffer remains alive through synchronous decode.
     // The C++ adapter validates input/layout, catches exceptions and writes only
     // within the exactly matching repr(C) output. It never retains input bytes.
-    let result = unsafe { oma_raw_decode(bytes.as_ptr(), bytes.len(), &mut native) };
+    let active = cancel.native_activity();
+    let result = unsafe {
+        oma_raw_decode(
+            bytes.as_ptr(),
+            bytes.len(),
+            &mut native,
+            cancellation::cancelled,
+            (cancel as *const Cancellation).cast(),
+            cancellation::progress,
+            reserve_native,
+            (&admission as *const Admission).cast(),
+            resources::global().usage().1,
+            i32::from(sensor_only),
+        )
+    };
+    drop(active);
+    let decoded = NativeDecoded {
+        image: native,
+        lease: admission.lease,
+        _decoder,
+    };
+    cancel.check()?;
+    if let Some(error) = admission
+        .error
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take()
+    {
+        return Err(error);
+    }
     if result != 0 {
-        let error = text(&native.error);
+        let error = text(&decoded.image.error);
         return Err(format!("Could not decode camera RAW: {error}"));
     }
+    Ok(decoded)
+}
+
+pub(crate) fn decode_reserved(
+    bytes: &[u8],
+    cancel: &Cancellation,
+    input: &resources::Lease,
+) -> Result<RawImage, String> {
+    cancel.check()?;
+    if input.bytes() < bytes.len() as u64 {
+        return Err("RAW input is not covered by its memory reservation".into());
+    }
+    if bytes.is_empty() {
+        return Err("RAW input must not be empty".into());
+    }
+    let decoded = native_decode(bytes, cancel, false)?;
+    let native = &decoded.image;
+    let lease = decoded.lease.clone();
     let count = u64::from(native.width) * u64::from(native.height);
     if count == 0
-        || count > MAX_PIXELS
+        || count
+            .checked_mul(6)
+            .is_none_or(|bytes| bytes > isize::MAX as u64)
         || native.bits != 16
         || !matches!(native.colors, 1 | 3)
         || native.data_size != count * u64::from(native.colors) * 2
@@ -137,15 +307,24 @@ pub fn decode(bytes: &[u8]) -> Result<RawImage, String> {
         // bit pattern is valid. LibRaw memory images use host byte order. Copy
         // once rather than walking millions of samples in a development build.
         unsafe {
-            std::ptr::copy_nonoverlapping(
-                samples.as_ptr(),
-                pixels.as_mut_ptr().cast::<u8>(),
-                samples.len(),
-            );
+            for (index, chunk) in samples.chunks(4 * 1024 * 1024).enumerate() {
+                cancel.check()?;
+                std::ptr::copy_nonoverlapping(
+                    chunk.as_ptr(),
+                    pixels
+                        .as_mut_ptr()
+                        .cast::<u8>()
+                        .add(index * 4 * 1024 * 1024),
+                    chunk.len(),
+                );
+            }
             pixels.set_len(count as usize * 3);
         }
     } else {
-        for sample in samples.as_chunks::<2>().0 {
+        for (index, sample) in samples.as_chunks::<2>().0.iter().enumerate() {
+            if index % 65536 == 0 {
+                cancel.check()?;
+            }
             let value = u16::from_ne_bytes([sample[0], sample[1]]);
             pixels.extend([value; 3]);
         }
@@ -169,10 +348,14 @@ pub fn decode(bytes: &[u8]) -> Result<RawImage, String> {
             native.raw_count
         ));
     }
-    Ok(RawImage {
+    cancel.check()?;
+    let pixels = std::sync::Arc::new(pixels);
+    let retained_bytes = resources::retained_demand(count).ok_or("RAW memory demand overflow")?;
+    let image = RawImage {
         width: native.width,
         height: native.height,
-        pixels,
+        pixels: pixels.clone(),
+        memory: Some(lease.clone()),
         metadata: RawMetadata {
             make: text(&native.make),
             model: text(&native.model),
@@ -193,7 +376,29 @@ pub fn decode(bytes: &[u8]) -> Result<RawImage, String> {
             timestamp: native.timestamp,
         },
         warnings,
-    })
+    };
+    drop(decoded);
+    lease.resize(retained_bytes, cancel)?;
+    resources::global().retain(&pixels, lease.clone());
+    Ok(image)
+}
+
+struct Admission<'a> {
+    cancel: &'a Cancellation,
+    lease: std::sync::Arc<resources::Lease>,
+    error: std::sync::Mutex<Option<String>>,
+}
+
+unsafe extern "C" fn reserve_native(context: *const c_void, bytes: u64) -> i32 {
+    // SAFETY: the synchronous native call borrows Admission until all callbacks return.
+    let admission = unsafe { &*context.cast::<Admission>() };
+    match admission.lease.resize(bytes, admission.cancel) {
+        Ok(()) => 0,
+        Err(error) => {
+            *admission.error.lock().unwrap_or_else(|e| e.into_inner()) = Some(error);
+            1
+        }
+    }
 }
 
 fn positive(value: f32) -> f32 {
@@ -221,3 +426,61 @@ fn text<const N: usize>(field: &[c_char; N]) -> String {
 #[cfg(test)]
 #[path = "raw/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "raw/qualification.rs"]
+mod qualification;
+
+#[cfg(test)]
+struct SensorImage {
+    width: u32,
+    height: u32,
+    samples: std::sync::Arc<resources::Allocation<u16>>,
+}
+
+#[cfg(test)]
+fn decode_sensor(bytes: &[u8], cancel: &Cancellation) -> Result<SensorImage, String> {
+    let _input = resources::global().reserve(bytes.len() as u64, cancel)?;
+    let decoded = native_decode(bytes, cancel, true)?;
+    let native = &decoded.image;
+    let lease = decoded.lease.clone();
+    let count = u64::from(native.width) * u64::from(native.height);
+    if count == 0
+        || count.checked_mul(2) != Some(native.data_size)
+        || native.colors != 1
+        || native.bits != 16
+        || native.data.is_null()
+        || native.data_size > isize::MAX as u64
+    {
+        return Err("Invalid sensor reference plane".into());
+    }
+    let mut values: Vec<u16> = Vec::new();
+    values
+        .try_reserve_exact(count as usize)
+        .map_err(|_| "Not enough memory for the sensor reference")?;
+    // SAFETY: validated native storage remains owned through this bounded copy; u16 has no invalid bit patterns.
+    unsafe {
+        let bytes = std::slice::from_raw_parts(native.data, native.data_size as usize);
+        for (index, chunk) in bytes.chunks(4 * 1024 * 1024).enumerate() {
+            cancel.check()?;
+            std::ptr::copy_nonoverlapping(
+                chunk.as_ptr(),
+                values
+                    .as_mut_ptr()
+                    .cast::<u8>()
+                    .add(index * 4 * 1024 * 1024),
+                chunk.len(),
+            );
+        }
+        values.set_len(count as usize);
+    }
+    let (width, height) = (native.width, native.height);
+    drop(decoded);
+    lease.resize(values.capacity() as u64 * 2, cancel)?;
+    let samples = resources::global().adopt(values, lease)?;
+    Ok(SensorImage {
+        width,
+        height,
+        samples,
+    })
+}

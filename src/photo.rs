@@ -1,8 +1,12 @@
+pub mod catalog;
 pub mod edits;
+pub mod local;
+pub mod optics;
 pub mod presets;
 mod raw_photo;
 pub mod transfer;
 pub use raw_photo::LinearImage;
+pub use raw_photo::{AdmittedImage, AdmittedSamples, EncodedPhoto};
 
 use image::ImageEncoder;
 use rayon::prelude::*;
@@ -107,6 +111,10 @@ pub struct DevelopParams {
     pub hsl: [HslBand; 8],
     pub rotate: u32,
     pub crop: Option<[f32; 4]>,
+    #[serde(default, skip_serializing_if = "optics::OpticalSettings::is_default")]
+    pub optics: optics::OpticalSettings,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub local_adjustments: Vec<local::LocalAdjustment>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -155,6 +163,8 @@ impl Default for DevelopParams {
             hsl: [HslBand::default(); 8],
             rotate: 0,
             crop: None,
+            optics: Default::default(),
+            local_adjustments: vec![],
         }
     }
 }
@@ -203,34 +213,6 @@ pub struct PhotoImage {
 }
 
 impl PhotoImage {
-    /// Small live preview, including saved edits, crop, rotation and linear RAW
-    /// adjustments. It never renders or retains a full-resolution developed image.
-    pub fn render_thumbnail(&self, max_edge: u32) -> RgbaImage {
-        if let Some(raw) = &self.raw_preview {
-            let scale = (max_edge as f32 / raw.w.max(raw.h) as f32).min(1.0);
-            let w = (raw.w as f32 * scale).round().max(1.0) as u32;
-            let h = (raw.h as f32 * scale).round().max(1.0) as u32;
-            let mut pixels = Vec::with_capacity(w as usize * h as usize * 3);
-            for y in 0..h {
-                for x in 0..w {
-                    let sx = (x as u64 * raw.w as u64 / w as u64) as u32;
-                    let sy = (y as u64 * raw.h as u64 / h as u64) as u32;
-                    let index = (sy as usize * raw.w as usize + sx as usize) * 3;
-                    pixels.extend_from_slice(&raw.pixels[index..index + 3]);
-                }
-            }
-            let mut params = self.develop.clone();
-            params.exposure += self
-                .raw
-                .as_ref()
-                .map_or(0.0, |raw| raw.metadata.baseline_exposure);
-            let (w, h, data) = develop_inner::<u8>(DevelopSource::linear(w, h, &pixels), &params);
-            RgbaImage { w, h, data }
-        } else {
-            develop(&self.preview.downscaled(max_edge), &self.develop)
-        }
-    }
-
     pub fn from_full(name: String, full: RgbaImage) -> Self {
         let preview = std::sync::Arc::new(full.downscaled(1600));
         let thumb = std::sync::Arc::new(full.downscaled(192));
@@ -339,6 +321,11 @@ impl OutputChannel for u16 {
         (value.clamp(0., 1.) * 65535.).round() as u16
     }
 }
+impl OutputChannel for f32 {
+    fn encode(value: f32) -> Self {
+        value
+    }
+}
 fn srgb_encode(linear: f32) -> f32 {
     let x = linear.clamp(0., 1.);
     if x <= 0.0031308 {
@@ -351,11 +338,40 @@ fn develop_inner<T: OutputChannel>(
     src: DevelopSource<'_>,
     p: &DevelopParams,
 ) -> (u32, u32, Vec<T>) {
+    develop_checked(src, p, &crate::ml::NoProgress).expect("photo preview allocation")
+}
+
+/// Develop admitted pixels with cancellation between bounded pieces of work.
+/// Args: source, saved adjustments and progress owner. Returns straight encoded RGBA or an allocation/cancellation error.
+fn develop_checked<T: OutputChannel>(
+    src: DevelopSource<'_>,
+    p: &DevelopParams,
+    progress: &dyn crate::ml::Progress,
+) -> Result<(u32, u32, Vec<T>), String> {
+    progress.check()?;
     let (rw, rh) = p.rotated_dim(src.w, src.h);
     let (cw, ch) = p.output_dim(src.w, src.h);
 
-    let n = src.w as usize * src.h as usize;
-    let mut col = vec![0f32; n * 3];
+    let n = (src.w as usize)
+        .checked_mul(src.h as usize)
+        .filter(|n| *n > 0)
+        .ok_or("Invalid photo dimensions")?;
+    let mut col = photo_buffer(n.checked_mul(3).ok_or("Photo dimensions overflow")?)?;
+    let optical = p.optics.active();
+    let mut opacity = if optical {
+        Some(photo_buffer(n)?)
+    } else {
+        None
+    };
+    if let Some(alpha) = &mut opacity {
+        alpha.par_iter_mut().enumerate().try_for_each(|(i, a)| {
+            if i % 4096 == 0 {
+                progress.check()?;
+            }
+            *a = p.optics.sample(src, i)[3];
+            Ok::<_, String>(())
+        })?;
+    }
 
     let exp = 2f32.powf(p.exposure);
     let t = p.temperature.clamp(-100.0, 100.0) / 100.0;
@@ -375,13 +391,35 @@ fn develop_inner<T: OutputChannel>(
             .iter()
             .any(|band| band.hue.abs() + band.sat.abs() + band.luma.abs() > 0.001);
 
-    col.par_chunks_mut(3).enumerate().for_each(|(i, px)| {
-        let [mut r, mut g, mut b, a] = src.pixel(i);
+    col.par_chunks_mut(3).enumerate().try_for_each(|(i, px)| {
+        if i % 4096 == 0 {
+            progress.check()?;
+        }
+        let [mut r, mut g, mut b, a] = if optical {
+            p.optics.sample(src, i)
+        } else {
+            src.pixel(i)
+        };
 
         if a > 0.0 {
+            let local = p.local_adjustments.iter().any(|a| a.enabled);
+            if local {
+                if src.linear.is_none() && !optical {
+                    r = optics::srgb_decode(r);
+                    g = optics::srgb_decode(g);
+                    b = optics::srgb_decode(b);
+                }
+                let point = [
+                    ((i % src.w as usize) as f32 + 0.5) / src.w as f32,
+                    ((i / src.w as usize) as f32 + 0.5) / src.h as f32,
+                ];
+                for adjustment in &p.local_adjustments {
+                    [r, g, b] = adjustment.apply([r, g, b], point, src.w as f32 / src.h as f32);
+                }
+            }
             // RAW exposure and WB operate on scene-linear channels before the
             // display transfer curve. Original 16-bit samples remain unchanged.
-            if src.linear.is_some() {
+            if src.linear.is_some() || optical || local {
                 r = srgb_encode(r * exp * temp_r);
                 g = srgb_encode(g * exp * temp_g);
                 b = srgb_encode(b * exp * temp_b);
@@ -469,17 +507,28 @@ fn develop_inner<T: OutputChannel>(
         px[0] = r;
         px[1] = g;
         px[2] = b;
-    });
+        Ok::<_, String>(())
+    })?;
 
     if p.clarity.abs() > 0.001 {
-        let lum: Vec<f32> = col
-            .par_chunks(3)
-            .map(|px| pixel_luma(px[0], px[1], px[2]))
-            .collect();
+        let mut lum: Vec<f32> = photo_buffer(n)?;
+        lum.par_iter_mut()
+            .zip(col.par_chunks(3))
+            .enumerate()
+            .try_for_each(|(i, (out, px))| {
+                if i % 4096 == 0 {
+                    progress.check()?;
+                }
+                *out = pixel_luma(px[0], px[1], px[2]);
+                Ok::<_, String>(())
+            })?;
         let radius = ((src.w.min(src.h)) as f32 / 260.0).clamp(2.0, 10.0) as usize;
-        let bl = box_blur(&lum, src.w as usize, src.h as usize, radius);
+        let bl = box_blur_checked(&lum, src.w as usize, src.h as usize, radius, progress)?;
         let c = (p.clarity.clamp(-1.0, 1.0) * 3.0) / (1.0 + radius as f32 * 0.5);
-        col.par_chunks_mut(3).enumerate().for_each(|(i, px)| {
+        col.par_chunks_mut(3).enumerate().try_for_each(|(i, px)| {
+            if i % 4096 == 0 {
+                progress.check()?;
+            }
             let l = lum[i];
             let delta = (l - bl[i]) * c;
             let nl = pil(l + delta);
@@ -489,16 +538,22 @@ fn develop_inner<T: OutputChannel>(
                 px[1] = pil(px[1] * f);
                 px[2] = pil(px[2] * f);
             }
-        });
+            Ok::<_, String>(())
+        })?;
     }
 
     let grain = p.grain.clamp(0.0, 1.0);
     let vign = p.vignette.clamp(-1.0, 1.0);
 
-    let mut out = vec![T::default(); cw as usize * ch as usize * 4];
+    let count = (cw as usize)
+        .checked_mul(ch as usize)
+        .and_then(|n| n.checked_mul(4))
+        .ok_or("Photo output dimensions overflow")?;
+    let mut out = photo_buffer(count)?;
     out.par_chunks_mut(cw as usize * 4)
         .enumerate()
-        .for_each(|(y, row)| {
+        .try_for_each(|(y, row)| {
+            progress.check()?;
             for (x, px) in row.chunks_mut(4).enumerate() {
                 let sw = src.w as f64;
                 let sh = src.h as f64;
@@ -540,7 +595,10 @@ fn develop_inner<T: OutputChannel>(
                 let sxr = ix as usize;
                 let syr = iy as usize;
                 let si = (syr * src.w as usize + sxr) * 3;
-                let a = src.alpha(sxr as u32, syr as u32);
+                let a = opacity.as_ref().map_or_else(
+                    || src.alpha(sxr as u32, syr as u32),
+                    |alpha| alpha[syr * src.w as usize + sxr],
+                );
                 let (mut r, mut g, mut b) = (col[si], col[si + 1], col[si + 2]);
 
                 if vign.abs() > 0.001 {
@@ -575,9 +633,20 @@ fn develop_inner<T: OutputChannel>(
                 px[2] = T::encode(b);
                 px[3] = T::encode(a);
             }
-        });
+            Ok::<_, String>(())
+        })?;
 
-    (cw, ch, out)
+    progress.check()?;
+    Ok((cw, ch, out))
+}
+
+fn photo_buffer<T: Default + Clone>(count: usize) -> Result<Vec<T>, String> {
+    let mut values = Vec::new();
+    values
+        .try_reserve_exact(count)
+        .map_err(|_| "Not enough memory to develop this photo")?;
+    values.resize(count, T::default());
+    Ok(values)
 }
 
 fn rgb_to_hsl(r: f32, g: f32, b: f32) -> (f32, f32, f32) {
@@ -624,29 +693,44 @@ fn eval_curve(x: f32, pts: &[f32; 5]) -> f32 {
 }
 
 fn box_blur(lum: &[f32], w: usize, h: usize, radius: usize) -> Vec<f32> {
+    box_blur_checked(lum, w, h, radius, &crate::ml::NoProgress).expect("photo preview allocation")
+}
+fn box_blur_checked(
+    lum: &[f32],
+    w: usize,
+    h: usize,
+    radius: usize,
+    progress: &dyn crate::ml::Progress,
+) -> Result<Vec<f32>, String> {
     let win = radius * 2 + 1;
-    let mut horiz = vec![0f32; w * h];
-    horiz.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
-        let source = &lum[y * w..(y + 1) * w];
-        let mut sum = source[0] * radius as f32;
-        for x in 0..=radius {
-            sum += source[x.min(w - 1)];
-        }
-        for (x, pixel) in row.iter_mut().enumerate() {
-            *pixel = sum / win as f32;
-            sum -= source[x.saturating_sub(radius)];
-            sum += source[(x + radius + 1).min(w - 1)];
-        }
-    });
+    let mut horiz = photo_buffer(w.checked_mul(h).ok_or("Photo dimensions overflow")?)?;
+    horiz
+        .par_chunks_mut(w)
+        .enumerate()
+        .try_for_each(|(y, row)| {
+            progress.check()?;
+            let source = &lum[y * w..(y + 1) * w];
+            let mut sum = source[0] * radius as f32;
+            for x in 0..=radius {
+                sum += source[x.min(w - 1)];
+            }
+            for (x, pixel) in row.iter_mut().enumerate() {
+                *pixel = sum / win as f32;
+                sum -= source[x.saturating_sub(radius)];
+                sum += source[(x + radius + 1).min(w - 1)];
+            }
+            Ok::<_, String>(())
+        })?;
 
-    let mut vert = vec![0f32; w * h];
+    let mut vert = photo_buffer(w * h)?;
     // Each strip owns complete output rows; vertical sums stay contiguous in memory.
     const STRIP_ROWS: usize = 64;
     vert.par_chunks_mut(w * STRIP_ROWS)
         .enumerate()
-        .for_each(|(strip_index, strip)| {
+        .try_for_each(|(strip_index, strip)| {
+            progress.check()?;
             let start_y = strip_index * STRIP_ROWS;
-            let mut sums = vec![0f32; w];
+            let mut sums: Vec<f32> = photo_buffer(w)?;
             for offset in 0..win {
                 let y = (start_y + offset).saturating_sub(radius).min(h - 1);
                 for (sum, value) in sums.iter_mut().zip(&horiz[y * w..(y + 1) * w]) {
@@ -654,6 +738,7 @@ fn box_blur(lum: &[f32], w: usize, h: usize, radius: usize) -> Vec<f32> {
                 }
             }
             for (offset, row) in strip.chunks_exact_mut(w).enumerate() {
+                progress.check()?;
                 let y = start_y + offset;
                 let remove = y.saturating_sub(radius) * w;
                 let add = (y + radius + 1).min(h - 1) * w;
@@ -662,8 +747,9 @@ fn box_blur(lum: &[f32], w: usize, h: usize, radius: usize) -> Vec<f32> {
                     *sum += horiz[add + x] - horiz[remove + x];
                 }
             }
-        });
-    vert
+            Ok::<_, String>(())
+        })?;
+    Ok(vert)
 }
 
 #[derive(Clone, Copy)]
@@ -973,21 +1059,23 @@ mod tests {
             crate::formats::raw::RawImage {
                 width: 80,
                 height: 40,
-                pixels: [4096, 4096, 4096].repeat(80 * 40),
+                pixels: [4096, 4096, 4096].repeat(80 * 40).into(),
+                memory: None,
                 metadata: crate::formats::raw::RawMetadata {
                     baseline_exposure: 0.5,
                     ..Default::default()
                 },
                 warnings: vec![],
             },
-        );
+        )
+        .unwrap();
         for mut image in [raster, raw] {
-            let before = image.render_thumbnail(80);
-            assert_eq!(before, image.render_preview());
+            let before = image.render_thumbnail(80).unwrap();
+            assert_eq!(before, image.render_preview().unwrap());
             image.develop.exposure = 1.0;
             image.develop.rotate = 90;
             image.develop.crop = Some([0.0, 0.0, 1.0, 0.5]);
-            let after = image.render_thumbnail(40);
+            let after = image.render_thumbnail(40).unwrap();
             assert_eq!((after.w, after.h), (20, 20));
             assert!(after.data[0] > before.data[0]);
         }

@@ -1161,7 +1161,7 @@ impl Reader<'_> {
         let name = self.name(node.id(), "Appearance");
         let mut layer = Layer::placed_raster(
             name.clone(),
-            Pixels::from_pixmap(&pm),
+            Pixels::from_pixmap(&pm)?,
             Pt::new(left, top),
             Pt::new(w as f32, h as f32),
         );
@@ -1985,8 +1985,8 @@ mod tests {
         let tree = usvg::Tree::from_str(source, &usvg::Options::default()).unwrap();
         let mut expected = tiny_skia::Pixmap::new(40, 30).unwrap();
         resvg::render(&tree, Transform::identity(), &mut expected.as_mut());
-        let expected = Pixels::from_pixmap(&expected);
-        assert_eq!(actual.data, expected.data);
+        let expected = Pixels::from_pixmap(&expected).unwrap();
+        assert_eq!(actual.data.as_slice(), expected.data.as_slice());
         let exported = crate::svg::export(&doc).unwrap();
         let (roundtrip, _) = read(&exported, "again").unwrap();
         assert_eq!(

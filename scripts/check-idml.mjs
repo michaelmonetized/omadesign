@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
  * Inspect a publishing export independently with Node and libxml2.
- * Args: output IDML; optional --master-source IDML --native OMA, --master-image FILE --unavailable-source DIR. Returns a JSON receipt or rejects broken references and payloads.
+ * Args: output IDML; optional --master-source IDML --native OMA, --master-image FILE --unavailable-source DIR, --text-evidence JSON. Returns a JSON receipt or rejects broken references and payloads.
  */
 import fs from 'node:fs';
 import zlib from 'node:zlib';
 import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import assert from 'node:assert/strict';
+import path from 'node:path';
 
 function zipParts(file) {
   const bytes = fs.readFileSync(file), parts = new Map(), entries = [];
@@ -55,6 +56,7 @@ const file = process.argv[2], args = process.argv.slice(3);
 const option = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
 const sourceFile = option('--master-source'), nativeFile = option('--native');
 const externalImage = option('--master-image'), unavailableSource = option('--unavailable-source');
+const textEvidence = option('--text-evidence');
 assert.equal(Boolean(sourceFile), Boolean(nativeFile), 'master inspection needs both source and native project');
 assert.equal(Boolean(externalImage), Boolean(unavailableSource), 'source-folder inspection needs an image and the unavailable original source directory');
 if (unavailableSource) assert(!fs.existsSync(unavailableSource), 'original source folder must be unavailable');
@@ -82,7 +84,7 @@ for (const [key, value] of Object.entries({Top:9, InsideOrLeft:12, Bottom:15, Ou
 const stories = xmls.filter(([n]) => n.startsWith('Stories/'));
 assert.equal(stories.length, 1);
 const story = stories[0][1].toString();
-assert(story.includes(sourceFile ? 'Café &amp; typography' : 'Edited café'));
+if (!textEvidence) assert(story.includes(sourceFile ? 'Café &amp; typography' : 'Edited café'));
 assert(!story.includes('<Table') && !story.includes('<Note'));
 assert(story.includes('CharacterStyle/Emphasis'));
 const images = spreads.map(([, text]) => text.toString()).join('');
@@ -131,6 +133,88 @@ if (sourceFile) {
     layerReferences:layerRefs, ownedPayloads:payloads, unavailableOriginalSource:unavailableSource,
     hiddenInheritedRasterStatePreserved:externalImage ? true : undefined, exactSavedTableAndNoteWarnings:true};
 }
+let textChecks;
+if (textEvidence) {
+  assert(nativeFile, 'mixed type inspection needs the native project');
+  const expected = JSON.parse(fs.readFileSync(textEvidence));
+  const scalar = query => xpath(story, `string(${query})`).trim();
+  const characters = [];
+  const paragraphs = Number(xpath(story, 'count(//Story/ParagraphStyleRange)'));
+  for (let p = 1; p <= paragraphs; p++) {
+    const paragraph = `(//Story/ParagraphStyleRange)[${p}]`;
+    const paragraphStyle = scalar(`${paragraph}/@AppliedParagraphStyle`);
+    const count = Number(xpath(story, `count(${paragraph}/CharacterStyleRange)`));
+    for (let c = 1; c <= count; c++) {
+      const range = `${paragraph}/CharacterStyleRange[${c}]`;
+      assert(Number(xpath(story, `count(${range}/Content)`)) <= 1);
+      assert.equal(Number(xpath(story, `count(${range}/Tab)`)), 0);
+      const text = xpath(story, `string(${range}/Content)`).replace(/\n$/, '') + '\n'.repeat(Number(xpath(story, `count(${range}/Br)`)));
+      const colorId = scalar(`${range}/@FillColor`);
+      const graphic = parts.get('Resources/Graphic.xml');
+      const color = xpath(graphic, `string(//Color[@Self=${literal(colorId)}]/@ColorValue)`).trim().split(/\s+/).map(Number).concat(255);
+      const style = {family:scalar(`${range}/Properties/AppliedFont`), face:scalar(`${range}/@FontStyle`), px:Number(scalar(`${range}/@PointSize`)), color,
+        hscale:Number(scalar(`${range}/@HorizontalScale`)), vscale:Number(scalar(`${range}/@VerticalScale`)), tracking:Number(scalar(`${range}/@Tracking`)),
+        leading:Number(scalar(`${range}/Properties/Leading`)), baseline_shift:Number(scalar(`${range}/@BaselineShift`)), paragraph_style:paragraphStyle,
+        character_style:scalar(`${range}/@AppliedCharacterStyle`)};
+      if (style.character_style === 'CharacterStyle/$ID/[No character style]') style.character_style = null;
+      for (const character of text) characters.push({character, ...style});
+    }
+  }
+  assert.deepEqual(characters, expected.characters, 'logical Unicode characters/effective fonts, sizes, scales, paint and style order');
+  const families = [...new Set(characters.map(c => c.family))].sort();
+  assert.deepEqual(families, ['Liberation Sans', 'Liberation Serif']);
+  const frameMap = new Map();
+  for (const [page, [, xml]] of spreads.entries()) {
+    const pageMatrix = xpath(xml, 'string(//Page/@ItemTransform)').trim().split(/\s+/).map(Number);
+    for (const id of attrs(xml, '//TextFrame/@Self')) {
+      const frame = `//TextFrame[@Self=${literal(id)}]`;
+      const value = attr => xpath(xml, `string(${frame}/@${attr})`).trim();
+      const matrix = value('ItemTransform').split(/\s+/).map(Number);
+      matrix[4] -= pageMatrix[4]; matrix[5] -= pageMatrix[5];
+      frameMap.set(id, {name:value('Name'), page, transform:matrix, bounds:value('GeometricBounds').split(/\s+/).map(Number), prev:value('PreviousTextFrame'), next:value('NextTextFrame'), story:value('ParentStory')});
+    }
+  }
+  let current = [...frameMap].find(([, f]) => f.prev === 'n');
+  const frames = [];
+  while (current) {
+    const [id, frame] = current;
+    assert(frames.length < frameMap.size);
+    const reference = expected.frames[frames.length];
+    assert.equal(frame.name, reference.name); assert.equal(frame.page, reference.page);
+    for (const key of ['transform', 'bounds']) frame[key].forEach((n, i) => assert(Math.abs(n - reference[key][i]) < 0.0001, `${key} ${frame.name}`));
+    frames.push(frame);
+    if (frame.next === 'n') break;
+    const next = frameMap.get(frame.next);
+    assert(next && next.prev === id && next.story === frame.story);
+    current = [frame.next, next];
+  }
+  assert.equal(frames.length, 2); assert.equal(frames.length, frameMap.size);
+  const native = JSON.parse(fs.readFileSync(nativeFile));
+  assert.equal(native.version, 23, 'Publishing requires its assigned common reader');
+  let archive = path.dirname(path.resolve(nativeFile));
+  while (!fs.existsSync(path.join(archive, '.omabrand/fonts'))) {
+    const parent = path.dirname(archive); assert.notEqual(parent, archive, 'missing portable archive'); archive = parent;
+  }
+  const portableFonts = expected.portable_font_ids.map(id => {
+    const file = path.join(archive, '.omabrand/fonts', `${id.replace('omatype:', '')}.ttf`);
+    const bytes = fs.readFileSync(file);
+    const scan = spawnSync('fc-scan', ['--format', '%{family}\n%{style}\n', file], {encoding:'utf8'});
+    assert.equal(scan.status, 0, scan.stderr);
+    const [family, face] = scan.stdout.trim().split('\n');
+    assert(characters.some(c => c.family === family && c.face === face));
+    return {id, file, bytes:bytes.length, sha256:sha(bytes), family, face};
+  });
+  assert.equal(portableFonts.length, 2);
+  const head = native.doc.layers.flatMap(l => l.kind.Vector?.shapes ?? []).map(s => s.geom.Text).find(t => t?.content);
+  assert(head.spans.some(s => s.font === expected.portable_font_ids[1]));
+  assert.notEqual(head.font, expected.portable_font_ids[1], 'second family must be span-only');
+  const cold = JSON.parse(fs.readFileSync(path.join(path.dirname(nativeFile), 'cold-reopen.json')));
+  assert.equal(cold.cold_font_cache, true);
+  assert(cold.native_mean_channel_error.every(n => n < 0.1));
+  assert(cold.idml_mean_channel_error.every(n => n < 0.1));
+  textChecks = {logicalCharacters:characters.length, families, frames, portableFonts, spanOnlyFamilyArchived:true, coldReopen:true, nativeSchema:23,
+    nativeMeanChannelError:cold.native_mean_channel_error, idmlMeanChannelError:cold.idml_mean_channel_error, maximumAllowedMeanChannelError:0.1};
+}
 console.log(JSON.stringify({file, sha256:sha(bytes), zipEntries:entries.length, xmlParts:xmls.length, pages,
   stories:stories.length, masterSpreads:masters.length, uniqueIds:ids.size, checkedReferences:refs,
-  embeddedPng:true, linkedUrisRetained:true, unsupportedTablesNotesAbsent:true, masterChecks, bytes:bytes.length}, null, 2));
+  embeddedPng:true, linkedUrisRetained:true, unsupportedTablesNotesAbsent:true, masterChecks, textChecks, bytes:bytes.length}, null, 2));

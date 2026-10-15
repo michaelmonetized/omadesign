@@ -238,6 +238,21 @@ struct AllocationBudget {
     allowance: usize,
 }
 impl AllocationBudget {
+    /// Count retained image allocations. Args: decoded pixels. Returns an error above the import allowance.
+    fn charge_pixels(&mut self, pixels: &crate::document::Pixels) -> Result<(), String> {
+        let (samples, cmyk, profile) = pixels.native.as_ref().map_or((0, 0, 0), |native| {
+            (
+                native.samples.bytes(),
+                native.cmyk.as_ref().map_or(0, |inks| inks.bytes()),
+                native.icc_profile.bytes(),
+            )
+        });
+        for bytes in [pixels.data.bytes(), samples, cmyk, profile] {
+            self.charge(usize::try_from(bytes).map_err(|_| "IDML allocation budget overflow")?)?;
+        }
+        Ok(())
+    }
+
     /// Reserve owned buffers before duplication. Args: byte count. Returns an error above the aggregate allowance.
     fn charge(&mut self, bytes: usize) -> Result<(), String> {
         self.used = self
@@ -661,14 +676,7 @@ impl Importer<'_> {
                     .and_then(|id| self.colors.get(id))
                     .copied()
                     .unwrap_or(Rgba::BLACK);
-                if let Some(first) = story_color {
-                    if first != color {
-                        warn(
-                            &mut self.notes,
-                            "Mixed IDML text colors are displayed in the first text color; named color styles remain in the package.",
-                        );
-                    }
-                } else {
+                if story_color.is_none() {
                     story_color = Some(color);
                 }
                 let font = self.font(&a);
@@ -680,7 +688,6 @@ impl Importer<'_> {
                 }
                 let start = run.content.chars().count();
                 content(c, &mut run.content);
-                let ratio = size / run.px;
                 let leading = a
                     .get("Leading")
                     .filter(|v| v.as_str() != "Auto")
@@ -692,10 +699,12 @@ impl Importer<'_> {
                     end: run.content.chars().count(),
                     publishing_style: c.attribute("AppliedCharacterStyle").map(str::to_owned),
                     font: (font != run.font).then_some(font),
+                    px: Some(size),
+                    fill: Some(Fill::Solid(color)),
                     tracking: Some(number(&a, "Tracking", 0.)?),
                     leading: Some(leading),
-                    hscale: Some(number(&a, "HorizontalScale", 100.)? * ratio),
-                    vscale: Some(number(&a, "VerticalScale", 100.)? * ratio),
+                    hscale: Some(number(&a, "HorizontalScale", 100.)?),
+                    vscale: Some(number(&a, "VerticalScale", 100.)?),
                     baseline_shift: Some(number(&a, "BaselineShift", 0.)?),
                     no_break: a.get("NoBreak").is_some_and(|v| v == "true"),
                     ..Default::default()
@@ -881,7 +890,7 @@ impl Importer<'_> {
                 if let Some(bytes) = bytes {
                     match crate::formats::decode_image(&bytes) {
                         Ok(px) => {
-                            self.budget.charge(px.data.capacity())?;
+                            self.budget.charge_pixels(&px)?;
                             layer.kind = Layer::placed_raster(&name, px, b.min, b.size()).kind;
                         }
                         Err(e) => {
@@ -945,9 +954,19 @@ impl Importer<'_> {
                         ..Default::default()
                     }
                 };
-                run.origin = Pt::new(b.min.x, b.min.y + run.px * 0.85);
+                let affine = m.0[..4] != Matrix::ID.0[..4];
+                let local = if affine {
+                    if (m.0[0] * m.0[3] - m.0[1] * m.0[2]).abs() < 1e-10 {
+                        return Err("IDML text frame has a singular transform".into());
+                    }
+                    run.transform = Some(m.0);
+                    bounds(n, Matrix::ID)?
+                } else {
+                    b
+                };
+                run.origin = Pt::new(local.min.x, local.min.y + run.px * 0.85);
                 let mut frame = TextFrame {
-                    size: b.size(),
+                    size: local.size(),
                     ..Default::default()
                 };
                 if let Some(options) = child(n, "TextFramePreference") {
@@ -1005,12 +1024,6 @@ impl Importer<'_> {
                         prev: attr(n, "PreviousTextFrame"),
                         next: attr(n, "NextTextFrame"),
                     });
-                }
-                if m.0[1].abs() + m.0[2].abs() > 0.001 {
-                    warn(
-                        &mut self.notes,
-                        "Rotated or sheared IDML text frames import into their axis-aligned editable bounds.",
-                    );
                 }
                 layer.kind.shapes_mut().unwrap().push(shape);
             } else {
@@ -1167,6 +1180,7 @@ impl Importer<'_> {
                     .remove(&f.story)
                     .ok_or("Missing IDML story head")?;
                 source.origin = run.origin;
+                source.transform = run.transform;
                 source.frame = run.frame.take();
                 **run = source;
             }

@@ -269,7 +269,7 @@ impl Capture {
                 assert!(self.studio.doc.layers[0].mask.is_some());
                 assert_eq!(self.studio.history.len(), 1);
                 assert_eq!(
-                    self.studio.doc.layers[0].kind.pixels().unwrap().data,
+                    self.studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(),
                     self.original
                 );
                 self.shot(ctx, "05-applied");
@@ -291,7 +291,7 @@ impl Capture {
             15 if ready => {
                 assert!(self.studio.doc.layers[0].mask.is_some());
                 assert_eq!(
-                    self.studio.doc.layers[0].kind.pixels().unwrap().data,
+                    self.studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(),
                     self.original
                 );
                 let path = self.output.join("native-cutout.oma");
@@ -299,11 +299,11 @@ impl Capture {
                 let reopened =
                     omadesign::project::decode(&std::fs::read_to_string(path).unwrap()).unwrap();
                 assert_eq!(
-                    reopened.layers[0].mask.as_ref().unwrap().data,
-                    self.studio.doc.layers[0].mask.as_ref().unwrap().data
+                    reopened.layers[0].mask.as_ref().unwrap().data.as_slice(),
+                    self.studio.doc.layers[0].mask.as_ref().unwrap().data.as_slice()
                 );
                 assert_eq!(
-                    reopened.layers[0].kind.pixels().unwrap().data,
+                    reopened.layers[0].kind.pixels().unwrap().data.as_slice(),
                     self.original
                 );
                 self.shot(ctx, "07-redo-saved");
@@ -443,8 +443,8 @@ pub fn run(input: PathBuf, output: PathBuf) -> eframe::Result {
     let mut studio = Studio::new();
     studio.doc = Document::new("Offline cutout QA", w as f32, h as f32, 96.);
     studio.doc.transparent = true;
-    let mut layer = omadesign::document::Layer::raster("Cat portrait", w, h);
-    layer.kind.pixels_mut().unwrap().data = original.clone();
+    let mut layer = omadesign::document::Layer::raster("Cat portrait", w, h).unwrap();
+    layer.kind.pixels_mut().unwrap().replace_bytes(original.clone()).unwrap();
     studio.doc.layers = vec![layer];
     studio.active_layer = Some(0);
     studio.persona = Persona::Pixel;

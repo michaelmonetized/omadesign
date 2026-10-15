@@ -28,6 +28,14 @@ struct PresetJob {
 }
 
 impl PhotoSession {
+    /// Select an isolated preset library before a test starts any preset operation.
+    /// Args: fixture-owned collection path. Returns nothing; an already-used preset state is refused.
+    #[cfg(test)]
+    pub(crate) fn set_preset_path_for_test(&mut self, path: PathBuf) {
+        assert!(!self.preset_state.attempted && self.preset_state.job.is_none());
+        self.preset_state.path = path;
+    }
+
     pub fn ensure_presets_loaded(&mut self) {
         if self.preset_state.attempted || self.preset_state.job.is_some() {
             return;
@@ -274,7 +282,7 @@ mod tests {
         let fixture = super::super::tests::Fixture::new();
         let path = fixture.0.join("library.omapreset");
         let mut session = PhotoSession::new();
-        session.preset_state.path = path.clone();
+        session.set_preset_path_for_test(path.clone());
         session.import_photo(super::super::tests::image());
         session.selected_mut().unwrap().develop.exposure = 1.25;
         session.ensure_presets_loaded();
@@ -292,7 +300,7 @@ mod tests {
         session.export_preset(0, shared.clone()).unwrap();
         wait(&mut session);
         let mut reopened = PhotoSession::new();
-        reopened.preset_state.path = path.clone();
+        reopened.set_preset_path_for_test(path.clone());
         reopened.ensure_presets_loaded();
         wait(&mut reopened);
         assert_eq!(reopened.presets, session.presets);

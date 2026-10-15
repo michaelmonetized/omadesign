@@ -1,6 +1,7 @@
 //! Full-resolution RAW inspection without sending whole camera images to the GPU.
 use crate::app::Studio;
-use crate::photo::{DevelopParams, RgbaImage};
+use crate::formats::raw::Cancellation;
+use crate::photo::{AdmittedImage, DevelopParams, RgbaImage};
 use eframe::egui::{self, Color32, ColorImage, Rect, TextureHandle, TextureOptions, Ui, Vec2};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
@@ -35,25 +36,32 @@ impl Region {
 struct Tile {
     region: Region,
     texture: TextureHandle,
+    _memory: Arc<crate::resources::Lease>,
 }
 
 #[derive(Debug)]
 struct Rendered {
-    full: Arc<RgbaImage>,
+    full: Arc<AdmittedImage>,
     region: Region,
-    pixels: RgbaImage,
+    pixels: AdmittedImage,
 }
 
 struct Job {
     key: Key,
+    cancel: Cancellation,
     receiver: mpsc::Receiver<Option<Rendered>>,
+}
+impl Drop for Job {
+    fn drop(&mut self) {
+        self.cancel.cancel();
+    }
 }
 
 #[derive(Default)]
 struct State {
     desired: Option<Key>,
     changed: Option<Instant>,
-    full: Option<Arc<RgbaImage>>,
+    full: Option<Arc<AdmittedImage>>,
     tile: Option<Tile>,
     job: Option<Job>,
     failed: bool,
@@ -66,6 +74,7 @@ impl State {
             self.changed = Some(Instant::now());
             self.full = None;
             self.tile = None;
+            self.job = None;
             self.failed = false;
         }
     }
@@ -90,6 +99,7 @@ impl State {
             self.tile = Some(Tile {
                 region: rendered.region,
                 texture: ctx.load_texture("photo-detail", image, TextureOptions::LINEAR),
+                _memory: rendered.pixels.memory,
             });
             self.full = Some(rendered.full);
         } else {
@@ -176,24 +186,35 @@ pub(super) fn draw(ui: &Ui, studio: &Studio, dest: Rect, viewport: Rect, preview
             let source = cached.is_none().then(|| image.clone());
             let (tx, receiver) = mpsc::channel();
             let ctx = ui.ctx().clone();
-            state.job = Some(Job { key, receiver });
+            let cancel = Cancellation::default();
+            let worker_cancel = cancel.clone();
+            state.job = Some(Job {
+                key,
+                receiver,
+                cancel,
+            });
             std::thread::spawn(move || {
                 let rendered = std::panic::catch_unwind(|| {
-                    let full = cached.unwrap_or_else(|| {
+                    let full = if let Some(cached) = cached {
+                        cached
+                    } else {
                         let mut photo = source.expect("uncached RAW source");
                         if key.original {
                             photo.develop = DevelopParams::default();
                         }
-                        Arc::new(photo.render_full())
-                    });
-                    let pixels = tile_pixels(&full, requested, limit);
-                    Rendered {
+                        Arc::new(photo.render_full_cancellable(&worker_cancel)?)
+                    };
+                    worker_cancel.check()?;
+                    let pixels = tile_pixels(&full, requested, limit, &worker_cancel)?;
+                    worker_cancel.check()?;
+                    Ok::<_, String>(Rendered {
                         full,
                         region: requested,
                         pixels,
-                    }
+                    })
                 })
-                .ok();
+                .ok()
+                .and_then(Result::ok);
                 let _ = tx.send(rendered);
                 ctx.request_repaint();
             });
@@ -287,28 +308,71 @@ fn region((w, h): (u32, u32), dest: Rect, clip: Rect, padding: u32) -> Option<Re
     })
 }
 
-fn tile_pixels(full: &RgbaImage, region: Region, limit: u32) -> RgbaImage {
+fn tile_pixels(
+    full: &RgbaImage,
+    region: Region,
+    limit: u32,
+    cancel: &Cancellation,
+) -> Result<AdmittedImage, String> {
+    cancel.check()?;
+    if region.w == 0
+        || region.h == 0
+        || region
+            .x
+            .checked_add(region.w)
+            .is_none_or(|end| end > full.w)
+        || region
+            .y
+            .checked_add(region.h)
+            .is_none_or(|end| end > full.h)
+    {
+        return Err("Invalid photo detail region".into());
+    }
     let buffer =
         image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(full.w, full.h, full.data.as_slice())
-            .expect("validated developed pixels");
+            .ok_or("Invalid developed pixels")?;
     let view = image::imageops::crop_imm(&buffer, region.x, region.y, region.w, region.h);
-    let scale = (limit as f64 / region.w.max(region.h) as f64).min(1.0);
+    let scale = (limit.max(1) as f64 / region.w.max(region.h) as f64).min(1.0);
     let w = (region.w as f64 * scale).round().max(1.0) as u32;
     let h = (region.h as f64 * scale).round().max(1.0) as u32;
-    if (w, h) == (region.w, region.h) {
-        let mut data = Vec::with_capacity(w as usize * h as usize * 4);
+    let output = u64::from(w) * u64::from(h) * 12;
+    let workspace = if (w, h) == (region.w, region.h) {
+        0
+    } else {
+        u64::from(region.w)
+            .checked_mul(u64::from(h))
+            .and_then(|n| n.checked_mul(16))
+            .ok_or("Photo detail memory demand overflow")?
+    };
+    let memory = crate::resources::global().reserve(
+        output
+            .checked_add(workspace)
+            .and_then(|n| n.checked_add(8 * 1024 * 1024))
+            .ok_or("Photo detail memory demand overflow")?,
+        cancel,
+    )?;
+    let data = if (w, h) == (region.w, region.h) {
+        let mut data = Vec::new();
+        data.try_reserve_exact(w as usize * h as usize * 4)
+            .map_err(|_| "Not enough memory for photo detail")?;
         for row in region.y..region.y + region.h {
+            cancel.check()?;
             let start = (row as usize * full.w as usize + region.x as usize) * 4;
             data.extend_from_slice(&full.data[start..start + w as usize * 4]);
         }
-        return RgbaImage { w, h, data };
-    }
-    let pixels = image::imageops::resize(&*view, w, h, image::imageops::FilterType::Triangle);
-    RgbaImage {
-        w,
-        h,
-        data: pixels.into_raw(),
-    }
+        data
+    } else {
+        image::imageops::resize(&*view, w, h, image::imageops::FilterType::Triangle).into_raw()
+    };
+    cancel.check()?;
+    memory.resize(
+        data.capacity() as u64 + u64::from(w) * u64::from(h) * 8,
+        cancel,
+    )?;
+    Ok(AdmittedImage {
+        image: RgbaImage { w, h, data },
+        memory,
+    })
 }
 
 #[cfg(test)]
@@ -334,7 +398,8 @@ mod tests {
                 h: 2
             }
         );
-        let tile = tile_pixels(&full, visible, 2048);
+        let cancel = Cancellation::default();
+        let tile = tile_pixels(&full, visible, 2048, &cancel).unwrap();
         assert_eq!((tile.w, tile.h), (3, 2));
         assert_eq!(&tile.data[..4], &[10, 11, 12, 255]);
         assert_eq!(&tile.data[20..24], &[20, 21, 22, 255]);
@@ -347,8 +412,16 @@ mod tests {
                 h: 4,
             },
             4,
-        );
+            &cancel,
+        )
+        .unwrap();
         assert_eq!((scaled.w, scaled.h), (4, 2));
+        let lease = Arc::downgrade(&scaled.memory);
+        assert!(scaled.memory.bytes() >= scaled.data.capacity() as u64);
+        drop(scaled);
+        assert!(lease.upgrade().is_none());
+        cancel.cancel();
+        assert!(tile_pixels(&full, visible, 2048, &cancel).is_err());
     }
 
     #[test]
@@ -367,31 +440,22 @@ mod tests {
             source: 2,
         };
         let (tx, receiver) = mpsc::channel();
+        let cancel = Cancellation::default();
         let mut state = State {
             desired: Some(old),
-            job: Some(Job { key: old, receiver }),
+            job: Some(Job {
+                key: old,
+                receiver,
+                cancel: cancel.clone(),
+            }),
             ..Default::default()
         };
         state.select(Some(current));
-        tx.send(Some(Rendered {
-            full: Arc::new(RgbaImage {
-                w: 1,
-                h: 1,
-                data: vec![0, 0, 0, 255],
-            }),
-            region: Region {
-                x: 0,
-                y: 0,
-                w: 1,
-                h: 1,
-            },
-            pixels: RgbaImage {
-                w: 1,
-                h: 1,
-                data: vec![0, 0, 0, 255],
-            },
-        }))
-        .unwrap();
+        assert!(cancel.is_cancelled());
+        assert!(
+            tx.send(None).is_err(),
+            "old ownership channel must disconnect immediately"
+        );
         state.poll(&ctx);
         assert!(state.full.is_none() && state.tile.is_none() && state.job.is_none());
         assert!(!state.failed);

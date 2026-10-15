@@ -22,7 +22,7 @@ mod layout_edit;
 pub mod libraries;
 pub(crate) mod masking;
 mod motion_presets;
-mod photo_session;
+pub(crate) mod photo_session;
 pub(crate) mod pixel_selection;
 pub(crate) mod pixel_edit;
 mod placement;
@@ -225,38 +225,40 @@ pub enum Op {
     Brush {
         layer: usize,
         erase: bool,
-        buf: Pixmap,
-        preview: Option<Pixmap>,
+        buf: crate::deep_color::surface::Surface,
+        preview: Option<crate::deep_color::surface::Surface>,
         last: Option<Pt>,
         before: crate::document::RasterState,
         selection_generation: u64,
     },
+    NativeRetouch {layer:usize,before:crate::document::Pixels,working:crate::document::Pixels,last:Pt,offset:Pt,tool:Tool},
+    NativeStroke {layer:usize,mask:bool,erase:bool,before:crate::document::Pixels,coverage:Pixmap,memory:std::sync::Arc<crate::resources::Lease>,last:Pt},
     Retouch {
         layer: usize,
         mask: bool,
         erase: bool,
         heal: bool,
-        source: Option<Pixmap>,
-        buf: Pixmap,
+        source: Option<crate::deep_color::surface::Surface>,
+        buf: crate::deep_color::surface::Surface,
         offset: Pt,
         last: Pt,
-        before: Vec<u8>,
+        before: std::sync::Arc<crate::resources::Allocation<u8>>,
         selection_generation: u64,
     },
     Smudge {
         layer: usize,
         last: Option<Pt>,
-        buf: Pixmap,
+        buf: crate::deep_color::surface::Surface,
         published: bool,
-        before: Vec<u8>,
+        before: std::sync::Arc<crate::resources::Allocation<u8>>,
         selection_generation: u64,
     },
     Clone {
         layer: usize,
         last: Option<Pt>,
         offset: Pt,
-        buf: Pixmap,
-        before: Vec<u8>,
+        buf: crate::deep_color::surface::Surface,
+        before: std::sync::Arc<crate::resources::Allocation<u8>>,
         selection_generation: u64,
     },
     Marquee {
@@ -776,6 +778,12 @@ impl Studio {
             self.new_doc_bleed,
             self.new_doc_safe,
         );
+        if self.persona == Persona::Pixel {
+            match Layer::raster("Layer 1", doc.width.round() as u32, doc.height.round() as u32) {
+                Ok(layer) => doc.layers[1] = layer,
+                Err(error) => {self.status = error; return;}
+            }
+        }
         doc.ruler.guides_locked = self.startup_preferences.guides_locked_by_default;
         crate::project::delete_swap(&self.swap_id);
         self.replace_active_tab(TabState::new(doc, None));
@@ -916,7 +924,7 @@ impl Studio {
                 &b,
                 false,
             );
-            *px = crate::document::Pixels::from_pixmap(&pm);
+            match crate::document::Pixels::from_pixmap(&pm) {Ok(pixels)=>*px=pixels,Err(error)=>{self.status=error;return;}}
         }
 
         self.selection.clear();
@@ -1677,11 +1685,7 @@ impl Studio {
     pub fn add_layer(&mut self, raster: bool) {
         let n = self.doc.layers.len() + 1;
         let mut layer = if raster {
-            Layer::raster(
-                format!("Pixel {n}"),
-                self.doc.width as u32,
-                self.doc.height as u32,
-            )
+            match Layer::raster(format!("Pixel {n}"),self.doc.width as u32,self.doc.height as u32) { Ok(layer)=>layer, Err(error)=>{self.status=error;return;} }
         } else {
             Layer::vector(format!("Layer {n}"))
         };
@@ -4382,8 +4386,7 @@ impl Studio {
     }
 
     fn place_raster(&mut self, name: String, image: RgbaImage, dest: Bounds) {
-        let pixels = crate::document::Pixels::from_rgba(image.w, image.h, image.data)
-            .unwrap_or_else(|| crate::document::Pixels::new(image.w.max(1), image.h.max(1)));
+        let Some(pixels) = crate::document::Pixels::from_rgba(image.w, image.h, image.data) else { self.status="Not enough memory to place this image; existing layers were kept".into(); return; };
         let layer = Layer::placed_raster(
             name.clone(),
             pixels,
@@ -5177,6 +5180,13 @@ mod tests {
     fn place_svg_adds_a_shape() {
         let mut s = Studio::new();
         s.show_welcome = false;
+        let before: usize = s
+            .doc
+            .layers
+            .iter()
+            .filter_map(|l| l.kind.shapes())
+            .map(|ss| ss.len())
+            .sum();
         let svg = r##"<svg viewBox="0 0 10 10"><path d="M0 0 L10 0 L10 10 L0 10 Z" fill="#112233"/></svg>"##;
         s.pending_place = Some(PendingPlace::Svg {
             name: "box.svg".into(),
@@ -5190,7 +5200,7 @@ mod tests {
             .filter_map(|l| l.kind.shapes())
             .map(|ss| ss.len())
             .sum();
-        assert_eq!(n, 1);
+        assert_eq!(n, before + 1);
         assert_eq!(s.selection.len(), 1);
     }
 
@@ -5230,7 +5240,7 @@ mod tests {
                 data[i + 2] = 0;
             }
         }
-        let mut layer = Layer::raster("ink", 32, 32);
+        let mut layer = Layer::raster("ink", 32, 32).unwrap();
         if let LayerKind::Raster { pixels, .. } = &mut layer.kind {
             *pixels = crate::document::Pixels::from_rgba(32, 32, data).unwrap();
         }

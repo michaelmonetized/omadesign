@@ -942,3 +942,85 @@ fn pdf_exchange_rejects_infinite_stroke_and_never_uses_source_gids_after_font_su
         "source glyph IDs were applied to a substitute face: {notes:?}"
     );
 }
+
+// Append to PDF adapter_tests only after the parent atomically merges the deep model and entry guard.
+// Source proposal: not compiled or qualified on pre-deep b16389db.
+#[test]
+fn pdf_adapter_native_admission_precedes_filtered_pattern_normalization() {
+    use crate::deep_color::{Depth, cms::Model};
+    use crate::document::Pixels;
+    let source = r##"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><defs><filter id="blur"><feGaussianBlur stdDeviation="2"/></filter><pattern id="p" patternUnits="userSpaceOnUse" width="16" height="16"><g filter="url(#blur)"><path d="M2 2H14V14H2Z" fill="#d35"/></g></pattern></defs><path d="M0 0H64V64H0Z" fill="url(#p)"/></svg>"##;
+    let (base, _) = crate::formats::svg::read(source, "Filtered pattern admission").unwrap();
+    let (_, notes) = write(&base).unwrap();
+    assert!(notes.iter().any(|n| n.contains("RGBA8")), "{notes:?}");
+    let location = base
+        .layers
+        .iter()
+        .enumerate()
+        .find_map(|(i, l)| {
+            l.kind
+                .shapes()
+                .unwrap_or(&[])
+                .iter()
+                .position(|s| matches!(s.style.fill, Fill::Pattern(_)))
+                .map(|s| (i, s))
+        })
+        .unwrap();
+    let rejection = "PDF cannot preserve native pixel or mask samples yet. Export PSD, TIFF or an explicit 8-bit document copy.";
+    for kind in 0..6 {
+        for poison in [false, true] {
+            let mut doc = base.clone();
+            let native =
+                Pixels::from_samples(1, 1, Depth::F32, vec![0.123456, 0.4, 0.7, 0.8]).unwrap();
+            match kind {
+                0 => doc.color.depth = Depth::F32,
+                1 => doc.color.icc_profile = vec![1],
+                2 => {
+                    let mut layer = Layer::placed_raster(
+                        "Hidden native samples",
+                        native,
+                        Pt::ZERO,
+                        Pt::splat(1.),
+                    );
+                    layer.visible = false;
+                    doc.layers.push(layer);
+                }
+                3 => doc.layers[location.0].mask = Some(native),
+                4 => {
+                    doc.layers[location.0].kind.shapes_mut().unwrap()[location.1].mask =
+                        Some(native)
+                }
+                _ => doc.color.model = Model::Cmyk,
+            }
+            if poison {
+                let Fill::Pattern(pattern) = &mut doc.layers[location.0].kind.shapes_mut().unwrap()
+                    [location.1]
+                    .style
+                    .fill
+                else {
+                    unreachable!()
+                };
+                pattern.definitions = "<broken".into();
+            }
+            assert!(crate::deep_color::has_native(&doc));
+            let before = serde_json::to_string(&doc).unwrap();
+            assert_eq!(
+                write(&doc).unwrap_err(),
+                rejection,
+                "kind={kind} poison={poison}"
+            );
+            assert_eq!(serde_json::to_string(&doc).unwrap(), before);
+        }
+    }
+    let mut poisoned = base;
+    let Fill::Pattern(pattern) = &mut poisoned.layers[location.0].kind.shapes_mut().unwrap()
+        [location.1]
+        .style
+        .fill
+    else {
+        unreachable!()
+    };
+    pattern.definitions = "<broken".into();
+    assert!(!crate::deep_color::has_native(&poisoned));
+    assert!(!write(&poisoned).unwrap_err().contains(rejection));
+}

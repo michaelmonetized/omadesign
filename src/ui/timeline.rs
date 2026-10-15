@@ -500,8 +500,8 @@ mod tests {
         let mut s = Studio::new();
         s.persona = Persona::Motion;
         s.doc.layers = vec![
-            crate::document::Layer::raster("First image", 10, 10),
-            crate::document::Layer::raster("Second image", 10, 10),
+            crate::document::Layer::raster("First image", 10, 10).unwrap(),
+            crate::document::Layer::raster("Second image", 10, 10).unwrap(),
         ];
         s.selection = vec![
             (0, crate::document::RASTER_ID),

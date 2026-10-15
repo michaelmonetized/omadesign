@@ -1,27 +1,63 @@
 use crate::document::{Document, Fill, StrokeAlignment};
 use crate::geom::Geom;
 use crate::gradient::{Gradient, Spread};
+#[cfg(test)]
+mod native_tests;
+mod retained;
+pub(crate) use retained::{serialized_version, value_version};
 
 pub(super) const RICH_TEXT: u32 = 14;
 pub(super) const ADVANCED_GRADIENT: u32 = 15;
 pub(super) const VECTOR_PATTERN: u32 = 16;
 pub(super) const SVG_FILTER: u32 = 17;
+pub(super) const SOURCE: u32 = 18;
+pub(super) const NATIVE: u32 = 19;
+pub(super) const COLOR: u32 = 20;
+pub(super) const PSD_TYPE: u32 = 21;
+pub(super) const SMART: u32 = 22;
 pub(super) const PUBLISHING: u32 = 23;
 
 /// Identify implemented project readers.
 /// Args: envelope version. Returns false for reserved formats whose models are absent.
 pub(super) fn supports_version(version: u32) -> bool {
-    (1..=SVG_FILTER).contains(&version) || version == PUBLISHING
+    (1..=PUBLISHING).contains(&version)
 }
 
 /// Find the oldest reader that preserves this document.
 /// Args: document with unpacked editable objects. Returns its highest required feature version.
 pub(super) fn required_version(doc: &Document) -> u32 {
     let mut version = if doc.mask_sources().is_empty() { 5 } else { 13 };
+    for source in &doc.sources {
+        version = version.max(retained::source_version(source));
+    }
+    if doc.color.depth != crate::deep_color::Depth::U8 {
+        version = version.max(NATIVE);
+    }
+    if doc.color.model != crate::deep_color::cms::Model::Rgb
+        || !doc.color.icc_profile.is_empty()
+        || doc.color.intent != crate::deep_color::cms::DocumentColor::default().intent
+    {
+        version = version.max(COLOR);
+    }
+    for native in crate::deep_color::buffers(doc).filter_map(|pixels| pixels.native.as_ref()) {
+        version = version.max(NATIVE);
+        if native.cmyk.is_some() || !native.icc_profile.is_empty() || native.intent != 1 {
+            version = version.max(COLOR);
+        }
+    }
     if !doc.publishing.is_empty() {
         version = version.max(PUBLISHING);
     }
     for layer in &doc.layers {
+        if layer.source_attachment.is_some() {
+            version = version.max(SOURCE);
+        }
+        if layer.psd_type.is_some() {
+            version = version.max(PSD_TYPE);
+        }
+        if layer.psd_smart.is_some() {
+            version = version.max(SMART);
+        }
         if layer.svg_filter.is_some() {
             version = version.max(SVG_FILTER);
         }
@@ -363,7 +399,11 @@ mod tests {
 
         let mut neutral: serde_json::Value =
             serde_json::from_str(&super::super::encode(&plain()).unwrap()).unwrap();
-        for reserved in SVG_FILTER + 1..PUBLISHING {
+        for implemented in 1..=PUBLISHING {
+            neutral["version"] = implemented.into();
+            super::super::decode(&neutral.to_string()).unwrap();
+        }
+        for reserved in [PUBLISHING + 1, u32::MAX] {
             neutral["version"] = reserved.into();
             assert!(
                 super::super::decode(&neutral.to_string())

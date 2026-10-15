@@ -227,6 +227,7 @@ pub fn render_view_posed(
 }
 
 pub(crate) fn render_export(doc: &Document, scale: u32) -> Result<Pixmap, String> {
+    admit_precise_export(doc)?;
     let s = scale.clamp(1, 8);
     let w = (doc.width * s as f32).round().max(1.0) as u32;
     let h = (doc.height * s as f32).round().max(1.0) as u32;
@@ -235,6 +236,15 @@ pub(crate) fn render_export(doc: &Document, scale: u32) -> Result<Pixmap, String
     let t = Transform::from_scale(s as f32, s as f32);
     groups::draw(&mut pm, doc, t, &Draft::none(), None, None);
     Ok(pm)
+}
+
+/// Refuse an authored native document at an RGBA8 render boundary.
+/// Args: original document. Returns an explicit precision error before any fallback work.
+pub(crate) fn admit_precise_export(doc: &Document) -> Result<(), String> {
+    if crate::deep_color::has_native(doc) {
+        return Err("This RGBA8 renderer cannot preserve native pixel or mask precision. Use the float compositor, PSD or TIFF, or convert an explicit document copy to 8-bit.".into());
+    }
+    Ok(())
 }
 
 /// Bounded still preview using exactly the still export's plates and scene.
@@ -286,6 +296,7 @@ pub fn render_export_at(
 }
 
 pub fn export_png(doc: &Document, scale: u32) -> Result<Vec<u8>, String> {
+    if crate::deep_color::has_native(doc) {return crate::export::encode(&crate::export::Source::Document(doc.clone()),crate::export::Settings {format:crate::export::Format::Png,scale,ai:None},&crate::ml::NoProgress).map(|out|out.0);}
     render_export(doc, scale)?
         .encode_png()
         .map_err(|e| e.to_string())

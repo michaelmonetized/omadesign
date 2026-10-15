@@ -46,7 +46,7 @@ pub fn execute(studio: &mut Studio, name: &str, args: &Value) -> Result<Value, S
                     paint::fill_poly_mask(w, h, &pts)
                 }
                 "wand" => paint::wand_mask(
-                    &pixels.to_pixmap().ok_or("Invalid pixels")?,
+                    &*pixels.to_pixmap().ok_or("Invalid pixels")?,
                     Pt::new(x, y),
                     number(args, "tolerance", 32.)?.clamp(0., 510.),
                 ),
@@ -92,6 +92,9 @@ pub fn execute(studio: &mut Studio, name: &str, args: &Value) -> Result<Value, S
             studio.replace_pixel_selection(values, space);
             studio.mark();
         } else if name == "paint_stroke" {
+            if layer.psd_smart.is_some() && !boolean(args, "mask", false)? {
+                return Err("Edit or replace the smart source, or rasterize an explicit copy before painting".into());
+            }
             let mask = boolean(args, "mask", false)?;
             let original = if mask {
                 layer
@@ -108,7 +111,7 @@ pub fn execute(studio: &mut Studio, name: &str, args: &Value) -> Result<Value, S
             }
             let before = original.data.clone();
             let original_pm = original.to_pixmap().ok_or("Invalid pixel data")?;
-            let mut pm = original_pm.clone();
+            let mut pm = original_pm.try_clone()?;
             let pts = points(&args["points"])?;
             if pts
                 .iter()
@@ -147,14 +150,85 @@ pub fn execute(studio: &mut Studio, name: &str, args: &Value) -> Result<Value, S
                     "Stroke is too large for one live operation; split into shorter strokes".into(),
                 );
             }
-            let selection = studio.pixel_sel_mask(li).map(|m| m.into_owned());
+            let mapped = studio.cached_pixel_sel_mask(li);
+            if !mask && studio.pixel_sel.is_some() && mapped.is_none() {return Err("Cannot map the selection under current memory pressure".into());}
+            let selection = mapped.map(|m| crate::deep_color::storage::collect(m.iter().copied())).transpose()?;
+            if original.native.is_some() {
+                if !["paint", "erase", "fill"].contains(&operation.as_str()) {
+                    return Err("High-depth retouch requires an explicit copy; paint, erase and fill retain native precision".into());
+                }
+                let before = original.clone();
+                let mut after = before.clone();
+                let mut overlay = crate::deep_color::surface::Surface::new(w, h)?;
+                if operation == "fill" {
+                    let region = crate::deep_color::retouch::flood_region(
+                        &before,
+                        pts[0],
+                        number(args, "tolerance", 32.)?.clamp(0., 510.),
+                        selection.as_ref().map(|s| s.as_slice()),
+                    )?;
+                    let c = before.paint_color(brush.color)?;
+                    let samples = crate::deep_color::storage::collect(
+                        (0..w as usize * h as usize).flat_map(|i| {
+                            crate::deep_color::blend_pixel(
+                                before.sample(i),
+                                c,
+                                crate::color::Blend::Normal,
+                                region[i] as f32 / 255. * brush.opacity,
+                            )
+                        }),
+                    )?;
+                    after.set_sample_allocation(samples)?;
+                } else {
+                    let brush = if operation == "erase" {
+                        paint::Brush {
+                            color: crate::color::Rgba::WHITE,
+                            ..brush
+                        }
+                    } else {
+                        brush
+                    };
+                    paint::stamp(&mut overlay, pts[0], &brush, false);
+                    for pair in pts.windows(2) {
+                        paint::stroke_to(&mut overlay, pair[0], pair[1], &brush, false);
+                    }
+                    if let Some(selection) = &selection {
+                        paint::feather_overlay(&mut overlay, selection);
+                    }
+                    if operation == "erase" {
+                        let samples = crate::deep_color::storage::collect(
+                            (0..w as usize * h as usize).flat_map(|i| {
+                                let p = before.sample(i);
+                                [
+                                    p[0],
+                                    p[1],
+                                    p[2],
+                                    p[3] * (1. - overlay.pixels()[i].alpha() as f32 / 255.),
+                                ]
+                            }),
+                        )?;
+                        after.set_sample_allocation(samples)?;
+                    } else {
+                        after.paint_overlay(&Pixels::from_pixmap(&overlay)?, 1.)?;
+                    }
+                }
+                studio.commit(Cmd::NativePixels {
+                    layer: li,
+                    mask,
+                    before,
+                    after,
+                });
+                return Ok(
+                    json!({"revision":studio.canvas_gen,"layer":li,"native_precision":true}),
+                );
+            }
             match operation.as_str() {
                 "fill" => paint::flood_fill_clipped(
                     &mut pm,
                     pts[0],
                     brush.color,
                     number(args, "tolerance", 32.)?.clamp(0., 510.),
-                    selection.as_deref(),
+                    selection.as_ref().map(|s| s.as_slice()),
                 ),
                 "paint" | "erase" => {
                     paint::stamp(&mut pm, pts[0], &brush, operation == "erase");
@@ -197,7 +271,7 @@ pub fn execute(studio: &mut Studio, name: &str, args: &Value) -> Result<Value, S
             if let Some(selection) = selection {
                 paint::feather_edit(&mut pm, &original_pm, &selection);
             }
-            let after = Pixels::from_pixmap(&pm).data;
+            let after = Pixels::from_pixmap(&pm)?.data;
             studio.commit(Cmd::Batch(vec![Cmd::Pixels {
                 layer: li,
                 mask,
@@ -231,18 +305,29 @@ fn mask(studio: &mut Studio, li: usize, args: &Value) -> Result<(), String> {
             "remove" => None,
             "invert" => {
                 let mut p = s.mask.clone().ok_or("Object has no mask")?;
-                for v in p.data.chunks_exact_mut(4) {
-                    let amount = (v[0] as u32 * v[3] as u32 / 255) as u8;
-                    let a = 255 - amount;
-                    v.copy_from_slice(&[a, a, a, 255]);
+                if p.native.is_some() {
+                    let samples = crate::deep_color::storage::collect(
+                        (0..p.w as usize * p.h as usize).flat_map(|i| {
+                            let c = p.sample(i);
+                            let v = 1. - (c[0] * 0.2126 + c[1] * 0.7152 + c[2] * 0.0722) * c[3];
+                            [v, v, v, 1.]
+                        }),
+                    )?;
+                    p.set_sample_allocation(samples)?;
+                } else {
+                    for v in p.bytes_mut()?.chunks_exact_mut(4) {
+                        let amount = (v[0] as u32 * v[3] as u32 / 255) as u8;
+                        let a = 255 - amount;
+                        v.copy_from_slice(&[a, a, a, 255]);
+                    }
                 }
                 p.touch();
                 Some(p)
             }
             "reveal" | "hide" => {
-                let mut p = Pixels::new(1, 1);
+                let mut p = Pixels::new(1, 1)?;
                 let a = if operation == "reveal" { 255 } else { 0 };
-                p.data.copy_from_slice(&[a, a, a, 255]);
+                p.bytes_mut()?.copy_from_slice(&[a, a, a, 255]);
                 p.touch();
                 Some(p)
             }

@@ -2,6 +2,256 @@ use super::*;
 
 const DNG: &[u8] = include_bytes!("synthetic.dng");
 
+#[test]
+fn native_result_retains_its_memory_and_cancellable_decoder_ownership() {
+    use std::time::Duration;
+    let baseline = resources::global().usage().0;
+    let native = native_decode(DNG, &Cancellation::default(), false).unwrap();
+    assert_eq!(
+        resources::global().usage().0,
+        baseline + native.lease.bytes()
+    );
+    let token = Cancellation::default();
+    let worker_token = token.clone();
+    let (started_tx, started_rx) = std::sync::mpsc::channel();
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        started_tx.send(()).unwrap();
+        done_tx
+            .send(decode_cancellable(DNG, &worker_token))
+            .unwrap();
+    });
+    started_rx.recv().unwrap();
+    token.cancel();
+    assert!(
+        done_rx
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap()
+            .unwrap_err()
+            .contains("cancelled")
+    );
+    worker.join().unwrap();
+    assert_eq!(
+        resources::global().usage().0,
+        baseline + native.lease.bytes()
+    );
+    assert!(native.image.data_size > 0 && !native.image.data.is_null());
+    drop(native);
+    assert_eq!(resources::global().usage().0, baseline);
+    let next = decode(DNG).unwrap();
+    assert_eq!((next.width, next.height), (64, 48));
+    drop(next);
+    assert_eq!(resources::global().usage().0, baseline);
+}
+
+#[test]
+fn sensor_reference_is_unscaled_unoriented_mosaic_including_borders() {
+    let sensor = decode_sensor(DNG, &Cancellation::default()).unwrap();
+    assert_eq!((sensor.width, sensor.height), (64, 48));
+    let raw = &DNG[DNG.len() - 64 * 48 * 2..];
+    for (sample, expected) in sensor.samples.iter().zip(raw.as_chunks::<2>().0) {
+        assert_eq!(*sample, u16::from_le_bytes(*expected));
+    }
+}
+
+/// Create a bounded Bayer frame that takes the real native interpolation path.
+/// Args: sensor width and height. Returns an original MIT calibration DNG without an embedded preview.
+fn calibration_dng(w: u32, h: u32) -> Vec<u8> {
+    let mut bytes = DNG.to_vec();
+    let offset = bytes.len() as u32;
+    for (tag, value) in [
+        (256, w),
+        (257, h),
+        (278, h),
+        (273, offset),
+        (279, w * h * 2),
+    ] {
+        set_tag(&mut bytes, tag, &value.to_le_bytes());
+    }
+    for y in 0..h {
+        for x in 0..w {
+            let value = 3000 + (x * 13 + y * 7) % 25000;
+            bytes.extend_from_slice(&(value as u16).to_le_bytes());
+        }
+    }
+    bytes
+}
+
+#[test]
+fn active_native_interpolation_cancels_promptly_then_next_decode_succeeds() {
+    use std::time::{Duration, Instant};
+    let bytes = calibration_dng(2048, 1536);
+    let token = Cancellation::default();
+    let worker_token = token.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        let _ = tx.send(decode_cancellable(&bytes, &worker_token));
+    });
+    let started = Instant::now();
+    while token.native_progress() < (1 << 11) && started.elapsed() < Duration::from_secs(20) {
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    let phase = token.native_progress();
+    let active = token.native_active();
+    let cancelled = Instant::now();
+    token.cancel();
+    let result = rx.recv().unwrap();
+    let latency = cancelled.elapsed();
+    worker.join().unwrap();
+    assert!(
+        active,
+        "cancellation must be requested during the native call"
+    );
+    assert_eq!(
+        phase,
+        1 << 11,
+        "must cancel inside actual native interpolation, stage={phase}"
+    );
+    assert!(result.unwrap_err().contains("cancelled"));
+    assert!(
+        latency < Duration::from_millis(500),
+        "native cancel latency {latency:?}"
+    );
+    let next = decode(DNG).unwrap();
+    assert_eq!((next.width, next.height), (64, 48));
+    eprintln!("active native AHD cancellation: {latency:?}; immediate next decode 64x48 succeeded");
+}
+
+#[test]
+#[ignore = "pinned real camera source; scheduled with the strict corpus and shared heavy lock"]
+fn real_camera_active_cancel_keeps_edits_and_immediately_opens_next() {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+    use std::time::{Duration, Instant};
+    fn hash(path: &std::path::Path) -> String {
+        let mut file = std::fs::File::open(path).unwrap();
+        let mut digest = Sha256::new();
+        let mut bytes = [0u8; 65536];
+        loop {
+            let n = file.read(&mut bytes).unwrap();
+            if n == 0 {
+                break;
+            }
+            digest.update(&bytes[..n]);
+        }
+        format!("{:x}", digest.finalize())
+    }
+    let source =
+        std::path::PathBuf::from(std::env::var_os("OMA_RAW_FIXTURE").expect("OMA_RAW_FIXTURE"));
+    let expected = std::env::var("OMA_RAW_SOURCE_SHA256").expect("OMA_RAW_SOURCE_SHA256");
+    assert_eq!(expected.len(), 64);
+    assert_eq!(hash(&source), expected);
+    struct NextSource(std::path::PathBuf, std::path::PathBuf);
+    impl Drop for NextSource {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.1);
+            let _ = std::fs::remove_dir(&self.0);
+        }
+    }
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(".qa-runs")
+        .join(format!(
+            "raw-cancel-next-{}-{}",
+            std::process::id(),
+            crate::document::next_id()
+        ));
+    std::fs::create_dir_all(directory.parent().unwrap()).unwrap();
+    std::fs::create_dir(&directory).unwrap();
+    let next_source = NextSource(
+        directory.clone(),
+        directory.join(source.file_name().unwrap()),
+    );
+    std::fs::copy(&source, &next_source.1).unwrap();
+    assert_eq!(hash(&next_source.1), expected);
+    let photo = crate::photo::PhotoImage::load(&source).unwrap();
+    let metadata = photo.raw.as_ref().unwrap().metadata.clone();
+    let original = photo.raw.as_ref().unwrap().pixels.clone();
+    let mut session = crate::app::PhotoSession::new();
+    session.import_photo(photo);
+    session.images[0].develop.exposure = 0.625;
+    let current = session.images[0].develop.clone();
+    session.import_file(&source);
+    let first = session.import_token(&source).expect("active import owner");
+    let opening = Instant::now();
+    while !(first.native_active() && first.native_progress() >= 8)
+        && opening.elapsed() < Duration::from_secs(30)
+    {
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    let active = first.native_active();
+    let stage = first.native_progress();
+    let cancelled = Instant::now();
+    session.cancel_imports();
+    let cleared = !session.is_loading();
+    session.import_file(&next_source.1);
+    let next = session
+        .import_token(&next_source.1)
+        .expect("next import starts immediately");
+    let mut next_live_until_completion = !next.is_cancelled();
+    while first.native_active() && cancelled.elapsed() < Duration::from_secs(5) {
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    let native_stop = cancelled.elapsed();
+    let ctx = eframe::egui::Context::default();
+    while session.is_loading() && cancelled.elapsed() < Duration::from_secs(60) {
+        next_live_until_completion &= !next.is_cancelled();
+        session.poll(&ctx);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    let next_open = cancelled.elapsed();
+    let source_after = hash(&source);
+    let source_kept =
+        std::sync::Arc::ptr_eq(&session.images[0].raw.as_ref().unwrap().pixels, &original);
+    let kept = session.images[0].develop == current && source_kept;
+    let next_accepted = session.images.len() == 2
+        && session.images[1].source.as_ref() == Some(&next_source.1.canonicalize().unwrap())
+        && session.images[1].dimensions() == session.images[0].dimensions()
+        && session.images[1].develop.is_default();
+    let result = serde_json::json!({"source_before_sha256":expected,"source_after_sha256":source_after,"metadata":metadata,"native_active_at_cancel":active,"native_progress_at_cancel":stage,"native_stop_ms":native_stop.as_secs_f64()*1000.,"next_open_ms":next_open.as_secs_f64()*1000.,"current_edits_and_source_kept":kept,"slots_cleared_immediately":cleared,"next_live_until_completion":next_live_until_completion,"next_native_progress":next.native_progress(),"next_distinct_source_accepted":next_accepted,"completed_owner_cleanup_signalled":next.is_cancelled(),"loaded_photos":session.images.len(),"errors":session.import_errors(),"proof":"headless actual PhotoSession import/cancel/distinct-path next-open; completed ImportJob drop defensively cancels its token after accepting its result; no native window/device/physical proof"});
+    if let Some(path) = std::env::var_os("OMA_RAW_CANCEL_RECEIPT") {
+        use std::io::Write;
+        let path = std::path::PathBuf::from(path);
+        assert!(path.is_absolute() && path.starts_with("/home"));
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .unwrap();
+        writeln!(file, "{result}").unwrap();
+    }
+    eprintln!("RAW_CANCEL {result}");
+    assert!(active && stage >= 8, "real native stage not observed");
+    assert!(
+        native_stop < Duration::from_millis(500),
+        "active native stop took {native_stop:?}"
+    );
+    assert!(cleared && kept && next_live_until_completion);
+    assert!(next_accepted && next.native_progress() > 0);
+    assert!(!session.is_loading());
+    assert_eq!(session.images.len(), 2, "stale result must never publish");
+    assert!(session.import_errors().is_empty());
+    assert_eq!(hash(&source), expected);
+}
+
+#[test]
+fn shared_raw_samples_keep_legacy_json_array_and_restore_admission() {
+    let image = decode(DNG).unwrap();
+    let encoded = serde_json::to_string(&image).unwrap();
+    assert!(encoded.contains("\"pixels\":["));
+    assert!(!encoded.contains("memory"));
+    let mut restored: RawImage = serde_json::from_str(&encoded).unwrap();
+    let before = resources::global().retained(&restored.pixels).unwrap();
+    restored.admit_memory(&Cancellation::default()).unwrap();
+    assert_eq!(
+        true,
+        std::sync::Arc::ptr_eq(&before, restored.memory.as_ref().unwrap()),
+        "restored samples must reuse their preallocation lease"
+    );
+    assert_eq!(image.pixels, restored.pixels);
+    let clone = restored.clone();
+    assert!(std::sync::Arc::ptr_eq(&clone.pixels, &restored.pixels));
+}
+
 fn set_tag(bytes: &mut [u8], tag: u16, value: &[u8]) {
     let count = u16::from_le_bytes(bytes[8..10].try_into().unwrap()) as usize;
     for index in 0..count {

@@ -1434,7 +1434,7 @@ impl Reader<'_> {
                 for x in 0..w as usize {
                     let mx = x * mask.w as usize / w as usize;
                     let my = y * mask.h as usize / h as usize;
-                    pixels.data[(y * w as usize + x) * 4 + 3] =
+                    pixels.bytes_mut()?[(y * w as usize + x) * 4 + 3] =
                         mask.data[(my * mask.w as usize + mx) * 4];
                 }
             }
@@ -1488,13 +1488,20 @@ fn placed_image(
     if dx.dot(dy).abs() < size.x * size.y * 0.0001 {
         if dx.cross(dy) < 0. {
             let row = pixels.w as usize * 4;
-            for y in 0..pixels.h as usize / 2 {
-                let opposite = pixels.h as usize - y - 1;
-                for i in 0..row {
-                    pixels.data.swap(y * row + i, opposite * row + i);
+            let h = pixels.h as usize;
+            if pixels.native.is_some() {
+                let mut samples = pixels.copy_samples(&crate::deep_color::storage::check)?;
+                for y in 0..h / 2 {
+                    for i in 0..row {samples.as_mut_slice().swap(y * row + i, (h-y-1) * row + i);}
                 }
+                pixels.set_sample_allocation(std::sync::Arc::new(samples))?;
+            } else {
+                let data = pixels.bytes_mut()?;
+                for y in 0..h / 2 {
+                    for i in 0..row {data.swap(y * row + i, (h-y-1) * row + i);}
+                }
+                pixels.touch();
             }
-            pixels.touch();
         }
         let center = top_left + (dx + dy) * 0.5;
         let origin = center - size * 0.5;
@@ -1533,8 +1540,11 @@ fn placed_image(
     );
     Ok(Layer::placed_raster(
         "Image",
-        Pixels::from_pixmap(&output),
+        Pixels::from_pixmap(&output)?,
         min,
         Pt::new(w as f32, h as f32),
     ))
 }
+
+#[cfg(test)]
+mod adapter_tests;

@@ -10,7 +10,7 @@ fn raster_pixels_for_frame(layer: &Layer) -> Result<Vec<u8>, String> {
         .kind
         .pixels()
         .ok_or("The selected image no longer exists")?;
-    let mut data = pixels.data.clone();
+    let mut data = pixels.data.to_vec();
     let Some(mask) = &layer.mask else {
         return Ok(data);
     };

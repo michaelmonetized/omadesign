@@ -87,7 +87,7 @@ mod tests {
                 shape
             })
             .collect();
-        shapes[1994].mask = Some(Pixels::new(2048, 2048));
+        shapes[1994].mask = Some(Pixels::new(2048, 2048).unwrap());
         let storage = shapes[1994].mask.as_ref().unwrap().data.as_ptr();
         let clip = egui::Rect::from_min_max(egui::pos2(0.0, 180.0), egui::pos2(300.0, 288.0));
         let rows = snapshot(&shapes, 0.0, clip, 6.0, Some(shapes[0].id));

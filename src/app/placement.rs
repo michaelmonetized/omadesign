@@ -552,6 +552,17 @@ impl Studio {
             .into_iter()
             .map(|shape| Cmd::AddShape { layer, shape })
             .collect();
+        let mut sources = self.doc.sources.clone();
+        for source in &source.sources {
+            source.validate()?;
+            if !sources.iter().any(|s| s.id == source.id) { sources.push(source.clone()); }
+        }
+        if sources.iter().map(|s|s.bytes().len()).sum::<usize>() > 512 * 1024 * 1024 {
+            return Err("Retained sources exceed 512 MiB".into());
+        }
+        if sources != self.doc.sources {
+            commands.push(Cmd::SetSources { before: self.doc.sources.clone(), after: sources });
+        }
         if tokens != self.doc.layout_tokens {
             commands.push(Cmd::SetLayoutTokens {
                 before: self.doc.layout_tokens.clone(),

@@ -122,7 +122,7 @@ fn read(name: &str, args: &Value) -> Result<Value, String> {
             ))
     {
         let photo = crate::photo::PhotoImage::load(&path)?;
-        let preview = photo.render_thumbnail(960);
+        let preview = photo.render_thumbnail(960)?;
         let bytes = preview.encode_png().ok_or("Could not encode preview")?;
         return Ok(
             json!({"content":[{"type":"image","mimeType":"image/png","data":base64::engine::general_purpose::STANDARD.encode(bytes)},{"type":"text","text":format!("{} · source {} × {}", path.display(),photo.full.w,photo.full.h)}]}),

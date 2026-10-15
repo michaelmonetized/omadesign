@@ -51,7 +51,7 @@ pub(crate) fn busy(ctx: &Context) -> bool {
 }
 
 pub(crate) fn ready(ctx: &Context) -> bool {
-    !jobs::is_running::<crate::photo::RgbaImage>(ctx, PREVIEW_JOB) && !busy(ctx)
+    !jobs::is_running::<crate::photo::AdmittedImage>(ctx, PREVIEW_JOB) && !busy(ctx)
 }
 
 pub(crate) fn open(ctx: &Context, studio: &mut Studio, format: Format, copy: bool) {
@@ -183,27 +183,30 @@ impl Dialog {
     fn start_preview(&mut self, ctx: &Context) {
         self.preview = None;
         self.preview_error = None;
-        jobs::cancel::<crate::photo::RgbaImage>(ctx, PREVIEW_JOB);
+        jobs::cancel::<crate::photo::AdmittedImage>(ctx, PREVIEW_JOB);
         let source = self.source.lock().unwrap().clone();
         let format = self.format;
         jobs::start(ctx, PREVIEW_JOB, move || preview_image(&source, format));
     }
 }
-fn preview_image(source: &Source, format: Format) -> Result<crate::photo::RgbaImage, String> {
+fn preview_image(source: &Source, format: Format) -> Result<crate::photo::AdmittedImage, String> {
     let mut image = match source {
-        Source::Photo(photo) => photo.render_thumbnail(420),
+        Source::Photo(photo) => photo.render_thumbnail(420)?,
         Source::Document(doc) => {
             let pm = crate::compositor::render_export_preview(doc, 420)?;
-            let pixels = crate::document::Pixels::from_pixmap(&pm);
-            crate::photo::RgbaImage {
-                w: pixels.w,
-                h: pixels.h,
-                data: pixels.data,
+            let pixels = crate::document::Pixels::from_pixmap(&pm)?;
+            let (w, h) = (pixels.w, pixels.h);
+            let allocation = Arc::try_unwrap(pixels.data)
+                .map_err(|_| "Export preview unexpectedly shares working bytes")?;
+            let (data, memory) = allocation.into_parts();
+            crate::photo::AdmittedImage {
+                image: crate::photo::RgbaImage { w, h, data },
+                memory,
             }
         }
     };
     if format == Format::Jpeg {
-        for p in image.data.chunks_exact_mut(4) {
+        for p in image.image.data.chunks_exact_mut(4) {
             let alpha = p[3] as u32;
             for channel in &mut p[..3] {
                 *channel = ((*channel as u32 * alpha + 127) / 255 + 255 - alpha) as u8;
@@ -215,7 +218,7 @@ fn preview_image(source: &Source, format: Format) -> Result<crate::photo::RgbaIm
 }
 fn close(ctx: &Context) {
     jobs::cancel::<Output>(ctx, JOB);
-    jobs::cancel::<crate::photo::RgbaImage>(ctx, PREVIEW_JOB);
+    jobs::cancel::<crate::photo::AdmittedImage>(ctx, PREVIEW_JOB);
     ctx.data_mut(|d| d.remove::<Dialog>(id()));
 }
 
@@ -295,7 +298,7 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
             }
         }
     }
-    if let Some(result) = jobs::poll::<crate::photo::RgbaImage>(ctx, PREVIEW_JOB) {
+    if let Some(result) = jobs::poll::<crate::photo::AdmittedImage>(ctx, PREVIEW_JOB) {
         match result {
             Ok(image) => {
                 dialog.preview = Some(ctx.load_texture(
@@ -558,7 +561,7 @@ mod tests {
         let mut studio=Studio::new();
         let ctx=Context::default();
         open(&ctx,&mut studio,Format::Png,false);
-        jobs::cancel::<crate::photo::RgbaImage>(&ctx,PREVIEW_JOB);
+        jobs::cancel::<crate::photo::AdmittedImage>(&ctx,PREVIEW_JOB);
         for frame in 0..5 {
             if frame == 2 {
                 let texture=ctx.load_texture("qa-preview",egui::ColorImage::filled([320,210],egui::Color32::WHITE),Default::default());

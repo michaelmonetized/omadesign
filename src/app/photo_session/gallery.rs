@@ -11,12 +11,12 @@ static DECODE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[derive(Default)]
 pub struct FolderPreview {
-    pub pixels: Option<RgbaImage>,
+    pub pixels: Option<photo::AdmittedImage>,
     pub error: Option<String>,
 }
 
 struct PreviewJob {
-    receiver: mpsc::Receiver<(usize, Result<RgbaImage, String>)>,
+    receiver: mpsc::Receiver<(usize, Result<photo::AdmittedImage, String>)>,
     cancel: Arc<AtomicBool>,
 }
 
@@ -66,7 +66,11 @@ impl FolderGallery {
                         if worker_cancel.load(Ordering::Relaxed) {
                             break;
                         }
-                        PhotoImage::load(&path).map(|image| image.render_thumbnail(edge))
+                        PhotoImage::load_cancellable(
+                            &path,
+                            &crate::formats::raw::Cancellation::from_flag(worker_cancel.clone()),
+                        )
+                        .and_then(|image| image.render_thumbnail(edge))
                     };
                     if worker_cancel.load(Ordering::Relaxed)
                         || sender.send((index, pixels)).is_err()

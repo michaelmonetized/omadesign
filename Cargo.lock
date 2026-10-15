@@ -2965,6 +2965,7 @@ dependencies = [
  "sha2 0.10.9",
  "simplecss",
  "tar",
+ "tiff",
  "tiny-skia 0.12.0",
  "unicode-bidi",
  "unicode-linebreak",

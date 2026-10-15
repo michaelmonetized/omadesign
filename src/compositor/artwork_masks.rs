@@ -78,6 +78,7 @@ pub(super) fn multiply(target: &mut tiny_skia::Mask, other: &tiny_skia::Mask) {
 /// Render live masks for formats that cannot store artwork references.
 /// `doc` stays editable. Returns a copy with only affected layers or groups rasterized.
 pub(crate) fn raster_export_document(doc: &Document) -> Result<Document, String> {
+    super::admit_precise_export(doc)?;
     doc.validate_hierarchy()?;
     let width = doc.width.round().max(1.) as u32;
     let height = doc.height.round().max(1.) as u32;
@@ -129,7 +130,7 @@ pub(crate) fn raster_export_document(doc: &Document) -> Result<Document, String>
         scene.layers[index] = original.clone();
         let replacement = &mut output.layers[index];
         replacement.kind = LayerKind::Raster {
-            pixels: crate::document::Pixels::from_pixmap(&pixels),
+            pixels: crate::document::Pixels::from_pixmap(&pixels)?,
             origin: Pt::ZERO,
             size: Pt::new(width as f32, height as f32),
             rotation: 0.,

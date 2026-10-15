@@ -22,9 +22,6 @@ struct Embedded {
 /// Validate text numbers before writing PDF operators.
 /// Args: source run. Returns an error for nonfinite size, placement or composed glyphs.
 pub(super) fn validate(run: &TypeRun) -> Result<(), String> {
-    if run.svg_text.is_some() || run.spans.iter().any(|span| span.fill.is_some()) {
-        return Err("PDF export of retained SVG text or per-range paint requires the integrated rich-text adapter; save the editable .oma document instead.".into());
-    }
     if [
         run.px,
         run.origin.x,
@@ -37,14 +34,25 @@ pub(super) fn validate(run: &TypeRun) -> Result<(), String> {
     {
         return Err("PDF text geometry must be finite".into());
     }
-    if crate::text::compose(run)
-        .iter()
-        .flat_map(|l| &l.glyphs)
-        .any(|g| {
-            [g.x, g.y, g.hscale, g.vscale]
-                .iter()
-                .any(|n| !n.is_finite())
-        })
+    if run
+        .transform
+        .is_some_and(|m| m.iter().any(|v| !v.is_finite()))
+        || run
+            .spans
+            .iter()
+            .any(|s| s.px.is_some_and(|v| !v.is_finite() || v <= 0.))
+    {
+        return Err("PDF text transforms and range sizes must be finite and positive".into());
+    }
+    if run.svg_text.is_none()
+        && crate::text::compose(run)
+            .iter()
+            .flat_map(|l| &l.glyphs)
+            .any(|g| {
+                [g.x, g.y, g.hscale, g.vscale]
+                    .iter()
+                    .any(|n| !n.is_finite())
+            })
     {
         return Err("PDF composed glyph geometry must be finite".into());
     }
@@ -54,110 +62,88 @@ pub(super) fn validate(run: &TypeRun) -> Result<(), String> {
 /// Write positioned, editable glyphs with their permitted full TrueType face.
 /// Args: PDF, font registry, source object and output. Returns a reason when outlines are required.
 pub(super) fn write(
-    pdf: &mut Pdf,
-    fonts: &mut Fonts,
+    writer: &mut Writer,
     shape: &Shape,
+    bounds: Bounds,
     out: &mut Scene,
 ) -> Result<(), String> {
     let Geom::Text(run) = &shape.geom else {
         return Err("object is not text".into());
     };
+    if run.svg_text.is_some() {
+        return Err(
+            "positioned/path/vertical SVG source layout retains its exact painted outlines".into(),
+        );
+    }
     if run.on_path.is_some() || run.frame.is_some() {
-        return Err("path and area text layout uses outlines".into());
+        return Err("path and area layout retains its painted outlines".into());
     }
-    if run.transform.is_some()
-        || run.svg_text.is_some()
-        || run
-            .spans
-            .iter()
-            .any(|span| span.font.is_some() || span.px.is_some() || span.fill.is_some())
+    if shape
+        .style
+        .stroke
+        .as_ref()
+        .is_some_and(|s| s.gradient.is_some())
     {
-        return Err("affine and per-range text requires the integrated rich-text adapter".into());
-    }
-    if !matches!(shape.style.fill, Fill::Solid(_) | Fill::None)
-        || shape
-            .style
-            .stroke
-            .as_ref()
-            .is_some_and(|s| s.gradient.is_some())
-    {
-        return Err("gradient text paint uses outlines".into());
-    }
-    let bytes =
-        crate::text::font_bytes_for(run).ok_or("the resolved font bytes are unavailable")?;
-    let face = Face::parse(&bytes, 0).map_err(|_| "the resolved font cannot be parsed")?;
-    if !editable_font(&face) {
-        return Err("the font does not permit editable outline embedding".into());
-    }
-    if face.tables().glyf.is_none()
-        || face.is_variable()
-        || bytes.starts_with(b"ttcf")
-        || bytes.len() > 16 * 1024 * 1024
-    {
-        return Err("this font container or variable/CFF face requires outlines".into());
+        return Err("gradient text stroke retains its vector outline".into());
     }
     let lines = crate::text::compose(run);
     for line in lines.iter() {
         let mut seen = HashSet::new();
         if line.glyphs.iter().any(|g| !seen.insert(g.cluster)) {
-            return Err(
-                "multi-glyph text clusters require outlines for editable interchange".into(),
-            );
+            return Err("multi-glyph text clusters retain their outlines".into());
         }
     }
-    let fingerprint = crate::typography::fingerprint(&bytes);
-    if !fonts.entries.contains_key(&fingerprint) {
-        fonts
-            .entries
-            .insert(fingerprint, Embedded::new(pdf, bytes.clone(), &face)?);
+    let mut resolved = HashMap::new();
+    let mut faces: HashMap<String, (u128, u16)> = HashMap::new();
+    for glyph in lines.iter().flat_map(|line| &line.glyphs) {
+        let style = run.character_style(glyph.cluster);
+        let font = style.font.unwrap_or_else(|| run.font.clone());
+        let (key, glyph_count) = if let Some(face) = faces.get(&font) {
+            *face
+        } else {
+            let mut effective = run.clone();
+            effective.font = font.clone();
+            let bytes = crate::text::font_bytes_for(&effective)
+                .ok_or("the composer's resolved font bytes are unavailable")?;
+            let face = Face::parse(&bytes, 0).map_err(|_| "the resolved font cannot be parsed")?;
+            if !editable_font(&face) {
+                return Err("the resolved face does not permit editable outline embedding".into());
+            }
+            if face.tables().glyf.is_none()
+                || face.is_variable()
+                || bytes.starts_with(b"ttcf")
+                || bytes.len() > 16 * 1024 * 1024
+            {
+                return Err("this font container or variable/CFF face requires outlines".into());
+            }
+            let key = crate::typography::fingerprint(&bytes);
+            if !writer.fonts.entries.contains_key(&key) {
+                writer
+                    .fonts
+                    .entries
+                    .insert(key, Embedded::new(&mut writer.pdf, bytes.clone(), &face)?);
+            }
+            let entry = (key, face.number_of_glyphs());
+            faces.insert(font, entry);
+            entry
+        };
+        if glyph.id >= glyph_count {
+            return Err("the composed glyph does not belong to the resolved face".into());
+        }
+        resolved.insert(glyph.cluster, (key, style.px.unwrap_or(run.px).max(1.)));
     }
-    let embedded = fonts
-        .entries
-        .get_mut(&fingerprint)
-        .ok_or("PDF font registration failed")?;
-    let color = match shape.style.fill {
-        Fill::Solid(c) => Some(c),
-        _ => None,
-    };
-    op(&mut out.ops, "q", &[]);
-    rotate_matrix(&mut out.ops, shape.geom.bbox().center(), shape.rotation);
-    if let Some(color) = color {
-        op(
-            &mut out.ops,
-            "rg",
-            &[
-                color.r as f32 / 255.,
-                color.g as f32 / 255.,
-                color.b as f32 / 255.,
-            ],
-        );
-    }
-    if let Some(stroke) = shape.style.stroke.as_ref().filter(|s| s.width > 0.) {
-        let c = stroke.color;
-        op(
-            &mut out.ops,
-            "RG",
-            &[c.r as f32 / 255., c.g as f32 / 255., c.b as f32 / 255.],
-        );
-        stroke_style(&mut out.ops, shape);
-    }
-    let state=pdf.add_object(dictionary!{"Type"=>"ExtGState","ca"=>color.map_or(1.,|c|c.a as f32/255.),"CA"=>shape.style.stroke.as_ref().map_or(1.,|s|s.color.a as f32/255.)});
-    out.invoke("gs", "ExtGState", state);
-    let mode = match (
-        color.is_some(),
-        shape.style.stroke.as_ref().is_some_and(|s| s.width > 0.),
-    ) {
-        (true, true) => 2,
-        (true, false) => 0,
-        (false, true) => 1,
-        _ => 3,
-    };
     let character_bytes = run
         .content
         .char_indices()
         .map(|(i, _)| i)
         .chain(std::iter::once(run.content.len()))
         .collect::<Vec<_>>();
+    let text_bounds = shape.geom.bbox();
+    let text_page_bounds = paint::local_bounds(bounds, text_bounds.center(), shape.rotation);
+    op(&mut out.ops, "q", &[]);
+    rotate_matrix(&mut out.ops, text_bounds.center(), shape.rotation);
+    let [a, b, c, d, _, _] = run.transform.unwrap_or([1., 0., 0., 1., 0., 0.]);
+    let mut last_mode = None;
     for line in lines.iter() {
         let mut clusters = line
             .glyphs
@@ -184,47 +170,217 @@ pub(super) fn write(
                 Object::Dictionary(dictionary! {"ActualText"=>lopdf::text_string(&actual)}),
             ],
         ));
-        op(&mut out.ops, "BT", &[]);
-        let font_name = out.resource("Font", embedded.font);
-        out.ops.push(Operation::new(
-            "Tf",
-            vec![
-                Object::Name(font_name.into_bytes()),
-                Object::Real(run.px.max(1.)),
-            ],
-        ));
-        op(&mut out.ops, "Tr", &[mode as f32]);
         for glyph in &line.glyphs {
             let end = ends.get(&glyph.cluster).copied().unwrap_or(line.end);
             let unicode = run.content[character_bytes[glyph.cluster]..character_bytes[end]]
                 .chars()
                 .filter(|&c| c != '\u{ad}')
                 .collect::<String>();
+            let &(key, px) = resolved
+                .get(&glyph.cluster)
+                .ok_or("PDF glyph face resolution failed")?;
+            let embedded = writer
+                .fonts
+                .entries
+                .get_mut(&key)
+                .ok_or("PDF font registration failed")?;
             let cid = embedded.code(glyph.id, unicode)?;
+            let font = embedded.font;
+            let fill = run
+                .character_style(glyph.cluster)
+                .fill
+                .unwrap_or_else(|| shape.style.fill.clone());
+            let color = if let Fill::Solid(color) = fill {
+                Some(color)
+            } else {
+                None
+            };
+            let state = writer.state(
+                byte(color.map_or(1., |c| c.a as f32 / 255.)),
+                255,
+                Blend::Normal,
+            );
+            out.invoke("gs", "ExtGState", state);
+            if let Some(color) = color {
+                op(
+                    &mut out.ops,
+                    "rg",
+                    &[
+                        color.r as f32 / 255.,
+                        color.g as f32 / 255.,
+                        color.b as f32 / 255.,
+                    ],
+                );
+            }
+            let mut glyph_ops = Vec::new();
+            op(&mut glyph_ops, "BT", &[]);
+            let name = out.resource("Font", font);
+            glyph_ops.push(Operation::new(
+                "Tf",
+                vec![Object::Name(name.into_bytes()), Object::Real(px)],
+            ));
+            let p = run.map_point(crate::geom::Pt::new(
+                run.origin.x + glyph.x,
+                run.origin.y + glyph.y,
+            ));
             op(
-                &mut out.ops,
+                &mut glyph_ops,
                 "Tm",
                 &[
-                    glyph.hscale,
-                    0.,
-                    0.,
-                    -glyph.vscale,
-                    run.origin.x + glyph.x,
-                    run.origin.y + glyph.y,
+                    a * glyph.hscale,
+                    b * glyph.hscale,
+                    -c * glyph.vscale,
+                    -d * glyph.vscale,
+                    p.x,
+                    p.y,
                 ],
             );
-            out.ops.push(Operation::new(
+            let show = Operation::new(
                 "Tj",
                 vec![Object::String(
                     cid.to_be_bytes().to_vec(),
                     lopdf::StringFormat::Hexadecimal,
                 )],
-            ));
+            );
+            if color.is_none() && !fill.is_none() {
+                op(&mut out.ops, "q", &[]);
+                out.ops.extend(glyph_ops.clone());
+                op(&mut out.ops, "Tr", &[7.]);
+                out.ops.push(show.clone());
+                op(&mut out.ops, "ET", &[]);
+                let mut painted = Shape::new(
+                    Geom::Rect {
+                        origin: text_bounds.min,
+                        size: Pt::new(text_bounds.width(), text_bounds.height()),
+                        radius: 0.,
+                    },
+                    crate::document::Style { fill, stroke: None },
+                );
+                painted.id = shape.id;
+                writer.paint(&painted, false, text_page_bounds, out)?;
+                op(&mut out.ops, "Q", &[]);
+                continue;
+            }
+            out.ops.extend(glyph_ops);
+            let mode = if color.is_some() { 0. } else { 3. };
+            if last_mode != Some(mode) {
+                op(&mut out.ops, "Tr", &[mode]);
+                last_mode = Some(mode);
+            }
+            out.ops.push(show);
+            op(&mut out.ops, "ET", &[]);
         }
-        op(&mut out.ops, "ET", &[]);
         op(&mut out.ops, "EMC", &[]);
     }
     op(&mut out.ops, "Q", &[]);
+    if let Some(stroke) = shape.style.stroke.as_ref().filter(|s| s.width > 0.) {
+        let mut style = tiny_skia::Stroke {
+            width: stroke.width,
+            line_cap: stroke.cap.to_skia(),
+            line_join: stroke.join.to_skia(),
+            ..Default::default()
+        };
+        style.dash = stroke
+            .dash
+            .and_then(|(a, b)| tiny_skia::StrokeDash::new(vec![a, b], stroke.dash_offset));
+        let outline = shape
+            .get_cached_path(96)
+            .and_then(|p| p.stroke(&style, 1.))
+            .ok_or("the text stroke cannot be outlined")?;
+        op(&mut out.ops, "q", &[]);
+        let state = writer.state(stroke.color.a, 255, Blend::Normal);
+        out.invoke("gs", "ExtGState", state);
+        op(
+            &mut out.ops,
+            "rg",
+            &[
+                stroke.color.r as f32 / 255.,
+                stroke.color.g as f32 / 255.,
+                stroke.color.b as f32 / 255.,
+            ],
+        );
+        skia_path(&mut out.ops, &outline);
+        op(&mut out.ops, "f", &[]);
+        op(&mut out.ops, "Q", &[]);
+        writer.warnings.insert(format!(
+            "PDF text object {} keeps its stroke as a vector outline; glyph fills remain embedded and editable.",
+            shape.id
+        ));
+    }
+    Ok(())
+}
+
+/// Preserve each text range's actual paint when editable PDF layout is unavailable.
+/// Args: writer, current text object, page bounds and output. Returns an outline/source encoding error.
+pub(super) fn outlines(
+    writer: &mut Writer,
+    shape: &Shape,
+    bounds: Bounds,
+    out: &mut Scene,
+) -> Result<(), String> {
+    let Geom::Text(run) = &shape.geom else {
+        return Err("Expected text for PDF outlines".into());
+    };
+    if run.svg_text.is_some() {
+        let painted = if run
+            .svg_text
+            .as_ref()
+            .is_some_and(|s| s.base_fill != shape.style.fill)
+        {
+            crate::text::svg_type::object_paint(run, &shape.style.fill)
+        } else {
+            run.clone()
+        };
+        let layout = crate::text::svg_type::layout(&painted)
+            .ok_or("PDF could not resolve the current SVG text source")?;
+        let source = layout.tree.to_string(&usvg::WriteOptions::default());
+        let (doc, notes) = crate::formats::svg::read(&source, "PDF source text outlines")?;
+        let (doc, more) = fallback::prepare(&doc)?;
+        for note in notes.into_iter().chain(more) {
+            writer
+                .warnings
+                .insert(format!("PDF text object {}: {note}", shape.id));
+        }
+        op(&mut out.ops, "q", &[]);
+        rotate_matrix(&mut out.ops, shape.geom.bbox().center(), shape.rotation);
+        writer.children(
+            &doc,
+            None,
+            paint::local_bounds(bounds, shape.geom.bbox().center(), shape.rotation),
+            out,
+            0,
+            true,
+        )?;
+        op(&mut out.ops, "Q", &[]);
+        return Ok(());
+    }
+    let center = shape.geom.bbox().center();
+    for (fill, mut contours) in crate::text::paint_groups(run, &shape.style.fill) {
+        if fill.is_none() {
+            continue;
+        }
+        let mut clip = shape.clone();
+        for point in contours.iter_mut().flatten() {
+            *point = point.rotate_about(center, shape.rotation);
+        }
+        clip.geom = Geom::Poly {
+            contours,
+            winding: true,
+        };
+        clip.rotation = 0.;
+        op(&mut out.ops, "q", &[]);
+        path(&mut out.ops, &clip);
+        op(&mut out.ops, "W", &[]);
+        op(&mut out.ops, "n", &[]);
+        let mut painted = shape.clone();
+        painted.style.fill = fill;
+        painted.style.stroke = None;
+        writer.paint(&painted, false, bounds, out)?;
+        op(&mut out.ops, "Q", &[]);
+    }
+    if shape.style.stroke.as_ref().is_some_and(|s| s.width > 0.) {
+        writer.paint(shape, true, bounds, out)?;
+    }
     Ok(())
 }
 

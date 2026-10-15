@@ -9,11 +9,16 @@ use lopdf::{Dictionary, Document as Pdf, Object, ObjectId, Stream, dictionary};
 use std::collections::{BTreeSet, HashMap};
 
 mod fallback;
+mod paint;
 mod text;
 
 /// Write editable PDF artwork.
 /// Args: the source document. Returns PDF 1.7 bytes and any appearance fallback notes.
 pub fn write(document: &Document) -> Result<(Vec<u8>, Vec<String>), String> {
+    if crate::deep_color::has_native(document) {
+        return Err("PDF cannot preserve native pixel or mask samples yet. Export PSD, TIFF or an explicit 8-bit document copy.".into());
+    }
+    crate::compositor::admit_precise_export(document)?;
     document.validate_hierarchy()?;
     let (prepared, warnings) = fallback::prepare(document)?;
     let document = prepared.as_ref();
@@ -24,6 +29,7 @@ pub fn write(document: &Document) -> Result<(Vec<u8>, Vec<String>), String> {
         images: HashMap::new(),
         properties: Dictionary::new(),
         fonts: text::Fonts::default(),
+        pattern_depth: 0,
     };
     let page_tree = writer.pdf.new_object_id();
     let mut ocgs = vec![];
@@ -160,6 +166,7 @@ struct Writer {
     images: HashMap<u64, ObjectId>,
     properties: Dictionary,
     fonts: text::Fonts,
+    pattern_depth: usize,
 }
 impl Writer {
     /// Encode a bounded transparency form.
@@ -352,7 +359,7 @@ impl Writer {
         if let Geom::Text(run) = &shape.geom {
             text::validate(run)?;
             let mut scene = Scene::default();
-            match text::write(&mut self.pdf, &mut self.fonts, shape, &mut scene) {
+            match text::write(self, shape, bounds, &mut scene) {
                 Ok(()) => {
                     out.ops.extend(scene.ops);
                     merge_resources(&mut out.resources, scene.resources);
@@ -360,7 +367,8 @@ impl Writer {
                 }
                 Err(reason) => {
                     self.warnings
-                        .insert(format!("PDF text uses vector outlines because {reason}."));
+                        .insert(format!("PDF text object {} uses vector outlines because {reason}; its native text remains in .oma.", shape.id));
+                    return text::outlines(self, shape, bounds, out);
                 }
             }
         }
@@ -400,16 +408,42 @@ impl Writer {
                 _ => None,
             }
         };
-        let alpha = solid.map_or(1., |c| c.a as f32 / 255.);
+        let alpha = if gradient.is_some() {
+            1.
+        } else {
+            solid.map_or(1., |c| c.a as f32 / 255.)
+        };
         let mut scene = Scene::default();
         let state = self.state(byte(alpha), byte(alpha), Blend::Normal);
         scene.invoke("gs", "ExtGState", state);
         if stroke {
             stroke_style(&mut scene.ops, shape);
         }
+        if !stroke && let Fill::Pattern(pattern) = &shape.style.fill {
+            return self.pattern(shape, pattern, bounds, out);
+        }
         if let Some(gradient) = gradient {
             let mut gradient = gradient;
+            if gradient
+                .from
+                .iter()
+                .chain(&gradient.to)
+                .chain(&gradient.focal)
+                .chain(gradient.radial_axis.iter().flatten())
+                .chain(std::iter::once(&gradient.inner_radius))
+                .any(|v| !v.is_finite())
+            {
+                return Err("PDF gradient fields must be finite".into());
+            }
             gradient.normalize();
+            if gradient.kind == GradientKind::Radial
+                && gradient
+                    .radial_transform(shape.geom.bbox())
+                    .invert()
+                    .is_none_or(|t| !t.is_finite())
+            {
+                return Err("PDF radial paint matrix is singular".into());
+            }
             if stroke {
                 let s = shape.style.stroke.as_ref().ok_or("PDF stroke missing")?;
                 let mut style = tiny_skia::Stroke {
@@ -435,14 +469,23 @@ impl Writer {
             op(&mut scene.ops, if winding { "W" } else { "W*" }, &[]);
             op(&mut scene.ops, "n", &[]);
             rotate_matrix(&mut scene.ops, shape.geom.bbox().center(), shape.rotation);
-            let shading = self.shading(&gradient, shape.geom.bbox(), false)?;
-            scene.invoke("sh", "Shading", shading);
+            if gradient.kind == GradientKind::Radial {
+                matrix(&mut scene.ops, gradient.radial_transform(shape.geom.bbox()));
+            }
+            let extent = paint::local_bounds(bounds, shape.geom.bbox().center(), shape.rotation);
+            for shading in self.shading(&gradient, shape.geom.bbox(), extent, false)? {
+                scene.invoke("sh", "Shading", shading);
+            }
             let id = self.form(scene, bounds, true)?;
             let id = if gradient.stops.iter().any(|s| s.color.a != 255) {
                 let mut alpha = Scene::default();
                 rotate_matrix(&mut alpha.ops, shape.geom.bbox().center(), shape.rotation);
-                let shading = self.shading(&gradient, shape.geom.bbox(), true)?;
-                alpha.invoke("sh", "Shading", shading);
+                if gradient.kind == GradientKind::Radial {
+                    matrix(&mut alpha.ops, gradient.radial_transform(shape.geom.bbox()));
+                }
+                for shading in self.shading(&gradient, shape.geom.bbox(), extent, true)? {
+                    alpha.invoke("sh", "Shading", shading);
+                }
                 let mask = self.form(alpha, bounds, true)?;
                 self.masked(id, mask, MaskMode::Luminance, bounds)?
             } else {
@@ -485,15 +528,26 @@ impl Writer {
         &mut self,
         gradient: &Gradient,
         bounds: Bounds,
+        extent: Bounds,
         alpha: bool,
-    ) -> Result<ObjectId, String> {
+    ) -> Result<Vec<ObjectId>, String> {
         let (a, b) = gradient.endpoints(bounds);
         let radial = gradient.kind == GradientKind::Radial;
         if !matches!(gradient.kind, GradientKind::Linear | GradientKind::Radial) {
             return Err("Unsupported PDF gradient reached vector writer".into());
         }
+        if gradient.spread != crate::gradient::Spread::Pad {
+            return paint::field(&mut self.pdf, gradient, bounds, extent, alpha);
+        }
         let coords = if radial {
-            vec![a.x, a.y, 0., a.x, a.y, (b - a).length().max(1e-6)]
+            vec![
+                gradient.focal[0],
+                gradient.focal[1],
+                gradient.inner_radius.max(0.),
+                0.,
+                0.,
+                1.,
+            ]
         } else {
             vec![a.x, a.y, b.x, b.y]
         };
@@ -544,7 +598,7 @@ impl Writer {
             .flat_map(|_| [0.into(), 1.into()])
             .collect::<Vec<Object>>();
         let function=self.pdf.add_object(dictionary!{"FunctionType"=>3,"Domain"=>vec![0.into(),1.into()],"Functions"=>functions,"Bounds"=>cuts,"Encode"=>encode});
-        Ok(self.pdf.add_object(dictionary!{"ShadingType"=>if radial{3}else{2},"ColorSpace"=>if alpha{"DeviceGray"}else{"DeviceRGB"},"Coords"=>coords.into_iter().map(Object::Real).collect::<Vec<_>>(),"Function"=>function,"Extend"=>vec![Object::Boolean(true),Object::Boolean(true)]}))
+        Ok(vec![self.pdf.add_object(dictionary!{"ShadingType"=>if radial{3}else{2},"ColorSpace"=>if alpha{"DeviceGray"}else{"DeviceRGB"},"Coords"=>coords.into_iter().map(Object::Real).collect::<Vec<_>>(),"Function"=>function,"Extend"=>vec![Object::Boolean(true),Object::Boolean(true)]})])
     }
     /// Apply pixel and live vector masks without rasterizing the painted artwork.
     /// Args: source form, mask references, optional placed pixel mask, bounds and depth. Returns the nested masked form.

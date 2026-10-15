@@ -281,7 +281,7 @@ mod tests {
         let other_mask = draw(&other);
         assert_ne!(replaced.data(), other_mask.data());
         let px = shape.mask.as_mut().unwrap();
-        px.data[..4].copy_from_slice(&[0, 0, 0, 255]);
+        px.bytes_mut().unwrap()[..4].copy_from_slice(&[0, 0, 0, 255]);
         px.touch();
         let touched = draw(&shape);
         assert_eq!(
@@ -291,7 +291,7 @@ mod tests {
         // Validate the bytes actually supplied by with_pm, not only stored RGBA
         // or its version: retained premultiplied state is the render authority.
         let px = shape.mask.as_mut().unwrap();
-        let raw = px.data.clone();
+        let raw = px.data.to_vec();
         let version = px.version;
         px.cached_pm
             .get_mut()
@@ -299,7 +299,7 @@ mod tests {
             .unwrap()
             .1
             .fill(tiny_skia::Color::WHITE);
-        assert_eq!(px.data, raw);
+        assert_eq!(px.data.as_slice(), raw);
         assert_eq!(px.version, version);
         let changed_pm = draw(&shape);
         assert!(!Arc::ptr_eq(&touched, &changed_pm));

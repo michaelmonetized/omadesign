@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 mod batch;
 #[path = "photo_session/gallery.rs"]
 mod gallery;
+#[path = "photo_session/catalog.rs"]
+pub mod catalog;
 #[path = "photo_session/preset_library.rs"]
 mod preset_library;
 pub use batch::BatchProgress;
@@ -20,8 +22,13 @@ const MAX_UNDO: usize = 128;
 
 struct ImportJob {
     cancelled: bool,
+    cancel: crate::formats::raw::Cancellation,
     path: PathBuf,
     receiver: mpsc::Receiver<Result<PhotoImage, String>>,
+}
+
+impl Drop for ImportJob {
+    fn drop(&mut self) { self.cancel.cancel(); }
 }
 
 struct FolderListing {
@@ -95,12 +102,13 @@ pub struct PhotoSession {
     pub folder: String,
     pub folder_files: Vec<(String, String)>,
     pub gallery: gallery::FolderGallery,
+    pub catalog: catalog::CatalogState,
     pub view_scale: f32,
     pub view_offset: egui::Vec2,
     pub fit_scale: f32,
     pub show_original: bool,
     pub crop_drag: Option<(Pt, Pt)>,
-    pub adjusted: Option<RgbaImage>,
+    pub adjusted: Option<photo::AdmittedImage>,
     pub hists: [Histogram; 4],
     pub tex: Option<egui::TextureHandle>,
     pub orig_tex: Option<egui::TextureHandle>,
@@ -145,6 +153,7 @@ impl PhotoSession {
             folder: String::new(),
             folder_files: vec![],
             gallery: Default::default(),
+            catalog: Default::default(),
             view_scale: 1.0,
             view_offset: egui::Vec2::ZERO,
             fit_scale: 1.0,
@@ -253,6 +262,11 @@ impl PhotoSession {
         &self.import_errors
     }
 
+    #[cfg(test)]
+    pub(crate) fn import_token(&self,path:&Path)->Option<crate::formats::raw::Cancellation> {
+        self.import_jobs.iter().find(|job|job.path==path).map(|job|job.cancel.clone())
+    }
+
     pub fn queued_imports(&self) -> usize {
         self.import_queue.len() + self.import_jobs.len()
     }
@@ -260,7 +274,9 @@ impl PhotoSession {
         self.import_queue.clear();
         for job in &mut self.import_jobs {
             job.cancelled = true;
+            job.cancel.cancel();
         }
+        self.import_jobs.clear();
         self.status = "Photo opening cancelled.".into();
     }
 
@@ -270,12 +286,14 @@ impl PhotoSession {
                 break;
             };
             let input = path.clone();
+            let cancel = crate::formats::raw::Cancellation::default();
+            let worker_cancel = cancel.clone();
             let (tx, receiver) = mpsc::channel();
             if let Err(error) =
                 std::thread::Builder::new()
                     .name("photo-open".into())
                     .spawn(move || {
-                        let _ = tx.send(PhotoImage::load(&input));
+                        let _ = tx.send(PhotoImage::load_cancellable(&input, &worker_cancel));
                     })
             {
                 self.status = format!("Could not start opening the photo: {error}");
@@ -290,6 +308,7 @@ impl PhotoSession {
                 path,
                 receiver,
                 cancelled: false,
+                cancel,
             });
         }
     }
@@ -358,6 +377,7 @@ impl PhotoSession {
         }
         self.gallery.poll(ctx);
         self.poll_presets();
+        self.poll_catalog(ctx);
         let was_loading = self.is_loading();
         let mut index = 0;
         while index < self.import_jobs.len() {
@@ -531,7 +551,7 @@ impl PhotoSession {
     }
 
     pub fn is_saving(&self) -> bool {
-        self.save_job.is_some() || self.is_batching() || self.is_saving_presets()
+        self.save_job.is_some() || self.is_batching() || self.is_saving_presets() || self.catalog.busy()
     }
 
     pub fn save_settings(&mut self) {
@@ -868,9 +888,17 @@ impl PhotoSession {
         let Some(img) = self.selected() else {
             return;
         };
-        let out = img.render_preview();
-        self.hists = photo::histograms(&out);
-        self.adjusted = Some(out);
+        match img.render_preview() {
+            Ok(out) => {
+                self.hists = photo::histograms(&out);
+                self.adjusted = Some(out);
+            }
+            Err(error) => {
+                self.adjusted = None;
+                self.tex = None;
+                self.status = error;
+            }
+        }
         self.dirty = false;
     }
 }
@@ -1026,6 +1054,40 @@ mod tests {
         assert_eq!(session.selected, Some(2));
         session.select_all_images();
         assert_eq!(session.selected_count(), 4);
+    }
+
+    #[test]
+    fn cancelling_imports_preserves_current_edits_disconnects_stale_owner_and_opens_next() {
+        let fixture = Fixture::new();
+        let mut session = PhotoSession::new();
+        session.import_photo(image());
+        session.selected_mut().unwrap().develop.exposure = 1.25;
+        let before = session.selected().unwrap().develop.clone();
+        let cancel = crate::formats::raw::Cancellation::default();
+        let (tx, receiver) = mpsc::channel();
+        session.import_jobs.push(ImportJob {
+            cancelled: false,
+            cancel: cancel.clone(),
+            path: fixture.0.join("stale.dng"),
+            receiver,
+        });
+        session.import_queue.push_back(fixture.0.join("queued.dng"));
+        session.cancel_imports();
+        assert!(cancel.is_cancelled());
+        assert!(!session.is_loading());
+        assert!(tx.send(Ok(image())).is_err());
+        assert_eq!(session.images[0].develop, before);
+        let next = fixture.0.join("next.dng");
+        std::fs::write(&next, include_bytes!("../formats/raw/synthetic.dng")).unwrap();
+        session.import_file(&next);
+        wait(&mut session);
+        assert_eq!(session.images.len(), 2);
+        assert_eq!(session.images[0].develop, before);
+        assert_eq!(
+            session.images[1].source.as_ref(),
+            Some(&next.canonicalize().unwrap())
+        );
+        assert!(session.import_errors().is_empty());
     }
 
     #[test]
@@ -1460,7 +1522,7 @@ mod tests {
             let before = session.selected().unwrap().develop.clone();
             session.selected_mut().unwrap().develop = params.clone();
             session.record_edit(before, false);
-            let rendered = session.selected().unwrap().render_full();
+            let rendered = session.selected().unwrap().render_full().unwrap();
             session.save_settings();
             wait(&mut session);
             assert!(session.save_error().is_empty());
@@ -1478,7 +1540,7 @@ mod tests {
             wait(&mut reopened);
             let loaded = reopened.selected().unwrap();
             assert_eq!(loaded.develop, params);
-            assert_eq!(loaded.render_full(), rendered);
+            assert_eq!(loaded.render_full().unwrap(), rendered);
             assert_eq!(loaded.source.as_ref(), Some(&source));
             assert_eq!(loaded.settings_path.as_ref(), Some(&settings));
             assert_eq!(loaded.raw.is_some(), name.ends_with("DNG"));
@@ -1533,7 +1595,7 @@ mod tests {
         let before = session.selected().unwrap().develop.clone();
         session.selected_mut().unwrap().develop.exposure = -0.5;
         session.record_edit(before, false);
-        let expected = session.selected().unwrap().render_full();
+        let expected = session.selected().unwrap().render_full().unwrap();
         std::fs::write(&settings, b"not valid settings").unwrap();
         session.import_file(&settings);
         wait(&mut session);
@@ -1541,7 +1603,7 @@ mod tests {
         assert_eq!(session.images.len(), 1);
         assert_eq!(session.selected, Some(0));
         assert!(session.settings_dirty());
-        assert_eq!(session.selected().unwrap().render_full(), expected);
+        assert_eq!(session.selected().unwrap().render_full().unwrap(), expected);
         let original = PhotoImage::load(&source).unwrap();
         assert!(original.develop.is_default());
         assert!(
@@ -1556,7 +1618,7 @@ mod tests {
         wait(&mut session);
         assert!(session.status.contains("original photo, photo.png"));
         assert_eq!(session.images.len(), 1);
-        assert_eq!(session.selected().unwrap().render_full(), expected);
+        assert_eq!(session.selected().unwrap().render_full().unwrap(), expected);
     }
 
     #[test]
@@ -1664,7 +1726,7 @@ impl PhotoSession {
                 {
                     return Err("Invalid original camera pixels in restart snapshot".into());
                 }
-                PhotoImage::from_raw(p.name, raw)
+                PhotoImage::from_raw(p.name, raw)?
             } else {
                 PhotoImage::from_full(
                     p.name,
@@ -1717,7 +1779,7 @@ mod browser_relocation_tests {
         assert!(session.images[0].source.is_none());
         assert!(session.images[0].settings_path.is_none());
         assert!(session.folder.is_empty());
-        assert_eq!(session.images[0].full.data,vec![20,40,60,255]);
+        assert_eq!(session.images[0].full.data.as_slice(),vec![20,40,60,255]);
     }
 
 }

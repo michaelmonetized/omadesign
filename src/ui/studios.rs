@@ -1455,6 +1455,7 @@ fn artboard_transform(ui: &mut Ui, studio: &mut Studio) {
 }
 
 fn raster_transform(ui: &mut Ui, studio: &mut Studio, li: usize) {
+    super::psd_smart::inspector(ui,studio,li);
     let Some(layer) = studio.doc.layers.get(li) else {
         return;
     };

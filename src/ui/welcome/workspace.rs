@@ -1170,6 +1170,9 @@ fn dialogs(ctx: &egui::Context, studio: &mut Studio, state: &mut State) {
             studio.switch_persona(persona);
             studio.doc.workspace = Some(persona);
             if persona == Persona::Pixel {
+                if !studio.doc.layers.iter().any(|layer| layer.kind.pixels().is_some()) {
+                    studio.add_layer(true);
+                }
                 studio.active_layer = studio
                     .doc
                     .layers

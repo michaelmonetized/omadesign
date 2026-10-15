@@ -657,6 +657,7 @@ fn xml_escape(s: &str) -> String {
 }
 
 pub fn export(doc: &Document) -> Result<String, String> {
+    if crate::deep_color::has_native(doc) { return Err("This exchange writer cannot preserve native pixel or mask samples. Export PSD, PSB, TIFF or an explicit 8-bit document copy.".into()); }
     export_inner(doc, false, false)
 }
 
@@ -2180,9 +2181,9 @@ mod tests {
             6.0,
             crate::motion::Ease::Linear,
         );
-        let mut photo = Layer::raster("Photo", 4, 4);
+        let mut photo = Layer::raster("Photo", 4, 4).unwrap();
         if let LayerKind::Raster { pixels, .. } = &mut photo.kind {
-            pixels.data.fill(255);
+            pixels.bytes_mut().unwrap().fill(255);
         }
         doc.layers.push(photo);
         let report = animated_export(&doc).unwrap();
@@ -2303,7 +2304,7 @@ mod mask_tests {
     fn svg_masks_preserve_luminance_alpha_placement_and_filter_order() {
         let mut doc = Document::new("Mask export", 160.0, 120.0, 72.0);
         doc.transparent = true;
-        let mut layer = Layer::raster("Masked image", 4, 2);
+        let mut layer = Layer::raster("Masked image", 4, 2).unwrap();
         if let LayerKind::Raster {
             pixels,
             origin,
@@ -2312,7 +2313,7 @@ mod mask_tests {
             ..
         } = &mut layer.kind
         {
-            pixels.data = [255, 0, 0, 255].repeat(8);
+            pixels.replace_bytes([255, 0, 0, 255].repeat(8)).unwrap();
             *origin = Pt::new(40.0, 30.0);
             *size = Pt::new(80.0, 40.0);
             *rotation = std::f32::consts::FRAC_PI_2;
@@ -2378,6 +2379,6 @@ mod mask_tests {
             "mask must be nested inside the outer filter group"
         );
         let decoded = crate::project::decode(&crate::project::encode(&doc).unwrap()).unwrap();
-        assert_eq!(decoded.layers[0].mask.as_ref().unwrap().data, mask_data);
+        assert_eq!(decoded.layers[0].mask.as_ref().unwrap().data.as_slice(), mask_data);
     }
 }

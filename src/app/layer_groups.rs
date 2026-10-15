@@ -503,7 +503,7 @@ mod tests {
                     studio.doc = Document::new("Selection", 32.0, 24.0, 96.0);
                     let mut source = Layer::placed_raster(
                         "Source",
-                        Pixels::new(8, 6),
+                        Pixels::new(8, 6).unwrap(),
                         origin,
                         Pt::new(16.0, 9.0),
                     );

@@ -995,7 +995,7 @@ mod sizing_review_tests {
     }
     #[test]
     fn native_bounds_include_shear_and_miter_outline() {
-        let mut layer = crate::document::Layer::placed_raster("shear", crate::document::Pixels::new(100, 100), Pt::new(20., 30.), Pt::splat(100.));
+        let mut layer = crate::document::Layer::placed_raster("shear", crate::document::Pixels::new(100, 100).unwrap(), Pt::new(20., 30.), Pt::splat(100.));
         layer.kind.set_raster_shear(100.);
         assert_eq!(native_bounds(&[], &[layer]).unwrap().size(), Pt::new(200., 100.));
         let shape = Shape::new(Geom::Poly { contours: vec![vec![Pt::new(0.,100.),Pt::new(50.,0.),Pt::new(55.,100.)]], winding: true }, Style { fill: crate::document::Fill::None, stroke: Some(Stroke { width: 20., join: crate::document::Join::Miter, ..Default::default() }) });

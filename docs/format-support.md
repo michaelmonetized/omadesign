@@ -15,7 +15,7 @@ Omadesign imports supported content into its native layer tree and records conve
 | `.ora` | OpenRaster pixel layers/groups, offsets, names, visibility, opacity, isolation and supported blends | OpenRaster with layers, stack.xml, merged preview and thumbnail | Vectors/text become pixels per layer. Masked/effected groups become one pixel layer. Extended SVG layer sources and unsupported compositing operations are rejected. |
 | `.xcf` | Native GIMP reader: pixel layers, groups, names, visibility, opacity, offsets, supported blends and applied layer masks | No XCF writer; export OpenRaster or PSD | Live text, layer effects, paths and floating selections are not reconstructed. High bit depth becomes 8-bit RGBA. Unmapped blend modes display as Normal. Save `.oma` to keep the imported stack. |
 | `.eps`, `.ps` | Ghostscript conversion to PDF, then native PDF import | No direct writer | Ghostscript must be installed. Conversion can discard original layer metadata or flatten artwork. |
-| `.omaphoto` | Reopens the matching original in Photo with saved development, crop and rotation | Save settings beside the original | Contains settings, not pixels. Keep the original and sidecar together with matching names; the source size and modification time must still match. |
+| `.omaphoto` | Reopens the matching original in Photo with saved development, optical calibration, local masks, crop and rotation | Save settings beside the original | Contains settings, not pixels. Keep the original and sidecar together with matching names; the source size and modification time must still match. |
 | `.omapreset` | Photo preset library Import | Photo preset library Export | Source-independent, named adjustment collections in versioned JSON. No image pixels or source identity. Crop and rotation are opt-in. |
 | Camera RAW: DNG, CR2/CR3, NEF/NRW, ARW, RAF, ORF, RW2, PEF and others | Full-resolution sensor decoding and Photo development | Developed PNG/TIFF with 16-bit channels, or JPEG; no camera RAW writer | Support depends on the camera and compression mode. Lens corrections, proprietary camera looks and unsupported DNG opcodes/profiles are not recreated. Design placement becomes 8-bit pixels. |
 | PNG, JPEG, WebP, GIF, BMP, TIFF | Pixel image | PNG and JPEG through headless conversion; other existing export actions remain separate | This path imports a single image, not layered TIFF or animated GIF structure. |
@@ -37,6 +37,14 @@ Open a RAW through **File → Open**, the Photo library, a folder, a file-manage
 **Save settings** writes a small adjacent file such as `DSC_0001.NEF.omaphoto`. Resume with **File → Open**, a drop, or **Photo → Library → ··· → Open photo or settings…**, choosing either the original or the settings file. Opening `.omaphoto` restores the original source, including RAW precision, and its development settings. The source photograph is never rewritten. Keep the settings file and original together with matching names. Settings are bound to the source size and modification time. An explicit settings open fails without replacing the current photo when the original is missing or changed, or the settings are invalid. Opening the original instead shows default development and a note if its settings cannot be used. Failed saves retain unsaved edits for retry. This metadata check is not a cryptographic content identity. Unsaved changes exist only in the current Photo session. A `.oma` Design document does not contain the RAW source or its development settings.
 
 Photo export develops the full-resolution source, including crop and rotation. RAW PNG/TIFF exports retain 16-bit developed channels; JPEG is an 8-bit delivery image. Exported files use display sRGB values and do not preserve the sensor mosaic, camera edit history, or all source metadata. **Place in Design** and general document conversion produce an 8-bit raster layer; keep the RAW and `.omaphoto` settings for further development. Native RAW writing is not provided.
+
+Photo’s **Detail → Lens and perspective** stores a named manual camera/lens calibration, radial distortion, red/blue chromatic scaling, optical center, corner light gain, perspective, straighten and scale. The inverse geometry samples the oriented source in linear light before white balance, exposure and the display transfer. Corrections, crop and rotation use the same pipeline for previews, detail tiles and 16-bit exports; the original linear data remains untouched. Calibration is manual; camera metadata does not select a measured profile automatically.
+
+Photo’s **Local** tab adds radial, graduated and painted masks with editable geometry, feathering, strength, inversion and local light/color. Brush strokes keep their points, radius, hardness, flow and erase operation; **Paint on photo** paints in source-relative coordinates through saved crop and rotation. **Show mask** is a viewer overlay and is excluded from exports. Local exposure, white balance and color run in linear light; masks travel in `.omaphoto` settings. Sidecars remain bounded to 2 MiB and 32 local adjustments. Older global-only sidecars retain version 1; optical settings use version 2 and local masks use version 3 so older readers refuse unfamiliar edits. Copy/paste and presets include optics and local masks only when their categories are explicitly selected.
+
+Photo’s **Library → Catalog** opens or creates a catalog in a chosen folder. **Import folder** recursively records originals in place without retaining decoded images. The catalog supports up to 100,000 originals and 256 MiB of metadata, star ratings, keywords, combined filters and named stacks. Its virtual list opens only requested originals. Catalog-opened photos save editable development to the journal after a gesture; **Save settings** also writes a portable sidecar. Folder browsing still works independently. Reopen the catalog folder after restart to resume.
+
+The versioned catalog uses SHA-256 checked journal records, synced writes, atomic compaction and an exclusive writer lock. Recovery skips damaged or torn records, retains valid later records and preserves the original damaged log beside the recovered catalog. **Relink original** accepts a moved file only when its content hash matches; catalog edits survive missing sidecars and changed modification times. Imported copies at different paths remain separate. Damaged records that have no later replacement cannot be reconstructed; recovery reports the skipped count and backup path.
 
 Rendering is not intended to match Lightroom, Capture One or an in-camera JPEG exactly. Proprietary looks, full Adobe camera profiles, automatic lens correction, some DNG opcodes and multi-frame computational rendering are not implemented. Sensor/channel clipping cannot be recovered by later exposure changes. The decoder rejects images larger than 64 megapixels and inputs larger than 512 MiB, limits LibRaw's sensor unpacking buffers, and requests cancellation through LibRaw's progress callback after 120 seconds. Total working memory also includes decoded pixels and development buffers. The callback is a cooperative limit, not a process deadline.
 
@@ -72,9 +80,9 @@ PDF import creates artboards for all pages, editable paths and strokes, nested o
 
 Import reports approximations for unsupported drawing operators, focal/two-circle radial, mesh and pattern shading, dash phases/patterns, custom miter limits, font substitutions, ICC/spot/pattern colors, overprint and knockout. PDF transparency groups are imported, but nonisolated groups are approximated as isolated groups. Annotations and form fields are not artwork. Encrypted PDFs must be saved as unlocked copies before importing. Illustrator's private editing data is not interpreted: `.ai` support means its PDF-compatible or older PostScript artwork.
 
-PDF export writes pages, paths, raster images with alpha, opacity/blending and optional-content layer metadata, including names, order, visibility and locks. Linear and centered radial fills and gradient strokes use vector shadings, including multiple stops and varying stop opacity. Live alpha/luminance artwork masks retain vector sources in PDF soft-mask groups; mask regions remain clipping paths. Pixel masks remain gray mask images without rasterizing their painted artwork. Isolated groups preserve group opacity and blending through transparency forms. Permitted standalone TrueType fonts are embedded once per face, with positioned PDF text, CID glyph mappings, Unicode extraction and ActualText. This keeps solid painted point text editable without changing kerning, tracking, wrapping or rotation. Full faces retain unused characters for later editing. Fonts that restrict editable embedding, variable/CFF/collection fonts, path/area text, multi-glyph clusters and gradient text retain outlines with an explicit note. Unsupported filters, shape/conic gradients, frame composition and noncentered stroke alignment still use bounded appearance fallback. A rendered group becomes one named PDF layer; its internal objects and hierarchy remain in the `.oma` master. Hidden layers retain their visibility state. Backdrop-dependent pass-through effects can require rendering entire pages. Every fallback produces a note explaining the reduction in editability; effects are not silently dropped or replaced with a single gradient color. Fallback images are limited to 64 megapixels each and a 512 MiB total pixel budget.
+PDF export writes pages, paths, raster images with alpha, opacity/blending and optional-content layer metadata, including names, order, visibility and locks. Linear and affine two-circle radial fills and gradient strokes use vector shadings, including focal placement, inner radius, multiple stops and varying stop opacity. Repeat and reflect fields use explicit repeated axial/radial shading segments, avoiding periodic calculator-field undersampling in independent renderers. Retained SVG patterns use reusable vector PDF tiles; effects inside a tile have a named appearance reduction when necessary. Live alpha/luminance artwork masks retain vector sources in PDF soft-mask groups; mask regions remain clipping paths. Pixel masks remain gray mask images without rasterizing their painted artwork. Isolated groups preserve group opacity and blending through transparency forms. Permitted standalone TrueType fonts are embedded once per face, with positioned PDF text, CID glyph mappings, Unicode extraction and ActualText. Native point text uses the composer’s effective face and size for every range, including affine transforms, kerning, tracking, wrapping and rotation. Solid range paints remain text paint; gradient and pattern range paints use glyph text clipping with the same embedded font and logical Unicode. Full faces retain unused characters for later editing. Fonts that restrict editable embedding, variable/CFF/collection fonts, path/area text and multi-glyph clusters retain correctly painted outlines with an object-specific note. Positioned, vertical and path SVG text use the resolved source layout’s painted outlines, retaining range paints and the editable native text in .oma. Retained SVG filter graphs render the current edited subtree and live masks into a bounded RGBA8 appearance layer, respecting filter extent and artboard coordinates. This path does not claim high-depth fidelity. Unsupported filters, shape/conic gradients, frame composition and noncentered stroke alignment still use bounded appearance fallback. A rendered group becomes one named PDF layer; its internal objects and hierarchy remain in the `.oma` master. Hidden layers retain their visibility state. Backdrop-dependent pass-through effects can require rendering entire pages. Every fallback produces a note explaining the reduction in editability; effects are not silently dropped or replaced with a single gradient color. Fallback images are limited to 64 megapixels each and a 512 MiB total pixel budget.
 
-A real four-page kitchen drawing imported with 608 shapes, 48 groups and 142 layers and was visually compared with Poppler rendering. A 28-artboard Illustrator document exposed blank PDF-compatible pages; an independent PDF renderer also showed them as blank. Artwork present only in Illustrator's private data cannot be recovered through the PDF path. Independent export checks cover hidden optional-content layers, raster alpha, vector masked multi-stop/radial gradients, shadows, group opacity, embedded fonts and Unicode text extraction. Vector-only fixtures are checked for zero image objects. Imported PDF text is saved to .oma and reopened in a fresh process to verify portable font bytes. The page fallback for backdrop-dependent blending retained the exact native composite pixels and rendered pixel for pixel with Poppler's Cairo backend; a separate Splash-backend check covers layers and alpha.
+A real four-page kitchen drawing imported with 608 shapes, 48 groups and 142 layers and was visually compared with Poppler rendering. A 28-artboard Illustrator document exposed blank PDF-compatible pages; an independent PDF renderer also showed them as blank. Artwork present only in Illustrator's private data cannot be recovered through the PDF path. Independent export checks cover hidden optional-content layers, raster alpha, vector masked multi-stop/radial gradients, shadows, group opacity, embedded fonts and Unicode text extraction. Vector-only fixtures are checked for zero image objects. Imported PDF text is saved to .oma and reopened in a fresh process to verify portable font bytes. The page fallback for backdrop-dependent blending retained the exact native composite pixels and rendered pixel for pixel with Poppler's Cairo backend; a separate Splash-backend check covers layers and alpha. Poppler’s Cairo backend treats nonisolated masked groups as isolated; strict native/Splash mask bands and an isolated Cairo control distinguish this renderer limitation.
 
 Legacy PostScript Illustrator, EPS and PS files use an installed Ghostscript executable to create PDF before native import. The process uses a private temporary directory and bounded runtime and output; missing Ghostscript produces setup guidance.
 
@@ -113,3 +121,69 @@ omadesign --convert artwork.oma --output artwork.ora
 Headless document output formats are `.oma`, `.svg`, `.png`, `.jpg`/`.jpeg`, `.psd`, `.psb`, `.pdf`, `.ora` and `.idml`. RAW inspection includes camera metadata, source dimensions, precision and saved development settings. RAW-to-PNG/TIFF conversion uses the full-resolution 16-bit Photo pipeline; RAW-to-JPEG produces an 8-bit image. Saved `.omaphoto` settings are applied automatically. Converting RAW to a document format renders an 8-bit pixel layer. Same-file conversion is refused to protect the original. General source-file size is limited to 512 MiB; specific readers also enforce object, pixel, decompression or process limits.
 
 Primary references: [Affinity V3 converter source](https://gitlab.com/inkscape/extras/extension-afdesign/-/commit/cd5cf29d5df22e07b1e9209219079ca44015b7fe), [OpenRaster archive specification](https://www.openraster.org/baseline/file-layout-spec.html), [OpenRaster layer-stack specification](https://www.openraster.org/baseline/layer-stack-spec.html).
+
+### Native document depth and profiles
+
+Raster layers imported from 16-bit PNG/TIFF/PSD or float TIFF/PSD retain authoritative
+floating-point samples independently of the RGBA8 display cache. PSD/PSB and TIFF
+preserve the authored depth; RGB PNG preserves 16-bit samples. Float PNG and JPEG
+exports require an explicit document conversion. File → Color and precision converts
+working mode/profile/depth with one undo step. The .oma schema gate is provisional
+until the Craft stack is integrated.
+
+CMYK PSD and TIFF retain original ink coverage, alpha and embedded ICC bytes. Little
+CMS 2.19 is statically included in every binary, built offline from pinned MIT sources;
+`--color-runtime-check` checks the linked version. Portable archives and prefix
+installs use the same built-in engine. No system liblcms2 lookup or download is needed.
+Malformed/mismatched profiles fail with an error. Untagged CMYK retains its samples
+and explicitly reports its uncalibrated device-formula preview.
+
+Pixel masks, mask inversion/application, raster filter edits, ordinary brush painting,
+fill and erase operate on authoritative samples and support undo/reopen. Native group
+masks resize without an RGBA8 intermediate. Healing, clone and smudge use native
+float donor and working samples, including selection clipping and undo. AI cutout upscaling is refused on native layers; mask-only
+background removal preserves original samples. Live artwork-mask flattening and
+SVG/PDF/OpenRaster exchange refuse native reductions until their own precise paths
+are implemented. These limits are explicit; they do not imply a completed FMT-04 gate.
+
+Native compositing and ICC transforms are software paths. The live canvas uses an
+RGBA8 display surface. Monitor profiles, physical display accuracy and print matching
+have not been qualified by these headless checks.
+
+### Editable PSD type
+
+PSD TySh and EngineData map to native TypeRun/CharSpan objects: Unicode text,
+full affine transform, requested font, per-run size/color, tracking, leading,
+baseline shift and horizontal/vertical scale remain editable. Export regenerates
+standard TySh/EngineData from current native text. Multiple type objects in one
+native layer become separate type layers in a Photoshop group. Original descriptor
+fields and unsupported warp settings remain in the project and exported PSD.
+
+Missing fonts produce an explicit note and native fallback preview while retaining
+the requested name. Text warp and vertical orientation currently retain their
+Photoshop parameters but use horizontal, unwarped native previews. Native path/SVG
+positioning exports as editable Photoshop point text with an explicit note. Saved
+pixels remain the fallback when a type descriptor cannot be parsed. These limits
+are separate from the independent editable horizontal type acceptance fixture.
+
+### Placed PSD sources and smart filters
+
+SoLd/SoLE and legacy PlLd records retain their source association, full perspective
+quad and complete Photoshop descriptor. Embedded lnk2/lnk3/lnkD sources use the
+shared immutable SourceAttachment store once. Linked source descriptors and missing
+source state survive .oma and PSD export; no linked path is followed automatically.
+
+The raster inspector can make a placed source, edit a separate PSD source copy,
+reload that edited source, replace/relink the source, adjust/toggle supported smart
+filters, and rasterize explicitly. Each replacement/filter change is one undo step;
+previous original bytes remain recoverable. Native moves, scales, rotations and
+shears update the exported placed-object quad. Perspective preview recomputation
+samples native floating-point source pixels. Gaussian blur, motion blur,
+brightness/contrast and invert have native filter mappings. Their parameters and
+unknown filter descriptors remain standard Photoshop data in exported files.
+
+An unsupported active filter or warp keeps the imported saved preview and gives
+an explicit explanation before native recomputation. Missing external sources can
+be relinked without discarding their stored placement/filter parameters. Native
+source editing/filter recomputation is software-qualified separately from Adobe
+Photoshop/GIMP application testing and native desktop interaction.
