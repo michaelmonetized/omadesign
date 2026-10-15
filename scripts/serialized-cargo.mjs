@@ -3,11 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { hashFile, runCargo, saveReceipt } from './cargo-receipt.mjs';
 
 const [mode, ...input] = process.argv.slice(2);
 const inside = mode === '--inside';
 const [configPath, repository, revision, ...args] = inside ? input : [mode, ...input];
-if (!configPath || !repository || !/^[a-f0-9]{40}$/.test(revision ?? '') || !['test', 'check', 'clippy', 'fmt', 'metadata', 'build'].includes(args[0]) || args.includes('--target-dir')) {
+if (!configPath || !repository || !/^[a-f0-9]{40}$/.test(revision ?? '') || !['test', 'check', 'clippy', 'fmt', 'metadata', 'build'].includes(args[0]) || args.some(arg => arg === '--target-dir' || arg.startsWith('--target-dir='))) {
   throw new Error('Usage: node scripts/serialized-cargo.mjs CONFIG REPOSITORY FULL_COMMIT test|check|clippy|fmt|metadata|build [ARGS]; target directory is centrally owned');
 }
 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
@@ -37,13 +38,31 @@ execFileSync('git', ['-C', entry.worktree, 'checkout', '--quiet', '--detach', re
 const scratch = fs.mkdtempSync(path.join(config.scratch, 'cargo-'));
 try {
   console.error(`Building ${repository} ${revision.slice(0, 12)} in ${entry.worktree}; shared target ${entry.target}`);
-  const result = spawnSync('cargo', args, {
-    cwd: entry.worktree,
-    env: { ...process.env, CARGO_TARGET_DIR: entry.target, CARGO_BUILD_JOBS: '2', TMPDIR: scratch, TMP: scratch, TEMP: scratch },
-    stdio: 'inherit',
+  const started = new Date().toISOString();
+  const sourceTree = git('rev-parse', `${revision}^{tree}`);
+  const helperHash = (await hashFile(fileURLToPath(import.meta.url))).sha256;
+  const receiptHash = (await hashFile(fileURLToPath(new URL('./cargo-receipt.mjs', import.meta.url)))).sha256;
+  const configHash = (await hashFile(configPath)).sha256;
+  const result = await runCargo(args, entry, { ...process.env, CARGO_TARGET_DIR: entry.target, CARGO_BUILD_JOBS: '2', TMPDIR: scratch, TMP: scratch, TEMP: scratch });
+  const dirtyAfter = Boolean(git('status', '--porcelain', '--untracked-files=all'));
+  if (dirtyAfter) result.receipt_errors.push('Canonical build checkout changed during Cargo; preserve it and contact the coordinator');
+  const receipt = saveReceipt(path.join(config.scratch, 'receipts', repository, revision), {
+    schema: 1,
+    repository,
+    revision,
+    source_tree: sourceTree,
+    dirty_before: false,
+    dirty_after: dirtyAfter,
+    cargo_args: args,
+    ...result,
+    started_at: started,
+    finished_at: new Date().toISOString(),
+    helper_sha256: helperHash,
+    receipt_helper_sha256: receiptHash,
+    config_sha256: configHash,
   });
-  if (result.error) throw result.error;
-  process.exitCode = result.status ?? 1;
+  console.error(`Cargo receipt: ${receipt}`);
+  process.exitCode = result.exit_code || (result.receipt_errors.length ? 1 : 0);
 } finally {
   fs.rmSync(scratch, { recursive: true, force: true });
 }

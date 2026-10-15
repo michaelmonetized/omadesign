@@ -192,13 +192,21 @@ impl Workspace {
                     .iter_mut()
                     .find(|g| g.panels.iter().any(|p| p == id))
                 {
-                    let index = group
-                        .panels
-                        .iter()
-                        .position(|p| p == id)
-                        .unwrap_or(0)
-                        .min(destination.panels.len() - 1);
+                    let origin = group.panels.iter().position(|p| p == id).unwrap_or(0);
                     destination.panels.retain(|p| p != id);
+                    let index = group.panels[origin + 1..]
+                        .iter()
+                        .find_map(|panel| destination.panels.iter().position(|p| p == panel))
+                        .or_else(|| {
+                            group.panels[..origin].iter().rev().find_map(|panel| {
+                                destination
+                                    .panels
+                                    .iter()
+                                    .position(|p| p == panel)
+                                    .map(|index| index + 1)
+                            })
+                        })
+                        .unwrap_or_else(|| origin.min(destination.panels.len()));
                     destination.panels.insert(index, id.into());
                     destination.active = index;
                 }
@@ -532,6 +540,49 @@ impl Book {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn shared_workspace_restores_every_tab_permutation_after_reopen() {
+        let permutations = [
+            ["a", "b", "c"],
+            ["a", "c", "b"],
+            ["b", "a", "c"],
+            ["b", "c", "a"],
+            ["c", "a", "b"],
+            ["c", "b", "a"],
+        ];
+        for original in permutations {
+            let group = Group {
+                panels: original.iter().map(|panel| (*panel).into()).collect(),
+                place: Place::Floating,
+                rect: [60.0, 70.0, 360.0, 440.0],
+                ..Default::default()
+            };
+            for restore in permutations {
+                let mut layout = Workspace {
+                    groups: vec![group.clone()],
+                    ..Default::default()
+                };
+                layout.close_group(&group);
+                for (step, panel) in restore.iter().enumerate() {
+                    layout = serde_json::from_slice(&serde_json::to_vec(&layout).unwrap()).unwrap();
+                    layout.restore(panel);
+                    assert_eq!(layout.groups.len(), 1);
+                    let expected: Vec<_> = original
+                        .iter()
+                        .filter(|id| restore[..=step].contains(id))
+                        .map(|id| (*id).to_string())
+                        .collect();
+                    assert_eq!(
+                        layout.groups[0].panels, expected,
+                        "original={original:?} restore={restore:?} step={step}"
+                    );
+                    assert_eq!(layout.groups[0].place, Place::Floating);
+                    assert_eq!(layout.groups[0].rect, group.rect);
+                    assert_eq!(layout.hidden.len(), 2 - step);
+                }
+            }
+        }
+    }
     #[test]
     fn shared_workspace_restores_tab_order_and_closed_floating_groups() {
         let mut layout = Workspace::preset(&[

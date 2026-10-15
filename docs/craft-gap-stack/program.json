@@ -4,7 +4,8 @@
   "prepared_milestones": [
     {"version":"0.6.4","pr":220,"scope":"Qualified installed brush/SVG/import baseline and coordinator tooling"},
     {"version":"0.6.5","pr":223,"source_commit":"516b965e984d9791bbd373a8389b429cd7b6934e","validation":"6 focused tests passed; canonical source hashes match all three apps","publication":"Source preparation only; binary and release qualification remain separate"},
-    {"version":"0.6.6","pr":225,"source_commit":"64bb31a84a611200d2d8ed1fcf1251fb20b39fa6","validation":"9 focused contextual-field tests passed at the stated source; lock-held executable receipt 8dc3d1fce7640bafcbf1253b5bb57c3065d567d6b627835a3b7221a807e37d66","publication":"Consistent source metadata only; no new binary or release qualification"}
+    {"version":"0.6.6","pr":225,"source_commit":"64bb31a84a611200d2d8ed1fcf1251fb20b39fa6","validation":"9 focused contextual-field tests passed at the stated source; lock-held executable receipt 8dc3d1fce7640bafcbf1253b5bb57c3065d567d6b627835a3b7221a807e37d66","publication":"Consistent source metadata only; no new binary or release qualification"},
+    {"version":"0.6.7","pr":229,"source_commit":"8a50bc900aeae58f83e32e485c54339151781a34","validation":"13 focused saved-panel tests passed at the stated source; lock-held executable receipt 24e06424f0d7e72e317b0ba235a4749689cdf516a53b4b83e7ae14d47182369d","publication":"Consistent source metadata only; no new binary or release qualification"}
   ],
   "groups": [
     {"key":"shared-ui","gaps":["SUITE-01","UI-02","UI-01","AUDIO-01","VIDEO-01","VIDEO-02"],"repos":["omadesign","omatainer","editbay"],"milestones":["0.6.5","0.6.6","0.6.7"]},

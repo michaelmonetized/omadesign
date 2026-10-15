@@ -8,6 +8,13 @@ Apps check in exact copies; `node scripts/check-shared-ui.mjs [other repo roots]
 checks hashes against the canonical manifest, including every supplied copy.
 Changes start in Omadesign and must update all consumers and the manifest.
 
+Revision 2 restores hidden floating tabs in their saved relative order regardless
+of restoration order. Earlier cuts retain revision 1 and its exact test receipts.
+Check matching historical copies with
+`node scripts/check-shared-ui.mjs --at CANONICAL_ROOT FULL_SHA CONSUMER_ROOT FULL_SHA`.
+The default command compares the current top copies; pinned mode compares only
+the explicitly selected canonical revision and consumers.
+
 `fields::number` accepts a stable ID, units, optional reset and mixed/locked/error
 state. It returns change/focus/commit/cancel signals; applications decide when to
 preview and commit typed commands. A field never owns undo or a document.

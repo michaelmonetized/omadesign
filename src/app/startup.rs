@@ -107,6 +107,10 @@ impl Studio {
 
     fn load_startup_preferences_from(&mut self, path: PathBuf) {
         self.startup_preferences_path = Some(path.clone());
+        match crate::ui::workspace::Book::read(&path.with_file_name("workspaces.json")) {
+            Ok(book) => self.panel_workspaces = book,
+            Err(error) => self.status = format!("Could not load workspaces: {error}"),
+        }
         match Preferences::read(&path) {
             Ok(preferences) => {
                 self.startup_preferences = preferences;
@@ -127,6 +131,16 @@ impl Studio {
                 }
             }
             Err(error) => self.status = format!("Could not load startup preferences: {error}"),
+        }
+    }
+
+    /// Save panel choices independently from artwork.
+    /// Args: none. Returns no value; failures appear in the application status.
+    pub(crate) fn save_panel_workspaces(&mut self) {
+        if let Some(path) = &self.startup_preferences_path {
+            if let Err(error) = self.panel_workspaces.write(&path.with_file_name("workspaces.json")) {
+                self.status = format!("Could not save workspaces: {error}");
+            }
         }
     }
 

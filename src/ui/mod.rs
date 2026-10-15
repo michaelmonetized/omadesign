@@ -44,6 +44,7 @@ mod retouch;
 mod brushes;
 mod selection;
 mod studios;
+mod panel_workspace;
 mod shared_transform;
 mod text_geometry;
 mod templates;
@@ -189,14 +190,9 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         photo::show(ui, studio);
     } else {
         chrome::doc_tabs(ui, studio);
-        layout::hierarchy(ui, studio);
         chrome::left_toolbar(ui, studio);
-        if !studio.agent.visible {
-            studios::right_panel(ui, studio);
-        }
         chrome::status_bar(ui, studio);
-        timeline::show(ui, studio);
-        canvas::show(ui, studio);
+        panel_workspace::show(ui, studio);
     }
 
     if !studio.file_dialog_pending() {

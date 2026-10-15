@@ -20,13 +20,20 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     eframe::egui::Panel::bottom("timeline")
         .exact_size(168.0)
         .show(ui, |ui| {
+            content(ui, studio);
+        });
+}
+
+/// Draw the motion timeline inside a movable panel.
+/// Args: panel UI and studio. Returns no value; motion commands remain unchanged.
+pub(super) fn content(ui: &mut Ui, studio: &mut Studio) {
+    if studio.persona != Persona::Motion {ui.label("Switch to Motion for keyframes");return;}
             ui.horizontal(|ui| {
                 transport(ui, studio);
             });
             ui.add_space(2.0);
             let (rect, resp) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
             paint_timeline(ui, studio, rect, &resp);
-        });
 }
 
 fn transport(ui: &mut Ui, studio: &mut Studio) {

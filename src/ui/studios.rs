@@ -46,6 +46,35 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                 .inner_margin(Margin::symmetric(14, 14)),
         )
         .show(ui, |ui| {
+            inspector_content(ui, studio);
+            layers_content(ui, studio);
+        });
+    let edge = eframe::egui::Rect::from_min_max(
+        panel.response.rect.left_top() - vec2(3.0, 0.0),
+        panel.response.rect.left_bottom() + vec2(3.0, 0.0),
+    );
+    let resize = ui
+        .interact(edge, width_id.with("drag"), eframe::egui::Sense::drag())
+        .on_hover_cursor(eframe::egui::CursorIcon::ResizeHorizontal);
+    if resize.dragged() {
+        let width = (width - resize.drag_delta().x).clamp(256.0, 420.0);
+        ui.ctx()
+            .data_mut(|data| data.insert_persisted(width_id, width));
+    }
+}
+
+/// Draw property commands inside an application-placed panel.
+/// Args: panel UI and studio. Returns no value; typed history stays studio-owned.
+pub(super) fn inspector_content(ui: &mut Ui, studio: &mut Studio) {
+    if studio.paint_mask
+        && studio
+            .active_layer
+            .and_then(|index| studio.doc.layers.get(index))
+            .is_none_or(|layer| layer.mask.is_none())
+    {
+        studio.paint_mask = false;
+    }
+
             ui.set_max_width(ui.available_width());
             ui.spacing_mut().item_spacing = vec2(8.0, 6.0);
             if studio.libraries.sidebar != crate::app::libraries::Sidebar::Inspector {
@@ -65,7 +94,7 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
             let typing = studio.type_edit.is_some()
                 || studio.tool == Tool::Text
                 || studio.selected_type().is_some();
-            let properties_height = (ui.available_height() - 152.0).max(170.0);
+            let properties_height = ui.available_height().max(0.0);
             ScrollArea::vertical()
                 .id_salt("properties-scroll")
                 .max_height(properties_height)
@@ -138,6 +167,12 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                     }
                 });
             });
+
+}
+
+/// Draw layer commands inside an application-placed panel.
+/// Args: panel UI and studio. Returns no value; layer edits retain typed history.
+pub(super) fn layers_content(ui: &mut Ui, studio: &mut Studio) {
             ui.add_space(10.0);
             ui.separator();
             ui.add_space(8.0);
@@ -145,19 +180,6 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                 .id_salt("layers-scroll")
                 .auto_shrink([false, false])
                 .show(ui, |ui| layers_studio(ui, studio));
-        });
-    let edge = eframe::egui::Rect::from_min_max(
-        panel.response.rect.left_top() - vec2(3.0, 0.0),
-        panel.response.rect.left_bottom() + vec2(3.0, 0.0),
-    );
-    let resize = ui
-        .interact(edge, width_id.with("drag"), eframe::egui::Sense::drag())
-        .on_hover_cursor(eframe::egui::CursorIcon::ResizeHorizontal);
-    if resize.dragged() {
-        let width = (width - resize.drag_delta().x).clamp(256.0, 420.0);
-        ui.ctx()
-            .data_mut(|data| data.insert_persisted(width_id, width));
-    }
 }
 
 fn section_gap(ui: &mut Ui) {
