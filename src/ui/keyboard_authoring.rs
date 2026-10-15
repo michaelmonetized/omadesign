@@ -91,6 +91,7 @@ pub(super) fn input(
             ui.ctx().accesskit_node_builder(response.id, |node| {
                 node.set_invalid(egui::accesskit::Invalid::True);
                 node.set_error_message(message.id.accesskit_id());
+                node.push_described_by(message.id.accesskit_id());
             });
             ui.ctx().accesskit_node_builder(message.id, |node| {
                 node.set_live(egui::accesskit::Live::Polite)

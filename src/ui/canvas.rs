@@ -355,6 +355,16 @@ fn interaction_objects(studio: &Studio) -> Option<Vec<(usize, u64)>> {
 /// Apply explicit keyboard coordinates through the canvas tools.
 /// Args: editor, finite world points, selection modifiers and clone-source mode.
 /// Returns a target error or completes the same tool command used by a canvas gesture.
+/// Locate the existing free-transform grips in document coordinates.
+/// Args: editor with an active transform. Returns scale/skew grips followed by rotation.
+pub(super) fn keyboard_transform_handles(studio: &Studio) -> Vec<Pt> {
+    if studio.free_transform.is_none() { return vec![]; }
+    let Some(bounds) = posed_bounds(studio) else { return vec![]; };
+    let angle = selection_angle(studio);
+    (0..8).map(|index| bounds.handle(index).rotate(angle))
+        .chain(std::iter::once(bounds.rotate_handle().rotate(angle))).collect()
+}
+
 pub(super) fn keyboard_gesture(studio: &mut Studio, points: &[Pt], shift: bool, alt: bool, source: bool) -> Result<(), String> {
     let Some(&first) = points.first() else { return Err("Enter at least one point.".into()); };
     if points.len() > 4096 || points.iter().any(|p| !p.x.is_finite() || !p.y.is_finite() || p.x.abs() > 1_000_000. || p.y.abs() > 1_000_000.) {
