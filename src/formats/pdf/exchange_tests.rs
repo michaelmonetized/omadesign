@@ -543,3 +543,402 @@ fn pdf_exchange_applies_fill_opacity_once_to_overlapping_fill_and_stroke() {
         );
     }
 }
+
+fn drawing_operations(pdf: &Pdf) -> Vec<lopdf::content::Operation> {
+    let mut operations = pdf
+        .get_pages()
+        .into_values()
+        .flat_map(|page| pdf.get_and_decode_page_content(page).unwrap().operations)
+        .collect::<Vec<_>>();
+    for stream in pdf
+        .objects
+        .values()
+        .filter_map(|o| o.as_stream().ok())
+        .filter(|s| s.dict.get(b"Subtype").and_then(Object::as_name).ok() == Some(b"Form"))
+    {
+        operations.extend(
+            Content::decode(&decoded(stream, STREAM_LIMIT).unwrap())
+                .unwrap()
+                .operations,
+        );
+    }
+    operations
+}
+
+fn text_document() -> Document {
+    let mut doc = Document::new("Embedded editable text", 360., 140., 72.);
+    doc.layers.clear();
+    let mut layer = Layer::vector("Live text");
+    let mut run = TypeRun {
+        font: [
+            "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/noto/NotoSans-Regular.ttf",
+        ]
+        .into_iter()
+        .find(|p| std::path::Path::new(p).is_file())
+        .expect("PDF text fixtures need Liberation Sans or Noto Sans")
+        .into(),
+        origin: Pt::new(15., 45.),
+        content: "Editable office — café".into(),
+        px: 24.,
+        liga: false,
+        ..Default::default()
+    };
+    run.contours = crate::text::shape(&run);
+    layer.kind.shapes_mut().unwrap().push(Shape::new(
+        Geom::Text(run),
+        Style {
+            fill: Fill::Solid(Rgba::rgb(25, 35, 60)),
+            stroke: None,
+        },
+    ));
+    let mut run = TypeRun {
+        font: [
+            "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/noto/NotoSans-Regular.ttf",
+        ]
+        .into_iter()
+        .find(|p| std::path::Path::new(p).is_file())
+        .expect("PDF text fixtures need Liberation Sans or Noto Sans")
+        .into(),
+        origin: Pt::new(18., 98.),
+        content: "Rotated vector type".into(),
+        px: 22.,
+        tracking: 0.4,
+        ..Default::default()
+    };
+    run.contours = crate::text::shape(&run);
+    let mut rotated = Shape::new(
+        Geom::Text(run),
+        Style {
+            fill: Fill::Solid(Rgba::rgb(130, 45, 75)),
+            stroke: None,
+        },
+    );
+    rotated.rotation = 0.13;
+    layer.kind.shapes_mut().unwrap().push(rotated);
+    doc.layers.push(layer);
+    doc
+}
+
+#[test]
+fn pdf_exchange_text_has_embedded_font_unicode_and_positioned_glyphs() {
+    let doc = text_document();
+    let (bytes, notes) = write(&doc).unwrap();
+    assert!(notes.is_empty(), "{notes:?}");
+    let pdf = Pdf::load_mem(&bytes).unwrap();
+    let fonts = pdf
+        .objects
+        .values()
+        .filter_map(|o| o.as_dict().ok())
+        .filter(|d| d.get(b"Subtype").and_then(Object::as_name).ok() == Some(b"Type0"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        fonts.len(),
+        1,
+        "the same resolved font should be embedded once"
+    );
+    assert!(fonts[0].get(b"ToUnicode").is_ok());
+    assert!(!pdf.objects.values().any(|o| subtype(o, b"Image")));
+    let text_ops = drawing_operations(&pdf)
+        .into_iter()
+        .filter(|o| o.operator == "Tj")
+        .count();
+    assert!(text_ops > 30, "text did not remain PDF text");
+    let (imported, notes) = read(&bytes, "editable.pdf").unwrap();
+    assert!(
+        notes.iter().all(|n| !n.contains("substituted")
+            && !n.contains("widths")
+            && !n.contains("could not")),
+        "{notes:?}"
+    );
+    let text = imported
+        .layers
+        .iter()
+        .flat_map(|l| l.kind.shapes().unwrap_or(&[]))
+        .filter_map(|s| {
+            if let Geom::Text(run) = &s.geom {
+                Some(run.content.as_str())
+            } else {
+                None
+            }
+        })
+        .collect::<String>();
+    assert_eq!(text, "Editable office — café");
+    assert!(
+        imported
+            .layers
+            .iter()
+            .flat_map(|l| l.kind.shapes().unwrap_or(&[]))
+            .any(|s| matches!(&s.geom,Geom::Text(run) if run.font.starts_with("omatype:")))
+    );
+}
+
+#[test]
+#[ignore = "independent text/font interoperability: requires Poppler utilities"]
+fn pdf_exchange_text_poppler_and_fresh_process_native_reopen() {
+    if let Some(path) = std::env::var_os("OMA_PDF_PORTABLE_REOPEN") {
+        let mut doc = crate::project::load_from(std::path::Path::new(&path)).unwrap();
+        let runs = doc
+            .layers
+            .iter()
+            .flat_map(|l| l.kind.shapes().unwrap_or(&[]))
+            .filter_map(|s| {
+                if let Geom::Text(run) = &s.geom {
+                    Some(run)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        assert!(!runs.is_empty());
+        for run in runs {
+            assert!(run.font.starts_with("omatype:"));
+            assert!(crate::text::font_bytes_for(run).is_some());
+        }
+        let run = doc
+            .layers
+            .iter_mut()
+            .filter_map(|l| l.kind.shapes_mut())
+            .flat_map(|shapes| shapes.iter_mut())
+            .find_map(|s| {
+                if let Geom::Text(run) = &mut s.geom {
+                    Some(run)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        let bytes = crate::text::font_bytes_for(run).unwrap();
+        assert!(
+            rustybuzz::ttf_parser::Face::parse(&bytes, 0)
+                .unwrap()
+                .glyph_index('Ω')
+                .is_some()
+        );
+        let before = crate::text::shape(run).len();
+        run.content.push('Ω');
+        run.contours = crate::text::shape(run);
+        assert!(
+            run.contours.len() > before,
+            "new character did not produce portable editable glyph contours"
+        );
+        let (bytes, notes) = write(&doc).unwrap();
+        assert!(notes.iter().all(|n| !n.contains("font")), "{notes:?}");
+        assert!(!bytes.is_empty());
+        return;
+    }
+    let folder =
+        std::env::temp_dir().join(format!("pdf-text-exchange-{}", crate::document::next_id()));
+    std::fs::create_dir_all(&folder).unwrap();
+    let doc = text_document();
+    let (bytes, notes) = write(&doc).unwrap();
+    assert!(notes.is_empty(), "{notes:?}");
+    let pdf = folder.join("text.pdf");
+    std::fs::write(&pdf, &bytes).unwrap();
+    let fonts = std::process::Command::new("pdffonts")
+        .arg(&pdf)
+        .output()
+        .unwrap();
+    assert!(fonts.status.success());
+    assert!(
+        fonts.stderr.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&fonts.stderr)
+    );
+    let inventory = String::from_utf8_lossy(&fonts.stdout);
+    let row = inventory.lines().skip(2).collect::<Vec<_>>();
+    assert_eq!(row.len(), 1, "{inventory}");
+    assert!(
+        row[0].contains("CID TrueType")
+            && row[0].contains("Identity-H")
+            && row[0].split_whitespace().filter(|&s| s == "yes").count() == 2,
+        "{inventory}"
+    );
+    let text = std::process::Command::new("pdftotext")
+        .args(["-layout", "-enc", "UTF-8"])
+        .arg(&pdf)
+        .arg("-")
+        .output()
+        .unwrap();
+    assert!(text.status.success());
+    assert!(
+        text.stderr.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&text.stderr)
+    );
+    let extracted = String::from_utf8_lossy(&text.stdout);
+    assert!(extracted.contains("Editable office — café"), "{extracted}");
+    assert!(extracted.contains("Rotated vector type"), "{extracted}");
+    let render = std::process::Command::new("pdftocairo")
+        .args(["-png", "-r", "72", "-singlefile"])
+        .arg(&pdf)
+        .arg(folder.join("text-poppler"))
+        .output()
+        .unwrap();
+    assert!(render.status.success());
+    assert!(
+        render.stderr.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&render.stderr)
+    );
+    let expected = crate::compositor::render_export(&doc, 1).unwrap();
+    expected.save_png(folder.join("text-native.png")).unwrap();
+    let actual = image::open(folder.join("text-poppler.png"))
+        .unwrap()
+        .to_rgb8();
+    assert_eq!(actual.dimensions(), (360, 140));
+    let error = expected
+        .pixels()
+        .iter()
+        .zip(actual.pixels())
+        .map(|(a, b)| {
+            let a = a.demultiply();
+            u64::from(a.red().abs_diff(b.0[0]))
+                + u64::from(a.green().abs_diff(b.0[1]))
+                + u64::from(a.blue().abs_diff(b.0[2]))
+        })
+        .sum::<u64>() as f64
+        / (360. * 140. * 3.);
+    eprintln!(
+        "embedded text: {} bytes, one embedded Unicode CID TrueType font; Poppler mean absolute channel difference {error:.4}/255",
+        bytes.len()
+    );
+    let (imported, _) = read(&bytes, "text.pdf").unwrap();
+    let portable = folder.join("portable-text.oma");
+    crate::project::save_to(&imported, &portable).unwrap();
+    let child=std::process::Command::new(std::env::current_exe().unwrap()).args(["--exact","formats::pdf::exchange_tests::pdf_exchange_text_poppler_and_fresh_process_native_reopen","--ignored","--nocapture"]).env("OMA_PDF_PORTABLE_REOPEN",&portable).output().unwrap();
+    assert!(
+        child.status.success(),
+        "fresh-process reopen failed: {}\n{}",
+        String::from_utf8_lossy(&child.stdout),
+        String::from_utf8_lossy(&child.stderr)
+    );
+    if let Some(receipts) = std::env::var_os("OMA_PDF_EXCHANGE_RECEIPTS") {
+        let receipts = std::path::PathBuf::from(receipts);
+        std::fs::create_dir_all(&receipts).unwrap();
+        for name in [
+            "text.pdf",
+            "text-native.png",
+            "text-poppler.png",
+            "portable-text.oma",
+        ] {
+            std::fs::copy(folder.join(name), receipts.join(name)).unwrap();
+        }
+        std::fs::write(receipts.join("pdffonts.txt"), fonts.stdout).unwrap();
+        std::fs::write(receipts.join("pdftotext.txt"), text.stdout).unwrap();
+    }
+    assert!(
+        error < 2.,
+        "embedded text differs by {error}/255; evidence in {}",
+        folder.display()
+    );
+    std::fs::remove_dir_all(folder).unwrap();
+}
+
+#[test]
+fn pdf_exchange_rejects_nonfinite_text_and_skips_zero_width_strokes() {
+    for field in 0..3 {
+        let mut doc = text_document();
+        let Geom::Text(run) = &mut doc.layers[0].kind.shapes_mut().unwrap()[0].geom else {
+            unreachable!()
+        };
+        match field {
+            0 => run.px = f32::INFINITY,
+            1 => run.origin.x = f32::NAN,
+            _ => run.tracking = f32::INFINITY,
+        };
+        assert!(write(&doc).unwrap_err().contains("finite"));
+    }
+    let mut doc = text_document();
+    let shapes = doc.layers[0].kind.shapes_mut().unwrap();
+    shapes.truncate(1);
+    shapes[0].style.fill = Fill::None;
+    shapes[0].style.stroke = Some(Stroke {
+        width: 0.,
+        ..Default::default()
+    });
+    let (bytes, notes) = write(&doc).unwrap();
+    assert!(notes.is_empty(), "{notes:?}");
+    let pdf = Pdf::load_mem(&bytes).unwrap();
+    let modes = drawing_operations(&pdf)
+        .into_iter()
+        .filter(|o| o.operator == "Tr")
+        .map(|o| number_value(&o.operands[0]).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(modes, vec![3.], "zero width stroke became a PDF hairline");
+}
+
+#[test]
+fn pdf_exchange_ligatures_preserve_embedded_glyphs_on_import() {
+    let mut doc = text_document();
+    let shapes = doc.layers[0].kind.shapes_mut().unwrap();
+    shapes.truncate(1);
+    let Geom::Text(run) = &mut shapes[0].geom else {
+        unreachable!()
+    };
+    run.font = "/usr/share/fonts/noto/NotoSans-Regular.ttf".into();
+    run.content = "office".into();
+    run.liga = true;
+    run.contours = crate::text::shape(run);
+    assert!(
+        crate::text::glyph_count(run) < run.content.chars().count(),
+        "fixture must shape an ffi ligature"
+    );
+    let expected = crate::compositor::render_export(&doc, 1).unwrap();
+    let (bytes, notes) = write(&doc).unwrap();
+    assert!(notes.is_empty(), "{notes:?}");
+    let (imported, notes) = read(&bytes, "ligatures.pdf").unwrap();
+    assert!(notes.is_empty(), "{notes:?}");
+    let text = imported
+        .layers
+        .iter()
+        .flat_map(|l| l.kind.shapes().unwrap_or(&[]))
+        .filter_map(|s| {
+            if let Geom::Text(run) = &s.geom {
+                Some(run.content.as_str())
+            } else {
+                None
+            }
+        })
+        .collect::<String>();
+    assert_eq!(text, "office");
+    let actual = crate::compositor::render_export(&imported, 1).unwrap();
+    assert_eq!(
+        expected.data(),
+        actual.data(),
+        "ligature glyph appearance changed during import"
+    );
+}
+
+#[test]
+fn pdf_exchange_rejects_infinite_stroke_and_never_uses_source_gids_after_font_substitution() {
+    let mut doc = text_document();
+    doc.layers[0].kind.shapes_mut().unwrap()[0].style.stroke = Some(Stroke {
+        width: f32::INFINITY,
+        ..Default::default()
+    });
+    assert!(write(&doc).unwrap_err().contains("finite"));
+    let (bytes, _) = write(&text_document()).unwrap();
+    let mut pdf = Pdf::load_mem(&bytes).unwrap();
+    for object in pdf.objects.values_mut() {
+        if let Ok(dict) = object.as_dict_mut() {
+            if dict.get(b"Type").and_then(Object::as_name).ok() == Some(b"FontDescriptor") {
+                dict.remove(b"FontFile2");
+            }
+            if dict.get(b"Type").and_then(Object::as_name).ok() == Some(b"Font") {
+                dict.set("BaseFont", "UnavailableSourceFont");
+            }
+        }
+    }
+    let mut bytes = vec![];
+    pdf.save_to(&mut bytes).unwrap();
+    let (_, notes) = read(&bytes, "missing-font.pdf").unwrap();
+    assert!(notes.iter().any(|n| n.contains("substituted")), "{notes:?}");
+    assert!(
+        notes.iter().all(|n| !n.contains("exact embedded glyph")),
+        "source glyph IDs were applied to a substitute face: {notes:?}"
+    );
+}

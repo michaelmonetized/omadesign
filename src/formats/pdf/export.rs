@@ -9,6 +9,7 @@ use lopdf::{Dictionary, Document as Pdf, Object, ObjectId, Stream, dictionary};
 use std::collections::{BTreeSet, HashMap};
 
 mod fallback;
+mod text;
 
 /// Write editable PDF artwork.
 /// Args: the source document. Returns PDF 1.7 bytes and any appearance fallback notes.
@@ -22,6 +23,7 @@ pub fn write(document: &Document) -> Result<(Vec<u8>, Vec<String>), String> {
         states: HashMap::new(),
         images: HashMap::new(),
         properties: Dictionary::new(),
+        fonts: text::Fonts::default(),
     };
     let page_tree = writer.pdf.new_object_id();
     let mut ocgs = vec![];
@@ -103,6 +105,7 @@ pub fn write(document: &Document) -> Result<(Vec<u8>, Vec<String>), String> {
     let info = writer.pdf.add_object(dictionary! {"Title"=>lopdf::text_string(&document.name), "Producer"=>lopdf::text_string("Omadesign")});
     writer.pdf.trailer.set("Root", catalog);
     writer.pdf.trailer.set("Info", info);
+    writer.fonts.finish(&mut writer.pdf)?;
     writer.pdf.compress();
     let mut bytes = Vec::new();
     writer
@@ -156,6 +159,7 @@ struct Writer {
     states: HashMap<(u8, u8, String), ObjectId>,
     images: HashMap<u64, ObjectId>,
     properties: Dictionary,
+    fonts: text::Fonts,
 }
 impl Writer {
     /// Encode a bounded transparency form.
@@ -331,8 +335,34 @@ impl Writer {
     /// Paint fill and stroke independently before object opacity is applied.
     /// Args: object, page bounds and output. Returns an error for invalid gradient data.
     fn shape(&mut self, shape: &Shape, bounds: Bounds, out: &mut Scene) -> Result<(), String> {
-        if matches!(shape.geom, Geom::Text(_)) {
-            self.warnings.insert("PDF text exports as vector outlines, preserving appearance but not live text editing.".into());
+        if !shape.rotation.is_finite()
+            || !shape.opacity.is_finite()
+            || !shape.fill_opacity.is_finite()
+        {
+            return Err("PDF object opacity and rotation must be finite".into());
+        }
+        if shape.style.stroke.as_ref().is_some_and(|s| {
+            !s.width.is_finite()
+                || !s.dash_offset.is_finite()
+                || s.dash
+                    .is_some_and(|(a, b)| !a.is_finite() || !b.is_finite())
+        }) {
+            return Err("PDF stroke geometry must be finite".into());
+        }
+        if let Geom::Text(run) = &shape.geom {
+            text::validate(run)?;
+            let mut scene = Scene::default();
+            match text::write(&mut self.pdf, &mut self.fonts, shape, &mut scene) {
+                Ok(()) => {
+                    out.ops.extend(scene.ops);
+                    merge_resources(&mut out.resources, scene.resources);
+                    return Ok(());
+                }
+                Err(reason) => {
+                    self.warnings
+                        .insert(format!("PDF text uses vector outlines because {reason}."));
+                }
+            }
         }
         if !shape.style.fill.is_none() {
             op(&mut out.ops, "q", &[]);
