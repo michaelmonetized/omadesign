@@ -15,9 +15,34 @@ Check matching historical copies with
 The default command compares the current top copies; pinned mode compares only
 the explicitly selected canonical revision and consumers.
 
+Revision 3 adds context-owned, one-use native focus and floating size requests.
+Call request_focus(ctx, workspace_id, panel) after normalizing the known registry;
+it returns focus to the native tab when the logical panel has not changed.
+request_floating_size accepts a visible floating panel and finite positive size.
+show revalidates requests and uses Window.fixed_size for the requested frame,
+then returns to ordinary resizing. Window IDs and saved Group.rect remain stable.
+Book.toolbar_for delivers explicit requests; toolbar remains compatible.
+Requests never enter serialized preferences or artwork history.
+
+Saved floating rectangles are outer window footprints. egui 0.36 takes that size
+directly; an egui 0.32 app enables the oma-ui-egui032 compile feature to subtract
+its public frame/title margins. Omadesign and EditBay leave that feature disabled.
+All consumers retain identical canonical source and manifest bytes.
+
+`fields::native_scope(ui, absolute_id, body)` preserves native control identity
+when earlier conditional rows change. It uses egui 0.36's absolute child scope
+and egui 0.32's public Ui constructor with inherited presentation and allocation.
+It is for native controls; the application retains their precision and behavior.
+Fields and panel tabs share this small adapter in `native_scope.rs`.
+
 `fields::number` accepts a stable ID, units, optional reset and mixed/locked/error
 state. It returns change/focus/commit/cancel signals; applications decide when to
 preview and commit typed commands. A field never owns undo or a document.
+The native parser uses egui's whitespace/minus grammar and rejects nonfinite
+drafts before conversion. Invalid drafts and application errors have one visible
+associated message and polite live semantics. Names, mixed state and focus use
+the actual widget. FieldResponse.changed is authoritative after rejection or
+cancellation; the native response remains available for app-owned history.
 `action`, `tab` and `section` return normal egui responses/results.
 
 Workspace panels have application-owned IDs. The canvas is outside the layout

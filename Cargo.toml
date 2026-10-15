@@ -19,6 +19,9 @@ path = "src/main.rs"
 name = "gen_media"
 path = "src/bin/gen_media.rs"
 
+[features]
+oma-ui-egui032 = []
+
 [dependencies]
 ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "load-dynamic", "api-27"] }
 sha2 = "0.10"
