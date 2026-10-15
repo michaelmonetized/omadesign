@@ -136,6 +136,21 @@ fn photo_preset() -> Workspace {
     layout
 }
 
+/// Return a closed app dialog to the current registered native panel.
+/// Args: context and studio. Returns no value; the canonical request handles modal handoff.
+pub(super) fn return_focus(ctx: &egui::Context, studio: &mut Studio) {
+    if let Some(layout) = studio
+        .panel_workspaces
+        .tasks
+        .get_mut(&studio.panel_workspaces.active)
+    {
+        layout.normalize(&PANELS.iter().map(|panel| panel.0).collect::<Vec<_>>());
+        if let Some(panel) = layout.focus.clone() {
+            layout.request_focus(ctx, "oma-workspace", &panel);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

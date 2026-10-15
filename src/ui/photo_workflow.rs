@@ -5,6 +5,10 @@ use crate::{
 };
 use eframe::egui::{self, Button, Context, Id, RichText, ScrollArea, Ui};
 
+#[cfg(test)]
+#[path = "photo_workflow_keyboard_tests.rs"]
+mod keyboard_tests;
+
 #[derive(Clone)]
 enum Dialog {
     Apply(Box<AdjustmentSnapshot>),
@@ -19,6 +23,74 @@ struct State {
     name: String,
     categories: Categories,
     error: String,
+    error_target: Option<Id>,
+    owner: Option<Owner>,
+}
+
+#[derive(Clone)]
+struct Owner {
+    id: Id,
+    document: String,
+    active: Option<usize>,
+    selection: Vec<usize>,
+    images: Vec<(usize, std::sync::Arc<crate::photo::RgbaImage>)>,
+}
+
+impl Owner {
+    /// Capture the actual photo instances without tying fields to changing edit revisions.
+    /// Args: context and studio. Returns one transient owner for this open dialog.
+    fn capture(ctx: &Context, studio: &Studio) -> Self {
+        let selection = studio.photo.selection.iter().copied().collect::<Vec<_>>();
+        let mut indices = selection.clone();
+        indices.extend(studio.photo.selected);
+        indices.sort_unstable();
+        indices.dedup();
+        Self {
+            id: super::super::keyboard_controls::draft_id(ctx, "photo-workflow"),
+            document: studio.swap_id.clone(),
+            active: studio.photo.selected,
+            selection,
+            images: indices.into_iter().filter_map(|index| studio.photo.images.get(index)
+                .map(|image| (index, image.full.clone()))).collect(),
+        }
+    }
+
+    /// Reject a draft after its document, selection or open photo instance changes.
+    /// Args: current studio. Returns whether the captured authoring target still exists.
+    fn current(&self, studio: &Studio) -> bool {
+        self.document == studio.swap_id && self.active == studio.photo.selected
+            && self.selection == studio.photo.selection.iter().copied().collect::<Vec<_>>()
+            && self.images.iter().all(|(index, full)| studio.photo.images.get(*index)
+                .is_some_and(|image| std::sync::Arc::ptr_eq(full, &image.full)))
+    }
+}
+
+/// Label one existing native draft and retain its identity through loading and filtering rows.
+/// Args: UI, property, visible name and owned text. Returns the actual edit response.
+fn text(ui: &mut Ui, owner: Id, property: &str, label: &str, value: &mut String) -> egui::Response {
+    let name = ui.label(label);
+    let response = ui.add(egui::TextEdit::singleline(value)
+        .id(owner.with(("field", property))).desired_width(f32::INFINITY)).labelled_by(name.id);
+    super::super::welcome::name_control(ui, &response, name.id, label);
+    response
+}
+
+/// Preserve the identity and visible focus of one category checkbox.
+/// Args: UI, existing category and visible label. Returns its actual native response.
+fn category(ui: &mut Ui, owner: Id, value: &mut bool, label: &str) -> egui::Response {
+    let id = owner.with(("adjustment-category", label));
+    let response = super::super::fields::native_scope(ui, id, |ui| ui.checkbox(value, label)).inner;
+    super::super::welcome::focus_control(ui, &response);
+    response
+}
+
+/// Keep one native dialog action stable while status and validation rows change.
+/// Args: UI, open draft owner, property, visible label and availability. Returns its actual response.
+fn action(ui: &mut Ui, owner: Id, property: &str, label: &str, enabled: bool) -> egui::Response {
+    let response = super::super::fields::native_scope(ui, owner.with(("action", property)),
+        |ui| ui.add_enabled(enabled, Button::new(label))).inner;
+    super::super::welcome::focus_control(ui, &response);
+    response
 }
 fn state_id() -> Id {
     Id::new("photo-workflow")
@@ -42,6 +114,8 @@ pub(super) fn paste(ctx: &Context, studio: &mut Studio) {
     state.dialog = Some(Dialog::Apply(Box::new(snapshot)));
     state.folder = false;
     state.error.clear();
+    state.error_target = None;
+    state.owner = Some(Owner::capture(ctx, studio));
     write(ctx, state);
 }
 pub(super) fn presets(ctx: &Context, studio: &mut Studio) {
@@ -49,6 +123,8 @@ pub(super) fn presets(ctx: &Context, studio: &mut Studio) {
     let mut state = read(ctx);
     state.dialog = Some(Dialog::Presets);
     state.error.clear();
+    state.error_target = None;
+    state.owner = Some(Owner::capture(ctx, studio));
     write(ctx, state);
 }
 pub(super) fn toolbar(ui: &mut Ui, studio: &mut Studio) {
@@ -82,17 +158,21 @@ pub(super) fn toolbar(ui: &mut Ui, studio: &mut Studio) {
         ui.label(RichText::new(format!("{} selected", studio.photo.selected_count())).small());
     });
 }
-fn categories(ui: &mut Ui, value: &mut Categories) {
+fn categories(ui: &mut Ui, owner: Id, value: &mut Categories) {
+    let mut responses = Vec::new();
     ui.columns(2, |c| {
-        c[0].checkbox(&mut value.light, "Light / tone");
-        c[0].checkbox(&mut value.curve, "Tone curve");
-        c[0].checkbox(&mut value.color, "Color");
-        c[0].checkbox(&mut value.detail, "Effects");
-        c[1].checkbox(&mut value.hsl, "Color mixer");
-        c[1].checkbox(&mut value.split_tone, "Color grading");
-        c[1].checkbox(&mut value.crop, "Crop");
-        c[1].checkbox(&mut value.rotation, "Rotation");
+        responses.push(category(&mut c[0], owner, &mut value.light, "Light / tone"));
+        responses.push(category(&mut c[0], owner, &mut value.curve, "Tone curve"));
+        responses.push(category(&mut c[0], owner, &mut value.color, "Color"));
+        responses.push(category(&mut c[0], owner, &mut value.detail, "Effects"));
+        responses.push(category(&mut c[1], owner, &mut value.hsl, "Color mixer"));
+        responses.push(category(&mut c[1], owner, &mut value.split_tone, "Color grading"));
+        responses.push(category(&mut c[1], owner, &mut value.crop, "Crop"));
+        responses.push(category(&mut c[1], owner, &mut value.rotation, "Rotation"));
     });
+    if !value.any() {
+        super::super::welcome::control_error(ui, &responses.iter().collect::<Vec<_>>(), "Choose at least one adjustment category.");
+    }
     ui.label(
         RichText::new("Crop and rotation are excluded unless you choose them.")
             .small()
@@ -151,19 +231,27 @@ pub(super) fn dialogs(ctx: &Context, studio: &mut Studio) {
     };
     let mut close = false;
     let mut next = None;
+    let owner = state.owner.get_or_insert_with(|| Owner::capture(ctx, studio)).clone();
+    let current = owner.current(studio);
+    let mut actions = Vec::new();
     let response = egui::Modal::new(Id::new("photo-workflow-dialog")).show(ctx, |ui| {
+        super::super::fields::native_scope(ui, owner.id, |ui| {
         ui.set_width((ctx.viewport_rect().width() - 64.).clamp(280., 440.));
         match dialog {
             Dialog::Apply(mut snapshot) => {
                 ui.heading("Apply adjustments");
                 ui.add(egui::Label::new(format!("From {}", snapshot.name)).truncate());
                 ui.add_space(8.);
-                categories(ui, &mut snapshot.categories);
+                categories(ui, owner.id, &mut snapshot.categories);
                 ui.separator();
                 let count = studio.photo.selected_count();
-                ui.radio_value(&mut state.folder, false, format!("Selected photos ({count})"));
+                let selected = super::super::fields::native_scope(ui, owner.id.with("selected-photos"), |ui|
+                    ui.radio_value(&mut state.folder, false, format!("Selected photos ({count})"))).inner;
+                super::super::welcome::focus_control(ui, &selected);
                 ui.add_enabled_ui(!studio.photo.folder_files.is_empty(), |ui| {
-                    ui.radio_value(&mut state.folder, true, format!("Whole folder ({} photos)", studio.photo.folder_files.len()));
+                    let folder = super::super::fields::native_scope(ui, owner.id.with("whole-folder"), |ui|
+                        ui.radio_value(&mut state.folder, true, format!("Whole folder ({} photos)", studio.photo.folder_files.len()))).inner;
+                    super::super::welcome::focus_control(ui, &folder);
                 });
                 if state.folder {
                     ui.add(egui::Label::new(&studio.photo.folder).truncate());
@@ -173,12 +261,14 @@ pub(super) fn dialogs(ctx: &Context, studio: &mut Studio) {
                 }
                 ui.add_space(8.);
                 ui.horizontal(|ui| {
-                    close = ui.button("Cancel").clicked();
-                    let enabled = snapshot.categories.any() && !studio.photo.is_saving() && if state.folder { !studio.photo.folder_files.is_empty() } else { count > 0 };
+                    close = action(ui, owner.id, "cancel", "Cancel", true).clicked();
+                    let enabled = current && snapshot.categories.any() && !studio.photo.is_saving() && if state.folder { !studio.photo.folder_files.is_empty() } else { count > 0 };
                     let label = if state.folder { format!("Write settings for {} photos", studio.photo.folder_files.len()) } else { format!("Apply to {count} photos") };
-                    if ui.add_enabled(enabled, Button::new(label)).clicked() {
+                    let apply = action(ui, owner.id, "apply", &label, enabled);
+                    actions.push(apply.clone());
+                    if apply.clicked() {
                         let result = if state.folder { studio.photo.start_folder_batch((*snapshot).clone()) } else { studio.photo.apply_adjustments(&snapshot).map(|_| ()) };
-                        match result { Ok(()) => close = true, Err(error) => state.error = error }
+                        match result { Ok(()) => close = true, Err(error) => { state.error = error; state.error_target = Some(apply.id); } }
                     }
                 });
                 state.dialog = Some(Dialog::Apply(snapshot));
@@ -187,20 +277,23 @@ pub(super) fn dialogs(ctx: &Context, studio: &mut Studio) {
                 ui.heading("Photo presets");
                 ui.label("Save, reuse and share development settings.");
                 if studio.photo.is_loading_presets() { ui.spinner(); ctx.request_repaint(); }
-                ui.add(egui::TextEdit::singleline(&mut state.query).hint_text("Filter presets…").desired_width(f32::INFINITY));
+                text(ui, owner.id, "preset-filter", "Filter presets", &mut state.query);
                 ScrollArea::vertical().id_salt("photo-presets").max_height(130.).min_scrolled_height(40.).show(ui, |ui| {
                     for preset in &studio.photo.presets {
                         if !preset.name.to_lowercase().contains(&state.query.to_lowercase()) { continue; }
-                        if ui.selectable_label(state.preset.as_deref() == Some(preset.name.as_str()), &preset.name).clicked() { state.preset = Some(preset.name.clone()); state.categories = preset.categories; }
+                        let id = owner.id.with(("saved-preset", &preset.name));
+                        let selected = super::super::fields::native_scope(ui, id, |ui| ui.selectable_label(state.preset.as_deref() == Some(preset.name.as_str()), &preset.name)).inner;
+                        super::super::welcome::focus_control(ui, &selected);
+                        if selected.clicked() { state.preset = Some(preset.name.clone()); state.categories = preset.categories; }
                     }
                     if studio.photo.presets.is_empty() { ui.label(RichText::new("Your saved looks will appear here.").weak()); } else if !studio.photo.presets.iter().any(|preset| preset.name.to_lowercase().contains(&state.query.to_lowercase())) { ui.label(RichText::new("No matching presets.").weak()); }
                 });
                 let selected_index = state.preset.as_ref().and_then(|name| studio.photo.presets.iter().position(|p| &p.name == name));
                 let selected = selected_index.and_then(|i| studio.photo.presets.get(i)).cloned();
-                let busy = studio.photo.is_loading_presets() || studio.photo.is_saving_presets() || studio.photo.is_batching();
+                let busy = !current || studio.photo.is_loading_presets() || studio.photo.is_saving_presets() || studio.photo.is_batching();
                 ui.horizontal_wrapped(|ui| {
-                    if ui.add_enabled(selected.is_some() && !busy, Button::new("Use preset…")).clicked() { next = selected.clone().map(|preset| Dialog::Apply(Box::new(preset))); state.folder = false; }
-                    if ui.add_enabled(!busy, Button::new("Import…")).on_hover_text("Import .omapreset files").clicked() {
+                    if action(ui, owner.id, "use", "Use preset…", selected.is_some() && !busy).clicked() { next = selected.clone().map(|preset| Dialog::Apply(Box::new(preset))); state.folder = false; }
+                    if action(ui, owner.id, "import", "Import…", !busy).on_hover_text("Import .omapreset files").clicked() {
                         studio.request_file_dialog(
                             || rfd::FileDialog::new().add_filter("Photo presets", &["omapreset"]).pick_file(),
                             |_, studio, path| {
@@ -208,7 +301,7 @@ pub(super) fn dialogs(ctx: &Context, studio: &mut Studio) {
                             },
                         );
                     }
-                    if ui.add_enabled(selected.is_some() && !busy, Button::new("Export…")).clicked() {
+                    if action(ui, owner.id, "export", "Export…", selected.is_some() && !busy).clicked() {
                         let selected_index = selected_index.unwrap();
                         studio.request_file_dialog(
                             || crate::project::dialog_export("Photo preset", "omapreset"),
@@ -217,34 +310,52 @@ pub(super) fn dialogs(ctx: &Context, studio: &mut Studio) {
                             },
                         );
                     }
-                    if ui.add_enabled(selected.is_some() && !busy, Button::new("Remove")).clicked() {
-                        if let Err(error) = studio.photo.delete_preset(selected_index.unwrap()) { state.error = error; } else { state.preset = None; }
+                    let remove = action(ui, owner.id, "remove", "Remove", selected.is_some() && !busy);
+                    actions.push(remove.clone());
+                    if remove.clicked() {
+                        if let Err(error) = studio.photo.delete_preset(selected_index.unwrap()) { state.error = error; state.error_target = Some(remove.id); } else { state.preset = None; }
                     }
                 });
                 ui.separator();
                 ui.label(RichText::new("Save the active photo’s look").strong());
-                ui.add(egui::TextEdit::singleline(&mut state.name).hint_text("Preset name").desired_width(f32::INFINITY));
-                categories(ui, &mut state.categories);
+                let name = text(ui, owner.id, "preset-name", "Preset name", &mut state.name);
+                let name_valid = !state.name.trim().is_empty() && state.name.trim().chars().count() <= 120 && !state.name.trim().chars().any(char::is_control);
+                if !name_valid {
+                    super::super::welcome::control_error(ui, &[&name], "Give this preset a name between 1 and 120 characters.");
+                }
+                categories(ui, owner.id, &mut state.categories);
                 ui.horizontal(|ui| {
-                    if ui.add_enabled(!busy && studio.photo.selected().is_some() && !state.name.trim().is_empty() && state.categories.any(), Button::new("Save preset")).clicked() {
-                        match studio.photo.save_preset(&state.name, state.categories) { Ok(()) => state.error.clear(), Err(error) => state.error = error }
+                    let save = action(ui, owner.id, "save", "Save preset", current && !busy && studio.photo.selected().is_some() && name_valid && state.categories.any());
+                    actions.push(save.clone());
+                    if save.clicked() {
+                        match studio.photo.save_preset(&state.name, state.categories) { Ok(()) => state.error.clear(), Err(error) => { state.error = error; state.error_target = Some(save.id); } }
                     }
-                    close = ui.button("Done").clicked();
+                    close = action(ui, owner.id, "done", "Done", true).clicked();
                 });
                 if !studio.photo.preset_error().is_empty() {
-                    ui.label(studio.photo.preset_error());
-                    if ui.button("Retry loading presets").clicked() { studio.photo.reload_presets(); }
+                    let retry = action(ui, owner.id, "retry", "Retry loading presets", true);
+                    super::super::welcome::control_error(ui, &[&retry], studio.photo.preset_error());
+                    if retry.clicked() { studio.photo.reload_presets(); }
                 }
             }
         }
-        if !state.error.is_empty() { ui.label(RichText::new(&state.error).color(crate::ui::theme::accent())); }
+        if !current { super::super::welcome::control_error(ui, &actions.iter().collect::<Vec<_>>(), "The document or photo selection changed. Close and reopen this dialog."); }
+        if !state.error.is_empty() {
+            let fields = actions.iter().filter(|response| Some(response.id) == state.error_target).collect::<Vec<_>>();
+            super::super::welcome::control_error(ui, &fields, &state.error);
+        }
+        });
     });
     if let Some(dialog) = next {
         state.dialog = Some(dialog);
         state.error.clear();
+        state.error_target = None;
+        state.owner = Some(Owner::capture(ctx, studio));
     }
     if close || response.should_close() {
         state.dialog = None;
+        state.owner = None;
+        super::super::panel_workspace::return_focus(ctx, studio);
     }
     write(ctx, state);
 }
