@@ -65,7 +65,7 @@ impl Studio {
         self.reset_snap_gesture();
     }
 
-    pub(super) fn selectable_objects(&self) -> Vec<(usize, u64)> {
+    pub(crate) fn selectable_objects(&self) -> Vec<(usize, u64)> {
         self.doc
             .layers
             .iter()

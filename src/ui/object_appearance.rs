@@ -2,6 +2,24 @@ use super::*;
 use crate::document::Cmd;
 
 pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
+    let id = ui.make_persistent_id(("object-appearance", &studio.swap_id, &studio.selection));
+    ui.scope_builder(eframe::egui::UiBuilder::new().id(id), |ui| {
+        if studio.file_dialog_pending()
+            || studio.updates.freezing
+            || studio.op.is_some()
+            || studio.free_transform.is_some()
+            || studio.deformation.is_some()
+        {
+            ui.disable();
+        }
+        controls(ui, studio);
+    });
+}
+
+/// Edit the current appearance through existing document commands.
+/// Args: owner-scoped UI and editor. Returns without changing unavailable artwork.
+fn controls(ui: &mut Ui, studio: &mut Studio) {
+    let editable: std::collections::HashSet<_> = studio.selectable_objects().into_iter().collect();
     let objects: Vec<_> = studio
         .selection
         .iter()
@@ -14,7 +32,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                     s.opacity,
                     s.fill_opacity,
                     s.blend_interior,
-                    studio.doc.layer_editable(li) && !s.locked,
+                    editable.contains(&(li, id)),
                 )
             })
         })
@@ -24,13 +42,16 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
     else {
         return;
     };
+    if !objects.iter().any(|object| object.6) {
+        ui.disable();
+    }
     ui.add_space(8.);
     let mut blend = original_blend;
     let mixed = objects.iter().any(|s| s.2 != blend);
     let mut blend_changed = false;
     ui.horizontal(|ui| {
-        ui.label("Object blend");
-        ComboBox::from_id_salt("object-blend")
+        let label = ui.label("Object blend");
+        let response = ComboBox::from_id_salt("object-blend")
             .selected_text(if mixed { "Mixed" } else { blend.name() })
             .show_ui(ui, |ui| {
                 for mode in Blend::ALL {
@@ -43,6 +64,10 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                     }
                 }
             });
+        if blend_changed {
+            response.response.request_focus();
+        }
+        crate::ui::welcome::name_control(ui, &response.response, label.id, "Object blend");
     });
     let mut opacity = original_opacity * 100.;
     let mixed_opacity = objects
@@ -57,7 +82,12 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
         objects.iter().any(|s| s.4 != original_fill),
     );
     let mut interior = original_interior;
-    let interior_changed = ui.checkbox(&mut interior, "Blend interior effects as group").on_hover_text("Blend inner effects with the content before applying Object blend. Fill opacity affects content only.").changed();
+    let response = ui.checkbox(&mut interior, "Blend interior effects as group").on_hover_text("Blend inner effects with the content before applying Object blend. Fill opacity affects content only.");
+    crate::ui::welcome::focus_control(ui, &response);
+    let interior_changed = response.changed();
+    if !ui.is_enabled() {
+        return;
+    }
     let mut commands = vec![];
     for (layer, id, b, o, f, i, editable) in objects {
         if !editable {
@@ -100,23 +130,111 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
         studio.commit(Cmd::Batch(commands));
     }
 }
+/// Name a canonical appearance percentage and observe accepted edits.
+/// Args: UI, property name, value and mixed state. Returns the authoritative change flag.
 fn percent(ui: &mut Ui, label: &str, value: &mut f32, mixed: bool) -> bool {
-    let mut changed = false;
-    ui.horizontal(|ui| {
-        ui.label(label);
-        let control = eframe::egui::DragValue::new(value)
-            .range(0.0..=100.0)
-            .suffix("%")
-            .speed(0.5);
-        changed = ui
-            .add(if mixed {
-                control.custom_formatter(|_, _| "Mixed".into())
-            } else {
-                control
-            })
-            .changed();
+    let result = crate::ui::fields::number(
+        ui,
+        label,
+        label,
+        value,
+        0.0..=100.0,
+        "%",
+        None,
+        crate::ui::fields::FieldState {
+            mixed,
+            ..Default::default()
+        },
+    );
+    crate::ui::welcome::focus_control(ui, &result.response);
+    ui.ctx().accesskit_node_builder(result.response.id, |node| {
+        node.set_label(format!("{label} (%)"))
     });
-    changed
+    result.changed
+}
+
+#[cfg(test)]
+mod keyboard_tests {
+    use super::*;
+    use crate::ui::welcome::keyboard_tests as keys;
+    use eframe::egui::{self, Event, Key, Modifiers};
+
+    fn frame(ctx: &egui::Context, studio: &mut Studio, events: Vec<Event>) -> egui::FullOutput {
+        keys::render(ctx, events, |ui| {
+            if !studio.updates.freezing && !studio.file_dialog_pending() {
+                studio.handle_shortcuts(ctx);
+            }
+            show(ui, studio);
+            crate::ui::canvas::show(ui, studio);
+            crate::ui::keyboard_authoring::show(ctx, studio);
+        })
+    }
+
+    #[test]
+    fn keyboard_created_artwork_appearance_uses_current_owner_and_rejects_locked_or_busy_edits() {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        crate::ui::theme::apply(&ctx);
+        let mut studio = Studio::new();
+        studio.doc = crate::document::Document::new("Keyboard object appearance", 64., 64., 72.);
+        studio.show_welcome = false;
+        assert!(studio.selection.is_empty());
+        frame(&ctx, &mut studio, vec![]);
+        frame(&ctx, &mut studio, keys::key(Key::F8, Modifiers::NONE));
+        frame(&ctx, &mut studio, keys::key(Key::R, Modifiers::NONE));
+        frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        frame(&ctx, &mut studio, vec![]);
+        frame(
+            &ctx,
+            &mut studio,
+            keys::key(Key::Enter, Modifiers::CTRL | Modifiers::COMMAND),
+        );
+        frame(&ctx, &mut studio, vec![]);
+        let hit = studio.primary().unwrap();
+        let output = keys::tab_to(&ctx, "Object opacity (%)", |events| {
+            frame(&ctx, &mut studio, events)
+        });
+        keys::focused(&ctx, &output, "Object opacity (%)");
+        let opacity = keys::named(&output, "Object opacity (%)").0;
+        keys::replace("25", |events| frame(&ctx, &mut studio, events));
+        frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        assert_eq!(studio.doc.find_shape(hit.0, hit.1).unwrap().opacity, 0.25);
+        let output = keys::tab_to(&ctx, "Fill opacity (%)", |events| {
+            frame(&ctx, &mut studio, events)
+        });
+        assert_ne!(keys::named(&output, "Fill opacity (%)").0, opacity);
+        keys::replace("40", |events| frame(&ctx, &mut studio, events));
+        frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        assert_eq!(
+            studio.doc.find_shape(hit.0, hit.1).unwrap().fill_opacity,
+            0.4
+        );
+        studio.updates.freezing = true;
+        let history = studio.history.len();
+        let output = frame(&ctx, &mut studio, vec![]);
+        assert!(keys::named(&output, "Object opacity (%)").1.is_disabled());
+        frame(&ctx, &mut studio, vec![Event::Text("90".into())]);
+        assert_eq!(studio.history.len(), history);
+        studio.updates.freezing = false;
+        studio.doc.layers[hit.0].locked = true;
+        let output = frame(&ctx, &mut studio, vec![]);
+        assert!(keys::named(&output, "Fill opacity (%)").1.is_disabled());
+        assert_eq!(studio.history.len(), history);
+        assert_eq!(studio.doc.find_shape(hit.0, hit.1).unwrap().opacity, 0.25);
+        studio.doc.layers[hit.0].locked = false;
+        let output = frame(&ctx, &mut studio, vec![]);
+        assert_eq!(keys::named(&output, "Object opacity (%)").0, opacity);
+        frame(&ctx, &mut studio, keys::key(Key::F8, Modifiers::NONE));
+        frame(
+            &ctx,
+            &mut studio,
+            keys::key(Key::Z, Modifiers::CTRL | Modifiers::COMMAND),
+        );
+        assert_eq!(
+            studio.doc.find_shape(hit.0, hit.1).unwrap().fill_opacity,
+            1.
+        );
+    }
 }
 
 #[cfg(test)]
