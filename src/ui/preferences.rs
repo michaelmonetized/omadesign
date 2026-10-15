@@ -58,15 +58,32 @@ pub fn show(ctx: &egui::Context, studio: &mut Studio) {
     }
 }
 fn config(ui: &mut egui::Ui, studio: &mut Studio) {
+    ui.push_id("application-preferences", |ui| config_contents(ui, studio));
+}
+
+fn config_contents(ui: &mut egui::Ui, studio: &mut Studio) {
     ui.strong("Appearance");
-    ui.label("UI font");
-    ui.text_edit_singleline(&mut studio.startup_preferences.ui_font)
+    let label = ui.label("UI font");
+    let font = ui
+        .add(
+            egui::TextEdit::singleline(&mut studio.startup_preferences.ui_font)
+                .id(ui.make_persistent_id("ui-font")),
+        )
+        .labelled_by(label.id)
         .on_hover_text("Font family or font file path. Leave empty to follow your desktop font.");
+    name(ui, &font, "UI font");
     ui.horizontal(|ui| {
-        ui.label("Font size");
-        ui.add(
-            egui::Slider::new(&mut studio.startup_preferences.ui_font_size, 10..=24).suffix(" px"),
-        );
+        let label = ui.label("Font size");
+        let response = ui
+            .push_id("ui-font-size", |ui| {
+                ui.add(
+                    egui::Slider::new(&mut studio.startup_preferences.ui_font_size, 10..=24)
+                        .suffix(" px"),
+                )
+            })
+            .inner
+            .labelled_by(label.id);
+        name(ui, &response, "Font size (px)");
     });
     ui.small("The interface scales with the font size to keep controls readable.");
     ui.separator();
@@ -95,9 +112,36 @@ fn config(ui: &mut egui::Ui, studio: &mut Studio) {
     }
     ui.separator();
     ui.strong("Typography increments");
-    ui.add(egui::DragValue::new(&mut studio.startup_preferences.tracking_step).range(1..=1000).prefix("Tracking / kerning ").suffix(" /1000 em"));
-    ui.add(egui::DragValue::new(&mut studio.startup_preferences.leading_step).range(1..=100).prefix("Leading ").suffix(" px"));
-    ui.add(egui::DragValue::new(&mut studio.startup_preferences.baseline_step).range(1..=100).prefix("Baseline shift ").suffix(" px"));
+    super::fields::number(
+        ui,
+        "tracking-step",
+        "Tracking / kerning increment (/1000 em)",
+        &mut studio.startup_preferences.tracking_step,
+        1..=1000,
+        " /1000 em",
+        None,
+        Default::default(),
+    );
+    super::fields::number(
+        ui,
+        "leading-step",
+        "Leading increment (px)",
+        &mut studio.startup_preferences.leading_step,
+        1..=100,
+        " px",
+        None,
+        Default::default(),
+    );
+    super::fields::number(
+        ui,
+        "baseline-step",
+        "Baseline shift increment (px)",
+        &mut studio.startup_preferences.baseline_step,
+        1..=100,
+        " px",
+        None,
+        Default::default(),
+    );
     ui.separator();
     ui.strong("Privacy and updates");
     ui.checkbox(
@@ -114,6 +158,22 @@ fn config(ui: &mut egui::Ui, studio: &mut Studio) {
     if ui.button("Keyboard shortcuts").clicked() {
         studio.show_preferences = false;
         studio.show_shortcuts = true;
+    }
+}
+
+/// Name an existing preference control and show native focus.
+/// Args: UI, actual response and purpose. Returns no value and does not change its input behavior.
+fn name(ui: &egui::Ui, response: &egui::Response, label: &str) {
+    ui.ctx()
+        .accesskit_node_builder(response.id, |node| node.set_label(label));
+    if response.has_focus() {
+        response.scroll_to_me(Some(egui::Align::Center));
+        ui.painter().rect_stroke(
+            response.rect.expand(2.),
+            3.,
+            ui.visuals().selection.stroke,
+            egui::StrokeKind::Outside,
+        );
     }
 }
 fn update(ui: &mut egui::Ui, studio: &mut Studio) {
@@ -222,10 +282,20 @@ fn asset_keys(ui: &mut egui::Ui) {
                 status: String::new(),
             }
         });
-    ui.label("Pixabay API key");
-    ui.add(egui::TextEdit::singleline(&mut state.pixabay).password(true));
-    ui.label("Pexels API key");
-    ui.add(egui::TextEdit::singleline(&mut state.pexels).password(true));
+    for (id, label, value) in [
+        ("pixabay", "Pixabay API key", &mut state.pixabay),
+        ("pexels", "Pexels API key", &mut state.pexels),
+    ] {
+        let label_response = ui.label(label);
+        let response = ui
+            .add(
+                egui::TextEdit::singleline(value)
+                    .id(ui.make_persistent_id(("asset-key", id)))
+                    .password(true),
+            )
+            .labelled_by(label_response.id);
+        name(ui, &response, label);
+    }
     ui.small("Stored locally in assets.toml. Environment variables override these keys.");
     if ui.button("Save provider keys").clicked() {
         state.status =
@@ -238,4 +308,117 @@ fn asset_keys(ui: &mut egui::Ui) {
         ui.label(&state.status);
     }
     ui.ctx().data_mut(|d| d.insert_temp(key, state));
+}
+
+#[cfg(test)]
+mod keyboard_tests {
+    use super::*;
+    use egui::{Event, Key, Modifiers};
+
+    fn tap(key: Key, modifiers: Modifiers) -> Vec<Event> {
+        [true, false]
+            .into_iter()
+            .map(|pressed| Event::Key {
+                key,
+                physical_key: Some(key),
+                pressed,
+                repeat: false,
+                modifiers,
+            })
+            .collect()
+    }
+
+    fn frame(ctx: &egui::Context, studio: &mut Studio, mut events: Vec<Event>) -> egui::FullOutput {
+        let modifiers = events
+            .iter()
+            .find_map(|event| match event {
+                Event::Key { modifiers, .. } => Some(*modifiers),
+                _ => None,
+            })
+            .unwrap_or_default();
+        events.insert(0, Event::ModifiersChanged(modifiers));
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                events,
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(900., 1600.),
+                )),
+                ..Default::default()
+            },
+            |ui| config(ui, studio),
+        );
+        output.textures_delta.clear();
+        output
+    }
+
+    fn field(output: &egui::FullOutput, label: &str) -> egui::accesskit::NodeId {
+        output
+            .platform_output
+            .accesskit_update
+            .as_ref()
+            .unwrap()
+            .nodes
+            .iter()
+            .find_map(|(id, node)| (node.label() == Some(label)).then_some(*id))
+            .unwrap_or_else(|| panic!("missing {label}"))
+    }
+
+    fn tab_to(ctx: &egui::Context, studio: &mut Studio, label: &str) -> egui::FullOutput {
+        for _ in 0..64 {
+            let output = frame(ctx, studio, vec![]);
+            if ctx
+                .memory(|memory| memory.focused())
+                .is_some_and(|id| id.accesskit_id() == field(&output, label))
+            {
+                return output;
+            }
+            frame(ctx, studio, tap(Key::Tab, Modifiers::NONE));
+        }
+        panic!("Tab did not reach {label}");
+    }
+
+    #[test]
+    fn keyboard_preferences_native_names_identity_and_edits_stay_out_of_artwork_history() {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let mut studio = Studio::new();
+        studio.doc = crate::document::Document::new("Preference keyboard", 8., 8., 72.);
+        let history = studio.history.len();
+        let output = tab_to(&ctx, &mut studio, "UI font");
+        let font_id = field(&output, "UI font");
+        frame(
+            &ctx,
+            &mut studio,
+            tap(Key::A, Modifiers::CTRL | Modifiers::COMMAND),
+        );
+        frame(&ctx, &mut studio, vec![Event::Text("Monospace".into())]);
+        assert_eq!(studio.startup_preferences.ui_font, "Monospace");
+        let name = "Tracking / kerning increment (/1000 em)";
+        let output = tab_to(&ctx, &mut studio, name);
+        let tracking = field(&output, name);
+        assert_eq!(
+            ctx.memory(|memory| memory.focused())
+                .map(|id| id.accesskit_id()),
+            Some(tracking)
+        );
+        frame(
+            &ctx,
+            &mut studio,
+            tap(Key::A, Modifiers::CTRL | Modifiers::COMMAND),
+        );
+        frame(&ctx, &mut studio, vec![Event::Text("35".into())]);
+        frame(&ctx, &mut studio, tap(Key::Enter, Modifiers::NONE));
+        assert_eq!(studio.startup_preferences.tracking_step, 35);
+        studio.doc.name = "Another document".into();
+        let output = frame(&ctx, &mut studio, vec![]);
+        assert_eq!(field(&output, name), tracking);
+        assert_eq!(field(&output, "UI font"), font_id);
+        assert_ne!(
+            field(&output, "Leading increment (px)"),
+            field(&output, "Baseline shift increment (px)")
+        );
+        assert_eq!(studio.history.len(), history);
+        assert!(!studio.dirty);
+    }
 }

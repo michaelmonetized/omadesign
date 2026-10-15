@@ -48,6 +48,7 @@ struct Dialog {
     tool: Tool,
     persona: Persona,
     geometry: Option<GeometryTarget>,
+    plugin: Option<(String, String, String)>,
     handle: usize,
     points: String,
     add: bool,
@@ -144,8 +145,8 @@ impl Dialog {
         Ok(result)
     }
 
-    fn apply(&self, studio: &mut Studio) -> Result<(), String> {
-        if !self.current(studio) {
+    fn apply(&self, ctx: &egui::Context, studio: &mut Studio) -> Result<(), String> {
+        if !self.current(studio) || self.plugin != super::plugins::keyboard_tool(ctx) {
             return Err(
                 "The document, target or selection changed. Open Tool points again.".into(),
             );
@@ -157,6 +158,16 @@ impl Dialog {
             || studio.type_edit.is_some()
         {
             return Err("Finish the current edit first.".into());
+        }
+        if let Some(plugin) = &self.plugin {
+            return super::plugins::keyboard_gesture(
+                ctx,
+                studio,
+                plugin,
+                &self.parse()?,
+                self.add,
+                self.subtract,
+            );
         }
         if let Some(target) = &self.geometry {
             return self.apply_geometry(studio, target);
@@ -353,6 +364,7 @@ pub(crate) fn open(ctx: &egui::Context, studio: &mut Studio) {
         tool: studio.tool,
         persona: studio.persona,
         geometry,
+        plugin: super::plugins::keyboard_tool(ctx),
         handle: 0,
         points,
         add: false,
@@ -368,7 +380,7 @@ pub(super) fn show(ctx: &egui::Context, studio: &mut Studio) {
     let Some(mut dialog) = ctx.data(|data| data.get_temp::<Dialog>(Id::new(ID))) else {
         return;
     };
-    let current = dialog.current(studio);
+    let current = dialog.current(studio) && dialog.plugin == super::plugins::keyboard_tool(ctx);
     let mut apply = false;
     let mut cancel = false;
     let scope = Id::new((
@@ -380,6 +392,7 @@ pub(super) fn show(ctx: &egui::Context, studio: &mut Studio) {
         dialog.pixel_generation,
         dialog.photo.as_ref().map(|(index, _)| *index),
         dialog.photo_generation,
+        &dialog.plugin,
         dialog.geometry.as_ref().map(|target| match target {
             GeometryTarget::Pixel(_, mode) => format!("pixel-{mode:?}"),
             GeometryTarget::Vector(cage) => format!("vector-{:?}", cage.mode),
@@ -388,7 +401,7 @@ pub(super) fn show(ctx: &egui::Context, studio: &mut Studio) {
     ));
     let modal = egui::Modal::new(Id::new(ID)).show(ctx, |ui| {
         ui.set_width(380.);
-        ui.heading(if dialog.geometry.is_some() { "Edit geometry with keyboard".into() } else { format!("{} with keyboard", dialog.tool.label()) });
+        ui.heading(if dialog.plugin.is_some() { "Plugin tool with keyboard".into() } else if dialog.geometry.is_some() { "Edit geometry with keyboard".into() } else { format!("{} with keyboard", dialog.tool.label()) });
         if dialog.persona == Persona::Photo && let Some(image) = studio.photo.selected() {
             let (width, height) = image.develop.output_dim(image.preview.w, image.preview.h);
             ui.label(format!("Photo coordinates: {width} × {height} px"));
@@ -438,7 +451,7 @@ pub(super) fn show(ctx: &egui::Context, studio: &mut Studio) {
     });
     dialog.focus = false;
     let applied = if apply {
-        match dialog.apply(studio) {
+        match dialog.apply(ctx, studio) {
             Ok(()) => true,
             Err(error) => {
                 dialog.error = Some(error);
@@ -805,7 +818,12 @@ mod tests {
         frame(&ctx, &mut studio, key(Key::F9, Modifiers::NONE));
         let draft = ctx.data(|d| d.get_temp::<Dialog>(Id::new(ID))).unwrap();
         studio.photo.images[0].develop.exposure = 1.;
-        assert!(draft.apply(&mut studio).unwrap_err().contains("changed"));
+        assert!(
+            draft
+                .apply(&ctx, &mut studio)
+                .unwrap_err()
+                .contains("changed")
+        );
     }
 
     #[test]
@@ -821,18 +839,33 @@ mod tests {
         let draft = ctx.data(|d| d.get_temp::<Dialog>(Id::new(ID))).unwrap();
         let mut invalid = draft.clone();
         invalid.points = "NaN,1; 2,3".into();
-        assert!(invalid.apply(&mut studio).is_err());
+        assert!(invalid.apply(&ctx, &mut studio).is_err());
         let mut too_long = draft.clone();
         too_long.points = "0,0; 1000000,1000000".into();
-        assert!(too_long.apply(&mut studio).unwrap_err().contains("shorter"));
+        assert!(
+            too_long
+                .apply(&ctx, &mut studio)
+                .unwrap_err()
+                .contains("shorter")
+        );
         let layer = studio.raster_target().unwrap();
         studio.doc.layers[layer].locked = true;
-        assert!(draft.apply(&mut studio).unwrap_err().contains("unlocked"));
+        assert!(
+            draft
+                .apply(&ctx, &mut studio)
+                .unwrap_err()
+                .contains("unlocked")
+        );
         studio.doc.layers[layer].locked = false;
         studio.updates.freezing = true;
-        assert!(draft.apply(&mut studio).is_err());
+        assert!(draft.apply(&ctx, &mut studio).is_err());
         studio.updates.freezing = false;
         studio.pixel_sel_gen += 1;
-        assert!(draft.apply(&mut studio).unwrap_err().contains("changed"));
+        assert!(
+            draft
+                .apply(&ctx, &mut studio)
+                .unwrap_err()
+                .contains("changed")
+        );
     }
 }

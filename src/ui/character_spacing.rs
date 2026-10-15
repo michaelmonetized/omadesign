@@ -66,6 +66,11 @@ fn amount(
             let before = value.unwrap_or(fallback);
             let mut number = before;
             let input_range = range.clone();
+            let draft_id = ui.make_persistent_id("character-native-draft");
+            let previous = ui.data(|data| data.get_temp::<(f32, String)>(draft_id))
+                .filter(|(accepted, _)| *accepted == before);
+            let attempted = std::cell::RefCell::new(None::<String>);
+            let observer = &attempted;
             let response = ui
                 .add(
                     egui::DragValue::new(&mut number)
@@ -81,6 +86,7 @@ fn amount(
                             }
                         })
                         .custom_parser(move |text| {
+                            observer.replace(Some(text.to_owned()));
                             parse_number(text)
                                 .filter(|value| input_range.contains(value))
                                 .map(f64::from)
@@ -88,7 +94,13 @@ fn amount(
                 )
                 .labelled_by(label_id)
                 .on_hover_text(help);
-            let text = ui.data(|data| data.get_temp::<String>(response.id));
+            let cancelled = (response.has_focus() || response.lost_focus())
+                && ui.input(|input| input.key_pressed(egui::Key::Escape));
+            let text = if cancelled { None } else { attempted.into_inner().or_else(|| previous.map(|(_, text)| text)) };
+            ui.data_mut(|data| {
+                if let Some(text) = &text { data.insert_temp(draft_id, (number, text.clone())); }
+                else { data.remove::<(f32, String)>(draft_id); }
+            });
             let entered = text
                 .as_deref()
                 .filter(|text| !(value.is_none() && *text == "Mixed"))
@@ -109,6 +121,7 @@ fn amount(
             };
             let changed = response.changed()
                 && response.enabled()
+                && !cancelled
                 && error.is_none()
                 && (number != before || entered.flatten().is_some());
             let error_id = error
