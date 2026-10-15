@@ -44,6 +44,7 @@ mod retouch;
 mod brushes;
 mod selection;
 mod studios;
+mod shared_transform;
 mod text_geometry;
 mod templates;
 pub mod theme;

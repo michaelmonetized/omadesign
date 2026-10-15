@@ -53,6 +53,9 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                 return;
             }
             inspector_title(ui, studio);
+            let locked = studio.selection.iter().any(|&(layer,id)| !studio.layer_unlocked(layer) || studio.doc.find_shape(layer,id).is_some_and(|shape|shape.locked));
+            if locked {ui.label("Selection locked");}
+            ui.add_enabled_ui(!locked, |ui| {
             section_gap(ui);
             let design = studio.persona == Persona::Design || studio.persona == Persona::Layout;
             let motion = studio.persona == Persona::Motion;
@@ -134,6 +137,7 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                             .show(ui, |ui| fx_studio(ui, studio));
                     }
                 });
+            });
             ui.add_space(10.0);
             ui.separator();
             ui.add_space(8.0);
@@ -328,7 +332,7 @@ fn number_field<N: eframe::egui::emath::Numeric>(
     range: std::ops::RangeInclusive<N>,
     suffix: &str,
 ) -> bool {
-    super::fields::number(ui, label, label, value, range, suffix, None, Default::default()).changed
+    super::fields::number(ui, label, label, value, range, suffix, matches!(label, "X" | "Y" | "Rotate").then(|| N::from_f64(0.0)), Default::default()).changed
 }
 
 fn bounds_fields(
@@ -1538,6 +1542,7 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
         }
         return;
     }
+    if super::shared_transform::mixed(ui, studio) { return; }
     let Some((layer, id)) = studio.primary() else {
         return;
     };

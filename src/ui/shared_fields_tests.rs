@@ -8,6 +8,11 @@ pub(super) fn headless(
     input: egui::RawInput,
     body: impl FnMut(&mut egui::Ui),
 ) -> egui::FullOutput {
+    let theme_key = egui::Id::new("shared-ui-test-native-theme");
+    if !ctx.data_mut(|data| data.get_temp::<bool>(theme_key).unwrap_or(false)) {
+        super::theme::apply(ctx);
+        ctx.data_mut(|data| data.insert_temp(theme_key, true));
+    }
     let mut output = ctx.run_ui(input, body);
     output.textures_delta.clear();
     output
