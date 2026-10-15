@@ -259,6 +259,7 @@ mod tests {
         studio.show_welcome = false;
         let before = studio.doc.artboards.clone();
         open(&ctx, &studio, Pt::new(f32::NAN, 0.));
+        frame(&ctx, &mut studio, vec![]);
         let output = frame(&ctx, &mut studio, vec![]);
         keys::associated_error(&output, "Artboard width (px)");
         let create = keys::named(&output, "Create artboard");

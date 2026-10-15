@@ -463,14 +463,16 @@ fn layout_library(ui: &mut Ui, studio: &mut Studio, state: &mut Browser) {
         );
     }
     ui.add_space(10.0);
-    let label = ui.label("Search Layout templates").id;
-    let response = ui.add(
-        egui::TextEdit::singleline(&mut state.query)
-            .id(ui.make_persistent_id("layout-template-search"))
-            .hint_text("Find a Layout starter…")
-            .desired_width(240.0),
-    );
-    super::welcome::name_control(ui, &response, label, "Search Layout templates");
+    ui.horizontal_wrapped(|ui| {
+        let label = ui.label("Search Layout templates").id;
+        let response = ui.add(
+            egui::TextEdit::singleline(&mut state.query)
+                .id(ui.make_persistent_id("layout-template-search"))
+                .hint_text("Find a Layout starter…")
+                .desired_width(240.0),
+        );
+        super::welcome::name_control(ui, &response, label, "Search Layout templates");
+    });
     let query = state.query.trim().to_lowercase();
     let visible: Vec<_> = crate::layout_templates::CATALOG
         .iter()
@@ -625,7 +627,7 @@ fn size_fields(ui: &mut Ui, studio: &Studio, state: &mut Browser) -> bool {
         let before = state.width;
         let id = ui.make_persistent_id("width");
         let attempt = RefCell::new(None);
-        let (response, label) = ui.scope_builder(egui::UiBuilder::new().id(id), |ui| {
+        let (response, label) = ui.scope_builder(egui::UiBuilder::new().id(id).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
             let label = ui.label("Width (px)").id;
             (ui.add(
             egui::DragValue::new(&mut state.width)
@@ -644,7 +646,7 @@ fn size_fields(ui: &mut Ui, studio: &Studio, state: &mut Browser) -> bool {
         let before = state.height;
         let id = ui.make_persistent_id("height");
         let attempt = RefCell::new(None);
-        let (response, label) = ui.scope_builder(egui::UiBuilder::new().id(id), |ui| {
+        let (response, label) = ui.scope_builder(egui::UiBuilder::new().id(id).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
             let label = ui.label("Height (px)").id;
             (ui.add(
             egui::DragValue::new(&mut state.height)
@@ -663,7 +665,7 @@ fn size_fields(ui: &mut Ui, studio: &Studio, state: &mut Browser) -> bool {
         let before = state.dpi;
         let id = ui.make_persistent_id("dpi");
         let attempt = RefCell::new(None);
-        let (response, label) = ui.scope_builder(egui::UiBuilder::new().id(id), |ui| {
+        let (response, label) = ui.scope_builder(egui::UiBuilder::new().id(id).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
             let label = ui.label("Resolution (dpi)").id;
             (ui.add(
             egui::DragValue::new(&mut state.dpi)

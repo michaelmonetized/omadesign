@@ -143,7 +143,6 @@ pub(crate) fn show(ui: &mut Ui, studio: &mut Studio) {
     let duration = studio.doc.motion.duration.max(0.05);
     let doc_w = studio.doc.width;
     let doc_h = studio.doc.height;
-    let mut open = true;
     let mut export_clicked = false;
     let mut cancel_clicked = false;
     let allowed = session.current(studio)
@@ -152,160 +151,147 @@ pub(crate) fn show(ui: &mut Ui, studio: &mut Studio) {
         && !studio.updates.freezing;
     let owner = Id::new((JOB, &session.owner));
     let mut valid = true;
-    egui::Window::new("Export animation")
-        .id(owner)
-        .open(&mut open)
-        .collapsible(false)
-        .resizable(false)
-        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-        .show(&ctx, |ui| {
-            ui.set_min_width(320.0);
-            ui.push_id(owner, |ui| {
-                ui.add_enabled_ui(allowed, |ui| {
-                    ui.horizontal(|ui| {
-                        for kind in AnimKind::ALL {
-                            let response = ui.selectable_label(panel.kind == kind, kind.label());
-                            super::welcome::focus_control(ui, &response);
-                            if response.clicked() && panel.kind != kind {
-                                panel.kind = kind;
-                                panel.settings.transparent = kind.allows_alpha();
-                            }
+    let modal = egui::Modal::new(owner).show(&ctx, |ui| {
+        ui.set_min_width(320.0);
+        ui.heading("Export animation");
+        ui.push_id(owner, |ui| {
+            ui.add_enabled_ui(allowed, |ui| {
+                ui.horizontal(|ui| {
+                    for kind in AnimKind::ALL {
+                        let response = ui.selectable_label(panel.kind == kind, kind.label());
+                        super::welcome::focus_control(ui, &response);
+                        if response.clicked() && panel.kind != kind {
+                            panel.kind = kind;
+                            panel.settings.transparent = kind.allows_alpha();
                         }
-                    });
-                    ui.add_space(8.0);
-                    let mut fields = Vec::new();
-                    let mut invalid = Vec::new();
-                    let (response, accepted) = number(
-                        ui,
-                        owner.with("scale"),
-                        "Animation scale (×)",
-                        &mut panel.settings.scale,
-                        0.25..=4.,
-                        0.05,
-                        "×",
-                    );
-                    if session.focus && allowed {
-                        response.request_focus();
-                    }
-                    if !accepted && allowed {
-                        invalid.push(response.clone());
-                    }
-                    fields.push(response);
-                    let w = (doc_w * panel.settings.scale).round().max(1.0) as u32;
-                    let h = (doc_h * panel.settings.scale).round().max(1.0) as u32;
-                    ui.label(format!("{w} × {h}"));
-                    let (response, accepted) = number(
-                        ui,
-                        owner.with("fps"),
-                        "Animation frame rate (fps)",
-                        &mut panel.settings.fps,
-                        1.0..=60.,
-                        1.,
-                        " fps",
-                    );
-                    if !accepted && allowed {
-                        invalid.push(response.clone());
-                    }
-                    fields.push(response);
-                    for (property, label, value) in [
-                        ("start", "Animation start (s)", &mut panel.settings.start),
-                        ("end", "Animation end (s)", &mut panel.settings.end),
-                    ] {
-                        let (response, accepted) = number(
-                            ui,
-                            owner.with(property),
-                            label,
-                            value,
-                            0.0..=duration,
-                            0.05,
-                            " s",
-                        );
-                        if !accepted && allowed {
-                            invalid.push(response.clone());
-                        }
-                        fields.push(response);
-                    }
-                    let looped = ui.checkbox(&mut panel.settings.looped, "Loop");
-                    super::welcome::focus_control(ui, &looped);
-                    if panel.kind.allows_alpha() {
-                        let alpha =
-                            ui.checkbox(&mut panel.settings.transparent, "Transparent background");
-                        super::welcome::focus_control(ui, &alpha);
-                    } else {
-                        panel.settings.transparent = false;
-                        ui.label("MP4 is flat on white.");
-                    }
-                    valid = invalid.is_empty()
-                        && panel.settings.start <= panel.settings.end
-                        && studio.doc.motion.duration.is_finite()
-                        && duration.is_finite()
-                        && doc_w.is_finite()
-                        && doc_h.is_finite()
-                        && doc_w > 0.
-                        && doc_h > 0.;
-                    if !invalid.is_empty() {
-                        super::welcome::control_error(
-                            ui,
-                            &invalid.iter().collect::<Vec<_>>(),
-                            "Enter a finite number within the animation field's range.",
-                        );
-                    } else if panel.settings.start > panel.settings.end {
-                        super::welcome::control_error(
-                            ui,
-                            &fields[2..].iter().collect::<Vec<_>>(),
-                            "Animation end must be at or after its start.",
-                        );
                     }
                 });
-                if !session.current(studio) {
+                ui.add_space(8.0);
+                let mut fields = Vec::new();
+                let mut invalid = Vec::new();
+                let (response, accepted) = number(
+                    ui,
+                    owner.with("scale"),
+                    "Animation scale (×)",
+                    &mut panel.settings.scale,
+                    0.25..=4.,
+                    0.05,
+                    "×",
+                );
+                if session.focus && allowed {
+                    response.request_focus();
+                }
+                if !accepted && allowed {
+                    invalid.push(response.clone());
+                }
+                fields.push(response);
+                let w = (doc_w * panel.settings.scale).round().max(1.0) as u32;
+                let h = (doc_h * panel.settings.scale).round().max(1.0) as u32;
+                ui.label(format!("{w} × {h}"));
+                let (response, accepted) = number(
+                    ui,
+                    owner.with("fps"),
+                    "Animation frame rate (fps)",
+                    &mut panel.settings.fps,
+                    1.0..=60.,
+                    1.,
+                    " fps",
+                );
+                if !accepted && allowed {
+                    invalid.push(response.clone());
+                }
+                fields.push(response);
+                for (property, label, value) in [
+                    ("start", "Animation start (s)", &mut panel.settings.start),
+                    ("end", "Animation end (s)", &mut panel.settings.end),
+                ] {
+                    let (response, accepted) = number(
+                        ui,
+                        owner.with(property),
+                        label,
+                        value,
+                        0.0..=duration,
+                        0.05,
+                        " s",
+                    );
+                    if !accepted && allowed {
+                        invalid.push(response.clone());
+                    }
+                    fields.push(response);
+                }
+                let looped = ui.checkbox(&mut panel.settings.looped, "Loop");
+                super::welcome::focus_control(ui, &looped);
+                if panel.kind.allows_alpha() {
+                    let alpha =
+                        ui.checkbox(&mut panel.settings.transparent, "Transparent background");
+                    super::welcome::focus_control(ui, &alpha);
+                } else {
+                    panel.settings.transparent = false;
+                    ui.label("MP4 is flat on white.");
+                }
+                valid = invalid.is_empty()
+                    && panel.settings.start <= panel.settings.end
+                    && studio.doc.motion.duration.is_finite()
+                    && duration.is_finite()
+                    && doc_w.is_finite()
+                    && doc_h.is_finite()
+                    && doc_w > 0.
+                    && doc_h > 0.;
+                if !invalid.is_empty() {
                     super::welcome::control_error(
                         ui,
-                        &[],
-                        "The document changed. Cancel and open Export animation again.",
+                        &invalid.iter().collect::<Vec<_>>(),
+                        "Enter a finite number within the animation field's range.",
                     );
-                } else if studio.file_dialog_pending() || studio.updates.freezing {
-                    ui.label("Finish the current operation before changing this export.");
+                } else if panel.settings.start > panel.settings.end {
+                    super::welcome::control_error(
+                        ui,
+                        &fields[2..].iter().collect::<Vec<_>>(),
+                        "Animation end must be at or after its start.",
+                    );
                 }
-                ui.add_space(6.0);
-                ui.label(summary(panel.kind, &panel.settings));
-                if matches!(panel.kind, AnimKind::Mp4 | AnimKind::Webm) && !ffmpeg_installed() {
-                    ui.label("ffmpeg is not installed");
+            });
+            if !session.current(studio) {
+                super::welcome::control_error(
+                    ui,
+                    &[],
+                    "The document changed. Cancel and open Export animation again.",
+                );
+            } else if studio.file_dialog_pending() || studio.updates.freezing {
+                ui.label("Finish the current operation before changing this export.");
+            }
+            ui.add_space(6.0);
+            ui.label(summary(panel.kind, &panel.settings));
+            if matches!(panel.kind, AnimKind::Mp4 | AnimKind::Webm) && !ffmpeg_installed() {
+                ui.label("ffmpeg is not installed");
+            }
+            if exporting {
+                let (done, total) =
+                    super::jobs::frame_progress::<PathBuf>(&ctx, JOB).unwrap_or((0, 0));
+                ui.label(progress_line(done, total));
+            }
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                let response = ui.add_enabled(allowed && valid, egui::Button::new("Export"));
+                super::welcome::focus_control(ui, &response);
+                if allowed && valid && response.clicked() {
+                    export_clicked = true;
                 }
-                if exporting {
-                    let (done, total) =
-                        super::jobs::frame_progress::<PathBuf>(&ctx, JOB).unwrap_or((0, 0));
-                    ui.label(progress_line(done, total));
+                let response = ui.button("Cancel");
+                super::welcome::focus_control(ui, &response);
+                if response.clicked() {
+                    cancel_clicked = true;
                 }
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    let response = ui.add_enabled(allowed && valid, egui::Button::new("Export"));
-                    super::welcome::focus_control(ui, &response);
-                    if allowed && valid && response.clicked() {
-                        export_clicked = true;
-                    }
-                    let response = ui.button("Cancel");
-                    super::welcome::focus_control(ui, &response);
-                    if response.clicked() {
-                        cancel_clicked = true;
-                    }
-                });
             });
         });
+    });
     session.focus = false;
     ctx.data_mut(|data| data.insert_temp(session_id(), session.clone()));
-    if cancel_clicked {
+    if cancel_clicked || modal.should_close() {
         if exporting {
             super::jobs::cancel::<PathBuf>(&ctx, JOB);
             studio.status = "Export cancelled".into();
         }
-        studio.anim_export = None;
-        ctx.data_mut(|data| data.remove::<Session>(session_id()));
-        if let Some(id) = session.previous_focus {
-            ctx.memory_mut(|memory| memory.request_focus(id));
-        }
-        return;
-    }
-    if !open {
         studio.anim_export = None;
         ctx.data_mut(|data| data.remove::<Session>(session_id()));
         if let Some(id) = session.previous_focus {
