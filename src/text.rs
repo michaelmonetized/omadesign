@@ -504,6 +504,7 @@ fn fallback_block(content: &str, px: f32, origin: Pt) -> Vec<Vec<Pt>> {
 
 /// Shape `run` into closed contours in world space.
 pub fn shape(run: &TypeRun) -> Vec<Vec<Pt>> {
+    if run.svg_text.is_some() {return svg_type::layout(run).map(|l|l.contours.clone()).unwrap_or_default();}
     if run.on_path.is_some() { return crate::text_geometry::shape_on_path(run); }
     if run.frame.is_some() { return crate::text_geometry::shape_frame(run); }
     let Some(path) = resolve_path(run) else {
@@ -522,6 +523,7 @@ fn buzz_shape(_bytes: &[u8], run: &TypeRun) -> Option<Vec<Vec<Pt>>> {
 }
 
 mod composer;
+pub mod svg_type;
 mod edit;
 mod metrics;
 pub use metrics::character_metrics;
@@ -552,6 +554,7 @@ pub fn measure(run:&TypeRun)->(f32,f32) {
     let lines=compose(run);(run.wrap_width.unwrap_or_else(||lines.iter().map(|l|l.width).fold(0.,f32::max)),lines.iter().map(|l|l.height).sum())
 }
 pub fn caret_pt(run:&TypeRun,char_idx:usize)->Pt {
+    if run.svg_text.is_some() && let Some(layout)=svg_type::layout(run) && let Some(caret)=layout.carets.iter().min_by_key(|c|c.0.abs_diff(char_idx)){return caret.1;}
     if let Some((point,_)) = crate::text_geometry::caret_frame(run,char_idx) { return point; }
     let lines=compose(run);let idx=char_idx.min(run.content.chars().count());
     let line=&lines[lines.iter().rposition(|l|l.start<=idx).unwrap_or(0)];
@@ -561,6 +564,7 @@ pub fn caret_pt(run:&TypeRun,char_idx:usize)->Pt {
 /// Return both ends of the insertion caret in document coordinates.
 /// Args: text run and character index. Returns top and bottom after all type transforms.
 pub fn caret_segment(run:&TypeRun,index:usize)->(Pt,Pt) {
+    if run.svg_text.is_some(){return svg_type::caret_segment(run,index);}
     let point=caret_pt(run,index);let height=caret_height(run,index);
     let geometry=crate::text_geometry::caret_frame(run,index);
     let tangent=geometry.map_or(Pt::new(1.,0.),|(_,t)|t);
@@ -568,6 +572,7 @@ pub fn caret_segment(run:&TypeRun,index:usize)->(Pt,Pt) {
     (point-tangent.perp()*height*0.9,point+tangent.perp()*height*0.2)
 }
 pub fn hit_char(run:&TypeRun,p:Pt)->usize {
+    if run.svg_text.is_some() && let Some(layout)=svg_type::layout(run){return layout.carets.iter().min_by(|a,b|(a.1-p).length_sq().total_cmp(&(b.1-p).length_sq())).map_or(0,|c|c.0);}
     if let Some(index) = crate::text_geometry::hit_char(run,p) { return index; }
     let p=run.unmap_point(p);
     let lines=compose(run);

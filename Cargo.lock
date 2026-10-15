@@ -2966,6 +2966,7 @@ dependencies = [
  "simplecss",
  "tar",
  "tiny-skia 0.12.0",
+ "unicode-bidi",
  "unicode-linebreak",
  "unicode-segmentation",
  "ureq",

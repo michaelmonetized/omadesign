@@ -346,6 +346,7 @@ pub fn hit_char(run: &TypeRun, point: Pt) -> Option<usize> {
         .map(|c| c.0)
 }
 pub fn selection_quads(run: &TypeRun, a: usize, b: usize) -> Option<Vec<[Pt; 4]>> {
+    if run.svg_text.is_some(){return Some(crate::text::svg_type::selection_quads(run,a,b));}
     if run.transform.is_some() && run.frame.is_none() && run.on_path.is_none(){return Some(crate::text::selection_rects(run,a,b).into_iter().map(|(a,b)|[a,Pt::new(b.x,a.y),b,Pt::new(a.x,b.y)].map(|p|run.map_point(p))).collect());}
     let computed;
     let layout = if let Some(layout) = &run.layout {

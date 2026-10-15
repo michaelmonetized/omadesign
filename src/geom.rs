@@ -652,6 +652,8 @@ pub struct TypeRun {
     pub origin: Pt,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transform: Option<[f32; 6]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub svg_text: Option<crate::text::svg_type::SvgText>,
     pub content: String,
     pub px: f32,
     pub tracking: f32,
@@ -699,6 +701,7 @@ impl Default for TypeRun {
         Self {
             origin: Pt::ZERO,
             transform: None,
+            svg_text: None,
             content: String::new(),
             px: 72.0,
             tracking: 0.0,
@@ -916,6 +919,7 @@ impl Geom {
 
     pub fn bbox(&self) -> Bounds {
         match self {
+            Geom::Text(run) if run.svg_text.is_some()=>if let Some(layout)=crate::text::svg_type::layout(run){return layout.bounds;},
             Geom::Text(run) if run.frame.is_some() => return crate::text_geometry::frame_bounds(run).unwrap(),
             Geom::Text(run) if run.transform.is_none() && run.on_path.is_none() && run.wrap_width.is_some() => {
                 let (width, height) = crate::text::measure(run);
