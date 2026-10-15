@@ -71,6 +71,14 @@ fn amount(
                 .filter(|(accepted, _)| *accepted == before);
             let attempted = std::cell::RefCell::new(None::<String>);
             let observer = &attempted;
+            let vertical_step = ui.input(|input| input.events.iter().any(|event| {
+                matches!(event, egui::Event::Key {
+                    key: egui::Key::ArrowUp | egui::Key::ArrowDown,
+                    pressed: true,
+                    modifiers,
+                    ..
+                } if !modifiers.any())
+            }));
             let response = ui
                 .add(
                     egui::DragValue::new(&mut number)
@@ -94,6 +102,17 @@ fn amount(
                 )
                 .labelled_by(label_id)
                 .on_hover_text(help);
+            if response.enabled() && response.has_focus() {
+                ui.memory_mut(|memory| {
+                    memory.set_focus_lock_filter(response.id, egui::EventFilter {
+                        horizontal_arrows: true,
+                        vertical_arrows: true,
+                        tab: false,
+                        escape: false,
+                    });
+                    if vertical_step { memory.move_focus(egui::FocusDirection::None); }
+                });
+            }
             let cancelled = (response.has_focus() || response.lost_focus())
                 && ui.input(|input| input.key_pressed(egui::Key::Escape));
             let text = if cancelled { None } else { attempted.into_inner().or_else(|| previous.map(|(_, text)| text)) };
@@ -452,6 +471,7 @@ mod tests {
 
     /// Check native focus and its visible outline.
     /// Args: context, rendered output and purpose. Returns no value; checks tree and paint evidence.
+    #[track_caller]
     fn assert_focused(ctx: &egui::Context, output: &egui::FullOutput, name: &str) {
         let (id, node) = named(output, name);
         let focused = ctx.memory(|memory| memory.focused());
@@ -563,11 +583,19 @@ mod tests {
         assert_eq!(metrics.baseline_shift, Some(-3.));
         let output = tab(&ctx, &mut studio, true);
         assert_focused(&ctx, &output, "Horizontal scale");
-        frame(&ctx, &mut studio, key(Key::ArrowUp, Modifiers::NONE));
+        let output = frame(&ctx, &mut studio, key(Key::ArrowUp, Modifiers::NONE));
+        assert_focused(&ctx, &output, "Horizontal scale");
         assert_eq!(studio.selected_character_metrics()[0].hscale, Some(111.));
         assert_eq!(studio.selected_character_metrics()[0].vscale, Some(85.));
         frame(&ctx, &mut studio, key(Key::Enter, Modifiers::NONE));
         assert_eq!(ctx.memory(|memory| memory.focused()), None);
+        assert_eq!(studio.selected_character_metrics()[0].hscale, Some(111.));
+        tab_to(&ctx, &mut studio, "Vertical scale");
+        let output = frame(&ctx, &mut studio, key(Key::ArrowDown, Modifiers::NONE));
+        assert_focused(&ctx, &output, "Vertical scale");
+        frame(&ctx, &mut studio, key(Key::Escape, Modifiers::NONE));
+        assert_eq!(ctx.memory(|memory| memory.focused()), None);
+        assert_eq!(studio.selected_character_metrics()[0].vscale, Some(84.));
         assert_eq!(studio.selected_character_metrics()[0].hscale, Some(111.));
     }
 
@@ -590,12 +618,18 @@ mod tests {
         }
         assert_focused(&ctx, &output, "Tracking");
         assert!(!ids.contains(&named(&output, "Pair kerning").0));
-        frame(&ctx, &mut studio, key(Key::ArrowUp, Modifiers::NONE));
+        let output = frame(&ctx, &mut studio, key(Key::ArrowUp, Modifiers::NONE));
+        assert_focused(&ctx, &output, "Tracking");
+        let output = frame(&ctx, &mut studio, vec![]);
+        assert_focused(&ctx, &output, "Tracking");
         assert_eq!(studio.selected_character_metrics()[0].tracking, Some(73.));
         assert!(studio.selected_type().unwrap().manual_kern.is_empty());
         let output = tab(&ctx, &mut studio, true);
         assert_focused(&ctx, &output, "Pair kerning");
-        frame(&ctx, &mut studio, key(Key::ArrowDown, Modifiers::NONE));
+        let output = frame(&ctx, &mut studio, key(Key::ArrowDown, Modifiers::NONE));
+        assert_focused(&ctx, &output, "Pair kerning");
+        let output = frame(&ctx, &mut studio, vec![]);
+        assert_focused(&ctx, &output, "Pair kerning");
         assert_eq!(studio.selected_type().unwrap().manual_kern.get(&2), Some(&-1.));
         let output = tab(&ctx, &mut studio, false);
         assert_focused(&ctx, &output, "Tracking");
@@ -605,7 +639,10 @@ mod tests {
         let output = frame(&ctx, &mut studio, vec![]);
         assert_focused(&ctx, &output, "Tracking");
         assert_eq!(named(&output, "Tracking").0, ids[3]);
-        frame(&ctx, &mut studio, key(Key::ArrowDown, Modifiers::NONE));
+        let output = frame(&ctx, &mut studio, key(Key::ArrowDown, Modifiers::NONE));
+        assert_focused(&ctx, &output, "Tracking");
+        let output = frame(&ctx, &mut studio, vec![]);
+        assert_focused(&ctx, &output, "Tracking");
         assert_eq!(studio.selected_character_metrics()[0].tracking, Some(72.));
         let run = studio.selected_type().unwrap();
         assert_eq!(run.content, "Type");
