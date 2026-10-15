@@ -19,6 +19,16 @@ pub struct FieldResponse {
     pub cancelled: bool,
 }
 
+/// Check whether a numeric field's current native draft and domain state are valid.
+/// Args: the response returned by number in this frame.
+/// Returns false for rejected input or an associated application error; changed still owns edits.
+pub fn number_is_valid(field: &FieldResponse) -> bool {
+    field.response.ctx.data(|data| {
+        data.get_temp::<bool>(field.response.id.with("oma-number-valid"))
+            .unwrap_or(true)
+    })
+}
+
 /// Parse the native egui number grammar without accepting nonfinite input.
 /// Args: native draft. Returns the parsed finite value for egui's existing range handling.
 fn parse_number(text: &str) -> Option<f64> {
@@ -150,6 +160,12 @@ pub fn number<N: egui::emath::Numeric>(
                 *value = before;
             }
             let changed = response.changed() && !cancelled && !invalid && enabled;
+            ui.data_mut(|data| {
+                data.insert_temp(
+                    response.id.with("oma-number-valid"),
+                    !invalid && state.error.is_none(),
+                );
+            });
             ui.ctx().accesskit_node_builder(response.id, |node| {
                 node.set_label(label);
                 if state.mixed {

@@ -52,7 +52,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
     if previous_persona.as_deref() != Some(persona_name) {
         book.active = persona_name.into();
     }
-    book.toolbar(ui, &presets, PANELS);
+    book.toolbar_for(ui, "oma-workspace", &presets, PANELS);
     let active_persona = match book.active.as_str() {
         "Layout" => crate::tools::Persona::Layout,
         "Pixel" => crate::tools::Persona::Pixel,
@@ -65,6 +65,16 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
     ui.ctx()
         .data_mut(|data| data.insert_temp(persona_key, book.active.clone()));
     let active = book.active.clone();
+    if let Some(request) = super::panel_keyboard::show(ui, &mut book, PANELS) {
+        let layout = book.tasks.get_mut(&active).unwrap();
+        layout.normalize(&PANELS.iter().map(|panel| panel.0).collect::<Vec<_>>());
+        if let Some((panel, size)) = request.size {
+            layout.request_floating_size(ui.ctx(), "oma-workspace", &panel, size);
+        }
+        if let Some(panel) = request.focus {
+            layout.request_focus(ui.ctx(), "oma-workspace", &panel);
+        }
+    }
     let center =
         book.tasks
             .get_mut(&active)

@@ -49,8 +49,8 @@ fn field_frame(
     value: &mut f32,
     state: FieldState<'_>,
     events: Vec<Event>,
-) -> (egui::FullOutput, [bool; 3]) {
-    let mut flags = [false; 3];
+) -> (egui::FullOutput, [bool; 4]) {
+    let mut flags = [false; 4];
     let output = keys::render(ctx, events, |ui| {
         let result = number(
             ui,
@@ -65,6 +65,7 @@ fn field_frame(
         flags[0] |= result.changed;
         flags[1] |= result.committed;
         flags[2] |= result.cancelled;
+        flags[3] = number_is_valid(&result);
         let next = ui.button("Next field");
         super::welcome::focus_control(ui, &next);
     });
@@ -88,6 +89,7 @@ fn keyboard_shared_number_rejects_native_drafts_and_retains_names_focus_and_mixe
     keys::focused(&ctx, &output, "Native amount");
     assert_eq!(value, 4.);
     assert!(!flags[0] && !flags[1]);
+    assert!(!flags[3]);
     let error = keys::named(&output, "Native amount")
         .1
         .error_message()
@@ -109,6 +111,8 @@ fn keyboard_shared_number_rejects_native_drafts_and_retains_names_focus_and_mixe
     });
     assert_eq!(value, -12.);
     assert_eq!(keys::named(&output, "Native amount").1.invalid(), None);
+    let (_, flags) = field_frame(&ctx, &mut value, Default::default(), vec![]);
+    assert!(flags[3]);
     let (output, flags) = field_frame(
         &ctx,
         &mut value,

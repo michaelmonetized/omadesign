@@ -24,6 +24,7 @@ mod jobs;
 mod key_hud;
 pub(crate) mod keyboard_authoring;
 pub(crate) mod keyboard_tools;
+mod panel_keyboard;
 #[cfg(test)]
 mod key_hud_tests;
 mod layer_drag;
@@ -144,6 +145,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         && !artboard_dialog::is_open(&ctx)
         && !keyboard_authoring::is_open(&ctx)
         && !keyboard_tools::is_open(&ctx)
+        && !panel_keyboard::is_open(&ctx)
         && !studio.show_templates
     {
         guides::handle_shortcuts(&ctx, studio);
@@ -161,6 +163,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         && !artboard_dialog::is_open(&ctx)
         && !keyboard_authoring::is_open(&ctx)
         && !keyboard_tools::is_open(&ctx)
+        && !panel_keyboard::is_open(&ctx)
         && !studio.show_templates
     {
         studio.handle_shortcuts(&ctx);

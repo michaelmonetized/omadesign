@@ -43,6 +43,9 @@ drafts before conversion. Invalid drafts and application errors have one visible
 associated message and polite live semantics. Names, mixed state and focus use
 the actual widget. FieldResponse.changed is authoritative after rejection or
 cancellation; the native response remains available for app-owned history.
+`number_is_valid(&field)` lets an existing dialog disable Apply for a rejected
+native draft even when egui retains the previous numeric value. It also observes
+the supplied application error; it never substitutes for `changed` when editing.
 `action`, `tab` and `section` return normal egui responses/results.
 
 Workspace panels have application-owned IDs. The canvas is outside the layout
