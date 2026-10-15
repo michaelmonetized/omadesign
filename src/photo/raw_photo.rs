@@ -13,7 +13,7 @@ pub struct LinearImage {
 }
 
 impl LinearImage {
-    fn preview(w: u32, h: u32, pixels: &[u16], max_edge: u32) -> Self {
+    pub(super) fn preview(w: u32, h: u32, pixels: &[u16], max_edge: u32) -> Self {
         let scale = (max_edge as f64 / w.max(h) as f64).min(1.);
         let (pw, ph) = (
             (w as f64 * scale).round().max(1.) as u32,

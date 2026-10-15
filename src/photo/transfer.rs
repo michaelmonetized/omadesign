@@ -15,6 +15,8 @@ pub struct Categories {
     pub rotation: bool,
     #[serde(skip_serializing_if = "is_false")]
     pub optics: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub local: bool,
 }
 
 /// Omit inactive opt-in fields for version 1 preset readers.
@@ -35,6 +37,7 @@ impl Default for Categories {
             crop: false,
             rotation: false,
             optics: false,
+            local: false,
         }
     }
 }
@@ -50,6 +53,7 @@ impl Categories {
             || self.crop
             || self.rotation
             || self.optics
+            || self.local
     }
 
     pub fn apply(self, source: &DevelopParams, target: &mut DevelopParams) {
@@ -87,6 +91,9 @@ impl Categories {
         }
         if self.crop {
             target.crop = source.crop;
+        }
+        if self.local {
+            target.local_adjustments = source.local_adjustments.clone();
         }
         if self.optics {
             target.optics = source.optics.clone();

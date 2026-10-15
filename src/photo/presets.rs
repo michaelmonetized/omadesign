@@ -39,7 +39,7 @@ pub fn decode(bytes: &[u8]) -> Result<Vec<Preset>, String> {
     let version = value["version"]
         .as_u64()
         .ok_or("Photo preset version is missing.")?;
-    if !(1..=2).contains(&version) {
+    if !(1..=3).contains(&version) {
         return Err("This Photo preset version is not supported.".into());
     }
     let collection = if value.get("presets").is_some() {
@@ -80,6 +80,12 @@ pub fn encode(presets: &[Preset]) -> Result<Vec<u8>, String> {
 /// Choose a format version that prevents older readers from dropping edits.
 /// Args: preset collection. Returns the oldest reader version preserving every setting.
 fn required_version(presets: &[Preset]) -> u32 {
+    if presets
+        .iter()
+        .any(|p| p.categories.local || !p.params.local_adjustments.is_empty())
+    {
+        return 3;
+    }
     if presets
         .iter()
         .any(|p| p.categories.optics || !p.params.optics.is_default())
@@ -230,6 +236,12 @@ mod compatibility_tests {
         let value: serde_json::Value = serde_json::from_slice(&neutral).unwrap();
         assert_eq!(value["version"], 1);
         assert!(value["presets"][0]["categories"].get("optics").is_none());
+        assert!(value["presets"][0]["categories"].get("local").is_none());
+        assert!(
+            value["presets"][0]["params"]
+                .get("local_adjustments")
+                .is_none()
+        );
         assert!(value["presets"][0]["params"].get("optics").is_none());
         assert_eq!(decode(&neutral).unwrap(), vec![preset.clone()]);
         preset.params.optics.profile.distortion[0] = 0.1;
@@ -238,6 +250,33 @@ mod compatibility_tests {
         assert_eq!(value["version"], 2);
         assert_eq!(decode(&bytes).unwrap(), vec![preset]);
         value["version"] = 1.into();
+        assert!(decode(&serde_json::to_vec(&value).unwrap()).is_err());
+    }
+}
+
+#[cfg(test)]
+mod local_compatibility_tests {
+    use super::*;
+    #[test]
+    fn local_presets_require_v3_and_keep_all_masks_after_reopen() {
+        let mut preset = Preset {
+            name: "Local".into(),
+            params: Default::default(),
+            categories: Default::default(),
+        };
+        preset.categories.local = true;
+        preset
+            .params
+            .local_adjustments
+            .push(crate::photo::local::LocalAdjustment {
+                exposure: 0.75,
+                ..Default::default()
+            });
+        let bytes = encode(&[preset.clone()]).unwrap();
+        let mut value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(value["version"], 3);
+        assert_eq!(decode(&bytes).unwrap(), vec![preset]);
+        value["version"] = 2.into();
         assert!(decode(&serde_json::to_vec(&value).unwrap()).is_err());
     }
 }

@@ -1,4 +1,5 @@
 pub mod edits;
+pub mod local;
 pub mod optics;
 pub mod presets;
 mod raw_photo;
@@ -110,6 +111,8 @@ pub struct DevelopParams {
     pub crop: Option<[f32; 4]>,
     #[serde(default, skip_serializing_if = "optics::OpticalSettings::is_default")]
     pub optics: optics::OpticalSettings,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub local_adjustments: Vec<local::LocalAdjustment>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -159,6 +162,7 @@ impl Default for DevelopParams {
             rotate: 0,
             crop: None,
             optics: Default::default(),
+            local_adjustments: vec![],
         }
     }
 }
@@ -211,24 +215,16 @@ impl PhotoImage {
     /// adjustments. It never renders or retains a full-resolution developed image.
     pub fn render_thumbnail(&self, max_edge: u32) -> RgbaImage {
         if let Some(raw) = &self.raw_preview {
-            let scale = (max_edge as f32 / raw.w.max(raw.h) as f32).min(1.0);
-            let w = (raw.w as f32 * scale).round().max(1.0) as u32;
-            let h = (raw.h as f32 * scale).round().max(1.0) as u32;
-            let mut pixels = Vec::with_capacity(w as usize * h as usize * 3);
-            for y in 0..h {
-                for x in 0..w {
-                    let sx = (x as u64 * raw.w as u64 / w as u64) as u32;
-                    let sy = (y as u64 * raw.h as u64 / h as u64) as u32;
-                    let index = (sy as usize * raw.w as usize + sx as usize) * 3;
-                    pixels.extend_from_slice(&raw.pixels[index..index + 3]);
-                }
-            }
+            let linear = LinearImage::preview(raw.w, raw.h, &raw.pixels, max_edge);
             let mut params = self.develop.clone();
             params.exposure += self
                 .raw
                 .as_ref()
                 .map_or(0.0, |raw| raw.metadata.baseline_exposure);
-            let (w, h, data) = develop_inner::<u8>(DevelopSource::linear(w, h, &pixels), &params);
+            let (w, h, data) = develop_inner::<u8>(
+                DevelopSource::linear(linear.w, linear.h, &linear.pixels),
+                &params,
+            );
             RgbaImage { w, h, data }
         } else {
             develop(&self.preview.downscaled(max_edge), &self.develop)
@@ -395,9 +391,24 @@ fn develop_inner<T: OutputChannel>(
         };
 
         if a > 0.0 {
+            let local = p.local_adjustments.iter().any(|a| a.enabled);
+            if local {
+                if src.linear.is_none() && !optical {
+                    r = optics::srgb_decode(r);
+                    g = optics::srgb_decode(g);
+                    b = optics::srgb_decode(b);
+                }
+                let point = [
+                    ((i % src.w as usize) as f32 + 0.5) / src.w as f32,
+                    ((i / src.w as usize) as f32 + 0.5) / src.h as f32,
+                ];
+                for adjustment in &p.local_adjustments {
+                    [r, g, b] = adjustment.apply([r, g, b], point, src.w as f32 / src.h as f32);
+                }
+            }
             // RAW exposure and WB operate on scene-linear channels before the
             // display transfer curve. Original 16-bit samples remain unchanged.
-            if src.linear.is_some() || optical {
+            if src.linear.is_some() || optical || local {
                 r = srgb_encode(r * exp * temp_r);
                 g = srgb_encode(g * exp * temp_g);
                 b = srgb_encode(b * exp * temp_b);

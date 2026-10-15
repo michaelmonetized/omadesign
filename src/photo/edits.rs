@@ -5,8 +5,8 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
-const VERSION: u32 = 2;
-const MAX_SETTINGS_BYTES: u64 = 64 * 1024;
+const VERSION: u32 = 3;
+const MAX_SETTINGS_BYTES: u64 = 2 * 1024 * 1024;
 
 /// Bind adjustments to the source that was actually decoded. The file's size
 /// and nanosecond modification time detect replacement without hashing large
@@ -91,7 +91,7 @@ pub fn load_file(path: &Path, identity: &SourceIdentity) -> Result<DevelopParams
         return Err("Choose a regular .omaphoto settings file.".into());
     }
     if metadata.len() > MAX_SETTINGS_BYTES {
-        return Err("Photo settings exceed the 64 KiB limit.".into());
+        return Err("Photo settings exceed the 2 MiB limit.".into());
     }
     let file = std::fs::File::open(path)
         .map_err(|error| format!("Could not read photo settings: {error}"))?;
@@ -100,7 +100,7 @@ pub fn load_file(path: &Path, identity: &SourceIdentity) -> Result<DevelopParams
         .read_to_end(&mut bytes)
         .map_err(|error| format!("Could not read photo settings: {error}"))?;
     if bytes.len() as u64 > MAX_SETTINGS_BYTES {
-        return Err("Photo settings exceed the 64 KiB limit.".into());
+        return Err("Photo settings exceed the 2 MiB limit.".into());
     }
     let settings: Settings = serde_json::from_slice(&bytes)
         .map_err(|error| format!("Could not read photo settings: {error}"))?;
@@ -152,16 +152,22 @@ pub(crate) fn encode(
     develop: &DevelopParams,
 ) -> Result<Vec<u8>, String> {
     validate(develop)?;
-    serde_json::to_vec_pretty(&Settings {
-        version: if develop.optics == Default::default() {
-            1
-        } else {
+    let bytes = serde_json::to_vec_pretty(&Settings {
+        version: if !develop.local_adjustments.is_empty() {
             VERSION
+        } else if develop.optics != Default::default() {
+            2
+        } else {
+            1
         },
         source: identity.clone(),
         develop: develop.clone(),
     })
-    .map_err(|error| format!("Could not encode photo settings: {error}"))
+    .map_err(|error| format!("Could not encode photo settings: {error}"))?;
+    if bytes.len() as u64 > MAX_SETTINGS_BYTES {
+        return Err("Photo settings exceed the 2 MiB limit.".into());
+    }
+    Ok(bytes)
 }
 
 /// Sidecars are editable JSON; reject invalid geometry and nonfinite or extreme
@@ -179,7 +185,9 @@ pub fn validate(p: &DevelopParams) -> Result<(), String> {
         p.dehaze,
         p.split_balance,
     ];
-    let valid = p.optics.valid()
+    let valid = p.local_adjustments.len() <= 32
+        && p.local_adjustments.iter().all(|a| a.valid())
+        && p.optics.valid()
         && within(p.exposure, -16.0, 16.0)
         && within(p.temperature, -100.0, 100.0)
         && within(p.tint, -100.0, 100.0)
@@ -284,6 +292,32 @@ mod tests {
             vec![b' '; MAX_SETTINGS_BYTES as usize + 1],
         )
         .unwrap();
-        assert!(load(&source, &identity).unwrap_err().contains("64 KiB"));
+        assert!(load(&source, &identity).unwrap_err().contains("2 MiB"));
+    }
+}
+
+#[cfg(test)]
+mod version_tests {
+    use super::*;
+    #[test]
+    fn sidecars_choose_the_oldest_version_preserving_all_adjustments() {
+        let identity = SourceIdentity {
+            size_bytes: 4,
+            modified_seconds: 1,
+            modified_nanos: 0,
+        };
+        let mut p = DevelopParams::default();
+        let version = |p: &DevelopParams| {
+            serde_json::from_slice::<serde_json::Value>(&encode(&identity,p).unwrap()).unwrap()["version"].as_u64().unwrap()
+        };
+        assert_eq!(version(&p), 1);
+        p.optics.profile.distortion[0] = 0.1;
+        assert_eq!(version(&p), 2);
+        p.local_adjustments
+            .push(crate::photo::local::LocalAdjustment {
+                exposure: 1.,
+                ..Default::default()
+            });
+        assert_eq!(version(&p), 3);
     }
 }
