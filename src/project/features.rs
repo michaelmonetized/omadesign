@@ -7,17 +7,53 @@ pub(super) const ADVANCED_GRADIENT: u32 = 15;
 pub(super) const VECTOR_PATTERN: u32 = 16;
 pub(super) const SVG_FILTER: u32 = 17;
 pub(super) const PUBLISHING: u32 = 23;
+pub(super) const EXPRESSIONS: u32 = 25;
+pub(super) const COMPOSITIONS: u32 = 26;
+pub(super) const SCENE3D: u32 = 27;
 
 /// Identify implemented project readers.
 /// Args: envelope version. Returns false for reserved formats whose models are absent.
 pub(super) fn supports_version(version: u32) -> bool {
-    (1..=SVG_FILTER).contains(&version) || version == PUBLISHING
+    matches!(version, 1..=17 | 23 | 25..=27)
 }
 
 /// Find the oldest reader that preserves this document.
 /// Args: document with unpacked editable objects. Returns its highest required feature version.
 pub(super) fn required_version(doc: &Document) -> u32 {
+    crate::motion::compositions::documents(doc)
+        .map(|docs| {
+            docs.into_iter()
+                .map(local_required_version)
+                .max()
+                .unwrap_or(5)
+        })
+        .unwrap_or(SCENE3D)
+}
+
+fn local_required_version(doc: &Document) -> u32 {
     let mut version = if doc.mask_sources().is_empty() { 5 } else { 13 };
+    if !doc.motion.expressions.is_empty() {
+        version = version.max(EXPRESSIONS);
+    }
+    if !doc.motion.compositions.is_empty()
+        || doc
+            .motion
+            .tracks
+            .iter()
+            .flat_map(|t| &t.keys)
+            .chain(doc.motion.compositions.iter().flat_map(|c| &c.time_remap))
+            .any(|k| {
+                matches!(
+                    k.ease,
+                    crate::motion::Ease::Hold | crate::motion::Ease::CubicBezier { .. }
+                )
+            })
+    {
+        version = version.max(COMPOSITIONS);
+    }
+    if doc.motion.scene3d.is_some() {
+        version = version.max(SCENE3D);
+    }
     if !doc.publishing.is_empty() {
         version = version.max(PUBLISHING);
     }
@@ -133,6 +169,7 @@ pub(super) fn validate_version(
     declared: u32,
     pooled_sources: bool,
 ) -> Result<(), String> {
+    crate::motion::compositions::documents(doc)?;
     let required = required_version(doc).max(if pooled_sources { VECTOR_PATTERN } else { 5 });
     if required >= RICH_TEXT && declared < required {
         return Err(format!(

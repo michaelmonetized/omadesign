@@ -29,6 +29,7 @@ pub mod layout_prototype;
 pub mod layout_templates;
 pub mod layout_tokens;
 pub mod motion;
+pub mod scene3d;
 pub mod ml;
 pub mod background_removal;
 pub mod upscale;

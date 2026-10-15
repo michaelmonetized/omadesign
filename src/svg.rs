@@ -657,6 +657,9 @@ fn xml_escape(s: &str) -> String {
 }
 
 pub fn export(doc: &Document) -> Result<String, String> {
+    if !doc.motion.compositions.is_empty() || doc.motion.scene3d.is_some() {
+        return Err("CompositionUnsupported: SVG cannot preserve nested composition timing; use Lottie, motion project or raster animation".into());
+    }
     export_inner(doc, false, false)
 }
 
@@ -669,7 +672,11 @@ pub fn export_frame(doc: &Document, layer: usize, frame_id: u64) -> Result<Strin
 }
 
 pub fn export_animated(doc: &Document) -> Result<String, String> {
-    Ok(animated_export(doc)?.svg)
+    let report = animated_export(doc)?;
+    if !report.warnings.is_empty() {
+        return Err(format!("SvgReduction: {}", report.warnings.join("; ")));
+    }
+    Ok(report.svg)
 }
 
 /// Animated SVG plus every effect the file cannot carry.
@@ -690,6 +697,17 @@ pub struct SvgExport {
 /// Apple glass, turbulence, displacement, color matrix, and a pixel layer that
 /// is flattened into the file. A rotating linear or radial gradient is not a warning.
 pub fn animated_export(doc: &Document) -> Result<SvgExport, String> {
+    if !doc.motion.compositions.is_empty() || doc.motion.scene3d.is_some() {
+        return Err("CompositionUnsupported: SVG cannot preserve nested composition timing; use Lottie, motion project or raster animation".into());
+    }
+    crate::motion::compositions::validate(doc)?;
+    for id in doc.motion.shapes() {
+        for time in doc.motion.sample_times(id) {
+            doc.motion
+                .evaluate_frame(time, &mut || true)
+                .map_err(|e| e.to_string())?;
+        }
+    }
     Ok(SvgExport {
         svg: export_inner(doc, true, true)?,
         warnings: export_warnings(doc),
@@ -743,88 +761,149 @@ fn svg_gradient(kind: crate::gradient::GradientKind) -> bool {
     )
 }
 
-fn spin_placement(shape: &Shape) -> Option<(SpinTarget, Pt)> {
-    let bounds = shape.geom.bbox();
-    let center_of = |gradient: &crate::gradient::Gradient| {
-        let (start, end) = gradient.endpoints(bounds);
-        if gradient.kind == crate::gradient::GradientKind::Linear {
-            (start + end) * 0.5
-        } else {
-            start
-        }
-    };
-    match &shape.style.fill {
-        Fill::Gradient(gradient) if svg_gradient(gradient.kind) => {
-            Some((SpinTarget::Fill, center_of(gradient)))
-        }
-        Fill::Linear { .. } | Fill::Radial { .. } => {
-            let gradient = shape.style.fill.gradient()?;
-            Some((SpinTarget::Fill, center_of(&gradient)))
-        }
-        Fill::Gradient(_) | Fill::Pattern(_) => None,
-        _ => {
-            let gradient = shape.style.stroke.as_ref()?.gradient.as_ref()?;
-            svg_gradient(gradient.kind).then(|| (SpinTarget::Stroke, center_of(gradient)))
-        }
-    }
-}
-
 fn gradient_turns(motion: &crate::motion::Motion, shape: u64, times: &[f32]) -> bool {
     motion.tracks.iter().any(|track| {
         track.shape == shape
             && track.prop == crate::motion::Prop::GradientAngle
             && !track.keys.is_empty()
-    }) || times.iter().any(|time| {
-        motion
-            .pose(shape, *time)
-            .gradient_angle
-            .is_some_and(|angle| angle.abs() > 1e-3)
-    })
+    }) || motion
+        .expressions
+        .iter()
+        .any(|e| e.enabled && e.shape == shape && e.prop == crate::motion::Prop::GradientAngle)
+        || times.iter().any(|time| {
+            motion
+                .pose(shape, *time)
+                .gradient_angle
+                .is_some_and(|angle| angle.abs() > 1e-3)
+        })
 }
 
+fn paint_gradient(shape: &Shape, target: SpinTarget) -> Option<crate::gradient::Gradient> {
+    match target {
+        SpinTarget::Fill => (shape.layout.frame || shape.geom.is_closed())
+            .then(|| shape.style.fill.gradient())
+            .flatten(),
+        SpinTarget::Stroke => shape
+            .style
+            .stroke
+            .as_ref()
+            .filter(|s| s.width > 0.)?
+            .gradient
+            .clone(),
+    }
+}
+
+fn gradient_motion_error(shape: &Shape, target: SpinTarget) -> Option<&'static str> {
+    let g = paint_gradient(shape, target)?;
+    if !svg_gradient(g.kind) {
+        return Some("this gradient kind cannot preserve angle animation");
+    }
+    if matches!(&shape.geom, Geom::Text(run) if crate::text::has_character_paint(run)) {
+        return Some("character paint angle animation is not representable");
+    }
+    if g.kind == crate::gradient::GradientKind::Radial
+        && g.radial_transform(shape.geom.bbox()).invert().is_none()
+    {
+        return Some("singular affine radial field cannot preserve angle animation");
+    }
+    if g.kind == crate::gradient::GradientKind::Radial
+        && (g.radial_axis.is_some() || g.focal != [0., 0.] || g.inner_radius != 0.)
+    {
+        let (a, b) = g.endpoints(shape.geom.bbox());
+        if (b - a).length() < 1. {
+            return Some(
+                "sub-unit affine radial field changes native radius during angle animation",
+            );
+        }
+    }
+    None
+}
+
+/// Rotate the complete native field, then restore its constant affine factors.
+/// Args: motion sample times and one fill/stroke. Returns SVG1.1 SMIL or an empty unsupported channel.
 fn gradient_motion(
     motion: &crate::motion::Motion,
     shape: &Shape,
     times: &[f32],
-) -> (Option<SpinTarget>, String) {
-    let Some((target, center)) = spin_placement(shape) else {
-        return (None, String::new());
+    target: SpinTarget,
+) -> String {
+    let Some(mut gradient) = paint_gradient(shape, target).filter(|g| svg_gradient(g.kind)) else {
+        return String::new();
     };
-    if !gradient_turns(motion, shape.id, times) {
-        return (Some(target), String::new());
+    if !gradient_turns(motion, shape.id, times) || gradient_motion_error(shape, target).is_some() {
+        return String::new();
     }
+    let bounds = shape.geom.bbox();
+    let (a, b) = gradient.endpoints(bounds);
+    let center = if gradient.kind == crate::gradient::GradientKind::Linear {
+        (a + b) * 0.5
+    } else {
+        a
+    };
     let values = times
         .iter()
         .map(|time| {
-            let offset = motion.pose(shape.id, *time).gradient_angle.unwrap_or(0.0);
-            format!("{offset:.6} {:.4} {:.4}", center.x, center.y)
+            let angle = motion.pose(shape.id, *time).gradient_angle.unwrap_or(0.);
+            format!("{angle:.8} {:.8} {:.8}", center.x, center.y)
         })
         .collect::<Vec<_>>()
         .join(";");
-    (
-        Some(target),
-        animate_tag(
-            "animateTransform",
-            "gradientTransform",
-            " type=\"rotate\"",
-            motion,
-            times,
-            &values,
-        ),
-    )
+    let mut out = animate_tag(
+        "animateTransform",
+        "gradientTransform",
+        " type=\"rotate\"",
+        motion,
+        times,
+        &values,
+    );
+    if gradient.kind == crate::gradient::GradientKind::Radial
+        && (gradient.radial_axis.is_some()
+            || gradient.focal != [0., 0.]
+            || gradient.inner_radius != 0.)
+    {
+        gradient.set_angle(gradient.angle(bounds), bounds);
+        let m = gradient.radial_transform(bounds);
+        let (a, b, c, d) = (m.sx as f64, m.ky as f64, m.kx as f64, m.sy as f64);
+        let sx = a.hypot(b);
+        let sy = (a * d - b * c) / sx;
+        let rotation = b.atan2(a).to_degrees();
+        let skew = ((a * c + b * d) / (sx * sx)).atan().to_degrees();
+        for (kind, value) in [
+            ("translate", format!("{} {}", m.tx, m.ty)),
+            ("rotate", rotation.to_string()),
+            ("scale", format!("{sx} {sy}")),
+            ("skewX", skew.to_string()),
+        ] {
+            out.push_str(&animate_tag(
+                "animateTransform",
+                "gradientTransform",
+                &format!(" type=\"{kind}\" additive=\"sum\""),
+                motion,
+                &[0., motion.duration.max(0.05)],
+                &format!("{value};{value}"),
+            ));
+        }
+    }
+    out
 }
 
-fn insert_gradient_motion(defs: &mut String, start: usize, motion: &str) {
+fn insert_gradient_motion(defs: &mut String, start: usize, motion: &str, gradient_id: usize) {
     if motion.is_empty() || start > defs.len() {
         return;
     }
     let region = &defs[start..];
-    let linear = region.find("</linearGradient>");
-    let radial = region.find("</radialGradient>");
-    let Some(at) = linear.into_iter().chain(radial).min() else {
+    let Some(id) = region.find(&format!("id=\"g{gradient_id}\"")) else {
         return;
     };
-    defs.insert_str(start + at, motion);
+    let suffix = &region[id..];
+    if let Some(at) = suffix
+        .find("</linearGradient>")
+        .into_iter()
+        .chain(suffix.find("</radialGradient>"))
+        .min()
+    {
+        defs.insert_str(start + id + at, motion);
+    }
 }
 
 fn svg_fx(fx: &crate::filter::Fx) -> bool {
@@ -858,20 +937,14 @@ fn motion_exported(shape: &Shape, prop: crate::motion::Prop) -> bool {
                     .as_ref()
                     .is_some_and(|stroke| stroke.width > 0.0)
         }
-        Prop::GradientAngle => match spin_placement(shape) {
-            Some((SpinTarget::Fill, _)) => {
-                shape.layout.frame || (shape.geom.is_closed() && !shape.style.fill.is_none())
-            }
-            Some((SpinTarget::Stroke, _)) => {
-                shape.layout.frame
-                    || shape
-                        .style
-                        .stroke
-                        .as_ref()
-                        .is_some_and(|stroke| stroke.width > 0.0)
-            }
-            None => false,
-        },
+        Prop::GradientAngle => {
+            [SpinTarget::Fill, SpinTarget::Stroke]
+                .into_iter()
+                .any(|target| paint_gradient(shape, target).is_some())
+                && [SpinTarget::Fill, SpinTarget::Stroke]
+                    .into_iter()
+                    .all(|target| gradient_motion_error(shape, target).is_none())
+        }
         Prop::StrokeWidth | Prop::Fill | Prop::Dash | Prop::Gap | Prop::DashLength => false,
     }
 }
@@ -929,16 +1002,33 @@ fn export_warnings(doc: &Document) -> Vec<String> {
                             }
                         }
                     }
-                    for track in doc
+                    let props: std::collections::HashSet<_> = doc
                         .motion
                         .tracks
                         .iter()
-                        .filter(|track| track.shape == shape.id && !track.keys.is_empty())
-                    {
-                        if !motion_exported(shape, track.prop) {
+                        .filter(|t| t.shape == shape.id && !t.keys.is_empty())
+                        .map(|t| t.prop)
+                        .chain(
+                            doc.motion
+                                .expressions
+                                .iter()
+                                .filter(|e| e.enabled && e.shape == shape.id)
+                                .map(|e| e.prop),
+                        )
+                        .collect();
+                    for prop in props {
+                        if !motion_exported(shape, prop) {
+                            let reason = if prop == crate::motion::Prop::GradientAngle {
+                                [SpinTarget::Fill, SpinTarget::Stroke]
+                                    .into_iter()
+                                    .find_map(|target| gradient_motion_error(shape, target))
+                                    .unwrap_or("no representable gradient angle channel")
+                            } else {
+                                "channel is not representable"
+                            };
                             warnings.push(format!(
-                                "{} on \"{}\" in layer \"{}\" is not in the animated SVG",
-                                track.prop.name(),
+                                "SvgReduction: {} on \"{}\" in layer \"{}\": {reason}",
+                                prop.name(),
                                 shape.name,
                                 layer.name
                             ));
@@ -962,7 +1052,7 @@ fn write_animated_shape(
     let times = motion.sample_times(shape.id);
     let bounds = shape.world_bbox();
     let center = bounds.center();
-    let (spin_target, spin) = gradient_motion(motion, shape, &times);
+
     body.push_str(&format!(
         "<g class=\"oma-a\" style=\"animation-name: oma-{}; transform-origin: {:.4}px {:.4}px\">\n",
         shape.id, center.x, center.y
@@ -1014,9 +1104,8 @@ fn write_animated_shape(
             &xf_attr(&component),
             true,
         );
-        if spin_target == Some(SpinTarget::Fill) {
-            insert_gradient_motion(defs, defs_at, &spin);
-        }
+        let spin = gradient_motion(motion, &component, &times, SpinTarget::Fill);
+        insert_gradient_motion(defs, defs_at, &spin, *grad_id);
         body.push_str(&part.replacen(
             &format!("id=\"oma-{}\"", shape.id),
             &format!("id=\"oma-{}-fill\"", shape.id),
@@ -1129,9 +1218,8 @@ fn write_animated_shape(
             &xf_attr(&component),
             true,
         );
-        if spin_target == Some(SpinTarget::Stroke) {
-            insert_gradient_motion(defs, defs_at, &spin);
-        }
+        let spin = gradient_motion(motion, &component, &times, SpinTarget::Stroke);
+        insert_gradient_motion(defs, defs_at, &spin, *grad_id);
         body.push_str(&part.replacen(
             &format!("id=\"oma-{}\"", shape.id),
             &format!("id=\"oma-{}-stroke\"", shape.id),
@@ -1354,11 +1442,17 @@ fn write_shape_tree(
                 let defs_at = defs.len();
                 write_shape(body, defs, grad_id, &background, "", false);
                 if animate {
-                    let (target, spin) =
-                        gradient_motion(motion, shape, &motion.sample_times(shape.id));
-                    if target.is_some() {
-                        insert_gradient_motion(defs, defs_at, &spin);
-                    }
+                    let times = motion.sample_times(shape.id);
+                    let stroke_has_gradient = shape
+                        .style
+                        .stroke
+                        .as_ref()
+                        .is_some_and(|s| s.width > 0. && s.gradient.is_some());
+                    let fill_id = *grad_id - usize::from(stroke_has_gradient);
+                    let spin = gradient_motion(motion, shape, &times, SpinTarget::Fill);
+                    insert_gradient_motion(defs, defs_at, &spin, fill_id);
+                    let spin = gradient_motion(motion, shape, &times, SpinTarget::Stroke);
+                    insert_gradient_motion(defs, defs_at, &spin, *grad_id);
                 }
                 if shape.layout.clip {
                     let clip_id = format!("oma-frame-clip-{}", shape.id);
@@ -2381,3 +2475,6 @@ mod mask_tests {
         assert_eq!(decoded.layers[0].mask.as_ref().unwrap().data, mask_data);
     }
 }
+
+#[cfg(test)]
+pub(crate) mod motion_tests;

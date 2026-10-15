@@ -307,7 +307,15 @@ pub fn export_animation(
                 if !report(index as u32, total) {
                     return Err("Export cancelled".into());
                 }
-                let png = render_frame(doc, *time, settings.scale, transparent)?;
+                let png = crate::compositor::render_export_at_cancellable(
+                    doc,
+                    settings.scale,
+                    *time,
+                    transparent,
+                    &mut || report(index as u32, total),
+                )?
+                .encode_png()
+                .map_err(|e| e.to_string())?;
                 frames.push(rgba_from_png(&png)?);
             }
             if !report(total, total) {
@@ -378,7 +386,15 @@ fn encode_video(
         if !report(index as u32, total) {
             return Err("Export cancelled".into());
         }
-        let png = render_frame(doc, *time, settings.scale, transparent)?;
+        let png = crate::compositor::render_export_at_cancellable(
+            doc,
+            settings.scale,
+            *time,
+            transparent,
+            &mut || report(index as u32, total),
+        )?
+        .encode_png()
+        .map_err(|e| e.to_string())?;
         let png = even_png(&png, transparent)?;
         std::fs::write(dir.join(format!("frame_{index:04}.png")), png)
             .map_err(|e| e.to_string())?;

@@ -84,7 +84,14 @@ fn raster_motion_all_image_presets_render_and_preserve_pixels() {
             preset.name()
         );
         assert_eq!(s.doc.layers[0].kind.pixels().unwrap().data, before);
-        let svg = crate::svg::export_animated(&s.doc).unwrap();
+        let report = crate::svg::animated_export(&s.doc).unwrap();
+        assert!(report.warnings.iter().any(|w| w.contains("Pixel layer")));
+        assert!(
+            crate::svg::export_animated(&s.doc)
+                .unwrap_err()
+                .contains("SvgReduction")
+        );
+        let svg = report.svg;
         roxmltree::Document::parse(&svg).unwrap();
         for layer in &s.doc.layers {
             assert!(svg.contains(&format!("animation-name: oma-{};", layer.id)));
@@ -247,8 +254,14 @@ fn animated_raster_import_and_frame_reparent_keep_tracks_and_undo() {
     source.doc.layers.truncate(1);
     source.doc.layers[0].opacity = 0.3;
     let original = source.doc.layers[0].id;
-    source.doc.motion.set_key(original, Prop::X, 1.0, 40.0, Ease::Linear);
-    source.doc.motion.set_key(original, Prop::Opacity, 0.0, 0.3, Ease::Linear);
+    source
+        .doc
+        .motion
+        .set_key(original, Prop::X, 1.0, 40.0, Ease::Linear);
+    source
+        .doc
+        .motion
+        .set_key(original, Prop::Opacity, 0.0, 0.3, Ease::Linear);
     let mut s = fixture();
     s.doc.layers.clear();
     let mut layer = Layer::vector("Destination");
@@ -259,7 +272,12 @@ fn animated_raster_import_and_frame_reparent_keep_tracks_and_undo() {
     s.selection.clear();
     let before = crate::project::encode(&s.doc).unwrap();
     let full = Bounds::from_min_size(Pt::ZERO, source.doc.size());
-    s.place_imported_at(crate::import::Imported::Document(source.doc.clone()), Pt::ZERO, Some((full, full))).unwrap();
+    s.place_imported_at(
+        crate::import::Imported::Document(source.doc.clone()),
+        Pt::ZERO,
+        Some((full, full)),
+    )
+    .unwrap();
     let imported_id = s.doc.layers[1].id;
     assert_eq!(s.doc.motion.pose(imported_id, 1.0).dx, 40.0);
     let imported = crate::project::encode(&s.doc).unwrap();
@@ -273,8 +291,20 @@ fn animated_raster_import_and_frame_reparent_keep_tracks_and_undo() {
     assert_eq!(crate::project::encode(&s.doc).unwrap(), imported);
     s.undo();
     assert_eq!(crate::project::encode(&s.doc).unwrap(), before);
-    s.place_imported_in_frame(crate::import::Imported::Document(source.doc), Pt::new(120.0, 80.0), (0, frame_id), Some(full)).unwrap();
-    let track = s.doc.motion.tracks.iter().find(|t| t.prop == Prop::X).unwrap();
+    s.place_imported_in_frame(
+        crate::import::Imported::Document(source.doc),
+        Pt::new(120.0, 80.0),
+        (0, frame_id),
+        Some(full),
+    )
+    .unwrap();
+    let track = s
+        .doc
+        .motion
+        .tracks
+        .iter()
+        .find(|t| t.prop == Prop::X)
+        .unwrap();
     assert_eq!(s.doc.motion.pose(track.shape, 1.0).dx, 40.0);
     let wrapper = s.doc.find_shape(0, track.shape).unwrap();
     assert_eq!(wrapper.opacity, 0.3);

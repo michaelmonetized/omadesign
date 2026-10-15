@@ -625,7 +625,11 @@ fn svg_document(svg: &str) -> Result<crate::document::Document, String> {
 fn check_geometry(geom: &crate::geom::Geom, budget: &mut usize) -> Result<(), String> {
     check_geometry_with_budget(geom, budget, 250_000)
 }
-fn check_geometry_with_budget(geom: &crate::geom::Geom, budget: &mut usize, limit: usize) -> Result<(), String> {
+fn check_geometry_with_budget(
+    geom: &crate::geom::Geom,
+    budget: &mut usize,
+    limit: usize,
+) -> Result<(), String> {
     use crate::geom::Geom;
     let count = match geom {
         Geom::Polygon { sides, .. } => *sides as usize,
@@ -688,7 +692,11 @@ fn oma_document(bytes: &[u8]) -> Result<crate::document::Document, String> {
         #[serde(default)]
         svg_sources: std::collections::BTreeMap<String, std::sync::Arc<str>>,
     }
-    let Project { version, mut doc, svg_sources } = serde_json::from_slice(bytes)
+    let Project {
+        version,
+        mut doc,
+        svg_sources,
+    } = serde_json::from_slice(bytes)
         .map_err(|e| format!("Could not read project preview: {e}"))?;
     crate::project::restore_sources(&mut doc, version, &svg_sources)?;
     crate::project::normalize_decoded_document(checked_preview_document(doc)?, version)
@@ -704,11 +712,18 @@ pub(crate) fn load_preview_document(
 }
 
 /// Complex welcome previews retain bounded input and image decoding.
-pub(crate) fn load_full_preview_document(path: &Path, recovery: bool) -> Result<crate::document::Document, String> {
+pub(crate) fn load_full_preview_document(
+    path: &Path,
+    recovery: bool,
+) -> Result<crate::document::Document, String> {
     load_preview_document_with_budget(path, recovery, true)
 }
 
-fn load_preview_document_with_budget(path: &Path, recovery: bool, complex: bool) -> Result<crate::document::Document, String> {
+fn load_preview_document_with_budget(
+    path: &Path,
+    recovery: bool,
+    complex: bool,
+) -> Result<crate::document::Document, String> {
     let bytes = read_bounded(path, 64 * 1024 * 1024)?;
     if recovery {
         let meta: crate::project::SwapMeta =
@@ -719,7 +734,10 @@ fn load_preview_document_with_budget(path: &Path, recovery: bool, complex: bool)
         } else if let Some(original) = &meta.original {
             crate::typography::load_for_document(original)?;
         }
-        crate::project::normalize_decoded_document(checked_preview_document_with_budget(meta.doc, complex)?, crate::project::VERSION)
+        crate::project::normalize_decoded_document(
+            checked_preview_document_with_budget(meta.doc, complex)?,
+            crate::project::VERSION,
+        )
     } else {
         crate::typography::load_for_document(path)?;
         #[derive(Deserialize)]
@@ -729,54 +747,102 @@ fn load_preview_document_with_budget(path: &Path, recovery: bool, complex: bool)
             #[serde(default)]
             svg_sources: std::collections::BTreeMap<String, std::sync::Arc<str>>,
         }
-        let Project { version, mut doc, svg_sources } = serde_json::from_slice(&bytes).map_err(|e| format!("Could not read project preview: {e}"))?;
+        let Project {
+            version,
+            mut doc,
+            svg_sources,
+        } = serde_json::from_slice(&bytes)
+            .map_err(|e| format!("Could not read project preview: {e}"))?;
         crate::project::restore_sources(&mut doc, version, &svg_sources)?;
-        crate::project::normalize_decoded_document(checked_preview_document_with_budget(doc, complex)?, version)
+        crate::project::normalize_decoded_document(
+            checked_preview_document_with_budget(doc, complex)?,
+            version,
+        )
     }
 }
 
-fn checked_preview_document(doc: crate::document::Document) -> Result<crate::document::Document, String> {
+fn checked_preview_document(
+    doc: crate::document::Document,
+) -> Result<crate::document::Document, String> {
     checked_preview_document_with_budget(doc, false)
 }
 
 fn checked_preview_document_with_budget(
-    mut doc: crate::document::Document, complex: bool,
+    mut doc: crate::document::Document,
+    complex: bool,
 ) -> Result<crate::document::Document, String> {
-    if doc.layers.len() > if complex { 4096 } else { 256 } || doc.artboards.len() > if complex { 4096 } else { 128 } {
+    let documents = crate::motion::compositions::documents(&doc)?;
+    if documents.iter().map(|d| d.layers.len()).sum::<usize>() > if complex { 4096 } else { 256 }
+        || documents.iter().map(|d| d.artboards.len()).sum::<usize>()
+            > if complex { 4096 } else { 128 }
+    {
         return Err("Project has too many layers or artboards for a preview.".into());
     }
     crate::typography::validate_document_fonts(&doc)?;
     let mut pixels = 0;
     let mut geometry = 0;
     let mut effects = 0;
-    let total_effects: usize = doc.layers.iter().map(|l| l.filters.items.len() + l.kind.shapes().unwrap_or_default().iter().map(|s| s.filters.items.len()).sum::<usize>()).sum();
-    if total_effects > 4096 { return Err("Project exceeds the 4096-effect preview budget".into()); }
-    let mut objects = 0usize;
-    for layer in &mut doc.layers {
-        if complex { effects = 0; }
-        check_filters(&layer.filters, &mut effects)?;
-        for px in [layer.kind.pixels_mut(), layer.mask.as_mut()]
-            .into_iter()
-            .flatten()
-        {
-            prepare_preview_pixels(px, &mut pixels, if complex { 64_000_000 } else { MAX_PIXELS })?;
-        }
-        if let Some(shapes) = layer.kind.shapes_mut() {
-            objects = objects.saturating_add(shapes.len());
-            if shapes.len() > if complex { 100_000 } else { 2048 } || objects > 100_000 {
-                return Err("Project has too many objects for a preview.".into());
-            }
-            for shape in shapes {
-                if let Some(mask) = &mut shape.mask {
-                    prepare_preview_pixels(mask, &mut pixels, if complex { 64_000_000 } else { MAX_PIXELS })?;
-                }
-                if complex { effects = 0; }
-                check_filters(&shape.filters, &mut effects)?;
-                check_geometry_with_budget(&shape.geom, &mut geometry, if complex { 4_000_000 } else { 250_000 })?;
-                crate::text::fill_contours(&mut shape.geom);
-            }
-        }
+    let total_effects: usize = documents
+        .iter()
+        .flat_map(|d| &d.layers)
+        .map(|l| {
+            l.filters.items.len()
+                + l.kind
+                    .shapes()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|s| s.filters.items.len())
+                    .sum::<usize>()
+        })
+        .sum();
+    if total_effects > 4096 {
+        return Err("Project exceeds the 4096-effect preview budget".into());
     }
+    let mut objects = 0usize;
+    crate::motion::compositions::visit_documents_mut(&mut doc, |doc| {
+        for layer in &mut doc.layers {
+            if complex {
+                effects = 0;
+            }
+            check_filters(&layer.filters, &mut effects)?;
+            for px in [layer.kind.pixels_mut(), layer.mask.as_mut()]
+                .into_iter()
+                .flatten()
+            {
+                prepare_preview_pixels(
+                    px,
+                    &mut pixels,
+                    if complex { 64_000_000 } else { MAX_PIXELS },
+                )?;
+            }
+            if let Some(shapes) = layer.kind.shapes_mut() {
+                objects = objects.saturating_add(shapes.len());
+                if shapes.len() > if complex { 100_000 } else { 2048 } || objects > 100_000 {
+                    return Err("Project has too many objects for a preview.".into());
+                }
+                for shape in shapes {
+                    if let Some(mask) = &mut shape.mask {
+                        prepare_preview_pixels(
+                            mask,
+                            &mut pixels,
+                            if complex { 64_000_000 } else { MAX_PIXELS },
+                        )?;
+                    }
+                    if complex {
+                        effects = 0;
+                    }
+                    check_filters(&shape.filters, &mut effects)?;
+                    check_geometry_with_budget(
+                        &shape.geom,
+                        &mut geometry,
+                        if complex { 4_000_000 } else { 250_000 },
+                    )?;
+                    crate::text::fill_contours(&mut shape.geom);
+                }
+            }
+        }
+        Ok(())
+    })?;
     Ok(doc)
 }
 
@@ -1186,14 +1252,16 @@ mod welcome_budget_tests {
     use super::*;
     #[test]
     fn complex_preview_keeps_pixel_and_file_budgets() {
-        let root = std::env::temp_dir().join(format!("oma-preview-budget-{}", crate::document::next_id()));
+        let root =
+            std::env::temp_dir().join(format!("oma-preview-budget-{}", crate::document::next_id()));
         fs::create_dir_all(&root).unwrap();
         let path = root.join("oversized.oma");
         let file = fs::File::create(&path).unwrap();
         file.set_len(64 * 1024 * 1024 + 1).unwrap();
         assert!(load_full_preview_document(&path, false).is_err());
         let doc = crate::document::Document::new("malformed pixels", 1., 1., 96.);
-        let mut value: serde_json::Value = serde_json::from_str(&crate::project::encode(&doc).unwrap()).unwrap();
+        let mut value: serde_json::Value =
+            serde_json::from_str(&crate::project::encode(&doc).unwrap()).unwrap();
         let pixels = &mut value["doc"]["layers"][0]["kind"]["Raster"]["pixels"];
         // The serialized variant is checked below so this cannot silently test a no-op.
         assert!(pixels.is_object());
@@ -1205,21 +1273,29 @@ mod welcome_budget_tests {
     }
     #[test]
     fn complex_legacy_preview_matches_normal_native_decode() {
-        let root = std::env::temp_dir().join(format!("oma-legacy-preview-{}", crate::document::next_id()));
+        let root =
+            std::env::temp_dir().join(format!("oma-legacy-preview-{}", crate::document::next_id()));
         fs::create_dir_all(&root).unwrap();
         let path = root.join("legacy.oma");
         let mut doc = crate::document::Document::new("legacy", 10., 10., 96.);
-        doc.layers.extend((0..260).map(|_| crate::document::Layer::vector("layer")));
-        doc.layers[1].filters.items.push(crate::filter::Fx::Blur { std: 2. });
-        let mut value: serde_json::Value = serde_json::from_str(&crate::project::encode(&doc).unwrap()).unwrap();
+        doc.layers
+            .extend((0..260).map(|_| crate::document::Layer::vector("layer")));
+        doc.layers[1]
+            .filters
+            .items
+            .push(crate::filter::Fx::Blur { std: 2. });
+        let mut value: serde_json::Value =
+            serde_json::from_str(&crate::project::encode(&doc).unwrap()).unwrap();
         value["version"] = serde_json::json!(6);
         let data = serde_json::to_string(&value).unwrap();
         fs::write(&path, &data).unwrap();
         assert!(load_preview_document(&path, false).is_err());
         let preview = load_full_preview_document(&path, false).unwrap();
         let native = crate::project::decode(&data).unwrap();
-        assert_eq!(crate::project::encode(&preview).unwrap(), crate::project::encode(&native).unwrap());
+        assert_eq!(
+            crate::project::encode(&preview).unwrap(),
+            crate::project::encode(&native).unwrap()
+        );
         fs::remove_dir_all(root).unwrap();
     }
-
 }

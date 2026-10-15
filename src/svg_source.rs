@@ -434,20 +434,19 @@ pub(crate) fn xml_node(node: roxmltree::Node<'_, '_>) -> String {
 /// Args: document copy being saved. Returns the packed source table.
 pub fn pack_sources(
     doc: &mut crate::document::Document,
-) -> std::collections::BTreeMap<String, Arc<str>> {
+) -> Result<std::collections::BTreeMap<String, Arc<str>>, String> {
     use std::collections::{BTreeMap, HashMap};
     let mut sources = BTreeMap::new();
     let mut seen = HashMap::new();
     visit_sources(doc, &mut |source| {
-        let pointer = Arc::as_ptr(source) as *const u8 as usize;
-        let key = seen.entry(pointer).or_insert_with(|| {
+        let key = seen.entry(source.clone()).or_insert_with(|| {
             let key = format!("@oma-svg-source-{}", sources.len());
             sources.insert(key.clone(), source.clone());
             key
         });
         *source = Arc::from(key.as_str());
-    });
-    sources
+    })?;
+    Ok(sources)
 }
 
 /// Restore shared definitions after reading a project.
@@ -463,27 +462,33 @@ pub fn unpack_sources(
         } else if source.starts_with("@oma-svg-source-") {
             error = Some(format!("Missing vector source {source}"));
         }
-    });
+    })?;
     error.map_or(Ok(()), Err)
 }
 
 /// Visit each source reference without copying its XML.
 /// Args: mutable document and an operation on each shared definition reference.
-fn visit_sources(doc: &mut crate::document::Document, visit: &mut impl FnMut(&mut Arc<str>)) {
-    for layer in &mut doc.layers {
-        if let Some(graph) = &mut layer.svg_filter {
-            visit(&mut graph.definitions);
-            visit(&mut graph.original_definitions);
-        }
-        for shape in layer.kind.shapes_mut().into_iter().flatten() {
-            visit_fill_source(&mut shape.style.fill, visit);
-            if let crate::geom::Geom::Text(run) = &mut shape.geom {
-                for fill in run.spans.iter_mut().filter_map(|span| span.fill.as_mut()) {
-                    visit_fill_source(fill, visit);
+fn visit_sources(
+    doc: &mut crate::document::Document,
+    visit: &mut impl FnMut(&mut Arc<str>),
+) -> Result<(), String> {
+    crate::motion::compositions::visit_documents_mut(doc, |doc| {
+        for layer in &mut doc.layers {
+            if let Some(graph) = &mut layer.svg_filter {
+                visit(&mut graph.definitions);
+                visit(&mut graph.original_definitions);
+            }
+            for shape in layer.kind.shapes_mut().into_iter().flatten() {
+                visit_fill_source(&mut shape.style.fill, visit);
+                if let crate::geom::Geom::Text(run) = &mut shape.geom {
+                    for fill in run.spans.iter_mut().filter_map(|span| span.fill.as_mut()) {
+                        visit_fill_source(fill, visit);
+                    }
                 }
             }
         }
-    }
+        Ok(())
+    })
 }
 
 fn visit_fill_source(fill: &mut crate::document::Fill, visit: &mut impl FnMut(&mut Arc<str>)) {

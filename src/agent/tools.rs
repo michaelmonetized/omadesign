@@ -6,6 +6,7 @@ use crate::{
     geom::{Anchor, Geom, Pt},
 };
 mod animation;
+mod scene;
 mod catalog;
 mod editing;
 pub mod files;
@@ -140,6 +141,9 @@ pub fn mutates(name: &str) -> bool {
             | "paint_stroke"
             | "set_mask"
             | "set_motion"
+            | "set_composition"
+            | "set_expression"
+            | "set_scene3d"
             | "set_keyframes"
             | "apply_motion_preset"
             | "develop_photo"
@@ -541,6 +545,7 @@ pub fn execute_prepared(
         }
     }
     let result = match name {
+        "get_scene3d" | "set_scene3d" => scene::execute(studio,name,args)?,
         "get_document" => {
             let offset = args["layer_offset"].as_u64().unwrap_or(0) as usize;
             let layers: Vec<_> = studio
@@ -946,7 +951,7 @@ pub fn execute_prepared(
         | "get_editor_capabilities"
         | "editor_action" => editing::execute(studio, name, args)?,
         "set_pixel_selection" | "paint_stroke" | "set_mask" => pixels::execute(studio, name, args)?,
-        "get_motion" | "set_motion" | "set_keyframes" | "apply_motion_preset" => {
+        "get_motion" | "set_motion" | "set_composition" | "set_expression" | "set_keyframes" | "apply_motion_preset" => {
             animation::execute(studio, name, args)?
         }
         "get_photos" | "select_photo" | "develop_photo" | "save_document" => {

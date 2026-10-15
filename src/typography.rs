@@ -626,12 +626,18 @@ pub fn export_copy(source: &Path, destination: &Path) -> Result<(), String> {
 }
 
 pub(crate) fn validate_document_fonts(doc: &crate::document::Document) -> Result<(), String> {
-    for layer in &doc.layers {
-        for shape in layer.kind.shapes().unwrap_or_default() {
-            if let crate::geom::Geom::Text(run) = &shape.geom
-                && std::iter::once(run.font.as_str()).chain(run.spans.iter().filter_map(|s|s.font.as_deref())).any(|font|font.starts_with("omatype:") && !crate::text::project_font_loaded(font))
-            {
-                return Err("This artwork needs a missing project font. Copy its .omabrand/fonts folder beside the project.".into());
+    for doc in crate::motion::compositions::documents(doc)? {
+        for layer in &doc.layers {
+            for shape in layer.kind.shapes().unwrap_or_default() {
+                if let crate::geom::Geom::Text(run) = &shape.geom
+                    && std::iter::once(run.font.as_str())
+                        .chain(run.spans.iter().filter_map(|s| s.font.as_deref()))
+                        .any(|font| {
+                            font.starts_with("omatype:") && !crate::text::project_font_loaded(font)
+                        })
+                {
+                    return Err("This artwork needs a missing project font. Copy its .omabrand/fonts folder beside the project.".into());
+                }
             }
         }
     }
@@ -642,37 +648,38 @@ fn document_fonts(doc: &crate::document::Document) -> Result<Vec<LoadedFont>, St
     let mut seen = HashSet::new();
     let mut fonts = Vec::new();
     let mut total = 0;
-    for layer in &doc.layers {
-        for shape in layer.kind.shapes().unwrap_or_default() {
-            let crate::geom::Geom::Text(run) = &shape.geom else {
-                continue;
-            };
-            for font in std::iter::once(&run.font).chain(run.spans.iter().filter_map(|s|s.font.as_ref())) {
-            if !font.starts_with("omatype:") || !seen.insert(font.clone()) {
-                continue;
-            }
-            let bytes = crate::text::project_font_bytes(font).ok_or_else(|| {
+    for doc in crate::motion::compositions::documents(doc)? {
+        for layer in &doc.layers {
+            for shape in layer.kind.shapes().unwrap_or_default() {
+                let crate::geom::Geom::Text(run) = &shape.geom else {
+                    continue;
+                };
+                for font in std::iter::once(&run.font)
+                    .chain(run.spans.iter().filter_map(|s| s.font.as_ref()))
+                {
+                    if !font.starts_with("omatype:") || !seen.insert(font.clone()) {
+                        continue;
+                    }
+                    let bytes = crate::text::project_font_bytes(font).ok_or_else(|| {
                 format!("Cannot save without the artwork's project font: {}. Load its typography kit first.", font)
             })?;
-            total += bytes.len();
-            if fonts.len() >= 256 || total > MAX_TOTAL {
-                return Err("The artwork's font archive exceeds 256 faces or 64 MB".into());
-            }
-            let extension = if bytes.starts_with(b"OTTO") {
-                "otf"
-            } else {
-                "ttf"
-            };
-            fonts.push(LoadedFont {
-                role: "Archived font".into(),
-                file: format!(
-                    "fonts/{}.{extension}",
-                    font.trim_start_matches("omatype:")
-                ),
-                id: font.clone(),
-                family: crate::text::label_for(font),
-                bytes,
-            });
+                    total += bytes.len();
+                    if fonts.len() >= 256 || total > MAX_TOTAL {
+                        return Err("The artwork's font archive exceeds 256 faces or 64 MB".into());
+                    }
+                    let extension = if bytes.starts_with(b"OTTO") {
+                        "otf"
+                    } else {
+                        "ttf"
+                    };
+                    fonts.push(LoadedFont {
+                        role: "Archived font".into(),
+                        file: format!("fonts/{}.{extension}", font.trim_start_matches("omatype:")),
+                        id: font.clone(),
+                        family: crate::text::label_for(font),
+                        bytes,
+                    });
+                }
             }
         }
     }

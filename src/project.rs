@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 mod features;
 
-pub(crate) const VERSION: u32 = features::PUBLISHING;
+pub(crate) const VERSION: u32 = features::SCENE3D;
 
 /// Check whether this build implements a project version.
 /// Args: envelope version. Returns false for unimplemented reserved formats.
@@ -24,9 +24,10 @@ struct File {
 }
 
 pub fn encode(doc: &Document) -> Result<String, String> {
+    crate::motion::compositions::validate(doc)?;
     let mut packed = doc.clone();
     pack_rasters(&mut packed)?;
-    let svg_sources = crate::svg_source::pack_sources(&mut packed);
+    let svg_sources = crate::svg_source::pack_sources(&mut packed)?;
     serde_json::to_string(&File {
         version: features::required_version(doc),
         doc: packed,
@@ -39,15 +40,7 @@ pub fn decode(s: &str) -> Result<Document, String> {
     let file: File = serde_json::from_str(s).map_err(|e| e.to_string())?;
     let mut doc = file.doc;
     restore_sources(&mut doc, file.version, &file.svg_sources)?;
-    for layer in &mut doc.layers {
-        if let Some(px) = layer.kind.pixels_mut() { *px = decompress_pixels(px)?; }
-        if let Some(mask) = layer.mask.as_mut() { *mask = decompress_pixels(mask)?; }
-        if let Some(shapes) = layer.kind.shapes_mut() {
-            for shape in shapes {
-                if let Some(mask) = shape.mask.as_mut() { *mask = decompress_pixels(mask)?; }
-            }
-        }
-    }
+    unpack_rasters(&mut doc)?;
     normalize_decoded_document(doc, file.version)
 }
 
@@ -66,28 +59,51 @@ pub(crate) fn restore_sources(
 }
 
 /// Shared normalization after pixels have been decoded under the caller's budgets.
-pub(crate) fn normalize_decoded_document(mut doc: Document, version: u32) -> Result<Document, String> {
+pub(crate) fn normalize_decoded_document(
+    mut doc: Document,
+    version: u32,
+) -> Result<Document, String> {
     if !supports_version(version) {
         return Err("Unsupported omadesign project version".into());
     }
     features::validate_version(&doc, version, false)?;
-    for layer in &mut doc.layers {
-        if version < 7 { layer.filters.migrate_legacy(layer.blend); }
-        if let Some(shapes) = layer.kind.shapes_mut() {
-            for shape in shapes {
-                if version < 7 { shape.filters.migrate_legacy(shape.blend); }
-                if version < 8 {
-                    if let crate::geom::Geom::Text(t) = &mut shape.geom && t.wrap_width.is_some() {
-                        t.update_paragraphs(0, t.content.chars().count(), |p| p.overflow_wrap = true);
+    crate::motion::compositions::visit_documents_mut(&mut doc, |doc| {
+        for layer in &mut doc.layers {
+            if version < 7 {
+                layer.filters.migrate_legacy(layer.blend);
+            }
+            if let Some(shapes) = layer.kind.shapes_mut() {
+                for shape in shapes {
+                    if version < 7 {
+                        shape.filters.migrate_legacy(shape.blend);
                     }
+                    if version < 8 {
+                        if let crate::geom::Geom::Text(t) = &mut shape.geom
+                            && t.wrap_width.is_some()
+                        {
+                            t.update_paragraphs(0, t.content.chars().count(), |p| {
+                                p.overflow_wrap = true
+                            });
+                        }
+                    }
+                    crate::text::fill_contours(&mut shape.geom);
                 }
-                crate::text::fill_contours(&mut shape.geom);
             }
         }
-    }
-    crate::text_geometry::reflow(&mut doc);
-    doc.ensure_ids()?;
-    doc.validate_hierarchy()?;
+        crate::text_geometry::reflow(doc);
+        for comp in &doc.motion.compositions {
+            crate::document::bump_id(comp.id);
+        }
+        if let Some(scene) = &doc.motion.scene3d {
+            for object in &scene.objects {
+                crate::document::bump_id(object.id);
+            }
+        }
+        doc.ensure_ids()?;
+        doc.validate_hierarchy()?;
+        Ok(())
+    })?;
+    crate::motion::compositions::validate(&doc)?;
     Ok(doc)
 }
 
@@ -126,8 +142,11 @@ pub fn decode_clipboard_shapes(text: &str) -> Result<Vec<crate::document::Shape>
 }
 
 fn compress_pixels(px: &Pixels) -> Result<Pixels, String> {
-    let pm = px.to_pixmap().ok_or("pixmap")?;
-    let png = pm.encode_png().map_err(|e| e.to_string())?;
+    use image::ImageEncoder;
+    let mut png = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut png)
+        .write_image(&px.data, px.w, px.h, image::ExtendedColorType::Rgba8)
+        .map_err(|e| e.to_string())?;
     let b64 = base64::engine::general_purpose::STANDARD.encode(png);
     Ok(Pixels {
         w: px.w,
@@ -158,8 +177,13 @@ fn decompress_pixels(px: &Pixels) -> Result<Pixels, String> {
 }
 
 pub fn save_to(doc: &Document, path: &Path) -> Result<(), String> {
+    save_serialized_document(doc, path, &encode(doc)?)
+}
+
+/// Save a native envelope with the shared font archive and atomic writer.
+/// Args: document, destination and serialized envelope. Returns a write/archive error.
+pub(crate) fn save_serialized_document(doc: &Document, path: &Path, s: &str) -> Result<(), String> {
     use std::io::Write;
-    let s = encode(doc)?;
     let parent = path
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
@@ -240,6 +264,12 @@ const PLACE_EXTS: &[&str] = &[
     "ps",
     "psd",
     "psb",
+    "omamotion",
+    "gltf",
+    "glb",
+    "obj",
+    "stl",
+    "fbx",
     "ora",
     "xcf",
     "af",
@@ -434,22 +464,43 @@ pub fn swap_path(id: &str) -> PathBuf {
 }
 
 fn pack_rasters(doc: &mut Document) -> Result<(), String> {
-    for layer in &mut doc.layers {
-        if let Some(px) = layer.kind.pixels_mut() {
-            *px = compress_pixels(px)?;
-        }
-        if let Some(mask) = layer.mask.as_mut() {
-            *mask = compress_pixels(mask)?;
-        }
-        if let Some(shapes) = layer.kind.shapes_mut() {
-            for shape in shapes {
-                if let Some(mask) = shape.mask.as_mut() {
-                    *mask = compress_pixels(mask)?;
+    crate::motion::compositions::visit_documents_mut(doc, |doc| {
+        for layer in &mut doc.layers {
+            if let Some(px) = layer.kind.pixels_mut() {
+                *px = compress_pixels(px)?;
+            }
+            if let Some(mask) = layer.mask.as_mut() {
+                *mask = compress_pixels(mask)?;
+            }
+            if let Some(shapes) = layer.kind.shapes_mut() {
+                for shape in shapes {
+                    if let Some(mask) = shape.mask.as_mut() {
+                        *mask = compress_pixels(mask)?;
+                    }
                 }
             }
         }
-    }
-    Ok(())
+        Ok(())
+    })
+}
+
+fn unpack_rasters(doc: &mut Document) -> Result<(), String> {
+    crate::motion::compositions::visit_documents_mut(doc, |doc| {
+        for layer in &mut doc.layers {
+            if let Some(px) = layer.kind.pixels_mut() {
+                *px = decompress_pixels(px)?;
+            }
+            if let Some(mask) = layer.mask.as_mut() {
+                *mask = decompress_pixels(mask)?;
+            }
+            for shape in layer.kind.shapes_mut().into_iter().flatten() {
+                if let Some(mask) = shape.mask.as_mut() {
+                    *mask = decompress_pixels(mask)?;
+                }
+            }
+        }
+        Ok(())
+    })
 }
 
 /// A worker writes a temporary file; only the UI may publish it after checking
@@ -544,23 +595,8 @@ pub fn load_swap(path: &Path) -> Result<SwapMeta, String> {
         crate::typography::load_for_document(original)?;
     }
     crate::typography::validate_document_fonts(&meta.doc)?;
-    for layer in &mut meta.doc.layers {
-        if let Some(px) = layer.kind.pixels_mut() {
-            *px = decompress_pixels(px)?;
-        }
-        if let Some(mask) = layer.mask.as_mut() {
-            *mask = decompress_pixels(mask)?;
-        }
-        if let Some(shapes) = layer.kind.shapes_mut() {
-            for sh in shapes {
-                crate::text::fill_contours(&mut sh.geom);
-                if let Some(mask) = sh.mask.as_mut() {
-                    *mask = decompress_pixels(mask)?;
-                }
-            }
-        }
-    }
-    meta.doc.ensure_ids()?;
+    unpack_rasters(&mut meta.doc)?;
+    meta.doc = normalize_decoded_document(meta.doc, VERSION)?;
     Ok(meta)
 }
 
@@ -667,15 +703,27 @@ mod tests {
         use crate::text_geometry::{TextFrame, TextOnPath};
         let mut doc = Document::new("Combined typography", 640., 480., 96.);
         let guide = Shape::new(
-            Geom::Ellipse { center: Pt::new(160., 160.), radii: Pt::splat(100.) },
+            Geom::Ellipse {
+                center: Pt::new(160., 160.),
+                radii: Pt::splat(100.),
+            },
             Style::default(),
         );
         let guide_id = guide.id;
-        let text = Shape::new(Geom::Text(TypeRun {
-            content: "AV typography".into(), px: 24., ..Default::default()
-        }), Style::default());
+        let text = Shape::new(
+            Geom::Text(TypeRun {
+                content: "AV typography".into(),
+                px: 24.,
+                ..Default::default()
+            }),
+            Style::default(),
+        );
         let id = text.id;
-        doc.layers[1].kind.shapes_mut().unwrap().extend([guide, text]);
+        doc.layers[1]
+            .kind
+            .shapes_mut()
+            .unwrap()
+            .extend([guide, text]);
         let check = |doc: &Document, expected: u32| {
             let encoded = encode(doc).unwrap();
             let file: serde_json::Value = serde_json::from_str(&encoded).unwrap();
@@ -684,7 +732,8 @@ mod tests {
         };
         check(&doc, 5);
         doc.find_shape_mut(1, id).unwrap().style.stroke = Some(crate::document::Stroke {
-            alignment: crate::document::StrokeAlignment::Outside, ..Default::default()
+            alignment: crate::document::StrokeAlignment::Outside,
+            ..Default::default()
         });
         check(&doc, 6);
         doc.find_shape_mut(1, id).unwrap().fill_opacity = 0.4;
@@ -697,7 +746,10 @@ mod tests {
         }
         run(&mut doc, id).wrap_width = Some(260.);
         check(&doc, 8);
-        run(&mut doc, id).on_path = Some(TextOnPath { path_id: guide_id, ..Default::default() });
+        run(&mut doc, id).on_path = Some(TextOnPath {
+            path_id: guide_id,
+            ..Default::default()
+        });
         check(&doc, 9);
         run(&mut doc, id).on_path = None;
         run(&mut doc, id).frame = Some(TextFrame::default());
@@ -706,15 +758,23 @@ mod tests {
         check(&doc, 11);
         run(&mut doc, id).manual_kern.insert(1, -30.);
         run(&mut doc, id).spans.push(CharSpan {
-            start: 0, end: 2, leading: Some(Leading::Fixed(45.)),
-            tracking: Some(80.), baseline_shift: Some(3.), ..Default::default()
+            start: 0,
+            end: 2,
+            leading: Some(Leading::Fixed(45.)),
+            tracking: Some(80.),
+            baseline_shift: Some(3.),
+            ..Default::default()
         });
         check(&doc, 12);
         let restored = decode(&encode(&doc).unwrap()).unwrap();
         let shape = restored.find_shape(1, id).unwrap();
         assert_eq!(shape.fill_opacity, 0.4);
-        let Geom::Text(actual) = &shape.geom else { unreachable!() };
-        let Geom::Text(expected) = &doc.find_shape(1, id).unwrap().geom else { unreachable!() };
+        let Geom::Text(actual) = &shape.geom else {
+            unreachable!()
+        };
+        let Geom::Text(expected) = &doc.find_shape(1, id).unwrap().geom else {
+            unreachable!()
+        };
         assert_eq!(actual.content, expected.content);
         assert_eq!(actual.frame, expected.frame);
         assert_eq!(actual.features, expected.features);
@@ -1117,3 +1177,6 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 }
+
+#[cfg(test)]
+mod motion_archive_tests;
