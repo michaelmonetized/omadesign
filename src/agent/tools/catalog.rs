@@ -117,6 +117,16 @@ pub fn extended() -> Vec<Value> {
             true,
         ),
         (
+            "get_scene3d",
+            "Inspect persistent model objects, node transforms, cameras, lights, materials and animation clips.",
+            json!({}), vec![], false,
+        ),
+        (
+            "set_scene3d",
+            "Edit native 3D scene. operation: import (absolute model path), primitive (kind), object (persistent object id + patch), node/material (index + patch), camera (patch), lighting (lights/ambient/imported_camera/imported_lights), remove (object). Object rotation is degrees, node rotation quaternion xyzw. Scene data is embedded and undoable; get_scene3d shows current fields and clips.",
+            json!({"operation":s,"path":s,"kind":s,"object":i,"node":i,"material":i,"patch":{"type":"object"},"lights":{"type":"array"},"ambient":{"type":"array"},"imported_camera":{},"imported_lights":b}), vec!["operation"], true,
+        ),
+        (
             "get_motion",
             "Inspect duration, FPS, loop, playhead, paginated tracks, expressions and composition metadata including persistent IDs, anchors and time-remap keys.",
             json!({"offset":i}),

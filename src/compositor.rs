@@ -7,10 +7,16 @@ mod appearance_tests;
 mod bounded_blit;
 pub(crate) mod cache_admission;
 mod effects_cache;
-mod mask_cache;
 mod frames;
 mod groups;
+mod mask_cache;
 mod motion_scene;
+thread_local! {static MOTION_ERROR:std::cell::RefCell<Option<String>>=const {std::cell::RefCell::new(None)};}
+
+/// Read the last live scene error. Returns a named error for the motion controls.
+pub fn motion_error() -> Option<String> {
+    MOTION_ERROR.with(|e| e.borrow().clone())
+}
 pub(crate) mod interaction;
 #[cfg(test)]
 mod performance_tests;
@@ -91,8 +97,8 @@ impl View {
         if viewport.width() < 1.0 || viewport.height() < 1.0 {
             return;
         }
-        self.scale =
-            ((viewport.width() / doc.x).min(viewport.height() / doc.y) * 0.90).clamp(0.000001, 64.0);
+        self.scale = ((viewport.width() / doc.x).min(viewport.height() / doc.y) * 0.90)
+            .clamp(0.000001, 64.0);
         let scaled = doc * self.scale;
         self.offset = viewport.center() - scaled * 0.5;
     }
@@ -178,6 +184,17 @@ pub fn sample_color(doc: &Document, at: Pt) -> Option<Rgba> {
     };
     draw_plates(&mut pm, doc, view);
     groups::draw(&mut pm, doc, view.transform(), &Draft::none(), None, None);
+    motion_scene::draw(
+        &mut pm,
+        doc,
+        view.transform(),
+        0.,
+        0,
+        &HashMap::new(),
+        &mut || true,
+        &mut motion_scene::Budget::default(),
+    )
+    .ok()?;
     let px = pm.pixel(0, 0)?;
     if px.alpha() == 0 {
         return None;
@@ -222,10 +239,24 @@ pub fn render_view_posed(
     draw_plates(&mut pm, doc, view);
 
     let t = view.transform();
-    let mut poses = motion_t.and_then(|time| doc.motion.evaluate_frame(time, &mut || true).ok()).unwrap_or_default();
-    if let Some(overrides) = overrides { poses.extend(overrides.iter().map(|(id, pose)| (*id, *pose))); }
+    let mut poses = motion_t
+        .and_then(|time| doc.motion.evaluate_frame(time, &mut || true).ok())
+        .unwrap_or_default();
+    if let Some(overrides) = overrides {
+        poses.extend(overrides.iter().map(|(id, pose)| (*id, *pose)));
+    }
     groups::draw(&mut pm, doc, t, &draft, motion_t, Some(&poses));
-    let _ = motion_scene::draw(&mut pm, doc, t, motion_t.unwrap_or(0.), 0, &poses, &mut || true, &mut motion_scene::Budget::default());
+    let scene_result = motion_scene::draw(
+        &mut pm,
+        doc,
+        t,
+        motion_t.unwrap_or(0.),
+        0,
+        &poses,
+        &mut || true,
+        &mut motion_scene::Budget::default(),
+    );
+    MOTION_ERROR.with(|e| *e.borrow_mut() = scene_result.err());
     Some(pm)
 }
 
@@ -233,11 +264,25 @@ pub(crate) fn render_export(doc: &Document, scale: u32) -> Result<Pixmap, String
     let s = scale.clamp(1, 8);
     let w = (doc.width * s as f32).round().max(1.0) as u32;
     let h = (doc.height * s as f32).round().max(1.0) as u32;
+    if (doc.motion.scene3d.is_some() || !doc.motion.compositions.is_empty())
+        && w as u64 * h as u64 > 16_000_000
+    {
+        return Err("ScenePixels: at most 16 million output pixels".into());
+    }
     let mut pm = Pixmap::new(w, h).ok_or("could not allocate export pixmap")?;
     draw_export_plates(&mut pm, doc, s as f32);
     let t = Transform::from_scale(s as f32, s as f32);
     groups::draw(&mut pm, doc, t, &Draft::none(), None, None);
-    motion_scene::draw(&mut pm, doc, t, 0., 0, &HashMap::new(), &mut || true, &mut motion_scene::Budget::default())?;
+    motion_scene::draw(
+        &mut pm,
+        doc,
+        t,
+        0.,
+        0,
+        &HashMap::new(),
+        &mut || true,
+        &mut motion_scene::Budget::default(),
+    )?;
     Ok(pm)
 }
 
@@ -256,7 +301,16 @@ pub(crate) fn render_export_preview(doc: &Document, max_edge: u32) -> Result<Pix
         None,
         None,
     );
-    motion_scene::draw(&mut pm,doc,Transform::from_scale(s,s),0.,0,&HashMap::new(),&mut || true,&mut motion_scene::Budget::default())?;
+    motion_scene::draw(
+        &mut pm,
+        doc,
+        Transform::from_scale(s, s),
+        0.,
+        0,
+        &HashMap::new(),
+        &mut || true,
+        &mut motion_scene::Budget::default(),
+    )?;
     Ok(pm)
 }
 
@@ -283,16 +337,26 @@ pub fn render_export_at_cancellable(
     keep: &mut dyn FnMut() -> bool,
 ) -> Result<Pixmap, String> {
     crate::motion::compositions::validate(doc)?;
-    if !keep() { return Err("Cancelled: render cancelled".into()); }
+    if !keep() {
+        return Err("Cancelled: render cancelled".into());
+    }
     let s = if scale.is_finite() {
         scale.clamp(0.1, 8.0)
     } else {
         1.0
     };
     let time = if time.is_finite() { time } else { 0.0 };
-    let poses = doc.motion.evaluate_frame(time, keep).map_err(|e| e.to_string())?;
+    let poses = doc
+        .motion
+        .evaluate_frame(time, keep)
+        .map_err(|e| e.to_string())?;
     let w = (doc.width * s).round().max(1.0) as u32;
     let h = (doc.height * s).round().max(1.0) as u32;
+    if (doc.motion.scene3d.is_some() || !doc.motion.compositions.is_empty())
+        && w as u64 * h as u64 > 16_000_000
+    {
+        return Err("ScenePixels: at most 16 million output pixels".into());
+    }
     let mut pm = Pixmap::new(w, h).ok_or("could not allocate export pixmap")?;
     if !transparent {
         pm.fill(tiny_skia::Color::WHITE);
@@ -302,8 +366,19 @@ pub fn render_export_at_cancellable(
     }
     let t = Transform::from_scale(s, s);
     groups::draw(&mut pm, doc, t, &Draft::none(), Some(time), Some(&poses));
-    motion_scene::draw(&mut pm, doc, t, time, 0, &poses, keep, &mut motion_scene::Budget::default())?;
-    if !keep() { return Err("Cancelled: render cancelled".into()); }
+    motion_scene::draw(
+        &mut pm,
+        doc,
+        t,
+        time,
+        0,
+        &poses,
+        keep,
+        &mut motion_scene::Budget::default(),
+    )?;
+    if !keep() {
+        return Err("Cancelled: render cancelled".into());
+    }
     Ok(pm)
 }
 
@@ -823,7 +898,11 @@ fn object_mask(
     if let Some(parent) = parent {
         // A parent's coverage can change independently. Keep the reusable own
         // mask immutable, and combine the current parent only for this draw.
-        for (a, b) in std::sync::Arc::make_mut(&mut mask).data_mut().iter_mut().zip(parent.data()) {
+        for (a, b) in std::sync::Arc::make_mut(&mut mask)
+            .data_mut()
+            .iter_mut()
+            .zip(parent.data())
+        {
             *a = ((u16::from(*a) * u16::from(*b) + 127) / 255) as u8;
         }
     }
@@ -972,7 +1051,9 @@ fn draw_shape_masked(
         shape.blend.to_skia()
     };
     if !shape.filters.active()
-        && (mask.is_some() || alpha * shape.fill_opacity < 1.0 || shape.blend != crate::color::Blend::Normal)
+        && (mask.is_some()
+            || alpha * shape.fill_opacity < 1.0
+            || shape.blend != crate::color::Blend::Normal)
     {
         // Composite the complete fill/image/stroke once, using a bounded temporary.
         let pad = shape
@@ -1054,11 +1135,18 @@ fn draw_shape_masked(
         // into and out of large world coordinates introduces cancellation noise
         // that invalidates blur/shadow caches during otherwise identical motion.
         let translation = Pt::new(pose.dx, pose.dy);
-        let pose = Pose { dx: 0., dy: 0., ..pose };
+        let pose = Pose {
+            dx: 0.,
+            dy: 0.,
+            ..pose
+        };
         let b = pose.map_bounds(shape.world_bbox()).inflate(pad);
         let tw = b.width().ceil().max(1.0) as u32;
         let th = b.height().ceil().max(1.0) as u32;
-        let xf = t.pre_concat(Transform::from_translate(b.min.x + translation.x, b.min.y + translation.y));
+        let xf = t.pre_concat(Transform::from_translate(
+            b.min.x + translation.x,
+            b.min.y + translation.y,
+        ));
         // These stacks already combine locally before one bilinear canvas blit.
         // Reuse those exact pixels; backdrop-dependent appearance keeps its full
         // compositing path below, including per-effect blend and group opacity.
@@ -1108,19 +1196,39 @@ fn draw_shape_masked(
         let prepared = effects_cache::prepared(shape, pose, b, || {
             let mut temp = Pixmap::new(tw, th)?;
             let local = Transform::from_translate(-b.min.x, -b.min.y);
-            let opaque_pose = Pose { opacity: Some(1.), ..pose };
-            draw_shape_inner(&mut temp, shape, local, 1., tiny_skia::BlendMode::SourceOver, opaque_pose, None);
+            let opaque_pose = Pose {
+                opacity: Some(1.),
+                ..pose
+            };
+            draw_shape_inner(
+                &mut temp,
+                shape,
+                local,
+                1.,
+                tiny_skia::BlendMode::SourceOver,
+                opaque_pose,
+                None,
+            );
             if shape.filters.active() {
                 for fx in &shape.filters.items {
-                    if fx.appearance().is_none() { crate::filter::apply_one(&mut temp, fx); }
+                    if fx.appearance().is_none() {
+                        crate::filter::apply_one(&mut temp, fx);
+                    }
                 }
             }
             Some(temp)
         });
         if let Some(temp) = prepared {
             crate::filter::composite_cached(
-                pm, temp, &shape.filters, xf, blend,
-                opacity * alpha, shape.fill_opacity, shape.blend_interior, mask,
+                pm,
+                temp,
+                &shape.filters,
+                xf,
+                blend,
+                opacity * alpha,
+                shape.fill_opacity,
+                shape.blend_interior,
+                mask,
             );
         }
         return;
@@ -1409,7 +1517,11 @@ fn fill_paint<'a>(
 }
 
 pub(crate) fn is_paper_raster(layer: &Layer) -> bool {
-    if layer.mask.is_some() || !layer.artwork_masks.is_empty() || layer.parent.is_some() || layer.name != "Background" {
+    if layer.mask.is_some()
+        || !layer.artwork_masks.is_empty()
+        || layer.parent.is_some()
+        || layer.name != "Background"
+    {
         return false;
     }
     let LayerKind::Raster { pixels, size, .. } = &layer.kind else {

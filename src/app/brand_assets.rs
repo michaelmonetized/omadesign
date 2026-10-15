@@ -43,6 +43,35 @@ impl Studio {
         if !at.x.is_finite() || !at.y.is_finite() {
             return Err("The placement point is invalid".into());
         }
+        if let Imported::Document(doc) = &imported
+            && (!doc.motion.compositions.is_empty()
+                || !doc.motion.expressions.is_empty()
+                || doc.motion.scene3d.is_some())
+        {
+            crate::motion::compositions::validate(doc)?;
+            let mut comp = crate::motion::compositions::Composition::new(doc.clone());
+            if let Some((source, dest)) = placement {
+                comp.scale = Pt::new(
+                    dest.width() / source.width(),
+                    dest.height() / source.height(),
+                );
+                comp.anchor = source.min;
+                comp.position = dest.min;
+            } else {
+                comp.position = at - doc.size() * 0.5;
+            }
+            let mut after = self.doc.motion.clone();
+            after.duration = after.duration.max(comp.end);
+            after.compositions.push(comp);
+            let mut candidate = self.doc.clone();
+            candidate.motion = after.clone();
+            crate::motion::compositions::validate(&candidate)?;
+            self.commit(Cmd::Batch(vec![Cmd::SetMotion {
+                before: self.doc.motion.clone(),
+                after,
+            }]));
+            return Ok(());
+        }
         let (name, mut layers, motion, notes, imported_tokens) = match imported {
             Imported::Photo(_) => {
                 return Err(
@@ -303,7 +332,10 @@ impl Studio {
         }
         let mut after = self.doc.motion.clone();
         for mut track in motion.tracks {
-            let Some(id) = ids.get(&track.shape).or_else(|| layer_ids.get(&track.shape)) else {
+            let Some(id) = ids
+                .get(&track.shape)
+                .or_else(|| layer_ids.get(&track.shape))
+            else {
                 continue;
             };
             track.shape = *id;

@@ -111,6 +111,7 @@ fn transport(ui: &mut Ui, studio: &mut Studio) {
     ui.separator();
     expression_editor(ui, studio);
     super::motion_compositions::show(ui, studio);
+    super::scene3d::show(ui, studio);
     if ui
         .add_enabled(
             !studio.selection.is_empty(),

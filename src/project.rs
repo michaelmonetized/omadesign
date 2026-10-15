@@ -261,6 +261,7 @@ const PLACE_EXTS: &[&str] = &[
     "ps",
     "psd",
     "psb",
+    "omamotion", "gltf", "glb", "obj", "stl", "fbx",
     "ora",
     "xcf",
     "af",

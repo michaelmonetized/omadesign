@@ -397,6 +397,7 @@ impl Motion {
         self.tracks.iter().all(|t| t.keys.is_empty())
             && !self.expressions.iter().any(|e| e.enabled)
             && self.compositions.is_empty()
+            && self.scene3d.as_ref().is_none_or(|s| s.objects.is_empty())
     }
 
     pub fn value(&self, shape: u64, prop: Prop, t: f32) -> Option<f32> {
@@ -1494,7 +1495,9 @@ fn import_lottie_value(
             continue;
         }
         if ty != 4 {
-            if layers.iter().all(|l|l["ty"]!=0 && l["ty"]!=4) {return Err(import_failure(v));}
+            if layers.iter().all(|l| l["ty"] != 0 && l["ty"] != 4) {
+                return Err(import_failure(v));
+            }
             return Err(format!("CompositionUnsupported: Lottie layer type {ty}"));
         }
         let Some((geom, fill, stroke)) = layer_geom(layer) else {

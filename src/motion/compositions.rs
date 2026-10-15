@@ -495,14 +495,22 @@ mod tests {
     #[test]
     fn nested_resource_errors_are_named_and_cancellable() {
         let mut root = child();
+        root.layers.clear();
         let mut inner = child();
         inner.width = 1_000_000.;
         inner.height = 1_000_000.;
         root.motion.compositions.push(Composition::new(inner));
+        let visible = crate::compositor::render_export_at(&root, 1., 0., true).unwrap();
+        assert_eq!((visible.width(), visible.height()), (12, 12));
+        assert_eq!(visible.pixel(2, 2).unwrap().alpha(), 255);
+        let mut checks = 0;
         assert!(
-            crate::compositor::render_export_at(&root, 1., 0., true)
-                .unwrap_err()
-                .contains("CompositionPixels")
+            crate::compositor::render_export_at_cancellable(&root, 1., 0., true, &mut || {
+                checks += 1;
+                checks < 2
+            })
+            .unwrap_err()
+            .contains("Cancelled")
         );
         root.motion.compositions[0].speed = 0.;
         assert!(validate(&root).unwrap_err().contains("Transform"));
