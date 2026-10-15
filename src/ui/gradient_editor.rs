@@ -1,8 +1,5 @@
 //! Compact, direct manipulation gradient editor for the Appearance studio.
-use crate::{
-    geom::Bounds,
-    gradient::{Gradient, GradientKind, GradientStop},
-};
+use crate::gradient::{Gradient, GradientKind, GradientStop};
 use eframe::egui::{self, Color32, Sense, Stroke, Ui, pos2, vec2};
 
 #[derive(Clone, Default)]
@@ -45,47 +42,99 @@ impl Stops {
     }
 }
 
-pub(super) fn editor(ui: &mut Ui, gradient: &mut Gradient, bounds: Bounds) -> bool {
+/// Decorate the existing precise radial number and observe accepted edits.
+/// Args: UI, stable property, visible name, native purpose and model draft.
+/// Returns the authoritative change flag, retaining the native .01 step and finite grammar.
+fn radial_number(ui: &mut Ui, property: &str, label: &str, purpose: &str, value: &mut f32) -> bool {
+    let range = if property == "inner-radius" {
+        0.0..=0.9999
+    } else {
+        -f32::MAX..=f32::MAX
+    };
+    let (field, _) = crate::ui::keyboard_controls::motion_number(
+        ui,
+        ui.make_persistent_id(("gradient-radial", property)),
+        (label, purpose),
+        value,
+        range,
+        0.01,
+        "",
+        None,
+    );
+    crate::app::input_history::record(field.response, field.changed)
+}
+
+#[derive(Default)]
+pub(super) struct Edits {
+    pub design: bool,
+    pub angle: Option<f32>,
+}
+
+/// Edit saved gradient properties and report explicit angle intent separately.
+/// Args: UI, saved rest gradient and displayed rest-plus-live angle.
+/// Returns design changes and an accepted absolute angle without baking a posed preview into the design.
+pub(super) fn editor(ui: &mut Ui, gradient: &mut Gradient, shown_angle: f32) -> Edits {
     gradient.normalize();
     let mut changed = false;
+    let mut angle_changed = None;
     if gradient.kind == GradientKind::Radial {
-        ui.collapsing("Radial geometry", |ui| {
-            for (label, value) in [
-                ("Focus X", &mut gradient.focal[0]),
-                ("Inner radius", &mut gradient.inner_radius),
+        let radial = ui.collapsing("Radial geometry", |ui| {
+            for (property, label, purpose, value) in [
+                (
+                    "focus-x",
+                    "Focus X",
+                    "Radial gradient focus X",
+                    &mut gradient.focal[0],
+                ),
+                (
+                    "inner-radius",
+                    "Inner radius",
+                    "Radial gradient inner radius",
+                    &mut gradient.inner_radius,
+                ),
             ] {
-                ui.horizontal(|ui| {
-                    ui.label(label);
-                    changed |= ui.add(egui::DragValue::new(value).speed(0.01)).changed();
-                });
+                changed |= radial_number(ui, property, label, purpose, value);
             }
-            ui.horizontal(|ui| {
-                ui.label("Focus Y");
-                changed |= ui
-                    .add(egui::DragValue::new(&mut gradient.focal[1]).speed(0.01))
-                    .changed();
-            });
+            changed |= radial_number(
+                ui,
+                "focus-y",
+                "Focus Y",
+                "Radial gradient focus Y",
+                &mut gradient.focal[1],
+            );
             if let Some(axis) = &mut gradient.radial_axis {
-                ui.horizontal(|ui| {
-                    ui.label("Ellipse axis");
-                    for value in axis {
-                        changed |= ui.add(egui::DragValue::new(value).speed(0.01)).changed();
-                    }
-                });
+                ui.label("Ellipse axis");
+                for (index, value) in axis.iter_mut().enumerate() {
+                    let (property, label, purpose) = if index == 0 {
+                        ("axis-x", "X", "Radial gradient ellipse axis X")
+                    } else {
+                        ("axis-y", "Y", "Radial gradient ellipse axis Y")
+                    };
+                    changed |= radial_number(ui, property, label, purpose, value);
+                }
             }
-            gradient.inner_radius = gradient.inner_radius.clamp(0., 0.9999);
         });
+        crate::ui::welcome::focus_control(ui, &radial.header_response);
     }
     ui.horizontal(|ui| {
-        ui.label("Spread");
+        let label = ui.label("Spread");
         for mode in [
             crate::gradient::Spread::Pad,
             crate::gradient::Spread::Repeat,
             crate::gradient::Spread::Reflect,
         ] {
-            changed |= ui
-                .selectable_value(&mut gradient.spread, mode, mode.svg())
-                .changed();
+            let id = ui.make_persistent_id(("gradient-spread", mode.svg()));
+            let response = crate::ui::fields::native_scope(ui, id, |ui| {
+                ui.selectable_value(&mut gradient.spread, mode, mode.svg())
+            })
+            .inner;
+            crate::ui::welcome::name_control(
+                ui,
+                &response,
+                label.id,
+                &format!("Gradient spread {}", mode.svg()),
+            );
+            changed |= response.changed();
         }
     });
     let id = ui.make_persistent_id("gradient-stop");
@@ -248,7 +297,7 @@ pub(super) fn editor(ui: &mut Ui, gradient: &mut Gradient, bounds: Bounds) -> bo
                 Default::default(),
             );
             crate::ui::welcome::focus_control(ui, &response.response);
-            if response.changed {
+            if crate::app::input_history::record(response.response, response.changed) {
                 stop.offset = position / 100.;
                 changed = true;
             }
@@ -284,7 +333,7 @@ pub(super) fn editor(ui: &mut Ui, gradient: &mut Gradient, bounds: Bounds) -> bo
         }
     });
     if gradient.kind != GradientKind::Shape {
-        let mut angle = gradient.angle(bounds);
+        let mut angle = shown_angle;
         let response = crate::ui::fields::number(
             ui,
             "angle",
@@ -296,9 +345,8 @@ pub(super) fn editor(ui: &mut Ui, gradient: &mut Gradient, bounds: Bounds) -> bo
             Default::default(),
         );
         crate::ui::welcome::focus_control(ui, &response.response);
-        if response.changed {
-            gradient.set_angle(angle, bounds);
-            changed = true;
+        if crate::app::input_history::record(response.response, response.changed) {
+            angle_changed = Some(angle);
         }
     }
     ui.horizontal(|ui| {
@@ -328,13 +376,16 @@ pub(super) fn editor(ui: &mut Ui, gradient: &mut Gradient, bounds: Bounds) -> bo
     }
     stops.expected = gradient.stops.clone();
     ui.data_mut(|data| data.insert_temp(id, stops));
-    changed
+    Edits {
+        design: changed,
+        angle: angle_changed,
+    }
 }
 
 #[cfg(test)]
 mod keyboard_tests {
     use super::*;
-    use crate::{color::Rgba, ui::welcome::keyboard_tests as keys};
+    use crate::{color::Rgba, geom::Bounds, ui::welcome::keyboard_tests as keys};
     use egui::{Event, Key, Modifiers};
 
     fn frame(
@@ -348,11 +399,13 @@ mod keyboard_tests {
             ui.set_max_width(320.);
             ui.push_id(owner, |ui| {
                 ui.add_enabled_ui(enabled, |ui| {
-                    editor(
-                        ui,
-                        gradient,
-                        Bounds::from_min_size(crate::geom::Pt::ZERO, crate::geom::Pt::splat(64.)),
-                    );
+                    let bounds =
+                        Bounds::from_min_size(crate::geom::Pt::ZERO, crate::geom::Pt::splat(64.));
+                    let angle = gradient.angle(bounds);
+                    let edits = editor(ui, gradient, angle);
+                    if let Some(angle) = edits.angle {
+                        gradient.set_angle(angle, bounds);
+                    }
                 });
             });
         })
@@ -370,6 +423,293 @@ mod keyboard_tests {
             keys::key(Key::Enter, Modifiers::NONE),
         );
         frame(ctx, gradient, "document-A", true, vec![]);
+    }
+
+    fn studio_frame(
+        ctx: &egui::Context,
+        studio: &mut crate::app::Studio,
+        events: Vec<Event>,
+    ) -> egui::FullOutput {
+        keys::render(ctx, events, |ui| {
+            studio.handle_shortcuts(ui.ctx());
+            egui::Panel::right("native-gradient-properties")
+                .exact_size(400.)
+                .show(ui, |ui| {
+                    super::super::inspector_content(ui, studio);
+                });
+            crate::ui::canvas::show(ui, studio);
+            crate::ui::keyboard_authoring::show(ui.ctx(), studio);
+        })
+    }
+
+    fn studio_action(
+        ctx: &egui::Context,
+        studio: &mut crate::app::Studio,
+        label: &str,
+    ) -> egui::FullOutput {
+        keys::tab_to(ctx, label, |events| studio_frame(ctx, studio, events));
+        studio_frame(ctx, studio, keys::key(Key::Enter, Modifiers::NONE));
+        studio_frame(ctx, studio, vec![])
+    }
+
+    fn studio_text(
+        ctx: &egui::Context,
+        studio: &mut crate::app::Studio,
+        label: &str,
+        text: &str,
+    ) -> egui::FullOutput {
+        keys::tab_to(ctx, label, |events| studio_frame(ctx, studio, events));
+        let output = keys::replace(text, |events| studio_frame(ctx, studio, events));
+        keys::focused(ctx, &output, label);
+        output
+    }
+
+    #[test]
+    fn keyboard_gradient_native_radial_geometry_keeps_precision_errors_and_current_owner() {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        crate::ui::theme::apply(&ctx);
+        let mut gradient = Gradient::new(GradientKind::Radial, Rgba::BLACK, Rgba::WHITE);
+        gradient.radial_axis = Some([0.125, 0.375]);
+        gradient.inner_radius = 1.5;
+        let before = gradient.clone();
+        action(&ctx, &mut gradient, "Radial geometry");
+        assert_eq!(
+            gradient, before,
+            "Opening the native geometry group cannot clamp loaded values"
+        );
+        keys::tab_to(&ctx, "Radial gradient inner radius", |events| {
+            frame(&ctx, &mut gradient, "document-A", true, events)
+        });
+        keys::replace("0.125", |events| {
+            frame(&ctx, &mut gradient, "document-A", true, events)
+        });
+        frame(
+            &ctx,
+            &mut gradient,
+            "document-A",
+            true,
+            keys::key(Key::Enter, Modifiers::NONE),
+        );
+        let before = gradient.clone();
+        let purpose = "Radial gradient ellipse axis X";
+        keys::tab_to(&ctx, purpose, |events| {
+            frame(&ctx, &mut gradient, "document-A", true, events)
+        });
+        let output = keys::replace("-", |events| {
+            frame(&ctx, &mut gradient, "document-A", true, events)
+        });
+        keys::associated_error(&output, purpose);
+        assert_eq!(gradient, before);
+        let id = keys::named(&output, purpose).0;
+        keys::replace("0.25", |events| {
+            frame(&ctx, &mut gradient, "document-A", true, events)
+        });
+        frame(
+            &ctx,
+            &mut gradient,
+            "document-A",
+            true,
+            keys::key(Key::ArrowUp, Modifiers::NONE),
+        );
+        let output = frame(&ctx, &mut gradient, "document-A", true, vec![]);
+        assert!((gradient.radial_axis.unwrap()[0] - 0.26).abs() < 1e-6);
+        assert_eq!(keys::named(&output, purpose).0, id);
+        keys::focused(&ctx, &output, purpose);
+        assert_ne!(
+            keys::named(&output, purpose).1.invalid(),
+            Some(egui::accesskit::Invalid::True)
+        );
+        let saved = gradient.clone();
+        frame(
+            &ctx,
+            &mut gradient,
+            "document-A",
+            false,
+            keys::action(
+                id,
+                egui::accesskit::Action::SetValue,
+                Some(egui::accesskit::ActionData::NumericValue(999.)),
+            ),
+        );
+        assert_eq!(gradient, saved);
+        let output = frame(&ctx, &mut gradient, "document-B", true, vec![]);
+        assert_ne!(keys::named(&output, purpose).0, id);
+    }
+
+    #[test]
+    fn keyboard_gradient_empty_motion_authoring_separates_rest_fields_from_native_angle_keys() {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        crate::ui::theme::apply(&ctx);
+        let mut studio = crate::app::Studio::new();
+        studio.doc = crate::document::Document::new("Native radial authoring", 300., 220., 72.);
+        studio.persona = crate::tools::Persona::Motion;
+        studio.show_welcome = false;
+        assert!(studio.selection.is_empty());
+        assert_eq!(
+            studio
+                .doc
+                .layers
+                .iter()
+                .filter_map(|layer| layer.kind.shapes())
+                .flatten()
+                .count(),
+            0
+        );
+        studio_frame(&ctx, &mut studio, vec![]);
+        studio_frame(&ctx, &mut studio, keys::key(Key::F8, Modifiers::NONE));
+        studio_frame(
+            &ctx,
+            &mut studio,
+            keys::key(
+                Key::K,
+                Modifiers::CTRL | Modifiers::COMMAND | Modifiers::SHIFT,
+            ),
+        );
+        studio_frame(&ctx, &mut studio, vec![]);
+        assert!(crate::ui::keyboard_authoring::is_open(&ctx));
+        studio_action(&ctx, &mut studio, "Create");
+        let target = studio.primary().unwrap();
+        studio_action(&ctx, &mut studio, "Fill type");
+        studio_action(&ctx, &mut studio, "Radial");
+        let rest = studio
+            .doc
+            .find_shape(target.0, target.1)
+            .unwrap()
+            .style
+            .fill
+            .gradient()
+            .unwrap();
+        let geometry = studio
+            .doc
+            .find_shape(target.0, target.1)
+            .unwrap()
+            .geom
+            .clone();
+        let authored = crate::project::encode(&studio.doc).unwrap();
+        studio_text(&ctx, &mut studio, "Gradient angle (°)", "47.25");
+        studio_frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        let motion = studio.doc.motion.clone();
+        assert_eq!(
+            studio
+                .doc
+                .find_shape(target.0, target.1)
+                .unwrap()
+                .style
+                .fill
+                .gradient()
+                .unwrap(),
+            rest
+        );
+        assert_eq!(
+            motion
+                .tracks
+                .iter()
+                .find(|track| track.shape == target.1
+                    && track.prop == crate::motion::Prop::GradientAngle)
+                .unwrap()
+                .keys[0]
+                .value,
+            47.25
+        );
+        studio_action(&ctx, &mut studio, "Radial geometry");
+        let before = crate::project::encode(&studio.doc).unwrap();
+        let output = studio_text(&ctx, &mut studio, "Radial gradient focus X", "-");
+        keys::associated_error(&output, "Radial gradient focus X");
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+        for (label, value) in [
+            ("Radial gradient focus X", "0.25"),
+            ("Radial gradient focus Y", "-0.375"),
+            ("Radial gradient inner radius", "0.125"),
+        ] {
+            studio_text(&ctx, &mut studio, label, value);
+            studio_frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        }
+        let before_spread = studio
+            .doc
+            .find_shape(target.0, target.1)
+            .unwrap()
+            .style
+            .fill
+            .gradient()
+            .unwrap();
+        studio_action(&ctx, &mut studio, "Gradient spread reflect");
+        let gradient = studio
+            .doc
+            .find_shape(target.0, target.1)
+            .unwrap()
+            .style
+            .fill
+            .gradient()
+            .unwrap();
+        assert_eq!(gradient.spread, crate::gradient::Spread::Reflect);
+        assert_eq!(gradient.focal, [0.25, -0.375]);
+        assert_eq!(gradient.inner_radius, 0.125);
+        assert_eq!(
+            (gradient.from, gradient.to, gradient.radial_axis),
+            (rest.from, rest.to, rest.radial_axis)
+        );
+        assert_eq!(
+            studio.doc.motion, motion,
+            "Design properties cannot replace or add gradient-angle keys"
+        );
+        assert_eq!(
+            studio.doc.find_shape(target.0, target.1).unwrap().geom,
+            geometry
+        );
+        assert_ne!(crate::project::encode(&studio.doc).unwrap(), authored);
+        studio_frame(&ctx, &mut studio, keys::key(Key::F8, Modifiers::NONE));
+        studio_frame(
+            &ctx,
+            &mut studio,
+            keys::key(Key::Z, Modifiers::CTRL | Modifiers::COMMAND),
+        );
+        assert_eq!(
+            studio
+                .doc
+                .find_shape(target.0, target.1)
+                .unwrap()
+                .style
+                .fill
+                .gradient()
+                .unwrap(),
+            before_spread
+        );
+        studio_frame(
+            &ctx,
+            &mut studio,
+            keys::key(
+                Key::Z,
+                Modifiers::CTRL | Modifiers::COMMAND | Modifiers::SHIFT,
+            ),
+        );
+        assert_eq!(
+            studio
+                .doc
+                .find_shape(target.0, target.1)
+                .unwrap()
+                .style
+                .fill
+                .gradient()
+                .unwrap(),
+            gradient
+        );
+        let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(".artifacts")
+            .join(format!(
+                "keyboard-radial-{}-{}",
+                std::process::id(),
+                crate::document::next_id()
+            ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("radial.oma");
+        crate::project::save_to(&studio.doc, &path).unwrap();
+        assert_eq!(
+            crate::project::encode(&crate::project::load_from(&path).unwrap()).unwrap(),
+            crate::project::encode(&studio.doc).unwrap()
+        );
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

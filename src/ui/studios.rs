@@ -622,7 +622,7 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
         style.stroke.as_ref().and_then(|s| s.gradient.clone())
     };
     ui.horizontal(|ui| {
-        ui.label(
+        let label = ui.label(
             RichText::new(if studio.fill_active {
                 "Fill type"
             } else {
@@ -635,7 +635,8 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
         let pattern = matches!(style.fill, Fill::Pattern(_));
         let mut replace_pattern = false;
         let mut chosen = current;
-        ComboBox::from_id_salt("paint-type")
+        let owner = eframe::egui::Id::new(("paint-type", &studio.swap_id, &studio.selection, studio.fill_active));
+        let picker = super::fields::native_scope(ui, owner, |ui| ComboBox::from_id_salt("value")
             .selected_text(if pattern { "Pattern" } else { current.map(|k| k.name()).unwrap_or("Solid") })
             .width(108.)
             .show_ui(ui, |ui| {
@@ -643,7 +644,8 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
                 for kind in crate::gradient::GradientKind::ALL {
                     ui.selectable_value(&mut chosen, Some(kind), kind.name());
                 }
-            });
+            })).inner;
+        super::welcome::name_control(ui, &picker.response, label.id, if studio.fill_active { "Fill type" } else { "Stroke type" });
         if chosen != current || replace_pattern {
             gradient = chosen.map(|kind| {
                 let mut g = gradient.clone().unwrap_or_else(|| {
@@ -673,6 +675,7 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
                 g
             });
             apply_gradient(studio, gradient.clone());
+            picker.response.request_focus();
         }
     });
     super::svg_paint::show(ui, studio);
@@ -687,42 +690,36 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
                     crate::geom::Pt::new(100., 100.),
                 )
             });
-        let rest = gradient.clone();
+        let mut shown_angle = gradient.angle(bounds);
         if studio.is_motion()
             && let Some((_, id)) = studio.primary()
         {
             let offset = studio.live_pose(id).gradient_angle.unwrap_or(0.0);
-            if offset.abs() > 1e-3 {
-                gradient.set_angle(rest.angle(bounds) + offset, bounds);
-            }
+            shown_angle += offset;
         }
-        ui.push_id(
-            if studio.fill_active {
-                "fill-gradient"
-            } else {
-                "stroke-gradient"
-            },
-            |ui| {
-                if gradient_editor::editor(ui, &mut gradient, bounds) {
+        let fill_active = studio.fill_active;
+        studio.with_field_history(
+            ui,
+            ("gradient", fill_active),
+            |ui, studio| {
+                let edits = gradient_editor::editor(ui, &mut gradient, shown_angle);
+                if edits.design {
                     for stop in &gradient.stops {
                         studio.push_recent(stop.color);
                     }
-                    let angle_only = gradient.kind == rest.kind && gradient.stops == rest.stops;
+                    apply_gradient(studio, Some(gradient.clone()));
+                }
+                if let Some(angle) = edits.angle {
                     if studio.is_motion()
-                        && angle_only
                         && let Some((_, id)) = studio.primary()
                     {
                         studio.key_prop(
                             id,
                             crate::motion::Prop::GradientAngle,
-                            gradient.angle(bounds) - rest.angle(bounds),
+                            angle - gradient.angle(bounds),
                         );
-                    } else if studio.is_motion() {
-                        let mut next = rest.clone();
-                        next.stops = gradient.stops.clone();
-                        next.kind = gradient.kind;
-                        apply_gradient(studio, Some(next));
                     } else {
+                        gradient.set_angle(angle, bounds);
                         apply_gradient(studio, Some(gradient.clone()));
                     }
                 }
