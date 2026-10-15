@@ -213,7 +213,7 @@ mod tests {
     fn pixel_menu_actions_leave_artwork_unchanged_and_keep_empty_masks() {
         let mut studio = Studio::new();
         studio.doc = crate::document::Document::new("Selections", 24.0, 20.0, 96.0);
-        studio.doc.layers = vec![crate::document::Layer::raster("Pixels", 24, 20)];
+        studio.doc.layers = vec![crate::document::Layer::raster("Pixels", 24, 20).unwrap()];
         studio.active_layer = Some(0);
         let original = studio.doc.layers[0].clone();
         studio.select_all_pixels();
@@ -226,8 +226,8 @@ mod tests {
         studio.invert_pixel_selection();
         assert!(studio.pixel_sel.as_ref().unwrap().iter().all(|v| *v == 255));
         assert_eq!(
-            studio.doc.layers[0].kind.pixels().unwrap().data,
-            original.kind.pixels().unwrap().data
+            studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(),
+            original.kind.pixels().unwrap().data.as_slice()
         );
     }
 }

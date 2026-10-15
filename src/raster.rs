@@ -1,7 +1,18 @@
 //! Destructive raster filters, evaluated from immutable source pixels.
 //! RGB is straight-alpha at the boundary; spatial mixing uses premultiplied alpha.
 use crate::color::Rgba;
+use crate::resources::Allocation;
 use rayon::prelude::*;
+trait AdmittedCollect: IndexedParallelIterator<Item = [f32; 4]> + Sized {
+    fn admit(self) -> Result<Allocation<[f32; 4]>, String> {
+        let mut out = crate::resources::global()
+            .allocate_now::<[f32; 4], _>(self.len(), &crate::deep_color::storage::check)?;
+        self.zip(out.as_mut_slice().par_iter_mut())
+            .for_each(|(src, dst)| *dst = src);
+        Ok(out)
+    }
+}
+impl<T: IndexedParallelIterator<Item = [f32; 4]>> AdmittedCollect for T {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Bank {
@@ -294,7 +305,7 @@ pub fn apply(
     if selection.is_some_and(|m| m.len() != count) {
         return Err("Selection dimensions no longer match this layer".into());
     }
-    let src: Vec<[f32; 4]> = source
+    let src = source
         .par_chunks_exact(4)
         .map(|p| {
             [
@@ -304,12 +315,37 @@ pub fn apply(
                 p[3] as f32 / 255.0,
             ]
         })
-        .collect();
+        .admit()?;
+    Ok(apply_float(&src, w, h, settings, selection)?
+        .par_iter()
+        .flat_map_iter(|p| p.iter().map(|&v| byte(v)))
+        .collect())
+}
+
+/// Filter straight floating-point samples without an 8-bit intermediate.
+/// Args: source, dimensions, settings and optional coverage. Returns edited RGBA samples.
+pub fn apply_float(
+    src: &[[f32; 4]],
+    w: u32,
+    h: u32,
+    settings: &Settings,
+    selection: Option<&[u8]>,
+) -> Result<Allocation<[f32; 4]>, String> {
+    let count = (w as usize)
+        .checked_mul(h as usize)
+        .ok_or("Image is too large")?;
+    if count == 0
+        || src.len() != count
+        || selection.is_some_and(|m| m.len() != count)
+        || src.iter().flatten().any(|v| !v.is_finite())
+    {
+        return Err("Invalid native image or selection".into());
+    }
     let p = settings.values;
     let mut out = match settings.kind {
-        Kind::GaussianBlur => blur(&src, w, h, p[0]),
+        Kind::GaussianBlur => blur(&src, w, h, p[0])?,
         Kind::FeatherAlpha => {
-            let blurred = blur(&src, w, h, p[0]);
+            let blurred = blur(&src, w, h, p[0])?;
             src.par_iter()
                 .zip(blurred.par_iter())
                 .map(|(a, b)| {
@@ -320,7 +356,7 @@ pub fn apply(
                         [a[0], a[1], a[2], b[3]]
                     }
                 })
-                .collect()
+                .admit()?
         }
         Kind::GrowAlpha | Kind::ShrinkAlpha => morphology(
             &src,
@@ -328,8 +364,8 @@ pub fn apply(
             h,
             p[0].round().clamp(1.0, 32.0) as i32,
             settings.kind == Kind::GrowAlpha,
-        ),
-        Kind::MotionBlur => motion_blur(&src, w, h, p[0], p[1]),
+        )?,
+        Kind::MotionBlur => motion_blur(&src, w, h, p[0], p[1])?,
         Kind::Sharpen | Kind::UnsharpMask => {
             let blurred = blur(
                 &src,
@@ -340,7 +376,7 @@ pub fn apply(
                 } else {
                     p[0]
                 },
-            );
+            )?;
             src.par_iter()
                 .zip(blurred.par_iter())
                 .map(|(c, b)| {
@@ -362,17 +398,17 @@ pub fn apply(
                     }
                     v
                 })
-                .collect()
+                .admit()?
         }
-        Kind::EdgeDetect | Kind::Emboss => convolution(&src, w, h, settings),
+        Kind::EdgeDetect | Kind::Emboss => convolution(&src, w, h, settings)?,
         Kind::Pixelate | Kind::Halftone => pixelate(
             &src,
             w,
             h,
             p[0].round().max(1.0) as u32,
             settings.kind == Kind::Halftone,
-        ),
-        Kind::Swirl | Kind::Ripple => distort(&src, w, h, settings),
+        )?,
+        Kind::Swirl | Kind::Ripple => distort(&src, w, h, settings)?,
         _ => src
             .par_iter()
             .enumerate()
@@ -477,36 +513,35 @@ pub fn apply(
                 }
                 v
             })
-            .collect(),
+            .admit()?,
     };
     // Interpolate premultiplied colors so alpha-changing filters never create dark fringes.
     let strength = settings.strength.clamp(0.0, 1.0);
-    out.par_iter_mut().enumerate().for_each(|(i, pixel)| {
-        let amount = strength * selection.map_or(1.0, |mask| mask[i] as f32 / 255.0);
-        if amount <= 0.0 {
-            *pixel = src[i];
-            return;
-        }
-        if amount >= 1.0 {
-            return;
-        }
-        let original = src[i];
-        let alpha = original[3] * (1.0 - amount) + pixel[3] * amount;
-        for ch in 0..3 {
-            pixel[ch] = if alpha > 0.00001 {
-                (original[ch] * original[3] * (1.0 - amount)
-                    + pixel[ch].clamp(0.0, 1.0) * pixel[3] * amount)
-                    / alpha
-            } else {
-                original[ch]
-            };
-        }
-        pixel[3] = alpha;
-    });
-    Ok(out
-        .par_iter()
-        .flat_map_iter(|p| p.iter().map(|&v| byte(v)))
-        .collect())
+    out.as_mut_slice()
+        .par_iter_mut()
+        .enumerate()
+        .for_each(|(i, pixel)| {
+            let amount = strength * selection.map_or(1.0, |mask| mask[i] as f32 / 255.0);
+            if amount <= 0.0 {
+                *pixel = src[i];
+                return;
+            }
+            if amount >= 1.0 {
+                return;
+            }
+            let original = src[i];
+            let alpha = original[3] * (1.0 - amount) + pixel[3] * amount;
+            for ch in 0..3 {
+                pixel[ch] = if alpha > 0.00001 {
+                    (original[ch] * original[3] * (1.0 - amount) + pixel[ch] * pixel[3] * amount)
+                        / alpha
+                } else {
+                    original[ch]
+                };
+            }
+            pixel[3] = alpha;
+        });
+    Ok(out)
 }
 
 fn hash(mut n: u32) -> u32 {
@@ -579,23 +614,31 @@ fn sample(src: &[[f32; 4]], w: u32, h: u32, x: f32, y: f32) -> [f32; 4] {
     }
     unpremul(out)
 }
-fn blur(src: &[[f32; 4]], w: u32, h: u32, radius: f32) -> Vec<[f32; 4]> {
-    let input: Vec<_> = src.par_iter().copied().map(premul).collect();
-    blur_channels(&input, w, h, radius)
-        .into_par_iter()
-        .map(unpremul)
-        .collect()
+fn blur(src: &[[f32; 4]], w: u32, h: u32, radius: f32) -> Result<Allocation<[f32; 4]>, String> {
+    let input = src.par_iter().copied().map(premul).admit()?;
+    let mut out = blur_channels(&input, w, h, radius)?;
+    out.as_mut_slice()
+        .par_iter_mut()
+        .for_each(|p| *p = unpremul(*p));
+    Ok(out)
 }
-fn blur_channels(src: &[[f32; 4]], w: u32, h: u32, radius: f32) -> Vec<[f32; 4]> {
+fn blur_channels(
+    src: &[[f32; 4]],
+    w: u32,
+    h: u32,
+    radius: f32,
+) -> Result<Allocation<[f32; 4]>, String> {
     if radius < 0.1 {
-        return src.to_vec();
+        return crate::resources::global().copy_now(src, &crate::deep_color::storage::check);
     }
     let r = (radius * 0.58).round().clamp(1.0, 128.0) as i32;
-    let mut out = src.to_vec();
+    let mut out = crate::resources::global().copy_now(src, &crate::deep_color::storage::check)?;
     // Three separable box passes approximate a Gaussian in linear time.
     for _ in 0..3 {
-        let mut tmp = vec![[0.0; 4]; out.len()];
-        tmp.par_chunks_mut(w as usize)
+        let mut tmp = crate::resources::global()
+            .allocate_now::<[f32; 4], _>(out.len(), &crate::deep_color::storage::check)?;
+        tmp.as_mut_slice()
+            .par_chunks_mut(w as usize)
             .enumerate()
             .for_each(|(y, row)| {
                 let mut sum = [0.0; 4];
@@ -617,8 +660,10 @@ fn blur_channels(src: &[[f32; 4]], w: u32, h: u32, radius: f32) -> Vec<[f32; 4]>
                 }
             });
         // Transpose to keep vertical sliding-window passes parallel and contiguous.
-        let mut transposed = vec![[0.0; 4]; out.len()];
+        let mut transposed = crate::resources::global()
+            .allocate_now::<[f32; 4], _>(out.len(), &crate::deep_color::storage::check)?;
         transposed
+            .as_mut_slice()
             .par_chunks_mut(h as usize)
             .enumerate()
             .for_each(|(x, col)| {
@@ -640,7 +685,8 @@ fn blur_channels(src: &[[f32; 4]], w: u32, h: u32, radius: f32) -> Vec<[f32; 4]>
                     }
                 }
             });
-        out.par_chunks_mut(w as usize)
+        out.as_mut_slice()
+            .par_chunks_mut(w as usize)
             .enumerate()
             .for_each(|(y, row)| {
                 for (x, p) in row.iter_mut().enumerate() {
@@ -648,10 +694,16 @@ fn blur_channels(src: &[[f32; 4]], w: u32, h: u32, radius: f32) -> Vec<[f32; 4]>
                 }
             });
     }
-    out
+    Ok(out)
 }
-fn morphology(src: &[[f32; 4]], w: u32, h: u32, r: i32, grow: bool) -> Vec<[f32; 4]> {
-    let mut out = src.to_vec();
+fn morphology(
+    src: &[[f32; 4]],
+    w: u32,
+    h: u32,
+    r: i32,
+    grow: bool,
+) -> Result<Allocation<[f32; 4]>, String> {
+    let mut out = crate::resources::global().copy_now(src, &crate::deep_color::storage::check)?;
     // Separable square structuring element. Keep the winning pixel's RGB when growing.
     for vertical in [false, true] {
         let input = out;
@@ -680,11 +732,17 @@ fn morphology(src: &[[f32; 4]], w: u32, h: u32, r: i32, grow: bool) -> Vec<[f32;
                     [p[0], p[1], p[2], best[3]]
                 }
             })
-            .collect();
+            .admit()?;
     }
-    out
+    Ok(out)
 }
-fn motion_blur(src: &[[f32; 4]], w: u32, h: u32, length: f32, angle: f32) -> Vec<[f32; 4]> {
+fn motion_blur(
+    src: &[[f32; 4]],
+    w: u32,
+    h: u32,
+    length: f32,
+    angle: f32,
+) -> Result<Allocation<[f32; 4]>, String> {
     let n = length.round().clamp(1.0, 128.0) as u32;
     let theta = angle.to_radians();
     src.par_iter()
@@ -702,9 +760,14 @@ fn motion_blur(src: &[[f32; 4]], w: u32, h: u32, length: f32, angle: f32) -> Vec
             }
             unpremul(sum)
         })
-        .collect()
+        .admit()
 }
-fn convolution(src: &[[f32; 4]], w: u32, h: u32, s: &Settings) -> Vec<[f32; 4]> {
+fn convolution(
+    src: &[[f32; 4]],
+    w: u32,
+    h: u32,
+    s: &Settings,
+) -> Result<Allocation<[f32; 4]>, String> {
     src.par_iter()
         .enumerate()
         .map(|(i, c)| {
@@ -734,12 +797,18 @@ fn convolution(src: &[[f32; 4]], w: u32, h: u32, s: &Settings) -> Vec<[f32; 4]> 
             }
             v
         })
-        .collect()
+        .admit()
 }
-fn pixelate(src: &[[f32; 4]], w: u32, h: u32, size: u32, halftone: bool) -> Vec<[f32; 4]> {
+fn pixelate(
+    src: &[[f32; 4]],
+    w: u32,
+    h: u32,
+    size: u32,
+    halftone: bool,
+) -> Result<Allocation<[f32; 4]>, String> {
     let bw = w.div_ceil(size);
     let bh = h.div_ceil(size);
-    let cells: Vec<[f32; 4]> = (0..bw * bh)
+    let cells = (0..bw * bh)
         .into_par_iter()
         .map(|i| {
             let x = i % bw * size;
@@ -760,7 +829,7 @@ fn pixelate(src: &[[f32; 4]], w: u32, h: u32, size: u32, halftone: bool) -> Vec<
             }
             unpremul(sum)
         })
-        .collect();
+        .admit()?;
     src.par_iter()
         .enumerate()
         .map(|(i, c)| {
@@ -776,9 +845,9 @@ fn pixelate(src: &[[f32; 4]], w: u32, h: u32, size: u32, halftone: bool) -> Vec<
             let v = smooth(radius - 0.5, radius + 0.5, (dx * dx + dy * dy).sqrt());
             [v, v, v, c[3]]
         })
-        .collect()
+        .admit()
 }
-fn distort(src: &[[f32; 4]], w: u32, h: u32, s: &Settings) -> Vec<[f32; 4]> {
+fn distort(src: &[[f32; 4]], w: u32, h: u32, s: &Settings) -> Result<Allocation<[f32; 4]>, String> {
     src.par_iter()
         .enumerate()
         .map(|(i, c)| {
@@ -809,7 +878,7 @@ fn distort(src: &[[f32; 4]], w: u32, h: u32, s: &Settings) -> Vec<[f32; 4]> {
                 sample(src, w, h, cx + dx * scale, cy + dy * scale)
             }
         })
-        .collect()
+        .admit()
 }
 
 #[cfg(test)]

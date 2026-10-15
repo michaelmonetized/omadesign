@@ -455,17 +455,17 @@ mod object_guide_tests {
     fn image_bounds_guides_keep_pixels_and_hidden_guides_do_not_capture_artwork() {
         let mut studio = Studio::new();
         studio.doc.ruler.guides_locked = false;
-        studio.doc.layers = vec![Layer::raster("Image", 8, 8)];
-        studio.doc.layers[0].kind.pixels_mut().unwrap().data = [24, 96, 180, 255].repeat(64);
+        studio.doc.layers = vec![Layer::raster("Image", 8, 8).unwrap()];
+        studio.doc.layers[0].kind.pixels_mut().unwrap().replace_bytes([24, 96, 180, 255].repeat(64)).unwrap();
         studio.doc.layers[0]
             .kind
             .set_raster_xform(Pt::new(20.0, 20.0), Pt::new(80.0, 80.0), 0.0);
-        let pixels = studio.doc.layers[0].kind.pixels().unwrap().data.clone();
+        let pixels = studio.doc.layers[0].kind.pixels().unwrap().data.to_vec();
         studio.selection = vec![(0, RASTER_ID)];
         studio.doc.ruler.guides_locked = false;
         studio.convert_selection_to_guides();
         assert_eq!(studio.doc.layers.len(), 2);
-        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data, pixels);
+        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(), pixels);
         let guide = studio.selection[0];
         assert!(studio.doc.find_shape(guide.0, guide.1).unwrap().guide);
         assert_eq!(studio.doc.hit_test(Pt::new(20.0, 50.0), 3.0), Some(guide));
@@ -485,7 +485,7 @@ mod object_guide_tests {
         studio.undo();
         studio.undo();
         assert_eq!(studio.doc.layers.len(), 1);
-        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data, pixels);
+        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(), pixels);
     }
 }
 

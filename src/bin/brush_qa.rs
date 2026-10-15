@@ -153,7 +153,7 @@ impl eframe::App for Qa {
             self.studio.redo();
             assert_eq!(omadesign::project::encode(&self.studio.doc).unwrap(), after);
             assert_eq!(
-                self.studio.doc.layers[0].kind.pixels().unwrap().data,
+                self.studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(),
                 pixels
             );
             let path = self.output.join("paint.oma");
@@ -167,7 +167,7 @@ impl eframe::App for Qa {
                     .kind
                     .pixels()
                     .unwrap()
-                    .data,
+                    .data.as_slice(),
                 pixels
             );
             self.painted = Some(pixels);
@@ -246,7 +246,7 @@ fn main() -> eframe::Result {
     let mut studio = Studio::new();
     studio.doc = Document::new("Brush packs", 320., 180., 72.);
     studio.doc.transparent = true;
-    studio.doc.layers = vec![Layer::raster("Paint", 320, 180)];
+    studio.doc.layers = vec![Layer::raster("Paint", 320, 180).unwrap()];
     studio.active_layer = Some(0);
     studio.show_welcome = false;
     studio.persona = Persona::Pixel;

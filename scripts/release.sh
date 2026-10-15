@@ -58,7 +58,7 @@ package() {
     echo "could not inspect native dependencies of $bin" >&2
     exit 1
   fi
-  if printf '%s\n' "$native_libraries" | grep -Eq 'Shared library: \[lib(raw|jpeg|mozjpeg|z\.|stdc\+\+|c\+\+)'; then
+  if printf '%s\n' "$native_libraries" | grep -Eq 'Shared library: \[lib(raw|lcms2|jpeg|mozjpeg|z\.|stdc\+\+|c\+\+)'; then
     echo "refusing to ship $triple: RAW support has an external library dependency" >&2
     exit 1
   fi

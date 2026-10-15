@@ -25,20 +25,7 @@ pub fn document(path: &Path) -> Result<Document, String> {
 
 /// Design documents receive developed pixels; the Photo source/settings stay separate.
 pub fn photo_document(photo: &crate::photo::PhotoImage) -> Result<Document, String> {
-    let image = photo.render_full()?;
-    let _memory = image.memory;
-    let image = image.image;
-    let mut doc = Document::new(&photo.name, image.w as f32, image.h as f32, 72.);
-    doc.transparent = true;
-    let size = Pt::new(image.w as f32, image.h as f32);
-    let pixels =
-        Pixels::from_rgba(image.w, image.h, image.data).ok_or("Invalid developed photo")?;
-    doc.layers = vec![Layer::placed_raster(&photo.name, pixels, Pt::ZERO, size)];
-    doc.import_notes = photo.notes.clone();
-    if photo.raw.is_some() {
-        doc.import_notes.push("Photo development was rendered to an 8-bit pixel layer for Design. Keep the camera original and .omaphoto settings for RAW editing.".into());
-    }
-    Ok(doc)
+    super::photo_placement::document(photo, None, &super::raw::Cancellation::default())
 }
 pub fn export(doc: &Document, path: &Path) -> Result<Vec<String>, String> {
     let extension = path
@@ -46,6 +33,31 @@ pub fn export(doc: &Document, path: &Path) -> Result<Vec<String>, String> {
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
+    if matches!(extension.as_str(), "png" | "tif" | "tiff" | "jpg" | "jpeg") {
+        let format = match extension.as_str() {
+            "png" => crate::export::Format::Png,
+            "tif" | "tiff" => crate::export::Format::Tiff,
+            _ => crate::export::Format::Jpeg,
+        };
+        let (bytes, notes) = crate::export::encode(
+            &crate::export::Source::Document(doc.clone()),
+            crate::export::Settings {
+                format,
+                ..Default::default()
+            },
+            &crate::ml::NoProgress,
+        )?;
+        super::write_atomic(path, &bytes)?;
+        return Ok(notes);
+    }
+    if matches!(extension.as_str(), "svg" | "pdf" | "ora")
+        && doc.layers.iter().any(|l| {
+            l.kind.pixels().is_some_and(|p| p.native.is_some())
+                || l.mask.as_ref().is_some_and(|p| p.native.is_some())
+        })
+    {
+        return Err("This exchange route cannot retain native precision. Use .oma, PSD/PSB or TIFF, or explicitly convert a copy to 8-bit.".into());
+    }
     let (bytes,notes)=match extension.as_str(){
         "oma"=>{crate::project::save_to(doc,path)?;return Ok(vec![]);}
         "svg"=>(crate::svg::export(doc)?.into_bytes(),vec![]),

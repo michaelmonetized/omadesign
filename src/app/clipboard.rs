@@ -148,7 +148,7 @@ mod tests {
         let bounds = source.doc.find_shape(shape.0, shape.1).unwrap().geom.bbox();
         let raster = Layer::placed_raster(
             "Image",
-            crate::document::Pixels::new(3, 2),
+            crate::document::Pixels::new(3, 2).unwrap(),
             Pt::new(98., 142.),
             Pt::new(60., 40.),
         );
@@ -529,7 +529,7 @@ mod tests {
         let index = source.doc.layers.len();
         source.doc.layers.push(Layer::placed_raster(
             "Photo",
-            crate::document::Pixels::new(2, 2),
+            crate::document::Pixels::new(2, 2).unwrap(),
             Pt::new(140.0, 50.0),
             Pt::new(40.0, 40.0),
         ));

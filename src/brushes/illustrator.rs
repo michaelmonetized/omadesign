@@ -325,7 +325,7 @@ fn render_pattern(block: &str) -> Result<(Tip, BTreeSet<String>), String> {
             pm.fill_path(&path, &paint, FillRule::Winding, transform, None);
         }
     }
-    let pixels = crate::document::Pixels::from_pixmap(&pm);
+    let pixels = crate::document::Pixels::from_pixmap(&pm)?;
     Ok((
         super::tip_from_rgba(pixels.w, pixels.h, &pixels.data)?,
         unsupported,

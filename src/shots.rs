@@ -552,7 +552,7 @@ fn pixel(s: &mut Studio) {
                 false,
             );
         }
-        *px = crate::document::Pixels::from_pixmap(&pm);
+        *px = crate::document::Pixels::from_pixmap(&pm).unwrap();
     }
     s.brush.size = 48.0;
     s.brush.hardness = 0.35;
@@ -694,7 +694,7 @@ fn healing(s: &mut Studio) {
         ("Original texture", 92.0, original),
         ("Healed texture", 690.0, repaired),
     ] {
-        let pixels = crate::document::Pixels::from_pixmap(&image);
+        let pixels = crate::document::Pixels::from_pixmap(&image).unwrap();
         let layer = crate::document::Layer::placed_raster(
             name,
             pixels,
@@ -908,7 +908,7 @@ fn poster(s: &mut Studio) {
             &b,
             false,
         );
-        *px = crate::document::Pixels::from_pixmap(&pm);
+        *px = crate::document::Pixels::from_pixmap(&pm).unwrap();
     }
     if let Some(shapes) = s.doc.layers.get(1).and_then(|l| l.kind.shapes())
         && let Some(word) = shapes.iter().find(|sh| match &sh.geom {

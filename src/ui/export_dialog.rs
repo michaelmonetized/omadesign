@@ -194,12 +194,15 @@ fn preview_image(source: &Source, format: Format) -> Result<crate::photo::Admitt
         Source::Photo(photo) => photo.render_thumbnail(420)?,
         Source::Document(doc) => {
             let pm = crate::compositor::render_export_preview(doc, 420)?;
-            let pixels = crate::document::Pixels::from_pixmap(&pm);
-            crate::photo::AdmittedImage::from_raster(crate::photo::RgbaImage {
-                w: pixels.w,
-                h: pixels.h,
-                data: pixels.data,
-            })?
+            let pixels = crate::document::Pixels::from_pixmap(&pm)?;
+            let (w, h) = (pixels.w, pixels.h);
+            let allocation = Arc::try_unwrap(pixels.data)
+                .map_err(|_| "Export preview unexpectedly shares working bytes")?;
+            let (data, memory) = allocation.into_parts();
+            crate::photo::AdmittedImage {
+                image: crate::photo::RgbaImage { w, h, data },
+                memory,
+            }
         }
     };
     if format == Format::Jpeg {

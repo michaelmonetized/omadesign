@@ -274,12 +274,11 @@ pub(super) fn window(ctx: &egui::Context, studio: &mut Studio) {
                                         &preset.tip,
                                         false,
                                     );
-                                    let pixels = crate::document::Pixels::from_pixmap(&pm);
                                     let texture = ctx.load_texture(
                                         format!("brush-{p}-{b}"),
-                                        egui::ColorImage::from_rgba_unmultiplied(
+                                        egui::ColorImage::from_rgba_premultiplied(
                                             [160, 48],
-                                            &pixels.data,
+                                            pm.data(),
                                         ),
                                         TextureOptions::LINEAR,
                                     );

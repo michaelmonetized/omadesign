@@ -193,8 +193,8 @@ mod tests {
         assert_eq!(restored.persona, Persona::Photo);
         assert!(restored.photo.settings_dirty());
         assert_eq!(
-            restored.photo.images[0].full.data,
-            s.photo.images[0].full.data
+            restored.photo.images[0].full.data.as_slice(),
+            s.photo.images[0].full.data.as_slice()
         );
         assert_eq!(restored.photo.images[0].develop.exposure, 1.5);
         assert!(restored.libraries.personal.dirty);

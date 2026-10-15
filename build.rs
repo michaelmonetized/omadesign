@@ -3,6 +3,7 @@ use std::{env, fs, path::Path};
 mod release_version;
 
 fn main() {
+    build_color_runtime();
     let cargo_version = env::var("CARGO_PKG_VERSION").expect("Cargo package version");
     assert_eq!(
         release_version::cargo_version(&release_version::public_version(&cargo_version)),
@@ -68,4 +69,26 @@ fn add_sources(build: &mut cc::Build, directory: &Path) {
             build.file(entry);
         }
     }
+}
+
+/// Build the pinned color engine into every target binary.
+/// Args: none. Returns after cc has emitted the native link instructions.
+fn build_color_runtime() {
+    println!("cargo:rerun-if-changed=vendor/lcms2");
+    let mut build = cc::Build::new();
+    build
+        .warnings(false)
+        .include("vendor/lcms2/include")
+        .include("vendor/lcms2/src")
+        .define("CMS_STATIC", None);
+    let mut sources = fs::read_dir("vendor/lcms2/src")
+        .expect("vendored Little CMS sources")
+        .map(|e| e.expect("Little CMS source entry").path())
+        .filter(|p| p.extension().is_some_and(|s| s == "c"))
+        .collect::<Vec<_>>();
+    sources.sort();
+    for source in sources {
+        build.file(source);
+    }
+    build.compile("omadesign_lcms2");
 }

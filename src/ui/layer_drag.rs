@@ -582,8 +582,8 @@ mod tests {
             }
             studio.undo();
             assert_eq!(serde_json::to_string(&studio.doc.layers).unwrap(), before);
-            assert_eq!(studio.doc.layers[0].mask.as_ref().unwrap().data, mask);
-            assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data, source);
+            assert_eq!(studio.doc.layers[0].mask.as_ref().unwrap().data.as_slice(), mask);
+            assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(), source);
             studio.redo();
             assert_eq!(studio.doc.layers.len(), 1);
         }

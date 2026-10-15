@@ -241,9 +241,9 @@ mod tests {
         let mut doc = fixture();
         doc.layers[2].opacity = 0.68;
         doc.layers[2].blend = crate::color::Blend::Multiply;
-        let mut raster = Layer::raster("paint", 128, 96);
-        raster.mask = Some(Pixels::new(128, 96));
-        raster.mask.as_mut().unwrap().data.fill(190);
+        let mut raster = Layer::raster("paint", 128, 96).unwrap();
+        raster.mask = Some(Pixels::new(128, 96).unwrap());
+        raster.mask.as_mut().unwrap().bytes_mut().unwrap().fill(190);
         raster.mask.as_mut().unwrap().touch();
         doc.layers.insert(2, raster);
         let view = View {

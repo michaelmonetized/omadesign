@@ -199,7 +199,7 @@ pub fn pixels(
     let mut output = doc.clone();
     let mut group = crate::document::Layer::group("Export selection");
     group.pass_through = false;
-    group.mask = Some(crate::document::Pixels::from_pixmap(&mask));
+    group.mask = Some(crate::document::Pixels::from_pixmap(&mask)?);
     group.mask_origin = bounds.min;
     group.mask_size = Pt::new(mw as f32, mh as f32);
     for layer in &mut output.layers {
@@ -280,8 +280,8 @@ mod tests {
     #[test]
     fn export_pixel_selection_preserves_feather_and_native_layers() {
         let mut doc = Document::new("Mask", 8., 8., 96.);
-        let mut layer = Layer::raster("Pixels", 8, 8);
-        layer.kind.pixels_mut().unwrap().data = [220, 60, 30, 255].repeat(64);
+        let mut layer = Layer::raster("Pixels", 8, 8).unwrap();
+        layer.kind.pixels_mut().unwrap().replace_bytes([220, 60, 30, 255].repeat(64)).unwrap();
         doc.layers = vec![layer];
         let mut coverage = vec![0; 64];
         coverage[2 * 8 + 3] = 128;

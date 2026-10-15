@@ -214,7 +214,7 @@ fn placed_raster_becomes_embedded_image_and_undo_restores_original_layer() {
     let frame = layout::make_frame(Pt::ZERO, Pt::splat(300.0));
     let parent = frame.id;
     s.doc.layers[1].kind.shapes_mut().unwrap().push(frame);
-    let original_pixels = s.doc.layers[0].kind.pixels().unwrap().data.clone();
+    let original_pixels = s.doc.layers[0].kind.pixels().unwrap().data.to_vec();
     let original_bounds = s.doc.layers[0].kind.raster_bounds().unwrap();
     s.selection = vec![(0, RASTER_ID)];
     s.reparent_layout_selection(Some(parent));
@@ -254,7 +254,7 @@ fn placed_raster_becomes_embedded_image_and_undo_restores_original_layer() {
         ),
         appearance
     );
-    assert_eq!(s.doc.layers[0].kind.pixels().unwrap().data, original_pixels);
+    assert_eq!(s.doc.layers[0].kind.pixels().unwrap().data.as_slice(), original_pixels);
     assert!(s.doc.find_shape(1, id).is_none());
     s.redo();
     assert_eq!(s.doc.layers.len(), 1);

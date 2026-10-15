@@ -82,7 +82,7 @@ impl Studio {
         if layers.len() > 1024 {
             return Err("The brand asset contains too many layers".into());
         }
-        let mut total_pixels = 0usize;
+        let mut legacy_pixels = 0usize;
         let mut total_shapes = 0usize;
         let mut largest_id = 0;
         let mut vector_masks = 0usize;
@@ -92,7 +92,20 @@ impl Studio {
                 .into_iter()
                 .flatten()
             {
-                total_pixels += checked_pixels(pixels.w, pixels.h, pixels.data.len())?;
+                pixels.validate_native()?;
+                if pixels.native.is_some() {
+                    let count = (pixels.w as usize)
+                        .checked_mul(pixels.h as usize)
+                        .filter(|&count| count > 0)
+                        .and_then(|count| count.checked_mul(4));
+                    if count != Some(pixels.data.len()) {
+                        return Err("The asset contains invalid native display pixels".into());
+                    }
+                } else {
+                    legacy_pixels = legacy_pixels
+                        .checked_add(checked_pixels(pixels.w, pixels.h, pixels.data.len())?)
+                        .ok_or("The asset image dimensions overflow")?;
+                }
             }
             total_shapes += layer.kind.shapes().map_or(0, <[Shape]>::len);
             if let Some(shapes) = layer.kind.shapes() {
@@ -107,7 +120,7 @@ impl Studio {
                 }
             }
         }
-        if total_pixels > MAX_PIXELS || total_shapes > 100_000 {
+        if legacy_pixels > MAX_PIXELS || total_shapes > 100_000 {
             return Err("The brand asset is too large to place safely".into());
         }
         if vector_masks as f64
@@ -593,7 +606,7 @@ mod tests {
         let (origin, size, _) = raster.kind.raster_xform().unwrap();
         assert_eq!(origin, Pt::new(92.0, 96.0));
         assert_eq!(size, Pt::new(4.0, 4.0));
-        assert_eq!(raster.kind.pixels().unwrap().data, data);
+        assert_eq!(raster.kind.pixels().unwrap().data.as_slice(), data);
         studio.doc.validate_hierarchy().unwrap();
         let placed = serde_json::to_value(&studio.doc).unwrap();
         studio.undo();
@@ -776,7 +789,7 @@ mod tests {
             )
             .unwrap();
         let layer = studio.doc.layers.last().unwrap();
-        assert_eq!(layer.kind.pixels().unwrap().data, data);
+        assert_eq!(layer.kind.pixels().unwrap().data.as_slice(), data);
         assert_eq!(
             layer.kind.raster_bounds().unwrap().center(),
             Pt::new(150.0, 120.0)
@@ -794,11 +807,11 @@ mod tests {
             Pt::new(16.0, 16.0),
             Rgba::WHITE,
         ));
-        let mut mask = Pixels::new(32, 16);
+        let mut mask = Pixels::new(32, 16).unwrap();
         for y in 0..16 {
             for x in 0..8 {
                 let i = (y * 32 + x) * 4;
-                mask.data[i..i + 4].copy_from_slice(&[255, 255, 255, 255]);
+                mask.bytes_mut().unwrap()[i..i + 4].copy_from_slice(&[255, 255, 255, 255]);
             }
         }
         source.layers[0].mask = Some(mask);
