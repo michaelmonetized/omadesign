@@ -22,6 +22,7 @@ pub(super) fn motion_number(
             let name = ui.label(label);
             let mut widget = egui::DragValue::new(value)
                 .range(range)
+                .clamp_existing_to_range(false)
                 .speed(step)
                 .suffix(suffix)
                 .custom_parser(|text| super::welcome::parse_number(&attempted, text));

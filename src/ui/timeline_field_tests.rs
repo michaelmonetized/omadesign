@@ -158,3 +158,25 @@ fn keyboard_motion_disabled_native_timing_rejects_accessibility_changes() {
     );
     assert_eq!(studio.doc.motion, before);
 }
+
+#[test]
+fn keyboard_motion_timing_keeps_loaded_document_values_and_exposes_full_model_ranges() {
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    let mut studio = Studio::new();
+    studio.persona = Persona::Motion;
+    studio.show_welcome = false;
+    studio.doc.motion.duration = 1200.;
+    studio.doc.motion.fps = 120.;
+    let before = studio.doc.motion.clone();
+    for _ in 0..3 {
+        frame(&ctx, &mut studio, vec![]);
+    }
+    assert_eq!(studio.doc.motion, before);
+    edit(&ctx, &mut studio, "Motion duration (s)", "3600");
+    edit(&ctx, &mut studio, "Motion frame rate (fps)", "240");
+    assert_eq!(studio.doc.motion.duration, 3600.);
+    assert_eq!(studio.doc.motion.fps, 240.);
+    let reopened = crate::project::decode(&crate::project::encode(&studio.doc).unwrap()).unwrap();
+    assert_eq!(reopened.motion, studio.doc.motion);
+}
