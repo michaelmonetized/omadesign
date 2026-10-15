@@ -369,6 +369,21 @@ fn font_bytes(path: &Path) -> Option<Arc<Vec<u8>>> {
     Some(arc)
 }
 
+/// Share the composer's resolved font bytes with format writers.
+/// Args: text run. Returns cached font bytes, including project fonts, or None.
+pub(crate) fn font_bytes_for(run: &TypeRun) -> Option<Arc<Vec<u8>>> {
+    resolve_path(run).and_then(|path| font_bytes(&path))
+}
+
+/// Read the composer's font ascent, descent and line gap in design pixels.
+/// Args: authored text run. Returns real OpenType metrics, or None without a font.
+pub(crate) fn font_metrics_for(run: &TypeRun) -> Option<(f32, f32, f32)> {
+    let bytes = font_bytes_for(run)?;
+    let face = rustybuzz::Face::from_slice(&bytes, 0)?;
+    let scale = run.px / face.units_per_em() as f32;
+    Some((face.ascender() as f32 * scale, -(face.descender() as f32) * scale, face.line_gap() as f32 * scale))
+}
+
 fn ot_features(run: &TypeRun) -> Vec<rustybuzz::Feature> {
     let tag = |b: &[u8; 4]| rustybuzz::ttf_parser::Tag::from_bytes(b);
     let feat = |bytes: &[u8; 4], on: bool| rustybuzz::Feature::new(tag(bytes), u32::from(on), ..);

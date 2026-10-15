@@ -53,7 +53,7 @@ pub(super) fn stack_css(stack: &crate::layout::AutoStack) -> String {
     css
 }
 
-pub(super) fn breakpoints(shape: &Shape) -> String {
+pub(super) fn breakpoints(shape: &Shape, scope: &str) -> String {
     let mut points: Vec<_> = shape
         .layout
         .breakpoints
@@ -74,13 +74,13 @@ pub(super) fn breakpoints(shape: &Shape) -> String {
             let leading = run.line_height() / run.px.max(1.) * px;
             let _ = write!(
                 text_css,
-                "[data-node=\"{}\"]>span{{font-size:{px:.3}px!important;line-height:{leading:.3}px!important;}}",
+                "[data-state=\"{scope}\"][data-node=\"{}\"]>span{{font-size:{px:.3}px!important;line-height:{leading:.3}px!important;}}",
                 shape.id
             );
         }
         let _ = write!(
             output,
-            "@container(max-width:{width:.3}px){{[data-node=\"{}\"]{{{}}}{text_css}}}",
+            "@container(max-width:{width:.3}px){{[data-state=\"{scope}\"][data-node=\"{}\"]{{{}}}{text_css}}}",
             shape.id,
             css.replace(';', "!important;")
         );

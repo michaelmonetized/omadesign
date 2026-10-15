@@ -5,7 +5,7 @@ mod responsive;
 use crate::document::{Document, Fill, Shape};
 use crate::geom::{Geom, Pt};
 use crate::layout::{Constraint, Sizing, StackAlign, StackAxis, StackFlow, StackJustify};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt::Write;
 
 pub fn frame_document(doc: &Document, layer: usize, frame_id: u64) -> Result<Document, String> {
@@ -412,6 +412,7 @@ fn fill_css(fill: &Fill) -> String {
 }
 
 struct Html<'a> {
+    scope: String,
     shapes: HashMap<u64, &'a Shape>,
     children: HashMap<u64, Vec<u64>>,
     fonts: HashMap<String, (String, f32, f32)>,
@@ -426,20 +427,7 @@ impl<'a> Html<'a> {
             return font.clone();
         }
         let family = format!("oma-font-{}", self.fonts.len());
-        let bytes = if run.font.starts_with("omatype:") {
-            crate::text::project_font_bytes(&run.font).map(|b| b.as_ref().clone())
-        } else {
-            let path = if run.font.is_empty() {
-                crate::text::default_path()
-                    .map(|p| p.to_string_lossy().into_owned())
-                    .unwrap_or_default()
-            } else {
-                run.font.clone()
-            };
-            std::fs::read(path)
-                .ok()
-                .filter(|data| data.len() <= 20_000_000)
-        };
+        let bytes = crate::text::font_bytes_for(run).filter(|b| b.len() <= 20_000_000);
         let mut metrics = (0.8, 0.2);
         let name = if let Some(bytes) =
             bytes.filter(|bytes| rustybuzz::Face::from_slice(bytes, 0).is_some())
@@ -450,7 +438,7 @@ impl<'a> Html<'a> {
                     -(face.descender() as f32) / face.units_per_em() as f32,
                 );
             }
-            let data = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes);
+            let data = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes.as_slice());
             let _ = write!(
                 self.styles,
                 "@font-face{{font-family:'{family}';src:url(data:font/ttf;base64,{data});font-display:block;}}"
@@ -478,7 +466,7 @@ impl<'a> Html<'a> {
         if depth >= 64 || !self.visited.insert(id) {
             return Err("Invalid frame hierarchy in HTML export".into());
         }
-        self.styles.push_str(&responsive::breakpoints(shape));
+        self.styles.push_str(&responsive::breakpoints(shape, &self.scope));
         let mut css = String::new();
         let in_stack = parent.is_some_and(|p| p.layout.stack.is_some()) && !shape.layout.absolute;
         css.push_str(if parent.is_none() || in_stack {
@@ -625,13 +613,14 @@ impl<'a> Html<'a> {
         };
         let _ = write!(
             out,
-            "<div id=\"oma-{id}\" data-node=\"{id}\" data-actions=\"{action_data}\" class=\"node{}\" aria-label=\"{}\"{}{component} style=\"{}\">",
+            "<div id=\"oma-{id}\" data-state=\"{}\" data-node=\"{id}\" data-actions=\"{action_data}\" class=\"node{}\" aria-label=\"{}\"{}{component} style=\"{}\">",
+            self.scope,
             if interactive { " interactive" } else { "" },
             escape(&shape.name),
             if interactive {
                 " role=\"button\" tabindex=\"0\""
             } else {
-                ""
+                " tabindex=\"-1\""
             },
             escape(&css)
         );
@@ -766,18 +755,42 @@ impl<'a> Html<'a> {
     }
 }
 
+/// Follow only emitted objects. Args: document, object owners and compiled tree;
+/// returns readable invalid-link failures and extends the reachable state graph.
+fn collect_links(doc: &Document, owners: &HashMap<u64, usize>, html: &Html<'_>,
+    screens: &mut BTreeSet<u64>, instances: &mut BTreeSet<u64>, variants: &mut BTreeSet<u64>) -> Result<(), String> {
+    for node in &html.visited {
+        let shape = html.shapes[node];
+        if matches!(shape.layout.component, Some(crate::layout_components::ComponentBinding::Instance { .. })) {
+            instances.insert(*node);
+        }
+        for interaction in &shape.layout.interactions {
+            let layer = owners.get(node).copied().or_else(|| doc.layers.iter().position(|l| l.kind.shapes().is_some_and(|s| s.iter().any(|s| s.id==*node))))
+                .ok_or("Prototype object is missing")?;
+            crate::layout_prototype::validate_interaction(doc, layer, *node, interaction)
+                .map_err(|e| format!("Invalid prototype link on '{}': {e}", shape.name))?;
+            use crate::layout_prototype::PrototypeAction;
+            match interaction.action {
+                PrototypeAction::Navigate { target } | PrototypeAction::OpenOverlay { target } => { screens.insert(target); }
+                PrototypeAction::SetVariant { component } => { variants.insert(component); }
+                _ => {}
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn export_html(doc: &Document, layer: usize, frame_id: u64) -> Result<String, String> {
     let frame = doc
         .find_shape(layer, frame_id)
         .filter(|s| s.layout.frame)
         .ok_or("Select a frame to export")?;
-    let shapes = doc
-        .layers
-        .get(layer)
-        .and_then(|l| l.kind.shapes())
-        .ok_or("Missing frame layer")?;
+    let shapes: Vec<_> = doc.layers.iter().filter_map(|l| l.kind.shapes()).flatten().collect();
+    let owners: HashMap<_, _> = doc.layers.iter().enumerate()
+        .flat_map(|(li, l)| l.kind.shapes().unwrap_or(&[]).iter().map(move |s| (s.id, li))).collect();
     let mut html = Html {
-        shapes: shapes.iter().map(|s| (s.id, s)).collect(),
+        scope: String::new(),
+        shapes: shapes.iter().map(|s| (s.id, *s)).collect(),
         children: HashMap::new(),
         fonts: HashMap::new(),
         styles: String::new(),
@@ -789,71 +802,42 @@ pub fn export_html(doc: &Document, layer: usize, frame_id: u64) -> Result<String
             html.children.entry(parent).or_default().push(s.id);
         }
     }
-    let mut pending = vec![frame_id];
-    let mut screens = HashSet::new();
+    let mut pending = BTreeSet::from([frame_id]);
+    let mut screens = BTreeSet::new();
     let mut body = String::new();
-    let mut instances = HashSet::new();
-    let mut variant_targets = HashSet::new();
-    while let Some(id) = pending.pop() {
-        if !screens.insert(id) {
-            continue;
-        }
-        if screens.len() > 256 {
-            return Err("Prototype has more than 256 linked screens".into());
-        }
-        let mut content = String::new();
-        html.visited.clear();
-        html.node(id, None, &mut content, 0)?;
-        let _ = write!(body, "<template id=\"screen-{id}\">{content}</template>");
-        for node in &html.visited {
-            if let Some(shape) = html.shapes.get(node) {
-                if matches!(
-                    shape.layout.component,
-                    Some(crate::layout_components::ComponentBinding::Instance { .. })
-                ) {
-                    instances.insert(*node);
-                }
-                for interaction in &shape.layout.interactions {
-                    use crate::layout_prototype::PrototypeAction;
-                    if let PrototypeAction::SetVariant { component } = interaction.action {
-                        variant_targets.insert(component);
-                    }
-                    match interaction.action {
-                        PrototypeAction::Navigate { target }
-                        | PrototypeAction::OpenOverlay { target }
-                        | PrototypeAction::SetVariant { component: target }
-                            if html.shapes.get(&target).is_some_and(|s| s.layout.frame) =>
-                        {
-                            pending.push(target);
-                        }
-                        _ => {}
-                    }
-                }
+    let mut instances = BTreeSet::new();
+    let mut variant_targets = BTreeSet::new();
+    let mut compiled = BTreeSet::new();
+    loop {
+        while let Some(id) = pending.pop_first() {
+            if !screens.insert(id) { continue; }
+            if screens.len() > 256 {
+                return Err("Prototype has more than 256 linked screens".into());
             }
+            html.scope = format!("screen-{id}");
+            let mut content = String::new();
+            html.visited.clear();
+            html.node(id, None, &mut content, 0)?;
+            let _ = write!(body, "<template id=\"screen-{id}\">{content}</template>");
+            collect_links(doc, &owners, &html, &mut pending, &mut instances, &mut variant_targets)?;
         }
-    }
-    // Compile each used variant through the native merge engine. This preserves
-    // instance text/style overrides and gives the portable preview the same state.
-    let mut variant_count = 0;
-    for instance in instances {
-        for &target in &variant_targets {
-            if crate::layout_components::family_of(doc, instance)
-                != crate::layout_components::family_of(doc, target)
-            {
-                continue;
-            }
-            variant_count += 1;
-            if variant_count > 1024 {
+        let pairs: Vec<_> = instances.iter().flat_map(|i| variant_targets.iter().map(move |t| (*i, *t)))
+            .filter(|(i,t)| !compiled.contains(&(*i,*t)) && crate::layout_components::family_of(doc,*i)
+                == crate::layout_components::family_of(doc,*t)).collect();
+        if pairs.is_empty() { break; }
+        for (instance, target) in pairs {
+            compiled.insert((instance,target));
+            if compiled.len() > 1024 {
                 return Err("Prototype contains too many component variant combinations".into());
             }
+            let layer = owners[&instance];
             let mut variant_doc = doc.layout_snapshot();
             crate::layout_components::swap_variant(&mut variant_doc, layer, instance, target)?;
-            let shapes = variant_doc.layers[layer]
-                .kind
-                .shapes()
-                .ok_or("Missing variant layer")?;
+            crate::layout::reflow(&mut variant_doc, layer, instance);
+            let shapes: Vec<_> = variant_doc.layers.iter().filter_map(|l| l.kind.shapes()).flatten().collect();
             let mut variant = Html {
-                shapes: shapes.iter().map(|s| (s.id, s)).collect(),
+                scope: format!("variant-{instance}-{target}"),
+                shapes: shapes.iter().map(|s| (s.id,*s)).collect(),
                 children: HashMap::new(),
                 fonts: html.fonts.clone(),
                 styles: String::new(),
@@ -865,12 +849,12 @@ pub fn export_html(doc: &Document, layer: usize, frame_id: u64) -> Result<String
                     variant.children.entry(parent).or_default().push(shape.id);
                 }
             }
+            let parent = variant_doc.find_shape(layer, instance).and_then(|s| s.layout.parent)
+                .and_then(|id| variant_doc.find_shape(layer,id));
             let mut content = String::new();
-            variant.node(instance, None, &mut content, 0)?;
-            let _ = write!(
-                body,
-                "<template id=\"variant-{instance}-{target}\">{content}</template>"
-            );
+            variant.node(instance, parent, &mut content, 0)?;
+            let _ = write!(body,"<template id=\"variant-{instance}-{target}\">{content}</template>");
+            collect_links(&variant_doc, &owners, &variant, &mut pending, &mut instances, &mut variant_targets)?;
             html.fonts = variant.fonts;
             html.styles.push_str(&variant.styles);
         }
@@ -884,78 +868,14 @@ pub fn export_html(doc: &Document, layer: usize, frame_id: u64) -> Result<String
         .replace("__ROOT__", &frame_id.to_string())
         .replace("__ACTIONS__", &actions);
     Ok(format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{}</title><style>{BASE_CSS}{}</style></head><body><main id=\"stage\" aria-label=\"Design prototype\"></main><dialog id=\"overlay\"></dialog>{body}<script>{script}</script></body></html>",
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{}</title><style>{BASE_CSS}{}</style></head><body><main id=\"stage\" aria-label=\"Design prototype\"></main><dialog id=\"overlay\" aria-label=\"Prototype overlays\"></dialog><p id=\"prototype-error\" role=\"alert\"></p>{body}<script>{script}</script></body></html>",
         escape(&frame.name),
         html.styles
     ))
 }
 
-const BASE_CSS: &str = "*{box-sizing:border-box}body{margin:0;background:#17191d;font-family:system-ui,sans-serif}#stage{display:flex;justify-content:center;min-height:100vh;width:100%;margin:0 auto;container-type:inline-size}.node{flex-shrink:0}.node>svg{display:block;overflow:visible}.interactive{cursor:pointer}.interactive:focus-visible{outline:2px solid #5b9fff!important;outline-offset:3px!important}#overlay{width:100vw;container-type:inline-size;padding:0;border:0;background:transparent;max-width:100vw;max-height:100vh}#overlay::backdrop{background:#0008}@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}";
-const PROTOTYPE_RUNTIME: &str = r#"(()=>{
-'use strict';
-const actions=__ACTIONS__, stage=document.getElementById('stage'), overlay=document.getElementById('overlay'), history=[], hoverRestore=new WeakMap();
-let current=__ROOT__;
-const template=id=>document.getElementById('screen-'+id);
-function mount(id,target,interaction){
- const source=template(id); if(!source)return false;
- target.replaceChildren(source.content.cloneNode(true));
- target.style.maxWidth=target.firstElementChild.style.maxWidth;
- const node=target.firstElementChild;
- if(node&&interaction&&!matchMedia('(prefers-reduced-motion: reduce)').matches){
-  const kind=interaction.transition, duration=Math.min(3000,Math.max(0,interaction.duration_ms||0));
-  if(kind!=='Instant'){
-   const frames=kind==='Dissolve'?[{opacity:0},{opacity:1}]:[{transform:'translateX('+(kind==='SlideLeft'?'40px':'-40px')+')',opacity:0},{transform:'translateX(0)',opacity:1}];
-   node.animate(frames,{duration,easing:'cubic-bezier(.2,.8,.2,1)'});
-  }
- }
- return true;
-}
-function variant(node,id,temporary){
- node=node.closest('[data-component]')||node;
- const source=document.getElementById('variant-'+node.dataset.component+'-'+id)||template(id); if(!source)return;
- if(!temporary)hoverRestore.delete(node);
- if(temporary&&!hoverRestore.has(node))hoverRestore.set(node,{style:node.style.cssText,content:node.innerHTML,key:node.dataset.node,actions:node.dataset.actions});
- const next=source.content.firstElementChild.cloneNode(true);
- // Instance placement belongs to the layout, independent of the active variant.
- for(const property of ['position','left','right','top','bottom','width','height','minWidth','maxWidth','minHeight','maxHeight','flex','alignSelf'])next.style[property]=node.style[property];
- node.style.cssText=next.style.cssText;
- node.dataset.node=next.dataset.node;
- node.dataset.actions=next.dataset.actions;
- node.replaceChildren(...next.childNodes);
- // Component source IDs identify actions; DOM IDs remain unique per live instance.
- node.querySelectorAll('[id]').forEach(child=>child.removeAttribute('id'));
-}
-function act(node,interaction){
- const a=interaction.action;
- if(a.Navigate){if(mount(a.Navigate.target,stage,interaction)){history.push(current);current=a.Navigate.target;overlay.close();}}
- else if(a==='Back'){if(overlay.open){overlay.close();return;}const previous=history.pop();if(previous!==undefined&&mount(previous,stage,interaction))current=previous;}
- else if(a.OpenOverlay){if(mount(a.OpenOverlay.target,overlay,interaction)&&!overlay.open)overlay.showModal();}
- else if(a==='CloseOverlay')overlay.close();
- else if(a.SetVariant)variant(node,a.SetVariant.component,interaction.trigger==='Hover');
-}
-function dispatch(event,trigger){
- const node=event.target.closest('[data-node]');if(!node)return;
- for(let ancestor=node;ancestor&&ancestor!==document.body;ancestor=ancestor.parentElement){
-  const handlers=(ancestor.dataset.actions?JSON.parse(ancestor.dataset.actions):(actions[ancestor.dataset.node]||[])).filter(i=>i.trigger===trigger);
-  if(handlers.length){
-   if(trigger==='Hover'&&event.relatedTarget&&ancestor.contains(event.relatedTarget))return;
-   event.preventDefault();handlers.forEach(i=>act(ancestor,i));break;
-  }
- }
-}
-document.addEventListener('click',e=>dispatch(e,'Click'));
-document.addEventListener('pointerover',e=>dispatch(e,'Hover'));
-document.addEventListener('pointerdown',e=>dispatch(e,'Press'));
-document.addEventListener('pointerout',event=>{
- for(let node=event.target.closest('[data-node]');node;node=node.parentElement){
-  const original=hoverRestore.get(node);
-  if(original&&(!event.relatedTarget||!node.contains(event.relatedTarget))){node.style.cssText=original.style;node.innerHTML=original.content;node.dataset.node=original.key;node.dataset.actions=original.actions;hoverRestore.delete(node);}
- }
-});
-document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('.interactive'))dispatch(e,'Click');});
-overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.close();});
-mount(current,stage);
-})();"#;
+const BASE_CSS: &str = "*{box-sizing:border-box}body{margin:0;background:#17191d;font-family:system-ui,sans-serif}#stage{display:flex;justify-content:center;min-height:100vh;width:100%;margin:0 auto;container-type:inline-size}.node{flex-shrink:0}.node>svg{display:block;overflow:visible}.interactive{cursor:pointer}.interactive:focus-visible{outline:2px solid #5b9fff!important;outline-offset:3px!important}#overlay{position:fixed;inset:auto;margin:0;container-type:inline-size;padding:0;border:0;background:transparent;max-width:none;max-height:none;overflow:visible}#overlay::backdrop{background:transparent}.overlay-layer{position:absolute;inset:0;background:rgba(0,0,0,0.392157)}.overlay-layer>.node{position:absolute!important}#prototype-error{color:#fff;background:#a22;margin:0}#prototype-error:empty{display:none}@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}";
+const PROTOTYPE_RUNTIME: &str = include_str!("layout_export/prototype.js");
 
 #[cfg(test)]
 mod tests {
@@ -1157,8 +1077,11 @@ mod tests {
             });
         let html = export_html(&doc, 0, frame).unwrap();
         assert!(html.contains(&format!("id=\"screen-{target}\"")));
-        assert!(html.contains("\"Navigate\":{\"target\":"));
+        assert!(html.contains("&quot;Navigate&quot;:{&quot;target&quot;:"));
         assert!(!html.contains("PRIVATE SIBLING"));
         assert_eq!(html.matches("<template ").count(), 2);
     }
 }
+
+#[cfg(test)]
+mod depth_tests;
