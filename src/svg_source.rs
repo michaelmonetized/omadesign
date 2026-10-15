@@ -144,7 +144,7 @@ impl SvgPattern {
             self.opacity.clamp(0., 1.),
             if winding { "nonzero" } else { "evenodd" }
         );
-        let Ok(tree) = usvg::Tree::from_str(&source, &options()) else {
+        let Ok(tree) = scene(&source) else {
             return;
         };
         let Some(mut surface) = tiny_skia::Pixmap::new(pm.width(), pm.height()) else {
@@ -497,6 +497,58 @@ mod tests {
     use crate::{document::Fill, formats::svg::read};
 
     #[test]
+    fn svg_project_guard_covers_each_advanced_gradient_field_on_fill_and_stroke() {
+        use crate::gradient::{Gradient, GradientKind, Spread};
+        let (plain, _) = read(r##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#fff" stroke="#000"/></svg>"##, "Guard").unwrap();
+        let version = |doc: &crate::document::Document| {
+            serde_json::from_str::<serde_json::Value>(&crate::project::encode(doc).unwrap())
+                .unwrap()["version"]
+                .as_u64()
+                .unwrap()
+        };
+        assert_eq!(version(&plain), 5);
+        let legacy = Gradient::new(
+            GradientKind::Radial,
+            crate::color::Rgba::BLACK,
+            crate::color::Rgba::WHITE,
+        );
+        for field in 0..6 {
+            let mut gradient = legacy.clone();
+            match field {
+                0 => {}
+                1 => gradient.radial_axis = Some([0.2, 0.4]),
+                2 => gradient.focal = [0.1, -0.2],
+                3 => gradient.inner_radius = 0.15,
+                4 => gradient.spread = Spread::Repeat,
+                _ => gradient.spread = Spread::Reflect,
+            }
+            for stroke in [false, true] {
+                let mut doc = plain.clone();
+                let shape = doc
+                    .layers
+                    .iter_mut()
+                    .filter_map(|l| l.kind.shapes_mut())
+                    .flatten()
+                    .next()
+                    .unwrap();
+                if stroke {
+                    shape.style.stroke.as_mut().unwrap().gradient = Some(gradient.clone());
+                } else {
+                    shape.style.fill = Fill::Gradient(gradient.clone());
+                }
+                assert_eq!(
+                    version(&doc),
+                    if field == 0 { 5 } else { 14 },
+                    "field={field} stroke={stroke}"
+                );
+                let reopened =
+                    crate::project::decode(&crate::project::encode(&doc).unwrap()).unwrap();
+                assert_eq!(requires_advanced_paint(&reopened), field != 0);
+            }
+        }
+    }
+
+    #[test]
     fn svg_sources_share_prune_pack_and_reopen_without_pattern_id_collisions() {
         let shapes = (0..120)
             .map(|i| {
@@ -556,6 +608,81 @@ mod tests {
             .map(|(a, b)| u64::from(a.abs_diff(*b)))
             .sum();
         assert!(sum as f64 / (actual.data().len() as f64) < 0.1);
+    }
+}
+
+struct Scene {
+    source: Arc<str>,
+    tree: Arc<usvg::Tree>,
+    bytes: usize,
+}
+thread_local! {
+    static SCENES: std::cell::RefCell<std::collections::VecDeque<Scene>> = const { std::cell::RefCell::new(std::collections::VecDeque::new()) };
+}
+
+/// Reuse parsed vectors while each camera or export gets its own requested resolution.
+/// Args: exact current SVG source. Returns a parsed scene, never a page-sized raster cache.
+pub fn scene(source: &str) -> Result<Arc<usvg::Tree>, String> {
+    if let Some(tree) = SCENES.with_borrow_mut(|scenes| {
+        let index = scenes.iter().position(|s| s.source.as_ref() == source)?;
+        let entry = scenes.remove(index)?;
+        let tree = entry.tree.clone();
+        scenes.push_front(entry);
+        Some(tree)
+    }) {
+        return Ok(tree);
+    }
+    let mut options = options();
+    if source.contains("<text") {
+        options.fontdb_mut().load_system_fonts();
+    }
+    let tree = Arc::new(
+        usvg::Tree::from_str(source, &options)
+            .map_err(|e| format!("Invalid SVG vector source: {e}"))?,
+    );
+    let bytes = source.len().saturating_mul(32);
+    if bytes <= 16 * 1024 * 1024 && !source.contains("data:") && !source.contains("<image") {
+        SCENES.with_borrow_mut(|scenes| {
+            scenes.push_front(Scene {
+                source: Arc::from(source),
+                tree: tree.clone(),
+                bytes,
+            });
+            let mut total = 0usize;
+            scenes.retain(|s| {
+                total = total.saturating_add(s.bytes);
+                total <= 64 * 1024 * 1024
+            });
+            scenes.truncate(8);
+        });
+    }
+    Ok(tree)
+}
+
+#[cfg(test)]
+mod scene_tests {
+    use super::*;
+    #[test]
+    fn svg_scene_cache_reuses_vectors_across_view_scales_and_invalidates_edits() {
+        let source = r##"<svg xmlns="http://www.w3.org/2000/svg" width="100000" height="80000"><defs><filter id="fx"><feGaussianBlur stdDeviation="20"/></filter></defs><g filter="url(#fx)"><rect width="80000" height="70000" fill="#28a"/></g></svg>"##;
+        let first = scene(source).unwrap();
+        let second = scene(source).unwrap();
+        assert!(Arc::ptr_eq(&first, &second));
+        for scale in [0.002, 0.003] {
+            let mut pixels = tiny_skia::Pixmap::new(200, 160).unwrap();
+            resvg::render(
+                &second,
+                Transform::from_scale(scale, scale),
+                &mut pixels.as_mut(),
+            );
+            assert_eq!(pixels.data().len(), 128000);
+        }
+        let changed = scene(&source.replace("#28a", "#e42")).unwrap();
+        assert!(!Arc::ptr_eq(&first, &changed));
+        SCENES.with_borrow(|scenes| {
+            assert!(scenes.len() <= 8);
+            assert!(scenes.iter().map(|s| s.bytes).sum::<usize>() <= 64 * 1024 * 1024);
+        });
     }
 }
 
