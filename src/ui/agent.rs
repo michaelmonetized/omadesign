@@ -9,6 +9,52 @@ use std::path::PathBuf;
 const OPEN: &str = "design-agent-open";
 const VISIBLE: &str = "design-agent-visible";
 
+#[cfg(test)]
+#[path = "agent_keyboard_tests.rs"]
+mod keyboard_tests;
+
+/// Scope native agent controls to their document and conversation.
+/// Args: studio and agent workspace. Returns an owner independent of current field values.
+pub(super) fn native_owner(studio: &Studio, agent: &Workspace) -> Id {
+    Id::new(("agent-native-owner", &studio.swap_id, agent.thread.as_ref().map(|thread| &thread.id)))
+}
+
+/// Add a name and visible focus to an existing native control.
+/// Args: UI, native response and purpose. Returns that response without changing its role or action.
+pub(super) fn named(ui: &egui::Ui, response: egui::Response, purpose: &str) -> egui::Response {
+    ui.ctx().accesskit_node_builder(response.id, |node| node.set_label(purpose));
+    super::welcome::focus_control(ui, &response);
+    response
+}
+
+/// Draw an existing native action in its explicit owner scope.
+/// Args: UI, property ID, visible text, accessible purpose and availability. Returns its real response.
+pub(super) fn action(ui: &mut egui::Ui, id: Id, visible: &str, purpose: &str, enabled: bool) -> egui::Response {
+    let response = super::fields::native_scope(ui, id, |ui|
+        ui.add_enabled(enabled, egui::Button::new(visible))).inner;
+    named(ui, response, purpose)
+}
+
+/// Label an existing agent text draft without sharing native editing state across owners.
+/// Args: UI, property ID, visible name, text and multiline flag. Returns its real response.
+pub(super) fn text(ui: &mut egui::Ui, id: Id, label: &str, value: &mut String, multiline: bool) -> egui::Response {
+    super::fields::native_scope(ui, id, |ui| {
+        let name = ui.label(label);
+        let widget = if multiline { egui::TextEdit::multiline(value).desired_rows(2) }
+            else { egui::TextEdit::singleline(value) };
+        let response = ui.add(widget.id(id.with("input")).desired_width(f32::INFINITY));
+        super::welcome::name_control(ui, &response, name.id, label);
+        response
+    }).inner
+}
+
+/// Validate only the existing public connection draft grammar before starting a process.
+/// Args: agent workspace. Returns whether its JSON arguments and required text are usable.
+fn connection_valid(agent: &Workspace) -> bool {
+    !agent.settings.profile.command.trim().is_empty() && !agent.config_directory.trim().is_empty()
+        && serde_json::from_str::<Vec<String>>(&agent.config_args).is_ok()
+}
+
 fn tool_title(title: &str) -> String {
     let name = title
         .strip_prefix("mcp.omadesign.")
@@ -104,42 +150,50 @@ pub(super) fn button(ui: &mut egui::Ui, studio: &mut Studio) {
     }
 }
 
-fn connection_settings(ui: &mut egui::Ui, agent: &mut Workspace) {
+fn connection_settings(ui: &mut egui::Ui, owner: Id, agent: &mut Workspace) {
     ui.add_enabled_ui(!agent.busy&&!agent.connecting&&!agent.ready,|ui|{
-        let mut chosen=None;
-        egui::ComboBox::from_id_salt("agent-provider").selected_text(&agent.settings.profile.name).show_ui(ui,|ui|{
-            for profile in crate::agent::config::presets(){if ui.selectable_label(profile.name==agent.settings.profile.name,&profile.name).clicked(){chosen=Some(profile);}}
-        });
-        if let Some(profile)=chosen{agent.settings.profile=profile;agent.sync_fields();}
+        let profiles=crate::agent::config::presets();
+        let mut selected=agent.settings.profile.name.clone();
+        let options=profiles.iter().map(|profile|(profile.name.clone(),profile.name.clone())).collect::<Vec<_>>();
+        let choice=super::fields::native_scope(ui,owner.with("provider"),|ui|
+            super::keyboard_controls::choice(ui,"value","Agent provider",&mut selected,&options)).inner;
+        if choice.changed() && let Some(profile)=profiles.into_iter().find(|profile|profile.name==selected){
+            agent.settings.profile=profile;agent.sync_fields();
+        }
         if agent.settings.profile.command=="npx"{ui.small("The ACP adapter is downloaded on first connection. Your local agent sign-in is reused.");}
-        ui.label("Project folder");ui.add(egui::TextEdit::singleline(&mut agent.config_directory).desired_width(f32::INFINITY));
-        egui::CollapsingHeader::new("Agent command").show(ui,|ui|{
-            ui.label("Executable");ui.add(egui::TextEdit::singleline(&mut agent.settings.profile.command).desired_width(f32::INFINITY));
-            ui.label("Arguments (JSON array)");ui.add(egui::TextEdit::multiline(&mut agent.config_args).desired_rows(2).desired_width(f32::INFINITY));
+        let profile=owner.with(("profile",&agent.settings.profile.name));
+        let folder=text(ui,profile.with("directory"),"Project folder",&mut agent.config_directory,false);
+        if agent.config_directory.trim().is_empty(){super::welcome::control_error(ui,&[&folder],"Choose a project folder");}
+        egui::CollapsingHeader::new("Agent command").id_salt(owner.with("command-details")).show(ui,|ui|{
+            let command=text(ui,profile.with("command"),"Agent executable",&mut agent.settings.profile.command,false);
+            if agent.settings.profile.command.trim().is_empty(){super::welcome::control_error(ui,&[&command],"Enter an ACP agent executable");}
+            let args=text(ui,profile.with("arguments"),"Agent arguments (JSON array)",&mut agent.config_args,true);
+            if serde_json::from_str::<Vec<String>>(&agent.config_args).is_err(){super::welcome::control_error(ui,&[&args],"Arguments must be a JSON array of strings");}
             ui.small("Any local ACP agent speaking JSON-RPC over stdio.");
         });
     });
-    ui.checkbox(&mut agent.settings.live_edits, "Allow live canvas edits");
-    ui.checkbox(&mut agent.follow_canvas, "Keep the design in view");
+    let response=super::fields::native_scope(ui,owner.with("live-edits"),|ui|ui.checkbox(&mut agent.settings.live_edits,"Allow live canvas edits")).inner;
+    named(ui,response,"Allow live canvas edits");
+    let response=super::fields::native_scope(ui,owner.with("follow-canvas"),|ui|ui.checkbox(&mut agent.follow_canvas,"Keep the design in view")).inner;
+    named(ui,response,"Keep the design in view");
 }
 
 fn body(ui: &mut egui::Ui, studio: &mut Studio, agent: &mut Workspace, height: f32) {
+    let owner=native_owner(studio,agent);
     let start_y = ui.cursor().top();
     ui.horizontal(|ui| {
-        if ui
-            .add_enabled(!agent.busy && !agent.connecting, egui::Button::new("New"))
-            .clicked()
+        if action(ui,owner.with("new"),"New","New agent conversation",!agent.busy&&!agent.connecting).clicked()
         {
             agent.new_thread(studio);
             agent.focus_prompt = true;
         }
-        if ui.selectable_label(agent.show_history, "History").clicked() {
+        let response=super::fields::native_scope(ui,owner.with("history"),|ui|ui.selectable_label(agent.show_history,"History")).inner;
+        if named(ui,response,"Agent conversation history").clicked() {
             agent.refresh_history();
             agent.show_history = !agent.show_history;
         }
-        if ui
-            .selectable_label(agent.show_settings, "Connection")
-            .clicked()
+        let response=super::fields::native_scope(ui,owner.with("connection-settings"),|ui|ui.selectable_label(agent.show_settings,"Connection")).inner;
+        if named(ui,response,"Agent connection settings").clicked()
         {
             agent.show_settings = !agent.show_settings;
         }
@@ -149,7 +203,7 @@ fn body(ui: &mut egui::Ui, studio: &mut Studio, agent: &mut Workspace, height: f
         egui::ScrollArea::vertical()
             .id_salt("agent-settings-scroll")
             .max_height(240.0)
-            .show(ui, |ui| connection_settings(ui, agent));
+            .show(ui, |ui| connection_settings(ui, owner, agent));
     }
     if agent.show_history {
         let history = agent.history.clone();
@@ -184,12 +238,8 @@ fn body(ui: &mut egui::Ui, studio: &mut Studio, agent: &mut Workspace, height: f
                                             .display()
                                             .to_string())
                                 ));
-                                if ui
-                                    .add_enabled(
-                                        !agent.busy && !agent.connecting,
-                                        egui::Button::new("Continue in saved document"),
-                                    )
-                                    .clicked()
+                                    if action(ui,owner.with(("continue",&thread.id)),"Continue in saved document",
+                                        &format!("Continue agent conversation {} in saved document",thread.title),!agent.busy&&!agent.connecting).clicked()
                                 {
                                     if let Err(e) = agent.continue_in_document(thread.clone(), studio, ui.ctx()) {
                                         agent.error = e;
@@ -203,6 +253,7 @@ fn body(ui: &mut egui::Ui, studio: &mut Studio, agent: &mut Workspace, height: f
                                             ui,
                                             &entry.attachments,
                                             false,
+                                            owner.with(("history-attachments",&thread.id)),
                                         );
                                     }
                                 }
@@ -215,31 +266,38 @@ fn body(ui: &mut egui::Ui, studio: &mut Studio, agent: &mut Workspace, height: f
         if agent.connecting || agent.busy {
             ui.spinner();
         }
-        ui.label(
+        let response=ui.label(
             RichText::new(&agent.status)
                 .small()
                 .color(super::theme::fg_weak()),
         );
+        ui.ctx().accesskit_node_builder(response.id,|node|{node.set_live(egui::accesskit::Live::Polite);node.set_live_atomic();});
     });
     if agent.ready {
-        egui::CollapsingHeader::new(format!("{} settings", agent.settings.profile.name))
-            .show(ui, |ui| super::agent_picker::other_options(ui, agent));
+        egui::CollapsingHeader::new(format!("{} settings", agent.settings.profile.name)).id_salt(owner.with(("provider-settings",&agent.settings.profile.name)))
+            .show(ui, |ui| super::agent_picker::other_options(ui, studio, agent));
     }
     if !agent.error.is_empty() {
-        ui.label(
+        let error=ui.label(
             RichText::new(&agent.error)
                 .small()
                 .color(egui::Color32::LIGHT_RED),
         );
+        ui.ctx().accesskit_node_builder(error.id,|node|{node.set_live(egui::accesskit::Live::Polite);node.set_live_atomic();});
+        for id in [super::agent_attachments::field_id(studio,agent),owner.with(("profile",&agent.settings.profile.name)).with("directory").with("input")] {
+            if ui.ctx().read_response(id).is_some(){
+                ui.ctx().accesskit_node_builder(id,|node|{node.push_described_by(error.id.accesskit_id());node.set_error_message(error.id.accesskit_id());});
+            }
+        }
         if !agent.ready {
             let methods = agent.initialization["authMethods"]
                 .as_array()
                 .cloned()
                 .unwrap_or_default();
             for method in methods {
-                if ui
-                    .button(method["name"].as_str().unwrap_or("Sign in"))
-                    .clicked()
+                if action(ui,owner.with(("authenticate",method["id"].as_str().unwrap_or_default())),
+                    method["name"].as_str().unwrap_or("Sign in"),
+                    &format!("Agent sign in: {}",method["name"].as_str().unwrap_or("Sign in")),!agent.connecting).clicked()
                 {
                     if let Some(c) = &agent.connection {
                         let _ = c.send(Command::Authenticate(
@@ -276,9 +334,9 @@ fn body(ui: &mut egui::Ui, studio: &mut Studio, agent: &mut Workspace, height: f
                 }
                 ui.horizontal_wrapped(|ui| {
                     for option in permission["options"].as_array().into_iter().flatten() {
-                        if ui
-                            .button(option["name"].as_str().unwrap_or("Choose"))
-                            .clicked()
+                        if action(ui,owner.with(("permission",id.to_string(),option["optionId"].as_str().unwrap_or_default())),
+                            option["name"].as_str().unwrap_or("Choose"),
+                            &format!("{}: {}",permission["toolCall"]["title"].as_str().unwrap_or("Agent permission"),option["name"].as_str().unwrap_or("Choose")),true).clicked()
                         {
                             agent.permission(
                                 id.clone(),
@@ -286,7 +344,7 @@ fn body(ui: &mut egui::Ui, studio: &mut Studio, agent: &mut Workspace, height: f
                             );
                         }
                     }
-                    if ui.button("Cancel request").clicked() {
+                    if action(ui,owner.with(("permission-cancel",id.to_string())),"Cancel request","Cancel agent permission request",true).clicked() {
                         agent.permission(id.clone(), None);
                     }
                 });
@@ -297,7 +355,7 @@ fn body(ui: &mut egui::Ui, studio: &mut Studio, agent: &mut Workspace, height: f
                 if let Some(thread)=&agent.thread{
                     for (i,entry) in thread.messages.iter().enumerate(){ui.push_id(i,|ui|{
                         match entry.role.as_str(){
-                            "user"=>{ui.add_space(8.0);ui.label(RichText::new("You").strong());ui.add(egui::Label::new(&entry.text).wrap());super::agent_attachments::chips(ui,&entry.attachments,false);}
+                            "user"=>{ui.add_space(8.0);ui.label(RichText::new("You").strong());ui.add(egui::Label::new(&entry.text).wrap());super::agent_attachments::chips(ui,&entry.attachments,false,owner.with(("transcript-attachments",i)));}
                             "assistant"=>{ui.add_space(8.0);ui.label(RichText::new(&agent.settings.profile.name).strong().color(super::theme::accent()));ui.add(egui::Label::new(&entry.text).wrap().selectable(true));}
                             "tool"=>{let icon=match entry.status.as_str(){"completed"=>"✓","failed"=>"!",_=>"·"};ui.small(format!("{icon} {}",tool_title(&entry.text)));}
                             "design"=>{ui.label(RichText::new(format!("✓ Canvas · {}",entry.text)).small().color(super::theme::accent()));}
@@ -314,6 +372,7 @@ pub(super) fn panel(ui: &mut egui::Ui, studio: &mut Studio) {
         return;
     }
     let mut agent = std::mem::take(&mut studio.agent);
+    let owner=native_owner(studio,&agent);
     egui::Panel::right("design-agent-panel")
         .resizable(true)
         .default_size(360.0)
@@ -327,13 +386,13 @@ pub(super) fn panel(ui: &mut egui::Ui, studio: &mut Studio) {
             ui.horizontal(|ui| {
                 ui.label(RichText::new("Design with agent").strong().size(16.0));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button("×").on_hover_text("Hide panel").clicked() {
+                    if action(ui,owner.with("hide"),"×","Hide agent panel",true).on_hover_text("Hide panel").clicked() {
                         agent.visible = false;
                     }
                 });
             });
             let body_height = (ui.available_height()
-                - 220.0
+                - 260.0
                 - if agent.attachments.is_empty() && agent.attachment_jobs.is_empty() {
                     0.
                 } else {
@@ -348,10 +407,12 @@ pub(super) fn panel(ui: &mut egui::Ui, studio: &mut Studio) {
             ui.separator();
             ui.horizontal(|ui| {
                 ui.add_enabled_ui(!agent.busy && !agent.ready && !agent.connecting, |ui| {
-                    ui.selectable_value(&mut agent.purpose, Purpose::Create, "Create");
-                    ui.selectable_value(&mut agent.purpose, Purpose::Learn, "Learn");
+                    let response=super::fields::native_scope(ui,owner.with("purpose-create"),|ui|ui.selectable_value(&mut agent.purpose,Purpose::Create,"Create")).inner;
+                    named(ui,response,"Agent purpose: Create");
+                    let response=super::fields::native_scope(ui,owner.with("purpose-learn"),|ui|ui.selectable_value(&mut agent.purpose,Purpose::Learn,"Learn")).inner;
+                    named(ui,response,"Agent purpose: Learn");
                 });
-                if agent.ready && !agent.busy && ui.small_button("Disconnect").clicked() {
+                if agent.ready && !agent.busy && action(ui,owner.with("disconnect"),"Disconnect","Disconnect agent",true).clicked() {
                     agent.disconnect();
                     agent.status = "Disconnected".into();
                 }
@@ -364,19 +425,18 @@ pub(super) fn panel(ui: &mut egui::Ui, studio: &mut Studio) {
             }
             let send_key = field.has_focus()
                 && ui.input_mut(|i| i.consume_key(egui::Modifiers::CTRL, egui::Key::Enter));
+            let prompt_valid=crate::agent::attachments::typed_len(&agent.request,&agent.attachments)<=32_768;
+            if !prompt_valid{super::welcome::control_error(ui,&[&field],"Keep the brief under 32 KB");}
+            let can_connect=agent.ready||connection_valid(&agent);
             ui.horizontal(|ui| {
                 if agent.busy || agent.connecting {
-                    if ui.button("Stop").clicked() {
+                    if action(ui,owner.with("stop"),"Stop","Stop agent",true).clicked() {
                         agent.stop();
                     }
                 } else {
-                    if ui
-                        .add_enabled(
-                            !agent.request.trim().is_empty() && agent.attachment_jobs.is_empty(),
-                            egui::Button::new("Send").fill(super::theme::accent_soft()),
-                        )
-                        .clicked()
-                        || send_key
+                    let can_send=!agent.request.trim().is_empty()&&agent.attachment_jobs.is_empty()&&prompt_valid&&can_connect;
+                    let send=super::fields::native_scope(ui,owner.with("send"),|ui|ui.add_enabled(can_send,egui::Button::new("Send").fill(super::theme::accent_soft()))).inner;
+                    if named(ui,send,"Send agent brief").clicked() || send_key&&can_send
                     {
                         let result = std::env::current_exe()
                             .map_err(|e| e.to_string())
@@ -385,7 +445,7 @@ pub(super) fn panel(ui: &mut egui::Ui, studio: &mut Studio) {
                             agent.error = e;
                         }
                     }
-                    if !agent.ready && ui.button("Connect").clicked() {
+                    if !agent.ready && action(ui,owner.with("connect"),"Connect","Connect agent",can_connect).clicked() {
                         let result = std::env::current_exe()
                             .map_err(|e| e.to_string())
                             .and_then(|exe| agent.connect(studio, ui.ctx(), exe));
@@ -397,6 +457,7 @@ pub(super) fn panel(ui: &mut egui::Ui, studio: &mut Studio) {
                 ui.small("Ctrl+Enter to send");
             });
         });
+    if !agent.visible{super::panel_workspace::return_focus(ui.ctx(),studio);}
     agent.persist(false);
     ui.ctx()
         .data_mut(|d| d.insert_temp(Id::new(VISIBLE), agent.visible));

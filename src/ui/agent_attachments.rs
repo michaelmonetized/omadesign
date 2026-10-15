@@ -9,8 +9,8 @@ use eframe::egui::{
     self, Id, RichText,
     text::{CCursor, CCursorRange},
 };
-pub(super) fn field_id() -> Id {
-    Id::new("agent-prompt-input")
+pub(super) fn field_id(studio: &Studio, agent: &Workspace) -> Id {
+    super::agent::native_owner(studio,agent).with("prompt-input")
 }
 fn range(ctx: &egui::Context, id: Id, len: usize) -> std::ops::Range<usize> {
     egui::TextEdit::load_state(ctx, id)
@@ -39,7 +39,7 @@ fn erase(request: &mut String, selection: std::ops::Range<usize>) {
     let end = byte(request, selection.end);
     request.replace_range(start..end, "");
 }
-pub(super) fn chips(ui: &mut egui::Ui, items: &[Attachment], editable: bool) -> Option<String> {
+pub(super) fn chips(ui: &mut egui::Ui, items: &[Attachment], editable: bool, owner: Id) -> Option<String> {
     let mut remove = None;
     let width = ui.available_width().max(80.);
     ui.vertical(|ui| {
@@ -82,11 +82,9 @@ pub(super) fn chips(ui: &mut egui::Ui, items: &[Attachment], editable: bool) -> 
                             egui::Label::new(RichText::new(label).small()).truncate(),
                         )
                         .on_hover_text(a.tooltip());
-                        if editable
-                            && ui
-                                .small_button("×")
-                                .on_hover_text(format!("Remove {}", a.name))
-                                .clicked()
+                        let remove_id=owner.with(("remove-attachment",&a.id));
+                        if editable && super::agent::action(ui,remove_id,"×",&format!("Remove attachment {}",a.name),true)
+                            .on_hover_text(format!("Remove {}",a.name)).clicked()
                         {
                             remove = Some(a.id.clone());
                         }
@@ -134,7 +132,7 @@ pub(super) fn composer(
     studio: &Studio,
     agent: &mut Workspace,
 ) -> egui::Response {
-    let id = field_id();
+    let id = field_id(studio,agent);
     if let Some(insert) = agent.poll_attachments() {
         let at = agent.insert_attachment_result(insert);
         set_cursor(ui.ctx(), id, at);
@@ -215,7 +213,7 @@ pub(super) fn composer(
         .id_salt("prompt-attachment-chips")
         .max_height(116.)
         .show(ui, |ui| {
-            if let Some(id) = chips(ui, &agent.attachments, true) {
+            if let Some(id) = chips(ui, &agent.attachments, true, id) {
                 let before = agent.request.clone();
                 attachments::remove(&mut agent.request, &mut agent.attachments, &id);
                 agent.rebase_attachment_jobs(&before);
@@ -262,6 +260,7 @@ pub(super) fn composer(
         job.append(&text[at..], 0., normal);
         ui.fonts_mut(|f| f.layout_job(job))
     };
+    let label=ui.label("Agent brief");
     let mut buffer = PromptBuffer {
         text: &mut agent.request,
         edits: vec![],
@@ -286,6 +285,7 @@ pub(super) fn composer(
         agent.rebase_attachment_edit(range, added);
     }
     attachments::reconcile(&agent.request, &mut agent.attachments);
+    super::welcome::name_control(ui,&field,label.id,"Agent brief");
     field
 }
 fn atomic_range(
@@ -410,7 +410,7 @@ mod tests {
             };
             render(&mut workspace, vec![]);
             render(&mut workspace, vec![]);
-            set_cursor(&ctx, field_id(), 0);
+            set_cursor(&ctx, field_id(&studio,&workspace), 0);
             render(&mut workspace, vec![egui::Event::Text(prefix.into())]);
             assert_eq!(workspace.request, format!("{prefix}{before}"));
             tx.send(Ok(attachments::Prepared {
@@ -432,6 +432,7 @@ mod tests {
         let a = attachment();
         workspace.request = format!("Hello {}", a.token());
         workspace.attachments = vec![a];
+        let id=field_id(&studio,&workspace);
         let mut render = |events: Vec<egui::Event>, focus: bool| {
             let mut result = ctx.run_ui(
                 egui::RawInput {
@@ -453,7 +454,7 @@ mod tests {
         };
         render(vec![], true);
         render(vec![], true);
-        set_cursor(&ctx, field_id(), usize::MAX);
+        set_cursor(&ctx, id, usize::MAX);
         // TextEdit clamps the requested end position before the next event.
         render(vec![], true);
         render(

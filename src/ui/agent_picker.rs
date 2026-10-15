@@ -56,18 +56,18 @@ fn connect(
         }
     }
 }
-pub(super) fn other_options(ui: &mut egui::Ui, agent: &mut Workspace) {
+pub(super) fn other_options(ui: &mut egui::Ui, studio: &Studio, agent: &mut Workspace) {
+    let owner=super::agent::native_owner(studio,agent);
     ui.add_enabled_ui(agent.ready && !agent.busy && !agent.connecting, |ui| {
         for option in discovery::options(&agent.metadata)
             .into_iter()
             .filter(|o| !matches!(o.category.as_str(), "model" | "thought_level"))
         {
-            ui.label(&option.name);
-            dropdown(ui, agent, &option);
+            dropdown(ui, owner, agent, &option);
         }
     });
 }
-fn dropdown(ui: &mut egui::Ui, agent: &mut Workspace, option: &OptionSet) {
+fn dropdown(ui: &mut egui::Ui, owner: egui::Id, agent: &mut Workspace, option: &OptionSet) {
     let current = if agent.ready {
         option.current.as_str()
     } else {
@@ -78,36 +78,21 @@ fn dropdown(ui: &mut egui::Ui, agent: &mut Workspace, option: &OptionSet) {
             .map_or(option.current.as_str(), String::as_str)
     }
     .to_owned();
-    let text = option
-        .choices
-        .iter()
-        .find(|c| c.id == current)
-        .map_or(current.as_str(), |c| c.label.as_str())
-        .to_owned();
-    egui::ComboBox::from_id_salt(("agent-choice", &option.id))
-        .selected_text(text)
-        .width(88.0)
-        .show_ui(ui, |ui| {
-            for choice in &option.choices {
-                if ui
-                    .selectable_label(choice.id == current, &choice.label)
-                    .clicked()
-                {
-                    agent.choose_option(option, &choice.id);
-                }
-            }
-        })
-        .response
-        .on_hover_text(&option.name);
+    let mut selected=current;
+    let choices=option.choices.iter().map(|choice|(choice.id.clone(),choice.label.clone())).collect::<Vec<_>>();
+    let property=owner.with(("agent-choice",&agent.settings.profile.name,&option.id));
+    let response=super::fields::native_scope(ui,property,|ui|super::keyboard_controls::choice(ui,"value",&option.name,&mut selected,&choices)).inner;
+    if response.changed(){agent.choose_option(option,&selected);}
 }
 pub(super) fn picker(ui: &mut egui::Ui, studio: &Studio, agent: &mut Workspace) {
+    let owner=super::agent::native_owner(studio,agent);
     let metadata = available(agent);
     let options = discovery::options(&metadata);
     let model = options.iter().find(|o| o.category == "model");
     let model_text = model.map_or("Choose model", label);
     ui.add_enabled_ui(!agent.busy && !agent.connecting, |ui| {
         ui.horizontal(|ui| {
-            egui::containers::menu::MenuButton::new(format!("{} ▾", model_text))
+            let response=super::fields::native_scope(ui,owner.with("model-menu"),|ui|egui::containers::menu::MenuButton::new(format!("{} ▾", model_text))
                 .config(
                     egui::containers::menu::MenuConfig::new()
                         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
@@ -137,16 +122,17 @@ pub(super) fn picker(ui: &mut egui::Ui, studio: &Studio, agent: &mut Workspace) 
                         });
                     }
                     ui.set_width(420.0);
+                    let search_label=ui.label("Search agent models");
                     ui.horizontal(|ui| {
-                        ui.add(
+                        let search=ui.add(
                             egui::TextEdit::singleline(&mut agent.discovery.search)
+                                .id(owner.with("model-search"))
                                 .hint_text("Search models…")
                                 .desired_width(310.0),
                         );
-                        if ui
-                            .small_button("↻")
-                            .on_hover_text("Refresh installed agents and authorization")
-                            .clicked()
+                        super::welcome::name_control(ui,&search,search_label.id,"Search agent models");
+                        if super::agent::action(ui,owner.with("refresh-models"),"↻","Refresh installed agents and authorization",true)
+                            .on_hover_text("Refresh installed agents and authorization").clicked()
                         {
                             agent
                                 .discovery
@@ -156,33 +142,29 @@ pub(super) fn picker(ui: &mut egui::Ui, studio: &Studio, agent: &mut Workspace) 
                     ui.separator();
                     ui.horizontal_top(|ui| {
                         ui.vertical(|ui| {
-                            if ui
-                                .selectable_label(
+                            let response=super::fields::native_scope(ui,owner.with("all-models"),|ui|ui.selectable_label(
                                     agent.discovery.filter.is_none()
                                         && !agent.discovery.favorites_only,
                                     "All",
-                                )
-                                .clicked()
+                                )).inner;
+                            if super::agent::named(ui,response,"All agent models").clicked()
                             {
                                 agent.discovery.filter = None;
                                 agent.discovery.favorites_only = false;
                             }
-                            if ui
-                                .selectable_label(agent.discovery.favorites_only, "★")
-                                .on_hover_text("Favorite models")
-                                .clicked()
+                            let response=super::fields::native_scope(ui,owner.with("favorite-models"),|ui|ui.selectable_label(agent.discovery.favorites_only,"★")).inner;
+                            if super::agent::named(ui,response,"Favorite agent models").on_hover_text("Favorite models").clicked()
                             {
                                 agent.discovery.favorites_only = true;
                                 agent.discovery.filter = None;
                             }
                             for provider in &providers {
-                                if ui
-                                    .selectable_label(
+                                let response=super::fields::native_scope(ui,owner.with(("filter-provider",&provider.profile.name)),|ui|ui.selectable_label(
                                         agent.discovery.filter.as_ref()
                                             == Some(&provider.profile.name),
                                         &provider.profile.name,
-                                    )
-                                    .on_hover_text(format!(
+                                    )).inner;
+                                if super::agent::named(ui,response,&format!("Filter agent models: {}",provider.profile.name)).on_hover_text(format!(
                                         "{} · {}",
                                         provider.profile.name,
                                         provider.status.label()
@@ -262,12 +244,8 @@ pub(super) fn picker(ui: &mut egui::Ui, studio: &Studio, agent: &mut Workspace) 
                                                 }
                                                 count += 1;
                                                 ui.horizontal(|ui| {
-                                                    if ui
-                                                        .small_button(if favorite {
-                                                            "★"
-                                                        } else {
-                                                            "☆"
-                                                        })
+                                                    if super::agent::action(ui,owner.with(("favorite",&key)),if favorite{"★"}else{"☆"},
+                                                        &format!("{} {} model {}",if favorite{"Unfavorite"}else{"Favorite"},provider.profile.name,choice.label),true)
                                                         .on_hover_text("Favorite model")
                                                         .clicked()
                                                     {
@@ -284,15 +262,14 @@ pub(super) fn picker(ui: &mut egui::Ui, studio: &Studio, agent: &mut Workspace) 
                                                     let selected = provider.profile.name
                                                         == agent.settings.profile.name
                                                         && choice.id == model.current;
-                                                    if ui
-                                                        .add(
+                                                    let response=super::fields::native_scope(ui,owner.with(("model",&provider.profile.name,&model.id,&choice.id)),|ui|ui.add(
                                                             egui::Button::selectable(
                                                                 selected,
                                                                 &choice.label,
                                                             )
                                                             .truncate(),
-                                                        )
-                                                        .clicked()
+                                                        )).inner;
+                                                    if super::agent::named(ui,response,&format!("Choose {} model {}",provider.profile.name,choice.label)).clicked()
                                                     {
                                                         connect(
                                                             agent,
@@ -314,7 +291,8 @@ pub(super) fn picker(ui: &mut egui::Ui, studio: &Studio, agent: &mut Workspace) 
                                             } else {
                                                 "Connect / sign in"
                                             };
-                                            if ui.button(text).clicked() {
+                                            if super::agent::action(ui,owner.with(("connect-provider",&provider.profile.name)),text,
+                                                &format!("{}: {}",provider.profile.name,text),true).clicked() {
                                                 connect(agent, studio, ui.ctx(), provider, None);
                                                 agent.show_settings = true;
                                                 ui.close();
@@ -329,10 +307,10 @@ pub(super) fn picker(ui: &mut egui::Ui, studio: &Studio, agent: &mut Workspace) 
                             });
                     });
                 })
-                .0
-                .on_hover_text(format!("Provider: {}", agent.settings.profile.name));
+                .0).inner;
+            super::agent::named(ui,response,"Choose agent model").on_hover_text(format!("Provider: {}",agent.settings.profile.name));
             if let Some(effort) = options.iter().find(|o| o.category == "thought_level") {
-                dropdown(ui, agent, effort);
+                dropdown(ui, owner, agent, effort);
             } else {
                 ui.label(RichText::new("Auto effort").small())
                     .on_hover_text("This agent does not advertise an effort control.");
