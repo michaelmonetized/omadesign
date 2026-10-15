@@ -270,12 +270,20 @@ pub(super) fn start_brush(studio: &mut Studio, world: Pt) {
         studio.status = "add a pixel layer to paint".into();
         return;
     };
-    let Some((w, h, before)) = layer_pixels(studio, layer) else {
+    let Some(before) = crate::document::RasterState::capture(&studio.doc.layers[layer]) else {
         return;
     };
+    let pixels = before.kind.pixels().unwrap();
+    let (w, h) = (pixels.w, pixels.h);
     let Some(mut buf) = tiny_skia::Pixmap::new(w, h) else {
         return;
     };
+    let mut preview = None;
+    if let Err(message) = super::brush_bounds::ensure(studio, layer, world, world, &mut buf, &mut preview, true) {
+        studio.status = message.into();
+        return;
+    }
+    let (w, h) = (buf.width(), buf.height());
     let point = studio.mask_point(layer, world);
     studio.brush_distance = studio.brush.spacing_distance();
     studio.brush_heading = 0.0;
@@ -612,6 +620,15 @@ pub(super) fn brush_drag(studio: &mut Studio, world: Pt) {
         });
         return;
     }
+    if let Err(message) = super::brush_bounds::ensure(
+        studio, layer, last.unwrap_or(world), world, &mut buf, &mut preview, false,
+    ) {
+        studio.status = message.into();
+        studio.op = Some(Op::Brush {
+            layer, erase, buf, preview, last: None, before, selection_generation,
+        });
+        return;
+    }
     let from = last.map_or_else(
         || studio.mask_point(layer, world),
         |p| studio.mask_point(layer, p),
@@ -821,6 +838,168 @@ mod tests {
         let pixels = pixels(studio, 0, mask).unwrap();
         let offset = ((y * pixels.w + x) * 4) as usize;
         pixels.data[offset..offset + 4].try_into().unwrap()
+    }
+
+    fn world_rgba(studio: &Studio, point: Pt) -> [u8; 4] {
+        let point = studio.mask_point(0, point);
+        let pixels = pixels(studio, 0, false).unwrap();
+        assert!(point.x >= 0.0 && point.y >= 0.0);
+        assert!(point.x < pixels.w as f32 && point.y < pixels.h as f32);
+        rgba(studio, point.x.floor() as u32, point.y.floor() as u32, false)
+    }
+
+    #[test]
+    fn brush_crosses_every_original_bitmap_edge_and_undo_restores_the_grid() {
+        let mut studio = studio(96, 80);
+        studio.tool = Tool::Brush;
+        studio.doc.artboards = vec![
+            crate::document::Artboard::new(1, Pt::new(-50.0, -50.0), Pt::new(200.0, 200.0)),
+            crate::document::Artboard::new(2, Pt::new(100.0, -50.0), Pt::new(50.0, 200.0)),
+        ];
+        let before = crate::project::encode(&studio.doc).unwrap();
+        start_brush(&mut studio, Pt::new(48.0, 40.0));
+        for point in [
+            Pt::new(-25.0, 40.0),
+            Pt::new(-25.0, -30.0),
+            Pt::new(125.0, -30.0),
+            Pt::new(125.0, 110.0),
+        ] {
+            brush_drag(&mut studio, point);
+        }
+        studio.end_pixel_stroke(false);
+        for point in [
+            Pt::new(-25.0, 20.0),
+            Pt::new(30.0, -30.0),
+            Pt::new(125.0, 60.0),
+        ] {
+            assert!(world_rgba(&studio, point)[3] > 200);
+        }
+        assert_eq!(world_rgba(&studio, Pt::new(30.0, 60.0)), [160, 170, 180, 255]);
+        assert_eq!(studio.history.len(), 1);
+        let after = crate::project::encode(&studio.doc).unwrap();
+        studio.undo();
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+        studio.redo();
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), after);
+    }
+
+    #[test]
+    fn brush_can_start_far_outside_an_empty_layer_without_allocating_the_gap() {
+        let mut studio = studio(96, 80);
+        studio.doc.layers[0].kind = crate::document::Layer::raster("Paint", 96, 80).kind;
+        let before = crate::project::encode(&studio.doc).unwrap();
+        let point = Pt::new(-250_000.0, 180_000.0);
+        start_brush(&mut studio, point);
+        studio.end_pixel_stroke(false);
+        assert!(world_rgba(&studio, point)[3] > 200);
+        let pixels = pixels(&studio, 0, false).unwrap();
+        assert!(pixels.w <= 128 && pixels.h <= 128);
+        let saved = crate::project::encode(&studio.doc).unwrap();
+        studio.doc = crate::project::decode(&saved).unwrap();
+        assert!(world_rgba(&studio, point)[3] > 200);
+        studio.undo();
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+        studio.redo();
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), saved);
+    }
+
+    #[test]
+    fn growing_transformed_raster_preserves_pixels_and_its_native_mask() {
+        let mut studio = studio(32, 24);
+        if let crate::document::LayerKind::Raster { origin, size, rotation, shear, .. } = &mut studio.doc.layers[0].kind {
+            *origin = Pt::new(200.0, -100.0);
+            *size = Pt::new(64.0, 72.0);
+            *rotation = 0.6;
+            *shear = 17.0;
+        }
+        let mut mask = Pixels::new(32, 24);
+        mask.data = [255, 255, 255, 255].repeat(32 * 24);
+        mask.data[(12 * 32 + 8) * 4..(12 * 32 + 8) * 4 + 4].fill(0);
+        mask.touch();
+        studio.doc.layers[0].mask = Some(mask);
+        let before = crate::project::encode(&studio.doc).unwrap();
+        let transform = crate::compositor::layer_pixel_transform(&studio.doc.layers[0]);
+        let world = |x, y| {
+            let mut point = tiny_skia::Point::from_xy(x, y);
+            transform.map_point(&mut point);
+            Pt::new(point.x, point.y)
+        };
+        let destination = world(-20.0, 60.0);
+        start_brush(&mut studio, destination);
+        studio.end_pixel_stroke(false);
+        assert!(world_rgba(&studio, destination)[3] > 200);
+        assert_eq!(world_rgba(&studio, world(8.5, 12.5)), [160, 170, 180, 255]);
+        let hole = studio.mask_point(0, world(8.5, 12.5));
+        assert_eq!(rgba(&studio, hole.x.floor() as u32, hole.y.floor() as u32, true), [0; 4]);
+        let outside = studio.mask_point(0, destination);
+        assert_eq!(rgba(&studio, outside.x.floor() as u32, outside.y.floor() as u32, true), [0; 4]);
+        for (x, y) in [(0.0, 0.0), (16.0, 12.0), (32.0, 24.0)] {
+            let local = studio.mask_point(0, world(x, y));
+            let reference = studio.mask_point(0, world(0.0, 0.0));
+            assert!((local.x - reference.x - x).abs() < 0.001);
+            assert!((local.y - reference.y - y).abs() < 0.001);
+        }
+        let after = crate::project::encode(&studio.doc).unwrap();
+        studio.undo();
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+        studio.redo();
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), after);
+    }
+
+    #[test]
+    fn cancelled_and_fully_selected_out_growth_restore_the_original_layer() {
+        let mut studio = studio(32, 24);
+        let before = crate::project::encode(&studio.doc).unwrap();
+        start_brush(&mut studio, Pt::new(-40.0, -30.0));
+        brush_drag(&mut studio, Pt::new(60.0, 60.0));
+        assert!(studio.end_pixel_stroke(true));
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+        assert_eq!(studio.history.len(), 0);
+        studio.set_pixel_sel(Some(vec![255; 32 * 24]));
+        studio.pixel_sel_space = None;
+        start_brush(&mut studio, Pt::new(-40.0, -30.0));
+        studio.end_pixel_stroke(false);
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+        assert_eq!(studio.history.len(), 0);
+        let selection = studio.pixel_sel_mask(0).unwrap();
+        assert_eq!(&*selection, &[255; 32 * 24]);
+    }
+
+    #[test]
+    fn a_feathered_world_selection_can_extend_beyond_the_current_pixel_grid() {
+        let mut studio = studio(32, 24);
+        studio.set_pixel_sel(Some(vec![128; 64 * 64]));
+        let mut space = studio.pixel_sel_space.unwrap();
+        space.w = 64;
+        space.h = 64;
+        space.transform = tiny_skia::Transform::from_translate(-16., -16.);
+        studio.pixel_sel_space = Some(space);
+        start_brush(&mut studio, Pt::new(-8., 12.));
+        brush_drag(&mut studio, Pt::new(60., 12.));
+        studio.end_pixel_stroke(false);
+        assert!((120..=135).contains(&world_rgba(&studio, Pt::new(-8., 12.))[3]));
+        assert_eq!(world_rgba(&studio, Pt::new(60., 12.))[3], 0);
+        assert_eq!(studio.pixel_sel_space, Some(space));
+        studio.undo();
+        assert_eq!((pixels(&studio, 0, false).unwrap().w, pixels(&studio, 0, false).unwrap().h), (32, 24));
+        assert_eq!(studio.pixel_sel_space, Some(space));
+    }
+
+    #[test]
+    fn rejected_growth_keeps_the_existing_stroke_and_accepts_later_valid_dabs() {
+        let mut studio = studio(32, 24);
+        start_brush(&mut studio, Pt::new(12.0, 12.0));
+        let original_dimensions = pixels(&studio, 0, false).map(|p| (p.w, p.h)).unwrap();
+        for point in [Pt::new(f32::NAN, 0.0), Pt::new(1_000_000.0, 1_000_000.0)] {
+            brush_drag(&mut studio, point);
+            let p = pixels(&studio, 0, false).unwrap();
+            assert_eq!((p.w, p.h), original_dimensions);
+        }
+        brush_drag(&mut studio, Pt::new(20.0, 12.0));
+        studio.end_pixel_stroke(false);
+        assert_ne!(world_rgba(&studio, Pt::new(12.0, 12.0)), [160, 170, 180, 255]);
+        assert_ne!(world_rgba(&studio, Pt::new(20.0, 12.0)), [160, 170, 180, 255]);
+        assert_eq!(studio.history.len(), 1);
     }
 
     #[test]

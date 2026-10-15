@@ -2498,6 +2498,10 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
 fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) {
     studio.reset_snap_gesture();
     match studio.op.take() {
+        Some(op @ (Op::Brush { .. } | Op::Retouch { .. } | Op::Smudge { .. } | Op::Clone { .. })) => {
+            studio.op = Some(op);
+            studio.end_pixel_stroke(false);
+        }
         Some(Op::Create {
             kind,
             start,
@@ -2669,51 +2673,6 @@ fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) 
                 );
             }
             commit_canvas_commands(studio, commands);
-        }
-        Some(Op::Brush {
-            layer,
-            mut buf,
-            before,
-            ..
-        }) => {
-            if let Some(mask) = studio.pixel_sel_mask(layer) {
-                paint::feather_overlay(&mut buf, &mask);
-            }
-            if let Some(px) = studio
-                .doc
-                .layers
-                .get_mut(layer)
-                .and_then(|l| l.kind.pixels_mut())
-                && let Some(mut pm) = px.to_pixmap()
-            {
-                paint::blend_onto(&mut pm, &buf, studio.brush.opacity);
-                *px = crate::document::Pixels::from_pixmap(&pm);
-                let after = px.data.clone();
-                studio.history.push(crate::document::Cmd::Pixels {
-                    layer,
-                    mask: false,
-                    before,
-                    after,
-                });
-                studio.dirty = true;
-            }
-        }
-        Some(Op::Retouch {
-            layer,
-            mask,
-            before,
-            ..
-        }) => super::retouch::finish(studio, layer, mask, before),
-        Some(Op::Smudge { layer, before, .. }) | Some(Op::Clone { layer, before, .. }) => {
-            if let Some(px) = studio.doc.layers.get(layer).and_then(|l| l.kind.pixels()) {
-                studio.history.push(crate::document::Cmd::Pixels {
-                    layer,
-                    mask: false,
-                    before,
-                    after: px.data.clone(),
-                });
-                studio.dirty = true;
-            }
         }
         Some(Op::Marquee {
             start,

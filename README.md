@@ -129,7 +129,7 @@ masks. Raster studio has **17 filters and 13 effects**, including chroma key wit
 sampling, similarity, falloff, hardness, spill cleanup and Flow. Compare the
 preview, Apply at full resolution and Undo as one edit. Raster treatments are
 applied pixel edits; live raster stacks and vector-object masks are not included.
-Brush packs include 13 original tips, including Square. The cursor follows the tip’s shape and angle. Set spacing up to 10,000%, rotate the tip, follow the stroke direction, and vary scatter, angle, size, and opacity. Save those settings in a portable brush pack. Wayland and X11 pen pressure can control Size and Flow independently. See the [brush guide](docs/brushes.md).
+Brush packs include 13 original tips, including Square. Paint across and outside artboards: pixel layers grow with the stroke. The cursor follows the tip’s shape and angle. Set spacing up to 10,000%, rotate the tip, follow the stroke direction, and vary scatter, angle, size, and opacity. Save those settings in a portable brush pack. Wayland and X11 pen pressure can control Size and Flow independently. See the [brush guide](docs/brushes.md).
 
 Photo: develop sliders, histogram, crop, Place in Design.
 

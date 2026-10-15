@@ -2937,7 +2937,7 @@ dependencies = [
 
 [[package]]
 name = "omadesign"
-version = "0.6.3-nightly.20261013.1"
+version = "0.6.4"
 dependencies = [
  "ab_glyph",
  "arboard",

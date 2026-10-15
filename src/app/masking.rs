@@ -85,19 +85,52 @@ impl Studio {
     /// Finish or restore an in-flight pixel edit before changing document context.
     /// Returning true lets Undo cancel the current gesture before touching history.
     pub(crate) fn end_pixel_stroke(&mut self, cancel: bool) -> bool {
-        let (layer, mask, before, buffer) = match self.op.take() {
+        if matches!(self.op, Some(Op::Brush { .. })) {
+            let Some(Op::Brush { layer, before, mut buf, .. }) = self.op.take() else {
+                unreachable!()
+            };
+            self.paint_contact = None;
+            self.brush.pressure = 1.0;
+            if !cancel
+                && let Some(selection) = self.cached_pixel_sel_mask(layer)
+            {
+                paint::feather_overlay(&mut buf, &selection);
+            }
+            if let Some(target) = self.doc.layers.get_mut(layer) {
+                if cancel || self.brush.opacity <= 0.0 || buf.pixels().iter().all(|p| p.alpha() == 0) {
+                    before.restore(target);
+                } else if let Some(pixels) = target.kind.pixels_mut() {
+                    if let Some(mut destination) = pixels.to_pixmap() {
+                        paint::blend_onto(&mut destination, &buf, self.brush.opacity);
+                        *pixels = Pixels::from_pixmap(&destination);
+                    }
+                    if pixels.data != before.kind.pixels().unwrap().data
+                        || target.kind.raster_xform() != before.kind.raster_xform()
+                    {
+                        let after = crate::document::RasterState::capture(target).unwrap();
+                        self.history.push(Cmd::PaintRaster {
+                            layer,
+                            before,
+                            after,
+                        });
+                        self.dirty = true;
+                    }
+                }
+            }
+            self.reset_snap_gesture();
+            self.mark();
+            return true;
+        }
+        let (layer, mask, before) = match self.op.take() {
             Some(Op::Retouch {
                 layer,
                 mask,
                 before,
                 ..
-            }) => (layer, mask, before, None),
+            }) => (layer, mask, before),
             Some(Op::Smudge { layer, before, .. } | Op::Clone { layer, before, .. }) => {
-                (layer, false, before, None)
+                (layer, false, before)
             }
-            Some(Op::Brush {
-                layer, before, buf, ..
-            }) => (layer, false, before, Some(buf)),
             other => {
                 self.op = other;
                 return false;
@@ -105,18 +138,6 @@ impl Studio {
         };
         self.paint_contact = None;
         self.brush.pressure = 1.0;
-        let buffer = if cancel {
-            // Undo/Escape discards the overlay; preparing its selection preview
-            // can scan millions of pixels that will never be displayed.
-            None
-        } else {
-            buffer.map(|mut buffer| {
-                if let Some(selection) = self.cached_pixel_sel_mask(layer) {
-                    paint::feather_overlay(&mut buffer, &selection);
-                }
-                buffer
-            })
-        };
         let Some(target) = self.doc.layers.get_mut(layer) else {
             return true;
         };
@@ -130,12 +151,6 @@ impl Studio {
                 pixels.data = before;
                 pixels.touch();
             } else {
-                if let Some(buffer) = buffer
-                    && let Some(mut destination) = pixels.to_pixmap()
-                {
-                    paint::blend_onto(&mut destination, &buffer, self.brush.opacity);
-                    *pixels = Pixels::from_pixmap(&destination);
-                }
                 if pixels.data != before {
                     self.history.push(Cmd::Pixels {
                         layer,
@@ -994,7 +1009,7 @@ mod tests {
             buf,
             preview: None,
             last: Some(Pt::new(4.0, 4.0)),
-            before: before.clone(),
+            before: crate::document::RasterState::capture(&studio.doc.layers[0]).unwrap(),
             selection_generation: studio.pixel_sel_gen,
         });
         assert!(studio.end_pixel_stroke(true));

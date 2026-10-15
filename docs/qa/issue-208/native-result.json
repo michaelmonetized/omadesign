@@ -1,0 +1,20 @@
+{
+  "canvas_bounds": true,
+  "frames": 45,
+  "import": "built-in Square",
+  "input": "egui pointer down, 20 drag samples, pointer up",
+  "original_grid": [
+    320,
+    180
+  ],
+  "packs_after_reload": 2,
+  "painted_grid": [
+    640,
+    448
+  ],
+  "painted_pixels": 60790,
+  "renderer": "native WGPU",
+  "save_reopen_exact": true,
+  "seconds": 9.563703536987305,
+  "undo_redo_exact": true
+}

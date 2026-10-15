@@ -15,6 +15,12 @@ SVG artwork is rendered to a sampled tip. Paint in your chosen foreground color,
 then adjust Size, Spacing, Flow, and Opacity. The cursor shows the selected tip’s visible boundary and angle. Sampled tips include their own edge. Save current settings as a brush,
 or export the selected pack to share it.
 
+Paint across and outside artboards, including negative canvas coordinates. Pixel
+layers grow with the brush; existing artwork stays in place. Undo restores both
+the stroke and the previous layer bounds. Selections and layer masks still limit
+where paint appears. Automatic growth supports up to 64 million pixels per layer;
+add another pixel layer when working across a larger area.
+
 Spacing ranges from 1% to 10,000% of the tip size and carries between input samples. Angle rotates the tip; **Follow stroke direction** turns it along the stroke. **Scatter and randomness** contains scatter distance and angle, size, and opacity jitter. Each stroke starts a fresh random pattern. Saved presets retain these controls.
 
 Wayland tablet tools and X11 tablets supply contact, release, position, and pressure. In the Brush inspector, enable pressure for Size and Flow independently. Dab spacing follows the pressure-scaled size, including very light strokes. Hover previews retain the chosen tip shape. Tablet pad buttons, tilt, physical tool rotation, and automatic reverse-side eraser switching are not brush controls yet. Third-party licenses still apply.

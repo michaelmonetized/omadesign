@@ -1664,6 +1664,35 @@ impl CanvasSettings {
     }
 }
 
+/// A paint layer's pixels, placement, and aligned mask.
+#[derive(Clone, Debug)]
+pub struct RasterState {
+    pub kind: LayerKind,
+    pub mask: Option<Pixels>,
+}
+
+impl RasterState {
+    /// Capture paint content before a stroke.
+    /// Takes a layer; returns its raster content, or None for a vector layer.
+    pub fn capture(layer: &Layer) -> Option<Self> {
+        layer.kind.pixels()?;
+        Some(Self {
+            kind: layer.kind.clone(),
+            mask: layer.mask.clone(),
+        })
+    }
+
+    /// Restore paint content without changing layer settings.
+    /// Takes the destination layer; returns nothing.
+    pub fn restore(self, layer: &mut Layer) {
+        layer.kind = self.kind;
+        if let Some(pixels) = layer.kind.pixels_mut() {
+            pixels.touch();
+        }
+        layer.mask = self.mask;
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum Cmd {
     SetCanvas { before: CanvasSettings, after: CanvasSettings },
@@ -1805,6 +1834,11 @@ pub enum Cmd {
         mask: bool,
         before: Vec<u8>,
         after: Vec<u8>,
+    },
+    PaintRaster {
+        layer: usize,
+        before: RasterState,
+        after: RasterState,
     },
     AddGuide {
         guide: Guide,
@@ -2317,6 +2351,11 @@ pub(crate) fn invert_cmd(cmd: Cmd) -> Cmd {
             before: after,
             after: before,
         },
+        Cmd::PaintRaster { layer, before, after } => Cmd::PaintRaster {
+            layer,
+            before: after,
+            after: before,
+        },
         Cmd::AddGuide { guide } => Cmd::RemoveGuide {
             index: usize::MAX,
             guide,
@@ -2678,6 +2717,11 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
                 l.locked = *locked;
                 l.opacity = *opacity;
                 l.blend = *blend;
+            }
+        }
+        Cmd::PaintRaster { layer, after, .. } => {
+            if let Some(layer) = doc.layers.get_mut(*layer) {
+                after.clone().restore(layer);
             }
         }
         Cmd::Pixels {

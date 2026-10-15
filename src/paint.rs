@@ -51,6 +51,12 @@ impl Default for Brush {
 }
 
 impl Brush {
+    /// Bound a dab including scatter, rotated corners, and antialiasing.
+    /// Takes this brush; returns the conservative radius in native pixels.
+    pub(crate) fn stroke_radius(&self) -> f32 {
+        (self.size * (std::f32::consts::FRAC_1_SQRT_2 + self.scatter)).max(1.0).ceil() + 2.0
+    }
+
     /// Keep dab spacing proportional to the pressure-scaled tip.
     /// Takes this brush and returns the distance between dabs, at least half a pixel.
     pub fn spacing_distance(&self) -> f32 {
@@ -108,10 +114,7 @@ impl PixelRegion {
     }
 
     pub fn stroke(w: u32, h: u32, from: Pt, to: Pt, brush: &Brush) -> Self {
-        let radius = (brush.size * (std::f32::consts::FRAC_1_SQRT_2 + brush.scatter))
-            .max(1.0)
-            .ceil()
-            + 2.0;
+        let radius = brush.stroke_radius();
         Self {
             x0: (from.x.min(to.x) - radius).floor().clamp(0.0, w as f32) as usize,
             y0: (from.y.min(to.y) - radius).floor().clamp(0.0, h as f32) as usize,

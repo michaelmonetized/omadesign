@@ -228,7 +228,7 @@ pub enum Op {
         buf: Pixmap,
         preview: Option<Pixmap>,
         last: Option<Pt>,
-        before: Vec<u8>,
+        before: crate::document::RasterState,
         selection_generation: u64,
     },
     Retouch {
