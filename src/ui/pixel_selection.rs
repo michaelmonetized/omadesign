@@ -12,6 +12,7 @@ type Job = Arc<Mutex<Option<Option<Preview>>>>;
 
 #[derive(Clone)]
 struct Session {
+    instance: Id,
     document: String,
     generation: u64,
     source: Arc<Vec<u8>>,
@@ -62,10 +63,12 @@ fn open(ctx: &Context, studio: &mut Studio, settings: Edit) {
     let Some(_) = crate::paint::selection_bounds(source, space.w, space.h) else {
         return;
     };
+    let instance = super::keyboard_controls::draft_id(ctx, "pixel-selection-radius");
     ctx.data_mut(|d| {
         d.insert_temp(
             id(),
             Session {
+                instance,
                 document: studio.swap_id.clone(),
                 generation: studio.pixel_sel_gen,
                 source: Arc::new(source.clone()),
@@ -151,6 +154,7 @@ pub(super) fn menu(ui: &mut Ui, studio: &mut Studio) {
 fn controls(ui: &mut Ui, session: &mut Session) -> super::fields::FieldResponse {
     let owner = Id::new((
         "selection-radius",
+        session.instance,
         &session.document,
         session.generation,
         session.initial.title(),
@@ -221,13 +225,7 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
             let field = ui
                 .add_enabled_ui(available, |ui| controls(ui, &mut session))
                 .inner;
-            if field.changed || field.committed || field.cancelled {
-                session.draft_valid = true;
-            } else if field.response.enabled()
-                && (field.response.changed() || field.response.lost_focus())
-            {
-                session.draft_valid = false;
-            }
+            session.draft_valid = super::fields::number_is_valid(&field);
             ui.separator();
             let ready = session.rendered == Some(session.settings) && !session.error;
             if !ready && !session.error {
@@ -252,13 +250,15 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
                 ui.label("This will leave an empty selection.");
             }
             ui.horizontal(|ui| {
-                cancel = ui.button("Cancel").clicked();
-                apply = ui
-                    .add_enabled(
-                        available && ready && session.draft_valid,
-                        egui::Button::new("Apply"),
-                    )
-                    .clicked();
+                let response = ui.button("Cancel");
+                super::welcome::focus_control(ui, &response);
+                cancel = response.clicked();
+                let response = ui.add_enabled(
+                    available && ready && session.draft_valid,
+                    egui::Button::new("Apply"),
+                );
+                super::welcome::focus_control(ui, &response);
+                apply = available && session.draft_valid && response.clicked();
             });
         });
     if !opened || cancel || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -515,6 +515,10 @@ mod keyboard_tests {
         });
         keys::focused(&ctx, &output, "Selection radius (px)");
         let radius_id = keys::named(&output, "Selection radius (px)").0;
+        let output = keys::replace("letters", |events| frame(&ctx, &mut studio, events));
+        keys::associated_error(&output, "Selection radius (px)");
+        assert!(keys::named(&output, "Apply").1.is_disabled());
+        assert_eq!(studio.pixel_sel.as_ref().unwrap(), &before);
         keys::replace("2", |events| frame(&ctx, &mut studio, events));
         frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
         settle(&ctx, &mut studio);

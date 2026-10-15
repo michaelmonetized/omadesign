@@ -291,6 +291,40 @@ fn window(output: &egui::FullOutput) -> (egui::accesskit::NodeId, egui::Rect) {
     )
 }
 
+fn painted_window(output: &egui::FullOutput, layout: &Workspace) -> egui::Rect {
+    let saved = layout
+        .groups
+        .iter()
+        .find(|group| {
+            group.place == Place::Floating && group.panels.contains(&"properties".to_string())
+        })
+        .unwrap();
+    let actual = egui::Rect::from_min_size(
+        egui::pos2(saved.rect[0], saved.rect[1]),
+        egui::vec2(saved.rect[2], saved.rect[3]),
+    );
+    fn matches(shape: &egui::Shape, rect: egui::Rect) -> bool {
+        match shape {
+            egui::Shape::Rect(shape) => {
+                shape.fill.a() > 0
+                    && (shape.rect.min - rect.min).length() <= 1.
+                    && (shape.rect.size() - rect.size()).length() <= 1.
+            }
+            egui::Shape::Vec(shapes) => shapes.iter().any(|shape| matches(shape, rect)),
+            _ => false,
+        }
+    }
+    assert!(
+        output
+            .shapes
+            .iter()
+            .any(|shape| shape.clip_rect.expand(1.).contains_rect(actual)
+                && matches(&shape.shape, actual)),
+        "native frame must paint its returned footprint {actual:?}"
+    );
+    actual
+}
+
 #[test]
 fn keyboard_shared_floating_size_renders_once_then_allows_native_resize_and_reopen() {
     let ctx = egui::Context::default();
@@ -326,12 +360,18 @@ fn keyboard_shared_floating_size_renders_once_then_allows_native_resize_and_reop
         egui::vec2(480., 300.)
     ));
     let output = workspace_frame(&ctx, &mut layout, vec![]);
-    let (id, requested) = window(&output);
+    let (id, _) = window(&output);
+    let requested = painted_window(&output, &layout);
     assert_eq!(id, original_id);
     assert!((requested.width() - 480.).abs() <= 1., "{requested:?}");
     assert!((requested.height() - 300.).abs() <= 1., "{requested:?}");
     let output = workspace_frame(&ctx, &mut layout, vec![]);
-    assert_eq!(window(&output).1, requested);
+    assert_eq!(painted_window(&output, &layout), requested);
+    assert_eq!(
+        window(&output).1,
+        requested,
+        "native window bounds follow the rendered footprint"
+    );
     let start = requested.right_bottom() - egui::vec2(2., 2.);
     let end = start + egui::vec2(48., 36.);
     workspace_frame(
@@ -358,7 +398,7 @@ fn keyboard_shared_floating_size_renders_once_then_allows_native_resize_and_reop
             modifiers: Modifiers::NONE,
         }],
     );
-    let resized = window(&output).1;
+    let resized = painted_window(&output, &layout);
     assert!(resized.width() > requested.width() + 20., "{resized:?}");
     assert!(resized.height() > requested.height() + 10., "{resized:?}");
     let mut book = Book::default();
@@ -383,8 +423,9 @@ fn keyboard_shared_floating_size_renders_once_then_allows_native_resize_and_reop
     for _ in 0..3 {
         output = workspace_frame(&fresh, layout, vec![]);
     }
-    assert!((window(&output).1.width() - resized.width()).abs() <= 1.);
-    assert!((window(&output).1.height() - resized.height()).abs() <= 1.);
+    let actual = painted_window(&output, layout);
+    assert!((actual.width() - resized.width()).abs() <= 1.);
+    assert!((actual.height() - resized.height()).abs() <= 1.);
 }
 
 fn focus_frame(

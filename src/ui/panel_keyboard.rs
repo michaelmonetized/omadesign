@@ -1,3 +1,4 @@
+use super::keyboard_controls::choice;
 use super::workspace::{Book, Group, Place, Workspace};
 use eframe::egui::{self, Id, Key, Modifiers, Ui};
 
@@ -54,6 +55,7 @@ pub(super) struct PanelRequest {
 
 #[derive(Clone)]
 struct Dialog {
+    instance: Id,
     task: String,
     baseline: Workspace,
     panel: String,
@@ -87,6 +89,7 @@ impl Dialog {
             .map_or("", |p| p.0)
             .into();
         Some(Self {
+            instance: super::keyboard_controls::draft_id(ctx, ID),
             task: book.active.clone(),
             baseline,
             panel,
@@ -202,97 +205,6 @@ fn number(
     super::fields::number_is_valid(&result)
 }
 
-/// Choose an existing panel target or operation through its native combo.
-/// Args: UI, stable property, visible name, selected value and available choices.
-/// Returns the native response, retaining focus after keyboard selection.
-fn choice<T: Clone + PartialEq>(
-    ui: &mut Ui,
-    id: &str,
-    label: &str,
-    value: &mut T,
-    options: &[(T, String)],
-) -> egui::Response {
-    let id = ui.make_persistent_id(id);
-    super::fields::native_scope(ui, id, |ui| {
-        let label_response = ui.label(label);
-        let before = value.clone();
-        let mut selected = false;
-        let mut response = egui::ComboBox::from_id_salt("value")
-            .selected_text(
-                options
-                    .iter()
-                    .find(|(key, _)| key == value)
-                    .map_or("Choose…", |(_, name)| name.as_str()),
-            )
-            .show_ui(ui, |ui| {
-                for (key, name) in options {
-                    let item = ui.selectable_value(value, key.clone(), name);
-                    super::welcome::focus_control(ui, &item);
-                    selected |= item.clicked();
-                }
-            })
-            .response
-            .labelled_by(label_response.id);
-        if selected {
-            response.request_focus();
-        }
-        if response.enabled() && response.has_focus() {
-            ui.memory_mut(|memory| {
-                memory.set_focus_lock_filter(
-                    response.id,
-                    egui::EventFilter {
-                        horizontal_arrows: true,
-                        vertical_arrows: true,
-                        ..Default::default()
-                    },
-                )
-            });
-            if !egui::ComboBox::is_open(ui.ctx(), response.id) && !options.is_empty() {
-                let index = options
-                    .iter()
-                    .position(|(key, _)| key == value)
-                    .unwrap_or(0);
-                let next = ui.input_mut(|input| {
-                    if input.consume_key(Modifiers::NONE, Key::ArrowDown)
-                        || input.consume_key(Modifiers::NONE, Key::ArrowRight)
-                    {
-                        Some((index + 1).min(options.len() - 1))
-                    } else if input.consume_key(Modifiers::NONE, Key::ArrowUp)
-                        || input.consume_key(Modifiers::NONE, Key::ArrowLeft)
-                    {
-                        Some(index.saturating_sub(1))
-                    } else if input.consume_key(Modifiers::NONE, Key::Home) {
-                        Some(0)
-                    } else if input.consume_key(Modifiers::NONE, Key::End) {
-                        Some(options.len() - 1)
-                    } else {
-                        None
-                    }
-                });
-                if let Some(index) = next {
-                    *value = options[index].0.clone();
-                    ui.memory_mut(|memory| memory.move_focus(egui::FocusDirection::None));
-                }
-            }
-        }
-        if *value != before {
-            response.mark_changed();
-        }
-        response.widget_info(|| {
-            let mut info =
-                egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, response.enabled(), label);
-            info.current_text_value = options
-                .iter()
-                .find(|(key, _)| key == value)
-                .map(|(_, name)| name.clone());
-            info
-        });
-        super::welcome::focus_control(ui, &response);
-        response
-    })
-    .inner
-}
-
 pub(super) fn is_open(ctx: &egui::Context) -> bool {
     ctx.data(|data| data.get_temp::<Dialog>(Id::new(ID)).is_some())
 }
@@ -344,7 +256,7 @@ pub(super) fn show(
                 .cloned()
                 .unwrap_or_default();
         }
-        ui.push_id((ID, &dialog.task, &dialog.panel), |ui| {
+        ui.push_id((ID, dialog.instance, &dialog.task, &dialog.panel), |ui| {
             let actions = Action::ALL
                 .into_iter()
                 .map(|action| (action, action.label().into()))
@@ -500,8 +412,16 @@ mod tests {
     fn frame(
         ctx: &egui::Context,
         book: &mut Book,
-        events: Vec<egui::Event>,
+        mut events: Vec<egui::Event>,
     ) -> (egui::FullOutput, f32) {
+        let modifiers = events
+            .iter()
+            .find_map(|event| match event {
+                egui::Event::Key { modifiers, .. } => Some(*modifiers),
+                _ => None,
+            })
+            .unwrap_or_default();
+        events.insert(0, egui::Event::ModifiersChanged(modifiers));
         let mut left = 0.;
         let mut output = ctx.run_ui(
             egui::RawInput {
@@ -703,6 +623,18 @@ mod tests {
         frame(&ctx, &mut book, key(Key::Enter, Modifiers::NONE));
         assert!(!is_open(&ctx));
         assert_eq!(book, before);
+        open(&ctx, &mut book);
+        action(&ctx, &mut book, "Resize panel");
+        let output = frame(&ctx, &mut book, vec![]).0;
+        assert_eq!(keys::named(&output, "Dock size").1.invalid(), None);
+        assert!(!keys::named(&output, "Apply panel").1.is_disabled());
+        tab_to(&ctx, &mut book, "Dock size");
+        keys::replace("320", |events| frame(&ctx, &mut book, events).0);
+        apply(&ctx, &mut book);
+        assert_eq!(
+            group(&book.tasks["Design"], "properties").unwrap().extent,
+            320.
+        );
     }
 
     #[test]

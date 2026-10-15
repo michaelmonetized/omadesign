@@ -25,6 +25,7 @@ mod key_hud;
 pub(crate) mod keyboard_authoring;
 pub(crate) mod keyboard_tools;
 mod panel_keyboard;
+mod keyboard_controls;
 #[cfg(test)]
 mod key_hud_tests;
 mod layer_drag;
