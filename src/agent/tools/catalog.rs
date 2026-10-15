@@ -129,6 +129,13 @@ pub fn extended() -> Vec<Value> {
             true,
         ),
         (
+            "set_expression",
+            "Set or remove a bounded numeric expression without changing keys. Arithmetic, time/value/duration/fps/pi/tau, sin/cos/abs/sqrt/floor/ceil/round, min/max/clamp/lerp/smoothstep, seeded random(seed)/noise(x,seed), property(id,X). Native rotation is radians. No scripts or IO; get_motion returns named evaluation errors.",
+            json!({"layer":i,"id":i,"property":s,"source":s,"remove":b}),
+            vec!["layer","id","property"],
+            true,
+        ),
+        (
             "set_keyframes",
             "Add/update or remove keys on vector objects or raster images. id=0 selects raster layer. property uses names from get_editor_capabilities. Rotation is degrees; x/y are offsets, scale/width/height are multipliers, opacity/reveal 0–1. Key ease is Linear, EaseIn, EaseOut or EaseInOut. Fill keys use hex color. One undo step.",
             json!({"layer":i,"id":i,"property":s,"remove":b,"keys":{"type":"array","minItems":1,"maxItems":1000,"items":{"type":"object","properties":{"time":n,"value":n,"color":s,"ease":{"enum":["Linear","EaseIn","EaseOut","EaseInOut"]}},"required":["time"],"additionalProperties":false}}}),

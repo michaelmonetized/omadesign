@@ -13,11 +13,29 @@ pub fn execute(studio: &mut Studio, name: &str, args: &Value) -> Result<Value, S
             .collect();
         let next = offset.saturating_add(tracks.len());
         return Ok(
-            json!({"duration":studio.doc.motion.duration,"fps":studio.doc.motion.fps,"looped":studio.doc.motion.looped,"time":studio.playhead,"playing":studio.playing,"tracks":tracks,"next_offset":(next<studio.doc.motion.tracks.len()).then_some(next),"revision":studio.canvas_gen}),
+            json!({"duration":studio.doc.motion.duration,"fps":studio.doc.motion.fps,"looped":studio.doc.motion.looped,"time":studio.playhead,"playing":studio.playing,"tracks":tracks,"expressions":studio.doc.motion.expressions,"error":studio.doc.motion.evaluate_frame(studio.playhead,&mut ||true).err(),"next_offset":(next<studio.doc.motion.tracks.len()).then_some(next),"revision":studio.canvas_gen}),
         );
     }
     let mut after = studio.doc.motion.clone();
     match name {
+        "set_expression" => {
+            let li = index(args, "layer")?;
+            let id = index(args, "id")? as u64;
+            editing::target(studio, li, id)?;
+            let target = crate::motion::target(&studio.doc, li, id).ok_or("No animation target")?;
+            let prop: Prop =
+                serde_json::from_value(args["property"].clone()).map_err(|_| "Unknown property")?;
+            let source = if args["remove"].as_bool().unwrap_or(false) {
+                None
+            } else {
+                Some(text(args, "source", "")?)
+            };
+            after.set_expression(target.id, prop, source)?;
+            studio.commit(Cmd::Batch(vec![Cmd::SetMotion {
+                before: studio.doc.motion.clone(),
+                after,
+            }]));
+        }
         "set_motion" => {
             after.duration = number(args, "duration", after.duration)?;
             after.fps = number(args, "fps", after.fps)?;
@@ -161,7 +179,11 @@ pub fn execute(studio: &mut Studio, name: &str, args: &Value) -> Result<Value, S
                 crate::motion_presets::apply(&studio.doc.motion, preset, &targets, time, options)?;
             if !(0.0..=3600.0).contains(&time)
                 || !(0.01..=3600.0).contains(&after.duration)
-                || after.tracks.iter().flat_map(|track| &track.keys).any(|key| !(0.0..=3600.0).contains(&key.t))
+                || after
+                    .tracks
+                    .iter()
+                    .flat_map(|track| &track.keys)
+                    .any(|key| !(0.0..=3600.0).contains(&key.t))
             {
                 return Err("Preset and all staggered keys must fit within 0–3600 seconds".into());
             }

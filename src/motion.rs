@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
+pub mod expressions;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Prop {
     X,
@@ -180,6 +182,8 @@ pub struct Motion {
     pub looped: bool,
     #[serde(default)]
     pub tracks: Vec<Track>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub expressions: Vec<expressions::Expression>,
 }
 
 impl Default for Motion {
@@ -189,6 +193,7 @@ impl Default for Motion {
             fps: 30.0,
             looped: true,
             tracks: vec![],
+            expressions: vec![],
         }
     }
 }
@@ -220,6 +225,25 @@ pub struct Pose {
 }
 
 impl Pose {
+    fn set_numeric(&mut self, prop: Prop, value: f32) {
+        match prop {
+            Prop::X => self.dx = value,
+            Prop::Y => self.dy = value,
+            Prop::Rotation => self.rotation = value,
+            Prop::Scale => self.scale = value,
+            Prop::Width => self.width_scale = value,
+            Prop::Height => self.height_scale = value,
+            Prop::Opacity => self.opacity = Some(value.clamp(0., 1.)),
+            Prop::StrokeReveal => self.stroke_reveal = Some(value.clamp(0., 1.)),
+            Prop::FillReveal => self.fill_reveal = Some(value.clamp(0., 1.)),
+            Prop::GradientAngle => self.gradient_angle = Some(value),
+            Prop::StrokeWidth => self.stroke_width = Some(value),
+            Prop::Dash => self.dash = Some(value),
+            Prop::Gap => self.gap = Some(value),
+            Prop::DashLength => self.dash_length = Some(value),
+            Prop::Fill => (),
+        }
+    }
     pub fn identity() -> Self {
         Self {
             dx: 0.0,
@@ -316,10 +340,25 @@ impl Pose {
 
 impl Motion {
     pub fn is_empty(&self) -> bool {
-        self.tracks.iter().all(|t| t.keys.is_empty())
+        self.tracks.iter().all(|t| t.keys.is_empty()) && !self.expressions.iter().any(|e| e.enabled)
     }
 
     pub fn value(&self, shape: u64, prop: Prop, t: f32) -> Option<f32> {
+        if self
+            .expressions
+            .iter()
+            .any(|e| e.shape == shape && e.prop == prop && e.enabled)
+        {
+            return expressions::Evaluation::new(self, t, &mut || true)
+                .value(shape, prop)
+                .ok()
+                .flatten()
+                .or_else(|| self.key_value(shape, prop, t));
+        }
+        self.key_value(shape, prop, t)
+    }
+
+    fn key_value(&self, shape: u64, prop: Prop, t: f32) -> Option<f32> {
         let track = self
             .tracks
             .iter()
@@ -328,23 +367,107 @@ impl Motion {
     }
 
     pub fn pose(&self, shape: u64, t: f32) -> Pose {
-        Pose {
-            dx: self.value(shape, Prop::X, t).unwrap_or(0.0),
-            dy: self.value(shape, Prop::Y, t).unwrap_or(0.0),
-            rotation: self.value(shape, Prop::Rotation, t).unwrap_or(0.0),
-            scale: self.value(shape, Prop::Scale, t).unwrap_or(1.0),
-            width_scale: self.value(shape, Prop::Width, t).unwrap_or(1.0),
-            height_scale: self.value(shape, Prop::Height, t).unwrap_or(1.0),
-            opacity: self.value(shape, Prop::Opacity, t),
-            stroke_reveal: self.value(shape, Prop::StrokeReveal, t),
-            fill_reveal: self.value(shape, Prop::FillReveal, t),
-            gradient_angle: self.value(shape, Prop::GradientAngle, t),
-            stroke_width: self.value(shape, Prop::StrokeWidth, t),
-            fill_color: self.color_value(shape, Prop::Fill, t),
-            dash: self.value(shape, Prop::Dash, t),
-            gap: self.value(shape, Prop::Gap, t),
-            dash_length: self.value(shape, Prop::DashLength, t),
+        let mut pose = self.keyed_pose(shape, t);
+        let mut keep = || true;
+        let mut evaluation = expressions::Evaluation::new(self, t, &mut keep);
+        for expression in self
+            .expressions
+            .iter()
+            .filter(|e| e.shape == shape && e.enabled)
+        {
+            if let Ok(Some(value)) = evaluation.value(shape, expression.prop) {
+                pose.set_numeric(expression.prop, value);
+            }
         }
+        pose
+    }
+
+    fn keyed_pose(&self, shape: u64, t: f32) -> Pose {
+        Pose {
+            dx: self.key_value(shape, Prop::X, t).unwrap_or(0.0),
+            dy: self.key_value(shape, Prop::Y, t).unwrap_or(0.0),
+            rotation: self.key_value(shape, Prop::Rotation, t).unwrap_or(0.0),
+            scale: self.key_value(shape, Prop::Scale, t).unwrap_or(1.0),
+            width_scale: self.key_value(shape, Prop::Width, t).unwrap_or(1.0),
+            height_scale: self.key_value(shape, Prop::Height, t).unwrap_or(1.0),
+            opacity: self.key_value(shape, Prop::Opacity, t),
+            stroke_reveal: self.key_value(shape, Prop::StrokeReveal, t),
+            fill_reveal: self.key_value(shape, Prop::FillReveal, t),
+            gradient_angle: self.key_value(shape, Prop::GradientAngle, t),
+            stroke_width: self.key_value(shape, Prop::StrokeWidth, t),
+            fill_color: self.color_value(shape, Prop::Fill, t),
+            dash: self.key_value(shape, Prop::Dash, t),
+            gap: self.key_value(shape, Prop::Gap, t),
+            dash_length: self.key_value(shape, Prop::DashLength, t),
+        }
+    }
+
+    /// Evaluate all expression targets under one cancellable frame budget.
+    /// Args: sample time and keep-going callback. Returns pose overrides or a named error.
+    pub fn evaluate_frame(
+        &self,
+        time: f32,
+        keep: &mut dyn FnMut() -> bool,
+    ) -> Result<HashMap<u64, Pose>, expressions::Error> {
+        let mut poses = HashMap::new();
+        let mut evaluation = expressions::Evaluation::new(self, time, keep);
+        if self.expressions.len() > expressions::MAX_EXPRESSIONS {
+            return Err(expressions::Error {
+                code: expressions::ErrorCode::WorkLimit,
+                shape: 0,
+                prop: Prop::X,
+                message: "at most 256 expressions per composition".into(),
+            });
+        }
+        for expression in self.expressions.iter().filter(|e| e.enabled) {
+            let value = evaluation.value(expression.shape, expression.prop)?;
+            if let Some(value) = value {
+                poses
+                    .entry(expression.shape)
+                    .or_insert_with(|| self.keyed_pose(expression.shape, time))
+                    .set_numeric(expression.prop, value);
+            }
+        }
+        Ok(poses)
+    }
+
+    /// Replace a numeric expression while preserving keys underneath it.
+    /// Args: persistent id, channel and optional source. Returns validation errors without mutation.
+    pub fn set_expression(
+        &mut self,
+        shape: u64,
+        prop: Prop,
+        source: Option<String>,
+    ) -> Result<(), String> {
+        if prop == Prop::Fill {
+            return Err("Fill expressions require a numeric channel".into());
+        }
+        if source
+            .as_ref()
+            .is_some_and(|s| s.len() > expressions::MAX_SOURCE)
+        {
+            return Err("WorkLimit: expression exceeds 4096 bytes".into());
+        }
+        if source.is_some()
+            && self.expressions.len() >= expressions::MAX_EXPRESSIONS
+            && !self
+                .expressions
+                .iter()
+                .any(|e| e.shape == shape && e.prop == prop)
+        {
+            return Err("WorkLimit: at most 256 expressions per composition".into());
+        }
+        self.expressions
+            .retain(|e| e.shape != shape || e.prop != prop);
+        if let Some(source) = source.filter(|s| !s.trim().is_empty()) {
+            self.expressions.push(expressions::Expression {
+                shape,
+                prop,
+                source,
+                enabled: true,
+            });
+        }
+        Ok(())
     }
 
     /// Sample a fill color. Empty when this shape has no fill keys.
@@ -402,6 +525,7 @@ impl Motion {
 
     pub fn has_shape(&self, id: u64) -> bool {
         self.tracks.iter().any(|tr| tr.shape == id)
+            || self.expressions.iter().any(|e| e.shape == id)
     }
 
     pub fn key_after_remove(
@@ -426,14 +550,17 @@ impl Motion {
 
     pub fn drop_shape(&mut self, id: u64) {
         self.tracks.retain(|tr| tr.shape != id);
+        self.expressions.retain(|e| e.shape != id);
     }
 
     pub fn drop_shapes(&mut self, ids: &[u64]) {
         self.tracks.retain(|tr| !ids.contains(&tr.shape));
+        self.expressions.retain(|e| !ids.contains(&e.shape));
     }
 
     pub fn shapes(&self) -> Vec<u64> {
         let mut ids: Vec<u64> = self.tracks.iter().map(|t| t.shape).collect();
+        ids.extend(self.expressions.iter().map(|e| e.shape));
         ids.sort_unstable();
         ids.dedup();
         ids
@@ -470,6 +597,14 @@ impl Motion {
 
     pub fn sample_times(&self, shape: u64) -> Vec<f32> {
         let mut times = self.key_times(shape);
+        if self
+            .expressions
+            .iter()
+            .any(|e| e.shape == shape && e.enabled)
+        {
+            let count = (self.duration * self.fps).ceil().clamp(1., 10_000.) as usize;
+            times.extend((0..=count).map(|i| self.duration * i as f32 / count as f32));
+        }
         if times.is_empty() {
             return times;
         }
@@ -750,7 +885,12 @@ pub fn hits_in_rect(
 /// Lottie shape export. Unsupported raster masks/effects fail explicitly;
 /// animated SVG remains the complete document export for those compositions.
 pub fn export_lottie(doc: &Document) -> Result<String, String> {
-    if !doc.mask_sources().is_empty() {return Err("Lottie cannot preserve live artwork masks here. Export animated SVG to keep them.".into());}
+    if !doc.mask_sources().is_empty() {
+        return Err(
+            "Lottie cannot preserve live artwork masks here. Export animated SVG to keep them."
+                .into(),
+        );
+    }
     let fps = doc.motion.fps.clamp(1.0, 120.0);
     let op = (doc.motion.duration * fps).max(1.0);
     let mut layers = Vec::new();
@@ -1179,6 +1319,7 @@ pub fn import_lottie(json: &str) -> Result<LottieImport, String> {
         fps,
         looped: true,
         tracks: vec![],
+        ..Motion::default()
     };
     let mut shapes = Vec::new();
     for layer in layers.iter().rev() {

@@ -221,7 +221,9 @@ pub fn render_view_posed(
     draw_plates(&mut pm, doc, view);
 
     let t = view.transform();
-    groups::draw(&mut pm, doc, t, &draft, motion_t, overrides);
+    let mut poses = motion_t.and_then(|time| doc.motion.evaluate_frame(time, &mut || true).ok()).unwrap_or_default();
+    if let Some(overrides) = overrides { poses.extend(overrides.iter().map(|(id, pose)| (*id, *pose))); }
+    groups::draw(&mut pm, doc, t, &draft, motion_t, Some(&poses));
     Some(pm)
 }
 
@@ -264,12 +266,26 @@ pub fn render_export_at(
     time: f32,
     transparent: bool,
 ) -> Result<Pixmap, String> {
+    render_export_at_cancellable(doc, scale, time, transparent, &mut || true)
+}
+
+/// Render a motion frame with a shared expression budget and cancellation.
+/// Args: document, scale, sample time, alpha policy and keep-going callback. Returns pixels or a named error.
+pub fn render_export_at_cancellable(
+    doc: &Document,
+    scale: f32,
+    time: f32,
+    transparent: bool,
+    keep: &mut dyn FnMut() -> bool,
+) -> Result<Pixmap, String> {
+    if !keep() { return Err("Cancelled: render cancelled".into()); }
     let s = if scale.is_finite() {
         scale.clamp(0.1, 8.0)
     } else {
         1.0
     };
     let time = if time.is_finite() { time } else { 0.0 };
+    let poses = doc.motion.evaluate_frame(time, keep).map_err(|e| e.to_string())?;
     let w = (doc.width * s).round().max(1.0) as u32;
     let h = (doc.height * s).round().max(1.0) as u32;
     let mut pm = Pixmap::new(w, h).ok_or("could not allocate export pixmap")?;
@@ -280,7 +296,8 @@ pub fn render_export_at(
         }
     }
     let t = Transform::from_scale(s, s);
-    groups::draw(&mut pm, doc, t, &Draft::none(), Some(time), None);
+    groups::draw(&mut pm, doc, t, &Draft::none(), Some(time), Some(&poses));
+    if !keep() { return Err("Cancelled: render cancelled".into()); }
     Ok(pm)
 }
 
