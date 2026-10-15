@@ -1935,11 +1935,18 @@ const MAX_HISTORY: usize = 200;
 pub struct History {
     undo: Vec<Cmd>,
     redo: Vec<Cmd>,
+    field: Option<u64>,
+    sealed: bool,
 }
+
+#[path = "document/input_history.rs"]
+mod input_history;
 
 impl History {
     pub fn push(&mut self, cmd: Cmd) {
-        if let Some(prev) = self.undo.last_mut()
+        self.field = None;
+        if !std::mem::take(&mut self.sealed)
+            && let Some(prev) = self.undo.last_mut()
             && coalesce(prev, &cmd)
         {
             self.redo.clear();
@@ -1960,6 +1967,8 @@ impl History {
     }
 
     pub fn undo(&mut self) -> Option<Cmd> {
+        self.field = None;
+        self.sealed = true;
         let cmd = self.undo.pop()?;
         let inv = invert_cmd(cmd.clone());
         self.redo.push(cmd);
@@ -1967,6 +1976,8 @@ impl History {
     }
 
     pub fn redo(&mut self) -> Option<Cmd> {
+        self.field = None;
+        self.sealed = true;
         let cmd = self.redo.pop()?;
         self.undo.push(cmd.clone());
         Some(cmd)
@@ -1975,6 +1986,8 @@ impl History {
     pub fn clear(&mut self) {
         self.undo.clear();
         self.redo.clear();
+        self.field = None;
+        self.sealed = false;
     }
 
     pub fn len(&self) -> usize {

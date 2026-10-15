@@ -10,6 +10,10 @@ use eframe::egui::Ui;
 /// Edit a mixed vector selection without changing untouched properties.
 /// Args: panel UI and studio. Returns true when the selection was handled.
 pub(super) fn mixed(ui: &mut Ui, studio: &mut Studio) -> bool {
+    studio.with_field_history(ui, "mixed-transform", |ui, studio| mixed_contents(ui, studio))
+}
+
+fn mixed_contents(ui: &mut Ui, studio: &mut Studio) -> bool {
     if studio.selection.len() < 2 {
         return false;
     }
@@ -73,7 +77,7 @@ pub(super) fn mixed(ui: &mut Ui, studio: &mut Studio) -> bool {
                 .any(|value| (value[index] - after[index]).abs() > 0.001),
             ..Default::default()
         };
-        changed[index] = fields::number(
+        let field = fields::number(
             ui,
             ("mixed-transform", index),
             label,
@@ -82,8 +86,8 @@ pub(super) fn mixed(ui: &mut Ui, studio: &mut Studio) -> bool {
             unit,
             reset,
             state,
-        )
-        .changed;
+        );
+        changed[index] = crate::app::input_history::record(field.response, field.changed);
     }
     apply(studio, after, changed);
     true
