@@ -505,12 +505,20 @@ mod tests {
 
     fn apply(ctx: &egui::Context, book: &mut Book) -> egui::FullOutput {
         tab_to(ctx, book, "Apply panel");
-        frame(ctx, book, key(Key::Enter, Modifiers::NONE));
+        let first=frame(ctx, book, key(Key::Enter, Modifiers::NONE)).0;
         assert!(!is_open(ctx));
+        let panel=book.tasks["Design"].focus.as_deref().unwrap();
+        let label=REGISTRY.iter().find(|entry|entry.0==panel).unwrap().1;
+        let observed=|output:&egui::FullOutput|output.platform_output.events.iter().any(|event|
+            matches!(event,egui::output::OutputEvent::FocusGained(info) if info.label.as_deref()==Some(label)&&info.enabled));
+        let mut native_event=observed(&first);
         let mut output = frame(ctx, book, vec![]).0;
+        native_event|=observed(&output);
         for _ in 0..2 {
             output = frame(ctx, book, vec![]).0;
+            native_event|=observed(&output);
         }
+        assert!(native_event,"Actual native FocusGained must name the requested panel {label}");
         output
     }
 

@@ -411,7 +411,18 @@ impl Workspace {
                             && response.enabled()
                             && ui.memory(|memory| memory.allows_interaction(response.layer_id))
                         {
+                            let already_focused = response.has_focus();
                             response.request_focus();
+                            if !already_focused && response.gained_focus() {
+                                response.widget_info(|| {
+                                    egui::WidgetInfo::selected(
+                                        egui::WidgetType::Button,
+                                        response.enabled(),
+                                        tab == group.active,
+                                        panel_label(panel),
+                                    )
+                                });
+                            }
                             focus_delivered = true;
                         }
                         if response.clicked() {
