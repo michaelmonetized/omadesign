@@ -15,6 +15,7 @@ pub mod compound;
 pub mod document;
 pub mod filter;
 pub mod formats;
+pub mod publishing;
 pub mod geom;
 pub mod google_fonts;
 pub mod gradient;

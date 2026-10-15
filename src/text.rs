@@ -369,6 +369,13 @@ fn font_bytes(path: &Path) -> Option<Arc<Vec<u8>>> {
     Some(arc)
 }
 
+/// Share the composer's resolved font bytes with format writers.
+/// Args: text run. Returns cached font bytes, including project fonts, or None.
+pub(crate) fn font_bytes_for(run: &TypeRun) -> Option<Arc<Vec<u8>>> {
+    resolve_path(run).and_then(|path| font_bytes(&path))
+}
+
+
 fn ot_features(run: &TypeRun) -> Vec<rustybuzz::Feature> {
     let tag = |b: &[u8; 4]| rustybuzz::ttf_parser::Tag::from_bytes(b);
     let feat = |bytes: &[u8; 4], on: bool| rustybuzz::Feature::new(tag(bytes), u32::from(on), ..);

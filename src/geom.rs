@@ -766,16 +766,19 @@ pub enum KeepTogether { #[default] None, All, Edges { first: u8, last: u8 } }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ParagraphStyle {
+    pub publishing_style: Option<String>,
     pub start: usize, pub align: TextAlign, pub word_spacing: [f32; 3], pub letter_spacing: [f32; 3],
     pub break_mode: BreakMode, pub overflow_wrap: bool, pub hyphenate: bool, pub hyphen: Option<HyphenSettings>,
     pub min_start_lines: u8, pub min_end_lines: u8, pub allow_orphans: bool, pub runt: Option<RuntRule>,
     pub keep_with_next: u8, pub keep_together: KeepTogether,
 }
-impl Default for ParagraphStyle { fn default() -> Self { Self { start: 0, align: TextAlign::Start, word_spacing: [80.,100.,133.], letter_spacing: [0.,0.,0.], break_mode: BreakMode::Normal, overflow_wrap: false, hyphenate: false, hyphen: None, min_start_lines: 2, min_end_lines: 2, allow_orphans: true, runt: None, keep_with_next: 0, keep_together: KeepTogether::None } } }
+impl Default for ParagraphStyle { fn default() -> Self { Self { publishing_style: None, start: 0, align: TextAlign::Start, word_spacing: [80.,100.,133.], letter_spacing: [0.,0.,0.], break_mode: BreakMode::Normal, overflow_wrap: false, hyphenate: false, hyphen: None, min_start_lines: 2, min_end_lines: 2, allow_orphans: true, runt: None, keep_with_next: 0, keep_together: KeepTogether::None } } }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CharSpan {
+    pub publishing_style: Option<String>,
+    pub font: Option<String>,
     pub start: usize, pub end: usize, pub no_break: bool, pub features: Vec<([u8;4],u32)>,
     pub tracking: Option<f32>, pub kerning: Option<KernMode>, pub leading: Option<Leading>,
     pub baseline_shift: Option<f32>, pub hscale: Option<f32>, pub vscale: Option<f32>,
