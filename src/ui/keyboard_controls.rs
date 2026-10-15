@@ -1,5 +1,89 @@
 use eframe::egui::{self, Key, Modifiers, Ui};
 
+/// Decorate an existing precise motion widget without changing its native step or formatting.
+/// Args: UI, owner, name, value, range, step, suffix and optional decimal limit.
+/// Returns the actual response with accepted changes and owned draft validity; history remains app-owned.
+pub(super) fn motion_number(
+    ui: &mut Ui,
+    owner: egui::Id,
+    labels: (&str, &str),
+    value: &mut f32,
+    range: std::ops::RangeInclusive<f32>,
+    step: f64,
+    suffix: &str,
+    decimals: Option<usize>,
+) -> (super::fields::FieldResponse, bool) {
+    let (label, purpose) = labels;
+    let before = *value;
+    let attempted = std::cell::RefCell::new(None);
+    let limits = f64::from(*range.start())..=f64::from(*range.end());
+    let response = super::fields::native_scope(ui, owner, |ui| {
+        ui.horizontal(|ui| {
+            let name = ui.label(label);
+            let mut widget = egui::DragValue::new(value)
+                .range(range)
+                .speed(step)
+                .suffix(suffix)
+                .custom_parser(|text| super::welcome::parse_number(&attempted, text));
+            if let Some(decimals) = decimals {
+                widget = widget.max_decimals(decimals);
+            }
+            let response = ui.add(widget).labelled_by(name.id);
+            response.widget_info(|| {
+                let mut info = egui::WidgetInfo::drag_value(response.enabled(), f64::from(*value));
+                info.label = Some(purpose.into());
+                info
+            });
+            response
+        })
+        .inner
+    })
+    .inner;
+    let cancelled = (response.has_focus() || response.lost_focus() || response.dragged())
+        && ui.input(|input| input.key_pressed(Key::Escape));
+    let valid = super::welcome::native_number_valid(
+        ui,
+        &response,
+        owner,
+        attempted.into_inner(),
+        f64::from(*value),
+        limits,
+    );
+    if !valid || cancelled {
+        *value = before;
+    }
+    if !valid && response.enabled() {
+        super::welcome::control_error(
+            ui,
+            &[&response],
+            "Enter a finite number within the shown range",
+        );
+    }
+    number_focus(ui, &response);
+    super::welcome::focus_control(ui, &response);
+    if response.enabled() {
+        ui.data_mut(|data| data.insert_temp(owner.with("motion-number-valid"), valid));
+    }
+    (
+        super::fields::FieldResponse {
+            changed: valid && !cancelled && response.changed(),
+            committed: valid && !cancelled && (response.lost_focus() || response.drag_stopped()),
+            cancelled,
+            response,
+        },
+        valid,
+    )
+}
+
+/// Read a motion draft's own validation while its advanced controls are collapsed.
+/// Args: context and stable field owner. Returns true until that widget rejects an edit.
+pub(super) fn motion_number_is_valid(ctx: &egui::Context, owner: egui::Id) -> bool {
+    ctx.data(|data| {
+        data.get_temp::<bool>(owner.with("motion-number-valid"))
+            .unwrap_or(true)
+    })
+}
+
 /// Draw a native action with a stable property identity and visible keyboard focus.
 /// Args: UI, property name and visible label. Returns the actual button response.
 pub(super) fn button(ui: &mut Ui, id: &str, label: &str) -> egui::Response {
