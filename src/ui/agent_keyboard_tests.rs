@@ -104,7 +104,8 @@ fn keyboard_agent_native_brief_uses_new_document_and_conversation_owners() {
     let output = frame(&ctx, &mut studio, vec![]);
     assert!(keys::named(&output, "Agent provider").1.is_disabled());
     press(&ctx, &mut studio, "Stop agent");
-    assert!(!studio.agent.busy);
+    assert_eq!(studio.agent.status, "Stopping…");
+    assert!(studio.agent.busy, "The existing Stop route waits for the provider cancellation result");
     assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
     assert_eq!(studio.history.len(), history);
     assert!(studio.agent.connection.is_none());

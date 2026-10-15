@@ -32,7 +32,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
 /// Args: panel UI and studio. Returns no value; motion commands remain unchanged.
 pub(super) fn content(ui: &mut Ui, studio: &mut Studio) {
     if studio.persona != Persona::Motion {ui.label("Switch to Motion for keyframes");return;}
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 transport(ui, studio);
             });
             ui.add_space(2.0);

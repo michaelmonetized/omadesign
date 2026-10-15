@@ -13,67 +13,76 @@ pub(super) fn motion_number(
     suffix: &str,
     decimals: Option<usize>,
 ) -> (super::fields::FieldResponse, bool) {
-    let (label, purpose) = labels;
-    let before = *value;
-    let attempted = std::cell::RefCell::new(None);
-    let limits = f64::from(*range.start())..=f64::from(*range.end());
-    let response = super::fields::native_scope(ui, owner, |ui| {
-        ui.horizontal(|ui| {
-            let name = ui.label(label);
-            let mut widget = egui::DragValue::new(value)
-                .range(range)
-                .clamp_existing_to_range(false)
-                .speed(step)
-                .suffix(suffix)
-                .custom_parser(|text| super::welcome::parse_number(&attempted, text));
-            if let Some(decimals) = decimals {
-                widget = widget.max_decimals(decimals);
-            }
-            let response = ui.add(widget).labelled_by(name.id);
-            response.widget_info(|| {
-                let mut info = egui::WidgetInfo::drag_value(response.enabled(), f64::from(*value));
-                info.label = Some(purpose.into());
-                info
-            });
-            response
+    ui.vertical(|ui| {
+        let (label, purpose) = labels;
+        let before = *value;
+        let attempted = std::cell::RefCell::new(None);
+        let limits = f64::from(*range.start())..=f64::from(*range.end());
+        let response = super::fields::native_scope(ui, owner, |ui| {
+            ui.horizontal(|ui| {
+                let name = ui.label(label);
+                let mut widget = egui::DragValue::new(value)
+                    .range(range)
+                    .clamp_existing_to_range(false)
+                    .speed(step)
+                    .suffix(suffix)
+                    .custom_parser(|text| super::welcome::parse_number(&attempted, text));
+                if let Some(decimals) = decimals {
+                    widget = widget.max_decimals(decimals);
+                }
+                let response = ui.add(widget).labelled_by(name.id);
+                response.widget_info(|| {
+                    let mut info =
+                        egui::WidgetInfo::drag_value(response.enabled(), f64::from(*value));
+                    info.label = Some(purpose.into());
+                    info
+                });
+                response
+            })
+            .inner
         })
-        .inner
-    })
-    .inner;
-    let cancelled = (response.has_focus() || response.lost_focus() || response.dragged())
-        && ui.input(|input| input.key_pressed(Key::Escape));
-    let valid = super::welcome::native_number_valid(
-        ui,
-        &response,
-        owner,
-        attempted.into_inner(),
-        f64::from(*value),
-        limits,
-    );
-    if !valid || cancelled {
-        *value = before;
-    }
-    if !valid && response.enabled() {
-        super::welcome::control_error(
+        .inner;
+        let cancelled = (response.has_focus() || response.lost_focus() || response.dragged())
+            && ui.input(|input| input.key_pressed(Key::Escape));
+        let valid = super::welcome::native_number_valid(
             ui,
-            &[&response],
-            "Enter a finite number within the shown range",
+            &response,
+            owner,
+            attempted.into_inner(),
+            f64::from(*value),
+            limits,
         );
-    }
-    number_focus(ui, &response);
-    super::welcome::focus_control(ui, &response);
-    if response.enabled() {
-        ui.data_mut(|data| data.insert_temp(owner.with("motion-number-valid"), valid));
-    }
-    (
-        super::fields::FieldResponse {
-            changed: valid && !cancelled && response.changed(),
-            committed: valid && !cancelled && (response.lost_focus() || response.drag_stopped()),
-            cancelled,
-            response,
-        },
-        valid,
-    )
+        if !valid || cancelled {
+            *value = before;
+        }
+        if !valid && response.enabled() {
+            ui.scope(|ui| {
+                ui.set_max_width(220.0);
+                super::welcome::control_error(
+                    ui,
+                    &[&response],
+                    "Enter a finite number within the shown range",
+                );
+            });
+        }
+        number_focus(ui, &response);
+        super::welcome::focus_control(ui, &response);
+        if response.enabled() {
+            ui.data_mut(|data| data.insert_temp(owner.with("motion-number-valid"), valid));
+        }
+        (
+            super::fields::FieldResponse {
+                changed: valid && !cancelled && response.changed(),
+                committed: valid
+                    && !cancelled
+                    && (response.lost_focus() || response.drag_stopped()),
+                cancelled,
+                response,
+            },
+            valid,
+        )
+    })
+    .inner
 }
 
 /// Read a motion draft's own validation while its advanced controls are collapsed.

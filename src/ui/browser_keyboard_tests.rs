@@ -57,9 +57,10 @@ fn keyboard_browser_places_bundled_shape_and_undo_saves_reopens_without_pointer_
     frame(&ctx, &mut studio, vec![]);
     press(&ctx, &mut studio, "Shape library");
     assert!(studio.show_shape_browser);
-    keys::tab_to(&ctx, "Shape collection", |events| {
+    let output = keys::tab(true, |events| {
         frame(&ctx, &mut studio, events)
     });
+    keys::focused(&ctx, &output, "Shape collection");
     frame(&ctx, &mut studio, keys::key(Key::Home, Modifiers::NONE));
     frame(
         &ctx,

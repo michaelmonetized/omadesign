@@ -1386,9 +1386,7 @@ mod keyboard_tests {
             shared.lock().unwrap().state.active_variants.get(&instance),
             Some(&variant)
         );
-        keys::render(&ctx, keys::key(Key::Tab, Modifiers::SHIFT), |ui| {
-            show(ui, &mut studio)
-        });
+        keys::tab(true, |events| keys::render(&ctx, events, |ui| show(ui, &mut studio)));
         assert_ne!(ctx.memory(|memory|memory.focused()).map(|id|id.accesskit_id()),Some(target),"Native Shift+Tab must leave the Hover action");
         keys::render(&ctx,vec![],|ui|show(ui,&mut studio));
         assert!(shared.lock().unwrap().state.active_variants.is_empty());

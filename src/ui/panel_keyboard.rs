@@ -607,8 +607,13 @@ mod tests {
         let before = book.clone();
         open(&ctx, &mut book);
         tab_to(&ctx, &mut book, "Cancel");
-        frame(&ctx, &mut book, key(Key::Enter, Modifiers::NONE));
-        let output = frame(&ctx, &mut book, vec![]).0;
+        let first = frame(&ctx, &mut book, key(Key::Enter, Modifiers::NONE)).0;
+        let observed=|output:&egui::FullOutput|output.platform_output.events.iter().any(|event|
+            matches!(event,egui::output::OutputEvent::FocusGained(info) if info.label.as_deref()==Some("Properties")&&info.enabled));
+        let mut event = observed(&first);
+        let mut output = first;
+        for _ in 0..3 { output=frame(&ctx,&mut book,vec![]).0; event|=observed(&output); }
+        assert!(event,"Cancel must deliver the actual native Properties focus event after the modal layer closes");
         focused_panel(&ctx, &output);
         assert_eq!(book, before);
     }

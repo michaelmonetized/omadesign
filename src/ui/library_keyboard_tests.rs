@@ -230,7 +230,11 @@ fn keyboard_library_brand_places_from_empty_selection_colors_undoes_and_native_r
             .1
             .is_disabled()
     );
-    palettes::apply_colour(&mut f.studio, Rgba::BLACK, true);
+    f.frame(keys::action(
+        keys::named(&output, "Apply #D97C5B to fill").0,
+        egui::accesskit::Action::Click,
+        None,
+    ));
     assert_eq!(crate::project::encode(&f.studio.doc).unwrap(), locked);
 }
 

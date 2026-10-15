@@ -534,7 +534,11 @@ pub(super) mod keyboard_tests {
         assert_eq!(error.live(), Some(accesskit::Live::Polite));
         assert!(error.is_live_atomic());
         let text = error.value().unwrap();
-        assert_eq!(output.shapes.iter().filter(|shape| matches!(&shape.shape, egui::Shape::Text(shape) if shape.galley.job.text == text)).count(), 1);
+        let painted = output.shapes.iter().filter_map(|shape| match &shape.shape {
+            egui::Shape::Text(shape) => Some(shape.galley.job.text.as_str()), _ => None,
+        }).collect::<Vec<_>>();
+        assert_eq!(painted.iter().filter(|painted| **painted == text).count(), 1,
+            "The actual error for {name} must paint once: {text:?}; bounds={:?}; painted={painted:?}", error.bounds());
     }
 
     pub fn action(target_node: accesskit::NodeId, action: accesskit::Action, data: Option<accesskit::ActionData>) -> Vec<Event> {
