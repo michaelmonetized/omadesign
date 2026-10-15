@@ -18,6 +18,8 @@ mod shading;
 pub use export::write;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod exchange_tests;
 
 const STREAM_LIMIT: usize = 128 * 1024 * 1024;
 const PIXEL_LIMIT: usize = 64 * 1024 * 1024;
