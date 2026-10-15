@@ -18,6 +18,8 @@ the explicitly selected canonical revision and consumers.
 Revision 3 adds context-owned, one-use native focus and floating size requests.
 Call request_focus(ctx, workspace_id, panel) after normalizing the known registry;
 it returns focus to the native tab when the logical panel has not changed.
+Delivery waits until both the tab and its native layer accept interaction, so
+a closing modal cannot consume a request before the background tab can focus.
 request_floating_size accepts a visible floating panel and finite positive size.
 show revalidates requests and uses Window.fixed_size for the requested frame,
 then returns to ordinary resizing. Window IDs and saved Group.rect remain stable.

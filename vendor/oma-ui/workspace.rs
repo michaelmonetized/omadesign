@@ -407,7 +407,10 @@ impl Workspace {
                                 egui::StrokeKind::Outside,
                             );
                         }
-                        if focus_next.as_ref() == Some(panel) && response.enabled() {
+                        if focus_next.as_ref() == Some(panel)
+                            && response.enabled()
+                            && ui.memory(|memory| memory.allows_interaction(response.layer_id))
+                        {
                             response.request_focus();
                             focus_delivered = true;
                         }
