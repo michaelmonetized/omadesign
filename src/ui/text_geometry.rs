@@ -5,7 +5,51 @@ use crate::{
     text_geometry::{self, PathAlign},
 };
 use eframe::egui::{self, Color32, Rect, Sense, Stroke, Ui};
+
+/// Check the current text or wrap owner before inspector edits.
+/// Args: editor. Returns false for busy, hidden, locked or missing owners, including a linked story head.
+pub(super) fn edits_allowed(studio: &Studio) -> bool {
+    if studio.file_dialog_pending()
+        || studio.updates.freezing
+        || studio.op.is_some()
+        || studio.free_transform.is_some()
+        || studio.deformation.is_some()
+    {
+        return false;
+    }
+    if studio.selected_layer.is_some_and(|id| {
+        !studio
+            .doc
+            .layers
+            .iter()
+            .position(|layer| layer.id == id)
+            .is_some_and(|index| studio.doc.layer_editable(index))
+    }) {
+        return false;
+    }
+    studio.selection.iter().all(|&(layer, id)| {
+        let editable = |(layer, id)| {
+            studio.doc.layer_editable(layer)
+                && (id == crate::document::RASTER_ID
+                    || studio
+                        .doc
+                        .find_shape(layer, id)
+                        .is_some_and(|shape| shape.visible && !shape.locked))
+        };
+        editable((layer, id))
+            && (id == crate::document::RASTER_ID || editable(studio.story_head((layer, id))))
+    })
+}
+
 pub fn path_inspector(ui: &mut Ui, studio: &mut Studio) {
+    let owner = egui::Id::new(("text-path-fields", &studio.swap_id, &studio.selection));
+    let allowed = edits_allowed(studio);
+    ui.push_id(owner, |ui| {
+        ui.add_enabled_ui(allowed, |ui| path_controls(ui, studio))
+    });
+}
+
+fn path_controls(ui: &mut Ui, studio: &mut Studio) {
     let Some(run) = studio.selected_type() else {
         return;
     };
@@ -17,62 +61,94 @@ pub fn path_inspector(ui: &mut Ui, studio: &mut Studio) {
         .default_open(true)
         .show(ui, |ui| {
             let length = on.cache.as_ref().map(|p| p.length).unwrap_or(0.);
-            ui.horizontal(|ui| {
-                ui.label("Start %");
-                ui.add(
-                    egui::DragValue::new(&mut on.start)
-                        .speed(0.001)
-                        .custom_formatter(|v, _| format!("{:.1}", v * 100.))
-                        .custom_parser(|s| s.parse::<f64>().ok().map(|v| v / 100.)),
-                );
-            });
-            ui.horizontal(|ui| {
-                ui.label("End %");
-                ui.add(
-                    egui::DragValue::new(&mut on.end)
-                        .speed(0.001)
-                        .custom_formatter(|v, _| format!("{:.1}", v * 100.))
-                        .custom_parser(|s| s.parse::<f64>().ok().map(|v| v / 100.)),
-                );
-            });
+            let mut start_percent = f64::from(on.start) * 100.;
+            let mut end_percent = f64::from(on.end) * 100.;
+            let range = f64::from(f32::MIN) * 100. ..=f64::from(f32::MAX) * 100.;
+            if super::fields::number(
+                ui,
+                "path-start-percent",
+                "Path start (%)",
+                &mut start_percent,
+                range.clone(),
+                " %",
+                None,
+                Default::default(),
+            )
+            .changed
+            {
+                on.start = (start_percent / 100.) as f32;
+            }
+            if super::fields::number(
+                ui,
+                "path-end-percent",
+                "Path end (%)",
+                &mut end_percent,
+                range,
+                " %",
+                None,
+                Default::default(),
+            )
+            .changed
+            {
+                on.end = (end_percent / 100.) as f32;
+            }
             if length > 0. {
-                let mut start = on.start * length;
-                let mut end = on.end * length;
-                ui.horizontal(|ui| {
-                    ui.label("Start px");
-                    if ui
-                        .add(egui::DragValue::new(&mut start).speed(0.5))
-                        .changed()
-                    {
-                        on.start = start / length;
-                    }
-                });
-                ui.horizontal(|ui| {
-                    ui.label("End px");
-                    if ui.add(egui::DragValue::new(&mut end).speed(0.5)).changed() {
-                        on.end = end / length;
-                    }
-                });
+                let mut start = f64::from(on.start) * f64::from(length);
+                let mut end = f64::from(on.end) * f64::from(length);
+                let range = f64::from(f32::MIN) * f64::from(length)
+                    ..=f64::from(f32::MAX) * f64::from(length);
+                if super::fields::number(
+                    ui,
+                    "path-start-pixels",
+                    "Path start (px)",
+                    &mut start,
+                    range.clone(),
+                    " px",
+                    None,
+                    Default::default(),
+                )
+                .changed
+                {
+                    on.start = (start / f64::from(length)) as f32;
+                }
+                if super::fields::number(
+                    ui,
+                    "path-end-pixels",
+                    "Path end (px)",
+                    &mut end,
+                    range,
+                    " px",
+                    None,
+                    Default::default(),
+                )
+                .changed
+                {
+                    on.end = (end / f64::from(length)) as f32;
+                }
             }
             ui.checkbox(&mut on.flip, "Flip side and direction");
-            ui.horizontal(|ui| {
-                ui.label("Baseline shift");
-                ui.add(
-                    egui::DragValue::new(&mut on.baseline_shift)
-                        .speed(0.25)
-                        .suffix(" px"),
-                );
-            });
-            ui.horizontal(|ui| {
-                ui.label("Curve spacing");
-                ui.add(
-                    egui::DragValue::new(&mut on.spacing)
-                        .speed(0.1)
-                        .suffix(" px"),
-                );
-            });
-            ui.label("Align to path");
-            egui::ComboBox::from_id_salt("path-alignment")
+            super::fields::number(
+                ui,
+                "path-baseline-shift",
+                "Path baseline shift (px)",
+                &mut on.baseline_shift,
+                f32::MIN..=f32::MAX,
+                " px",
+                None,
+                Default::default(),
+            );
+            super::fields::number(
+                ui,
+                "path-curve-spacing",
+                "Path curve spacing (px)",
+                &mut on.spacing,
+                f32::MIN..=f32::MAX,
+                " px",
+                None,
+                Default::default(),
+            );
+            let label = ui.label("Align to path");
+            let response = egui::ComboBox::from_id_salt("path-alignment")
                 .selected_text(format!("{:?}", on.align))
                 .show_ui(ui, |ui| {
                     for value in [
@@ -83,9 +159,13 @@ pub fn path_inspector(ui: &mut Ui, studio: &mut Studio) {
                     ] {
                         ui.selectable_value(&mut on.align, value, format!("{value:?}"));
                     }
-                });
+                })
+                .response
+                .labelled_by(label.id);
+            ui.ctx()
+                .accesskit_node_builder(response.id, |node| node.set_label("Align text to path"));
         });
-    if before != on {
+    if ui.is_enabled() && before != on {
         studio.patch_type(|t| {
             t.on_path = Some(on.clone());
             t.layout = None;
@@ -96,7 +176,7 @@ pub fn menu(ui: &mut Ui, studio: &mut Studio) {
     frame_menu(ui, studio);
     if ui
         .add_enabled(
-            studio.can_attach_text_path(),
+            edits_allowed(studio) && studio.can_attach_text_path(),
             egui::Button::new("Attach text to path"),
         )
         .clicked()
@@ -104,7 +184,8 @@ pub fn menu(ui: &mut Ui, studio: &mut Studio) {
         studio.attach_text_path();
         ui.close();
     }
-    let attached = studio.selected_type().is_some_and(|t| t.on_path.is_some());
+    let attached =
+        edits_allowed(studio) && studio.selected_type().is_some_and(|t| t.on_path.is_some());
     if ui
         .add_enabled(attached, egui::Button::new("Release text from path"))
         .clicked()
@@ -254,6 +335,14 @@ pub fn brackets(ui: &mut Ui, rect: Rect, studio: &mut Studio) -> bool {
 }
 
 pub fn frame_inspector(ui: &mut Ui, studio: &mut Studio) {
+    let owner = egui::Id::new(("text-frame-fields", &studio.swap_id, &studio.selection));
+    let allowed = edits_allowed(studio);
+    ui.push_id(owner, |ui| {
+        ui.add_enabled_ui(allowed, |ui| frame_controls(ui, studio))
+    });
+}
+
+fn frame_controls(ui: &mut Ui, studio: &mut Studio) {
     use text_geometry::{Overflow, VAlign};
     let Some(run) = studio.selected_type() else {
         return;
@@ -270,31 +359,41 @@ pub fn frame_inspector(ui: &mut Ui, studio: &mut Studio) {
         .default_open(true)
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label("Width");
-                ui.add(
-                    egui::DragValue::new(&mut frame.size.x)
-                        .range(1.0..=100000.)
-                        .speed(1.),
+                super::fields::number(
+                    ui,
+                    "frame-width",
+                    "Text frame width (px)",
+                    &mut frame.size.x,
+                    1.0..=100000.,
+                    " px",
+                    None,
+                    Default::default(),
                 );
-                ui.label("Height");
-                ui.add(
-                    egui::DragValue::new(&mut frame.size.y)
-                        .range(1.0..=100000.)
-                        .speed(1.),
+                super::fields::number(
+                    ui,
+                    "frame-height",
+                    "Text frame height (px)",
+                    &mut frame.size.y,
+                    1.0..=100000.,
+                    " px",
+                    None,
+                    Default::default(),
                 );
             });
             for (index, label) in ["Inset top", "Inset right", "Inset bottom", "Inset left"]
                 .into_iter()
                 .enumerate()
             {
-                ui.horizontal(|ui| {
-                    ui.label(label);
-                    ui.add(
-                        egui::DragValue::new(&mut frame.inset[index])
-                            .range(0.0..=10000.)
-                            .speed(0.5),
-                    );
-                });
+                super::fields::number(
+                    ui,
+                    label,
+                    &format!("Text frame {label} (px)"),
+                    &mut frame.inset[index],
+                    0.0..=10000.,
+                    " px",
+                    None,
+                    Default::default(),
+                );
             }
             ui.horizontal(|ui| {
                 for (value, label, glyph) in [
@@ -313,16 +412,20 @@ pub fn frame_inspector(ui: &mut Ui, studio: &mut Studio) {
                 ] {
                     let selected = frame.valign == value;
                     let (rect, _) = ui.allocate_exact_size(egui::vec2(30., 28.), Sense::hover());
-                    let response =
-                        ui.interact(rect, egui::Id::new(("frame-valign", label)), Sense::click());
+                    let response = ui.interact(
+                        rect,
+                        ui.make_persistent_id(("frame-valign", label)),
+                        Sense::click(),
+                    );
                     response.widget_info(|| {
                         egui::WidgetInfo::selected(
                             egui::WidgetType::Button,
                             ui.is_enabled(),
                             selected,
-                            label,
+                            format!("Text frame vertical alignment: {label}"),
                         )
                     });
+                    super::welcome::focus_control(ui, &response);
                     if selected || response.hovered() || response.has_focus() {
                         ui.painter().rect_filled(
                             rect.shrink(1.),
@@ -380,7 +483,8 @@ pub fn frame_inspector(ui: &mut Ui, studio: &mut Studio) {
                 frame.contour.is_none(),
                 egui::Checkbox::new(&mut frame.auto_height, "Auto height"),
             );
-            egui::ComboBox::from_id_salt("frame-overflow")
+            let label = ui.label("Text frame overflow");
+            let response = egui::ComboBox::from_id_salt("frame-overflow")
                 .selected_text(format!("{:?}", frame.overflow))
                 .show_ui(ui, |ui| {
                     for mode in [
@@ -393,7 +497,12 @@ pub fn frame_inspector(ui: &mut Ui, studio: &mut Studio) {
                             ui.selectable_value(&mut frame.overflow, mode, format!("{mode:?}"));
                         });
                     }
-                });
+                })
+                .response
+                .labelled_by(label.id);
+            ui.ctx()
+                .accesskit_node_builder(response.id, |node| node.set_label("Text frame overflow"));
+            super::welcome::focus_control(ui, &response);
             if frame.overflow == Overflow::Flow {
                 ui.label("Last frame");
                 ui.horizontal(|ui| {
@@ -410,10 +519,15 @@ pub fn frame_inspector(ui: &mut Ui, studio: &mut Studio) {
                 frame.max_lines = limited.then_some(1);
             }
             if let Some(max) = &mut frame.max_lines {
-                ui.add(
-                    egui::DragValue::new(max)
-                        .range(1..=100000)
-                        .prefix("Max lines "),
+                super::fields::number(
+                    ui,
+                    "frame-max-lines",
+                    "Text frame maximum lines",
+                    max,
+                    1..=100000,
+                    "",
+                    None,
+                    Default::default(),
                 );
             }
             if run.layout.as_ref().is_some_and(|l| l.overflow) {
@@ -423,7 +537,7 @@ pub fn frame_inspector(ui: &mut Ui, studio: &mut Studio) {
                 );
             }
         });
-    if frame != before {
+    if ui.is_enabled() && frame != before {
         studio.patch_frame_geometry(|t| {
             t.frame = Some(frame.clone());
             t.layout = None;
@@ -432,6 +546,19 @@ pub fn frame_inspector(ui: &mut Ui, studio: &mut Studio) {
 }
 
 pub fn wrap_inspector(ui: &mut Ui, studio: &mut Studio) {
+    let owner = egui::Id::new((
+        "text-wrap-fields",
+        &studio.swap_id,
+        &studio.selection,
+        studio.selected_layer,
+    ));
+    let allowed = edits_allowed(studio);
+    ui.push_id(owner, |ui| {
+        ui.add_enabled_ui(allowed, |ui| wrap_controls(ui, studio))
+    });
+}
+
+fn wrap_controls(ui: &mut Ui, studio: &mut Studio) {
     use text_geometry::{TextWrap, WrapMode};
     let target = studio
         .selected_layer
@@ -464,7 +591,7 @@ pub fn wrap_inspector(ui: &mut Ui, studio: &mut Studio) {
                     let (rect, _) = ui.allocate_exact_size(egui::vec2(30., 28.), Sense::hover());
                     let response = ui.interact(
                         rect,
-                        egui::Id::new(("text-wrap-mode", label)),
+                        ui.make_persistent_id(("text-wrap-mode", label)),
                         Sense::click(),
                     );
                     response.widget_info(|| {
@@ -472,9 +599,10 @@ pub fn wrap_inspector(ui: &mut Ui, studio: &mut Studio) {
                             egui::WidgetType::Button,
                             ui.is_enabled(),
                             selected,
-                            label,
+                            format!("Text wrap: {label}"),
                         )
                     });
+                    super::welcome::focus_control(ui, &response);
                     if selected || response.hovered() || response.has_focus() {
                         ui.painter().rect_filled(
                             rect.shrink(1.),
@@ -545,29 +673,32 @@ pub fn wrap_inspector(ui: &mut Ui, studio: &mut Studio) {
             });
             if wrap.mode == WrapMode::ObjectShape {
                 let mut offset = wrap.offset[0];
-                ui.horizontal(|ui| {
-                    ui.label("Offset");
-                    if ui
-                        .add(
-                            egui::DragValue::new(&mut offset)
-                                .range(0.0..=10000.)
-                                .speed(0.5),
-                        )
-                        .changed()
-                    {
-                        wrap.offset = [offset; 4];
-                    }
-                });
+                if super::fields::number(
+                    ui,
+                    "wrap-offset",
+                    "Text wrap outline offset (px)",
+                    &mut offset,
+                    0.0..=10000.,
+                    " px",
+                    None,
+                    Default::default(),
+                )
+                .changed
+                {
+                    wrap.offset = [offset; 4];
+                }
             } else {
                 for (i, label) in ["Top", "Right", "Bottom", "Left"].into_iter().enumerate() {
-                    ui.horizontal(|ui| {
-                        ui.label(label);
-                        ui.add(
-                            egui::DragValue::new(&mut wrap.offset[i])
-                                .range(0.0..=10000.)
-                                .speed(0.5),
-                        );
-                    });
+                    super::fields::number(
+                        ui,
+                        label,
+                        &format!("Text wrap {label} offset (px)"),
+                        &mut wrap.offset[i],
+                        0.0..=10000.,
+                        " px",
+                        None,
+                        Default::default(),
+                    );
                 }
             }
             ui.checkbox(&mut wrap.invert, "Invert: flow inside object");
@@ -576,6 +707,7 @@ pub fn wrap_inspector(ui: &mut Ui, studio: &mut Studio) {
             if ui
                 .checkbox(&mut above, "Wrap affects text above only")
                 .changed()
+                && ui.is_enabled()
             {
                 studio.commit(crate::document::Cmd::SetTextWrapAbove {
                     before: studio.doc.text_wrap_above_only,
@@ -583,7 +715,7 @@ pub fn wrap_inspector(ui: &mut Ui, studio: &mut Studio) {
                 });
             }
         });
-    if wrap != before {
+    if ui.is_enabled() && wrap != before {
         studio.commit(crate::document::Cmd::SetTextWrap {
             layer,
             id: if id == crate::document::RASTER_ID {
@@ -599,6 +731,11 @@ pub fn wrap_inspector(ui: &mut Ui, studio: &mut Studio) {
 }
 
 pub fn frame_menu(ui: &mut Ui, studio: &mut Studio) {
+    let allowed = edits_allowed(studio);
+    ui.add_enabled_ui(allowed, |ui| frame_actions(ui, studio));
+}
+
+fn frame_actions(ui: &mut Ui, studio: &mut Studio) {
     if ui
         .add_enabled(
             studio.can_text_inside_shape(),
@@ -638,6 +775,43 @@ pub fn frame_menu(ui: &mut Ui, studio: &mut Studio) {
     {
         studio.break_text_thread((layer, id));
         ui.close();
+    }
+    let targets: Vec<_> = studio
+        .selection
+        .iter()
+        .copied()
+        .filter(|&(layer, id)| {
+            studio
+                .doc
+                .find_shape(layer, id)
+                .is_some_and(|shape| matches!(&shape.geom, Geom::Text(run) if run.frame.is_some()))
+        })
+        .collect();
+    let available = studio.selection.len() == 2 && targets.len() == 2;
+    let response = ui.add_enabled(available, egui::Button::new("Thread selected text frames"));
+    let error_id =
+        ui.make_persistent_id(("thread-selection-error", &studio.swap_id, &studio.selection));
+    if available {
+        ui.ctx().accesskit_node_builder(response.id, |node| {
+            node.set_description(format!(
+                "Flow from frame #{} into frame #{} in selection order",
+                targets[0].1, targets[1].1
+            ))
+        });
+    }
+    if ui.is_enabled() && available && response.clicked() {
+        match studio.thread_text_frames(targets[0], targets[1]) {
+            Ok(()) => {
+                ui.data_mut(|data| data.remove::<String>(error_id));
+                ui.close();
+            }
+            Err(error) => {
+                ui.data_mut(|data| data.insert_temp(error_id, error));
+            }
+        }
+    }
+    if let Some(error) = ui.data(|data| data.get_temp::<String>(error_id)) {
+        super::welcome::control_error(ui, &[&response], &error);
     }
 }
 
@@ -923,4 +1097,199 @@ pub fn frame_ports(ui: &mut Ui, rect: Rect, studio: &mut Studio) -> bool {
         }
     }
     handled
+}
+
+#[cfg(test)]
+mod keyboard_tests {
+    use super::*;
+    use crate::ui::welcome::keyboard_tests as keys;
+    use egui::{Event, Key, Modifiers};
+
+    fn frame(ctx: &egui::Context, studio: &mut Studio, events: Vec<Event>) -> egui::FullOutput {
+        keys::render(ctx, events, |ui| {
+            if !studio.updates.freezing && !studio.file_dialog_pending() {
+                studio.handle_shortcuts(ui.ctx());
+            }
+            ui.menu_button("Text actions", |ui| menu(ui, studio));
+            super::super::paragraph::show(ui, studio);
+            frame_inspector(ui, studio);
+            path_inspector(ui, studio);
+            wrap_inspector(ui, studio);
+            ui.interact(
+                ui.available_rect_before_wrap(),
+                egui::Id::new("studio-canvas"),
+                Sense::click(),
+            );
+            super::super::keyboard_authoring::show(ui.ctx(), studio);
+        })
+    }
+
+    fn editor() -> (egui::Context, Studio) {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        crate::ui::theme::apply(&ctx);
+        let mut studio = Studio::new();
+        studio.doc = crate::document::Document::new("Keyboard type geometry", 128., 96., 72.);
+        studio.show_welcome = false;
+        studio.text_font = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/assets/fonts/EBGaramond.ttf"
+        )
+        .into();
+        (ctx, studio)
+    }
+
+    fn text(ctx: &egui::Context, studio: &mut Studio, content: &str) -> (usize, u64) {
+        frame(ctx, studio, keys::key(Key::F8, Modifiers::NONE));
+        frame(ctx, studio, keys::key(Key::T, Modifiers::NONE));
+        frame(ctx, studio, keys::key(Key::Enter, Modifiers::NONE));
+        frame(ctx, studio, vec![]);
+        assert!(super::super::keyboard_authoring::is_open(ctx));
+        frame(
+            ctx,
+            studio,
+            keys::key(Key::Enter, Modifiers::CTRL | Modifiers::COMMAND),
+        );
+        frame(ctx, studio, vec![]);
+        assert!(studio.type_edit.is_some());
+        frame(
+            ctx,
+            studio,
+            keys::key(Key::A, Modifiers::CTRL | Modifiers::COMMAND),
+        );
+        frame(ctx, studio, vec![Event::Text(content.into())]);
+        frame(ctx, studio, keys::key(Key::Escape, Modifiers::NONE));
+        frame(ctx, studio, vec![]);
+        assert!(studio.type_edit.is_none());
+        studio.primary().unwrap()
+    }
+
+    fn action(ctx: &egui::Context, studio: &mut Studio, label: &str) {
+        keys::tab_to(ctx, "Text actions", |events| frame(ctx, studio, events));
+        frame(ctx, studio, keys::key(Key::Enter, Modifiers::NONE));
+        frame(ctx, studio, vec![]);
+        keys::tab_to(ctx, label, |events| frame(ctx, studio, events));
+        frame(ctx, studio, keys::key(Key::Enter, Modifiers::NONE));
+        frame(ctx, studio, vec![]);
+    }
+
+    #[test]
+    fn keyboard_text_fields_edit_created_paragraphs_and_reject_locked_or_busy_targets() {
+        let (ctx, mut studio) = editor();
+        assert!(studio.selection.is_empty());
+        let hit = text(&ctx, &mut studio, "Alpha\nBeta");
+        keys::tab_to(&ctx, "Wrap text to width", |events| {
+            frame(&ctx, &mut studio, events)
+        });
+        frame(&ctx, &mut studio, keys::key(Key::Space, Modifiers::NONE));
+        let output = keys::tab_to(&ctx, "Text wrap width (px)", |events| {
+            frame(&ctx, &mut studio, events)
+        });
+        let width_id = keys::named(&output, "Text wrap width (px)").0;
+        keys::replace("96", |events| frame(&ctx, &mut studio, events));
+        frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        assert_eq!(studio.selected_type().unwrap().wrap_width, Some(96.));
+        keys::tab_to(&ctx, "Justification", |events| {
+            frame(&ctx, &mut studio, events)
+        });
+        frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        frame(&ctx, &mut studio, vec![]);
+        keys::tab_to(&ctx, "Word spacing desired (%)", |events| {
+            frame(&ctx, &mut studio, events)
+        });
+        keys::replace("120", |events| frame(&ctx, &mut studio, events));
+        frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        assert_eq!(
+            crate::text::paragraph_style(&studio.selected_type().unwrap(), 0).word_spacing[1],
+            120.
+        );
+        let output = frame(&ctx, &mut studio, vec![]);
+        assert_eq!(keys::named(&output, "Text wrap width (px)").0, width_id);
+        let before = studio.doc.find_shape(hit.0, hit.1).unwrap().geom.clone();
+        studio.doc.find_shape_mut(hit.0, hit.1).unwrap().locked = true;
+        let output = frame(&ctx, &mut studio, keys::key(Key::ArrowUp, Modifiers::NONE));
+        assert!(
+            keys::named(&output, "Word spacing desired (%)")
+                .1
+                .is_disabled()
+        );
+        assert_eq!(studio.doc.find_shape(hit.0, hit.1).unwrap().geom, before);
+        studio.doc.find_shape_mut(hit.0, hit.1).unwrap().locked = false;
+        studio.updates.freezing = true;
+        let output = frame(&ctx, &mut studio, keys::key(Key::ArrowUp, Modifiers::NONE));
+        assert!(keys::named(&output, "Text wrap width (px)").1.is_disabled());
+        assert_eq!(studio.doc.find_shape(hit.0, hit.1).unwrap().geom, before);
+    }
+
+    #[test]
+    fn keyboard_text_frames_create_edit_thread_save_reopen_and_undo_without_pointer() {
+        let (ctx, mut studio) = editor();
+        assert!(studio.selection.is_empty());
+        let first = text(&ctx, &mut studio, "First story.");
+        action(&ctx, &mut studio, "Convert to area text");
+        let output = keys::tab_to(&ctx, "Text frame width (px)", |events| {
+            frame(&ctx, &mut studio, events)
+        });
+        let first_width = keys::named(&output, "Text frame width (px)").0;
+        keys::replace("80", |events| frame(&ctx, &mut studio, events));
+        frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        assert_eq!(studio.selected_type().unwrap().frame.unwrap().size.x, 80.);
+        let second = text(&ctx, &mut studio, "Second story.");
+        action(&ctx, &mut studio, "Convert to area text");
+        let output = frame(&ctx, &mut studio, vec![]);
+        assert_ne!(keys::named(&output, "Text frame width (px)").0, first_width);
+        frame(&ctx, &mut studio, keys::key(Key::F8, Modifiers::NONE));
+        frame(&ctx, &mut studio, keys::key(Key::PageUp, Modifiers::NONE));
+        assert_eq!(studio.selection, vec![first]);
+        frame(
+            &ctx,
+            &mut studio,
+            keys::key(Key::PageDown, Modifiers::SHIFT),
+        );
+        assert_eq!(studio.selection, vec![first, second]);
+        let history = studio.history.len();
+        action(&ctx, &mut studio, "Thread selected text frames");
+        assert_eq!(studio.history.len(), history + 1);
+        let source = match &studio.doc.find_shape(first.0, first.1).unwrap().geom {
+            Geom::Text(run) => run,
+            _ => unreachable!(),
+        };
+        assert_eq!(source.thread.as_ref().unwrap().next, Some(second.1));
+        assert!(
+            source.content.contains("First story.") && source.content.contains("Second story.")
+        );
+        let target = match &studio.doc.find_shape(second.0, second.1).unwrap().geom {
+            Geom::Text(run) => run,
+            _ => unreachable!(),
+        };
+        assert_eq!(target.thread.as_ref().unwrap().prev, Some(first.1));
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(".artifacts")
+            .join(format!(
+                "keyboard-text-frames-{}-{}",
+                std::process::id(),
+                crate::document::next_id()
+            ));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("threaded.oma");
+        crate::project::save_to(&studio.doc, &path).unwrap();
+        let reopened = crate::project::load_from(&path).unwrap();
+        let Geom::Text(source) = &reopened.find_shape(first.0, first.1).unwrap().geom else {
+            unreachable!()
+        };
+        assert_eq!(source.thread.as_ref().unwrap().next, Some(second.1));
+        assert!(source.content.contains("Second story."));
+        std::fs::remove_dir_all(root).unwrap();
+        frame(&ctx, &mut studio, keys::key(Key::F8, Modifiers::NONE));
+        frame(
+            &ctx,
+            &mut studio,
+            keys::key(Key::Z, Modifiers::CTRL | Modifiers::COMMAND),
+        );
+        let Geom::Text(source) = &studio.doc.find_shape(first.0, first.1).unwrap().geom else {
+            unreachable!()
+        };
+        assert!(source.thread.is_none());
+        assert_eq!(source.content, "First story.");
+    }
 }

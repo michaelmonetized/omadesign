@@ -166,6 +166,22 @@ impl ArtworkDraft {
 }
 
 impl Studio {
+    /// Move only the artwork that the normal selection tools allow editing.
+    /// Args: canvas delta. Returns without a command if any selected owner became hidden or locked.
+    pub(crate) fn nudge_keyboard_artwork(&mut self, dx: f32, dy: f32) {
+        let eligible: std::collections::HashSet<_> =
+            self.selectable_objects().into_iter().collect();
+        if self
+            .selection
+            .iter()
+            .any(|target| !eligible.contains(target))
+        {
+            self.status = "Select visible, unlocked artwork to move".into();
+            return;
+        }
+        self.nudge(dx, dy);
+    }
+
     /// Create artwork through the existing document tools.
     /// Args: validated keyboard draft. Returns an error without editing for stale, busy or locked targets.
     pub(crate) fn create_keyboard_artwork(&mut self, draft: &ArtworkDraft) -> Result<(), String> {

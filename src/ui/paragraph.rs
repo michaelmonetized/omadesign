@@ -5,6 +5,14 @@ use crate::{
 use eframe::egui::{self, Ui};
 
 pub fn show(ui: &mut Ui, studio: &mut Studio) {
+    let owner = egui::Id::new(("paragraph-fields", &studio.swap_id, &studio.selection));
+    let allowed = super::text_geometry::edits_allowed(studio);
+    ui.push_id(owner, |ui| {
+        ui.add_enabled_ui(allowed, |ui| contents(ui, studio))
+    });
+}
+
+fn contents(ui: &mut Ui, studio: &mut Studio) {
     let Some(run) = studio.selected_type() else {
         return;
     };
@@ -16,7 +24,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     let before = p.clone();
     ui.strong("Paragraph");
     ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x=4.;
+        ui.spacing_mut().item_spacing.x = 4.;
         for (name, align) in [
             ("Left", TextAlign::Start),
             ("Center", TextAlign::Center),
@@ -46,59 +54,130 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
                 },
             ),
         ] {
-            let selected=p.align==align;
-            let clicked=match align {
-                TextAlign::Start=>super::icons::icon_button(ui,"\u{e484}",name,selected),
-                TextAlign::Center=>super::icons::icon_button(ui,"\u{e480}",name,selected),
-                TextAlign::End=>super::icons::icon_button(ui,"\u{e486}",name,selected),
-                TextAlign::Justify{last}=>{
-                    let (rect,response)=ui.allocate_exact_size(egui::vec2(30.,28.),egui::Sense::click());
-                    response.widget_info(||egui::WidgetInfo::selected(egui::WidgetType::Button,ui.is_enabled(),selected,name));
-                    if selected||response.hovered(){ui.painter().rect_filled(rect.shrink(1.),6.,if selected{super::theme::accent_soft()}else{super::theme::bg_widget_hover()});}
-                    let color=if selected{super::theme::accent()}else{super::theme::fg_weak()};
-                    for row in 0..4 {let width=if row==3&&last!=LastLine::Justify{10.}else{18.};let shift=if row==3{match last{LastLine::Center=>4.,LastLine::End=>8.,_=>0.}}else{0.};let x=rect.min.x+6.+shift;let y=rect.min.y+6.+row as f32*5.;ui.painter().line_segment([egui::pos2(x,y),egui::pos2(x+width,y)],egui::Stroke::new(1.2,color));}
-                    response.on_hover_text(match last{LastLine::Start=>"Justify, last line left",LastLine::Center=>"Justify, last line centered",LastLine::End=>"Justify, last line right",LastLine::Justify=>"Justify all lines"}).clicked()
+            let selected = p.align == align;
+            let clicked = match align {
+                TextAlign::Start => super::icons::icon_button(ui, "\u{e484}", name, selected),
+                TextAlign::Center => super::icons::icon_button(ui, "\u{e480}", name, selected),
+                TextAlign::End => super::icons::icon_button(ui, "\u{e486}", name, selected),
+                TextAlign::Justify { last } => {
+                    let (rect, response) =
+                        ui.allocate_exact_size(egui::vec2(30., 28.), egui::Sense::click());
+                    response.widget_info(|| {
+                        egui::WidgetInfo::selected(
+                            egui::WidgetType::Button,
+                            ui.is_enabled(),
+                            selected,
+                            name,
+                        )
+                    });
+                    if selected || response.hovered() || response.has_focus() {
+                        ui.painter().rect_filled(
+                            rect.shrink(1.),
+                            6.,
+                            if selected {
+                                super::theme::accent_soft()
+                            } else {
+                                super::theme::bg_widget_hover()
+                            },
+                        );
+                    }
+                    if response.has_focus() {
+                        ui.painter().rect_stroke(
+                            rect.expand(2.),
+                            3.,
+                            ui.visuals().selection.stroke,
+                            egui::StrokeKind::Outside,
+                        );
+                    }
+                    let color = if selected {
+                        super::theme::accent()
+                    } else {
+                        super::theme::fg_weak()
+                    };
+                    for row in 0..4 {
+                        let width = if row == 3 && last != LastLine::Justify {
+                            10.
+                        } else {
+                            18.
+                        };
+                        let shift = if row == 3 {
+                            match last {
+                                LastLine::Center => 4.,
+                                LastLine::End => 8.,
+                                _ => 0.,
+                            }
+                        } else {
+                            0.
+                        };
+                        let x = rect.min.x + 6. + shift;
+                        let y = rect.min.y + 6. + row as f32 * 5.;
+                        ui.painter().line_segment(
+                            [egui::pos2(x, y), egui::pos2(x + width, y)],
+                            egui::Stroke::new(1.2, color),
+                        );
+                    }
+                    response
+                        .on_hover_text(match last {
+                            LastLine::Start => "Justify, last line left",
+                            LastLine::Center => "Justify, last line centered",
+                            LastLine::End => "Justify, last line right",
+                            LastLine::Justify => "Justify all lines",
+                        })
+                        .clicked()
                 }
             };
-            if clicked{p.align=align;}
-
+            if clicked {
+                p.align = align;
+            }
         }
     });
     if run.frame.is_none() && run.on_path.is_none() {
-    let mut wrap = run.wrap_width.is_some();
-    let mut width = run.wrap_width.unwrap_or(320.);
-    let mut changed = ui.checkbox(&mut wrap, "Wrap text to width").changed();
-    if wrap {
-        changed |= ui
-            .add(
-                egui::DragValue::new(&mut width)
-                    .range(1.0..=10000.0)
-                    .prefix("Width ")
-                    .suffix(" px"),
+        let mut wrap = run.wrap_width.is_some();
+        let mut width = run.wrap_width.unwrap_or(320.);
+        let mut changed = ui.checkbox(&mut wrap, "Wrap text to width").changed();
+        if wrap {
+            changed |= super::fields::number(
+                ui,
+                "wrap-width",
+                "Text wrap width (px)",
+                &mut width,
+                1.0..=10000.0,
+                " px",
+                None,
+                Default::default(),
             )
-            .changed();
-    }
-    if changed {
-        studio.patch_type(|t| t.wrap_width = wrap.then_some(width));
-    }
+            .changed;
+        }
+        if ui.is_enabled() && changed {
+            studio.patch_type(|t| t.wrap_width = wrap.then_some(width));
+        }
     }
     ui.collapsing("Justification", |ui| {
         egui::Grid::new("justification_limits").show(ui, |ui| {
-            ui.label("");
-            ui.label("Min");
-            ui.label("Desired");
-            ui.label("Max");
-            ui.end_row();
             for (label, values, range) in [
-                ("Word %", &mut p.word_spacing, 1.0..=1000.0),
-                ("Letter %", &mut p.letter_spacing, -100.0..=1000.0),
+                ("Word spacing", &mut p.word_spacing, 1.0..=1000.0),
+                ("Letter spacing", &mut p.letter_spacing, -100.0..=1000.0),
             ] {
-                ui.label(label);
-                for v in values.iter_mut() {
-                    ui.add(egui::DragValue::new(v).range(range.clone()).speed(1.));
+                let mut accepted = false;
+                for (index, v) in values.iter_mut().enumerate() {
+                    let purpose =
+                        format!("{label} {} (%)", ["minimum", "desired", "maximum"][index]);
+                    accepted |= super::fields::number(
+                        ui,
+                        (label, index),
+                        &purpose,
+                        v,
+                        range.clone(),
+                        " %",
+                        None,
+                        Default::default(),
+                    )
+                    .changed;
                 }
                 ui.end_row();
-                values.sort_by(f32::total_cmp);
+                if accepted {
+                    values.sort_by(f32::total_cmp);
+                }
             }
         });
     });
@@ -125,8 +204,16 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         ui.collapsing("Hyphenation settings", |ui| {
             let h = p.hyphen.get_or_insert_with(Default::default);
             ui.horizontal(|ui| {
-                ui.label("Language");
-                ui.text_edit_singleline(&mut h.language);
+                let label = ui.label("Language");
+                let response = ui
+                    .add(
+                        egui::TextEdit::singleline(&mut h.language)
+                            .id(ui.make_persistent_id("hyphenation-language")),
+                    )
+                    .labelled_by(label.id);
+                ui.ctx().accesskit_node_builder(response.id, |node| {
+                    node.set_label("Hyphenation language")
+                });
             });
             for (label, v) in [
                 ("Minimum word length", &mut h.min_word_len),
@@ -134,18 +221,33 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
                 ("After hyphen", &mut h.min_after),
                 ("Consecutive lines", &mut h.max_consecutive),
             ] {
-                ui.horizontal(|ui| {
-                    ui.label(label);
-                    let minimum = usize::from(label != "Consecutive lines");
-                    ui.add(egui::DragValue::new(v).range(minimum..=30))
-                        .on_hover_text(if minimum == 0 { "0 allows unlimited consecutive hyphenated lines" } else { label });
+                let minimum = usize::from(label != "Consecutive lines");
+                super::fields::number(
+                    ui,
+                    label,
+                    label,
+                    v,
+                    minimum..=30,
+                    "",
+                    None,
+                    Default::default(),
+                )
+                .response
+                .on_hover_text(if minimum == 0 {
+                    "0 allows unlimited consecutive hyphenated lines"
+                } else {
+                    label
                 });
             }
-            ui.add(
-                egui::DragValue::new(&mut h.zone)
-                    .range(0.0..=1000.0)
-                    .prefix("Zone ")
-                    .suffix(" px"),
+            super::fields::number(
+                ui,
+                "hyphenation-zone",
+                "Hyphenation zone (px)",
+                &mut h.zone,
+                0.0..=1000.0,
+                " px",
+                None,
+                Default::default(),
             );
             ui.checkbox(&mut h.capitalized, "Hyphenate capitalized words");
             ui.checkbox(&mut h.last_word, "Hyphenate last word");
@@ -160,41 +262,67 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     if ui
         .checkbox(&mut no_break, "No break in selected text")
         .changed()
+        && ui.is_enabled()
     {
         studio.patch_character(|s| s.no_break = no_break);
     }
     ui.collapsing("Keeps & widows", |ui| {
         ui.checkbox(&mut p.allow_orphans, "Allow orphans");
-        ui.add(
-            egui::DragValue::new(&mut p.min_start_lines)
-                .range(1..=20)
-                .prefix("Orphan minimum "),
+        super::fields::number(
+            ui,
+            "orphan-minimum",
+            "Orphan minimum (lines)",
+            &mut p.min_start_lines,
+            1..=20,
+            "",
+            None,
+            Default::default(),
         );
-        ui.add(
-            egui::DragValue::new(&mut p.min_end_lines)
-                .range(1..=20)
-                .prefix("Widow minimum "),
+        super::fields::number(
+            ui,
+            "widow-minimum",
+            "Widow minimum (lines)",
+            &mut p.min_end_lines,
+            1..=20,
+            "",
+            None,
+            Default::default(),
         );
         let mut runt = p.runt.is_some();
         if ui.checkbox(&mut runt, "Avoid short last line").changed() {
             p.runt = runt.then(Default::default);
         }
         if let Some(rule) = &mut p.runt {
-            ui.add(
-                egui::DragValue::new(&mut rule.words)
-                    .range(1..=10)
-                    .prefix("Minimum words "),
+            super::fields::number(
+                ui,
+                "runt-words",
+                "Minimum words on last line",
+                &mut rule.words,
+                1..=10,
+                "",
+                None,
+                Default::default(),
             );
-            ui.add(
-                egui::DragValue::new(&mut rule.characters)
-                    .range(1..=50)
-                    .prefix("Minimum characters "),
+            super::fields::number(
+                ui,
+                "runt-characters",
+                "Minimum characters on last line",
+                &mut rule.characters,
+                1..=50,
+                "",
+                None,
+                Default::default(),
             );
         }
-        ui.add(
-            egui::DragValue::new(&mut p.keep_with_next)
-                .range(0..=20)
-                .prefix("Keep with next lines "),
+        super::fields::number(
+            ui,
+            "keep-with-next",
+            "Keep with next (lines)",
+            &mut p.keep_with_next,
+            0..=20,
+            "",
+            None,
+            Default::default(),
         );
         egui::ComboBox::from_label("Keep lines")
             .selected_text(match p.keep_together {
@@ -212,11 +340,29 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
                 );
             });
         if let KeepTogether::Edges { first, last } = &mut p.keep_together {
-            ui.add(egui::DragValue::new(first).range(1..=20).prefix("First "));
-            ui.add(egui::DragValue::new(last).range(1..=20).prefix("Last "));
+            super::fields::number(
+                ui,
+                "keep-first",
+                "Keep first (lines)",
+                first,
+                1..=20,
+                "",
+                None,
+                Default::default(),
+            );
+            super::fields::number(
+                ui,
+                "keep-last",
+                "Keep last (lines)",
+                last,
+                1..=20,
+                "",
+                None,
+                Default::default(),
+            );
         }
     });
-    if p != before {
+    if ui.is_enabled() && p != before {
         studio.patch_paragraph(|target|{
         macro_rules! changed {($($field:ident),*)=>{$(if p.$field!=before.$field{target.$field=p.$field.clone();})*};}
         changed!(align,word_spacing,letter_spacing,break_mode,overflow_wrap,hyphenate,hyphen,min_start_lines,min_end_lines,allow_orphans,runt,keep_with_next,keep_together);

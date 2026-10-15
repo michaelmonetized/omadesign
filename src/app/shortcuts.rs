@@ -777,10 +777,10 @@ impl Studio {
                 };
                 self.nudge_pixel_sel(dx, dy);
             }
-            Key::ArrowLeft => self.nudge(-step, 0.0),
-            Key::ArrowRight => self.nudge(step, 0.0),
-            Key::ArrowUp => self.nudge(0.0, -step),
-            Key::ArrowDown => self.nudge(0.0, step),
+            Key::ArrowLeft => self.nudge_keyboard_artwork(-step, 0.0),
+            Key::ArrowRight => self.nudge_keyboard_artwork(step, 0.0),
+            Key::ArrowUp => self.nudge_keyboard_artwork(0.0, -step),
+            Key::ArrowDown => self.nudge_keyboard_artwork(0.0, step),
             Key::X => self.swap_fill_stroke(),
             Key::D => self.style = Style::default(),
             Key::OpenBracket | Key::OpenCurlyBracket => {
