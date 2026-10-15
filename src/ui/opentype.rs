@@ -91,6 +91,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio, font: &str) {
                     }
                 }).response).inner;
             feature_response(ui,&response,current.iter().any(Option::is_none));
+            ui.ctx().accesskit_node_builder(response.id, |node| node.set_label("Figures"));
         }
         if has(b"sups") || has(b"subs") || has(b"ordn") {
             let current = [*b"sups", *b"subs", *b"ordn"].map(|tag| studio.selection_feature(tag));
@@ -125,6 +126,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio, font: &str) {
                     }
                 }).response).inner;
             feature_response(ui,&response,current.iter().any(Option::is_none));
+            ui.ctx().accesskit_node_builder(response.id, |node| node.set_label("Position"));
         }
         let sets: Vec<_> = features
             .iter()

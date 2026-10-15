@@ -6,6 +6,11 @@ mod object_appearance;
 mod layer_rows;
 
 use super::layer_drag;
+use crate::app::input_history;
+
+#[cfg(test)]
+#[path = "field_input_tests.rs"]
+mod field_input_tests;
 
 use crate::app::Studio;
 use crate::color::Blend;
@@ -354,7 +359,18 @@ fn number_field<N: eframe::egui::emath::Numeric>(
     range: std::ops::RangeInclusive<N>,
     suffix: &str,
 ) -> bool {
-    super::fields::number(ui, label, label, value, range, suffix, matches!(label, "X" | "Y" | "Rotate").then(|| N::from_f64(0.0)), Default::default()).changed
+    let field = number_field_response(ui, label, value, range, suffix);
+    input_history::record(field.response, field.changed)
+}
+
+fn number_field_response<N: eframe::egui::emath::Numeric>(
+    ui: &mut Ui,
+    label: &str,
+    value: &mut N,
+    range: std::ops::RangeInclusive<N>,
+    suffix: &str,
+) -> super::fields::FieldResponse {
+    super::fields::number(ui, label, label, value, range, suffix, matches!(label, "X" | "Y" | "Rotate").then(|| N::from_f64(0.0)), Default::default())
 }
 
 fn bounds_fields(
@@ -378,6 +394,12 @@ fn bounds_fields(
 }
 
 fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
+    studio.with_field_history(ui, ("color-row", fill), |ui, studio| {
+        color_row_contents(ui, studio, fill)
+    });
+}
+
+fn color_row_contents(ui: &mut Ui, studio: &mut Studio, fill: bool) {
     let style = inspected_style(studio);
     let source_fill = style.fill.clone();
     let source_stroke = style.stroke.clone();
@@ -386,6 +408,7 @@ fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
             Fill::Solid(c) | Fill::Linear { c0: c, .. } | Fill::Radial { c0: c, .. } => Some(*c),
             Fill::Gradient(g) => Some(g.sample(0.)),
             Fill::None => None,
+            Fill::Pattern(_) => Some(crate::color::Rgba::BLACK),
         }
     } else {
         source_stroke.as_ref().map(|stroke| {
@@ -420,7 +443,7 @@ fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
                     | Fill::Linear { c0: color, .. }
                     | Fill::Radial { c0: color, .. } => *color,
                     Fill::Gradient(g) => g.sample(0.),
-                    Fill::None => studio.brush.color,
+                    Fill::None | Fill::Pattern(_) => studio.brush.color,
                 }
             };
             color.a = 255;
@@ -493,7 +516,7 @@ fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
                         studio.fill_active = fill;
                     }
                     let mut opacity = f32::from(color.a) / 255.0 * 100.0;
-                    if ui
+                    if input_history::changed(ui
                         .add(
                             eframe::egui::DragValue::new(&mut opacity)
                                 .range(0.0..=100.0)
@@ -501,8 +524,7 @@ fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
                                 .max_decimals(0)
                                 .suffix("%"),
                         )
-                        .on_hover_text(format!("{label} opacity"))
-                        .changed()
+                        .on_hover_text(format!("{label} opacity")))
                     {
                         color.a = (opacity / 100.0 * 255.0).round() as u8;
                         changed = true;
@@ -610,17 +632,19 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
             .color(fg_weak()),
         );
         let current = gradient.as_ref().map(|g| g.kind);
+        let pattern = matches!(style.fill, Fill::Pattern(_));
+        let mut replace_pattern = false;
         let mut chosen = current;
         ComboBox::from_id_salt("paint-type")
-            .selected_text(current.map(|k| k.name()).unwrap_or("Solid"))
+            .selected_text(if pattern { "Pattern" } else { current.map(|k| k.name()).unwrap_or("Solid") })
             .width(108.)
             .show_ui(ui, |ui| {
-                ui.selectable_value(&mut chosen, None, "Solid");
+                replace_pattern = ui.selectable_value(&mut chosen, None, "Solid").clicked() && pattern;
                 for kind in crate::gradient::GradientKind::ALL {
                     ui.selectable_value(&mut chosen, Some(kind), kind.name());
                 }
             });
-        if chosen != current {
+        if chosen != current || replace_pattern {
             gradient = chosen.map(|kind| {
                 let mut g = gradient.clone().unwrap_or_else(|| {
                     crate::gradient::Gradient::new(
@@ -651,6 +675,7 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
             apply_gradient(studio, gradient.clone());
         }
     });
+    super::svg_paint::show(ui, studio);
     if let Some(mut gradient) = gradient {
         let bounds = studio
             .primary()
@@ -787,7 +812,7 @@ fn color_grid(ui: &mut Ui, studio: &mut Studio, recent: bool) {
                         | Fill::Linear { c0: current, .. }
                         | Fill::Radial { c0: current, .. } => *current,
                         Fill::Gradient(gradient) => gradient.sample(0.),
-                        Fill::None => color,
+                        Fill::None | Fill::Pattern(_) => color,
                     };
                     if studio.is_motion()
                         && !style.fill.is_none()
@@ -811,6 +836,12 @@ fn color_grid(ui: &mut Ui, studio: &mut Studio, recent: bool) {
 }
 
 fn stroke_studio(ui: &mut Ui, studio: &mut Studio) {
+    studio.with_field_history(ui, "stroke", |ui, studio| {
+        stroke_studio_contents(ui, studio)
+    });
+}
+
+fn stroke_studio_contents(ui: &mut Ui, studio: &mut Studio) {
     let mut stroke = inspected_style(studio).stroke.clone().unwrap_or_default();
     let mut enabled = inspected_style(studio).stroke.is_some();
     if ui.checkbox(&mut enabled, "Enable stroke").changed() {
@@ -947,13 +978,20 @@ fn apply_stroke(studio: &mut Studio, stroke: Option<DocStroke>) {
 }
 
 pub(super) fn character_studio(ui: &mut Ui, studio: &mut Studio) {
+    studio.with_field_history(ui, "character", |ui, studio| {
+        character_studio_contents(ui, studio)
+    });
+}
+
+fn character_studio_contents(ui: &mut Ui, studio: &mut Studio) {
     heading(ui, "Typography");
     super::text_geometry::frame_inspector(ui, studio);
     super::text_geometry::path_inspector(ui, studio);
     let live = studio.selected_type();
-    let font = live
+    let metrics=studio.selected_character_metrics();
+    let font = metrics.first().and_then(|s|s.font.clone()).or_else(||live
         .as_ref()
-        .map(|t| t.font.clone())
+        .map(|t| t.font.clone()))
         .unwrap_or_else(|| studio.text_font.clone());
     let label = crate::text::label_for(&font);
     let mut chosen = font.clone();
@@ -1032,7 +1070,7 @@ pub(super) fn character_studio(ui: &mut Ui, studio: &mut Studio) {
     if chosen != font {
         let path = chosen.clone();
         studio.remember_font(&path);
-        studio.patch_type(|t| t.font = path.clone());
+        if live.is_some(){studio.patch_character(|s|s.font=Some(path.clone()));}else{studio.patch_type(|t| t.font = path.clone());}
         studio.text_font = path;
         studio.font_scroll_once = true;
     }
@@ -1040,9 +1078,9 @@ pub(super) fn character_studio(ui: &mut Ui, studio: &mut Studio) {
         .default_open(false)
         .show(ui, |ui| google_fonts_ui(ui, studio));
 
-    let mut px = live.as_ref().map(|t| t.px).unwrap_or(studio.text_px);
+    let mut px = metrics.first().and_then(|s|s.px).or_else(||live.as_ref().map(|t|t.px)).unwrap_or(studio.text_px);
     if number_field(ui, "Size", &mut px, 8.0..=400.0, " px") {
-        studio.patch_type(|t| t.px = px);
+        if live.is_some(){studio.patch_character(|s|s.px=Some(px));}else{studio.patch_type(|t| t.px = px);}
     }
     super::character_spacing::show(ui,studio);
     super::opentype::show(ui, studio, &font);
@@ -1211,47 +1249,62 @@ fn inspector_slider<N: eframe::egui::emath::Numeric>(
     range: std::ops::RangeInclusive<N>,
     suffix: &str,
 ) -> bool {
-    let speed = (range.end().to_f64() - range.start().to_f64()) / 500.0;
-    let (mut changed, label_id) = ui
-        .horizontal(|ui| {
-            ui.with_layout(Layout::right_to_left(eframe::egui::Align::Center), |ui| {
-                ui.spacing_mut().button_padding.x = 4.0;
-                let number = ui.add_sized(
-                    [80.0, 24.0],
-                    eframe::egui::DragValue::new(value)
-                        .range(range.clone())
-                        .speed(speed)
-                        .max_decimals(3)
-                        .suffix(suffix),
-                );
-                let label_id = ui
-                    .with_layout(Layout::left_to_right(eframe::egui::Align::Center), |ui| {
-                        ui.add(
-                            eframe::egui::Label::new(RichText::new(label).small().color(fg_weak()))
+    ui.push_id(label, |ui| {
+        let speed = (range.end().to_f64() - range.start().to_f64()) / 500.0;
+        let (mut changed, label_id) = ui
+            .horizontal(|ui| {
+                ui.with_layout(Layout::right_to_left(eframe::egui::Align::Center), |ui| {
+                    ui.spacing_mut().button_padding.x = 4.0;
+                    let number = ui.add_sized(
+                        [80.0, 24.0],
+                        eframe::egui::DragValue::new(value)
+                            .range(range.clone())
+                            .speed(speed)
+                            .max_decimals(3)
+                            .suffix(suffix),
+                    );
+                    let label_id = ui
+                        .with_layout(Layout::left_to_right(eframe::egui::Align::Center), |ui| {
+                            ui.add(
+                                eframe::egui::Label::new(
+                                    RichText::new(label).small().color(fg_weak()),
+                                )
                                 .truncate(),
-                        )
-                        .id
-                    })
-                    .inner;
-                (number.labelled_by(label_id).changed(), label_id)
+                            )
+                            .id
+                        })
+                        .inner;
+                    (
+                        input_history::changed(number.labelled_by(label_id)),
+                        label_id,
+                    )
+                })
+                .inner
             })
-            .inner
-        })
-        .inner;
-    changed |= ui
-        .scope(|ui| {
-            // Keep the track inside the panel; the label and editable value
-            // live above it so their widths never push the panel outward.
-            ui.spacing_mut().slider_width = ui.available_width();
-            ui.add(Slider::new(value, range).show_value(false))
-                .labelled_by(label_id)
-                .changed()
-        })
-        .inner;
-    changed
+            .inner;
+        changed |= ui
+            .scope(|ui| {
+                // Keep the track inside the panel; the label and editable value
+                // live above it so their widths never push the panel outward.
+                ui.spacing_mut().slider_width = ui.available_width();
+                input_history::changed(
+                    ui.add(Slider::new(value, range).show_value(false))
+                        .labelled_by(label_id),
+                )
+            })
+            .inner;
+        changed
+    })
+    .inner
 }
 
 fn motion_keys(ui: &mut Ui, studio: &mut Studio) {
+    studio.with_field_history(ui, "motion-keys", |ui, studio| {
+        motion_keys_contents(ui, studio)
+    });
+}
+
+fn motion_keys_contents(ui: &mut Ui, studio: &mut Studio) {
     ui.label(
         RichText::new("Rest pose is Design. Keys are offsets.")
             .small()
@@ -1533,6 +1586,12 @@ fn edit_shape_geometry(studio: &mut Studio, layer: usize, id: u64, edit: impl Fn
 }
 
 fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
+    studio.with_field_history(ui, "transform", |ui, studio| {
+        transform_studio_contents(ui, studio, title)
+    });
+}
+
+fn transform_studio_contents(ui: &mut Ui, studio: &mut Studio, title: bool) {
     if title {
         heading(ui, "Layout");
     }
@@ -1967,6 +2026,11 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
 }
 
 fn fx_studio(ui: &mut Ui, studio: &mut Studio) {
+    studio.with_field_history(ui, "effects", |ui, studio| fx_studio_contents(ui, studio));
+}
+
+fn fx_studio_contents(ui: &mut Ui, studio: &mut Studio) {
+    super::svg_effect::show(ui, studio);
     let group_active = studio
         .active_layer
         .and_then(|i| studio.doc.layers.get(i))
@@ -2222,6 +2286,12 @@ fn object_icon(ui: &mut Ui, icon: &str, color: Color32) {
 }
 
 pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
+    studio.with_field_history(ui, "layers", |ui, studio| {
+        layers_studio_contents(ui, studio)
+    });
+}
+
+fn layers_studio_contents(ui: &mut Ui, studio: &mut Studio) {
     // Reveal a newly selected object once; a manual collapse stays collapsed.
     let primary = studio.primary();
     let reveal_id = ui.make_persistent_id("reveal-selection");
@@ -2358,14 +2428,14 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
             let mut opacity = studio.doc.layers[i].opacity * 100.0;
             ui.horizontal(|ui| {
                 ui.label("Layer opacity");
-                ui.add(
+                input_history::changed(ui.add(
                     eframe::egui::DragValue::new(&mut opacity)
                         .range(0.0..=100.0)
                         .suffix("%")
                         .speed(0.5)
                         .max_decimals(0),
                 )
-                .on_hover_text("Layer opacity");
+                .on_hover_text("Layer opacity"));
             });
             let layer = &studio.doc.layers[i];
             if blend != layer.blend || (opacity / 100.0 - layer.opacity).abs() > 0.0001 {

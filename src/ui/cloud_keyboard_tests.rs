@@ -35,6 +35,7 @@ fn keyboard_cloud_invitation_native_email_validation_focus_and_fresh_dialog_owne
     let before = crate::project::encode(&studio.doc).unwrap();
     let history = studio.history.len();
     frame(&ctx, &mut studio, vec![]);
+    frame(&ctx, &mut studio, vec![]);
     let output = frame(&ctx, &mut studio, vec![]);
     let email = keys::named(&output, "Reviewer email").0;
     keys::focused(&ctx, &output, "Reviewer email");

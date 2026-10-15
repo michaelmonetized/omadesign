@@ -482,7 +482,7 @@ pub(super) mod keyboard_tests {
         let mut output = frame(vec![]);
         for _ in 0..128 {
             if ctx.memory(|memory| memory.focused()).map(|id| id.accesskit_id()) == Some(named(&output, name).0) {
-                return output;
+                return frame(vec![]);
             }
             output = tab(false, &mut frame);
         }
@@ -491,7 +491,11 @@ pub(super) mod keyboard_tests {
 
     pub fn replace(text: &str, mut frame: impl FnMut(Vec<Event>) -> egui::FullOutput) -> egui::FullOutput {
         frame(key(Key::A, Modifiers { ctrl: true, command: true, ..Modifiers::NONE }));
-        frame(vec![Event::Text(text.into())])
+        if text.is_empty() {
+            frame(key(Key::Backspace, Modifiers::NONE))
+        } else {
+            frame(vec![Event::Text(text.into())])
+        }
     }
 
     pub fn focused(ctx: &egui::Context, output: &egui::FullOutput, name: &str) {

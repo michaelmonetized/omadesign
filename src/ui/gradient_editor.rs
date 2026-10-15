@@ -48,6 +48,46 @@ impl Stops {
 pub(super) fn editor(ui: &mut Ui, gradient: &mut Gradient, bounds: Bounds) -> bool {
     gradient.normalize();
     let mut changed = false;
+    if gradient.kind == GradientKind::Radial {
+        ui.collapsing("Radial geometry", |ui| {
+            for (label, value) in [
+                ("Focus X", &mut gradient.focal[0]),
+                ("Inner radius", &mut gradient.inner_radius),
+            ] {
+                ui.horizontal(|ui| {
+                    ui.label(label);
+                    changed |= ui.add(egui::DragValue::new(value).speed(0.01)).changed();
+                });
+            }
+            ui.horizontal(|ui| {
+                ui.label("Focus Y");
+                changed |= ui
+                    .add(egui::DragValue::new(&mut gradient.focal[1]).speed(0.01))
+                    .changed();
+            });
+            if let Some(axis) = &mut gradient.radial_axis {
+                ui.horizontal(|ui| {
+                    ui.label("Ellipse axis");
+                    for value in axis {
+                        changed |= ui.add(egui::DragValue::new(value).speed(0.01)).changed();
+                    }
+                });
+            }
+            gradient.inner_radius = gradient.inner_radius.clamp(0., 0.9999);
+        });
+    }
+    ui.horizontal(|ui| {
+        ui.label("Spread");
+        for mode in [
+            crate::gradient::Spread::Pad,
+            crate::gradient::Spread::Repeat,
+            crate::gradient::Spread::Reflect,
+        ] {
+            changed |= ui
+                .selectable_value(&mut gradient.spread, mode, mode.svg())
+                .changed();
+        }
+    });
     let id = ui.make_persistent_id("gradient-stop");
     let mut stops = ui
         .data(|data| data.get_temp::<Stops>(id))

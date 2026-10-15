@@ -30,6 +30,14 @@ pub(super) fn show(ui: &mut egui::Ui) {
     ui.label("Omadesign includes the following third-party components. Full license and copyright notices are available here offline and in the installed licenses folder.");
     for (name, copyright, license, texts) in [
         (
+            "EffectCraft model import and geometry · 0311bdc3",
+            "Copyright (c) 2026 ArtCraft Team and the EffectCraft contributors",
+            "MIT",
+            &[include_str!(
+                "../../docs/licenses/effectcraft-model-MIT.txt"
+            )][..],
+        ),
+        (
             "Real-ESRGAN · General x4v3, x4plus, x2plus, anime 6B",
             "Copyright (c) 2021, Xintao Wang",
             "BSD-3-Clause",

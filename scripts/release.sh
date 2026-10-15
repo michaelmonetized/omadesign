@@ -129,6 +129,7 @@ package() {
   mkdir -p "$stage/licenses/libraw" "$stage/licenses/native-notices"
   cp vendor/libraw/* "$stage/licenses/libraw/"
   cp vendor/native-notices/* "$stage/licenses/native-notices/"
+  cp docs/licenses/effectcraft-model-MIT.txt "$stage/licenses/native-notices/EffectCraft-MIT.txt"
   mkdir -p "$stage/licenses/lua" "$stage/plugins"
   cp vendor/lua-notices/* "$stage/licenses/lua/"
   cp -R plugins/studio-starter "$stage/plugins/"

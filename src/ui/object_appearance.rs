@@ -2,17 +2,19 @@ use super::*;
 use crate::document::Cmd;
 
 pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
-    let id = ui.make_persistent_id(("object-appearance", &studio.swap_id, &studio.selection));
-    ui.scope_builder(eframe::egui::UiBuilder::new().id(id), |ui| {
-        if studio.file_dialog_pending()
-            || studio.updates.freezing
-            || studio.op.is_some()
-            || studio.free_transform.is_some()
-            || studio.deformation.is_some()
-        {
-            ui.disable();
-        }
-        controls(ui, studio);
+    studio.with_field_history(ui, "object-appearance", |ui, studio| {
+        let id = ui.make_persistent_id(("object-appearance", &studio.swap_id, &studio.selection));
+        ui.scope_builder(eframe::egui::UiBuilder::new().id(id), |ui| {
+            if studio.file_dialog_pending()
+                || studio.updates.freezing
+                || studio.op.is_some()
+                || studio.free_transform.is_some()
+                || studio.deformation.is_some()
+            {
+                ui.disable();
+            }
+            controls(ui, studio);
+        });
     });
 }
 
@@ -150,7 +152,7 @@ fn percent(ui: &mut Ui, label: &str, value: &mut f32, mixed: bool) -> bool {
     ui.ctx().accesskit_node_builder(result.response.id, |node| {
         node.set_label(format!("{label} (%)"))
     });
-    result.changed
+    crate::app::input_history::record(result.response, result.changed)
 }
 
 #[cfg(test)]
@@ -257,6 +259,7 @@ mod tests {
                 ..Default::default()
             },
             |ui| {
+                studio.handle_shortcuts(ui.ctx());
                 if layer_controls {
                     layers_studio(ui, studio)
                 } else {
@@ -312,6 +315,131 @@ mod tests {
         s.active_layer = Some(0);
         s
     }
+    fn value_at(labels: &[(String, Rect)], name: &str) -> Pos2 {
+        let label = labels.iter().find(|(text, _)| text == name).unwrap().1;
+        labels.iter().find(|(_, rect)| rect.min.x > label.max.x && (rect.center().y - label.center().y).abs() < 3.).unwrap().1.center()
+    }
+
+    fn pointer(pos: Pos2, pressed: bool) -> Vec<Event> {
+        vec![Event::PointerMoved(pos), Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE }]
+    }
+
+    #[test]
+    fn field_input_object_drags_keep_only_endpoints_and_separate_gestures() {
+        let ctx = egui::Context::default();
+        crate::ui::theme::apply(&ctx);
+        let mut studio = fixture();
+        let initial: Vec<_> = studio.doc.layers[0].kind.shapes().unwrap().iter().map(|s| s.opacity).collect();
+        let mut finals = Vec::new();
+        for _ in 0..2 {
+            let pos = value_at(&labels(&ctx, &mut studio, vec![]), "Object opacity");
+            labels(&ctx, &mut studio, pointer(pos, true));
+            for dx in [10., 20., 30., 40.] {
+                labels(&ctx, &mut studio, vec![Event::PointerMoved(pos + egui::vec2(dx, 0.))]);
+            }
+            labels(&ctx, &mut studio, pointer(pos + egui::vec2(40., 0.), false));
+            finals.push(studio.doc.layers[0].kind.shapes().unwrap().iter().map(|s| s.opacity).collect::<Vec<_>>());
+        }
+        assert_eq!(studio.history.len(), 2);
+        assert_ne!(finals[0], finals[1]);
+        assert_eq!(finals[1][2], initial[2], "locked object");
+        studio.undo();
+        assert_eq!(studio.doc.layers[0].kind.shapes().unwrap().iter().map(|s| s.opacity).collect::<Vec<_>>(), finals[0]);
+        studio.undo();
+        assert_eq!(studio.doc.layers[0].kind.shapes().unwrap().iter().map(|s| s.opacity).collect::<Vec<_>>(), initial);
+        studio.redo(); studio.redo();
+        assert_eq!(studio.doc.layers[0].kind.shapes().unwrap().iter().map(|s| s.opacity).collect::<Vec<_>>(), finals[1]);
+        fn leaves(command: Cmd) -> usize {
+            match command { Cmd::Batch(commands) => commands.into_iter().map(leaves).sum(), _ => 1 }
+        }
+        assert_eq!(leaves(studio.history.clone().undo().unwrap()), 2, "one final command per editable object");
+    }
+
+    #[test]
+    fn field_input_layer_drags_do_not_merge_with_each_other_or_unrelated_edits() {
+        let ctx = egui::Context::default();
+        crate::ui::theme::apply(&ctx);
+        let mut studio = fixture();
+        let mut values = vec![studio.doc.layers[0].opacity];
+        for _ in 0..2 {
+            let pos = value_at(&render(&ctx, &mut studio, vec![], true), "Layer opacity");
+            render(&ctx, &mut studio, pointer(pos, true), true);
+            for dx in [-10., -20., -30.] {
+                render(&ctx, &mut studio, vec![Event::PointerMoved(pos + egui::vec2(dx, 0.))], true);
+            }
+            render(&ctx, &mut studio, pointer(pos + egui::vec2(-30., 0.), false), true);
+            values.push(studio.doc.layers[0].opacity);
+        }
+        assert_eq!(studio.history.len(), 2);
+        let layer = &studio.doc.layers[0];
+        studio.commit(Cmd::SetLayerMeta { index: 0, name: "Independent name".into(), visible: layer.visible, locked: layer.locked, opacity: layer.opacity, blend: layer.blend,
+            before: (layer.name.clone(), layer.visible, layer.locked, layer.opacity, layer.blend) });
+        assert_eq!(studio.history.len(), 3);
+        studio.undo();
+        assert_eq!(studio.doc.layers[0].opacity, values[2]);
+        studio.undo();
+        assert_eq!(studio.doc.layers[0].opacity, values[1]);
+        studio.undo();
+        assert_eq!(studio.doc.layers[0].opacity, values[0]);
+        studio.redo(); studio.redo();
+        assert_eq!(studio.doc.layers[0].opacity, values[2]);
+    }
+
+    #[test]
+    fn field_input_opacity_redo_keeps_final_value_after_first_frame_layout_reconciliation() {
+        let ctx = egui::Context::default();
+        crate::ui::theme::apply(&ctx);
+        let mut studio = fixture();
+        let mut frame = crate::document::Shape::new(
+            Geom::Rect {
+                origin: crate::geom::Pt::splat(100.),
+                size: crate::geom::Pt::splat(250.),
+                radius: 0.,
+            },
+            Default::default(),
+        );
+        frame.layout.frame = true;
+        frame.layout.stack = Some(Default::default());
+        let frame_id = frame.id;
+        for shape in studio.doc.layers[0].kind.shapes_mut().unwrap() {
+            shape.layout.parent = Some(frame_id);
+        }
+        studio.doc.layers[0].kind.shapes_mut().unwrap().push(frame);
+        let initial = crate::project::encode(&studio.doc).unwrap();
+        let first = studio.selection[0];
+        let original_bounds = studio.doc.find_shape(first.0, first.1).unwrap().geom.bbox();
+        let at = value_at(&labels(&ctx, &mut studio, vec![]), "Object opacity");
+        labels(&ctx, &mut studio, pointer(at, true));
+        let mut first_frame_value = None;
+        for dx in [10., 20., 30., 40.] {
+            labels(
+                &ctx,
+                &mut studio,
+                vec![Event::PointerMoved(at + egui::vec2(dx, 0.))],
+            );
+            first_frame_value
+                .get_or_insert(studio.doc.find_shape(first.0, first.1).unwrap().opacity);
+        }
+        labels(&ctx, &mut studio, pointer(at + egui::vec2(40., 0.), false));
+        let final_value = studio.doc.find_shape(first.0, first.1).unwrap().opacity;
+        assert_ne!(Some(final_value), first_frame_value);
+        assert_ne!(
+            studio.doc.find_shape(first.0, first.1).unwrap().geom.bbox(),
+            original_bounds,
+            "real layout reconciliation moved the child"
+        );
+        assert_eq!(studio.history.len(), 1);
+        let final_document = crate::project::encode(&studio.doc).unwrap();
+        studio.undo();
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), initial);
+        studio.redo();
+        assert_eq!(
+            studio.doc.find_shape(first.0, first.1).unwrap().opacity,
+            final_value
+        );
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), final_document);
+    }
+
     #[test]
     fn object_appearance_visible_short_text_motion_and_mixed_edits_are_one_undo_step() {
         let ctx = egui::Context::default();

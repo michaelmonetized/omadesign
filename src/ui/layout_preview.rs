@@ -235,7 +235,9 @@ pub fn interaction_editor(ui: &mut Ui, studio: &mut Studio) {
             .iter()
             .all(|target| eligible.contains(target));
     super::fields::native_scope(ui, owner, |ui| {
-        ui.add_enabled_ui(available, |ui| interaction_controls(ui, studio))
+        studio.with_field_history(ui, "prototype-interactions", |ui, studio| {
+            ui.add_enabled_ui(available, |ui| interaction_controls(ui, studio))
+        })
     });
 }
 
@@ -396,7 +398,7 @@ fn interaction_controls(ui: &mut Ui, studio: &mut Studio) {
                                 None,
                                 Default::default(),
                             );
-                            if field.changed {
+                            if crate::app::input_history::record(field.response, field.changed) {
                                 interaction.duration_ms = duration;
                             }
                         }

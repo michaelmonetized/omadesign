@@ -529,7 +529,7 @@ fn pdf_effect_fallback_preserves_unaffected_vectors_and_hidden_layer_state() {
     assert!(
         notes
             .iter()
-            .any(|note| note.contains("complex group appearance"))
+            .any(|note| note.contains("unsupported filters"))
     );
     let (loaded, _) = read(&bytes, "effects.pdf").unwrap();
     assert!(
@@ -742,10 +742,35 @@ fn pdf_subpaths(geom: Geom, rotation: f32) -> Vec<Vec<Operation>> {
     assert!(warnings.is_empty(), "{warnings:?}");
     let pdf = Pdf::load_mem(&bytes).unwrap();
     let page = pdf.get_pages()[&1];
-    let content = pdf.get_and_decode_page_content(page).unwrap();
+    fn content(pdf: &Pdf, bytes: &[u8], resources: &Dictionary) -> Vec<Operation> {
+        let mut operations = vec![];
+        for operation in Content::decode(bytes).unwrap().operations {
+            if operation.operator == "Do" {
+                let name = operation.operands[0].as_name().unwrap();
+                if let Some(form) =
+                    resource(pdf, resources, b"XObject", name).and_then(|o| o.as_stream().ok())
+                {
+                    let own = form
+                        .dict
+                        .get(b"Resources")
+                        .ok()
+                        .and_then(|o| dictionary(pdf, o))
+                        .unwrap_or(resources);
+                    operations.extend(content(pdf, &decoded(form, STREAM_LIMIT).unwrap(), own));
+                }
+            } else {
+                operations.push(operation);
+            }
+        }
+        operations
+    }
+    let resources = inherited(&pdf, page, b"Resources")
+        .and_then(|o| dictionary(&pdf, o))
+        .unwrap();
+    let operations = content(&pdf, &pdf.get_page_content(page), resources);
     let mut subpaths = Vec::new();
     let mut current = Vec::new();
-    for operation in content.operations {
+    for operation in operations {
         match operation.operator.as_str() {
             "m" => {
                 if !current.is_empty() {

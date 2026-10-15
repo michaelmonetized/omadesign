@@ -208,43 +208,13 @@ pub(crate) fn hex_field(
             .hint_text("#RRGGBB"),
     );
     if response.changed()
-        && let Some(parsed) = Rgba::parse_hex(&text)
+        && let Some(parsed) = Rgba::parse_hex(text.trim())
     {
         *color = parsed;
-        text = color.hex();
         changed = true;
     }
-    if !response.has_focus() && Rgba::parse_hex(text.trim()).is_none() {
+    if !response.has_focus() {
         text = color.hex();
-    }
-    if response.has_focus() {
-        let paste = ui.input(|input| {
-            input.events.iter().find_map(|event| match event {
-                egui::Event::Paste(text) => Some(text.clone()),
-                _ => None,
-            })
-        });
-        let copy = ui.input(|input| {
-            input.events.iter().any(|event| matches!(event, egui::Event::Copy))
-                || input
-                    .events
-                    .iter()
-                    .any(|event| matches!(event, egui::Event::Key { key: egui::Key::C, pressed: true, modifiers, .. } if modifiers.command || modifiers.ctrl))
-        });
-        if copy {
-            ui.ctx().copy_text(if text.is_empty() {
-                color.hex()
-            } else {
-                text.clone()
-            });
-        }
-        if let Some(raw) = paste
-            && let Some(parsed) = Rgba::parse_hex(raw.trim())
-        {
-            *color = parsed;
-            text = color.hex();
-            changed = true;
-        }
     }
     if buttons {
         if icons::tiny_icon(ui, ph::COPY, "Copy hex", false) {

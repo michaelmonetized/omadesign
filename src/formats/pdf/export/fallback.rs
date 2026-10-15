@@ -9,6 +9,14 @@ use std::collections::HashSet;
 pub(super) fn prepare(
     document: &Document,
 ) -> Result<(Cow<'_, Document>, BTreeSet<String>), String> {
+    if document.layers.iter().any(|layer| {
+        layer
+            .svg_filter
+            .as_ref()
+            .is_some_and(|graph| !graph.filters.is_empty())
+    }) {
+        return Err("PDF export of retained SVG filter graphs requires the integrated graph adapter; save the editable .oma document instead.".into());
+    }
     let affected = document
         .layers
         .iter()
@@ -18,6 +26,29 @@ pub(super) fn prepare(
         .collect::<HashSet<_>>();
     if affected.is_empty() {
         return Ok((Cow::Borrowed(document), BTreeSet::new()));
+    }
+    let sources = document.mask_sources();
+    let interacts_with_masks = document.layers.iter().enumerate().any(|(index, layer)| {
+        let selected = affected.contains(&index)
+            || document
+                .layer_ancestors(index)
+                .iter()
+                .any(|i| affected.contains(i));
+        selected
+            && (!layer.artwork_masks.is_empty()
+                || layer
+                    .kind
+                    .shapes()
+                    .is_some_and(|shapes| shapes.iter().any(|s| !s.artwork_masks.is_empty()))
+                || sources
+                    .iter()
+                    .any(|source| source.resolve(document).is_some_and(|(i, _)| i == index)))
+    });
+    if interacts_with_masks {
+        let rendered = crate::compositor::raster_export_document(document)?;
+        let (prepared, mut warnings) = prepare(&rendered)?;
+        warnings.insert("PDF export renders live masked compositions when unsupported effects or frame/stroke appearances affect their targets or source artwork; ordinary vector masks remain editable without those appearances.".into());
+        return Ok((Cow::Owned(prepared.into_owned()), warnings));
     }
     let roots = affected
         .iter()
@@ -30,11 +61,16 @@ pub(super) fn prepare(
         })
         .collect::<Vec<_>>();
     let needs_backdrop = roots.iter().any(|index| {
-        let group = &document.layers[*index];
-        group.is_group
-            && group.pass_through
-            && document.layers.iter().enumerate().any(|(child, layer)| {
-                layer.blend != Blend::Normal && document.layer_ancestors(child).contains(index)
+        std::iter::once(*index)
+            .chain(document.layer_ancestors(*index))
+            .any(|ancestor| {
+                let group = &document.layers[ancestor];
+                group.is_group
+                    && group.pass_through
+                    && document.layers.iter().enumerate().any(|(child, layer)| {
+                        layer.blend != Blend::Normal
+                            && document.layer_ancestors(child).contains(&ancestor)
+                    })
             })
     });
     let effect_backdrop = document.layers.iter().any(|l| {
@@ -76,7 +112,7 @@ pub(super) fn prepare(
                 .inflate(group_pad),
         );
         check_budget(bounds, &mut byte_budget)?;
-        let mut scene = scene(document, bounds, selected, true);
+        let mut scene = scene(document, bounds, selected.clone(), true);
         let root = scene
             .layers
             .iter_mut()
@@ -101,7 +137,7 @@ pub(super) fn prepare(
         } else {
             original.blend
         };
-        for layer in &scene.layers {
+        for layer in &selected {
             if layer.id != original.id {
                 removed.insert(layer.id);
             }
@@ -110,7 +146,7 @@ pub(super) fn prepare(
         warnings.insert(if original.is_group {
             "PDF export preserves complex group appearance as a raster layer; its internal objects remain editable in the .oma project.".into()
         }else{
-            "PDF export preserves gradients, masks, and effects as raster layers where needed; unaffected vector layers stay editable.".into()
+            "PDF export preserves unsupported filters, shape/conic gradients, frame composition, or stroke alignment as raster layers; supported vector paint and masks stay editable.".into()
         });
     }
     prepared.layers.retain(|layer| !removed.contains(&layer.id));
@@ -123,36 +159,36 @@ pub(super) fn prepare(
 }
 
 fn needs_pixels(layer: &Layer) -> bool {
-    if layer.is_group {
-        !layer.pass_through
-            || layer.fill_opacity < 1.
-            || layer.opacity < 1.
-            || layer.mask.is_some()
-            || layer.filters.active()
-    } else {
-        layer.fill_opacity < 1.
-            || layer.mask.is_some()
-            || layer.filters.active()
-            || layer.kind.shapes().is_some_and(|shapes| {
-                shapes.iter().any(|shape| {
-                    shape.fill_opacity < 1.
-                        || shape.blend != Blend::Normal
-                        || shape.filters.active()
-                        || shape.mask.is_some()
-                        || shape.style.stroke.as_ref().is_some_and(|s| {
-                            s.gradient.is_some()
-                                || s.alignment != crate::document::StrokeAlignment::Center
-                        })
-                        || matches!(
-                            shape.style.fill,
-                            Fill::Gradient(_) | Fill::Linear { .. } | Fill::Radial { .. }
-                        )
-                })
+    layer.filters.active()
+        || layer.blend_interior
+        || layer.kind.shapes().is_some_and(|shapes| {
+            shapes.iter().any(|shape| {
+                shape.filters.active()
+                    || shape.blend_interior
+                    || shape.layout.parent.is_some()
+                    || shape.style.stroke.as_ref().is_some_and(|s| {
+                        s.alignment != crate::document::StrokeAlignment::Center
+                            || s.gradient.as_ref().is_some_and(unsupported_gradient)
+                    })
+                    || shape.style.fill.gradient().as_ref().map_or(
+                        !matches!(shape.style.fill, Fill::None | Fill::Solid(_)),
+                        unsupported_gradient,
+                    )
             })
-    }
+        })
 }
 
-fn layer_bounds(layer: &Layer) -> Option<Bounds> {
+/// Identify gradient kinds without a PDF shading equivalent.
+/// Args: gradient. Returns true when native appearance fallback is required.
+fn unsupported_gradient(g: &Gradient) -> bool {
+    !matches!(g.kind, GradientKind::Linear | GradientKind::Radial)
+        || g.radial_axis.is_some()
+        || g.focal != [0., 0.]
+        || g.inner_radius != 0.
+        || g.spread != crate::gradient::Spread::Pad
+}
+
+pub(super) fn layer_bounds(layer: &Layer) -> Option<Bounds> {
     let bounds = match &layer.kind {
         LayerKind::Vector { shapes } => shapes
             .iter()
@@ -220,7 +256,27 @@ fn scene(
         Pt::ZERO,
         Pt::new(bounds.width(), bounds.height()),
     )];
+    let layer_ids = layers
+        .iter()
+        .map(|l| (l.id, l.id))
+        .collect::<HashMap<_, _>>();
+    let shape_ids = layers
+        .iter()
+        .flat_map(|l| l.kind.shapes().unwrap_or(&[]))
+        .map(|s| (s.id, s.id))
+        .collect::<HashMap<_, _>>();
+    let placement = tiny_skia::Transform::from_translate(-bounds.min.x, -bounds.min.y);
     for layer in &mut layers {
+        for mask in &mut layer.artwork_masks {
+            mask.remap(&layer_ids, &shape_ids, placement);
+        }
+        if let Some(shapes) = layer.kind.shapes_mut() {
+            for shape in shapes {
+                for mask in &mut shape.artwork_masks {
+                    mask.remap(&layer_ids, &shape_ids, placement);
+                }
+            }
+        }
         match &mut layer.kind {
             LayerKind::Vector { shapes } => {
                 for shape in shapes {

@@ -415,7 +415,8 @@ mod tests {
         let visible = studio.selection.clone();
         assert_eq!(visible.len(), 1);
         let shape = studio.doc.find_shape(visible[0].0, visible[0].1).unwrap();
-        assert!(matches!(shape.geom, Geom::Path { .. }));
+        assert!(matches!(shape.geom, Geom::Path { .. } | Geom::Paths { .. }));
+        assert_eq!(shape.geom.path_contours().len(), 1);
         assert!(matches!(shape.style.fill, Fill::Solid(color) if color == Rgba::rgb(255, 0, 0)));
         assert_center(shape.world_bbox(), center);
         let group = studio

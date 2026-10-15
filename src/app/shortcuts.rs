@@ -218,6 +218,17 @@ impl Studio {
     }
 
     pub fn handle_shortcuts(&mut self, ctx: &egui::Context) {
+        if ctx.memory(|memory| memory.focused().is_some_and(|id| {
+            id != egui::Id::new("studio-canvas") && id != egui::Id::new("studio-photo-canvas")
+        })) {
+            ctx.input_mut(|input| {
+                for event in &mut input.events {
+                    if let Event::Key { modifiers, .. } = event {
+                        modifiers.command |= modifiers.ctrl || modifiers.mac_cmd;
+                    }
+                }
+            });
+        }
         let events = ctx.input(|i| i.events.clone());
         let final_modifiers = held_modifiers(ctx);
         // Clipboard events have no modifier field. Replay modifier changes in order,

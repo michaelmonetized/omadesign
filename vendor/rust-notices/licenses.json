@@ -1,7 +1,7 @@
 {
   "format": 1,
   "generator": "cargo-about 0.9.2 / scripts/update-third-party.py; Zstandard additions from locked Cargo metadata",
-  "cargo_lock_sha256": "dc055382b2270dfb8e55c73d1debd48a9674d55ed92594e263e91801089a8968",
+  "cargo_lock_sha256": "6f4d1a6b71c88e069fa6ae5a06a9b2d3e3bd29482a95c4f6d98774ee0fb9d8e0",
   "components": [
     {
       "name": "ab_glyph",

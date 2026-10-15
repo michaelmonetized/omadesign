@@ -33,9 +33,10 @@ pub enum Format {
     Psb,
     Pdf,
     Ora,
+    Idml,
 }
 impl Format {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Png,
         Self::Jpeg,
         Self::Tiff,
@@ -44,6 +45,7 @@ impl Format {
         Self::Psb,
         Self::Pdf,
         Self::Ora,
+        Self::Idml,
     ];
     pub fn raster(self) -> bool {
         matches!(self, Self::Png | Self::Jpeg | Self::Tiff)
@@ -58,6 +60,7 @@ impl Format {
             Self::Psb => "psb",
             Self::Pdf => "pdf",
             Self::Ora => "ora",
+            Self::Idml => "idml",
         }
     }
     pub fn label(self) -> &'static str {
@@ -70,6 +73,7 @@ impl Format {
             Self::Psb => "PSB · layered",
             Self::Pdf => "PDF · layered",
             Self::Ora => "OpenRaster · layered",
+            Self::Idml => "IDML · publishing",
         }
     }
 }
@@ -131,6 +135,7 @@ pub fn encode(
             }
             Format::Pdf => crate::formats::pdf::write(doc)?,
             Format::Ora => crate::formats::openraster::write(doc)?,
+            Format::Idml => crate::formats::idml::write(doc)?,
             _ => unreachable!(),
         };
         progress.check()?;

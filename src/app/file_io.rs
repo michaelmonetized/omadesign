@@ -390,6 +390,7 @@ impl Studio {
                     }
                     "pdf" => crate::formats::pdf::write(&doc)?,
                     "ora" => crate::formats::openraster::write(&doc)?,
+                    "idml" => crate::formats::idml::write(&doc)?,
                     _ => return Err("Unsupported layered export".into()),
                 };
                 crate::formats::write_atomic(&output, &bytes)?;

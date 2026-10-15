@@ -28,6 +28,33 @@ pub struct GradientStop {
     pub offset: f32,
     pub color: Rgba,
 }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Spread {
+    #[default]
+    Pad,
+    Repeat,
+    Reflect,
+}
+impl Spread {
+    /// Select the native shader tiling rule.
+    /// Returns the drawing mode corresponding to this saved spread mode.
+    pub fn skia(self) -> tiny_skia::SpreadMode {
+        match self {
+            Self::Pad => tiny_skia::SpreadMode::Pad,
+            Self::Repeat => tiny_skia::SpreadMode::Repeat,
+            Self::Reflect => tiny_skia::SpreadMode::Reflect,
+        }
+    }
+    /// Name the portable SVG spread mode.
+    /// Returns its standards-defined attribute value.
+    pub fn svg(self) -> &'static str {
+        match self {
+            Self::Pad => "pad",
+            Self::Repeat => "repeat",
+            Self::Reflect => "reflect",
+        }
+    }
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Gradient {
     pub kind: GradientKind,
@@ -35,6 +62,14 @@ pub struct Gradient {
     pub from: [f32; 2],
     pub to: [f32; 2],
     pub stops: Vec<GradientStop>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub radial_axis: Option<[f32; 2]>,
+    #[serde(default)]
+    pub spread: Spread,
+    #[serde(default)]
+    pub focal: [f32; 2],
+    #[serde(default)]
+    pub inner_radius: f32,
 }
 impl Gradient {
     pub fn new(kind: GradientKind, first: Rgba, last: Rgba) -> Self {
@@ -46,6 +81,10 @@ impl Gradient {
                 [0.5, 0.5]
             },
             to: [1., 0.5],
+            radial_axis: None,
+            spread: Spread::Pad,
+            focal: [0., 0.],
+            inner_radius: 0.,
             stops: vec![
                 GradientStop {
                     offset: 0.,
@@ -81,7 +120,11 @@ impl Gradient {
         let Some(first) = self.stops.first() else {
             return Rgba::TRANSPARENT;
         };
-        let position = position.clamp(0., 1.);
+        let position = match self.spread {
+            Spread::Pad => position.clamp(0., 1.),
+            Spread::Repeat => position.rem_euclid(1.),
+            Spread::Reflect => 1. - (position.rem_euclid(2.) - 1.).abs(),
+        };
         if position < first.offset {
             return first.color;
         }
@@ -139,6 +182,18 @@ impl Gradient {
                 (center.y + d.y * 0.5 - bounds.min.y) / bounds.height().max(1e-3),
             ];
         } else {
+            if let Some(axis) = &mut self.radial_axis {
+                let delta = degrees.to_radians() - (b.y - a.y).atan2(b.x - a.x);
+                let rotated = Pt::new(
+                    axis[0] * bounds.width().max(1e-3),
+                    axis[1] * bounds.height().max(1e-3),
+                )
+                .rotate(delta);
+                *axis = [
+                    rotated.x / bounds.width().max(1e-3),
+                    rotated.y / bounds.height().max(1e-3),
+                ];
+            }
             self.to = [
                 (a.x + d.x - bounds.min.x) / bounds.width().max(1e-3),
                 (a.y + d.y - bounds.min.y) / bounds.height().max(1e-3),
@@ -151,11 +206,45 @@ impl Gradient {
         let p = point - a;
         match self.kind {
             GradientKind::Linear => (p.x * d.x + p.y * d.y) / (d.x * d.x + d.y * d.y).max(1e-9),
-            GradientKind::Radial | GradientKind::Shape => p.length() / d.length().max(1e-6),
+            GradientKind::Radial => {
+                let mut q = tiny_skia::Point::from_xy(point.x, point.y);
+                let Some(inverse) = self.radial_transform(bounds).invert() else {
+                    return 0.;
+                };
+                inverse.map_point(&mut q);
+                let p = Pt::new(q.x - self.focal[0], q.y - self.focal[1]);
+                let f = Pt::from_array(self.focal);
+                let r = self.inner_radius;
+                let a = f.length_sq() - (1. - r).powi(2);
+                let b = 2. * (p.dot(f) - r * (1. - r));
+                let c = p.length_sq() - r * r;
+                if a.abs() < 1e-6 {
+                    return -c / b;
+                }
+                let root = (b * b - 4. * a * c).max(0.).sqrt();
+                ((-b - root) / (2. * a)).max((-b + root) / (2. * a))
+            }
+            GradientKind::Shape => p.length() / d.length().max(1e-6),
             GradientKind::Conic => {
                 ((p.y.atan2(p.x) - d.y.atan2(d.x)) / std::f32::consts::TAU).rem_euclid(1.)
             }
         }
+    }
+    /// Place the two radial circles in object space.
+    /// Args: current object bounds. Returns the affine map from unit-radius paint coordinates.
+    pub fn radial_transform(&self, bounds: Bounds) -> tiny_skia::Transform {
+        let (a, b) = self.endpoints(bounds);
+        let d = b - a;
+        let y = self
+            .radial_axis
+            .map(|v| {
+                Pt::new(
+                    v[0] * bounds.width().max(1e-3),
+                    v[1] * bounds.height().max(1e-3),
+                )
+            })
+            .unwrap_or_else(|| d.perp());
+        tiny_skia::Transform::from_row(d.x, d.y, y.x, y.y, a.x, a.y)
     }
     pub fn skia(&self, bounds: Bounds) -> tiny_skia::Shader<'static> {
         let mut normalized = self.clone();
@@ -173,17 +262,17 @@ impl Gradient {
                 a,
                 b,
                 stops,
-                tiny_skia::SpreadMode::Pad,
+                self.spread.skia(),
                 tiny_skia::Transform::identity(),
             ),
             _ => tiny_skia::RadialGradient::new(
-                a,
-                0.,
-                a,
-                ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt().max(1e-3),
+                tiny_skia::Point::from_xy(self.focal[0], self.focal[1]),
+                self.inner_radius.max(0.),
+                tiny_skia::Point::from_xy(0., 0.),
+                1.,
                 stops,
-                tiny_skia::SpreadMode::Pad,
-                tiny_skia::Transform::identity(),
+                self.spread.skia(),
+                self.radial_transform(bounds),
             ),
         };
         shader.unwrap_or(tiny_skia::Shader::SolidColor(self.sample(0.).to_skia()))

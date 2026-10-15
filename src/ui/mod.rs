@@ -50,10 +50,15 @@ mod selection;
 mod studios;
 mod panel_workspace;
 mod shared_transform;
+mod svg_paint;
+mod svg_effect;
 mod text_geometry;
 mod templates;
 pub mod theme;
 mod timeline;
+mod timeline_keyboard;
+mod motion_compositions;
+mod scene3d;
 mod welcome;
 
 use crate::app::Studio;

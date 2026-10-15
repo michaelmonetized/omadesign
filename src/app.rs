@@ -32,6 +32,7 @@ mod restart;
 pub(crate) mod selection;
 mod alignment;
 mod shortcuts;
+pub(crate) mod input_history;
 mod snapping;
 pub mod startup;
 mod tabs;
@@ -336,6 +337,8 @@ pub struct Studio {
     pub individual_object: Option<(usize, u64)>,
     pub active_layer: Option<usize>,
     pub history: History,
+    field_history_context: Option<egui::Context>,
+    field_history_generation: Option<u64>,
     pub style: Style,
     pub gradient: (Rgba, Rgba),
     pub brush: Brush,
@@ -557,7 +560,7 @@ fn recolor_fill(fill: Fill, color: Rgba) -> Fill {
             }
             Fill::Gradient(gradient)
         }
-        Fill::None | Fill::Solid(_) => Fill::Solid(color),
+        Fill::None | Fill::Solid(_) | Fill::Pattern(_) => Fill::Solid(color),
     }
 }
 
@@ -589,6 +592,8 @@ impl Studio {
             individual_object: None,
             active_layer: Some(1),
             history: History::default(),
+            field_history_context: None,
+            field_history_generation: None,
             style: Style::default(),
             gradient: (Rgba::from_hex(0xFFD166), Rgba::from_hex(0xE5484D)),
             brush: Brush::default(),
@@ -1524,6 +1529,7 @@ impl Studio {
     }
 
     pub fn commit(&mut self, cmd: Cmd) {
+        let field = self.take_field_history_key();
         crate::telemetry::count("feature.edit");
         self.end_pixel_stroke(false);
         self.end_deform(false);
@@ -1536,13 +1542,19 @@ impl Studio {
             crate::document::apply(&mut self.doc, &change);
             changes.push(change);
         }
-        self.history.push(if changes.len() == 1 {
+        let command = if changes.len() == 1 {
             changes.remove(0)
         } else {
             Cmd::Batch(changes)
-        });
+        };
+        if let Some(field) = field {
+            self.history.push_field(command, field, &self.doc);
+        } else {
+            self.history.push(command);
+        }
         self.dirty = true;
         self.mark();
+        self.field_history_generation = field.map(|_| self.canvas_gen);
         self.sanitize();
     }
 

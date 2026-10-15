@@ -292,6 +292,12 @@ impl Studio {
                 return Err("Develop the photo before placing it in a frame".into());
             }
         };
+        if !source.motion.compositions.is_empty()
+            || !source.motion.expressions.is_empty()
+            || source.motion.scene3d.is_some()
+        {
+            return Err("FrameComposition: place motion projects on the canvas or add them through Compositions to preserve their scene".into());
+        }
         source.validate_hierarchy()?;
         if source
             .layers

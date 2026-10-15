@@ -177,7 +177,7 @@ fn amount(
                 }
             });
             focus_outline(ui, &response);
-            changed.then_some(number)
+            crate::app::input_history::record(response, changed).then_some(number)
         },
     )
     .inner
@@ -224,6 +224,16 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         .num_columns(2)
         .spacing([8., 7.])
         .show(ui, |ui| {
+            let color_label=ui.label("Text color");
+            let color=values.first().and_then(|s|s.fill.as_ref()).and_then(|f|if let crate::document::Fill::Solid(c)=f{Some(*c)}else{None}).unwrap_or(crate::color::Rgba::BLACK);
+            let mut color=color.to_egui();
+            let range=studio.type_edit.as_ref().map(|edit|(edit.layer,edit.id,edit.caret.min(edit.anchor),edit.caret.max(edit.anchor)));
+            let response=crate::ui::fields::native_scope(ui,ui.make_persistent_id(("text-range-color",range)),|ui|ui.color_edit_button_srgba(&mut color)).inner;
+            crate::ui::welcome::name_control(ui,&response,color_label.id,"Selected text color");
+            if values.windows(2).any(|pair|pair[0].fill!=pair[1].fill){ui.ctx().accesskit_node_builder(response.id,|node|{node.set_value("Mixed");node.set_description("The selected text contains different colors");});}
+            if response.changed(){studio.patch_character(|s|s.fill=Some(crate::document::Fill::Solid(crate::color::Rgba::from_egui(color))));}
+            ui.end_row();
+
             let leading_label = ui.label("Leading").id;
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.;
@@ -416,7 +426,7 @@ mod tests {
                 events,
                 ..Default::default()
             },
-            |ui| show(ui, studio),
+            |ui| studio.with_field_history(ui, "character", |ui, studio| show(ui, studio)),
         );
         output.textures_delta.clear();
         output

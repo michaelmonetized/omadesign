@@ -67,6 +67,9 @@ pub(super) fn motion_number(
         }
         number_focus(ui, &response);
         super::welcome::focus_control(ui, &response);
+        if response.gained_focus() {
+            response.scroll_to_me_animation(None, egui::style::ScrollAnimation::none());
+        }
         if response.enabled() {
             ui.data_mut(|data| data.insert_temp(owner.with("motion-number-valid"), valid));
         }
