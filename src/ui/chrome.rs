@@ -703,6 +703,7 @@ fn view_menu(ui: &mut Ui, studio: &mut Studio) {
             ui.close();
         }
         ui.menu_button("Guides", |ui| {
+            super::guide_keyboard::menu(ui, studio);
             if ui.add_enabled(!studio.doc.ruler.guides_locked, Button::new("Lock all guides")).clicked() {
                 studio.set_guides_locked(true);
                 ui.close();

@@ -741,7 +741,7 @@ mod keyboard_tests {
         let ctx = egui::Context::default();
         ctx.enable_accesskit();
         crate::ui::theme::apply(&ctx);
-        ctx.style_mut(|style| style.animation_time = 0.0);
+        ctx.all_styles_mut(|style| style.animation_time = 0.0);
         ctx
     }
 
