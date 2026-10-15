@@ -10,6 +10,8 @@ Use `node scripts/version.mjs stable 0.6.4` to prepare Cargo.toml, Omadesign's C
 
 Builds run through `node scripts/serialized-cargo.mjs CONFIG REPOSITORY FULL_COMMIT test [FOCUSED_ARGS]`. The local JSON config names one dedicated clean build worktree and an existing target cache per repository, plus shared scratch and lock paths under /home. The helper holds a global flock, checks out only the requested committed source, limits Cargo to two jobs, and removes its temporary directory afterward. Never point the canonical worktree at a user's checkout. Agents must not create extra target caches, run cargo clean, package release archives or launch intrusive desktop/audio tests.
 
+The helper writes [source and executable receipts](build-receipts.md) before releasing that lock. Read the printed receipt path instead of hashing a shared target executable after another job can replace it. The receipt records compilation and command outcome; fixture execution and acceptance remain separate checks.
+
 The [approved follow-on scope](follow-on-scope.md) covers complete keyboard access, all advertised RAW families and modes, full component/grid/prototype authoring, stereo then 2.1/5.1/7.1 mixing, full audio delivery, full video formats and high-depth/HDR, and shared fixture qualification. Run affected fixtures per PR and the full agreed cohort before a public candidate. Undo/clipboard corrections and existing format integration remain within the original milestones. The 0.7.0 release decision follows qualification; no version-only release is needed.
 
 Accepted QA, rollback evidence, private fixtures, original artwork and the delivered client document remain protected.
