@@ -10,6 +10,7 @@ mod effects_cache;
 mod mask_cache;
 mod frames;
 mod groups;
+mod motion_scene;
 pub(crate) mod interaction;
 #[cfg(test)]
 mod performance_tests;
@@ -224,6 +225,7 @@ pub fn render_view_posed(
     let mut poses = motion_t.and_then(|time| doc.motion.evaluate_frame(time, &mut || true).ok()).unwrap_or_default();
     if let Some(overrides) = overrides { poses.extend(overrides.iter().map(|(id, pose)| (*id, *pose))); }
     groups::draw(&mut pm, doc, t, &draft, motion_t, Some(&poses));
+    let _ = motion_scene::draw(&mut pm, doc, t, motion_t.unwrap_or(0.), 0, &poses, &mut || true, &mut motion_scene::Budget::default());
     Some(pm)
 }
 
@@ -235,6 +237,7 @@ pub(crate) fn render_export(doc: &Document, scale: u32) -> Result<Pixmap, String
     draw_export_plates(&mut pm, doc, s as f32);
     let t = Transform::from_scale(s as f32, s as f32);
     groups::draw(&mut pm, doc, t, &Draft::none(), None, None);
+    motion_scene::draw(&mut pm, doc, t, 0., 0, &HashMap::new(), &mut || true, &mut motion_scene::Budget::default())?;
     Ok(pm)
 }
 
@@ -253,6 +256,7 @@ pub(crate) fn render_export_preview(doc: &Document, max_edge: u32) -> Result<Pix
         None,
         None,
     );
+    motion_scene::draw(&mut pm,doc,Transform::from_scale(s,s),0.,0,&HashMap::new(),&mut || true,&mut motion_scene::Budget::default())?;
     Ok(pm)
 }
 
@@ -278,6 +282,7 @@ pub fn render_export_at_cancellable(
     transparent: bool,
     keep: &mut dyn FnMut() -> bool,
 ) -> Result<Pixmap, String> {
+    crate::motion::compositions::validate(doc)?;
     if !keep() { return Err("Cancelled: render cancelled".into()); }
     let s = if scale.is_finite() {
         scale.clamp(0.1, 8.0)
@@ -297,6 +302,7 @@ pub fn render_export_at_cancellable(
     }
     let t = Transform::from_scale(s, s);
     groups::draw(&mut pm, doc, t, &Draft::none(), Some(time), Some(&poses));
+    motion_scene::draw(&mut pm, doc, t, time, 0, &poses, keep, &mut motion_scene::Budget::default())?;
     if !keep() { return Err("Cancelled: render cancelled".into()); }
     Ok(pm)
 }

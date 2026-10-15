@@ -8,6 +8,8 @@ pub fn extended() -> Vec<Value> {
     let point = json!({"type":"array","items":n,"minItems":2,"maxItems":2});
     let points = json!({"type":"array","items":point,"minItems":1,"maxItems":4096});
     let targets = json!({"type":"array","minItems":1,"maxItems":100,"items":{"type":"object","properties":{"layer":i,"id":i},"required":["layer","id"],"additionalProperties":false}});
+    let ease = json!({"oneOf":[{"enum":["Linear","EaseIn","EaseOut","EaseInOut","Hold"]},{"type":"object","properties":{"CubicBezier":{"type":"object","properties":{"x1":n,"y1":n,"x2":n,"y2":n},"required":["x1","y1","x2","y2"],"additionalProperties":false}},"required":["CubicBezier"],"additionalProperties":false}]});
+    let remap = json!({"type":"array","maxItems":10000,"items":{"type":"object","properties":{"time":{"type":"number","minimum":0,"maximum":3600},"value":{"type":"number","minimum":-3600,"maximum":3600},"ease":ease},"required":["time","value"],"additionalProperties":false}});
     let specs = vec![
         (
             "configure_canvas",
@@ -116,7 +118,7 @@ pub fn extended() -> Vec<Value> {
         ),
         (
             "get_motion",
-            "Inspect duration, FPS, loop, playhead and paginated tracks with persistent target IDs.",
+            "Inspect duration, FPS, loop, playhead, paginated tracks, expressions and composition metadata including persistent IDs, anchors and time-remap keys.",
             json!({"offset":i}),
             vec![],
             false,
@@ -129,17 +131,24 @@ pub fn extended() -> Vec<Value> {
             true,
         ),
         (
+            "set_composition",
+            "Embed an editable .oma/.omamotion document as a nested composition (path), or edit/remove an existing composition by id. Start/end/source_start are seconds, speed may be negative, rotation is degrees; anchor_x/anchor_y are source coordinates. time_remap replaces ordered {time,value,ease} keys (parent seconds to source seconds); [] clears remapping. Nested data is embedded for save/reopen. Limits: eight levels and 128 compositions.",
+            json!({"id":i,"path":s,"remove":b,"name":s,"start":n,"end":n,"source_start":n,"speed":n,"looped":b,"x":n,"y":n,"anchor_x":n,"anchor_y":n,"time_remap":remap,"scale_x":n,"scale_y":n,"rotation":n,"opacity":n,"visible":b}),
+            vec![],
+            true,
+        ),
+        (
             "set_expression",
-            "Set or remove a bounded numeric expression without changing keys. Arithmetic, time/value/duration/fps/pi/tau, sin/cos/abs/sqrt/floor/ceil/round, min/max/clamp/lerp/smoothstep, seeded random(seed)/noise(x,seed), property(id,X). Native rotation is radians. No scripts or IO; get_motion returns named evaluation errors.",
-            json!({"layer":i,"id":i,"property":s,"source":s,"remove":b}),
-            vec!["layer","id","property"],
+            "Set or remove a bounded numeric expression without changing keys. Target either composition (persistent composition id), or layer/id for an existing object/raster. Compositions support X, Y, Rotation, Scale, Width, Height and Opacity. Arithmetic, time/value/duration/fps/pi/tau, sin/cos/abs/sqrt/floor/ceil/round, min/max/clamp/lerp/smoothstep, seeded random(seed)/noise(x,seed), property(id,X). Native rotation is radians. No scripts or IO; get_motion returns named evaluation errors.",
+            json!({"composition":i,"layer":i,"id":i,"property":s,"source":s,"remove":b}),
+            vec!["property"],
             true,
         ),
         (
             "set_keyframes",
-            "Add/update or remove keys on vector objects or raster images. id=0 selects raster layer. property uses names from get_editor_capabilities. Rotation is degrees; x/y are offsets, scale/width/height are multipliers, opacity/reveal 0–1. Key ease is Linear, EaseIn, EaseOut or EaseInOut. Fill keys use hex color. One undo step.",
-            json!({"layer":i,"id":i,"property":s,"remove":b,"keys":{"type":"array","minItems":1,"maxItems":1000,"items":{"type":"object","properties":{"time":n,"value":n,"color":s,"ease":{"enum":["Linear","EaseIn","EaseOut","EaseInOut"]}},"required":["time"],"additionalProperties":false}}}),
-            vec!["layer", "id", "property", "keys"],
+            "Add/update or remove keys on composition (persistent composition id), or layer/id for vector objects and raster images. Compositions support X, Y, Rotation, Scale, Width, Height and Opacity. id=0 selects raster layer. property uses names from get_editor_capabilities. Rotation is degrees; x/y are offsets, scale/width/height are multipliers, opacity/reveal 0–1. Key ease is Linear, EaseIn, EaseOut, EaseInOut, Hold, or {CubicBezier:{x1,y1,x2,y2}}. Fill keys use hex color. One undo step.",
+            json!({"composition":i,"layer":i,"id":i,"property":s,"remove":b,"keys":{"type":"array","minItems":1,"maxItems":1000,"items":{"type":"object","properties":{"time":n,"value":n,"color":s,"ease":ease},"required":["time"],"additionalProperties":false}}}),
+            vec!["property", "keys"],
             true,
         ),
         (
@@ -180,6 +189,41 @@ pub fn extended() -> Vec<Value> {
     ];
     specs.into_iter().map(|(name,description,mut properties,mut required,mutation)|{
         if mutation {properties["revision"]=i.clone();required.push("revision");}
-        json!({"name":name,"description":description,"inputSchema":{"type":"object","properties":properties,"required":required,"additionalProperties":false},"annotations":{"readOnlyHint":!mutation,"openWorldHint":matches!(name,"list_files"|"read_file"|"import_file"|"set_image_fill"|"save_document")}})
+        let mut schema=json!({"type":"object","properties":properties,"required":required,"additionalProperties":false});
+        if matches!(name,"set_expression"|"set_keyframes") {
+            schema["oneOf"]=json!([{"required":["composition"],"not":{"anyOf":[{"required":["layer"]},{"required":["id"]}]}},{"required":["layer","id"],"not":{"required":["composition"]}}]);
+        }
+        json!({"name":name,"description":description,"inputSchema":schema,"annotations":{"readOnlyHint":!mutation,"openWorldHint":matches!(name,"list_files"|"read_file"|"import_file"|"set_image_fill"|"save_document")}})
     }).collect()
+}
+
+#[cfg(test)]
+mod composition_tests {
+    use super::*;
+    #[test]
+    fn motion_tools_describe_both_target_routes_and_ordered_remapping() {
+        let tools = extended();
+        for name in ["set_keyframes", "set_expression"] {
+            let schema = &tools.iter().find(|t| t["name"] == name).unwrap()["inputSchema"];
+            assert_eq!(schema["properties"]["composition"]["type"], "integer");
+            assert_eq!(schema["oneOf"].as_array().unwrap().len(), 2);
+            assert!(
+                !schema["required"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|v| v == "layer" || v == "id")
+            );
+        }
+        let schema = &tools
+            .iter()
+            .find(|t| t["name"] == "set_composition")
+            .unwrap()["inputSchema"];
+        assert_eq!(schema["properties"]["anchor_x"]["type"], "number");
+        assert_eq!(schema["properties"]["time_remap"]["maxItems"], 10000);
+        assert_eq!(
+            schema["properties"]["time_remap"]["items"]["required"],
+            json!(["time", "value"])
+        );
+    }
 }

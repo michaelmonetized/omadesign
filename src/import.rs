@@ -19,6 +19,7 @@ pub fn classify(path: &Path) -> &'static str {
     }
     match ext.as_str() {
         "oma" => "oma",
+        "omamotion" => "motion-project",
         "omaphoto" => "photo-settings",
         "svg" | "svgz" => "svg",
         "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" | "tif" | "tiff" => "raster",
@@ -54,6 +55,10 @@ pub(crate) fn open_with_progress(path: &Path, stage: impl Fn(&'static str)) -> R
     };
     if kind == "oma" {
         return Ok(Imported::Document(crate::project::load_from(path)?));
+    }
+    if kind == "motion-project" {
+        let source=std::fs::read_to_string(path).map_err(|e|e.to_string())?;
+        return Ok(Imported::Document(crate::motion::compositions::import(&source)?));
     }
     if kind == "affinity" {
         stage("Converting Affinity artwork");

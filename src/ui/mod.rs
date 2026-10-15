@@ -44,6 +44,7 @@ mod text_geometry;
 mod templates;
 pub mod theme;
 mod timeline;
+mod motion_compositions;
 mod welcome;
 
 use crate::app::Studio;

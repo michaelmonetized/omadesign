@@ -103,12 +103,29 @@ impl<'a> Evaluation<'a> {
     /// Args: persistent target id and property. Returns a finite value or a named error.
     pub fn value(&mut self, shape: u64, prop: Prop) -> Result<Option<f32>, Error> {
         self.step()?;
+        self.remaining = self
+            .remaining
+            .checked_sub(self.motion.tracks.len() + self.motion.expressions.len())
+            .ok_or_else(|| self.error(ErrorCode::WorkLimit, "property lookup budget exhausted"))?;
         let base = self
             .motion
             .tracks
             .iter()
             .find(|t| t.shape == shape && t.prop == prop)
             .and_then(|t| eval_keys(&t.keys, self.time, self.motion.duration));
+        if let Some(track) = self
+            .motion
+            .tracks
+            .iter()
+            .find(|t| t.shape == shape && t.prop == prop)
+        {
+            self.remaining = self
+                .remaining
+                .checked_sub(track.keys.len())
+                .ok_or_else(|| {
+                    self.error(ErrorCode::WorkLimit, "keyframe lookup budget exhausted")
+                })?;
+        }
         let Some(expr) = self
             .motion
             .expressions

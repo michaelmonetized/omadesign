@@ -19,7 +19,7 @@ pub fn encode(doc: &Document) -> Result<String, String> {
     serde_json::to_string(&File {
         // Older readers must not silently strip a mask or change stroke placement.
         // Keep plain documents compatible with v5; v1-v13 remain readable here.
-        version: if !doc.motion.expressions.is_empty() {
+        version: if !doc.motion.expressions.is_empty() || !doc.motion.compositions.is_empty() || doc.motion.tracks.iter().any(|t|t.keys.iter().any(|k| matches!(k.ease, crate::motion::Ease::Hold | crate::motion::Ease::CubicBezier {..}))) {
             14
         } else if !doc.mask_sources().is_empty() {
             13
@@ -80,6 +80,9 @@ pub fn decode(s: &str) -> Result<Document, String> {
             }
         }
     }
+    for comp in &mut doc.motion.compositions {
+        comp.document = Box::new(decode(&serde_json::json!({"version":file.version,"doc":comp.document}).to_string())?);
+    }
     normalize_decoded_document(doc, file.version)
 }
 
@@ -100,6 +103,8 @@ pub(crate) fn normalize_decoded_document(mut doc: Document, version: u32) -> Res
         }
     }
     crate::text_geometry::reflow(&mut doc);
+    crate::motion::compositions::validate(&doc)?;
+    for comp in &doc.motion.compositions {crate::document::bump_id(comp.id);}
     doc.ensure_ids()?;
     doc.validate_hierarchy()?;
     Ok(doc)
@@ -140,8 +145,9 @@ pub fn decode_clipboard_shapes(text: &str) -> Result<Vec<crate::document::Shape>
 }
 
 fn compress_pixels(px: &Pixels) -> Result<Pixels, String> {
-    let pm = px.to_pixmap().ok_or("pixmap")?;
-    let png = pm.encode_png().map_err(|e| e.to_string())?;
+    use image::ImageEncoder;
+    let mut png=Vec::new();
+    image::codecs::png::PngEncoder::new(&mut png).write_image(&px.data,px.w,px.h,image::ExtendedColorType::Rgba8).map_err(|e|e.to_string())?;
     let b64 = base64::engine::general_purpose::STANDARD.encode(png);
     Ok(Pixels {
         w: px.w,
@@ -448,6 +454,7 @@ pub fn swap_path(id: &str) -> PathBuf {
 }
 
 fn pack_rasters(doc: &mut Document) -> Result<(), String> {
+    for comp in &mut doc.motion.compositions {pack_rasters(&mut comp.document)?;}
     for layer in &mut doc.layers {
         if let Some(px) = layer.kind.pixels_mut() {
             *px = compress_pixels(px)?;

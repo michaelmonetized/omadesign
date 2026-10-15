@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
+pub mod compositions;
 pub mod expressions;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -89,12 +90,14 @@ impl Prop {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Ease {
     Linear,
     EaseIn,
     EaseOut,
     EaseInOut,
+    Hold,
+    CubicBezier { x1: f32, y1: f32, x2: f32, y2: f32 },
 }
 
 impl Ease {
@@ -104,6 +107,8 @@ impl Ease {
             Ease::EaseIn => "In",
             Ease::EaseOut => "Out",
             Ease::EaseInOut => "In-Out",
+            Ease::Hold => "Hold",
+            Ease::CubicBezier { .. } => "Bezier",
         }
     }
 
@@ -114,6 +119,31 @@ impl Ease {
             Ease::EaseIn => t * t,
             Ease::EaseOut => 1.0 - (1.0 - t) * (1.0 - t),
             Ease::EaseInOut => t * t * (3.0 - 2.0 * t),
+            Ease::Hold => {
+                if t >= 1. {
+                    1.
+                } else {
+                    0.
+                }
+            }
+            Ease::CubicBezier { x1, y1, x2, y2 } => {
+                if t <= 0. || t >= 1. {
+                    return t;
+                }
+                let curve = |u: f32, a: f32, b: f32| {
+                    3. * (1. - u) * (1. - u) * u * a + 3. * (1. - u) * u * u * b + u * u * u
+                };
+                let (mut lo, mut hi) = (0., 1.);
+                for _ in 0..24 {
+                    let u = (lo + hi) * 0.5;
+                    if curve(u, x1, x2) < t {
+                        lo = u;
+                    } else {
+                        hi = u;
+                    }
+                }
+                curve((lo + hi) * 0.5, y1, y2)
+            }
         }
     }
 
@@ -123,6 +153,8 @@ impl Ease {
             Ease::EaseIn => "ease-in",
             Ease::EaseOut => "ease-out",
             Ease::EaseInOut => "ease-in-out",
+            Ease::Hold => "steps(1, end)",
+            Ease::CubicBezier { .. } => "linear",
         }
     }
 
@@ -131,7 +163,23 @@ impl Ease {
             Ease::Linear => Ease::EaseIn,
             Ease::EaseIn => Ease::EaseOut,
             Ease::EaseOut => Ease::EaseInOut,
-            Ease::EaseInOut => Ease::Linear,
+            Ease::EaseInOut => Ease::Hold,
+            Ease::Hold | Ease::CubicBezier { .. } => Ease::Linear,
+        }
+    }
+
+    /// Check a normalized temporal curve.
+    /// Args: curve controls. Returns whether its x controls are monotonic and all values finite.
+    pub fn valid(self) -> bool {
+        match self {
+            Self::CubicBezier { x1, y1, x2, y2 } => {
+                [x1, y1, x2, y2]
+                    .iter()
+                    .all(|v| v.is_finite() && v.abs() <= 10_000.)
+                    && (0.0..=1.).contains(&x1)
+                    && (0.0..=1.).contains(&x2)
+            }
+            _ => true,
         }
     }
 }
@@ -184,6 +232,8 @@ pub struct Motion {
     pub tracks: Vec<Track>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub expressions: Vec<expressions::Expression>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub compositions: Vec<compositions::Composition>,
 }
 
 impl Default for Motion {
@@ -194,6 +244,7 @@ impl Default for Motion {
             looped: true,
             tracks: vec![],
             expressions: vec![],
+            compositions: vec![],
         }
     }
 }
@@ -340,7 +391,9 @@ impl Pose {
 
 impl Motion {
     pub fn is_empty(&self) -> bool {
-        self.tracks.iter().all(|t| t.keys.is_empty()) && !self.expressions.iter().any(|e| e.enabled)
+        self.tracks.iter().all(|t| t.keys.is_empty())
+            && !self.expressions.iter().any(|e| e.enabled)
+            && self.compositions.is_empty()
     }
 
     pub fn value(&self, shape: u64, prop: Prop, t: f32) -> Option<f32> {
@@ -611,6 +664,9 @@ impl Motion {
         times.extend([0.0, self.duration.max(0.05)]);
         for track in self.tracks.iter().filter(|track| track.shape == shape) {
             for pair in track.keys.windows(2) {
+                if pair[0].ease == Ease::Hold {
+                    times.push((pair[1].t - 0.00001).max(pair[0].t));
+                }
                 if pair[0].ease != Ease::Linear {
                     for i in 1..16 {
                         times.push(pair[0].t + (pair[1].t - pair[0].t) * i as f32 / 16.0);
@@ -885,6 +941,14 @@ pub fn hits_in_rect(
 /// Lottie shape export. Unsupported raster masks/effects fail explicitly;
 /// animated SVG remains the complete document export for those compositions.
 pub fn export_lottie(doc: &Document) -> Result<String, String> {
+    compositions::validate(doc)?;
+    for id in doc.motion.shapes() {
+        for time in doc.motion.sample_times(id) {
+            doc.motion
+                .evaluate_frame(time, &mut || true)
+                .map_err(|e| e.to_string())?;
+        }
+    }
     if !doc.mask_sources().is_empty() {
         return Err(
             "Lottie cannot preserve live artwork masks here. Export animated SVG to keep them."
@@ -976,6 +1040,7 @@ pub fn export_lottie(doc: &Document) -> Result<String, String> {
             layers.extend(parts);
         }
     }
+    compositions::append_lottie(doc, fps, &mut assets, &mut layers, ind)?;
     serde_json::to_string_pretty(&json!({
         "v":"5.7.4","fr":fps,"ip":0,"op":op,"w":doc.width.round() as i32,"h":doc.height.round() as i32,
         "nm":doc.name,"ddd":0,"assets":assets,"layers":layers
@@ -1254,13 +1319,80 @@ fn lottie_stroke(st: &Stroke, opacity: f32) -> Value {
 
 fn lottie_transform(shape: &Shape, motion: &Motion, fps: f32, center: Pt) -> Value {
     let times = motion.sample_times(shape.id);
-    json!({
+    let mut result = json!({
         "o":lottie_scalar_anim(&times,fps,|t|motion.pose(shape.id,t).opacity.unwrap_or(shape.opacity)*100.0),
         "r":lottie_scalar_anim(&times,fps,|t|motion.pose(shape.id,t).rotation.to_degrees()),
         "p":lottie_vec2_anim(&times,fps,|t|{let pose=motion.pose(shape.id,t);[center.x+pose.dx,center.y+pose.dy]}),
         "a":{"a":0,"k":[0,0,0]},
         "s":lottie_vec2_anim(&times,fps,|t|{let pose=motion.pose(shape.id,t);[pose.scale*pose.width_scale*100.0, pose.scale*pose.height_scale*100.0]})
-    })
+    });
+    for (field, prop, factor) in [
+        ("r", Prop::Rotation, 180. / std::f32::consts::PI),
+        ("o", Prop::Opacity, 100.),
+    ] {
+        if let Some(channel) = lottie_native_channel(motion, shape.id, prop, fps, 0., factor) {
+            result[field] = channel;
+        }
+    }
+    let x =
+        lottie_native_channel(motion, shape.id, Prop::X, fps, center.x, 1.).unwrap_or_else(|| {
+            lottie_scalar_anim(&times, fps, |t| center.x + motion.pose(shape.id, t).dx)
+        });
+    let y =
+        lottie_native_channel(motion, shape.id, Prop::Y, fps, center.y, 1.).unwrap_or_else(|| {
+            lottie_scalar_anim(&times, fps, |t| center.y + motion.pose(shape.id, t).dy)
+        });
+    result["p"] = json!({"s":true,"x":x,"y":y});
+    result
+}
+
+fn lottie_native_channel(
+    motion: &Motion,
+    id: u64,
+    prop: Prop,
+    fps: f32,
+    offset: f32,
+    factor: f32,
+) -> Option<Value> {
+    if motion
+        .expressions
+        .iter()
+        .any(|e| e.shape == id && e.prop == prop && e.enabled)
+    {
+        return None;
+    }
+    let track = motion
+        .tracks
+        .iter()
+        .find(|t| t.shape == id && t.prop == prop && !t.keys.is_empty())?;
+    let keys: Vec<_> = track
+        .keys
+        .iter()
+        .enumerate()
+        .map(|(i, k)| {
+            let mut v = json!({"t":k.t*fps,"s":[offset+k.value*factor]});
+            if let Some(next) = track.keys.get(i + 1) {
+                v["e"] = json!([offset + next.value * factor]);
+            }
+            let controls = match k.ease {
+                Ease::Hold => {
+                    v["h"] = json!(1);
+                    None
+                }
+                Ease::CubicBezier { x1, y1, x2, y2 } => Some((x1, y1, x2, y2)),
+                Ease::Linear => Some((0., 0., 1., 1.)),
+                Ease::EaseIn => Some((1. / 3., 0., 2. / 3., 1. / 3.)),
+                Ease::EaseOut => Some((1. / 3., 2. / 3., 2. / 3., 1.)),
+                Ease::EaseInOut => Some((1. / 3., 0., 2. / 3., 1.)),
+            };
+            if let Some((x1, y1, x2, y2)) = controls {
+                v["o"] = json!({"x":[x1],"y":[y1]});
+                v["i"] = json!({"x":[x2],"y":[y2]});
+            }
+            v
+        })
+        .collect();
+    Some(json!({"a":1,"k":keys}))
 }
 
 fn lottie_vec2_anim(times: &[f32], fps: f32, sample: impl Fn(f32) -> [f32; 2]) -> Value {
@@ -1305,6 +1437,14 @@ pub struct LottieImport {
 pub fn import_lottie(json: &str) -> Result<LottieImport, String> {
     let json = json.trim_start_matches('\u{feff}');
     let v: Value = serde_json::from_str(json).map_err(|e| e.to_string())?;
+    import_lottie_value(&v, 0, &mut vec![])
+}
+
+fn import_lottie_value(
+    v: &Value,
+    depth: usize,
+    active: &mut Vec<String>,
+) -> Result<LottieImport, String> {
     let Some(layers) = v.get("layers").and_then(Value::as_array) else {
         return Err(import_failure(&v));
     };
@@ -1321,11 +1461,35 @@ pub fn import_lottie(json: &str) -> Result<LottieImport, String> {
         tracks: vec![],
         ..Motion::default()
     };
+    let mut seen_artwork = false;
+    for layer in layers {
+        if layer["ty"] == 0 && seen_artwork {
+            return Err("CompositionUnsupported: interleaved vector and precomposition layers require a unified layer stack".into());
+        }
+        if layer["ty"] == 4 {
+            seen_artwork = true;
+        }
+    }
     let mut shapes = Vec::new();
     for layer in layers.iter().rev() {
         let ty = js_f32(&layer["ty"]).unwrap_or(-1.0) as i32;
-        if ty != 4 {
+        if ty == 0 {
+            let comp = compositions::lottie_composition(layer, v, fps, ip, depth + 1, active)?;
+            apply_lottie_transform(
+                &mut motion,
+                comp.id,
+                &layer["ks"],
+                fps,
+                ip,
+                comp.position,
+                comp.opacity,
+            );
+            motion.compositions.push(comp);
             continue;
+        }
+        if ty != 4 {
+            if layers.iter().all(|l|l["ty"]!=0 && l["ty"]!=4) {return Err(import_failure(v));}
+            return Err(format!("CompositionUnsupported: Lottie layer type {ty}"));
         }
         let Some((geom, fill, stroke)) = layer_geom(layer) else {
             continue;
@@ -1335,16 +1499,29 @@ pub fn import_lottie(json: &str) -> Result<LottieImport, String> {
             shape.name = nm.to_string();
         }
         let ks = &layer["ks"];
-        let rest = parse_anim_vec2(&ks["p"])
-            .first()
-            .map(|(_, p)| *p)
-            .or_else(|| js_vec2(&ks["p"]))
-            .unwrap_or(Pt::ZERO);
+        let rest = if ks["p"]["s"].as_bool() == Some(true) {
+            Pt::new(
+                parse_anim_scalar(&ks["p"]["x"])
+                    .first()
+                    .map(|(_, v)| *v)
+                    .unwrap_or(0.),
+                parse_anim_scalar(&ks["p"]["y"])
+                    .first()
+                    .map(|(_, v)| *v)
+                    .unwrap_or(0.),
+            )
+        } else {
+            parse_anim_vec2(&ks["p"])
+                .first()
+                .map(|(_, p)| *p)
+                .or_else(|| js_vec2(&ks["p"]))
+                .unwrap_or(Pt::ZERO)
+        };
         shape.geom.translate(rest);
         apply_lottie_transform(&mut motion, shape.id, ks, fps, ip, rest, shape.opacity);
         shapes.push(shape);
     }
-    if shapes.is_empty() {
+    if shapes.is_empty() && motion.compositions.is_empty() {
         return Err(import_failure(&v));
     }
     Ok(LottieImport {
@@ -1554,6 +1731,35 @@ fn zip_text<R: std::io::Read + std::io::Seek>(
         .map_err(|_| "not a Lottie".to_string())
 }
 
+fn lottie_ease(value: &Value, frame: f32, component: usize) -> Ease {
+    let Some(key) = value["k"].as_array().and_then(|keys| {
+        keys.iter()
+            .find(|k| js_f32(&k["t"]).is_some_and(|t| (t - frame).abs() < 1e-4))
+    }) else {
+        return Ease::Linear;
+    };
+    if key["h"].as_i64() == Some(1) {
+        return Ease::Hold;
+    }
+    let control = |side: &str, axis: &str, default: f32| {
+        let v = &key[side][axis];
+        js_f32(v)
+            .or_else(|| {
+                v.as_array()
+                    .and_then(|a| a.get(component).or_else(|| a.first()))
+                    .and_then(js_f32)
+            })
+            .unwrap_or(default)
+    };
+    let ease = Ease::CubicBezier {
+        x1: control("o", "x", 0.333),
+        y1: control("o", "y", 0.333),
+        x2: control("i", "x", 0.667),
+        y2: control("i", "y", 0.667),
+    };
+    if ease.valid() { ease } else { Ease::Linear }
+}
+
 fn apply_lottie_transform(
     motion: &mut Motion,
     id: u64,
@@ -1563,62 +1769,69 @@ fn apply_lottie_transform(
     rest: Pt,
     rest_opacity: f32,
 ) {
-    let pos = parse_anim_vec2(&ks["p"]);
-    if pos.len() > 1 {
-        for (t, p) in &pos {
+    if ks["p"]["s"].as_bool() == Some(true) {
+        for (axis, prop, base) in [("x", Prop::X, rest.x), ("y", Prop::Y, rest.y)] {
+            for (t, v) in parse_anim_scalar(&ks["p"][axis]) {
+                motion.set_key(
+                    id,
+                    prop,
+                    frame_to_t(t, fps, ip),
+                    v - base,
+                    lottie_ease(&ks["p"][axis], t, 0),
+                );
+            }
+        }
+    } else {
+        for (t, p) in parse_anim_vec2(&ks["p"]) {
             motion.set_key(
                 id,
                 Prop::X,
-                frame_to_t(*t, fps, ip),
+                frame_to_t(t, fps, ip),
                 p.x - rest.x,
-                Ease::EaseInOut,
+                lottie_ease(&ks["p"], t, 0),
             );
             motion.set_key(
                 id,
                 Prop::Y,
-                frame_to_t(*t, fps, ip),
+                frame_to_t(t, fps, ip),
                 p.y - rest.y,
-                Ease::EaseInOut,
+                lottie_ease(&ks["p"], t, 1),
             );
         }
     }
-    let rot = parse_anim_scalar(&ks["r"]);
-    if rot.len() > 1 || rot.first().is_some_and(|(_, v)| v.abs() > 1e-3) {
-        for (t, v) in &rot {
-            motion.set_key(
-                id,
-                Prop::Rotation,
-                frame_to_t(*t, fps, ip),
-                v.to_radians(),
-                Ease::EaseInOut,
-            );
-        }
+    for (t, v) in parse_anim_scalar(&ks["r"]) {
+        motion.set_key(
+            id,
+            Prop::Rotation,
+            frame_to_t(t, fps, ip),
+            v.to_radians(),
+            lottie_ease(&ks["r"], t, 0),
+        );
     }
-    let sc = parse_anim_vec2(&ks["s"]);
-    if sc.len() > 1 || sc.first().is_some_and(|(_, p)| (p.x - 100.0).abs() > 0.5) {
-        for (t, p) in &sc {
-            motion.set_key(
-                id,
-                Prop::Scale,
-                frame_to_t(*t, fps, ip),
-                (p.x / 100.0).max(0.01),
-                Ease::EaseInOut,
-            );
-        }
+    for (t, p) in parse_anim_vec2(&ks["s"]) {
+        motion.set_key(
+            id,
+            Prop::Width,
+            frame_to_t(t, fps, ip),
+            p.x / 100.,
+            lottie_ease(&ks["s"], t, 0),
+        );
+        motion.set_key(
+            id,
+            Prop::Height,
+            frame_to_t(t, fps, ip),
+            p.y / 100.,
+            lottie_ease(&ks["s"], t, 1),
+        );
     }
-    let op = parse_anim_scalar(&ks["o"]);
-    if op.len() > 1
-        || op
-            .first()
-            .is_some_and(|(_, v)| (*v / 100.0 - rest_opacity).abs() > 0.01)
-    {
-        for (t, v) in &op {
+    for (t, v) in parse_anim_scalar(&ks["o"]) {
+        if (v / 100. - rest_opacity).abs() > 0.0001 || parse_anim_scalar(&ks["o"]).len() > 1 {
             motion.set_key(
                 id,
                 Prop::Opacity,
-                frame_to_t(*t, fps, ip),
-                (*v / 100.0).clamp(0.0, 1.0),
-                Ease::EaseInOut,
+                frame_to_t(t, fps, ip),
+                (v / 100.).clamp(0., 1.),
+                lottie_ease(&ks["o"], t, 0),
             );
         }
     }

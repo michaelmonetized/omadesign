@@ -110,6 +110,7 @@ fn transport(ui: &mut Ui, studio: &mut Studio) {
     }
     ui.separator();
     expression_editor(ui, studio);
+    super::motion_compositions::show(ui, studio);
     if ui
         .add_enabled(
             !studio.selection.is_empty(),
@@ -135,6 +136,66 @@ fn transport(ui: &mut Ui, studio: &mut Studio) {
             studio.status = format!("ease {}", k.ease.name());
         }
         studio.commit_motion(after);
+    }
+    if let Some((id, prop, index)) = studio.selected_key {
+        ui.menu_button("Curve", |ui| {
+            let mut after = studio.doc.motion.clone();
+            let Some(key) = after
+                .tracks
+                .iter_mut()
+                .find(|t| t.shape == id && t.prop == prop)
+                .and_then(|t| t.keys.get_mut(index))
+            else {
+                return;
+            };
+            let mut changed = false;
+            for ease in [
+                Ease::Linear,
+                Ease::EaseIn,
+                Ease::EaseOut,
+                Ease::EaseInOut,
+                Ease::Hold,
+            ] {
+                if ui.selectable_label(key.ease == ease, ease.name()).clicked() {
+                    key.ease = ease;
+                    changed = true;
+                }
+            }
+            let (mut x1, mut y1, mut x2, mut y2) = match key.ease {
+                Ease::CubicBezier { x1, y1, x2, y2 } => (x1, y1, x2, y2),
+                _ => (0.25, 0.1, 0.25, 1.),
+            };
+            let mut controls_changed = false;
+            for (name, value) in [
+                ("X1", &mut x1),
+                ("Y1", &mut y1),
+                ("X2", &mut x2),
+                ("Y2", &mut y2),
+            ] {
+                ui.horizontal(|ui| {
+                    ui.label(name);
+                    controls_changed |= ui
+                        .add(eframe::egui::DragValue::new(value).speed(0.01))
+                        .changed();
+                });
+            }
+            if controls_changed {
+                changed = true;
+                key.ease = Ease::CubicBezier {
+                    x1: x1.clamp(0., 1.),
+                    y1,
+                    x2: x2.clamp(0., 1.),
+                    y2,
+                };
+            }
+            if ui.button("Use Bezier").clicked() {
+                key.ease = Ease::CubicBezier { x1, y1, x2, y2 };
+                changed = true;
+            }
+            if changed && key.ease.valid() {
+                studio.commit_motion_step(after);
+            }
+        });
     }
 }
 
