@@ -23,6 +23,7 @@ struct Session {
     revision: u64,
     job: Option<(Edit, Job)>,
     error: bool,
+    draft_valid: bool,
 }
 
 fn id() -> Id {
@@ -76,6 +77,7 @@ fn open(ctx: &Context, studio: &mut Studio, settings: Edit) {
                 revision: 0,
                 job: None,
                 error: false,
+                draft_valid: true,
             },
         )
     });
@@ -146,13 +148,30 @@ pub(super) fn menu(ui: &mut Ui, studio: &mut Studio) {
     }
 }
 
-fn controls(ui: &mut Ui, session: &mut Session) {
+fn controls(ui: &mut Ui, session: &mut Session) -> super::fields::FieldResponse {
+    let owner = Id::new((
+        "selection-radius",
+        &session.document,
+        session.generation,
+        session.initial.title(),
+    ));
+    let initial = match session.initial {
+        Edit::Grow { radius } | Edit::Shrink { radius } | Edit::Feather { radius } => radius,
+    };
     match &mut session.settings {
         Edit::Grow { radius } | Edit::Shrink { radius } | Edit::Feather { radius } => {
-            ui.horizontal(|ui| {
-                ui.label("Radius");
-                ui.add(egui::DragValue::new(radius).range(0..=1024).suffix(" px"));
-            });
+            let response = super::fields::number(
+                ui,
+                owner,
+                "Selection radius (px)",
+                radius,
+                0..=1024,
+                " px",
+                Some(initial),
+                Default::default(),
+            );
+            super::welcome::focus_control(ui, &response.response);
+            response
         }
     }
 }
@@ -187,6 +206,7 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
     let mut apply = false;
     let mut cancel = false;
     let mut opened = true;
+    let available = !studio.file_dialog_pending() && !studio.updates.freezing;
     egui::Window::new(session.settings.title())
         .id(id())
         .open(&mut opened)
@@ -198,7 +218,16 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
             ui.label("Adjust the selection boundary.");
             ui.small("Distances use the selected image’s pixels. Edges clip to its bounds.");
             ui.separator();
-            controls(ui, &mut session);
+            let field = ui
+                .add_enabled_ui(available, |ui| controls(ui, &mut session))
+                .inner;
+            if field.changed || field.committed || field.cancelled {
+                session.draft_valid = true;
+            } else if field.response.enabled()
+                && (field.response.changed() || field.response.lost_focus())
+            {
+                session.draft_valid = false;
+            }
             ui.separator();
             let ready = session.rendered == Some(session.settings) && !session.error;
             if !ready && !session.error {
@@ -208,8 +237,9 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
                 });
             }
             if session.error {
-                ui.colored_label(
-                    egui::Color32::LIGHT_RED,
+                super::welcome::control_error(
+                    ui,
+                    &[&field.response],
                     "Unable to preview this selection.",
                 );
             }
@@ -222,25 +252,27 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
                 ui.label("This will leave an empty selection.");
             }
             ui.horizontal(|ui| {
-                if ui.button("Reset").clicked() {
-                    session.settings = session.initial;
-                }
                 cancel = ui.button("Cancel").clicked();
-                apply = ui.add_enabled(ready, egui::Button::new("Apply")).clicked();
+                apply = ui
+                    .add_enabled(
+                        available && ready && session.draft_valid,
+                        egui::Button::new("Apply"),
+                    )
+                    .clicked();
             });
         });
     if !opened || cancel || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
         ctx.request_repaint();
         return;
     }
-    if apply {
+    if available && apply {
         if let Some((values, space)) = session.preview {
             studio.replace_pixel_selection((*values).clone(), space);
         }
         ctx.request_repaint();
         return;
     }
-    if session.rendered != Some(session.settings) && session.job.is_none() {
+    if available && session.rendered != Some(session.settings) && session.job.is_none() {
         let source = session.source.clone();
         let space = session.space;
         let settings = session.settings;
@@ -403,5 +435,109 @@ mod tests {
         frame(&ctx, &mut studio, vec![]);
         assert!(!is_open(&ctx));
         assert!(studio.pixel_sel.as_ref().unwrap().iter().all(|v| *v == 255));
+    }
+}
+
+#[cfg(test)]
+mod keyboard_tests {
+    use super::*;
+    use crate::ui::welcome::keyboard_tests as keys;
+    use egui::{Event, Key, Modifiers};
+
+    fn frame(ctx: &Context, studio: &mut Studio, events: Vec<Event>) -> egui::FullOutput {
+        keys::render(ctx, events, |ui| {
+            if !is_open(ctx) && !studio.file_dialog_pending() && !studio.updates.freezing {
+                studio.handle_shortcuts(ui.ctx());
+            }
+            ui.add_enabled_ui(!is_open(ctx), |ui| {
+                ui.menu_button("Select pixels", |ui| menu(ui, studio));
+            });
+            ui.interact(
+                ui.available_rect_before_wrap(),
+                Id::new("studio-canvas"),
+                egui::Sense::click(),
+            );
+            super::super::keyboard_tools::show(ui.ctx(), studio);
+            show(ui.ctx(), studio);
+        })
+    }
+
+    fn settle(ctx: &Context, studio: &mut Studio) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        loop {
+            frame(ctx, studio, vec![]);
+            if ready(ctx) {
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "selection preview did not finish"
+            );
+            std::thread::yield_now();
+        }
+    }
+
+    #[test]
+    fn keyboard_selection_dialog_grows_keyboard_created_coverage_without_changing_pixels() {
+        let ctx = Context::default();
+        ctx.enable_accesskit();
+        let mut studio = Studio::new();
+        studio.doc = crate::document::Document::new("Keyboard selection radius", 32., 32., 72.);
+        studio.show_welcome = false;
+        studio.persona = crate::tools::Persona::Pixel;
+        assert!(studio.selection.is_empty());
+        let chord = Modifiers::CTRL | Modifiers::COMMAND;
+        frame(
+            &ctx,
+            &mut studio,
+            keys::key(Key::N, chord | Modifiers::SHIFT),
+        );
+        let layer = studio.raster_target().unwrap();
+        let pixels = studio.doc.layers[layer].kind.pixels().unwrap().data.clone();
+        frame(&ctx, &mut studio, keys::key(Key::M, Modifiers::SHIFT));
+        frame(&ctx, &mut studio, keys::key(Key::F9, Modifiers::NONE));
+        frame(&ctx, &mut studio, vec![]);
+        keys::replace("8,8; 24,24", |events| frame(&ctx, &mut studio, events));
+        frame(&ctx, &mut studio, keys::key(Key::Enter, chord));
+        frame(&ctx, &mut studio, vec![]);
+        assert!(studio.pixel_sel.is_some());
+        let before = studio.pixel_sel.clone().unwrap();
+        keys::tab_to(&ctx, "Select pixels", |events| {
+            frame(&ctx, &mut studio, events)
+        });
+        frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        keys::tab_to(&ctx, "Grow…", |events| frame(&ctx, &mut studio, events));
+        frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        settle(&ctx, &mut studio);
+        assert!(is_open(&ctx));
+        let output = keys::tab_to(&ctx, "Selection radius (px)", |events| {
+            frame(&ctx, &mut studio, events)
+        });
+        keys::focused(&ctx, &output, "Selection radius (px)");
+        let radius_id = keys::named(&output, "Selection radius (px)").0;
+        keys::replace("2", |events| frame(&ctx, &mut studio, events));
+        frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        settle(&ctx, &mut studio);
+        studio.updates.freezing = true;
+        let output = frame(&ctx, &mut studio, vec![]);
+        assert!(
+            keys::named(&output, "Selection radius (px)")
+                .1
+                .is_disabled()
+        );
+        assert!(keys::named(&output, "Apply").1.is_disabled());
+        assert_eq!(studio.pixel_sel.as_ref().unwrap(), &before);
+        studio.updates.freezing = false;
+        let output = frame(&ctx, &mut studio, vec![]);
+        assert_eq!(keys::named(&output, "Selection radius (px)").0, radius_id);
+        keys::tab_to(&ctx, "Apply", |events| frame(&ctx, &mut studio, events));
+        frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        assert!(!is_open(&ctx));
+        let coverage = studio.pixel_sel.as_ref().unwrap();
+        assert!(
+            coverage.iter().filter(|value| **value > 0).count()
+                > before.iter().filter(|value| **value > 0).count()
+        );
+        assert_eq!(studio.doc.layers[layer].kind.pixels().unwrap().data, pixels);
     }
 }
