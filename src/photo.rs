@@ -213,26 +213,6 @@ pub struct PhotoImage {
 }
 
 impl PhotoImage {
-    /// Small live preview, including saved edits, crop, rotation and linear RAW
-    /// adjustments. It never renders or retains a full-resolution developed image.
-    pub fn render_thumbnail(&self, max_edge: u32) -> RgbaImage {
-        if let Some(raw) = &self.raw_preview {
-            let linear = LinearImage::preview(raw.w, raw.h, &raw.pixels, max_edge);
-            let mut params = self.develop.clone();
-            params.exposure += self
-                .raw
-                .as_ref()
-                .map_or(0.0, |raw| raw.metadata.baseline_exposure);
-            let (w, h, data) = develop_inner::<u8>(
-                DevelopSource::linear(linear.w, linear.h, &linear.pixels),
-                &params,
-            );
-            RgbaImage { w, h, data }
-        } else {
-            develop(&self.preview.downscaled(max_edge), &self.develop)
-        }
-    }
-
     pub fn from_full(name: String, full: RgbaImage) -> Self {
         let preview = std::sync::Arc::new(full.downscaled(1600));
         let thumb = std::sync::Arc::new(full.downscaled(192));
@@ -750,7 +730,7 @@ fn box_blur_checked(
         .try_for_each(|(strip_index, strip)| {
             progress.check()?;
             let start_y = strip_index * STRIP_ROWS;
-            let mut sums = photo_buffer(w)?;
+            let mut sums: Vec<f32> = photo_buffer(w)?;
             for offset in 0..win {
                 let y = (start_y + offset).saturating_sub(radius).min(h - 1);
                 for (sum, value) in sums.iter_mut().zip(&horiz[y * w..(y + 1) * w]) {
@@ -1090,12 +1070,12 @@ mod tests {
         )
         .unwrap();
         for mut image in [raster, raw] {
-            let before = image.render_thumbnail(80);
-            assert_eq!(before, image.render_preview());
+            let before = image.render_thumbnail(80).unwrap();
+            assert_eq!(before, image.render_preview().unwrap());
             image.develop.exposure = 1.0;
             image.develop.rotate = 90;
             image.develop.crop = Some([0.0, 0.0, 1.0, 0.5]);
-            let after = image.render_thumbnail(40);
+            let after = image.render_thumbnail(40).unwrap();
             assert_eq!((after.w, after.h), (20, 20));
             assert!(after.data[0] > before.data[0]);
         }

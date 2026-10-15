@@ -265,7 +265,10 @@ mod tests {
         let reopened = PhotoImage::load(&source).unwrap();
         assert_eq!(reopened.develop, photo.develop);
         assert_eq!(photo.raw.as_ref().unwrap().pixels, sensor);
-        assert_eq!(reopened.render_preview(), photo.render_full().unwrap());
+        assert_eq!(
+            reopened.render_preview().unwrap(),
+            photo.render_full().unwrap()
+        );
         for extension in ["png", "tiff"] {
             let decoded =
                 image::load_from_memory(&reopened.export_bytes(extension).unwrap()).unwrap();
@@ -382,11 +385,11 @@ mod resized_camera_tests {
         .unwrap();
         let photo = PhotoImage::load(&settings).unwrap();
         let full = photo.render_full().unwrap();
-        let reduced = photo.render_preview();
+        let reduced = photo.render_preview().unwrap();
         assert_ne!((reduced.w, reduced.h), (full.w, full.h));
         assert!(mean_error(&reduced, &full.resized(reduced.w, reduced.h)) < 2.);
         for edge in [400, 800, 1600] {
-            let preview = photo.render_thumbnail(edge);
+            let preview = photo.render_thumbnail(edge).unwrap();
             let error = mean_error(&preview, &full.resized(preview.w, preview.h));
             assert!(
                 error < 2.,

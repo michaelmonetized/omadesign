@@ -75,6 +75,11 @@ impl<T: Copy> Allocation<T> {
     pub fn try_clone<C: CancellationCheck + ?Sized>(&self, cancel: &C) -> Result<Self, String> {
         self.lease.budget.copy(&self.values, cancel)
     }
+    /// Copy for a synchronous edit without waiting under pressure.
+    /// Args: cancellation owner. Returns admitted working storage or an immediate error.
+    pub fn try_clone_now<C: CancellationCheck + ?Sized>(&self, cancel: &C) -> Result<Self, String> {
+        self.lease.budget.copy_now(&self.values, cancel)
+    }
     /// Transfer storage with its admission intact. Args: none. Returns both owned samples and their lease.
     pub fn into_parts(self) -> (Vec<T>, Arc<Lease>) {
         (self.values, self.lease)
@@ -137,6 +142,21 @@ impl Budget {
         Ok(lease)
     }
 
+    /// Admit a synchronous operation without waiting for other buffers.
+    /// Args: required bytes and cancellation owner. Returns a lease or an immediate pressure error.
+    pub fn reserve_now<C: CancellationCheck + ?Sized>(
+        self: &Arc<Self>,
+        bytes: u64,
+        cancel: &C,
+    ) -> Result<Arc<Lease>, String> {
+        let lease = Arc::new(Lease {
+            budget: self.clone(),
+            bytes: AtomicU64::new(0),
+        });
+        lease.resize_now(bytes, cancel)?;
+        Ok(lease)
+    }
+
     /// Adopt already admitted storage without reserving the same bytes again.
     /// Args: owned plain samples and an exclusive same-pool lease covering their capacity. Returns immutable allocation ownership.
     pub fn adopt<T: Copy>(
@@ -160,12 +180,35 @@ impl Budget {
         count: usize,
         cancel: &C,
     ) -> Result<Allocation<T>, String> {
-        let lease = self.reserve(allocation_bytes::<T>(count)?, cancel)?;
+        self.allocate_mode(count, cancel, true)
+    }
+
+    /// Allocate synchronous working samples without a pressure wait.
+    /// Args: plain sample count and cancellation owner. Returns initialized storage or an immediate error.
+    pub fn allocate_now<T: Copy + Default, C: CancellationCheck + ?Sized>(
+        self: &Arc<Self>,
+        count: usize,
+        cancel: &C,
+    ) -> Result<Allocation<T>, String> {
+        self.allocate_mode(count, cancel, false)
+    }
+    fn allocate_mode<T: Copy + Default, C: CancellationCheck + ?Sized>(
+        self: &Arc<Self>,
+        count: usize,
+        cancel: &C,
+        wait: bool,
+    ) -> Result<Allocation<T>, String> {
+        let bytes = allocation_bytes::<T>(count)?;
+        let lease = if wait {
+            self.reserve(bytes, cancel)?
+        } else {
+            self.reserve_now(bytes, cancel)?
+        };
         let mut values = Vec::new();
         values
             .try_reserve_exact(count)
             .map_err(|_| "Not enough memory to allocate pixel samples")?;
-        lease.resize(allocation_bytes::<T>(values.capacity())?, cancel)?;
+        lease.resize_mode(allocation_bytes::<T>(values.capacity())?, cancel, wait)?;
         values.resize(count, T::default());
         Ok(Allocation { values, lease })
     }
@@ -177,12 +220,35 @@ impl Budget {
         source: &[T],
         cancel: &C,
     ) -> Result<Allocation<T>, String> {
-        let lease = self.reserve(allocation_bytes::<T>(source.len())?, cancel)?;
+        self.copy_mode(source, cancel, true)
+    }
+
+    /// Copy synchronous edit samples without a pressure wait.
+    /// Args: plain source samples and cancellation owner. Returns admitted independent storage or an immediate error.
+    pub fn copy_now<T: Copy, C: CancellationCheck + ?Sized>(
+        self: &Arc<Self>,
+        source: &[T],
+        cancel: &C,
+    ) -> Result<Allocation<T>, String> {
+        self.copy_mode(source, cancel, false)
+    }
+    fn copy_mode<T: Copy, C: CancellationCheck + ?Sized>(
+        self: &Arc<Self>,
+        source: &[T],
+        cancel: &C,
+        wait: bool,
+    ) -> Result<Allocation<T>, String> {
+        let bytes = allocation_bytes::<T>(source.len())?;
+        let lease = if wait {
+            self.reserve(bytes, cancel)?
+        } else {
+            self.reserve_now(bytes, cancel)?
+        };
         let mut values = Vec::new();
         values
             .try_reserve_exact(source.len())
             .map_err(|_| "Not enough memory to copy pixel samples")?;
-        lease.resize(allocation_bytes::<T>(values.capacity())?, cancel)?;
+        lease.resize_mode(allocation_bytes::<T>(values.capacity())?, cancel, wait)?;
         values.extend_from_slice(source);
         Ok(Allocation { values, lease })
     }
@@ -231,6 +297,24 @@ impl Lease {
         bytes: u64,
         cancel: &C,
     ) -> Result<(), String> {
+        self.resize_mode(bytes, cancel, true)
+    }
+
+    /// Resize synchronous admission without waiting on other owners.
+    /// Args: total bytes and cancellation owner. Returns success or an immediate pressure error.
+    pub fn resize_now<C: CancellationCheck + ?Sized>(
+        &self,
+        bytes: u64,
+        cancel: &C,
+    ) -> Result<(), String> {
+        self.resize_mode(bytes, cancel, false)
+    }
+    fn resize_mode<C: CancellationCheck + ?Sized>(
+        &self,
+        bytes: u64,
+        cancel: &C,
+        wait: bool,
+    ) -> Result<(), String> {
         if bytes > self.budget.limit {
             return Err(format!(
                 "This operation needs an estimated {} MiB; the shared pixel budget is {} MiB. Close other documents or increase available memory.",
@@ -256,7 +340,7 @@ impl Lease {
                 self.budget.wake.notify_all();
                 return Ok(());
             }
-            if started.elapsed() > Duration::from_secs(30) {
+            if !wait || started.elapsed() > Duration::from_secs(30) {
                 return Err(format!(
                     "Not enough free memory for this operation ({} MiB requested). Current documents and edits were kept.",
                     bytes.div_ceil(MIB)
@@ -351,6 +435,30 @@ pub fn decoder<C: CancellationCheck + ?Sized>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn synchronous_admission_never_waits_for_retained_buffers() {
+        let pool = Budget::new(64, false);
+        let check = || Ok(());
+        let storage = pool.allocate_now::<u8, _>(48, &check).unwrap();
+        let started = Instant::now();
+        assert!(pool.reserve_now(17, &check).is_err());
+        assert!(pool.allocate_now::<u16, _>(9, &check).is_err());
+        assert!(pool.copy_now(&[0u8; 17], &check).is_err());
+        assert!(storage.try_clone_now(&check).is_err());
+        let lease = pool.reserve_now(16, &check).unwrap();
+        assert!(lease.resize_now(17, &check).is_err());
+        assert_eq!(lease.bytes(), 16);
+        assert_eq!(pool.usage(), (64, 64));
+        lease.resize_now(8, &check).unwrap();
+        assert_eq!(pool.usage(), (56, 64));
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "synchronous admission waited for unavailable storage"
+        );
+        drop(storage);
+        drop(lease);
+        assert_eq!(pool.usage(), (0, 64));
+    }
     #[test]
     fn adopted_native_allocations_share_one_budget_with_raw_and_cow_copies() {
         let pool = Budget::new(160, false);

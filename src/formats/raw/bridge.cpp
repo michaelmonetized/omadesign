@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <memory>
 #include <new>
 #include <mutex>
@@ -91,7 +92,7 @@ extern "C" int oma_raw_decode(const unsigned char *bytes, size_t length,
                               OmaRawImage *output, int (*cancelled)(const void *),
                               const void *context, void (*report)(const void *, uint32_t),
                               int (*reserve)(const void *, uint64_t),
-                              const void *memory_context, uint64_t memory_limit) noexcept {
+                              const void *memory_context, uint64_t memory_limit, int sensor_only) noexcept {
     if (!output) return 1;
     *output = OmaRawImage{};
     if (!bytes || !length)
@@ -136,7 +137,8 @@ extern "C" int oma_raw_decode(const unsigned char *bytes, size_t length,
             return fail(output, "RAW pixel-aspect correction exceeds the decoder dimension range");
         const uint64_t sensor_pixels = uint64_t(raw.imgdata.sizes.raw_width) * raw.imgdata.sizes.raw_height;
         const uint64_t output_pixels = uint64_t(expanded_width) * uint64_t(expanded_height);
-        const uint64_t demand = sensor_pixels * 8 + output_pixels * 32 + 64ull * 1024 * 1024;
+        const uint64_t demand = sensor_only ? sensor_pixels * 4 + 64ull * 1024 * 1024 :
+            sensor_pixels * 8 + output_pixels * 32 + 64ull * 1024 * 1024;
         if (!reserve || reserve(memory_context, demand))
             return fail(output, "Not enough shared memory for this RAW sensor and output geometry");
         if (!raw.imgdata.idata.raw_count)
@@ -163,6 +165,36 @@ extern "C" int oma_raw_decode(const unsigned char *bytes, size_t length,
         if (code) return failure(output, code);
         if (state.damaged)
             return fail(output, "RAW sensor data is truncated or damaged");
+        if (sensor_only) {
+            const auto &sizes = raw.imgdata.sizes;
+            const uint64_t size = sensor_pixels * 2;
+            if (!raw.imgdata.rawdata.raw_image || raw.imgdata.idata.filters == 0 ||
+                sizes.raw_pitch < uint64_t(sizes.raw_width) * 2 || size > UINT32_MAX)
+                return fail(output, "This sensor reference needs an unpacked integer mosaic including masked borders");
+            std::unique_ptr<libraw_processed_image_t, decltype(&LibRaw::dcraw_clear_mem)> plane(
+                static_cast<libraw_processed_image_t *>(std::malloc(sizeof(libraw_processed_image_t) + size)),
+                LibRaw::dcraw_clear_mem);
+            if (!plane) return fail(output, "Not enough memory for the sensor reference plane");
+            plane->type = LIBRAW_IMAGE_BITMAP;
+            plane->width = sizes.raw_width;
+            plane->height = sizes.raw_height;
+            plane->bits = 16;
+            plane->colors = 1;
+            plane->data_size = static_cast<unsigned>(size);
+            for (unsigned y = 0; y < sizes.raw_height; ++y) {
+                if (state.stop_requested()) return fail(output, "Sensor reference cancelled");
+                const auto *row = reinterpret_cast<const unsigned char *>(raw.imgdata.rawdata.raw_image) + uint64_t(y) * sizes.raw_pitch;
+                std::memcpy(plane->data + uint64_t(y) * sizes.raw_width * 2, row, uint64_t(sizes.raw_width) * 2);
+            }
+            output->width = plane->width;
+            output->height = plane->height;
+            output->colors = 1;
+            output->bits = 16;
+            output->data_size = plane->data_size;
+            output->data = plane->data;
+            output->owner = plane.release();
+            return 0;
+        }
         code = raw.dcraw_process();
         if (code) return failure(output, code);
         if (state.damaged)

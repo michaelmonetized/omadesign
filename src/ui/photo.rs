@@ -289,24 +289,32 @@ fn library_cards(ui: &mut Ui, studio: &mut Studio) {
                         .get(&index)
                         .is_none_or(|(_, params)| *params != image.develop)
                     {
-                        let pixels = image.render_thumbnail(256);
-                        let color = ColorImage::from_rgba_unmultiplied(
-                            [pixels.w as usize, pixels.h as usize],
-                            &pixels.data,
-                        );
-                        if let Some((texture, params)) = studio.photo.thumbs.get_mut(&index) {
-                            texture.set(color, TextureOptions::LINEAR);
-                            *params = image.develop.clone();
-                        } else {
-                            let texture = ui.ctx().load_texture(
-                                format!("live-photo-{index}"),
-                                color,
-                                TextureOptions::LINEAR,
-                            );
-                            studio
-                                .photo
-                                .thumbs
-                                .insert(index, (texture, image.develop.clone()));
+                        match image.render_thumbnail(256) {
+                            Ok(pixels) => {
+                                let color = ColorImage::from_rgba_unmultiplied(
+                                    [pixels.w as usize, pixels.h as usize],
+                                    &pixels.data,
+                                );
+                                if let Some((texture, params)) = studio.photo.thumbs.get_mut(&index)
+                                {
+                                    texture.set(color, TextureOptions::LINEAR);
+                                    *params = image.develop.clone();
+                                } else {
+                                    let texture = ui.ctx().load_texture(
+                                        format!("live-photo-{index}"),
+                                        color,
+                                        TextureOptions::LINEAR,
+                                    );
+                                    studio
+                                        .photo
+                                        .thumbs
+                                        .insert(index, (texture, image.develop.clone()));
+                                }
+                            }
+                            Err(error) => {
+                                studio.photo.status = error;
+                                studio.photo.thumbs.remove(&index);
+                            }
                         }
                     }
                     studio

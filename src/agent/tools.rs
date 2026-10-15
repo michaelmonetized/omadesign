@@ -877,7 +877,7 @@ pub fn execute_prepared(
                     .photo
                     .selected()
                     .ok_or("Select/import a photo first")?;
-                let preview = p.render_thumbnail(960);
+                let preview = p.render_thumbnail(960)?;
                 let bytes = preview.encode_png().ok_or("Could not render photo")?;
                 return Ok(
                     json!({"content":[{"type":"image","mimeType":"image/png","data":base64::engine::general_purpose::STANDARD.encode(bytes)},{"type":"text","text":format!("Photo revision {} · {}",studio.photo.edit_revision,p.name)}]}),

@@ -9,6 +9,7 @@ use std::sync::{
 pub struct Cancellation {
     flag: Arc<AtomicBool>,
     progress: Arc<AtomicU32>,
+    active: Arc<AtomicBool>,
 }
 
 impl Cancellation {
@@ -48,6 +49,7 @@ impl Cancellation {
         Self {
             flag,
             progress: Arc::default(),
+            active: Arc::default(),
         }
     }
     /// Stop this job at its next decoder or buffer checkpoint.
@@ -68,6 +70,16 @@ impl Cancellation {
         self.progress.load(Ordering::Acquire)
     }
 
+    /// Inspect actual native call ownership. Args: none. Returns true only until the synchronous native call returns.
+    pub fn native_active(&self) -> bool {
+        self.active.load(Ordering::Acquire)
+    }
+
+    pub(super) fn native_activity(&self) -> NativeActivity {
+        self.active.store(true, Ordering::Release);
+        NativeActivity(self.active.clone())
+    }
+
     /// Reject further work after cancellation.
     /// Args: none. Returns a stable cancellation error or success.
     pub fn check(&self) -> Result<(), String> {
@@ -76,6 +88,13 @@ impl Cancellation {
         } else {
             Ok(())
         }
+    }
+}
+
+pub(super) struct NativeActivity(Arc<AtomicBool>);
+impl Drop for NativeActivity {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
     }
 }
 
