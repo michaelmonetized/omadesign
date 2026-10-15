@@ -33,7 +33,11 @@ pub(crate) fn open(ctx: &egui::Context, studio: &mut Studio) {
         return;
     }
     if studio.tool == crate::tools::Tool::Artboard {
-        super::artboard_dialog::open(ctx, studio, crate::geom::Pt::new(studio.doc.width * 0.5, studio.doc.height * 0.5));
+        super::artboard_dialog::open(
+            ctx,
+            studio,
+            crate::geom::Pt::new(studio.doc.width * 0.5, studio.doc.height * 0.5),
+        );
         return;
     }
     let kind = ArtworkKind::for_tool(studio.tool).unwrap_or(ArtworkKind::Rectangle);
@@ -98,7 +102,8 @@ pub(super) fn input(
                 node.push_described_by(message.id.accesskit_id());
             });
             ui.ctx().accesskit_node_builder(message.id, |node| {
-                node.set_live(egui::accesskit::Live::Polite)
+                node.set_live(egui::accesskit::Live::Polite);
+                node.set_live_atomic();
             });
         }
         response
@@ -263,14 +268,30 @@ mod tests {
         studio: &mut Studio,
         events: Vec<egui::Event>,
     ) -> egui::FullOutput {
-        let events = events.into_iter().flat_map(|event| {
-            if let egui::Event::Key { key, physical_key, pressed: true, modifiers, .. } = &event {
-                let release = egui::Event::Key { key: *key, physical_key: *physical_key, pressed: false, repeat: false, modifiers: *modifiers };
-                vec![event, release]
-            } else {
-                vec![event]
-            }
-        }).collect();
+        let events = events
+            .into_iter()
+            .flat_map(|event| {
+                if let egui::Event::Key {
+                    key,
+                    physical_key,
+                    pressed: true,
+                    modifiers,
+                    ..
+                } = &event
+                {
+                    let release = egui::Event::Key {
+                        key: *key,
+                        physical_key: *physical_key,
+                        pressed: false,
+                        repeat: false,
+                        modifiers: *modifiers,
+                    };
+                    vec![event, release]
+                } else {
+                    vec![event]
+                }
+            })
+            .collect();
         let mut output = ctx.run_ui(
             egui::RawInput {
                 events,

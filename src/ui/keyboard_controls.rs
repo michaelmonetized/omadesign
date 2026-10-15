@@ -1,5 +1,14 @@
 use eframe::egui::{self, Key, Modifiers, Ui};
 
+/// Draw a native action with a stable property identity and visible keyboard focus.
+/// Args: UI, property name and visible label. Returns the actual button response.
+pub(super) fn button(ui: &mut Ui, id: &str, label: &str) -> egui::Response {
+    let id = ui.make_persistent_id(id);
+    let response = super::fields::native_scope(ui, id, |ui| ui.button(label)).inner;
+    super::welcome::focus_control(ui, &response);
+    response
+}
+
 /// Allocate the identity of a newly opened app-owned draft.
 /// Args: context and dialog purpose. Returns an ID stable until that draft closes.
 pub(super) fn draft_id(ctx: &egui::Context, purpose: &str) -> egui::Id {

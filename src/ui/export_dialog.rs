@@ -1152,7 +1152,11 @@ mod tests {
         assert_eq!(dialog(&ctx).upscale.factor, 3.25);
         let output = frame(&ctx, &mut studio, keys::key(Key::ArrowUp, Modifiers::NONE));
         keys::focused(&ctx, &output, "AI upscale factor (×)");
-        assert!((dialog(&ctx).upscale.factor - 3.35).abs() < 1e-9);
+        assert_eq!(
+            dialog(&ctx).upscale.factor,
+            3.4,
+            "native 0.1 step rounds to its displayed precision"
+        );
         keys::tab_to(&ctx, "Cancel", |events| frame(&ctx, &mut studio, events));
         frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
         assert!(!is_open(&ctx));

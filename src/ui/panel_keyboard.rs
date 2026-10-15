@@ -522,6 +522,8 @@ mod tests {
         );
         frame(ctx, book, vec![]);
         assert!(is_open(ctx));
+        tab_to(ctx, book, "Panel");
+        frame(ctx, book, key(Key::Home, Modifiers::NONE));
     }
 
     #[test]
@@ -651,6 +653,8 @@ mod tests {
             book.tasks["Design"], dialog.baseline,
             "Ctrl+F6 must not also cycle the underlying F6 route"
         );
+        tab_to(&ctx, &mut book, "Panel");
+        frame(&ctx, &mut book, key(Key::Home, Modifiers::NONE));
         action(&ctx, &mut book, "Move left");
         frame(
             &ctx,
@@ -715,6 +719,11 @@ mod tests {
             Action::Bottom,
         ] {
             let mut draft = Dialog::new(&book, REGISTRY, &ctx).unwrap();
+            draft.panel = "properties".into();
+            draft.tab = "layers".into();
+            draft.geometry = group(&draft.baseline, &draft.panel)
+                .cloned()
+                .unwrap_or_default();
             draft.action = action;
             let request = draft.apply(&mut book, REGISTRY).unwrap();
             if action == Action::Float {
