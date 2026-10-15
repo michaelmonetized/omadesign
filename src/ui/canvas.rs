@@ -18,6 +18,14 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         eframe::egui::Id::new("studio-canvas"),
         Sense::click_and_drag(),
     );
+    resp.widget_info(|| eframe::egui::WidgetInfo::labeled(
+        eframe::egui::WidgetType::Other, resp.enabled(), "Artwork canvas"
+    ));
+    ui.ctx().accesskit_node_builder(resp.id, |node| {
+        node.set_role(eframe::egui::accesskit::Role::Canvas);
+        node.set_description("F8 focuses the canvas. Ctrl+Shift+K creates artwork. Page Up and Page Down select artwork; Shift extends selection. Arrow keys move selected artwork.");
+        node.set_state_description(format!("{} tool; {} objects selected", studio.tool.label(), studio.selection.len()));
+    });
     studio.canvas_rect = Some(rect);
     let text_geometry_input = super::text_geometry::brackets(ui, rect, studio) | super::text_geometry::frame_ports(ui,rect,studio);
     let text_geometry_input = text_geometry_input || super::text_geometry::area_input(studio,&resp,rect);
@@ -324,6 +332,9 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         for f in files {
             studio.ingest_dropped(f.path(), at);
         }
+    }
+    if resp.has_focus() {
+        ui.painter().rect_stroke(rect.shrink(2.), 2., ui.visuals().selection.stroke, eframe::egui::StrokeKind::Inside);
     }
 }
 

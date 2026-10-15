@@ -39,10 +39,18 @@ pub(super) enum Shortcut {
     ToggleKeyHud,
     FlipHorizontal,
     FlipVertical,
+    CreateArtwork,
+    FocusCanvas,
+    NextDocument,
+    PreviousDocument,
+    CloseDocument,
 }
 
 impl Shortcut {
     pub(super) fn available(self, persona: Persona) -> bool {
+        if self == Self::CreateArtwork {
+            return matches!(persona, Persona::Design | Persona::Layout | Persona::Motion);
+        }
         if matches!(self, Self::FlipHorizontal | Self::FlipVertical) {
             return matches!(persona, Persona::Design | Persona::Layout | Persona::Motion);
         }
@@ -76,6 +84,10 @@ impl Shortcut {
                 | Self::Export
                 | Self::Help
                 | Self::ToggleKeyHud
+                | Self::FocusCanvas
+                | Self::NextDocument
+                | Self::PreviousDocument
+                | Self::CloseDocument
         )
     }
 }
@@ -93,6 +105,9 @@ pub(super) fn key_shortcut(key: Key, mods: Modifiers) -> Option<Shortcut> {
     }
     if key == Key::F1 && mods.is_none() {
         return Some(Help);
+    }
+    if key == Key::F8 && mods.is_none() {
+        return Some(FocusCanvas);
     }
     if !(mods.command || mods.ctrl || mods.mac_cmd) {
         return match (key, mods.shift, mods.alt) {
@@ -118,6 +133,10 @@ pub(super) fn key_shortcut(key: Key, mods: Modifiers) -> Option<Shortcut> {
         (Key::P, true) => Place,
         (Key::N, false) => New,
         (Key::E, false) => Export,
+        (Key::K, true) => CreateArtwork,
+        (Key::Tab, false) => NextDocument,
+        (Key::Tab, true) => PreviousDocument,
+        (Key::W, false) => CloseDocument,
         (Key::Z, false) => Undo,
         (Key::Z, true) | (Key::Y, false) => Redo,
         (Key::C, false) => Copy,
@@ -335,7 +354,7 @@ impl Studio {
                     ..
                 } = event
                 && !(modifiers.ctrl || modifiers.command || modifiers.alt || modifiers.mac_cmd)
-                && self.canvas_key(*key, modifiers.shift, *repeat)
+                && self.canvas_key(ctx, *key, modifiers.shift, *repeat)
             {
                 consumed.push(index);
             }
@@ -354,6 +373,22 @@ impl Studio {
 
     fn run_shortcut(&mut self, ctx: &egui::Context, shortcut: Shortcut, payload: Option<&str>) {
         match shortcut {
+            Shortcut::CreateArtwork => crate::ui::keyboard_authoring::open(ctx, self),
+            Shortcut::NextDocument | Shortcut::PreviousDocument => {
+                self.ensure_tabs();
+                let count = self.tab_count();
+                let index = if shortcut == Shortcut::NextDocument {
+                    (self.active_tab + 1) % count
+                } else {
+                    (self.active_tab + count - 1) % count
+                };
+                self.switch_tab(index);
+                ctx.memory_mut(|memory| memory.request_focus(egui::Id::new("studio-canvas")));
+            }
+            Shortcut::CloseDocument => self.request_close_tab(self.active_tab),
+            Shortcut::FocusCanvas => ctx.memory_mut(|memory| memory.request_focus(egui::Id::new(
+                if self.persona == Persona::Photo { "studio-photo-canvas" } else { "studio-canvas" }
+            ))),
             Shortcut::FlipHorizontal => self.flip_selection(true),
             Shortcut::FlipVertical => self.flip_selection(false),
             Shortcut::ToggleGuides => self.toggle_guides(),
@@ -574,7 +609,7 @@ impl Studio {
         true
     }
 
-    fn canvas_key(&mut self, key: Key, shift: bool, repeat: bool) -> bool {
+    fn canvas_key(&mut self, ctx: &egui::Context, key: Key, shift: bool, repeat: bool) -> bool {
         if self.persona == Persona::Photo {
             if self.photo.is_batching() {
                 return false;
@@ -624,6 +659,19 @@ impl Studio {
             }
         }
         if self.pixel_edit_key(key) { return true; }
+        if !repeat && key == Key::Enter && self.op.is_none() && self.pending_place.is_none()
+            && self.free_transform.is_none() && self.deformation.is_none()
+        {
+            if self.tool == Tool::Select && self.edit_keyboard_text() { return true; }
+            if super::keyboard_authoring::ArtworkKind::for_tool(self.tool).is_some() {
+                crate::ui::keyboard_authoring::open(ctx, self);
+                return true;
+            }
+        }
+        if matches!(key, Key::PageUp | Key::PageDown) {
+            self.cycle_keyboard_artwork(key == Key::PageUp, shift);
+            return true;
+        }
         if self.deformation.is_some() && matches!(key, Key::Escape | Key::Enter) {
             self.end_deform(key == Key::Escape);
             return true;

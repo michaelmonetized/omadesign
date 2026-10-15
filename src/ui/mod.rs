@@ -22,6 +22,7 @@ mod guides;
 mod icons;
 mod jobs;
 mod key_hud;
+pub(crate) mod keyboard_authoring;
 #[cfg(test)]
 mod key_hud_tests;
 mod layer_drag;
@@ -140,6 +141,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         && !plugins::is_open(&ctx)
         && !welcome::modal_open(&ctx)
         && !artboard_dialog::is_open(&ctx)
+        && !keyboard_authoring::is_open(&ctx)
         && !studio.show_templates
     {
         guides::handle_shortcuts(&ctx, studio);
@@ -155,6 +157,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         && !plugins::is_open(&ctx)
         && !welcome::modal_open(&ctx)
         && !artboard_dialog::is_open(&ctx)
+        && !keyboard_authoring::is_open(&ctx)
         && !studio.show_templates
     {
         studio.handle_shortcuts(&ctx);
@@ -163,7 +166,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     layout::poll_image(&ctx, studio);
 
     // Keep the canvas visible for previews while preventing edits behind the dialog.
-    if pixel_selection::is_open(&ctx) || background_removal::is_open(&ctx) || export_dialog::is_open(&ctx) || artboard_dialog::is_open(&ctx) {
+    if pixel_selection::is_open(&ctx) || background_removal::is_open(&ctx) || export_dialog::is_open(&ctx) || artboard_dialog::is_open(&ctx) || keyboard_authoring::is_open(&ctx) {
         ui.disable();
     }
 
@@ -207,6 +210,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         background_removal::show(&ctx, studio);
         export_dialog::show(&ctx, studio);
         artboard_dialog::show(&ctx, studio);
+        keyboard_authoring::show(&ctx, studio);
         anim_export::show(ui, studio);
         pixel_selection::show(&ctx, studio);
 

@@ -340,6 +340,16 @@ pub struct ShortcutRow {
 pub fn shortcut_groups() -> &'static [(&'static str, &'static [ShortcutRow])] {
     &[
         (
+            "Keyboard artwork",
+            &[
+                ShortcutRow { action: "Create artwork", keys: "Ctrl+Shift+K" },
+                ShortcutRow { action: "Create with current tool / edit selected text", keys: "Enter" },
+                ShortcutRow { action: "Previous / next artwork", keys: "Page Up / Page Down" },
+                ShortcutRow { action: "Extend artwork selection", keys: "Shift+Page Up / Page Down" },
+                ShortcutRow { action: "Focus canvas", keys: "F8" },
+            ],
+        ),
+        (
             "File",
             &[
                 ShortcutRow {
