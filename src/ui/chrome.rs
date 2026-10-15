@@ -238,7 +238,7 @@ fn file_menu(ui: &mut Ui, studio: &mut Studio) {
             ("Export WebM…", crate::anim_export::AnimKind::Webm),
         ] {
             if ui.button(label).clicked() {
-                super::anim_export::open(studio, kind);
+                super::anim_export::open(ui.ctx(), studio, kind);
                 ui.close();
             }
         }
