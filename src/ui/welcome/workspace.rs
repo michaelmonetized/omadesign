@@ -129,7 +129,8 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
     if ui.is_enabled() && !studio.show_preferences && !studio.file_dialog_pending()
         && !egui::Popup::is_any_open(&ctx)
         && !agent::is_open(&ctx) && !studio.show_templates && !state.brand && state.size.is_none()
-        && ctx.memory(|m| m.focused()).and_then(|id| egui::TextEdit::load_state(&ctx, id)).is_none()
+        && ctx.memory(|m| m.focused()).is_none()
+        && !(if state.focus_right { &state.right } else { &state.left }).paths.is_empty()
         && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter))
     {
         let selection = if state.focus_right { &state.right } else { &state.left };
@@ -524,8 +525,9 @@ fn center(ui: &mut Ui, studio: &mut Studio, state: &mut State) {
             fg(),
         );
         response.widget_info(|| {
-            egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("New {label}"))
+            egui::WidgetInfo::labeled(egui::WidgetType::Button, response.enabled(), format!("New {label}"))
         });
+        super::focus_control(ui, &response);
         if response.clicked() {
             match persona {
                 Persona::Photo => studio.switch_persona(persona),
@@ -570,7 +572,8 @@ fn center(ui: &mut Ui, studio: &mut Studio, state: &mut State) {
                 icons::font(24.),
                 fg_weak(),
             );
-            response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tip));
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, response.enabled(), tip));
+            super::focus_control(ui, &response);
             if response.on_hover_text(tip).clicked() {
                 if persona != Persona::Photo {
                     open_size(ui.ctx(), studio, state, persona);
@@ -623,7 +626,8 @@ fn center(ui: &mut Ui, studio: &mut Studio, state: &mut State) {
         fg(),
     );
     response
-        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "New Project"));
+        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, response.enabled(), "New Project"));
+    super::focus_control(ui, &response);
     if response.clicked() {
         state.brand = true;
     }
@@ -688,7 +692,8 @@ fn center(ui: &mut Ui, studio: &mut Studio, state: &mut State) {
 
 fn action(ui: &mut Ui, glyph: &'static str, label: &str) -> bool {
     let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 32.), Sense::click());
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label));
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, response.enabled(), label));
+    super::focus_control(ui, &response);
     if response.hovered() || response.has_focus() {
         ui.painter().rect_filled(rect, 6., bg_widget_hover());
     }
@@ -1210,6 +1215,31 @@ fn dialogs(ctx: &egui::Context, studio: &mut Studio, state: &mut State) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn welcome_keyboard_launcher_keeps_native_enter_for_vector_templates() {
+        use crate::ui::welcome::keyboard_tests as keys;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        crate::ui::theme::apply(&ctx);
+        let mut studio = Studio::new();
+        studio.doc = crate::document::Document::new("Keyboard welcome", 8., 8., 72.);
+        studio.show_welcome = true;
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(".artifacts")
+            .join(format!("keyboard-welcome-launcher-{}-{}", std::process::id(), crate::document::next_id()));
+        std::fs::create_dir_all(&root).unwrap();
+        catalog::set_capture_catalog_root(&ctx, &root);
+        let render = |studio: &mut Studio, events| keys::render(&ctx, events, |ui| show(ui, studio));
+        let output = keys::tab_to(&ctx, "New Vector", |events| render(&mut studio, events));
+        keys::focused(&ctx, &output, "New Vector");
+        render(&mut studio, keys::key(egui::Key::Enter, egui::Modifiers::NONE));
+        assert!(studio.show_templates);
+        assert!(studio.show_welcome);
+        assert!(!modal_open(&ctx));
+        assert!(!crate::ui::jobs::is_running::<Option<[f32; 2]>>(&ctx, CLIPBOARD_SIZE_JOB));
+        catalog::cancel(&ctx);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     fn center_frame(
         ctx: &egui::Context,

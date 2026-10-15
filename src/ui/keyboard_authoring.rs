@@ -32,6 +32,10 @@ pub(crate) fn open(ctx: &egui::Context, studio: &mut Studio) {
     {
         return;
     }
+    if studio.tool == crate::tools::Tool::Artboard {
+        super::artboard_dialog::open(ctx, studio, crate::geom::Pt::new(studio.doc.width * 0.5, studio.doc.height * 0.5));
+        return;
+    }
     let kind = ArtworkKind::for_tool(studio.tool).unwrap_or(ArtworkKind::Rectangle);
     let draft = ArtworkDraft::new(studio, kind);
     let scope = Id::new((
