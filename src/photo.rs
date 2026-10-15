@@ -1,4 +1,5 @@
 pub mod edits;
+pub mod optics;
 pub mod presets;
 mod raw_photo;
 pub mod transfer;
@@ -107,6 +108,8 @@ pub struct DevelopParams {
     pub hsl: [HslBand; 8],
     pub rotate: u32,
     pub crop: Option<[f32; 4]>,
+    #[serde(default, skip_serializing_if = "optics::OpticalSettings::is_default")]
+    pub optics: optics::OpticalSettings,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -155,6 +158,7 @@ impl Default for DevelopParams {
             hsl: [HslBand::default(); 8],
             rotate: 0,
             crop: None,
+            optics: Default::default(),
         }
     }
 }
@@ -356,6 +360,14 @@ fn develop_inner<T: OutputChannel>(
 
     let n = src.w as usize * src.h as usize;
     let mut col = vec![0f32; n * 3];
+    let optical = p.optics.active();
+    let mut opacity = optical.then(|| vec![0f32; n]);
+    if let Some(alpha) = &mut opacity {
+        alpha
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(i, a)| *a = p.optics.sample(src, i)[3]);
+    }
 
     let exp = 2f32.powf(p.exposure);
     let t = p.temperature.clamp(-100.0, 100.0) / 100.0;
@@ -376,12 +388,16 @@ fn develop_inner<T: OutputChannel>(
             .any(|band| band.hue.abs() + band.sat.abs() + band.luma.abs() > 0.001);
 
     col.par_chunks_mut(3).enumerate().for_each(|(i, px)| {
-        let [mut r, mut g, mut b, a] = src.pixel(i);
+        let [mut r, mut g, mut b, a] = if optical {
+            p.optics.sample(src, i)
+        } else {
+            src.pixel(i)
+        };
 
         if a > 0.0 {
             // RAW exposure and WB operate on scene-linear channels before the
             // display transfer curve. Original 16-bit samples remain unchanged.
-            if src.linear.is_some() {
+            if src.linear.is_some() || optical {
                 r = srgb_encode(r * exp * temp_r);
                 g = srgb_encode(g * exp * temp_g);
                 b = srgb_encode(b * exp * temp_b);
@@ -540,7 +556,10 @@ fn develop_inner<T: OutputChannel>(
                 let sxr = ix as usize;
                 let syr = iy as usize;
                 let si = (syr * src.w as usize + sxr) * 3;
-                let a = src.alpha(sxr as u32, syr as u32);
+                let a = opacity.as_ref().map_or_else(
+                    || src.alpha(sxr as u32, syr as u32),
+                    |alpha| alpha[syr * src.w as usize + sxr],
+                );
                 let (mut r, mut g, mut b) = (col[si], col[si + 1], col[si + 2]);
 
                 if vign.abs() > 0.001 {

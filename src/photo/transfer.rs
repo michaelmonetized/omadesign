@@ -13,6 +13,14 @@ pub struct Categories {
     pub split_tone: bool,
     pub crop: bool,
     pub rotation: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub optics: bool,
+}
+
+/// Omit inactive opt-in fields for version 1 preset readers.
+/// Args: field value. Returns true when the field can be omitted.
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 impl Default for Categories {
@@ -26,6 +34,7 @@ impl Default for Categories {
             split_tone: true,
             crop: false,
             rotation: false,
+            optics: false,
         }
     }
 }
@@ -40,6 +49,7 @@ impl Categories {
             || self.split_tone
             || self.crop
             || self.rotation
+            || self.optics
     }
 
     pub fn apply(self, source: &DevelopParams, target: &mut DevelopParams) {
@@ -77,6 +87,9 @@ impl Categories {
         }
         if self.crop {
             target.crop = source.crop;
+        }
+        if self.optics {
+            target.optics = source.optics.clone();
         }
         if self.rotation {
             target.rotate = source.rotate;

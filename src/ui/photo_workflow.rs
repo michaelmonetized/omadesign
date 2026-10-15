@@ -92,9 +92,10 @@ fn categories(ui: &mut Ui, value: &mut Categories) {
         c[1].checkbox(&mut value.split_tone, "Color grading");
         c[1].checkbox(&mut value.crop, "Crop");
         c[1].checkbox(&mut value.rotation, "Rotation");
+        c[1].checkbox(&mut value.optics, "Lens / perspective");
     });
     ui.label(
-        RichText::new("Crop and rotation are excluded unless you choose them.")
+        RichText::new("Crop, rotation and lens calibration are excluded unless you choose them.")
             .small()
             .weak(),
     );

@@ -1,6 +1,8 @@
 use crate::app::Studio;
 #[path = "photo_workflow.rs"]
 mod workflow;
+#[path = "photo_optics.rs"]
+mod optics;
 use crate::photo::{self, DevelopParams, HSL_NAMES, Histogram};
 use crate::ui::theme::{accent, bg_canvas, bg_extreme, bg_panel, fg_weak};
 use eframe::egui::{
@@ -568,6 +570,7 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
                 changed |= slider(ui, "Dehaze", &mut p.dehaze, -1.0, 1.0);
                 changed |= slider(ui, "Grain", &mut p.grain, 0.0, 1.0);
                 changed |= slider(ui, "Vignette", &mut p.vignette, -1.0, 1.0);
+                changed |= optics::controls(ui, &mut p.optics);
                 ui.add_space(10.0);
                 ui.label(RichText::new("Orientation").small().color(fg_weak()));
                 ui.horizontal(|ui| {

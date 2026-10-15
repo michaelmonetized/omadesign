@@ -5,7 +5,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 const MAX_SETTINGS_BYTES: u64 = 64 * 1024;
 
 /// Bind adjustments to the source that was actually decoded. The file's size
@@ -104,7 +104,7 @@ pub fn load_file(path: &Path, identity: &SourceIdentity) -> Result<DevelopParams
     }
     let settings: Settings = serde_json::from_slice(&bytes)
         .map_err(|error| format!("Could not read photo settings: {error}"))?;
-    if settings.version != VERSION {
+    if !(1..=VERSION).contains(&settings.version) {
         return Err(format!(
             "Photo settings version {} is not supported.",
             settings.version
@@ -153,7 +153,11 @@ pub(crate) fn encode(
 ) -> Result<Vec<u8>, String> {
     validate(develop)?;
     serde_json::to_vec_pretty(&Settings {
-        version: VERSION,
+        version: if develop.optics == Default::default() {
+            1
+        } else {
+            VERSION
+        },
         source: identity.clone(),
         develop: develop.clone(),
     })
@@ -175,7 +179,8 @@ pub fn validate(p: &DevelopParams) -> Result<(), String> {
         p.dehaze,
         p.split_balance,
     ];
-    let valid = within(p.exposure, -16.0, 16.0)
+    let valid = p.optics.valid()
+        && within(p.exposure, -16.0, 16.0)
         && within(p.temperature, -100.0, 100.0)
         && within(p.tint, -100.0, 100.0)
         && within(p.contrast, 0.0, 4.0)
