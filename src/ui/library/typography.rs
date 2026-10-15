@@ -136,11 +136,11 @@ fn file_actions(
     busy: bool,
     has_edits: bool,
 ) -> bool {
+    let owner = egui::Id::new(("library-typography-files", &studio.swap_id, root));
     let available = !busy && !has_edits;
     let mut reload = false;
     ui.horizontal(|ui| {
-        if ui
-            .add_enabled(available, egui::Button::new("Add fonts…"))
+        if native(ui, owner.with("add"), "Add project typography fonts", |ui| ui.add_enabled(available, egui::Button::new("Add fonts…")))
             .clicked()
         {
             let target = root.to_path_buf();
@@ -158,7 +158,7 @@ fn file_actions(
             );
         }
         ui.add_enabled_ui(!busy, |ui| {
-            ui.menu_button("···", |ui| {
+            native(ui, owner.with("menu"), "Project typography actions", |ui| ui.menu_button("···", |ui| {
                 if ui
                     .add_enabled(available, egui::Button::new("Load kit…"))
                     .clicked()
@@ -206,8 +206,7 @@ fn file_actions(
                     ui.close();
                     reload = true;
                 }
-            })
-            .response
+            }).response)
             .on_hover_text("Load, save a copy or reload typography");
         });
     });
@@ -216,6 +215,8 @@ fn file_actions(
 
 fn name_editor(
     ui: &mut Ui,
+    id:egui::Id,
+    label:&str,
     name: &mut String,
     hint: &str,
     save_label: &str,
@@ -223,21 +224,27 @@ fn name_editor(
 ) -> (bool, bool) {
     let mut changed = false;
     let mut save = false;
-    ui.horizontal(|ui| {
+    let name_label=ui.label(label);
+    let valid=!name.trim().is_empty()&&name.chars().count()<=100&&!name.chars().any(char::is_control);
+    let field=ui.horizontal(|ui| {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            save = ui
-                .add_enabled(enabled, egui::Button::new(save_label))
-                .clicked();
-            changed = ui
+            save=native(ui,id.with("save"),&format!("Save {}",label.to_lowercase()),|ui|ui.add_enabled(enabled&&valid,egui::Button::new(save_label))).clicked();
+            let response=ui
                 .add_enabled(
                     enabled,
                     egui::TextEdit::singleline(name)
+                        .id(id.with("name"))
                         .desired_width(ui.available_width())
                         .hint_text(hint),
-                )
-                .changed();
-        });
-    });
+                );
+            super::super::welcome::name_control(ui,&response,name_label.id,label);
+            changed=response.changed();
+            response
+        }).inner
+    }).inner;
+    let valid=!name.trim().is_empty()&&name.chars().count()<=100&&!name.chars().any(char::is_control);
+    if !valid{super::super::welcome::control_error(ui,&[&field],"Use a name between 1 and 100 characters without line breaks");}
+    save&=valid;
     (changed, save)
 }
 
@@ -245,6 +252,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio, state: &mut Libraries) {
     let Some(root) = state.root.clone() else {
         return;
     };
+    let owner=egui::Id::new(("library-typography",&studio.swap_id,&root));
     egui::CollapsingHeader::new("Typography")
         .id_salt("brand-typography")
         .default_open(state.typography.is_some())
@@ -269,7 +277,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio, state: &mut Libraries) {
                 return;
             };
             let (changed, save) = name_editor(
-                ui, &mut state.typography_name, "Typography name", "Save name", !busy,
+                ui,owner.with(("kit-name",loaded.stamp)),"Typography kit name", &mut state.typography_name, "Typography name", "Save name", !busy,
             );
             if changed {
                 state.typography_edit_stamp.get_or_insert(loaded.stamp);
@@ -277,11 +285,14 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio, state: &mut Libraries) {
             if save {
                 save_edits(ui.ctx(), &root, &loaded, state);
             }
-            ui.add(
+            let query_label=ui.label("Filter typography roles");
+            let query=ui.add(
                 egui::TextEdit::singleline(&mut state.typography_query)
+                    .id(owner.with("query"))
                     .desired_width(ui.available_width())
                     .hint_text("Filter role, family or file…"),
             );
+            super::super::welcome::name_control(ui,&query,query_label.id,"Filter typography by role, family or file");
             let query = state.typography_query.to_lowercase();
             egui::ScrollArea::vertical()
                 .id_salt("brand-font-roles")
@@ -293,7 +304,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio, state: &mut Libraries) {
                             continue;
                         }
                         ui.horizontal(|ui| {
-                            if ui.small_button("Apply")
+                            if native(ui,owner.with(("apply-font",&font.file,index,&studio.selection)),&format!("Apply typography role {}: {}",font.role,font.family),|ui|ui.small_button("Apply"))
                                 .on_hover_text("Use on selected text, or the next text you create")
                                 .clicked()
                                 && let Err(error) = studio.apply_project_font(font)
@@ -301,11 +312,11 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio, state: &mut Libraries) {
                                 state.typography_message = error;
                             }
                             let label = format!("{} · {}", font.role, font.family);
-                            if ui.add_enabled(
+                            if native(ui,owner.with(("select-role",&font.file,index)),&format!("Select typography role {}: {}",font.role,font.family),|ui|ui.add_enabled(
                                 !busy && state.typography_edit_stamp.is_none(),
                                 egui::Button::selectable(state.typography_selected == index, label)
                                     .truncate(),
-                            ).on_hover_text(&font.file).clicked() {
+                            )).on_hover_text(&font.file).clicked() {
                                 state.typography_selected = index;
                                 state.typography_role = font.role.clone();
                             }
@@ -314,7 +325,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio, state: &mut Libraries) {
                 });
             if loaded.kit.roles.get(state.typography_selected).is_some() {
                 let (changed, save) = name_editor(
-                    ui, &mut state.typography_role, "Heading, Body, Caption…", "Save role", !busy,
+                    ui,owner.with(("role-name",state.typography_selected,loaded.stamp)),"Typography role name", &mut state.typography_role, "Heading, Body, Caption…", "Save role", !busy,
                 );
                 if changed {
                     state.typography_edit_stamp.get_or_insert(loaded.stamp);
@@ -322,7 +333,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio, state: &mut Libraries) {
                 if save {
                     save_edits(ui.ctx(), &root, &loaded, state);
                 }
-                if ui.add_enabled(!busy, egui::Button::new("Remove role"))
+                if native(ui, owner.with(("remove-role", state.typography_selected, loaded.stamp)), "Remove typography role", |ui| ui.add_enabled(!busy, egui::Button::new("Remove role")))
                     .on_hover_text("The copied font file stays available to existing artwork")
                     .clicked()
                 {

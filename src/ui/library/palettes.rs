@@ -2,6 +2,7 @@
 use super::*;
 
 pub(super) fn palettes(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
+    let scope=egui::Id::new(("palette-scope",&studio.swap_id));
     let compact = ui.ctx().viewport_rect().height() < 650.0;
     if !compact {
         ui.label(RichText::new("Your colors.").size(21.).strong());
@@ -9,8 +10,8 @@ pub(super) fn palettes(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
         ui.add_space(10.);
     }
     ui.horizontal(|ui| {
-        ui.selectable_value(&mut s.project_scope, false, "Personal");
-        ui.selectable_value(&mut s.project_scope, true, "Project");
+        native(ui,scope.with("personal"),"Personal palette collection",|ui|ui.selectable_value(&mut s.project_scope,false,"Personal"));
+        native(ui,scope.with("project"),"Project palette collection",|ui|ui.selectable_value(&mut s.project_scope,true,"Project"));
     });
     if s.project_scope {
         project_picker(ui, studio, s);
@@ -29,19 +30,23 @@ pub(super) fn palettes(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
     };
     let path = s.palette_path().unwrap();
     let busy = jobs::is_running::<PaletteResult>(ui.ctx(), PALETTE_ACTION);
+    let owner=collection_id(&root);
+    let generation=collection_generation(ui.ctx(),&root);
     let d = s.draft();
     ui.add_space(8.);
-    ui.add(
+    let query_label=ui.label("Filter palettes");
+    let query=ui.add(
         egui::TextEdit::singleline(&mut d.query)
+            .id(owner.with("query"))
             .hint_text("Filter names or hex colors…")
             .desired_width(f32::INFINITY),
     );
+    super::super::welcome::name_control(ui,&query,query_label.id,"Filter palettes by name or hex color");
     ui.horizontal_wrapped(|ui| {
-        if ui
-            .add_enabled(
+        if native(ui,owner.with("new"),"Create palette",|ui|ui.add_enabled(
                 d.palettes.len() < crate::palette::MAX_PALETTES,
                 egui::Button::new("+ Palette"),
-            )
+            ))
             .on_disabled_hover_text("This collection already contains the maximum 256 palettes.")
             .clicked()
         {
@@ -60,11 +65,10 @@ pub(super) fn palettes(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
             d.dirty = true;
             d.query.clear();
         }
-        if ui
-            .add_enabled(
+        if native(ui,owner.with("save"),"Save palette collection",|ui|ui.add_enabled(
                 !busy && d.loaded && !d.conflict,
                 egui::Button::new(if d.dirty { "Save •" } else { "Save" }),
-            )
+            ))
             .clicked()
         {
             let saved = d.palettes.clone();
@@ -79,7 +83,7 @@ pub(super) fn palettes(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
                 Ok(PaletteChange::Saved(saved, file_stamp(&path)?))
             });
         }
-        ui.menu_button("···", |ui| {
+        native(ui, owner.with("menu"), "Palette collection actions", |ui| ui.menu_button("···", |ui| {
             if ui
                 .add_enabled(!busy, egui::Button::new("Load palettes…"))
                 .clicked()
@@ -153,6 +157,7 @@ pub(super) fn palettes(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
                 .on_hover_text("Discard unsaved palette edits and reload the file")
                 .clicked()
             {
+                replace_collection_owner(ui.ctx(),&root);
                 d.dirty = false;
                 d.loaded = false;
                 d.conflict = false;
@@ -176,7 +181,7 @@ pub(super) fn palettes(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
                 }
                 ui.close();
             }
-        });
+        }).response);
     });
     if d.conflict {
         note(
@@ -189,6 +194,7 @@ pub(super) fn palettes(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
         note(ui, "Unsaved collection · Save writes this library to disk.");
     }
     ui.add_space(8.);
+    let targets = collection_owners(ui.ctx(), &root, &d.palettes);
     let query = d.query.trim().to_lowercase();
     let matches: Vec<_> = d
         .palettes
@@ -213,13 +219,13 @@ pub(super) fn palettes(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
                 .show(ui, |ui| {
                     for &index in &matches {
                         let palette = &d.palettes[index];
-                        let response = ui.add(
+                        let response = native(ui,owner.with(("palette-row",generation,targets[index].id)),&format!("Select palette {}",palette.name),|ui|ui.add(
                             egui::Button::selectable(
                                 d.selected == index,
                                 format!("{}   ·   {}", palette.name, palette.colors.len()),
                             )
                             .truncate(),
-                        );
+                        ));
                         if response.clicked() {
                             d.selected = index;
                             d.selected_name();
@@ -237,24 +243,38 @@ pub(super) fn palettes(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
                 );
             }
             if let Some(palette) = d.palettes.get(d.selected).cloned() {
-                palette_editor(ui, studio, d, &palette);
+                let target=owner.with(("palette",generation,targets[d.selected].id));
+                palette_editor(ui, studio, d, &palette,target,&root,&targets[d.selected].colors);
             }
         });
 }
 
-fn palette_editor(ui: &mut Ui, studio: &mut Studio, draft: &mut PaletteDraft, palette: &Palette) {
+/// Validate the existing palette rename draft and duplicate-name constraint.
+/// Args: palette draft. Returns its current visible field error, if any.
+fn name_error(draft:&PaletteDraft)->Option<String>{
+    crate::palette::validate_name(draft.name.trim()).err().or_else(||draft.palettes.iter().enumerate()
+        .any(|(index,palette)|index!=draft.selected&&palette.name.eq_ignore_ascii_case(draft.name.trim()))
+        .then_some("That palette name is already in use.".into()))
+}
+
+fn palette_editor(ui: &mut Ui, studio: &mut Studio, draft: &mut PaletteDraft, palette: &Palette, owner:egui::Id, root:&Option<PathBuf>, colors:&[u64]) {
+    let can_apply = colour_target_available(studio);
     let compact = ui.ctx().viewport_rect().height() < 650.0;
     ui.add_space(if compact { 6. } else { 14. });
     ui.separator();
     ui.add_space(if compact { 4. } else { 8. });
-    ui.horizontal(|ui| {
+    let name_label=ui.label("Palette name");
+    let name_valid=name_error(draft).is_none();
+    let name_response=ui.horizontal(|ui| {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let rename = ui.small_button("Rename").clicked();
-            ui.add(
+            let rename = native(ui,owner.with("rename"),"Rename palette",|ui|ui.add_enabled(name_valid,egui::Button::new("Rename"))).clicked();
+            let response=ui.add(
                 egui::TextEdit::singleline(&mut draft.name)
+                    .id(owner.with("name"))
                     .hint_text("Palette name")
                     .desired_width(ui.available_width()),
             );
+            super::super::welcome::name_control(ui,&response,name_label.id,"Palette name");
             if rename {
                 let name = draft.name.trim().to_string();
                 match crate::palette::validate_name(&name) {
@@ -271,11 +291,13 @@ fn palette_editor(ui: &mut Ui, studio: &mut Studio, draft: &mut PaletteDraft, pa
                     Err(error) => draft.message = error,
                 }
             }
-        });
-    });
+            response
+        }).inner
+    }).inner;
+    if let Some(error)=name_error(draft){super::super::welcome::control_error(ui,&[&name_response],&error);}
     ui.horizontal(|ui| {
-        ui.selectable_value(&mut studio.fill_active, true, "Fill");
-        ui.selectable_value(&mut studio.fill_active, false, "Stroke");
+        native(ui,owner.with("fill"),"Apply palette color to fill",|ui|ui.selectable_value(&mut studio.fill_active,true,"Fill"));
+        native(ui,owner.with("stroke"),"Apply palette color to stroke",|ui|ui.selectable_value(&mut studio.fill_active,false,"Stroke"));
     });
     let mut remove = None;
     let mut replace = None;
@@ -290,11 +312,14 @@ fn palette_editor(ui: &mut Ui, studio: &mut Studio, draft: &mut PaletteDraft, pa
         ui.horizontal(|ui| {
             for (column, color) in row.1.iter().copied().enumerate() {
                 let index = row.0 * columns + column;
-                ui.push_id(index, |ui| {
+                super::super::fields::native_scope(ui, owner.with(("swatch-cell", colors[index])), |ui| {
                     ui.vertical(|ui| {
                         ui.set_width(width);
-                        let (rect, response) =
-                            ui.allocate_exact_size(vec2(width, 32.), Sense::click());
+                        let response=super::super::fields::native_scope(ui,owner.with(("swatch",colors[index],&studio.swap_id,&studio.selection)),|ui|
+                            ui.add_enabled_ui(can_apply, |ui| ui.allocate_exact_size(vec2(width,32.),Sense::click()).1).inner).inner;
+                        let rect=response.rect;
+                        response.widget_info(||egui::WidgetInfo::labeled(egui::WidgetType::Button,response.enabled(),
+                            format!("Apply {} to {}",color.hex(),if studio.fill_active{"fill"}else{"stroke"})));
                         if ui.is_rect_visible(rect) {
                             checker(ui, rect);
                             ui.painter().rect_filled(rect, 6., color.to_egui());
@@ -305,6 +330,7 @@ fn palette_editor(ui: &mut Ui, studio: &mut Studio, draft: &mut PaletteDraft, pa
                                 egui::StrokeKind::Inside,
                             );
                         }
+                        super::super::welcome::focus_control(ui,&response);
                         let response =
                             response.on_hover_text("Apply color · right-click applies stroke");
                         if response.clicked() {
@@ -318,7 +344,7 @@ fn palette_editor(ui: &mut Ui, studio: &mut Studio, draft: &mut PaletteDraft, pa
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
                                     ui.spacing_mut().button_padding = vec2(3., 2.);
-                                    ui.menu_button("⋯", |ui| {
+                                    native(ui, owner.with(("swatch-menu", colors[index])), &format!("Actions for {} swatch", color.hex()), |ui| ui.menu_button("⋯", |ui| {
                                         if ui.button("Use current color").clicked() {
                                             replace = Some(index);
                                             ui.close();
@@ -331,7 +357,7 @@ fn palette_editor(ui: &mut Ui, studio: &mut Studio, draft: &mut PaletteDraft, pa
                                             remove = Some(index);
                                             ui.close();
                                         }
-                                    });
+                                    }).response);
                                     ui.add(
                                         egui::Label::new(
                                             RichText::new(color.hex()).monospace().size(10.),
@@ -348,6 +374,7 @@ fn palette_editor(ui: &mut Ui, studio: &mut Studio, draft: &mut PaletteDraft, pa
         });
     }
     if let Some(index) = remove {
+        remove_collection_owner(ui.ctx(),root,draft.selected,Some(index));
         draft.palettes[draft.selected].colors.remove(index);
         draft.dirty = true;
     }
@@ -357,11 +384,10 @@ fn palette_editor(ui: &mut Ui, studio: &mut Studio, draft: &mut PaletteDraft, pa
     }
     ui.add_space(8.);
     ui.horizontal_wrapped(|ui| {
-        if ui.button("+ Current color").clicked() {
+        if native(ui, owner.with("add-current"), "Add current color to palette", |ui| ui.button("+ Current color")).clicked() {
             add_colour(draft, current_colour(studio));
         }
-        if ui
-            .button("From selection")
+        if native(ui, owner.with(("from-selection", &studio.swap_id, &studio.selection)), "Collect palette colors from selection", |ui| ui.button("From selection"))
             .on_hover_text("Collect unique fill and stroke colors from selected objects")
             .clicked()
         {
@@ -370,34 +396,37 @@ fn palette_editor(ui: &mut Ui, studio: &mut Studio, draft: &mut PaletteDraft, pa
             }
         }
     });
-    ui.horizontal(|ui| {
+    let hex_label=ui.label("Hex color");
+    let hex_response=ui.horizontal(|ui| {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let add = ui
-                .add_enabled(
+            let add = native(ui,owner.with("add-hex"),"Add hex color",|ui|ui.add_enabled(
                     Rgba::parse_hex(&draft.hex).is_some(),
                     egui::Button::new("+"),
-                )
+                ))
                 .on_hover_text("Add hex color")
                 .clicked();
-            ui.add(
+            let response=ui.add(
                 egui::TextEdit::singleline(&mut draft.hex)
+                    .id(owner.with("hex"))
                     .hint_text("#D97C5B or #D97C5B80")
                     .desired_width(ui.available_width()),
             );
-            if add {
-                let color = Rgba::parse_hex(&draft.hex).unwrap();
+            super::super::welcome::name_control(ui,&response,hex_label.id,"Hex color to add to palette");
+            if add && let Some(color)=Rgba::parse_hex(&draft.hex) {
                 add_colour(draft, color);
                 draft.hex.clear();
             }
-        });
-    });
+            response
+        }).inner
+    }).inner;
+    if !draft.hex.is_empty()&&Rgba::parse_hex(&draft.hex).is_none(){super::super::welcome::control_error(ui,&[&hex_response],"Enter a valid hex color");}
     ui.add_space(10.);
     ui.collapsing("Manage palette", |ui| {
-        if ui
-            .button("Remove this palette")
+        if native(ui, owner.with("remove"), "Remove this palette", |ui| ui.button("Remove this palette"))
             .on_hover_text("Reload saved colors restores it until you save")
             .clicked()
         {
+            remove_collection_owner(ui.ctx(),root,draft.selected,None);
             draft.palettes.remove(draft.selected);
             draft.selected_name();
             draft.dirty = true;
@@ -524,6 +553,7 @@ mod tests {
 }
 
 fn apply_colour(studio: &mut Studio, color: Rgba, fill: bool) {
+    if !colour_target_available(studio) { return; }
     if fill {
         studio.set_fill(Fill::Solid(color));
         studio.brush.color = color;
@@ -531,4 +561,12 @@ fn apply_colour(studio: &mut Studio, color: Rgba, fill: bool) {
         studio.style = crate::ui::studios::inspected_style(studio).clone();
         studio.set_stroke_color(color);
     }
+}
+
+/// Check the existing selection rules before a library color edits artwork or defaults.
+/// Args: editor. Returns false for busy, stale, hidden or locked artwork owners.
+fn colour_target_available(studio: &Studio) -> bool {
+    if studio.show_welcome || studio.file_dialog_pending() || studio.updates.freezing || studio.op.is_some() || studio.free_transform.is_some() || studio.deformation.is_some() { return false; }
+    let selectable: std::collections::HashSet<_> = studio.selectable_objects().into_iter().collect();
+    studio.selection.iter().all(|target| selectable.contains(target))
 }

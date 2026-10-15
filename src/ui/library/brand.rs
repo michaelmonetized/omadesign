@@ -5,6 +5,7 @@ fn key(asset: &crate::brand::Asset) -> String {
     format!("{:?}", asset.fingerprint())
 }
 pub(super) fn brand(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
+    let owner=egui::Id::new(("brand-native",&studio.swap_id,&s.root));
     ui.label(RichText::new("Made for this brand.").size(21.).strong());
     note(ui, "Your logos, imagery and reusable artwork.");
     ui.add_space(10.);
@@ -27,22 +28,25 @@ pub(super) fn brand(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
         return;
     };
     ui.add_space(8.);
-    ui.horizontal(|ui| {
+    let name_label=ui.label("Brand library name");
+    let name_valid=!s.brand_name.trim().is_empty()&&s.brand_name.trim().chars().count()<=100&&!s.brand_name.trim().chars().any(char::is_control);
+    let name_response=ui.horizontal(|ui| {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             // Measure the action first so desktop fonts cannot make the row wider
             // than its parent and grow the resizable panel on each frame.
-            let save = ui
-                .add_enabled(
-                    !busy && s.brand_name != catalog.name,
+            let save = native(ui,owner.with("save-name"),"Save brand library name",|ui|ui.add_enabled(
+                    !busy && name_valid && s.brand_name != catalog.name,
                     egui::Button::new("Save"),
-                )
+                ))
                 .clicked();
-            ui.add(
+            let response=ui.add(
                 egui::TextEdit::singleline(&mut s.brand_name)
+                    .id(owner.with("name"))
                     .desired_width(ui.available_width())
                     .hint_text("Brand name"),
             );
-            if save {
+            super::super::welcome::name_control(ui,&response,name_label.id,"Brand library name");
+            if save && !s.brand_name.trim().is_empty() && s.brand_name.trim().chars().count()<=100 && !s.brand_name.trim().chars().any(char::is_control) {
                 let root = catalog.root.clone();
                 let name = s.brand_name.clone();
                 jobs::start(ui.ctx(), BRAND_ACTION, move || {
@@ -53,16 +57,23 @@ pub(super) fn brand(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
                     })
                 });
             }
-        });
-    });
-    ui.add(
+            response
+        }).inner
+    }).inner;
+    if s.brand_name.trim().is_empty()||s.brand_name.trim().chars().count()>100||s.brand_name.trim().chars().any(char::is_control){
+        super::super::welcome::control_error(ui,&[&name_response],"Choose a library name between 1 and 100 characters.");
+    }
+    let query_label=ui.label("Filter brand assets");
+    let query=ui.add(
         egui::TextEdit::singleline(&mut s.brand_query)
+            .id(owner.with("query"))
             .hint_text("Filter name, folder or file type…")
             .desired_width(f32::INFINITY),
     );
+    super::super::welcome::name_control(ui,&query,query_label.id,"Filter brand assets by name, folder or file type");
     ui.horizontal_wrapped(|ui| {
         for kind in ["All", "Image", "SVG", "omadesign"] {
-            ui.selectable_value(&mut s.brand_kind, kind.into(), kind);
+            native(ui,owner.with(("kind",kind)),&format!("Filter brand assets: {kind}"),|ui|ui.selectable_value(&mut s.brand_kind,kind.into(),kind));
         }
     });
     let assets: Vec<_> = catalog
@@ -74,9 +85,9 @@ pub(super) fn brand(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
         .collect();
     let photo = studio.persona == crate::tools::Persona::Photo;
     let gesture = if photo {
-        "double-click to place in Design"
+        "Enter or double-click to place in Design"
     } else {
-        "drag to artboard"
+        "Enter to place or drag to artboard"
     };
     note(
         ui,
@@ -150,11 +161,17 @@ pub(super) fn brand(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
                         };
                         let k = key(asset);
                         visible.insert(k.clone());
-                        ui.push_id(&asset.relative_path, |ui| {
+                        super::super::fields::native_scope(ui,owner.with(("asset",&asset.relative_path)),|ui| {
                             ui.vertical(|ui| {
                                 ui.set_width(width);
-                                let (rect, response) = ui
-                                    .allocate_exact_size(vec2(width, 86.), if photo { Sense::click() } else { Sense::click_and_drag() });
+                                let key=owner.with(("place",&asset.relative_path,&studio.selection));
+                                let keyboard=ui.memory(|memory|memory.has_focus(key.with("response")))
+                                    &&ui.input(|input|input.key_pressed(egui::Key::Enter)||input.key_pressed(egui::Key::Space));
+                                let accessible=ui.input(|input|input.accesskit_action_requests(key.with("response"),egui::accesskit::Action::Click).next().is_some());
+                                let rect=ui.allocate_exact_size(vec2(width,86.),Sense::hover()).0;
+                                let available = !studio.file_dialog_pending() && !studio.updates.freezing && !jobs::is_running::<Placed>(ui.ctx(), PLACE);
+                                let response=ui.add_enabled_ui(available, |ui| ui.interact(rect,key.with("response"),if photo{Sense::click()}else{Sense::click_and_drag()})).inner;
+                                response.widget_info(||egui::WidgetInfo::labeled(egui::WidgetType::Button,response.enabled(),format!("Place brand asset {}",asset.name)));
                                 checker(ui, rect);
                                 ui.painter().rect_stroke(
                                     rect,
@@ -208,6 +225,7 @@ pub(super) fn brand(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
                                         needed.push((*asset).clone());
                                     }
                                 }
+                                super::super::welcome::focus_control(ui,&response);
                                 if !photo {
                                     response.dnd_set_drag_payload(BrandDrag {
                                         path: asset.path(&catalog.root),
@@ -225,7 +243,7 @@ pub(super) fn brand(ui: &mut Ui, studio: &mut Studio, s: &mut Libraries) {
                                 let response = response
                                     .on_hover_text(tip)
                                     .on_hover_cursor(if photo { egui::CursorIcon::PointingHand } else { egui::CursorIcon::Grab });
-                                if response.double_clicked() {
+                                if response.double_clicked() || (keyboard||accessible)&&response.clicked() {
                                     let target = studio.asset_frame_target();
                                     let center = target
                                         .and_then(|frame| studio.asset_frame_center(frame))
