@@ -134,7 +134,7 @@ pub(super) fn ranged_features(
     let mut boundaries = std::collections::BTreeSet::new();
     let metrics = |at| {
         let s = super::character_metrics(run, at);
-        (s.tracking, s.kerning, s.baseline_shift, s.hscale, s.vscale)
+        (s.tracking, s.kerning, s.baseline_shift, s.hscale, s.vscale, s.fill)
     };
     for at in run.spans.iter().flat_map(|span| [span.start, span.end]) {
         if at > 0 && at < count && metrics(at - 1) != metrics(at) {

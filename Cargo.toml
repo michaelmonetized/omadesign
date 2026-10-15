@@ -44,6 +44,7 @@ rustybuzz = "0.20"
 unicode-linebreak = "0.1"
 hyphenation = { version = "0.8.4", features = ["embed_en-us"] }
 unicode-segmentation = "1.13"
+unicode-bidi = "0.3"
 rfd = "0.15"
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"

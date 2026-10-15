@@ -924,3 +924,14 @@ fn unsupported_tagged_tiff_models_do_not_fall_back_to_unmanaged_pixels() {
         else {assert!(result.unwrap().is_none());}
     }
 }
+
+#[test]
+fn non_solid_type_span_paint_survives_project_and_refuses_native_reduction() {
+    use crate::{color::Rgba,document::{Fill,Shape,Style},geom::{Geom,TypeRun,CharSpan}};
+    let mut doc = Document::new("Native span paint",8.,8.,72.);
+    let mut layer = Layer::vector("Type");
+    layer.kind.shapes_mut().unwrap().push(Shape::new(Geom::Text(TypeRun {content:"A".into(),spans:vec![CharSpan {start:0,end:1,fill:Some(Fill::Radial {c0:Rgba::BLACK,c1:Rgba::WHITE}),..Default::default()}],..Default::default()}),Style::default()));
+    doc.layers=vec![layer];
+    let reopened = crate::project::decode(&crate::project::encode(&doc).unwrap()).unwrap();
+    assert!(composite(&reopened,1).unwrap_err().contains("float paint renderer"));
+}

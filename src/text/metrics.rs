@@ -19,6 +19,7 @@ pub fn character_metrics(run: &TypeRun, index: usize) -> CharSpan {
     style.baseline_shift.get_or_insert(0.);
     style.hscale.get_or_insert(100.);
     style.vscale.get_or_insert(100.);
+    style.px.get_or_insert(run.px);
     style
 }
 
@@ -139,6 +140,33 @@ mod tests {
     }
     fn width(run: &TypeRun) -> f32 {
         compose(run)[0].width
+    }
+    #[test]
+    fn svg_type_native_affine_styled_type_survives_edit_transform_and_project_reopen() {
+        use crate::{color::Rgba,document::{Document,Shape,Style},geom::Pt};
+        let mut r=run("Type type");
+        r.set_character_style(5,9,|s| {s.px=Some(70.);s.font=Some(r#"/usr/share/fonts/liberation/LiberationSans-Bold.ttf"#.into());s.fill=Some(crate::document::Fill::Solid(Rgba::rgb(220,30,50)));});
+        assert!(width(&r)>width(&run("Type type")));
+        r.transform=Some([-0.9,0.25,0.35,1.2,220.,20.]);
+        let local=Pt::new(13.,-24.);
+        assert!((r.unmap_point(r.map_point(local))-local).length()<0.001);
+        r.contours=super::shape(&r);
+        let mut geom=Geom::Text(r);
+        let before=geom.contours(32);
+        geom.translate(Pt::new(17.,13.));
+        crate::text::fill_contours(&mut geom);
+        assert!((geom.contours(32)[0][0]-before[0][0]-Pt::new(17.,13.)).length()<0.001);
+        let Geom::Text(r)=&mut geom else {unreachable!()};
+        r.replace_text(0,0,"é",None);
+        assert_eq!(r.character_style(6).px,Some(70.));
+        let mut doc=Document::new("Affine type",300.,180.,96.);
+        doc.layers.clear();let mut layer=crate::document::Layer::vector("Type");layer.kind.shapes_mut().unwrap().push(Shape::new(geom,Style::default()));doc.layers.push(layer);
+        let encoded=crate::project::encode(&doc).unwrap();
+        assert!(encoded.contains("\"version\":14"));
+        let decoded=crate::project::decode(&encoded).unwrap();
+        assert_eq!(serde_json::to_value(&doc).unwrap(),serde_json::to_value(&decoded).unwrap());
+        let image=crate::compositor::render_export(&decoded,1).unwrap();
+        assert!(image.pixels().iter().any(|p|u16::from(p.red())>u16::from(p.blue())+20 && u16::from(p.red())>u16::from(p.green())+20));
     }
     fn near(a: f32, b: f32) {
         assert!((a - b).abs() < 0.02, "{a} != {b}");
@@ -523,4 +551,62 @@ mod tests {
         assert_eq!(run.character_style(6).baseline_shift, Some(5.));
         assert_eq!(run.character_style(3).tracking, None);
     }
+}
+
+#[cfg(test)]
+mod svg_type_native_acceptance {
+    use crate::{color::Rgba,document::{Document,Fill,Layer,Shape,Style},geom::{Geom,Pt,TypeRun}};
+    fn sample(content:&str)->TypeRun{TypeRun{content:content.into(),px:32.,origin:Pt::new(25.,65.),font:concat!(env!("CARGO_MANIFEST_DIR"),"/tests/assets/fonts/EBGaramond.ttf").into(),..Default::default()}}
+    fn document(mut run:TypeRun)->Document{run.contours=crate::text::shape(&run);let mut doc=Document::new("Native type",320.,180.,96.);doc.width=320.;doc.height=180.;doc.transparent=true;doc.layers.clear();let mut layer=Layer::vector("Type");layer.kind.shapes_mut().unwrap().push(Shape::new(Geom::Text(run),Style::default()));doc.layers.push(layer);doc}
+    fn compare(source:&str,doc:&Document)->f32{let mut options=usvg::Options::default();options.fontdb_mut().load_system_fonts();let tree=usvg::Tree::from_str(source,&options).unwrap();let mut expected=tiny_skia::Pixmap::new(320,180).unwrap();resvg::render(&tree,tiny_skia::Transform::identity(),&mut expected.as_mut());let actual=crate::compositor::render_export(doc,1).unwrap();actual.data().iter().zip(expected.data()).map(|(a,b)|a.abs_diff(*b)as f32).sum::<f32>()/actual.data().len()as f32}
+    #[test]
+    fn native_type_size_boundaries_leading_resize_and_affine_editing(){
+        let mut run=sample("AAAA\nBBBB");run.set_character_style(2,4,|s|s.px=Some(64.));run.manual_kern.insert(2,125.);
+        let line=crate::text::compose(&run);let before=line[0].glyphs.iter().find(|g|g.cluster==2).unwrap().x;
+        run.manual_kern.clear();let line=crate::text::compose(&run);assert!((before-line[0].glyphs.iter().find(|g|g.cluster==2).unwrap().x-8.).abs()<0.01);assert!(line[0].height>=76.);
+        run.contours=crate::text::shape(&run);let mut geom=Geom::Text(run);let src=geom.bbox();geom.map_into(src,crate::geom::Bounds::from_min_size(src.min,src.size()*2.));let Geom::Text(mut run)=geom else{unreachable!()};assert_eq!(run.character_style(2).px,Some(128.));
+        run.transform=Some([0.,1.,-1.,0.,150.,0.]);run.contours=crate::text::shape(&run);let(top,bottom)=crate::text::caret_segment(&run,2);assert!((top.x-bottom.x).abs()>100. && (top.y-bottom.y).abs()<0.01);let quads=crate::text_geometry::selection_quads(&run,2,3).unwrap();assert!((quads[0][0]-run.map_point(crate::text::selection_rects(&run,2,3)[0].0)).length()<0.01);
+    }
+    #[test]
+    fn native_type_paint_ligatures_rotation_gradient_masks_and_svg_matrix(){
+        let mut run=sample("fi fi");run.set_character_style(1,2,|s|s.fill=Some(Fill::Solid(Rgba::rgb(220,40,60))));assert_eq!(crate::text::glyph_count(&run),4);assert_eq!(crate::text::paint_groups(&run,&Fill::Solid(Rgba::rgb(0,0,220))).len(),3);
+        run.transform=Some([1.,0.15,0.25,1.,30.,5.]);let mut doc=document(run);let shape=&mut doc.layers[0].kind.shapes_mut().unwrap()[0];shape.rotation=0.3;shape.style.fill=Fill::Linear{from:[0.,0.],to:[1.,0.],c0:Rgba::rgb(0,0,220),c1:Rgba::rgb(0,200,80)};shape.opacity=0.7;
+        let svg=crate::svg::export(&doc).unwrap();assert!(compare(&svg,&doc)<0.1,"SVG and native painted affine type differ: {}",compare(&svg,&doc));
+        doc.layers[0].kind.shapes_mut().unwrap()[0].visible=false;let svg=crate::svg::export(&doc).unwrap();assert!(compare(&svg,&doc)<0.01);
+        let mut plain=sample("Matrix");plain.transform=Some([0.9,0.3,-0.2,1.1,20.,4.]);let doc=document(plain);let svg=crate::svg::export(&doc).unwrap();assert!(compare(&svg,&doc)<0.1);
+    }
+    #[test]
+    fn native_type_threaded_frame_uses_range_faces_and_affine_after_layout(){
+        let mut story=sample("MMMM WWWW");story.frame=Some(crate::text_geometry::TextFrame{size:Pt::new(240.,100.),..Default::default()});story.set_character_style(5,9,|s|s.font=Some("/usr/share/fonts/liberation/LiberationSans-Bold.ttf".into()));let plain=crate::text_geometry::layout_frame(&story,&story,0,&[],false);assert!(!plain.contours.is_empty());story.transform=Some([1.,0.2,0.3,1.,20.,10.]);let mapped=crate::text_geometry::layout_frame(&story,&story,0,&[],false);assert!((mapped.contours[0][0]-story.map_point(plain.contours[0][0])).length()<0.001);assert!((mapped.selections[0].2[0]-story.map_point(plain.selections[0].2[0])).length()<0.001);
+        let mut geom=Geom::Text(story);let bounds=geom.bbox();geom.map_into_with_text_scale(bounds,crate::geom::Bounds::from_min_size(bounds.min,bounds.size()*2.));let Geom::Text(run)=geom else{unreachable!()};assert_eq!(run.px,32.);assert!((run.transform.unwrap()[0]-2.).abs()<0.001);
+    }
+    #[test]
+    fn native_type_frame_path_paints_sizes_obstacles_and_wrapped_ink(){
+        use crate::text_geometry::{TextFrame,TextOnPath,ArcPath,Obstacle,TextWrap,WrapMode};
+        use crate::geom::Bounds;
+        let red=Fill::Solid(Rgba::rgb(220,20,40));
+        let mut story=sample("MMMM WWWW");story.px=20.;story.origin=Pt::new(20.,80.);story.wrap_width=Some(230.);story.set_character_style(0,1,|s|{s.px=Some(96.);s.fill=Some(red.clone());});story.contours=crate::text::shape(&story);
+        let bounds=Geom::Text(story.clone()).bbox();assert!(story.contours.iter().flatten().all(|p|p.y>=bounds.min.y-0.01));
+        let doc=document(story.clone());let image=crate::compositor::render_export(&doc,1).unwrap();assert!(image.pixels().iter().enumerate().any(|(i,p)|i/320<50 && p.red().saturating_sub(p.blue())>20));
+        story.frame=Some(TextFrame{size:Pt::new(250.,150.),..Default::default()});
+        let obstacle=Obstacle{id:7,order:(0,0),bounds:Bounds::from_min_size(Pt::new(20.,60.),Pt::new(90.,100.)),contours:vec![],wrap:TextWrap{mode:WrapMode::BoundingBox,..Default::default()},locked:false};
+        let plain=crate::text_geometry::layout_frame(&story,&story,0,&[obstacle.clone()],false);assert!(!plain.contours.is_empty());assert!(plain.caret_heights.iter().any(|(i,h)|*i==0&&*h>95.));
+        let mut shifted=obstacle;shifted.bounds.min.x+=100.;shifted.bounds.max.x+=100.;story.transform=Some([1.,0.,0.,1.,100.,0.]);let mapped=crate::text_geometry::layout_frame(&story,&story,0,&[shifted],false);assert_eq!(plain.contours.len(),mapped.contours.len());assert!((mapped.contours[0][0]-story.map_point(plain.contours[0][0])).length()<0.01);
+        story.transform=None;story.layout=Some(crate::text_geometry::layout_frame(&story,&story,0,&[],false));assert!(crate::text::paint_groups(&story,&Fill::None).iter().any(|(f,c)|*f==red&&!c.is_empty()));let doc=document(story.clone());assert!(compare(&crate::svg::export(&doc).unwrap(),&doc)<0.1);
+        story.frame=None;story.layout=None;story.on_path=Some(TextOnPath{cache:Some(ArcPath::new(vec![[Pt::new(10.,100.),Pt::new(110.,100.),Pt::new(210.,100.),Pt::new(310.,100.)]],false)),..Default::default()});let path=crate::text_geometry::layout_on_path(&story);assert!(path.caret_heights.iter().any(|(i,h)|*i==0&&*h>95.));assert!(crate::text::paint_groups(&story,&Fill::None).iter().any(|(f,c)|*f==red&&!c.is_empty()));let doc=document(story);assert!(compare(&crate::svg::export(&doc).unwrap(),&doc)<0.1);
+    }
+
+    #[test]
+    fn native_type_clipped_paint_ranges_and_affine_path_release(){
+        let mut run=sample("MMMMM");run.frame=Some(crate::text_geometry::TextFrame{size:Pt::new(20.,100.),..Default::default()});run.set_character_style(0,1,|s|s.fill=Some(Fill::Solid(Rgba::rgb(220,20,40))));let layout=crate::text_geometry::layout_frame(&run,&run,0,&[],false);assert!(layout.paint_ranges.iter().all(|(_,r)|r.end<=layout.contours.len()));let _=crate::text::paint_groups(&run,&Fill::None);let doc=document(run);crate::compositor::render_export(&doc,1).unwrap();
+        let mut run=sample("Release");run.on_path=Some(crate::text_geometry::TextOnPath{cache:Some(crate::text_geometry::ArcPath::new(vec![[Pt::new(20.,70.),Pt::new(110.,70.),Pt::new(210.,70.),Pt::new(300.,70.)]],false)),..Default::default()});run.transform=Some([1.,0.,0.,1.,100.,0.]);let before=crate::text::caret_pt(&run,0);crate::text_geometry::release(&mut run);assert!((crate::text::caret_pt(&run,0)-before).length()<0.01);
+    }
+
+    #[test]
+    fn native_type_visible_overflow_paints_and_affine_autoheight_stays_local(){
+        use crate::text_geometry::{TextFrame,Overflow};
+        let mut run=sample("MMMMM");run.frame=Some(TextFrame{size:Pt::new(20.,100.),overflow:Overflow::Visible,..Default::default()});run.set_character_style(0,1,|s|s.fill=Some(Fill::Solid(Rgba::rgb(220,20,40))));let doc=document(run);let image=crate::compositor::render_export(&doc,1).unwrap();assert!(image.pixels().iter().enumerate().any(|(i,p)|i%320>60&&p.alpha()>0));assert!(compare(&crate::svg::export(&doc).unwrap(),&doc)<0.1);
+        let mut run=sample("Auto height words wrap over multiple lines");run.frame=Some(TextFrame{size:Pt::new(120.,100.),auto_height:true,..Default::default()});let mut plain=document(run.clone());run.transform=Some([1.,0.,0.,1.,0.,100.]);let mut shifted=document(run);crate::text_geometry::reflow_areas(&mut plain);crate::text_geometry::reflow_areas(&mut shifted);let height=|d:&Document|{let Geom::Text(t)=&d.layers[0].kind.shapes().unwrap()[0].geom else{unreachable!()};t.frame.as_ref().unwrap().size.y};assert!((height(&plain)-height(&shifted)).abs()<0.01);
+    }
+
 }

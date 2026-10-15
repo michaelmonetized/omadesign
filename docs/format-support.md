@@ -140,3 +140,19 @@ are implemented. These limits are explicit; they do not imply a completed FMT-04
 Native compositing and ICC transforms are software paths. The live canvas uses an
 RGBA8 display surface. Monitor profiles, physical display accuracy and print matching
 have not been qualified by these headless checks.
+
+### Editable PSD type
+
+PSD TySh and EngineData map to native TypeRun/CharSpan objects: Unicode text,
+full affine transform, requested font, per-run size/color, tracking, leading,
+baseline shift and horizontal/vertical scale remain editable. Export regenerates
+standard TySh/EngineData from current native text. Multiple type objects in one
+native layer become separate type layers in a Photoshop group. Original descriptor
+fields and unsupported warp settings remain in the project and exported PSD.
+
+Missing fonts produce an explicit note and native fallback preview while retaining
+the requested name. Text warp and vertical orientation currently retain their
+Photoshop parameters but use horizontal, unwarped native previews. Native path/SVG
+positioning exports as editable Photoshop point text with an explicit note. Saved
+pixels remain the fallback when a type descriptor cannot be parsed. These limits
+are separate from the independent editable horizontal type acceptance fixture.

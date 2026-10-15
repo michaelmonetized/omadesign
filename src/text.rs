@@ -369,6 +369,12 @@ fn font_bytes(path: &Path) -> Option<Arc<Vec<u8>>> {
     Some(arc)
 }
 
+/// Share the composer's resolved font bytes with format writers.
+/// Args: text run. Returns cached font bytes, including project fonts, or None.
+pub(crate) fn font_bytes_for(run: &TypeRun) -> Option<Arc<Vec<u8>>> {
+    resolve_path(run).and_then(|path| font_bytes(&path))
+}
+
 fn ot_features(run: &TypeRun) -> Vec<rustybuzz::Feature> {
     let tag = |b: &[u8; 4]| rustybuzz::ttf_parser::Tag::from_bytes(b);
     let feat = |bytes: &[u8; 4], on: bool| rustybuzz::Feature::new(tag(bytes), u32::from(on), ..);
@@ -498,6 +504,7 @@ fn fallback_block(content: &str, px: f32, origin: Pt) -> Vec<Vec<Pt>> {
 
 /// Shape `run` into closed contours in world space.
 pub fn shape(run: &TypeRun) -> Vec<Vec<Pt>> {
+    if run.svg_text.is_some() {return svg_type::layout(run).map(|l|l.contours.clone()).unwrap_or_default();}
     if run.on_path.is_some() { return crate::text_geometry::shape_on_path(run); }
     if run.frame.is_some() { return crate::text_geometry::shape_frame(run); }
     let Some(path) = resolve_path(run) else {
@@ -506,7 +513,9 @@ pub fn shape(run: &TypeRun) -> Vec<Vec<Pt>> {
     let Some(bytes) = font_bytes(&path) else {
         return fallback_block(&run.content, run.px, run.origin);
     };
-    buzz_shape(&bytes, run).unwrap_or_else(|| fallback_block(&run.content, run.px, run.origin))
+    let mut contours=buzz_shape(&bytes, run).unwrap_or_else(|| fallback_block(&run.content, run.px, run.origin));
+    for point in contours.iter_mut().flatten(){*point=run.map_point(*point);}
+    contours
 }
 
 fn buzz_shape(_bytes: &[u8], run: &TypeRun) -> Option<Vec<Vec<Pt>>> {
@@ -514,6 +523,7 @@ fn buzz_shape(_bytes: &[u8], run: &TypeRun) -> Option<Vec<Vec<Pt>>> {
 }
 
 mod composer;
+pub mod svg_type;
 mod edit;
 mod metrics;
 pub use metrics::character_metrics;
@@ -523,21 +533,52 @@ pub mod hyphenation;
 pub use composer::{compose, compose_plain, glyph_contours, paragraph_style, LayoutGlyph, LayoutLine};
 
 pub fn fill_contours(geom: &mut crate::geom::Geom) { if let crate::geom::Geom::Text(run)=geom {run.contours=shape(run);} }
+
+pub(crate) fn has_character_paint(run:&TypeRun)->bool{run.spans.iter().any(|s|s.fill.is_some()) || run.layout.as_ref().is_some_and(|layout|layout.paint_ranges.iter().any(|(fill,_)|fill.is_some()))}
+
+pub(crate) fn paint_groups(run:&TypeRun,inherited:&crate::document::Fill)->Vec<(crate::document::Fill,Vec<Vec<Pt>>)> {
+    let mut groups:Vec<(crate::document::Fill,Vec<Vec<Pt>>)>=Vec::new();
+    if run.frame.is_some() || run.on_path.is_some(){
+        let computed;let layout=if let Some(layout)=&run.layout{layout}else{computed=if run.on_path.is_some(){crate::text_geometry::layout_on_path(run)}else{crate::text_geometry::layout_frame(run,run,0,&[],false)};&computed};
+        for (fill,range) in &layout.paint_ranges{let fill=fill.clone().unwrap_or_else(||inherited.clone());let contours=layout.contours[range.clone()].to_vec();if let Some((_,all))=groups.last_mut().filter(|(old,_)|*old==fill){all.extend(contours);}else{groups.push((fill,contours));}}return groups;
+    }
+    for line in compose(run).iter(){for glyph in &line.glyphs {
+        let fill=run.character_style(glyph.cluster).fill.unwrap_or_else(||inherited.clone());
+        let mut contours=glyph_contours(run,glyph);
+        for point in contours.iter_mut().flatten(){*point=run.map_point(*point);}
+        if let Some((_,all))=groups.last_mut().filter(|(old,_)|*old==fill){all.extend(contours);}else{groups.push((fill,contours));}
+    }}
+    groups
+}
 pub fn measure(run:&TypeRun)->(f32,f32) {
     let lines=compose(run);(run.wrap_width.unwrap_or_else(||lines.iter().map(|l|l.width).fold(0.,f32::max)),lines.iter().map(|l|l.height).sum())
 }
 pub fn caret_pt(run:&TypeRun,char_idx:usize)->Pt {
+    if run.svg_text.is_some() && let Some(layout)=svg_type::layout(run) && let Some(caret)=layout.carets.iter().min_by_key(|c|c.0.abs_diff(char_idx)){return caret.1;}
     if let Some((point,_)) = crate::text_geometry::caret_frame(run,char_idx) { return point; }
     let lines=compose(run);let idx=char_idx.min(run.content.chars().count());
     let line=&lines[lines.iter().rposition(|l|l.start<=idx).unwrap_or(0)];
-    Pt::new(run.origin.x+line.caret_x(idx),run.origin.y+line.baseline-character_metrics(run,idx.min(run.content.chars().count().saturating_sub(1))).baseline_shift.unwrap())
+    run.map_point(Pt::new(run.origin.x+line.caret_x(idx),run.origin.y+line.baseline-character_metrics(run,idx.min(run.content.chars().count().saturating_sub(1))).baseline_shift.unwrap()))
+}
+
+/// Return both ends of the insertion caret in document coordinates.
+/// Args: text run and character index. Returns top and bottom after all type transforms.
+pub fn caret_segment(run:&TypeRun,index:usize)->(Pt,Pt) {
+    if run.svg_text.is_some(){return svg_type::caret_segment(run,index);}
+    let point=caret_pt(run,index);let height=caret_height(run,index);
+    let geometry=crate::text_geometry::caret_frame(run,index);
+    let tangent=geometry.map_or(Pt::new(1.,0.),|(_,t)|t);
+    if run.transform.is_some(){let local=run.unmap_point(point);let tangent=geometry.map_or(Pt::new(1.,0.),|(_,t)|(run.unmap_point(point+t)-local).normalized());return (run.map_point(local-tangent.perp()*height*0.9),run.map_point(local+tangent.perp()*height*0.2));}
+    (point-tangent.perp()*height*0.9,point+tangent.perp()*height*0.2)
 }
 pub fn hit_char(run:&TypeRun,p:Pt)->usize {
+    if run.svg_text.is_some() && let Some(layout)=svg_type::layout(run){return layout.carets.iter().min_by(|a,b|(a.1-p).length_sq().total_cmp(&(b.1-p).length_sq())).map_or(0,|c|c.0);}
     if let Some(index) = crate::text_geometry::hit_char(run,p) { return index; }
+    let p=run.unmap_point(p);
     let lines=compose(run);
     lines.iter().flat_map(|line|line.carets.iter().map(move |(index,x)| {
         let style=character_metrics(run,(*index).min(run.content.chars().count().saturating_sub(1)));
-        let y=run.origin.y+line.baseline-style.baseline_shift.unwrap();let height=run.px*style.vscale.unwrap()/100.;
+        let y=run.origin.y+line.baseline-style.baseline_shift.unwrap();let height=style.px.unwrap_or(run.px)*style.vscale.unwrap()/100.;
         let dy=if p.y<y-height*0.9 {y-height*0.9-p.y}else if p.y>y+height*0.25{p.y-y-height*0.25}else{0.};
         let dx=run.origin.x+x-p.x;(*index,dx*dx+dy*dy)
     })).min_by(|(_,a),(_,b)|a.total_cmp(b)).map_or(0,|(index,_)|index)
@@ -548,14 +589,14 @@ pub fn selection_rects(run:&TypeRun,a:usize,b:usize)->Vec<(Pt,Pt)> {
         let mut from=lo.max(line.start);let end=hi.min(line.end);
         while from<end {
             let style=character_metrics(run,from);let mut to=from+1;
-            while to<end {let next=character_metrics(run,to);if next.baseline_shift!=style.baseline_shift||next.vscale!=style.vscale{break;}to+=1;}
-            let y=run.origin.y+line.baseline-style.baseline_shift.unwrap();let px=run.px*style.vscale.unwrap()/100.;
+            while to<end {let next=character_metrics(run,to);if next.baseline_shift!=style.baseline_shift||next.vscale!=style.vscale||next.px!=style.px{break;}to+=1;}
+            let y=run.origin.y+line.baseline-style.baseline_shift.unwrap();let px=style.px.unwrap_or(run.px)*style.vscale.unwrap()/100.;
             rects.push((Pt::new(run.origin.x+line.caret_x(from),y-px*0.9),Pt::new(run.origin.x+line.caret_x(to),y+px*0.25)));from=to;
         }
     }
     rects
 }
-pub fn caret_height(run:&TypeRun,index:usize)->f32 {if let Some(layout)=&run.layout&&let Some((_,height))=layout.caret_heights.iter().min_by_key(|(i,_)|i.abs_diff(index)){return *height;}run.px*character_metrics(run,index.min(run.content.chars().count().saturating_sub(1))).vscale.unwrap()/100.}
+pub fn caret_height(run:&TypeRun,index:usize)->f32 {if let Some(layout)=&run.layout&&let Some((_,height))=layout.caret_heights.iter().min_by_key(|(i,_)|i.abs_diff(index)){return *height;}{let style=character_metrics(run,index.min(run.content.chars().count().saturating_sub(1)));style.px.unwrap_or(run.px)*style.vscale.unwrap()/100.}}
 pub fn char_to_byte(s:&str,char_idx:usize)->usize {s.char_indices().nth(char_idx).map(|(i,_)|i).unwrap_or(s.len())}
 pub fn paragraph_spacing_css(run: &TypeRun, style: &crate::geom::ParagraphStyle) -> String {
     // CSS word spacing adds to the font's space advance; the inspector stores
@@ -570,6 +611,9 @@ pub fn paragraph_spacing_css(run: &TypeRun, style: &crate::geom::ParagraphStyle)
 pub fn character_css(run:&TypeRun,style:&crate::geom::CharSpan)->String {
     use std::fmt::Write;
     let mut css=String::new();
+    if let Some(font)=&style.font {let _=write!(css,"font-family:'{}';",label_for(font).replace(['\'','"','<','>'],""));}
+    if let Some(px)=style.px {let _=write!(css,"font-size:{px}px;");}
+    if let Some(crate::document::Fill::Solid(color))=&style.fill {let _=write!(css,"color:{};",color.hex());}
     if let Some(value)=style.tracking{let _=write!(css,"letter-spacing:calc({}em + var(--oma-paragraph-letter-spacing, 0em));",value/1000.);}
     if let Some(value)=style.leading{let _=write!(css,"line-height:{}px;",value.pixels(run.px));}
     if let Some(mode)=style.kerning{let _=write!(css,"font-kerning:{};",if mode==crate::geom::KernMode::Metrics{"normal"}else{"none"});}

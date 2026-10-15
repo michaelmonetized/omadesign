@@ -1168,6 +1168,29 @@ fn transformed_bounds(
     Some(bounds)
 }
 
+fn draw_svg_type(pm:&mut Pixmap,shape:&Shape,run:&crate::geom::TypeRun,layout:&crate::text::svg_type::Layout,t:Transform,opacity:f32,blend:tiny_skia::BlendMode,pose:Pose,mask:Option<&tiny_skia::Mask>){
+    let center=shape.geom.bbox().center();let world=t.pre_concat(pose.to_skia(shape.world_bbox().center()));let xf=world.pre_concat(Transform::from_rotate_at(shape.rotation.to_degrees(),center.x,center.y));
+    let op=(opacity*pose.opacity.unwrap_or(shape.opacity)).clamp(0.,1.);let fill=pose.fill_reveal.unwrap_or(1.).clamp(0.,1.);let stroke=pose.stroke_reveal.unwrap_or(1.).clamp(0.,1.);
+    if fill>=1. && stroke>=1. && op>=1. && blend==tiny_skia::BlendMode::SourceOver && mask.is_none(){resvg::render(&layout.tree,xf,&mut pm.as_mut());return;}
+    let Some(mut buffer)=Pixmap::new(pm.width(),pm.height())else{return;};
+    if fill>=1. && stroke>=1. {resvg::render(&layout.tree,xf,&mut buffer.as_mut());}
+    else {
+        if fill>0. && let Some(tree)=crate::text::svg_type::paint_tree(run,true){
+            if fill>=1. {resvg::render(&tree,xf,&mut buffer.as_mut());}
+            else if let Some(mut pixels)=Pixmap::new(pm.width(),pm.height()) && let Some(mut clip)=tiny_skia::Mask::new(pm.width(),pm.height()) {
+                let b=shape.world_bbox();if let Some(rect)=tiny_skia::Rect::from_xywh(b.min.x,b.max.y-b.height()*fill,b.width().max(0.001),(b.height()*fill).max(0.001)){clip.fill_path(&PathBuilder::from_rect(rect),FillRule::Winding,true,world);resvg::render(&tree,xf,&mut pixels.as_mut());buffer.draw_pixmap(0,0,pixels.as_ref(),&PixmapPaint::default(),Transform::identity(),Some(&clip));}
+            }
+        }
+        if stroke>0. && let Some(tree)=crate::text::svg_type::paint_tree(run,false){
+            if stroke>=1. {resvg::render(&tree,xf,&mut buffer.as_mut());}
+            else if let Some(path)=crate::motion::trimmed_stroke_path(shape,stroke) && let Some(outline)=path.stroke(&tiny_skia::Stroke{width:layout.stroke_width+2./world.get_scale().0.max(world.get_scale().1).max(0.001),line_cap:tiny_skia::LineCap::Round,..Default::default()},1.) && let Some(mut pixels)=Pixmap::new(pm.width(),pm.height()) && let Some(mut clip)=tiny_skia::Mask::new(pm.width(),pm.height()) {
+                clip.fill_path(&outline,FillRule::Winding,true,world);resvg::render(&tree,xf,&mut pixels.as_mut());buffer.draw_pixmap(0,0,pixels.as_ref(),&PixmapPaint::default(),Transform::identity(),Some(&clip));
+            }
+        }
+    }
+    pm.draw_pixmap(0,0,buffer.as_ref(),&PixmapPaint{opacity:op,blend_mode:blend,..Default::default()},Transform::identity(),mask);
+}
+
 fn draw_shape_inner(
     pm: &mut Pixmap,
     shape: &Shape,
@@ -1177,6 +1200,8 @@ fn draw_shape_inner(
     pose: Pose,
     mask: Option<&tiny_skia::Mask>,
 ) {
+    let painted_run=if let Geom::Text(run)=&shape.geom{run.svg_text.as_ref().filter(|svg|shape.style.fill!=svg.base_fill).map(|_|crate::text::svg_type::object_paint(run,&shape.style.fill))}else{None};
+    let rich=if let Geom::Text(run)=&shape.geom{let run=painted_run.as_ref().unwrap_or(run);run.svg_text.as_ref().and_then(|_|crate::text::svg_type::layout(run).map(|layout|(run,layout)))}else{None};
     let Some(path) = shape.get_cached_path(96) else {
         return;
     };
@@ -1188,7 +1213,25 @@ fn draw_shape_inner(
         t.pre_concat(pose.to_skia(shape.world_bbox().center()))
     };
     let fill_reveal = pose.fill_reveal.unwrap_or(1.0).clamp(0.0, 1.0);
-    if !shape.style.fill.is_none() && shape.geom.is_closed() && fill_reveal > 0.0 {
+    let painted=rich.is_none() && if let Geom::Text(run)=&shape.geom {crate::text::has_character_paint(run)}else{false};
+    if painted && fill_reveal>0. {
+        let Geom::Text(run)=&shape.geom else{unreachable!()};
+        for (fill,mut contours) in crate::text::paint_groups(run,&shape.style.fill) {
+            if shape.rotation.abs()>1e-5{let center=shape.geom.bbox().center();for point in contours.iter_mut().flatten(){*point=point.rotate_about(center,shape.rotation);}}
+            if fill.is_none(){continue;}
+            let part=Shape::new(Geom::Poly{contours,winding:true},shape.style.clone());
+            let Some(glyph_path)=part.get_cached_path(96)else{continue;};
+            let Some(mut clip)=tiny_skia::Mask::new(pm.width(),pm.height())else{continue;};
+            clip.fill_path(&glyph_path,FillRule::Winding,true,xf);
+            if let Some(parent)=mask{for(a,b)in clip.data_mut().iter_mut().zip(parent.data()){*a=((u16::from(*a)*u16::from(*b)+127)/255)as u8;}}
+            if fill_reveal<1. {let bounds=shape.world_bbox();if let Some(rect)=tiny_skia::Rect::from_xywh(bounds.min.x,bounds.max.y-bounds.height()*fill_reveal,bounds.width().max(0.001),bounds.height()*fill_reveal){clip.intersect_path(&PathBuilder::from_rect(rect),FillRule::Winding,true,xf);}}
+            let texture=fill.gradient().and_then(|g|crate::gradient::texture(&g,shape,0.,xf.get_scale().0.max(xf.get_scale().1)));
+            let mut paint=fill_paint(&fill,&shape.geom,texture.as_ref());paint.blend_mode=blend;paint.shader.apply_opacity(op);
+            if shape.rotation.abs()>1e-5{let center=shape.geom.bbox().center();paint.shader.transform(Transform::from_rotate_at(shape.rotation.to_degrees(),center.x,center.y));}
+            let bounds=glyph_path.bounds();if let Some(rect)=tiny_skia::Rect::from_xywh(bounds.x()-1.,bounds.y()-1.,bounds.width()+2.,bounds.height()+2.){pm.fill_rect(rect,&paint,xf,Some(&clip));}
+        }
+    }
+    if !painted && rich.is_none() && !shape.style.fill.is_none() && shape.geom.is_closed() && fill_reveal > 0.0 {
         let texture = shape.style.fill.gradient().and_then(|g| {
             crate::gradient::texture(&g, shape, 0., xf.get_scale().0.max(xf.get_scale().1))
         });
@@ -1230,6 +1273,7 @@ fn draw_shape_inner(
             pm.fill_path(&path, &paint, rule, xf, mask);
         }
     }
+    if let Some((run,layout))=&rich{draw_svg_type(pm,shape,run,layout,t,opacity,blend,pose,mask);}
     if shape.layout.image.is_some() {
         crate::layout_images::draw_with_blend(pm, shape, xf, op, blend, mask);
     }
@@ -1512,6 +1556,15 @@ fn draw_checker(pm: &mut Pixmap, origin: Pt, size: Pt) {
 mod tests {
     use super::*;
     use crate::document::{Cmd, Document, Shape, Style, apply};
+
+    #[test]
+    fn svg_type_rich_fill_and_stroke_reveals_remain_independent() {
+        let source=r##"<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120"><text x="20" y="75" font-family="DejaVu Sans" font-size="48" fill="#d24" stroke="#248" stroke-width="3" transform="rotate(8 20 75)">Type</text></svg>"##;
+        let(doc,_)=crate::formats::svg::read(source,"Reveal type").unwrap();let shape=doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().find(|s|matches!(&s.geom,Geom::Text(t) if t.svg_text.is_some())).unwrap();
+        let render=|fill,stroke|{let mut pixels=Pixmap::new(260,140).unwrap();draw_shape(&mut pixels,shape,Transform::identity(),1.,tiny_skia::BlendMode::SourceOver,Pose{dx:5.,dy:3.,fill_reveal:Some(fill),stroke_reveal:Some(stroke),..Pose::identity()});pixels};
+        let ink=|pixels:&Pixmap|pixels.pixels().iter().filter(|p|p.alpha()>0).count();
+        assert_eq!(ink(&render(0.,0.)),0);let fill=ink(&render(1.,0.));let stroke=ink(&render(0.,1.));assert!(fill>0 && stroke>0);let half_fill=ink(&render(0.5,0.));let half_stroke=ink(&render(0.,0.5));assert!(half_fill>0 && half_fill<fill);assert!(half_stroke>0 && half_stroke<stroke);assert!(ink(&render(1.,1.))>fill);
+    }
 
     #[test]
     fn reveal_channels_clip_fill_and_trim_stroke_independently_under_motion() {

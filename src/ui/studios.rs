@@ -952,9 +952,10 @@ pub(super) fn character_studio(ui: &mut Ui, studio: &mut Studio) {
     super::text_geometry::frame_inspector(ui, studio);
     super::text_geometry::path_inspector(ui, studio);
     let live = studio.selected_type();
-    let font = live
+    let metrics=studio.selected_character_metrics();
+    let font = metrics.first().and_then(|s|s.font.clone()).or_else(||live
         .as_ref()
-        .map(|t| t.font.clone())
+        .map(|t| t.font.clone()))
         .unwrap_or_else(|| studio.text_font.clone());
     let label = crate::text::label_for(&font);
     let mut chosen = font.clone();
@@ -1033,7 +1034,7 @@ pub(super) fn character_studio(ui: &mut Ui, studio: &mut Studio) {
     if chosen != font {
         let path = chosen.clone();
         studio.remember_font(&path);
-        studio.patch_type(|t| t.font = path.clone());
+        if live.is_some(){studio.patch_character(|s|s.font=Some(path.clone()));}else{studio.patch_type(|t| t.font = path.clone());}
         studio.text_font = path;
         studio.font_scroll_once = true;
     }
@@ -1041,9 +1042,9 @@ pub(super) fn character_studio(ui: &mut Ui, studio: &mut Studio) {
         .default_open(false)
         .show(ui, |ui| google_fonts_ui(ui, studio));
 
-    let mut px = live.as_ref().map(|t| t.px).unwrap_or(studio.text_px);
+    let mut px = metrics.first().and_then(|s|s.px).or_else(||live.as_ref().map(|t|t.px)).unwrap_or(studio.text_px);
     if number_field(ui, "Size", &mut px, 8.0..=400.0, " px") {
-        studio.patch_type(|t| t.px = px);
+        if live.is_some(){studio.patch_character(|s|s.px=Some(px));}else{studio.patch_type(|t| t.px = px);}
     }
     super::character_spacing::show(ui,studio);
     super::opentype::show(ui, studio, &font);

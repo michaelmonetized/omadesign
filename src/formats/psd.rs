@@ -4,7 +4,10 @@
 //! Parsing is bounded and never invokes a shell or an external converter.
 
 mod codec;
+pub mod descriptor;
 mod effects;
+mod engine_data;
+pub mod type_layer;
 
 use crate::color::Blend;
 use crate::document::{Document, Layer, LayerKind, Pixels};
@@ -183,6 +186,24 @@ pub fn decode(bytes: &[u8], name: &str) -> Result<PsdImport, String> {
                 layer
             }
         };
+        if let Some(data) = &record.type_data {
+            match type_layer::decode(data, &mut warnings) {
+                Ok((mut shape, metadata)) => {
+                    shape.name = record.name.clone();
+                    layer.kind = LayerKind::Vector {
+                        shapes: vec![shape],
+                    };
+                    layer.psd_type = Some(metadata);
+                }
+                Err(error) => warn(
+                    &mut warnings,
+                    format!(
+                        "PSD text '{}' uses saved pixels because its editable type record could not be read: {error}",
+                        record.name
+                    ),
+                ),
+            }
+        }
         layer.visible = record.flags & 2 == 0;
         layer.locked = record.flags & 1 != 0;
         layer.opacity = record.opacity as f32 / 255.0;
@@ -201,6 +222,11 @@ pub fn decode(bytes: &[u8], name: &str) -> Result<PsdImport, String> {
                 } else {
                     record.rect
                 };
+                if layer.kind.shapes().is_some() && !layer.is_group {
+                    layer.mask_origin = Pt::new(record.rect.left as f32, record.rect.top as f32);
+                    let (w, h) = record.rect.size()?;
+                    layer.mask_size = Pt::new(w as f32, h as f32);
+                }
                 layer.mask = Some(convert_mask(
                     mask,
                     values,

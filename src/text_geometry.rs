@@ -157,6 +157,7 @@ pub fn guide_path(shape: &Shape) -> Option<ArcPath> {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct TextGeometryLayout {
     pub contours: Vec<Vec<Pt>>,
+    pub paint_ranges: Vec<(Option<crate::document::Fill>, std::ops::Range<usize>)>,
     pub caret_heights: Vec<(usize, f32)>,
     pub carets: Vec<(usize, Pt, Pt)>, // story index, baseline position, tangent
     pub selections: Vec<(usize, usize, [Pt; 4])>,
@@ -167,6 +168,13 @@ pub struct TextGeometryLayout {
     pub visible_text: String,
     pub visible_run: Option<Box<TypeRun>>,
     pub hyphen_tail: usize,
+}
+
+pub(crate) fn map_layout(mut layout:TextGeometryLayout,run:&TypeRun)->TextGeometryLayout {
+    for p in layout.contours.iter_mut().flatten(){*p=run.map_point(*p);}
+    for (_,point,tangent) in &mut layout.carets{let end=run.map_point(*point+*tangent);*point=run.map_point(*point);*tangent=(end-*point).normalized();}
+    for (_,_,quad) in &mut layout.selections{*quad=quad.map(|p|run.map_point(p));}
+    layout
 }
 
 pub fn path_interval(on: &TextOnPath) -> Option<(f32, f32)> {
@@ -210,6 +218,7 @@ pub fn path_position(run: &TypeRun, distance: f32) -> Option<(Pt, Pt)> {
 }
 
 pub fn layout_on_path(run: &TypeRun) -> TextGeometryLayout {
+    if run.transform.is_some(){let mut local=run.clone();local.transform=None;local.layout=None;return map_layout(layout_on_path(&local),run);}
     let Some(on)=run.on_path.as_ref() else {return TextGeometryLayout::default()};
     let Some((_,span))=path_interval(on) else {return TextGeometryLayout::default()};
     let mut plain=run.clone();
@@ -232,6 +241,7 @@ pub fn layout_on_path(run: &TypeRun) -> TextGeometryLayout {
             let Some((point, tangent)) = path_position(run, center) else {
                 continue;
             };
+            let paint_start=result.contours.len();
             for contour in crate::text::glyph_contours(&plain, glyph) {
                 result.contours.push(
                     contour
@@ -244,6 +254,7 @@ pub fn layout_on_path(run: &TypeRun) -> TextGeometryLayout {
                         .collect(),
                 );
             }
+            result.paint_ranges.push((plain.character_style(glyph.cluster).fill,paint_start..result.contours.len()));
             result.visible_end = result.visible_end.max(glyph.cluster + 1);
         }
         for &(index, x) in &line.carets {
@@ -260,7 +271,7 @@ pub fn layout_on_path(run: &TypeRun) -> TextGeometryLayout {
                 ));
                 result
                     .caret_heights
-                    .push((index, run.px * metrics.vscale.unwrap() / 100.));
+                    .push((index, metrics.px.unwrap_or(run.px) * metrics.vscale.unwrap() / 100.));
             }
         }
         for pair in line.carets.windows(2) {
@@ -274,7 +285,7 @@ pub fn layout_on_path(run: &TypeRun) -> TextGeometryLayout {
                 path_position(run, (offset + y).min(span)),
             ) {
                 let metrics = crate::text::character_metrics(run, a);
-                let height = run.px * metrics.vscale.unwrap() / 100.;
+                let height = metrics.px.unwrap_or(run.px) * metrics.vscale.unwrap() / 100.;
                 let p = p - t.perp() * metrics.baseline_shift.unwrap();
                 let q = q - u.perp() * metrics.baseline_shift.unwrap();
                 result.selections.push((
@@ -335,6 +346,8 @@ pub fn hit_char(run: &TypeRun, point: Pt) -> Option<usize> {
         .map(|c| c.0)
 }
 pub fn selection_quads(run: &TypeRun, a: usize, b: usize) -> Option<Vec<[Pt; 4]>> {
+    if run.svg_text.is_some(){return Some(crate::text::svg_type::selection_quads(run,a,b));}
+    if run.transform.is_some() && run.frame.is_none() && run.on_path.is_none(){return Some(crate::text::selection_rects(run,a,b).into_iter().map(|(a,b)|[a,Pt::new(b.x,a.y),b,Pt::new(a.x,b.y)].map(|p|run.map_point(p))).collect());}
     let computed;
     let layout = if let Some(layout) = &run.layout {
         layout
@@ -405,7 +418,7 @@ pub fn reflow(doc: &mut Document) {
 
 pub fn release(run: &mut TypeRun) {
     if let Some((point, _)) = caret_frame(run, 0) {
-        run.origin = point;
+        run.origin = run.unmap_point(point);
     }
     run.on_path = None;
     run.layout = None;
