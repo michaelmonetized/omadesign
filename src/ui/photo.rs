@@ -1,4 +1,6 @@
 use crate::app::Studio;
+#[path = "photo_catalog.rs"]
+mod catalog;
 #[path = "photo_local.rs"]
 mod local;
 #[path = "photo_optics.rs"]
@@ -165,6 +167,14 @@ fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
         eframe::egui::Label::new(RichText::new(&studio.photo.status).small().color(fg_weak()))
             .wrap(),
     );
+    ui.horizontal(|ui| {
+        ui.selectable_value(&mut studio.photo.catalog.visible, false, "Folder");
+        ui.selectable_value(&mut studio.photo.catalog.visible, true, "Catalog");
+    });
+    if studio.photo.catalog.visible {
+        catalog::show(ui, studio);
+        return;
+    }
     workflow::progress(ui, studio);
     if studio.photo.queued_imports() > 0 {
         ui.horizontal(|ui| {

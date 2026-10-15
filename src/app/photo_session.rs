@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 mod batch;
 #[path = "photo_session/gallery.rs"]
 mod gallery;
+#[path = "photo_session/catalog.rs"]
+pub mod catalog;
 #[path = "photo_session/preset_library.rs"]
 mod preset_library;
 pub use batch::BatchProgress;
@@ -95,6 +97,7 @@ pub struct PhotoSession {
     pub folder: String,
     pub folder_files: Vec<(String, String)>,
     pub gallery: gallery::FolderGallery,
+    pub catalog: catalog::CatalogState,
     pub view_scale: f32,
     pub view_offset: egui::Vec2,
     pub fit_scale: f32,
@@ -145,6 +148,7 @@ impl PhotoSession {
             folder: String::new(),
             folder_files: vec![],
             gallery: Default::default(),
+            catalog: Default::default(),
             view_scale: 1.0,
             view_offset: egui::Vec2::ZERO,
             fit_scale: 1.0,
@@ -358,6 +362,7 @@ impl PhotoSession {
         }
         self.gallery.poll(ctx);
         self.poll_presets();
+        self.poll_catalog(ctx);
         let was_loading = self.is_loading();
         let mut index = 0;
         while index < self.import_jobs.len() {
@@ -531,7 +536,7 @@ impl PhotoSession {
     }
 
     pub fn is_saving(&self) -> bool {
-        self.save_job.is_some() || self.is_batching() || self.is_saving_presets()
+        self.save_job.is_some() || self.is_batching() || self.is_saving_presets() || self.catalog.busy()
     }
 
     pub fn save_settings(&mut self) {

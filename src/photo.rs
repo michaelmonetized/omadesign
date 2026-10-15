@@ -1,3 +1,4 @@
+pub mod catalog;
 pub mod edits;
 pub mod local;
 pub mod optics;

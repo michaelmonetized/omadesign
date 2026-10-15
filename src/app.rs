@@ -22,7 +22,7 @@ mod layout_edit;
 pub mod libraries;
 pub(crate) mod masking;
 mod motion_presets;
-mod photo_session;
+pub(crate) mod photo_session;
 pub(crate) mod pixel_selection;
 pub(crate) mod pixel_edit;
 mod placement;
