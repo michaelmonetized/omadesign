@@ -526,6 +526,10 @@ mod tests {
         frame(ctx, book, key(Key::Home, Modifiers::NONE));
     }
 
+    fn focused_panel(ctx: &egui::Context, output: &egui::FullOutput) {
+        keys::focused_role(ctx,output,"Properties",egui::accesskit::Role::Button);
+    }
+
     #[test]
     fn panel_keyboard_native_actions_float_tab_close_restore_and_repeat_focus() {
         let (ctx, mut book) = fixture();
@@ -546,7 +550,7 @@ mod tests {
                 }
             }
             let output = apply(&ctx, &mut book);
-            keys::focused(&ctx, &output, "Properties");
+            focused_panel(&ctx, &output);
         }
         let floating = frame(&ctx, &mut book, vec![]).0;
         let (_, window) = floating
@@ -567,14 +571,14 @@ mod tests {
             open(&ctx, &mut book);
             action(&ctx, &mut book, "Focus panel");
             let output = apply(&ctx, &mut book);
-            keys::focused(&ctx, &output, "Properties");
+            focused_panel(&ctx, &output);
         }
         open(&ctx, &mut book);
         action(&ctx, &mut book, "Tab with panel");
         tab_to(&ctx, &mut book, "Tab with panel");
         frame(&ctx, &mut book, key(Key::Home, Modifiers::NONE));
         let output = apply(&ctx, &mut book);
-        keys::focused(&ctx, &output, "Properties");
+        focused_panel(&ctx, &output);
         assert!(
             group(&book.tasks["Design"], "properties")
                 .unwrap()
@@ -591,13 +595,13 @@ mod tests {
         action(&ctx, &mut book, "Restore panel");
         let output = apply(&ctx, &mut book);
         assert!(!book.tasks["Design"].hidden.contains_key("properties"));
-        keys::focused(&ctx, &output, "Properties");
+        focused_panel(&ctx, &output);
         let before = book.clone();
         open(&ctx, &mut book);
         tab_to(&ctx, &mut book, "Cancel");
         frame(&ctx, &mut book, key(Key::Enter, Modifiers::NONE));
         let output = frame(&ctx, &mut book, vec![]).0;
-        keys::focused(&ctx, &output, "Properties");
+        focused_panel(&ctx, &output);
         assert_eq!(book, before);
     }
 

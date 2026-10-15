@@ -33,10 +33,20 @@ fn keyboard_motion_native_timing_and_preset_authoring_undo_and_save_reopen() {
     studio.show_welcome = false;
     assert!(studio.selection.is_empty());
     frame(&ctx, &mut studio, vec![]);
-    for key in [Key::F8, Key::R, Key::Enter] {
-        frame(&ctx, &mut studio, keys::key(key, Modifiers::NONE));
-    }
+    frame(&ctx, &mut studio, keys::key(Key::F8, Modifiers::NONE));
+    frame(
+        &ctx,
+        &mut studio,
+        keys::key(
+            Key::K,
+            Modifiers::CTRL | Modifiers::COMMAND | Modifiers::SHIFT,
+        ),
+    );
     frame(&ctx, &mut studio, vec![]);
+    assert!(
+        crate::ui::keyboard_authoring::is_open(&ctx),
+        "Motion's native Create artwork shortcut must open its actual draft"
+    );
     frame(
         &ctx,
         &mut studio,
@@ -138,6 +148,7 @@ fn keyboard_motion_native_timing_and_preset_authoring_undo_and_save_reopen() {
 fn keyboard_motion_disabled_native_timing_rejects_accessibility_changes() {
     let ctx = egui::Context::default();
     ctx.enable_accesskit();
+    crate::ui::theme::apply(&ctx);
     let mut studio = Studio::new();
     studio.persona = Persona::Motion;
     studio.show_welcome = false;
@@ -163,6 +174,7 @@ fn keyboard_motion_disabled_native_timing_rejects_accessibility_changes() {
 fn keyboard_motion_timing_keeps_loaded_document_values_and_exposes_full_model_ranges() {
     let ctx = egui::Context::default();
     ctx.enable_accesskit();
+    crate::ui::theme::apply(&ctx);
     let mut studio = Studio::new();
     studio.persona = Persona::Motion;
     studio.show_welcome = false;

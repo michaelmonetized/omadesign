@@ -496,7 +496,21 @@ pub(super) mod keyboard_tests {
 
     pub fn focused(ctx: &egui::Context, output: &egui::FullOutput, name: &str) {
         let (id, node) = named(output, name);
-        assert_eq!(ctx.memory(|memory| memory.focused()).map(|id| id.accesskit_id()), Some(id), "native focus: {name}");
+        focused_node(ctx, output, name, id, node);
+    }
+
+    pub fn focused_role(ctx: &egui::Context, output: &egui::FullOutput, name: &str, role: accesskit::Role) {
+        let (id,node)=output.platform_output.accesskit_update.as_ref().unwrap().nodes.iter()
+            .find(|(_,node)|node.label()==Some(name)&&node.role()==role)
+            .unwrap_or_else(||panic!("missing native {role:?}: {name}"));
+        focused_node(ctx,output,name,*id,node);
+    }
+
+    fn focused_node(ctx: &egui::Context, output: &egui::FullOutput, name: &str, id: accesskit::NodeId, node: &accesskit::Node) {
+        let native=ctx.memory(|memory|memory.focused()).map(|id|id.accesskit_id());
+        let actual=output.platform_output.accesskit_update.as_ref().unwrap().nodes.iter()
+            .find(|(id,_)|Some(*id)==native).map(|(_,node)|(node.role(),node.label()));
+        assert_eq!(native,Some(id),"native focus: {name}; actual node {actual:?}, expected {:?}",node.role());
         assert_eq!(output.platform_output.accesskit_update.as_ref().unwrap().focus, id);
         let bounds = node.bounds().unwrap();
         let outline = egui::Rect::from_min_max(egui::pos2(bounds.x0 as f32, bounds.y0 as f32), egui::pos2(bounds.x1 as f32, bounds.y1 as f32)).expand(2.);
