@@ -154,3 +154,99 @@ fn keyboard_agent_model_popup_search_filters_without_starting_provider_or_discov
     assert!(studio.agent.connection.is_none());
     assert!(!studio.agent.connecting && !studio.agent.busy);
 }
+
+#[test]
+fn keyboard_agent_native_options_and_favorites_persist_only_in_the_owned_fixture() {
+    use std::os::unix::fs::PermissionsExt;
+    struct Files(PathBuf);
+    impl Drop for Files {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let files = Files(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join(".artifacts/keyboard-agent-preferences")
+            .join(crate::project::new_swap_id()),
+    );
+    std::fs::create_dir_all(files.0.join("project")).unwrap();
+    let (ctx, mut studio) = fixture();
+    studio.agent = Workspace::isolated_for_test(files.0.clone());
+    studio.agent.discovery.providers = vec![crate::agent::discovery::Provider {
+        profile: studio.agent.settings.profile.clone(),
+        status: crate::agent::discovery::Status::Ready,
+        metadata: serde_json::json!({"configOptions":[
+            {"id":"model","name":"Model","category":"model","type":"select","currentValue":"first",
+                "options":[{"value":"first","name":"First model"},{"value":"second","name":"Second model"}]},
+            {"id":"effort","name":"Effort","category":"thought_level","type":"select","currentValue":"high",
+                "options":[{"value":"high","name":"High"},{"value":"low","name":"Low"}]}
+        ]}),
+        detail: "Owned advertised metadata fixture".into(),
+    }];
+    frame(&ctx, &mut studio, vec![]);
+    press(&ctx, &mut studio, "Agent");
+    keys::tab_to(&ctx, "Effort", |events| frame(&ctx, &mut studio, events));
+    frame(
+        &ctx,
+        &mut studio,
+        keys::key(Key::ArrowDown, Modifiers::NONE),
+    );
+    assert_eq!(
+        studio
+            .agent
+            .settings
+            .selections
+            .get("Codex/effort")
+            .map(String::as_str),
+        Some("low")
+    );
+    assert!(studio.agent.thread.is_none());
+    press(&ctx, &mut studio, "Choose agent model");
+    press(&ctx, &mut studio, "Favorite Codex model Second model");
+    assert_eq!(studio.agent.settings.favorites, vec!["Codex/second"]);
+    let settings_path = files.0.join("settings.json");
+    let saved: crate::agent::config::Settings =
+        serde_json::from_slice(&std::fs::read(&settings_path).unwrap()).unwrap();
+    assert_eq!(saved.selections, studio.agent.settings.selections);
+    assert_eq!(saved.favorites, studio.agent.settings.favorites);
+    frame(&ctx, &mut studio, keys::key(Key::Escape, Modifiers::NONE));
+    frame(&ctx, &mut studio, vec![]);
+    press(&ctx, &mut studio, "New agent conversation");
+    let thread = studio.agent.thread.as_ref().unwrap().id.clone();
+    keys::tab_to(&ctx, "Effort", |events| frame(&ctx, &mut studio, events));
+    frame(&ctx, &mut studio, keys::key(Key::Home, Modifiers::NONE));
+    assert_eq!(
+        studio
+            .agent
+            .settings
+            .selections
+            .get("Codex/effort")
+            .map(String::as_str),
+        Some("high")
+    );
+    assert!(studio.agent.connection.is_none() && !studio.agent.connecting && !studio.agent.busy);
+    let expected = studio.agent.settings.clone();
+    drop(studio);
+    let saved: crate::agent::config::Settings =
+        serde_json::from_slice(&std::fs::read(&settings_path).unwrap()).unwrap();
+    let thread_path = files.0.join("threads").join(format!("{thread}.json"));
+    let saved_thread: crate::agent::workspace::Thread =
+        serde_json::from_slice(&std::fs::read(&thread_path).unwrap()).unwrap();
+    assert_eq!(saved.selections, expected.selections);
+    assert_eq!(saved_thread.settings.selections, expected.selections);
+    assert_eq!(saved_thread.settings.favorites, expected.favorites);
+    for path in [&settings_path, &thread_path] {
+        assert_eq!(
+            std::fs::metadata(path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(
+            std::fs::metadata(path.parent().unwrap())
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+    }
+}
