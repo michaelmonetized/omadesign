@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 
+pub mod transport;
+
 type Snapshot = BTreeMap<String, Cell>;
 const PIXEL_BUDGET: u64 = 512 * 1024 * 1024;
 

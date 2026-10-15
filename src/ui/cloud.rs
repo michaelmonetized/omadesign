@@ -19,12 +19,14 @@ pub fn modal(ui: &mut Ui, studio: &mut Studio) {
         CloudModal::Review => "Review & annotations",
         CloudModal::Invite => "Invite a reviewer",
         CloudModal::Publish => "Publish finished work",
+        CloudModal::Live => "Live collaboration",
         CloudModal::None => return,
     };
     let dialog=egui::Modal::new(egui::Id::new("cloud-modal")).show(&ctx,|ui|{
  ui.set_width(if matches!(studio.cloud_modal,CloudModal::Review|CloudModal::Publish){760.}else{440.});ui.heading(title);ui.add_space(10.);
  let busy=studio.cloud_busy();
  match studio.cloud_modal {
+  CloudModal::Live => live_ui(ui, studio, busy),
   CloudModal::SignIn=>{
    if cloud::connected(&studio.cloud_identity){
     let who = cloud::account_label(&studio.cloud_identity);
@@ -70,5 +72,60 @@ pub fn modal(ui: &mut Ui, studio: &mut Studio) {
     }
     if dialog.should_close() {
         studio.cloud_modal = CloudModal::None;
+    }
+}
+
+fn live_ui(ui: &mut Ui, studio: &mut Studio, busy: bool) {
+    if let Some(replica) = &studio.doc.collaboration {
+        let session = replica.session.clone();
+        let paused = replica.paused;
+        let pending = replica.pending.len();
+        let conflicts = studio.live_conflict_count();
+        ui.label(studio.live_status());
+        ui.horizontal(|ui| {
+            ui.monospace(&session);
+            if ui.button("Copy session ID").clicked() { ui.ctx().copy_text(session); }
+        });
+        ui.label("Share this ID with a project editor. Reviewers cannot open the editable document.");
+        if ui.button(if paused { "Reconnect" } else { "Work offline" }).clicked() { studio.pause_live(!paused); }
+        ui.label(format!("{pending} edits waiting to send. Save the .oma file to keep offline edits and your undo history."));
+        for peer in studio.live_presence() { ui.label(format!("{} · {} selected", peer.name, peer.selection.len())); }
+        if conflicts > 0 {
+            ui.label(format!("{conflicts} properties have competing edits. Both edits remain saved. Undoing your edit reveals the other editor's value when it is still applicable."));
+        }
+    } else {
+        ui.label("Edit the same native document together. Each editor keeps their own undo history; offline edits merge when they reconnect.");
+        if ui.add_enabled(!busy && cloud::connected(&studio.cloud_identity), egui::Button::new("Start live edits for this project")).clicked() { studio.start_live(); }
+        ui.label("Start requires a cloud project. Manage editor invitations on the cloud website.");
+        ui.separator();
+        ui.label("Session ID");
+        ui.text_edit_singleline(&mut studio.live_join_id);
+        if ui.add_enabled(!busy && cloud::connected(&studio.cloud_identity) && !studio.live_join_id.trim().is_empty(), egui::Button::new("Join in a new document")).clicked() { studio.join_live(); }
+    }
+}
+
+pub fn paint_presence(painter: &egui::Painter, rect: egui::Rect, studio: &Studio) {
+    let painter = painter.with_clip_rect(rect);
+    for peer in studio.live_presence() {
+        let hue = peer.actor.bytes().fold(0u8, u8::wrapping_add);
+        let color = egui::Color32::from_rgb(100 + hue / 2, 210 - hue / 3, 220);
+        let screen = |point: crate::geom::Pt| {
+            let point = studio.view.to_screen(point);
+            egui::pos2(rect.min.x + point.x, rect.min.y + point.y)
+        };
+        if let Some(cursor) = peer.cursor {
+            let point = screen(cursor);
+            painter.circle_filled(point, 4., color);
+            painter.text(point + egui::vec2(8., -5.), egui::Align2::LEFT_BOTTOM, &peer.name, egui::FontId::proportional(12.), color);
+        }
+        for id in &peer.selection {
+            let Ok(id) = id.parse::<u64>() else { continue; };
+            for shape in studio.doc.layers.iter().flat_map(|layer| layer.kind.shapes().unwrap_or_default()) {
+                if shape.id == id {
+                    let bounds = shape.world_bbox();
+                    painter.rect_stroke(egui::Rect::from_min_max(screen(bounds.min), screen(bounds.max)), 0., egui::Stroke::new(1., color), egui::StrokeKind::Outside);
+                }
+            }
+        }
     }
 }

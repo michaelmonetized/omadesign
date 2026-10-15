@@ -297,6 +297,10 @@ fn file_menu(ui: &mut Ui, studio: &mut Studio) {
             studio.show_cloud_projects();
             ui.close();
         }
+        if ui.button("Live collaboration…").clicked() {
+            studio.cloud_modal = crate::app::CloudModal::Live;
+            ui.close();
+        }
         if ui.button("Review cloud annotations…").clicked() {
             studio.refresh_cloud_review();
             ui.close();
@@ -333,7 +337,7 @@ fn edit_menu(ui: &mut Ui, studio: &mut Studio) {
                 if studio.persona == Persona::Photo {
                     studio.photo.can_undo()
                 } else {
-                    studio.history.can_undo()
+                    studio.can_undo()
                 },
                 Button::new("Undo").shortcut_text("Ctrl+Z"),
             )
@@ -347,7 +351,7 @@ fn edit_menu(ui: &mut Ui, studio: &mut Studio) {
                 if studio.persona == Persona::Photo {
                     studio.photo.can_redo()
                 } else {
-                    studio.history.can_redo()
+                    studio.can_redo()
                 },
                 Button::new("Redo").shortcut_text("Ctrl+Shift+Z"),
             )

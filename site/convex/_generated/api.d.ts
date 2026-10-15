@@ -15,6 +15,7 @@ import type * as crons from "../crons.js";
 import type * as devices from "../devices.js";
 import type * as files from "../files.js";
 import type * as http from "../http.js";
+import type * as live from "../live.js";
 import type * as mail from "../mail.js";
 import type * as projects from "../projects.js";
 import type * as review from "../review.js";
@@ -36,6 +37,7 @@ declare const fullApi: ApiFromModules<{
   devices: typeof devices;
   files: typeof files;
   http: typeof http;
+  live: typeof live;
   mail: typeof mail;
   projects: typeof projects;
   review: typeof review;
