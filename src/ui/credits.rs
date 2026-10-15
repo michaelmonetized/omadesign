@@ -143,7 +143,9 @@ pub(super) fn show(ui: &mut egui::Ui) {
         .ctx()
         .data(|d| d.get_temp::<String>(key))
         .unwrap_or_default();
-    ui.add(egui::TextEdit::singleline(&mut query).hint_text("Find a component or license"));
+    let label=ui.label("Find a component or license");
+    let response=ui.add(egui::TextEdit::singleline(&mut query).id(key.with("edit")).hint_text("Find a component or license"));
+    super::welcome::name_control(ui,&response,label.id,"Find a component or license");
     ui.ctx().data_mut(|d| d.insert_temp(key, query.clone()));
     let query = query.to_lowercase();
     for c in &data.components {
@@ -179,6 +181,54 @@ pub(super) fn show(ui: &mut egui::Ui) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn keyboard_pixel_fields_credits_filter_keeps_actual_text_focus_and_inventory() {
+        use crate::ui::welcome::keyboard_tests as keys;
+        use eframe::egui::{self, Event};
+        fn frame(ctx: &egui::Context, preceding: bool, events: Vec<Event>) -> egui::FullOutput {
+            keys::render(ctx, events, |ui| {
+                if preceding {
+                    let _ = ui.button("Conditional credits status");
+                }
+                super::show(ui);
+            })
+        }
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        crate::ui::theme::apply(&ctx);
+        let output = keys::tab_to(&ctx, "Find a component or license", |events| {
+            frame(&ctx, false, events)
+        });
+        let target = keys::named(&output, "Find a component or license").0;
+        keys::replace("tiny-skia", |events| frame(&ctx, false, events));
+        let output = frame(&ctx, true, vec![]);
+        assert_eq!(
+            keys::named(&output, "Find a component or license").0,
+            target
+        );
+        keys::focused(&ctx, &output, "Find a component or license");
+        assert_eq!(
+            ctx.data(|data| data.get_temp::<String>(egui::Id::new("credits-search")))
+                .as_deref(),
+            Some("tiny-skia")
+        );
+        let painted = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some(text.galley.job.text.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert!(painted.iter().any(|text| text.starts_with("tiny-skia ")));
+        assert!(!painted.iter().any(|text| text.starts_with("serde ")));
+        assert!(
+            super::inventory()
+                .components
+                .iter()
+                .any(|component| component.name == "serde")
+        );
+    }
     #[test]
     fn credits_inventory_matches_lockfile_and_retains_full_notices() {
         use sha2::{Digest, Sha256};

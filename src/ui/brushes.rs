@@ -90,32 +90,38 @@ pub(super) fn inspector(ui: &mut egui::Ui, studio: &mut Studio) {
         .map_or("Round brush", |b| b.name.as_str())
         .to_owned();
     let mut select = None;
-    egui::ComboBox::from_id_salt("brush-pack-picker")
+    let mut round=false;
+    let owner=egui::Id::new(("brush-preset-picker",&studio.swap_id,&studio.brushes.directory));
+    let label=ui.label("Brush preset");
+    let response=super::fields::native_scope(ui,owner,|ui|egui::ComboBox::from_id_salt("brush-pack-picker")
         .selected_text(name)
         .width(ui.available_width())
         .show_ui(ui, |ui| {
-            if ui
-                .selectable_label(studio.brushes.selected.is_none(), "Round brush")
+            if super::fields::native_scope(ui,owner.with("round"),|ui|ui.selectable_label(studio.brushes.selected.is_none(), "Round brush")).inner
                 .clicked()
             {
                 studio.end_pixel_stroke(false);
                 studio.brushes.selected = None;
+                round=true;
             }
             for (p, pack) in studio.brushes.packs.iter().enumerate() {
                 ui.label(egui::RichText::new(&pack.name).strong());
                 for (b, brush) in pack.brushes.iter().enumerate() {
-                    if ui
-                        .selectable_label(studio.brushes.selected == Some((p, b)), &brush.name)
+                    let response=super::fields::native_scope(ui,owner.with(("preset",p,b,Arc::as_ptr(&brush.tip))),|ui|ui.selectable_label(studio.brushes.selected == Some((p, b)), &brush.name)).inner;
+                    let response=super::agent::named(ui,response,&format!("Select {} brush {}",pack.name,brush.name));
+                    if response
                         .clicked()
                     {
                         select = Some((p, b));
                     }
                 }
             }
-        });
+        }).response).inner;
+    super::welcome::name_control(ui,&response,label.id,"Brush preset");
     if let Some((p, b)) = select {
         studio.select_brush(p, b);
     }
+    if select.is_some()||round { response.request_focus(); }
     ui.horizontal(|ui| {
         if ui.button("Import…").clicked() {
             studio.request_file_dialog(
@@ -287,11 +293,13 @@ pub(super) fn window(ctx: &egui::Context, studio: &mut Studio) {
                                     texture
                                 });
                                 ui.add(egui::Image::new(&texture).bg_fill(egui::Color32::WHITE));
-                                if ui
-                                    .selectable_label(
+                                let owner=egui::Id::new(("brush-library-preset",&studio.swap_id,&studio.brushes.directory,p,b,Arc::as_ptr(&preset.tip)));
+                                let response=super::fields::native_scope(ui,owner,|ui|ui.selectable_label(
                                         studio.brushes.selected == Some((p, b)),
                                         &preset.name,
-                                    )
+                                    )).inner;
+                                let response=super::agent::named(ui,response,&format!("Select {} brush {}",pack.name,preset.name));
+                                if response
                                     .clicked()
                                 {
                                     select = Some((p, b));
@@ -302,7 +310,8 @@ pub(super) fn window(ctx: &egui::Context, studio: &mut Studio) {
                     ui.separator();
                 }
                 for error in &studio.brushes.errors {
-                    ui.colored_label(egui::Color32::LIGHT_RED, error);
+                    let response=ui.colored_label(egui::Color32::LIGHT_RED, error);
+                    ctx.accesskit_node_builder(response.id,|node|{node.set_live(egui::accesskit::Live::Polite);node.set_live_atomic();});
                 }
             });
         });
@@ -317,6 +326,91 @@ pub(super) fn window(ctx: &egui::Context, studio: &mut Studio) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn keyboard_pixel_fields_brush_popup_selects_existing_preset_and_keeps_native_owner() {
+        use crate::ui::welcome::keyboard_tests as keys;
+        use egui::{Event, Key, Modifiers};
+        fn frame(
+            ctx: &egui::Context,
+            studio: &mut Studio,
+            preceding: bool,
+            events: Vec<Event>,
+        ) -> egui::FullOutput {
+            keys::render(ctx, events, |ui| {
+                ui.set_max_width(340.);
+                if preceding {
+                    let _ = ui.button("Conditional brush status");
+                }
+                inspector(ui, studio);
+            })
+        }
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        crate::ui::theme::apply(&ctx);
+        let mut studio = Studio::new();
+        let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(".artifacts")
+            .join(format!(
+                "keyboard-brush-read-only-{}",
+                crate::document::next_id()
+            ));
+        studio.brushes = crate::brushes::Library::load(directory);
+        studio.brushes.packs.truncate(1);
+        studio.brushes.packs[0].brushes.truncate(2);
+        let pack = &studio.brushes.packs[0];
+        let preset = pack.brushes[0].clone();
+        let purpose = format!("Select {} brush {}", pack.name, preset.name);
+        let before = crate::project::encode(&studio.doc).unwrap();
+        let history = studio.history.len();
+        let output = keys::tab_to(&ctx, "Brush preset", |events| {
+            frame(&ctx, &mut studio, false, events)
+        });
+        let target = keys::named(&output, "Brush preset").0;
+        frame(
+            &ctx,
+            &mut studio,
+            false,
+            keys::key(Key::Enter, Modifiers::NONE),
+        );
+        keys::tab_to(&ctx, &purpose, |events| {
+            frame(&ctx, &mut studio, false, events)
+        });
+        frame(
+            &ctx,
+            &mut studio,
+            false,
+            keys::key(Key::Enter, Modifiers::NONE),
+        );
+        let output = frame(&ctx, &mut studio, true, vec![]);
+        assert_eq!(studio.brushes.selected, Some((0, 0)));
+        assert_eq!(studio.brush.size, preset.size);
+        assert_eq!(studio.brush.spacing, preset.spacing);
+        assert_eq!(studio.brush.opacity, preset.opacity);
+        assert_eq!(keys::named(&output, "Brush preset").0, target);
+        keys::focused(&ctx, &output, "Brush preset");
+        studio.brush.size += 1.;
+        let output = frame(&ctx, &mut studio, true, vec![]);
+        assert_eq!(keys::named(&output, "Brush preset").0, target);
+        frame(
+            &ctx,
+            &mut studio,
+            true,
+            keys::key(Key::Enter, Modifiers::NONE),
+        );
+        keys::tab_to(&ctx, "Round brush", |events| {
+            frame(&ctx, &mut studio, true, events)
+        });
+        frame(
+            &ctx,
+            &mut studio,
+            true,
+            keys::key(Key::Enter, Modifiers::NONE),
+        );
+        assert!(studio.brushes.selected.is_none());
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+        assert_eq!(studio.history.len(), history);
+        assert!(studio.selection.is_empty());
+    }
     #[test]
     fn library_previews_render_and_reuse_textures_across_frames() {
         let ctx = egui::Context::default();

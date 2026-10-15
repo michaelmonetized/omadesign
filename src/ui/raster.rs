@@ -270,6 +270,44 @@ fn render_job(
     result
 }
 
+/// Name the existing filter banks and retain each native option's identity.
+/// Args: UI, layer owner and selected kind. Returns the actual native combo.
+fn kind_choice(ui: &mut Ui, owner: Id, kind: &mut Kind) -> egui::Response {
+    let before = *kind;
+    let label = ui.label("Raster filter or effect");
+    let response = super::fields::native_scope(ui, owner.with("kind"), |ui| {
+        egui::ComboBox::from_id_salt("raster-kind")
+            .selected_text(kind.name())
+            .width(255.0)
+            .show_ui(ui, |ui| {
+                for bank in [Bank::Filters, Bank::Effects] {
+                    ui.strong(if bank == Bank::Filters {
+                        "Filters"
+                    } else {
+                        "Effects"
+                    });
+                    for option in Kind::ALL.into_iter().filter(|option| option.bank() == bank) {
+                        let response = super::fields::native_scope(
+                            ui,
+                            owner.with(("choice", option as usize)),
+                            |ui| ui.selectable_value(kind, option, option.name()),
+                        )
+                        .inner;
+                        super::welcome::focus_control(ui, &response);
+                    }
+                    ui.separator();
+                }
+            })
+            .response
+    })
+    .inner;
+    if before != *kind {
+        response.request_focus();
+    }
+    super::welcome::name_control(ui, &response, label.id, "Raster filter or effect");
+    response
+}
+
 pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
     let ctx = ui.ctx().clone();
     let Some(mut session) = ctx.data(|d| d.get_temp::<Session>(state_id())) else {
@@ -315,6 +353,8 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
     }
     let mut close = false;
     let busy = session.apply_job.is_some();
+    let owner=Id::new(("raster-filter-native",&session.document,session.layer_id,session.mask));
+    let mut kind_control=None;
     let dialog = egui::Modal::new(Id::new("raster-filter-modal")).show(&ctx, |ui| {
         let width = (ctx.viewport_rect().width() - 70.0).clamp(560.0, 950.0);
         ui.set_width(width);
@@ -346,13 +386,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                     ui.set_width(275.0);
                     ui.add_enabled_ui(!busy, |ui| {
                         let before_kind = session.settings.kind;
-                        egui::ComboBox::from_id_salt("raster-kind").selected_text(session.settings.kind.name()).width(255.0).show_ui(ui, |ui| {
-                            for bank in [Bank::Filters, Bank::Effects] {
-                                ui.strong(if bank == Bank::Filters { "Filters" } else { "Effects" });
-                                for kind in Kind::ALL.into_iter().filter(|k| k.bank() == bank) { ui.selectable_value(&mut session.settings.kind, kind, kind.name()); }
-                                ui.separator();
-                            }
-                        });
+                        kind_control=Some(kind_choice(ui,owner,&mut session.settings.kind));
                         if before_kind != session.settings.kind { session.settings = Settings::new(session.settings.kind); session.sample = false; session.error = None; }
                         ui.small(session.settings.kind.description());
                         ui.add_space(8.0);
@@ -367,7 +401,11 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
             });
         });
         ui.separator();
-        if let Some(error) = &session.error { ui.colored_label(Color32::LIGHT_RED, error); }
+        if let Some(error) = &session.error {
+            let message=ui.colored_label(Color32::LIGHT_RED,error);
+            ctx.accesskit_node_builder(message.id,|node|{node.set_live(egui::accesskit::Live::Polite);node.set_live_atomic();});
+            if let Some(response)=&kind_control{ctx.accesskit_node_builder(response.id,|node|{node.set_error_message(message.id.accesskit_id());node.push_described_by(message.id.accesskit_id());});}
+        }
         ui.horizontal(|ui| {
             if ui.button("Cancel").clicked() { close = true; }
             if busy { ui.spinner(); ui.label("Applying at full resolution…"); }
@@ -619,6 +657,74 @@ fn commit(studio: &mut Studio, session: &Session, after: Vec<u8>) -> Result<(), 
 mod tests {
     use super::*;
     use crate::document::{Layer, Pixels};
+
+    #[test]
+    fn keyboard_pixel_fields_raster_kind_uses_native_options_and_keeps_owner() {
+        use crate::ui::welcome::keyboard_tests as keys;
+        use egui::{Event, Key, Modifiers};
+        fn frame(
+            ctx: &Context,
+            kind: &mut Kind,
+            preceding: bool,
+            enabled: bool,
+            events: Vec<Event>,
+        ) -> egui::FullOutput {
+            keys::render(ctx, events, |ui| {
+                if preceding {
+                    let _ = ui.button("Conditional raster status");
+                }
+                ui.add_enabled_ui(enabled, |ui| {
+                    kind_choice(ui, Id::new(("raster-native-field-fixture", 7u64)), kind)
+                });
+            })
+        }
+        let ctx = Context::default();
+        ctx.enable_accesskit();
+        crate::ui::theme::apply(&ctx);
+        let mut kind = Kind::ChromaKey;
+        let output = keys::tab_to(&ctx, "Raster filter or effect", |events| {
+            frame(&ctx, &mut kind, false, true, events)
+        });
+        let target = keys::named(&output, "Raster filter or effect").0;
+        let output = frame(&ctx, &mut kind, true, true, vec![]);
+        assert_eq!(keys::named(&output, "Raster filter or effect").0, target);
+        keys::focused(&ctx, &output, "Raster filter or effect");
+        frame(
+            &ctx,
+            &mut kind,
+            true,
+            true,
+            keys::key(Key::Enter, Modifiers::NONE),
+        );
+        keys::tab_to(&ctx, "Exposure / gamma", |events| {
+            frame(&ctx, &mut kind, true, true, events)
+        });
+        frame(
+            &ctx,
+            &mut kind,
+            true,
+            true,
+            keys::key(Key::Enter, Modifiers::NONE),
+        );
+        let output = frame(&ctx, &mut kind, true, true, vec![]);
+        assert_eq!(kind, Kind::Exposure);
+        assert_eq!(keys::named(&output, "Raster filter or effect").0, target);
+        keys::focused(&ctx, &output, "Raster filter or effect");
+        let output = frame(&ctx, &mut kind, true, false, vec![]);
+        assert!(
+            keys::named(&output, "Raster filter or effect")
+                .1
+                .is_disabled()
+        );
+        frame(
+            &ctx,
+            &mut kind,
+            true,
+            false,
+            keys::action(target, egui::accesskit::Action::Click, None),
+        );
+        assert_eq!(kind, Kind::Exposure);
+    }
     #[test]
     fn filter_preview_cancel_is_non_destructive_and_apply_undo_round_trips() {
         let ctx = Context::default();
