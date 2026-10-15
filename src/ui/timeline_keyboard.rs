@@ -15,7 +15,7 @@ const COLOR: &str = "Keyframe color (RGBA hex)";
 const EASE: &str = "Keyframe easing";
 const CONTROLS: [&str; 4] = ["Bezier X1", "Bezier Y1", "Bezier X2", "Bezier Y2"];
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Curve {
     Linear,
     In,

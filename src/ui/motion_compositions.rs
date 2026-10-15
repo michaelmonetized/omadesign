@@ -3,89 +3,129 @@ use crate::{app::Studio, motion::compositions::Composition};
 use eframe::egui::{self, Ui};
 
 pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
-    ui.menu_button("Compositions", |ui| {
-        if ui.button("Add project…").clicked()
-            && let Some(path) = rfd::FileDialog::new()
-                .add_filter("Motion project", &["oma", "omamotion"])
-                .pick_file()
-        {
-            let imported = if path.extension().is_some_and(|e| e == "omamotion") {
-                crate::motion::compositions::load_from(&path)
-            } else {
-                crate::project::load_from(&path)
-            };
-            match imported {
-                Ok(doc) => {
-                    let mut after = studio.doc.motion.clone();
-                    let comp = Composition::new(doc);
-                    after.duration = after.duration.max(comp.end);
-                    after.compositions.push(comp);
-                    let mut candidate = studio.doc.clone();
-                    candidate.motion = after.clone();
-                    match crate::motion::compositions::validate(&candidate) {
-                        Ok(()) => studio.commit_motion_step(after),
-                        Err(e) => studio.status = e,
-                    }
-                }
+    let owner = egui::Id::new(("motion-compositions", &studio.swap_id));
+    let menu = super::fields::native_scope(ui, owner, |ui| {
+        ui.menu_button("Compositions", |ui| {
+            ui.set_min_width(300.);
+            ui.set_max_width(420.);
+            egui::ScrollArea::vertical()
+                .max_height(600.)
+                .show(ui, |ui| controls(ui, studio));
+        })
+    })
+    .inner;
+    super::welcome::focus_control(ui, &menu.response);
+}
+
+/// Import the project returned by the existing native chooser.
+/// Args: studio and chosen project path. Returns no value; validation and discrete commit remain unchanged.
+fn import_project(studio: &mut Studio, path: &std::path::Path) {
+    let imported = if path.extension().is_some_and(|e| e == "omamotion") {
+        crate::motion::compositions::load_from(&path)
+    } else {
+        crate::project::load_from(&path)
+    };
+    match imported {
+        Ok(doc) => {
+            let mut after = studio.doc.motion.clone();
+            let comp = Composition::new(doc);
+            after.duration = after.duration.max(comp.end);
+            after.compositions.push(comp);
+            let mut candidate = studio.doc.clone();
+            candidate.motion = after.clone();
+            match crate::motion::compositions::validate(&candidate) {
+                Ok(()) => studio.commit_motion_step(after),
                 Err(e) => studio.status = e,
             }
         }
-        if ui.button("Export motion project…").clicked()
-            && let Some(path) = rfd::FileDialog::new()
-                .add_filter("Motion project", &["omamotion"])
-                .set_file_name(format!("{}.omamotion", studio.doc.name))
-                .save_file()
-        {
-            studio.status = match crate::motion::compositions::save_to(&studio.doc, &path)
-            {
-                Ok(()) => "Motion project saved".into(),
-                Err(e) => e,
-            };
-        }
+        Err(e) => studio.status = e,
+    }
+}
+
+/// Keep continuous composition properties in the accepted field scope.
+/// Args: existing menu UI and studio. Returns after the original typed validation/commit path.
+fn controls(ui: &mut Ui, studio: &mut Studio) {
+    if super::keyboard_controls::button(ui, "add-project", "Add project…").clicked()
+        && let Some(path) = rfd::FileDialog::new()
+            .add_filter("Motion project", &["oma", "omamotion"])
+            .pick_file()
+    {
+        import_project(studio, &path);
+    }
+    if super::keyboard_controls::button(ui, "export-project", "Export motion project…").clicked()
+        && let Some(path) = rfd::FileDialog::new()
+            .add_filter("Motion project", &["omamotion"])
+            .set_file_name(format!("{}.omamotion", studio.doc.name))
+            .save_file()
+    {
+        studio.status = match crate::motion::compositions::save_to(&studio.doc, &path) {
+            Ok(()) => "Motion project saved".into(),
+            Err(e) => e,
+        };
+    }
+    let mut action = None;
+    studio.with_field_history(ui, "composition-properties", |ui, studio| {
         let mut after = studio.doc.motion.clone();
         let mut changed = false;
+        let mut fields = Vec::new();
         let mut remove = None;
-        let mut action = None;
         for comp in &mut after.compositions {
-            ui.push_id(comp.id, |ui| {
-                ui.collapsing(comp.name.clone(), |ui| {
-                    changed |= ui.checkbox(&mut comp.visible, "Visible").changed();
-                    changed |= ui.text_edit_singleline(&mut comp.name).changed();
-                    for (name, value) in [
-                        ("Start", &mut comp.start),
-                        ("End", &mut comp.end),
-                        ("Source time", &mut comp.source_start),
-                        ("Speed", &mut comp.speed),
-                        ("X", &mut comp.position.x),
-                        ("Y", &mut comp.position.y),
-                        ("Anchor X", &mut comp.anchor.x),
-                        ("Anchor Y", &mut comp.anchor.y),
-                        ("Scale X", &mut comp.scale.x),
-                        ("Scale Y", &mut comp.scale.y),
-                        ("Opacity", &mut comp.opacity),
-                    ] {
-                        ui.horizontal(|ui| {
-                            ui.label(name);
-                            changed |= ui.add(egui::DragValue::new(value).speed(0.05)).changed();
-                        });
-                    }
-                    let mut degrees = comp.rotation.to_degrees();
-                    ui.horizontal(|ui| {
-                        ui.label("Rotate");
-                        if ui
-                            .add(egui::DragValue::new(&mut degrees).suffix("°"))
-                            .changed()
-                        {
+            let owner = egui::Id::new(("motion-composition", &studio.swap_id, comp.id));
+            super::fields::native_scope(ui, owner, |ui| {
+                let section = egui::CollapsingHeader::new(comp.name.clone())
+                    .id_salt("composition")
+                    .show(ui, |ui| {
+                        let visible = ui.checkbox(&mut comp.visible, "Visible");
+                        super::welcome::focus_control(ui, &visible);
+                        changed |= visible.changed();
+                        let name = ui.label("Composition name");
+                        let response = ui
+                            .add(egui::TextEdit::singleline(&mut comp.name).id(owner.with("name")));
+                        super::welcome::name_control(ui, &response, name.id, "Composition name");
+                        changed |= response.changed();
+                        for (name, value) in [
+                            ("Start", &mut comp.start),
+                            ("End", &mut comp.end),
+                            ("Source time", &mut comp.source_start),
+                            ("Speed", &mut comp.speed),
+                            ("X", &mut comp.position.x),
+                            ("Y", &mut comp.position.y),
+                            ("Anchor X", &mut comp.anchor.x),
+                            ("Anchor Y", &mut comp.anchor.y),
+                            ("Scale X", &mut comp.scale.x),
+                            ("Scale Y", &mut comp.scale.y),
+                            ("Opacity", &mut comp.opacity),
+                        ] {
+                            let purpose = format!("Composition {}", name.to_lowercase());
+                            let (field, _) = number(ui, name, &purpose, value, 0.05, "");
+                            changed |= field.changed;
+                            fields.push(field);
+                        }
+                        let mut degrees = comp.rotation.to_degrees();
+                        let (field, _) = number(
+                            ui,
+                            "rotation",
+                            "Composition rotation (°)",
+                            &mut degrees,
+                            1.,
+                            "°",
+                        );
+                        if field.changed {
                             comp.rotation = degrees.to_radians();
                             changed = true;
                         }
+                        fields.push(field);
+                        let looped = ui.checkbox(&mut comp.looped, "Loop source");
+                        super::welcome::focus_control(ui, &looped);
+                        changed |= looped.changed();
+                        animation_controls(ui, studio, comp, &mut action);
+                        if super::keyboard_controls::button(ui, "remove", "Remove composition")
+                            .clicked()
+                        {
+                            remove = Some(comp.id);
+                        }
                     });
-                    changed |= ui.checkbox(&mut comp.looped, "Loop source").changed();
-                    animation_controls(ui, studio, comp, &mut action);
-                    if ui.button("Remove composition").clicked() {
-                        remove = Some(comp.id);
-                    }
-                });
+                super::welcome::focus_control(ui, &section.header_response);
             });
         }
         if let Some(id) = remove {
@@ -93,6 +133,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
             after.drop_shape(id);
             changed = true;
         }
+        let mut accepted = true;
         if changed {
             after.duration = after
                 .compositions
@@ -102,20 +143,105 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
             let mut doc = studio.doc.clone();
             doc.motion = after.clone();
             match crate::motion::compositions::validate(&doc) {
-                Ok(()) => studio.commit_motion(after),
-                Err(e) => studio.status = e,
+                Ok(()) => {}
+                Err(e) => {
+                    let rejected = fields
+                        .iter()
+                        .filter(|field| field.changed)
+                        .map(|field| &field.response)
+                        .collect::<Vec<_>>();
+                    super::welcome::control_error(ui, &rejected, &e);
+                    studio.status = e;
+                    accepted = false;
+                }
             }
         }
-        if let Some(action) = action {
-            if let Err(error) = apply_edit(studio, action) {
-                studio.status = error;
-            }
+        for field in fields {
+            crate::app::input_history::record(field.response, accepted && field.changed);
+        }
+        if changed && accepted {
+            studio.commit_motion(after);
         }
     });
+    if let Some((action, fields)) = action {
+        let id = match &action {
+            Edit::Key { id, .. } | Edit::Expression { id, .. } | Edit::Remap { id, .. } => *id,
+        };
+        let key = action_error_key(studio, id);
+        match apply_edit(studio, action) {
+            Ok(()) => {
+                ui.data_mut(|data| data.remove::<ActionError>(key));
+                let draft_key = animation_draft_key(studio, id);
+                let remap_key = remap_draft_key(studio, id);
+                ui.data_mut(|data| {
+                    if let Some(mut draft) = data.get_temp::<AnimationDraft>(draft_key) {
+                        draft.generation = studio.canvas_gen;
+                        data.insert_temp(draft_key, draft);
+                    }
+                    if let Some(mut draft) = data.get_temp::<RemapDraft>(remap_key) {
+                        draft.generation = studio.canvas_gen;
+                        data.insert_temp(remap_key, draft);
+                    }
+                });
+            }
+            Err(error) => {
+                studio.status = error.clone();
+                ui.data_mut(|data| {
+                    data.insert_temp(
+                        key,
+                        ActionError {
+                            message: error,
+                            fields,
+                            revision: studio.canvas_gen,
+                        },
+                    )
+                });
+                ui.ctx().request_repaint();
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+struct ActionError {
+    message: String,
+    fields: Vec<egui::Id>,
+    revision: u64,
+}
+
+/// Identify a rejected explicit edit by its actual document and composition.
+/// Args: studio and persistent composition ID. Returns app-owned error identity without edited values.
+fn action_error_key(studio: &Studio, id: u64) -> egui::Id {
+    egui::Id::new(("composition-action-error", &studio.swap_id, id))
+}
+
+/// Decorate one existing f32 number while retaining its native step and unrestricted finite values.
+/// Args: UI, stable property, visible/native purpose, draft, original speed and suffix.
+/// Returns the authoritative response and owned validity; callers decide whether it is an artwork property.
+fn number(
+    ui: &mut Ui,
+    property: &str,
+    purpose: &str,
+    value: &mut f32,
+    speed: f64,
+    suffix: &str,
+) -> (super::fields::FieldResponse, bool) {
+    super::keyboard_controls::motion_number(
+        ui,
+        ui.make_persistent_id(property),
+        (purpose, purpose),
+        value,
+        -f32::MAX..=f32::MAX,
+        speed,
+        suffix,
+        None,
+    )
 }
 
 #[derive(Clone)]
 struct AnimationDraft {
+    generation: u64,
+    instance: egui::Id,
     property: crate::motion::Prop,
     value: f32,
     ease: crate::motion::Ease,
@@ -124,8 +250,16 @@ struct AnimationDraft {
 }
 
 impl AnimationDraft {
-    fn new(motion: &crate::motion::Motion, id: u64, time: f32) -> Self {
+    fn new(
+        motion: &crate::motion::Motion,
+        id: u64,
+        time: f32,
+        generation: u64,
+        instance: egui::Id,
+    ) -> Self {
         let mut draft = Self {
+            generation,
+            instance,
             property: crate::motion::Prop::X,
             value: 0.,
             ease: crate::motion::Ease::EaseInOut,
@@ -189,9 +323,13 @@ fn properties() -> [crate::motion::Prop; 7] {
     ]
 }
 
-fn easing(ui: &mut Ui, ease: &mut crate::motion::Ease) {
+/// Decorate the existing easing choice and four unrestricted native controls.
+/// Args: UI, draft curve and native purpose. Returns parser/model validity and actual control IDs.
+fn easing(ui: &mut Ui, ease: &mut crate::motion::Ease, purpose: &str) -> (bool, Vec<egui::Id>) {
     use crate::motion::Ease;
-    egui::ComboBox::from_id_salt("easing")
+    let label = ui.label(purpose);
+    let mut chosen = false;
+    let picker = egui::ComboBox::from_id_salt("easing")
         .selected_text(ease.name())
         .show_ui(ui, |ui| {
             for option in [
@@ -207,152 +345,337 @@ fn easing(ui: &mut Ui, ease: &mut crate::motion::Ease) {
                     y2: 1.,
                 },
             ] {
-                ui.selectable_value(ease, option, option.name());
+                let response = ui.selectable_value(ease, option, option.name());
+                super::welcome::focus_control(ui, &response);
+                chosen |= response.clicked();
             }
         });
+    if chosen {
+        picker.response.request_focus();
+    }
+    super::welcome::name_control(ui, &picker.response, label.id, purpose);
+    let mut ids = vec![picker.response.id];
+    let mut valid = true;
     if let Ease::CubicBezier { x1, y1, x2, y2 } = ease {
         for (label, value) in [("X1", x1), ("Y1", y1), ("X2", x2), ("Y2", y2)] {
-            ui.horizontal(|ui| {
-                ui.label(label);
-                ui.add(egui::DragValue::new(value).speed(0.01));
+            let (field, accepted) =
+                number(ui, label, &format!("{purpose} {label}"), value, 0.01, "");
+            ids.push(field.response.id);
+            valid &= accepted;
+        }
+    }
+    if !ease.valid() {
+        super::welcome::control_error(
+            ui,
+            &[&picker.response],
+            "Use finite curve controls within ±10000 and X controls from 0 to 1; Y overshoot is allowed",
+        );
+        valid = false;
+    }
+    (valid, ids)
+}
+
+/// Reveal one rejected explicit edit only while its concrete controls and revision remain current.
+/// Args: UI, studio and persistent composition. Returns no value and never changes document history.
+fn action_error(ui: &mut Ui, studio: &Studio, id: u64, group: &[egui::Id]) {
+    let key = action_error_key(studio, id);
+    if let Some(error) = ui.data(|data| data.get_temp::<ActionError>(key)) {
+        if error.revision != studio.canvas_gen {
+            ui.data_mut(|data| data.remove::<ActionError>(key));
+            return;
+        }
+        if !error.fields.iter().any(|id| group.contains(id)) {
+            return;
+        }
+        let responses = error
+            .fields
+            .iter()
+            .filter_map(|id| ui.ctx().read_response(*id))
+            .collect::<Vec<_>>();
+        if !responses.is_empty() {
+            ui.scope(|ui| {
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                super::welcome::control_error(
+                    ui,
+                    &responses.iter().collect::<Vec<_>>(),
+                    &error.message,
+                );
             });
         }
     }
 }
 
-fn animation_controls(ui: &mut Ui, studio: &Studio, comp: &Composition, action: &mut Option<Edit>) {
-    ui.collapsing("Animate", |ui| {
-        let key = ui.id().with("animation-draft");
+#[derive(Clone)]
+struct RemapDraft {
+    generation: u64,
+    instance: egui::Id,
+    value: f32,
+    ease: crate::motion::Ease,
+}
+
+/// Scope an animation draft to its concrete source owner.
+/// Args: studio and composition identity. Returns an app-owned key without edited values.
+fn animation_draft_key(studio: &Studio, id: u64) -> egui::Id {
+    egui::Id::new(("composition-animation-draft", &studio.swap_id, id))
+}
+
+/// Scope a source-time draft to the current parent key target.
+/// Args: studio and composition identity. Returns a key for this captured playhead target.
+fn remap_draft_key(studio: &Studio, id: u64) -> egui::Id {
+    egui::Id::new((
+        "composition-remap-draft",
+        &studio.swap_id,
+        id,
+        studio.playhead.to_bits(),
+    ))
+}
+
+fn animation_controls(
+    ui: &mut Ui,
+    studio: &Studio,
+    comp: &Composition,
+    action: &mut Option<(Edit, Vec<egui::Id>)>,
+) {
+    let section = ui.collapsing("Animate", |ui| {
+        let key = animation_draft_key(studio, comp.id);
         let mut draft = ui
-            .data(|d| d.get_temp::<AnimationDraft>(key))
-            .unwrap_or_else(|| AnimationDraft::new(&studio.doc.motion, comp.id, studio.playhead));
-        let previous = draft.property;
-        egui::ComboBox::from_id_salt("property")
-            .selected_text(draft.property.name())
-            .show_ui(ui, |ui| {
-                for prop in properties() {
-                    ui.selectable_value(&mut draft.property, prop, prop.name());
-                }
+            .data(|data| data.get_temp::<AnimationDraft>(key))
+            .filter(|draft| draft.generation == studio.canvas_gen)
+            .unwrap_or_else(|| {
+                AnimationDraft::new(
+                    &studio.doc.motion,
+                    comp.id,
+                    studio.playhead,
+                    studio.canvas_gen,
+                    super::keyboard_controls::draft_id(ui.ctx(), "composition-animation"),
+                )
             });
+        let previous = draft.property;
+        let options = properties()
+            .into_iter()
+            .map(|prop| (prop, prop.name().to_owned()))
+            .collect::<Vec<_>>();
+        let property = super::keyboard_controls::choice(
+            ui,
+            "property",
+            "Composition key property",
+            &mut draft.property,
+            &options,
+        );
         if previous != draft.property || draft.time != studio.playhead {
             draft.time = studio.playhead;
             draft.read(&studio.doc.motion, comp.id, previous != draft.property);
         }
-        ui.label(format!("Key at {:.3} s", studio.playhead));
-        ui.add(egui::DragValue::new(&mut draft.value).speed(0.1));
-        ui.label(match draft.property {
-            crate::motion::Prop::Rotation => "Rotation in degrees",
-            crate::motion::Prop::Opacity => "Opacity multiplier · 0–1",
-            crate::motion::Prop::Scale
-            | crate::motion::Prop::Width
-            | crate::motion::Prop::Height => "Scale multiplier",
-            _ => "Offset from composition position",
-        });
-        easing(ui, &mut draft.ease);
-        ui.horizontal(|ui| {
-            if ui.button("Set key").clicked() {
-                *action = Some(Edit::Key {
-                    id: comp.id,
-                    property: draft.property,
-                    value: draft.value,
-                    ease: draft.ease,
-                    remove: false,
-                });
+        let field_owner = ui.make_persistent_id((
+            "key-fields",
+            draft.instance,
+            draft.property,
+            studio.playhead.to_bits(),
+        ));
+        super::fields::native_scope(ui, field_owner, |ui| {
+            ui.label(format!("Key at {:.3} s", studio.playhead));
+            let (field, valid) = number(
+                ui,
+                "value",
+                "Composition key value",
+                &mut draft.value,
+                0.1,
+                "",
+            );
+            ui.label(match draft.property {
+                crate::motion::Prop::Rotation => "Rotation in degrees",
+                crate::motion::Prop::Opacity => "Opacity multiplier · 0–1",
+                crate::motion::Prop::Scale
+                | crate::motion::Prop::Width
+                | crate::motion::Prop::Height => "Scale multiplier",
+                _ => "Offset from composition position",
+            });
+            let (curve_valid, mut controls) = easing(ui, &mut draft.ease, "Composition key easing");
+            controls.push(field.response.id);
+            if field.response.changed() || property.changed() {
+                ui.data_mut(|data| data.remove::<ActionError>(action_error_key(studio, comp.id)));
             }
-            if ui.button("Remove key").clicked() {
-                *action = Some(Edit::Key {
-                    id: comp.id,
-                    property: draft.property,
-                    value: draft.value,
-                    ease: draft.ease,
-                    remove: true,
-                });
-            }
+            ui.horizontal(|ui| {
+                if ui
+                    .add_enabled_ui(valid && curve_valid, |ui| {
+                        super::keyboard_controls::button(ui, "set-key", "Set key")
+                    })
+                    .inner
+                    .clicked()
+                {
+                    *action = Some((
+                        Edit::Key {
+                            id: comp.id,
+                            property: draft.property,
+                            value: draft.value,
+                            ease: draft.ease,
+                            remove: false,
+                        },
+                        controls.clone(),
+                    ));
+                }
+                let remove = super::keyboard_controls::button(ui, "remove-key", "Remove key");
+                controls.push(remove.id);
+                if remove.clicked() {
+                    *action = Some((
+                        Edit::Key {
+                            id: comp.id,
+                            property: draft.property,
+                            value: draft.value,
+                            ease: draft.ease,
+                            remove: true,
+                        },
+                        vec![remove.id],
+                    ));
+                }
+            });
+            action_error(ui, studio, comp.id, &controls);
         });
         ui.separator();
-        ui.label("Expression");
-        ui.add(
+        let label = ui.label("Expression");
+        let expression_owner = egui::Id::new((
+            "composition-expression",
+            &studio.swap_id,
+            comp.id,
+            draft.property,
+            draft.instance,
+        ));
+        let source = ui.add(
             egui::TextEdit::multiline(&mut draft.source)
+                .id(expression_owner)
                 .code_editor()
                 .desired_rows(3)
                 .hint_text("value + sin(time * tau) * 40"),
         );
+        super::welcome::name_control(ui, &source, label.id, "Composition expression");
+        if source.changed() {
+            let error = action_error_key(studio, comp.id);
+            ui.data_mut(|data| data.remove::<ActionError>(error));
+        }
         ui.label("time in seconds · expression rotation in radians");
+        let mut expression_controls = vec![source.id];
         ui.horizontal(|ui| {
-            if ui.button("Apply expression").clicked() {
-                *action = Some(Edit::Expression {
-                    id: comp.id,
-                    property: draft.property,
-                    source: Some(draft.source.clone()),
-                });
+            if super::keyboard_controls::button(ui, "apply-expression", "Apply expression")
+                .clicked()
+            {
+                *action = Some((
+                    Edit::Expression {
+                        id: comp.id,
+                        property: draft.property,
+                        source: Some(draft.source.clone()),
+                    },
+                    vec![source.id],
+                ));
             }
-            if ui.button("Remove expression").clicked() {
-                *action = Some(Edit::Expression {
-                    id: comp.id,
-                    property: draft.property,
-                    source: None,
-                });
+            let remove =
+                super::keyboard_controls::button(ui, "remove-expression", "Remove expression");
+            expression_controls.push(remove.id);
+            if remove.clicked() {
+                *action = Some((
+                    Edit::Expression {
+                        id: comp.id,
+                        property: draft.property,
+                        source: None,
+                    },
+                    vec![remove.id],
+                ));
                 draft.source.clear();
             }
         });
+        action_error(ui, studio, comp.id, &expression_controls);
         if let Err(error) = studio
             .doc
             .motion
             .evaluate_frame(studio.playhead, &mut || true)
         {
-            ui.colored_label(egui::Color32::LIGHT_RED, error.to_string());
+            let message = ui.colored_label(egui::Color32::LIGHT_RED, error.to_string());
+            ui.ctx().accesskit_node_builder(message.id, |node| {
+                node.set_live(egui::accesskit::Live::Polite);
+                node.set_live_atomic();
+            });
         }
-        ui.data_mut(|d| d.insert_temp(key, draft));
+        ui.data_mut(|data| data.insert_temp(key, draft));
     });
-    ui.collapsing("Time remapping", |ui| {
-        let key = ui.id().with("source-time");
-        let mut value = ui.data(|d| d.get_temp::<f32>(key)).unwrap_or_else(|| {
-            comp.local_time(studio.playhead)
-                .unwrap_or(comp.source_start)
-        });
-        ui.label(format!("Parent time {:.3} s", studio.playhead));
-        ui.horizontal(|ui| {
-            ui.label("Source seconds");
-            ui.add(egui::DragValue::new(&mut value).speed(0.05));
-        });
-        ui.data_mut(|d| d.insert_temp(key, value));
-        let ease_key = ui.id().with("remap-ease");
-        let mut ease = ui
-            .data(|d| d.get_temp::<crate::motion::Ease>(ease_key))
-            .unwrap_or(crate::motion::Ease::Linear);
-        easing(ui, &mut ease);
-        ui.data_mut(|d| d.insert_temp(ease_key, ease));
-        ui.horizontal(|ui| {
-            for (label, remove, clear) in [
-                ("Set source key", false, false),
-                ("Remove source key", true, false),
-                ("Clear remapping", false, true),
-            ] {
-                if ui.button(label).clicked() {
-                    *action = Some(Edit::Remap {
-                        id: comp.id,
-                        value,
-                        ease,
-                        remove,
-                        clear,
-                    });
-                }
+    super::welcome::focus_control(ui, &section.header_response);
+    let section = ui.collapsing("Time remapping", |ui| {
+        let key = remap_draft_key(studio, comp.id);
+        let mut draft = ui
+            .data(|data| data.get_temp::<RemapDraft>(key))
+            .filter(|draft| draft.generation == studio.canvas_gen)
+            .unwrap_or_else(|| RemapDraft {
+                generation: studio.canvas_gen,
+                instance: super::keyboard_controls::draft_id(ui.ctx(), "composition-remap"),
+                value: comp
+                    .local_time(studio.playhead)
+                    .unwrap_or(comp.source_start),
+                ease: crate::motion::Ease::Linear,
+            });
+        super::fields::native_scope(ui, draft.instance.with("fields"), |ui| {
+            ui.label(format!("Parent time {:.3} s", studio.playhead));
+            let (field, valid) = number(
+                ui,
+                "source-seconds",
+                "Composition source seconds",
+                &mut draft.value,
+                0.05,
+                "",
+            );
+            let (curve_valid, mut fields) =
+                easing(ui, &mut draft.ease, "Composition source easing");
+            fields.push(field.response.id);
+            if field.response.changed() {
+                let error = action_error_key(studio, comp.id);
+                ui.data_mut(|data| data.remove::<ActionError>(error));
             }
-        });
-        ui.label(format!("{} source-time keys", comp.time_remap.len()));
-        egui::ScrollArea::vertical()
-            .max_height(120.)
-            .show(ui, |ui| {
-                for k in &comp.time_remap {
-                    ui.label(format!(
-                        "{:.3} s → {:.3} s · {}",
-                        k.t,
-                        k.value,
-                        k.ease.name()
-                    ));
+            ui.horizontal(|ui| {
+                for (label, remove, clear) in [
+                    ("Set source key", false, false),
+                    ("Remove source key", true, false),
+                    ("Clear remapping", false, true),
+                ] {
+                    let response = ui
+                        .add_enabled_ui(remove || clear || (valid && curve_valid), |ui| {
+                            super::keyboard_controls::button(ui, label, label)
+                        })
+                        .inner;
+                    fields.push(response.id);
+                    if response.clicked() {
+                        *action = Some((
+                            Edit::Remap {
+                                id: comp.id,
+                                value: draft.value,
+                                ease: draft.ease,
+                                remove,
+                                clear,
+                            },
+                            if remove || clear {
+                                vec![response.id]
+                            } else {
+                                fields.clone()
+                            },
+                        ));
+                    }
                 }
             });
+            action_error(ui, studio, comp.id, &fields);
+            ui.data_mut(|data| data.insert_temp(key, draft));
+            ui.label(format!("{} source-time keys", comp.time_remap.len()));
+            egui::ScrollArea::vertical()
+                .id_salt("source-time-keys")
+                .max_height(120.)
+                .show(ui, |ui| {
+                    for key in &comp.time_remap {
+                        ui.label(format!(
+                            "{:.3} s → {:.3} s · {}",
+                            key.t,
+                            key.value,
+                            key.ease.name()
+                        ));
+                    }
+                });
+        });
     });
+    super::welcome::focus_control(ui, &section.header_response);
 }
 
 /// Apply one explicit composition animation edit.
@@ -630,5 +953,259 @@ mod tests {
             assert_eq!(studio.history.len(), 0);
             assert_eq!(studio.canvas_gen, revision);
         }
+    }
+}
+
+#[cfg(test)]
+mod keyboard_tests {
+    use super::*;
+    use crate::{
+        document::{Document, Layer},
+        geom::Pt,
+        motion::{Ease, Prop},
+        ui::welcome::keyboard_tests as keys,
+    };
+    use egui::{Event, Key, Modifiers};
+
+    struct Native {
+        root: std::path::PathBuf,
+        ctx: egui::Context,
+        studio: Studio,
+        id: u64,
+    }
+
+    impl Native {
+        fn new() -> Self {
+            let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join(".artifacts")
+                .join(format!(
+                    "keyboard-composition-{}-{}",
+                    std::process::id(),
+                    crate::document::next_id()
+                ));
+            std::fs::create_dir_all(&root).unwrap();
+            let mut source = Document::new("Imported artwork", 16., 16., 96.);
+            source.layers.clear();
+            source.artboards.clear();
+            source.artboardless = true;
+            source.transparent = true;
+            let mut layer = Layer::vector("Native source artwork");
+            layer
+                .kind
+                .shapes_mut()
+                .unwrap()
+                .push(crate::layout::make_frame(Pt::new(1., 1.), Pt::splat(4.)));
+            source.layers.push(layer);
+            let path = root.join("source.oma");
+            crate::project::save_to(&source, &path).unwrap();
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            crate::ui::theme::apply(&ctx);
+            let mut studio = Studio::new();
+            studio.doc = Document::new("Native composition", 48., 32., 96.);
+            studio.doc.layers.clear();
+            studio.doc.artboards.clear();
+            studio.doc.artboardless = true;
+            studio.doc.transparent = true;
+            studio.persona = crate::tools::Persona::Motion;
+            studio.show_welcome = false;
+            assert!(studio.selection.is_empty());
+            assert!(studio.doc.motion.compositions.is_empty());
+            let mut f = Self {
+                root,
+                ctx,
+                studio,
+                id: 0,
+            };
+            f.frame(false, vec![]);
+            f.press("Compositions");
+            let ctx = f.ctx.clone();
+            let output = keys::tab_to(&ctx, "Add project…", |events| f.frame(false, events));
+            keys::focused(&ctx, &output, "Add project…");
+            import_project(&mut f.studio, &path);
+            assert_eq!(f.studio.history.len(), 1);
+            assert_eq!(f.studio.doc.motion.compositions.len(), 1);
+            assert!(f.studio.selection.is_empty());
+            f.id = f.studio.doc.motion.compositions[0].id;
+            f.frame(false, vec![]);
+            f.press("Imported artwork");
+            f
+        }
+        fn frame(&mut self, preceding: bool, events: Vec<Event>) -> egui::FullOutput {
+            let ctx = self.ctx.clone();
+            keys::render(&ctx, events, |ui| {
+                if preceding {
+                    ui.label("Conditional native status");
+                    let _ = ui.button("Conditional action");
+                }
+                self.studio.handle_shortcuts(ui.ctx());
+                egui::Panel::bottom("native-composition-timeline")
+                    .exact_size(350.)
+                    .show(ui, |ui| crate::ui::timeline::content(ui, &mut self.studio));
+                crate::ui::canvas::show(ui, &mut self.studio);
+            })
+        }
+        fn press(&mut self, label: &str) -> egui::FullOutput {
+            let ctx = self.ctx.clone();
+            keys::tab_to(&ctx, label, |events| self.frame(false, events));
+            self.frame(false, keys::key(Key::Enter, Modifiers::NONE));
+            self.frame(false, vec![])
+        }
+        fn text(&mut self, label: &str, value: &str) -> egui::FullOutput {
+            let ctx = self.ctx.clone();
+            keys::tab_to(&ctx, label, |events| self.frame(false, events));
+            keys::replace(value, |events| self.frame(false, events));
+            self.frame(false, vec![])
+        }
+        fn close(&mut self) {
+            for _ in 0..4 {
+                if !egui::Popup::is_any_open(&self.ctx) {
+                    break;
+                }
+                self.frame(false, keys::key(Key::Escape, Modifiers::NONE));
+                self.frame(false, vec![]);
+            }
+            assert!(!egui::Popup::is_any_open(&self.ctx));
+            self.frame(false, keys::key(Key::F8, Modifiers::NONE));
+            self.frame(false, vec![]);
+        }
+    }
+    impl Drop for Native {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    #[test]
+    fn keyboard_composition_imported_native_fields_keys_expressions_remap_undo_and_reopen() {
+        let mut f = Native::new();
+        let output = f.frame(false, vec![]);
+        let x = keys::named(&output, "Composition x").0;
+        f.text("Composition name", "Renamed native source");
+        let output = f.frame(true, vec![]);
+        assert_eq!(keys::named(&output, "Composition x").0, x);
+        f.text("Composition x", "1.25");
+        assert_eq!(f.studio.doc.motion.compositions[0].position.x, 1.25);
+        f.press("Animate");
+        let before = f.studio.doc.motion.clone();
+        f.text("Composition key value", "12.125");
+        assert_eq!(
+            f.studio.doc.motion, before,
+            "An animation draft cannot commit before Set key"
+        );
+        f.press("Set key");
+        assert_eq!(
+            f.studio
+                .doc
+                .motion
+                .tracks
+                .iter()
+                .find(|track| track.shape == f.id && track.prop == Prop::X)
+                .unwrap()
+                .keys[0]
+                .value,
+            12.125
+        );
+        f.text("Composition expression", "sin(");
+        let before = f.studio.doc.motion.clone();
+        f.press("Apply expression");
+        let output = f.frame(false, vec![]);
+        keys::associated_error(&output, "Composition expression");
+        assert_eq!(f.studio.doc.motion, before);
+        f.text("Composition expression", "value + time * 2");
+        f.press("Apply expression");
+        assert_eq!(
+            f.studio
+                .doc
+                .motion
+                .expressions
+                .iter()
+                .find(|expression| expression.shape == f.id && expression.prop == Prop::X)
+                .unwrap()
+                .source,
+            "value + time * 2"
+        );
+        f.press("Time remapping");
+        f.text("Composition source seconds", "0.25");
+        f.press("Composition source easing");
+        f.press("Hold");
+        let before = f.studio.doc.motion.clone();
+        f.press("Set source key");
+        let key = &f.studio.doc.motion.compositions[0].time_remap[0];
+        assert_eq!(key.value, 0.25);
+        assert_eq!(key.ease, Ease::Hold);
+        let authored = f.studio.doc.motion.clone();
+        let path = f.root.join("authored.omamotion");
+        crate::motion::compositions::save_to(&f.studio.doc, &path).unwrap();
+        assert_eq!(
+            crate::motion::compositions::load_from(&path)
+                .unwrap()
+                .motion,
+            authored
+        );
+        let path = f.root.join("authored.oma");
+        crate::project::save_to(&f.studio.doc, &path).unwrap();
+        assert_eq!(
+            crate::project::encode(&crate::project::load_from(&path).unwrap()).unwrap(),
+            crate::project::encode(&f.studio.doc).unwrap()
+        );
+        f.close();
+        f.frame(
+            false,
+            keys::key(Key::Z, Modifiers::CTRL | Modifiers::COMMAND),
+        );
+        assert_eq!(f.studio.doc.motion, before);
+        f.frame(
+            false,
+            keys::key(
+                Key::Z,
+                Modifiers::CTRL | Modifiers::COMMAND | Modifiers::SHIFT,
+            ),
+        );
+        assert_eq!(f.studio.doc.motion, authored);
+        assert!(f.studio.selection.is_empty());
+    }
+
+    #[test]
+    fn keyboard_composition_invalid_native_drafts_and_external_revisions_do_not_cross_owners() {
+        let mut f = Native::new();
+        let before = f.studio.doc.motion.clone();
+        let output = f.text("Composition start", "-");
+        keys::associated_error(&output, "Composition start");
+        assert_eq!(f.studio.doc.motion, before);
+        f.text("Composition start", "0");
+        f.press("Animate");
+        let output = f.text("Composition key value", "-");
+        keys::associated_error(&output, "Composition key value");
+        assert!(keys::named(&output, "Set key").1.is_disabled());
+        assert_eq!(f.studio.doc.motion, before);
+        let output = f.text("Composition key value", "25");
+        let old = keys::named(&output, "Composition key value").0;
+        assert!(!keys::named(&output, "Set key").1.is_disabled());
+        assert_eq!(f.studio.doc.motion, before);
+        let mut external = f.studio.doc.motion.clone();
+        external.looped = !external.looped;
+        f.studio.commit_motion_step(external.clone());
+        let output = f.frame(false, vec![]);
+        let current = keys::named(&output, "Composition key value");
+        assert_ne!(current.0, old);
+        assert_eq!(current.1.numeric_value(), Some(0.));
+        assert_eq!(f.studio.doc.motion, external);
+        let action = keys::named(&output, "Set key").0;
+        f.studio.updates.freezing = true;
+        f.frame(
+            false,
+            keys::action(action, egui::accesskit::Action::Click, None),
+        );
+        assert_eq!(f.studio.doc.motion, external);
+        f.studio.updates.freezing = false;
+        f.studio.swap_id.push_str("-reopened-document");
+        f.frame(false, vec![]);
+        f.press("Compositions");
+        f.press("Imported artwork");
+        f.press("Animate");
+        let output = f.frame(false, vec![]);
+        assert_ne!(keys::named(&output, "Composition key value").0, current.0);
+        assert_eq!(f.studio.doc.motion, external);
     }
 }
