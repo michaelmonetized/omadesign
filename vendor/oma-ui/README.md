@@ -34,6 +34,9 @@ when earlier conditional rows change. It uses egui 0.36's absolute child scope
 and egui 0.32's public Ui constructor with inherited presentation and allocation.
 It is for native controls; the application retains their precision and behavior.
 Fields and panel tabs share this small adapter in `native_scope.rs`.
+Error associations use the public native ID value on both versions. Numeric
+focus uses each version's supported focus lock; the explicit pending-direction
+reset is enabled only on egui 0.36, which exposes that public API.
 
 `fields::number` accepts a stable ID, units, optional reset and mixed/locked/error
 state. It returns change/focus/commit/cancel signals; applications decide when to

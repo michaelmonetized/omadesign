@@ -60,6 +60,7 @@ pub fn number<N: egui::emath::Numeric>(
     let key = ui.make_persistent_id(id);
     let draft_key = key.with("invalid-native-number");
     let attempted = RefCell::new(None);
+    #[cfg(not(feature = "oma-ui-egui032"))]
     let arrow_step = ui.input(|input| input.events.iter().any(|event| matches!(event,
         egui::Event::Key { key: egui::Key::ArrowUp | egui::Key::ArrowDown, pressed: true, modifiers, .. }
             if !modifiers.any())));
@@ -185,8 +186,8 @@ pub fn number<N: egui::emath::Numeric>(
                 ui.ctx().accesskit_node_builder(response.id, |node| {
                     node.set_invalid(egui::accesskit::Invalid::True);
                     node.clear_numeric_value();
-                    node.set_error_message(error.id.accesskit_id());
-                    node.push_described_by(error.id.accesskit_id());
+                    node.set_error_message(egui::accesskit::NodeId(error.id.value()));
+                    node.push_described_by(egui::accesskit::NodeId(error.id.value()));
                 });
             }
             if response.has_focus() {
@@ -200,6 +201,7 @@ pub fn number<N: egui::emath::Numeric>(
                             escape: false,
                         },
                     );
+                    #[cfg(not(feature = "oma-ui-egui032"))]
                     if arrow_step {
                         memory.move_focus(egui::FocusDirection::None);
                     }
