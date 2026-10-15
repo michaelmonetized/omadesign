@@ -7,6 +7,7 @@ mod codec;
 pub mod descriptor;
 mod effects;
 mod engine_data;
+pub mod smart;
 pub mod type_layer;
 
 use crate::color::Blend;
@@ -146,6 +147,21 @@ pub fn decode(bytes: &[u8], name: &str) -> Result<PsdImport, String> {
             "Untagged CMYK retains original ink coverage. Its preview uses an uncalibrated device formula; assign an ICC profile for qualified color conversion.",
         );
     }
+    let mut linked = std::collections::HashMap::new();
+    for file in parsed.linked {
+        let id = if let Some(bytes) = file.bytes {
+            let format = std::path::Path::new(&file.name)
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("data");
+            let source =
+                crate::source_attachment::SourceAttachment::new(&file.name, format, bytes)?;
+            Some(doc.retain_source(source))
+        } else {
+            None
+        };
+        linked.insert(file.id, (id, file.external));
+    }
     let mut stack: Vec<Layer> = Vec::new();
     let mut clipping: Vec<u64> = Vec::new();
     for record in parsed.layers {
@@ -199,6 +215,42 @@ pub fn decode(bytes: &[u8], name: &str) -> Result<PsdImport, String> {
                     &mut warnings,
                     format!(
                         "PSD text '{}' uses saved pixels because its editable type record could not be read: {error}",
+                        record.name
+                    ),
+                ),
+            }
+        }
+        if let Some((key, data)) = &record.smart_data {
+            match smart::decode(*key, data, &layer, None, &mut warnings) {
+                Ok(mut smart) => {
+                    smart.retained_blocks = record.smart_blocks.clone();
+                    if !smart.retained_blocks.is_empty() {
+                        warn(&mut warnings, "Photoshop smart-filter masks are retained for export with the saved preview; native recomputation requires disabling those filters.");
+                    }
+                    let psd_id = smart
+                        .descriptor
+                        .get("Idnt")
+                        .and_then(descriptor::Value::text)
+                        .unwrap_or("");
+                    if let Some((source, external)) = linked.get(psd_id) {
+                        layer.source_attachment = source.clone();
+                        smart.external_link = external.clone();
+                    }
+                    if layer.source_attachment.is_none() {
+                        warn(
+                            &mut warnings,
+                            format!(
+                                "Smart object '{}' has no embedded source. Saved pixels, placement and filters are retained; use Replace source to relink the original.",
+                                record.name
+                            ),
+                        );
+                    }
+                    layer.psd_smart = Some(smart);
+                }
+                Err(error) => warn(
+                    &mut warnings,
+                    format!(
+                        "Smart object '{}' uses its saved pixels because editable placement data could not be read: {error}",
                         record.name
                     ),
                 ),

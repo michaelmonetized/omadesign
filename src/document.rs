@@ -818,8 +818,12 @@ impl LayerKind {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Layer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub psd_smart: Option<crate::formats::psd::smart::SmartObject>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub psd_type: Option<crate::formats::psd::type_layer::TypeData>,
     pub id: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_attachment: Option<String>,
     pub name: String,
     pub visible: bool,
     pub locked: bool,
@@ -865,6 +869,7 @@ impl Layer {
     pub fn vector(name: impl Into<String>) -> Self {
         Self {
             id: next_id(),
+            source_attachment: None,
             name: name.into(),
             visible: true,
             locked: false,
@@ -876,6 +881,7 @@ impl Layer {
             is_group: false,
             pass_through: false,
             psd_type: None,
+            psd_smart:None,
             text_wrap: Default::default(),
             mask: None,
             artwork_masks: Vec::new(),
@@ -900,6 +906,7 @@ impl Layer {
     pub fn placed_raster(name: impl Into<String>, pixels: Pixels, origin: Pt, size: Pt) -> Self {
         Self {
             id: next_id(),
+            source_attachment: None,
             name: name.into(),
             visible: true,
             locked: false,
@@ -911,6 +918,7 @@ impl Layer {
             is_group: false,
             pass_through: false,
             psd_type:None,
+            psd_smart:None,
             text_wrap: Default::default(),
             mask: None,
             artwork_masks: Vec::new(),
@@ -1228,6 +1236,8 @@ pub struct Document {
     /// Conversion changes stay with the saved project for later inspection.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub import_notes: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sources: Vec<crate::source_attachment::SourceAttachment>,
     pub guides: Vec<Guide>,
     #[serde(default)]
     pub ruler: RulerSettings,
@@ -1257,6 +1267,38 @@ pub struct Document {
 }
 
 impl Document {
+    /// Retain original format data once for all referencing objects.
+    /// Args: source attachment. Returns its stable UUID.
+    pub fn retain_source(&mut self, source: crate::source_attachment::SourceAttachment) -> String {
+        let id = source.id.clone();
+        if self.source(&id).is_none() { self.sources.push(source); }
+        id
+    }
+
+    /// Find the original data referenced by an imported object.
+    /// Args: attachment UUID. Returns the retained source if present.
+    pub fn source(&self, id: &str) -> Option<&crate::source_attachment::SourceAttachment> {
+        self.sources.iter().find(|s| s.id == id)
+    }
+
+    /// Validate retained original data and object references.
+    /// Args: none. Returns an error for damaged, duplicate, missing or oversized sources.
+    pub fn validate_sources(&self) -> Result<(), String> {
+        let mut bytes = 0usize;
+        let mut ids = std::collections::HashSet::new();
+        for source in &self.sources {
+            source.validate()?;
+            bytes = bytes.checked_add(source.bytes().len()).ok_or("Retained sources exceed 512 MiB")?;
+            if bytes > 512 * 1024 * 1024 { return Err("Retained sources exceed 512 MiB".into()); }
+            if !ids.insert(&source.id) { return Err("Duplicate retained source UUID".into()); }
+        }
+        for layer in &self.layers {
+            if let Some(id) = &layer.source_attachment && self.source(id).is_none() {
+                return Err(format!("Layer {} references a missing original source", layer.name));
+            }
+        }
+        Ok(())
+    }
     /// Editing layout needs vector state only. Preserve layer indices without
     /// copying image buffers or mask data into temporary solver documents.
     pub fn layout_snapshot(&self) -> Self {
@@ -1414,6 +1456,7 @@ impl Document {
             dpi,
             layers: vec![background, Layer::vector("Layer 1")],
             import_notes: vec![],
+            sources: vec![],
             guides: vec![],
             ruler: RulerSettings::default(),
             grid: Grid::default(),
@@ -1732,6 +1775,7 @@ impl RasterState {
 
 #[derive(Clone, Debug)]
 pub enum Cmd {
+    SetSmartLayer {index:usize,before:Box<Layer>,after:Box<Layer>},
     SetDocumentColor {
         before: crate::deep_color::cms::DocumentColor,
         after: crate::deep_color::cms::DocumentColor,
@@ -1766,6 +1810,10 @@ pub enum Cmd {
     SetImportNotes {
         before: Vec<String>,
         after: Vec<String>,
+    },
+    SetSources {
+        before: Vec<crate::source_attachment::SourceAttachment>,
+        after: Vec<crate::source_attachment::SourceAttachment>,
     },
     SetGroupPassThrough {
         index: usize,
@@ -2212,6 +2260,7 @@ fn coalesce(prev: &mut Cmd, next: &Cmd) -> bool {
 
 pub(crate) fn invert_cmd(cmd: Cmd) -> Cmd {
     match cmd {
+        Cmd::SetSmartLayer{index,before,after}=>Cmd::SetSmartLayer{index,before:after,after:before},
         Cmd::SetDocumentColor { before, after } => Cmd::SetDocumentColor {
             before: after,
             after: before,
@@ -2266,6 +2315,7 @@ pub(crate) fn invert_cmd(cmd: Cmd) -> Cmd {
             before: after,
             after: before,
         },
+        Cmd::SetSources { before, after } => Cmd::SetSources { before: after, after: before },
         Cmd::SetGroupPassThrough {
             index,
             before,
@@ -2587,6 +2637,7 @@ pub(crate) fn invert_cmd(cmd: Cmd) -> Cmd {
 
 pub fn apply(doc: &mut Document, cmd: &Cmd) {
     match cmd {
+        Cmd::SetSmartLayer{index,after,..}=>{if let Some(layer)=doc.layers.get_mut(*index){*layer=(**after).clone();}}
         Cmd::SetDocumentColor { after, .. } => doc.color = after.clone(),
         Cmd::SetCanvas { after, .. } => {
             doc.name = after.name.clone();
@@ -2630,6 +2681,7 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
             }
         }
         Cmd::SetImportNotes { after, .. } => doc.import_notes = after.clone(),
+        Cmd::SetSources { after, .. } => doc.sources = after.clone(),
         Cmd::SetGroupPassThrough { index, after, .. } => {
             if let Some(layer) = doc.layers.get_mut(*index) {
                 layer.pass_through = *after;

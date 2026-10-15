@@ -156,3 +156,25 @@ Photoshop parameters but use horizontal, unwarped native previews. Native path/S
 positioning exports as editable Photoshop point text with an explicit note. Saved
 pixels remain the fallback when a type descriptor cannot be parsed. These limits
 are separate from the independent editable horizontal type acceptance fixture.
+
+### Placed PSD sources and smart filters
+
+SoLd/SoLE and legacy PlLd records retain their source association, full perspective
+quad and complete Photoshop descriptor. Embedded lnk2/lnk3/lnkD sources use the
+shared immutable SourceAttachment store once. Linked source descriptors and missing
+source state survive .oma and PSD export; no linked path is followed automatically.
+
+The raster inspector can make a placed source, edit a separate PSD source copy,
+reload that edited source, replace/relink the source, adjust/toggle supported smart
+filters, and rasterize explicitly. Each replacement/filter change is one undo step;
+previous original bytes remain recoverable. Native moves, scales, rotations and
+shears update the exported placed-object quad. Perspective preview recomputation
+samples native floating-point source pixels. Gaussian blur, motion blur,
+brightness/contrast and invert have native filter mappings. Their parameters and
+unknown filter descriptors remain standard Photoshop data in exported files.
+
+An unsupported active filter or warp keeps the imported saved preview and gives
+an explicit explanation before native recomputation. Missing external sources can
+be relinked without discarding their stored placement/filter parameters. Native
+source editing/filter recomputation is software-qualified separately from Adobe
+Photoshop/GIMP application testing and native desktop interaction.

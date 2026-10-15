@@ -16,11 +16,32 @@ pub enum Value {
     Integer(i32),
     Large(i64),
     Double(f64),
-    Unit { unit: [u8; 4], value: f64 },
+    Unit {
+        unit: [u8; 4],
+        value: f64,
+    },
     Bool(bool),
-    Enum { class: String, value: String },
-    Bytes { kind: [u8; 4], value: Vec<u8> },
-    Class { name: String, class: String },
+    Enum {
+        class: String,
+        value: String,
+    },
+    Bytes {
+        kind: [u8; 4],
+        value: Vec<u8>,
+    },
+    Class {
+        name: String,
+        class: String,
+    },
+    ObjectArray {
+        name: String,
+        class: String,
+        items: Vec<(String, [u8; 4], Vec<f64>)>,
+    },
+    UnitFloat {
+        unit: [u8; 4],
+        value: f32,
+    },
 }
 impl Descriptor {
     pub fn new(class: &str) -> Self {
@@ -50,6 +71,7 @@ impl Value {
             Self::Integer(v) => Some(*v as f64),
             Self::Large(v) => Some(*v as f64),
             Self::Double(v) | Self::Unit { value: v, .. } => Some(*v),
+            Self::UnitFloat { value, .. } => Some(*value as f64),
             _ => None,
         }
     }
@@ -157,6 +179,42 @@ fn value(r: &mut Reader<'_>, kind: [u8; 4], depth: usize) -> Result<Value, Strin
             unit: r.key()?,
             value: number(r)?,
         },
+        b"UnFl" => {
+            let unit = r.key()?;
+            let value = f32::from_be_bytes(r.take(4)?.try_into().unwrap());
+            if !value.is_finite() {
+                return Err("Nonfinite descriptor unit float".into());
+            }
+            Value::UnitFloat { unit, value }
+        }
+        b"ObAr" => {
+            if r.u32()? != 16 {
+                return Err("Unsupported descriptor object-array version".into());
+            }
+            let name = unicode(r)?;
+            let class = id(r)?;
+            let count = r.u32()? as usize;
+            if count > 4096 {
+                return Err("Excessive descriptor object array".into());
+            }
+            let mut items = Vec::with_capacity(count);
+            for _ in 0..count {
+                let key = id(r)?;
+                if r.key()? != *b"UnFl" {
+                    return Err("Unsupported object-array element type".into());
+                }
+                let unit = r.key()?;
+                let count = r.u32()? as usize;
+                if count > 65536 || count > r.remaining() / 8 {
+                    return Err("Excessive descriptor coordinate array".into());
+                }
+                let values = (0..count)
+                    .map(|_| number(r))
+                    .collect::<Result<Vec<_>, _>>()?;
+                items.push((key, unit, values));
+            }
+            Value::ObjectArray { name, class, items }
+        }
         b"bool" => Value::Bool(r.u8()? != 0),
         b"enum" => Value::Enum {
             class: id(r)?,
@@ -230,6 +288,8 @@ fn write_value(out: &mut Vec<u8>, value: &Value) {
         Value::Enum { .. } => b"enum",
         Value::Bytes { kind, .. } => kind,
         Value::Class { .. } => b"type",
+        Value::ObjectArray { .. } => b"ObAr",
+        Value::UnitFloat { .. } => b"UnFl",
     });
     match value {
         Value::Object(d) => write(out, d),
@@ -255,6 +315,25 @@ fn write_value(out: &mut Vec<u8>, value: &Value) {
         Value::Bytes { value, .. } => {
             out.extend_from_slice(&(value.len() as u32).to_be_bytes());
             out.extend_from_slice(value);
+        }
+        Value::UnitFloat { unit, value } => {
+            out.extend_from_slice(unit);
+            out.extend_from_slice(&value.to_be_bytes());
+        }
+        Value::ObjectArray { name, class, items } => {
+            out.extend_from_slice(&16u32.to_be_bytes());
+            write_unicode(out, name);
+            write_id(out, class);
+            out.extend_from_slice(&(items.len() as u32).to_be_bytes());
+            for (key, unit, values) in items {
+                write_id(out, key);
+                out.extend_from_slice(b"UnFl");
+                out.extend_from_slice(unit);
+                out.extend_from_slice(&(values.len() as u32).to_be_bytes());
+                for value in values {
+                    out.extend_from_slice(&value.to_be_bytes());
+                }
+            }
         }
         Value::Class { name, class } => {
             write_unicode(out, name);

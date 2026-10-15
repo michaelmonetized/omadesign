@@ -43,7 +43,7 @@ impl Studio {
         if !at.x.is_finite() || !at.y.is_finite() {
             return Err("The placement point is invalid".into());
         }
-        let (name, mut layers, motion, notes, imported_tokens) = match imported {
+        let (name, mut layers, motion, notes, imported_tokens, imported_sources) = match imported {
             Imported::Photo(_) => {
                 return Err(
                     "Open camera RAW in Photo or use File → Place to develop it first".into(),
@@ -57,6 +57,7 @@ impl Studio {
                     doc.motion,
                     doc.import_notes,
                     doc.layout_tokens,
+                    doc.sources,
                 )
             }
             Imported::Raster { name, image } => {
@@ -69,14 +70,14 @@ impl Studio {
                     Pt::ZERO,
                     Pt::new(image.w as f32, image.h as f32),
                 );
-                (name, vec![layer], Motion::default(), vec![], vec![])
+                (name, vec![layer], Motion::default(), vec![], vec![], vec![])
             }
             Imported::Svg { name, svg } => {
                 if svg.len() > 16 * 1024 * 1024 {
                     return Err("Choose an SVG smaller than 16 MB".into());
                 }
                 let (doc, notes) = crate::formats::svg::read(&svg, &name)?;
-                (name, doc.layers, doc.motion, notes, doc.layout_tokens)
+                (name, doc.layers, doc.motion, notes, doc.layout_tokens, doc.sources)
             }
         };
         if layers.len() > 1024 {
@@ -201,6 +202,22 @@ impl Studio {
         }
         let mut selected = Vec::new();
         let mut commands = Vec::new();
+        let mut sources = self.doc.sources.clone();
+        for source in imported_sources {
+            source.validate()?;
+            if !sources.iter().any(|s| s.id == source.id) { sources.push(source); }
+        }
+        if sources.iter().map(|s|s.bytes().len()).sum::<usize>() > 512 * 1024 * 1024 {
+            return Err("Retained sources exceed 512 MiB".into());
+        }
+        for layer in &layers {
+            if let Some(id) = &layer.source_attachment && !sources.iter().any(|s| &s.id == id) {
+                return Err("Placed artwork references a missing original source".into());
+            }
+        }
+        if sources != self.doc.sources {
+            commands.push(Cmd::SetSources { before: self.doc.sources.clone(), after: sources });
+        }
         let layer_ids: HashMap<_, _> = layers.iter().map(|layer| (layer.id, next_id())).collect();
         for (position, mut layer) in layers.into_iter().enumerate() {
             let index = self.doc.layers.len() + position;

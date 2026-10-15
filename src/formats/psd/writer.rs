@@ -19,6 +19,8 @@ struct Record {
     channels: Vec<(i16, Arc<Allocation<u8>>)>,
     overlay: Option<super::effects::Overlay>,
     type_data: Option<Vec<u8>>,
+    smart_data: Option<Vec<u8>>,
+    smart_blocks: Vec<([u8; 4], Vec<u8>)>,
 }
 
 fn u16(out: &mut impl Write, value: u16) -> Result<(), String> {out.write_all(&value.to_be_bytes()).map_err(|e| e.to_string())}
@@ -51,6 +53,7 @@ fn zip_channel(data: &[u8]) -> Result<Arc<Allocation<u8>>, String> {
 /// Export a standards-compliant RGB/8 PSD or PSB, with a compatibility composite.
 /// Vectors and native filters are rendered per layer; groups and pixel masks stay separate.
 pub fn encode(doc: &Document, large: bool) -> Result<PsdExport, String> {
+    doc.validate_sources()?;
     if doc.layers.iter().any(|l| {
         l.kind.shapes().is_some_and(|ss| {
             ss.len() > 1
@@ -157,6 +160,8 @@ pub fn encode(doc: &Document, large: bool) -> Result<PsdExport, String> {
             channels: Vec::new(),
             overlay: None,
             type_data: None,
+            smart_data: None,
+            smart_blocks: Vec::new(),
         };
         add_pixels(
             &mut record,
@@ -200,6 +205,8 @@ pub fn encode(doc: &Document, large: bool) -> Result<PsdExport, String> {
             channels: Vec::new(),
             overlay: None,
             type_data: None,
+            smart_data: None,
+            smart_blocks: Vec::new(),
         });
     }
     let mut layer_info = storage::Builder::new()?;
@@ -251,11 +258,24 @@ pub fn encode(doc: &Document, large: bool) -> Result<PsdExport, String> {
         }
     }
     section(&mut out, &resources, false)?;
-    let mask_size = layer_info.len().checked_add(if large {12} else {8}).ok_or("Photoshop layer section size overflows")?;
+    let (embedded, external) = super::smart::write_links(doc)?;
+    let links = [(b"lnk2",embedded,large),(b"lnkE",external,false)];
+    let mut mask_size = layer_info.len().checked_add(if large {12} else {8}).ok_or("Photoshop layer section size overflows")?;
+    for (_,data,wide) in &links {
+        if !data.is_empty() {mask_size = mask_size.checked_add(if *wide {16} else {12}).and_then(|n| n.checked_add(data.len())).and_then(|n|n.checked_add((4-data.len()%4)%4)).ok_or("Photoshop linked source section size overflows")?;}
+    }
     length(&mut out, mask_size, large)?;
     section(&mut out, &layer_info, large)?;
     u32(&mut out, 0)?;
     drop(layer_info);
+    for (key,data,wide) in links {
+        if data.is_empty() {continue;}
+        out.write_all(b"8BIM").map_err(|e|e.to_string())?;
+        out.write_all(key).map_err(|e|e.to_string())?;
+        length(&mut out,data.len(),wide)?;
+        out.write_all(&data).map_err(|e|e.to_string())?;
+        out.write_all(&[0;3][..(4-data.len()%4)%4]).map_err(|e|e.to_string())?;
+    }
     let merged = if depth == 8 && doc.color.model == crate::deep_color::cms::Model::Rgb && doc.color.icc_profile.is_empty() {
         let png = crate::compositor::export_png(doc, 1)?;
         let image = image::load_from_memory(&png)
@@ -305,6 +325,8 @@ fn collect(
                 channels: Vec::new(),
                 overlay: None,
                 type_data: None,
+                smart_data: None,
+                smart_blocks: Vec::new(),
             });
             collect(
                 doc,
@@ -340,6 +362,8 @@ fn collect(
             channels: Vec::new(),
             overlay: super::effects::overlay(&layer.filters),
             type_data: None,
+            smart_data: None,
+            smart_blocks: Vec::new(),
         };
         if let Some(shape) = layer
             .kind
@@ -355,6 +379,10 @@ fn collect(
             )?);
             record.opacity =
                 (record.opacity as f32 * shape.opacity * shape.fill_opacity).round() as u8;
+        }
+        if layer.psd_smart.is_some() {
+            record.smart_data = Some(super::smart::encode(layer)?);
+            record.smart_blocks = layer.psd_smart.as_ref().unwrap().retained_blocks.clone();
         }
         if layer.is_group {
             if layer.filters.active() && record.overlay.is_none() {
@@ -667,5 +695,9 @@ fn write_record(out: &mut impl Write, record: &Record, large: bool) -> Result<()
     if let Some(data) = &record.type_data {
         tagged(&mut extra, b"TySh", data)?;
     }
+    if let Some(data) = &record.smart_data {
+        tagged(&mut extra, b"SoLd", data)?;
+    }
+    for (key, data) in &record.smart_blocks { tagged(&mut extra, key, data)?; }
     section(out, &extra, false)
 }

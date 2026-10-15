@@ -185,6 +185,15 @@ fn publish_region(
 }
 
 pub(super) fn start(studio: &mut Studio, world: Pt) {
+    if !studio.paint_mask
+        && studio
+            .active_layer
+            .and_then(|i| studio.doc.layers.get(i))
+            .is_some_and(|l| l.psd_smart.is_some())
+    {
+        studio.status = "Edit the placed source or rasterize it before painting its pixels".into();
+        return;
+    }
     let mask = studio.paint_mask;
     let heal = studio.tool == Tool::Heal;
     let erase = studio.tool == Tool::Eraser;
@@ -340,6 +349,15 @@ fn layer_pixels(
 }
 
 pub(super) fn start_brush(studio: &mut Studio, world: Pt) {
+    if !studio.paint_mask
+        && studio
+            .active_layer
+            .and_then(|i| studio.doc.layers.get(i))
+            .is_some_and(|l| l.psd_smart.is_some())
+    {
+        studio.status = "Edit the placed source or rasterize it before painting its pixels".into();
+        return;
+    }
     let Some(layer) = studio.raster_target() else {
         studio.status = "add a pixel layer to paint".into();
         return;
@@ -401,9 +419,16 @@ pub(super) fn start_brush(studio: &mut Studio, world: Pt) {
 }
 
 pub(super) fn start_smudge(studio: &mut Studio, world: Pt) {
-    if start_native_retouch(studio, world, Tool::Smudge) {
+    if !studio.paint_mask
+        && studio
+            .active_layer
+            .and_then(|i| studio.doc.layers.get(i))
+            .is_some_and(|l| l.psd_smart.is_some())
+    {
+        studio.status = "Edit the placed source or rasterize it before painting its pixels".into();
         return;
     }
+    if start_native_retouch(studio,world,Tool::Smudge) { return; }
     let Some(layer) = studio.raster_target() else {
         studio.status = "Choose an unlocked pixel layer to smudge".into();
         return;
@@ -425,6 +450,15 @@ pub(super) fn start_smudge(studio: &mut Studio, world: Pt) {
 }
 
 pub(super) fn start_clone(studio: &mut Studio, world: Pt) {
+    if !studio.paint_mask
+        && studio
+            .active_layer
+            .and_then(|i| studio.doc.layers.get(i))
+            .is_some_and(|l| l.psd_smart.is_some())
+    {
+        studio.status = "Edit the placed source or rasterize it before painting its pixels".into();
+        return;
+    }
     if studio.clone_source.is_none() {
         studio.status = "Alt-click to set clone source".into();
         return;
@@ -646,6 +680,15 @@ pub(super) fn finish(
 }
 
 pub(super) fn fill(studio: &mut Studio, world: Pt) {
+    if !studio.paint_mask
+        && studio
+            .active_layer
+            .and_then(|i| studio.doc.layers.get(i))
+            .is_some_and(|l| l.psd_smart.is_some())
+    {
+        studio.status = "Edit the placed source or rasterize it before painting its pixels".into();
+        return;
+    }
     let mask = studio.paint_mask;
     let Some(layer) = (if mask {
         studio.mask_target()

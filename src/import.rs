@@ -52,6 +52,7 @@ pub(crate) fn open_with_progress(
     }
     let document = |mut doc: crate::document::Document, notes: Vec<String>| {
         doc.import_notes.extend(notes);
+        doc.validate_sources()?;
         doc.validate_hierarchy()?;
         Ok(Imported::Document(doc))
     };

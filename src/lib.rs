@@ -48,6 +48,7 @@ pub mod shape_browser;
 pub mod simplify;
 pub mod shots;
 pub mod snap;
+pub mod source_attachment;
 pub mod svg;
 pub mod templates;
 pub mod text;

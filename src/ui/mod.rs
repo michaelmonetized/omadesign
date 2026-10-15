@@ -37,6 +37,7 @@ mod paragraph;
 mod character_spacing;
 mod opentype;
 mod raster;
+mod psd_smart;
 mod retouch;
 mod brushes;
 mod selection;
