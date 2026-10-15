@@ -95,8 +95,8 @@ fn disk_photos_import_in_every_workspace_with_source_pixels_undo_and_persistence
         let encoded = crate::project::encode(&s.doc).unwrap();
         let reopened = crate::project::decode(&encoded).unwrap();
         assert_eq!(
-            reopened.layers[li].kind.pixels().unwrap().data,
-            s.doc.layers[li].kind.pixels().unwrap().data
+            reopened.layers[li].kind.pixels().unwrap().data.as_slice(),
+            s.doc.layers[li].kind.pixels().unwrap().data.as_slice()
         );
         call(
             &mut s,
@@ -118,7 +118,7 @@ fn raster_selection_transform_mask_paint_and_motion_use_native_history() {
     let f = Fixture::new();
     let mut s = studio();
     let li = import(&mut s, &f);
-    let source = s.doc.layers[li].kind.pixels().unwrap().data.clone();
+    let source = s.doc.layers[li].kind.pixels().unwrap().data.to_vec();
     call(&mut s, "select_objects", json!({"layer":li,"ids":[0]}));
     call(
         &mut s,
@@ -138,13 +138,13 @@ fn raster_selection_transform_mask_paint_and_motion_use_native_history() {
     let mask = s.doc.layers[li].mask.as_ref().unwrap();
     assert_eq!(mask.data[0], 255);
     assert_eq!(mask.data[(20 * 4) as usize], 0);
-    assert_eq!(s.doc.layers[li].kind.pixels().unwrap().data, source);
+    assert_eq!(s.doc.layers[li].kind.pixels().unwrap().data.as_slice(), source);
     call(
         &mut s,
         "paint_stroke",
         json!({"layer":li,"points":[[5,5],[8,10]],"color":"#00FF00","size":5}),
     );
-    let painted = s.doc.layers[li].kind.pixels().unwrap().data.clone();
+    let painted = s.doc.layers[li].kind.pixels().unwrap().data.to_vec();
     assert_ne!(painted, source);
     for y in 0..24 {
         assert_eq!(
@@ -157,7 +157,7 @@ fn raster_selection_transform_mask_paint_and_motion_use_native_history() {
         "editor_action",
         json!({"action":"undo","history":"canvas"}),
     );
-    assert_eq!(s.doc.layers[li].kind.pixels().unwrap().data, source);
+    assert_eq!(s.doc.layers[li].kind.pixels().unwrap().data.as_slice(), source);
     call(
         &mut s,
         "set_keyframes",
@@ -497,7 +497,7 @@ for line in sys.stdin:
 
 #[test]
 fn layer_duplication_copies_ordinary_and_empty_layers_atomically() {
-    for layer in [Layer::vector("Empty vector"), Layer::raster("Pixels", 3, 2), Layer::group("Empty group")] {
+    for layer in [Layer::vector("Empty vector"), Layer::raster("Pixels", 3, 2).unwrap(), Layer::group("Empty group")] {
         let mut s = studio();
         s.doc.layers = vec![layer];
         let before = crate::project::encode(&s.doc).unwrap();

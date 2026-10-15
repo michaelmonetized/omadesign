@@ -76,7 +76,7 @@ fn grouped_raster_and_vector_align_together_with_an_outside_object() {
     *s.doc.layers[0].kind.shapes_mut().unwrap() = vec![a];
     s.doc.layers.push(Layer::placed_raster(
         "Pixels",
-        Pixels::new(2, 2),
+        Pixels::new(2, 2).unwrap(),
         Pt::new(50., 20.),
         Pt::splat(20.),
     ));
@@ -345,8 +345,8 @@ fn moving_a_group_preserves_hidden_and_locked_child_offsets() {
 fn grouped_canvas_rasters_are_movable_and_advanced_saves_require_a_new_reader() {
     let mut s = studio();
     s.doc.layers = vec![
-        Layer::raster("Paint 1", 20, 20),
-        Layer::raster("Paint 2", 20, 20),
+        Layer::raster("Paint 1", 20, 20).unwrap(),
+        Layer::raster("Paint 2", 20, 20).unwrap(),
     ];
     s.selection = vec![(0, RASTER_ID), (1, RASTER_ID)];
     s.group_selected();
@@ -365,7 +365,7 @@ fn grouped_canvas_rasters_are_movable_and_advanced_saves_require_a_new_reader() 
         5
     );
     let mut shape = rect(5., 5., 20., 20.);
-    shape.mask = Some(Pixels::new(2, 2));
+    shape.mask = Some(Pixels::new(2, 2).unwrap());
     plain.layers.push(Layer::vector("Masked"));
     plain
         .layers

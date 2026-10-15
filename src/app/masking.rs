@@ -13,7 +13,7 @@ pub struct SelectionSpace {
 /// cached allocation across all dabs instead of resampling and copying it.
 pub(crate) enum SelectionMask<'a> {
     Borrowed(&'a [u8]),
-    Mapped(std::sync::Arc<[u8]>),
+    Mapped(std::sync::Arc<crate::resources::Allocation<u8>>),
 }
 
 impl std::ops::Deref for SelectionMask<'_> {
@@ -37,7 +37,7 @@ struct SelectionKey {
 
 #[derive(Default)]
 pub(super) struct SelectionCache {
-    entry: std::cell::RefCell<Option<(SelectionKey, std::sync::Arc<[u8]>)>>,
+    entry: std::cell::RefCell<Option<(SelectionKey, std::sync::Arc<crate::resources::Allocation<u8>>)>>,
 }
 
 impl SelectionCache {
@@ -57,54 +57,106 @@ pub(super) fn resample(
     source: SelectionSpace,
     target: SelectionSpace,
 ) -> Option<Vec<u8>> {
-    if values.len() != source.w as usize * source.h as usize {
-        return None;
-    }
-    if source == target {
-        return Some(values.to_vec());
-    }
-    let data = values.iter().flat_map(|v| [255, 255, 255, *v]).collect();
-    let src = Pixels::from_rgba(source.w, source.h, data)?.to_pixmap()?;
-    let mut dest = tiny_skia::Pixmap::new(target.w, target.h)?;
-    let transform = target.transform.invert()?.pre_concat(source.transform);
-    dest.draw_pixmap(
-        0,
-        0,
-        src.as_ref(),
-        &tiny_skia::PixmapPaint {
-            quality: tiny_skia::FilterQuality::Bilinear,
-            ..Default::default()
-        },
-        transform,
-        None,
-    );
-    Some(dest.pixels().iter().map(|p| p.alpha()).collect())
+    resample_admitted(values, source, target).ok().map(|values| values.to_vec())
+}
+
+fn resample_admitted(values: &[u8], source: SelectionSpace, target: SelectionSpace) -> Result<std::sync::Arc<crate::resources::Allocation<u8>>, String> {
+    use crate::{deep_color::{storage, surface::Surface}, resources};
+    if values.len() != storage::count(source.w, source.h, 1)? {return Err("Invalid source selection dimensions".into());}
+    if source == target {return resources::global().copy_now(values, &storage::check).map(std::sync::Arc::new);}
+    let transform = target.transform.invert().ok_or("Selection transform is singular")?.pre_concat(source.transform);
+    let mut src = Surface::new(source.w, source.h)?;
+    for (pixel, &alpha) in src.pixels_mut().iter_mut().zip(values) {*pixel = tiny_skia::ColorU8::from_rgba(255,255,255,alpha).premultiply();}
+    let mut dest = Surface::new(target.w, target.h)?;
+    dest.draw_pixmap(0,0,src.as_ref(), &tiny_skia::PixmapPaint {quality:tiny_skia::FilterQuality::Bilinear,..Default::default()},transform,None);
+    storage::collect(dest.pixels().iter().map(|p| p.alpha()))
 }
 
 impl Studio {
     /// Finish or restore an in-flight pixel edit before changing document context.
     /// Returning true lets Undo cancel the current gesture before touching history.
     pub(crate) fn end_pixel_stroke(&mut self, cancel: bool) -> bool {
+        if matches!(
+            self.op,
+            Some(Op::NativeStroke { .. } | Op::NativeRetouch { .. })
+        ) {
+            let (layer, mask, before) = match self.op.take().unwrap() {
+                Op::NativeStroke {
+                    layer,
+                    mask,
+                    before,
+                    ..
+                } => (layer, mask, before),
+                Op::NativeRetouch { layer, before, .. } => (layer, false, before),
+                _ => unreachable!(),
+            };
+            let target = if mask {
+                self.doc.layers[layer].mask.as_mut()
+            } else {
+                self.doc.layers[layer].kind.pixels_mut()
+            };
+            if let Some(target) = target {
+                if cancel {
+                    *target = before;
+                } else {
+                    let after = target.clone();
+                    self.history.push(Cmd::NativePixels {
+                        layer,
+                        mask,
+                        before,
+                        after,
+                    });
+                    self.dirty = true;
+                }
+            }
+            self.paint_contact = None;
+            self.brush.pressure = 1.;
+            self.mark();
+            return true;
+        }
         if matches!(self.op, Some(Op::Brush { .. })) {
-            let Some(Op::Brush { layer, before, mut buf, .. }) = self.op.take() else {
+            let Some(Op::Brush {
+                layer,
+                before,
+                mut buf,
+                ..
+            }) = self.op.take()
+            else {
                 unreachable!()
             };
             self.paint_contact = None;
             self.brush.pressure = 1.0;
-            if !cancel
-                && let Some(selection) = self.cached_pixel_sel_mask(layer)
-            {
+            if !cancel && let Some(selection) = self.cached_pixel_sel_mask(layer) {
                 paint::feather_overlay(&mut buf, &selection);
             }
             if let Some(target) = self.doc.layers.get_mut(layer) {
-                if cancel || self.brush.opacity <= 0.0 || buf.pixels().iter().all(|p| p.alpha() == 0) {
+                if cancel
+                    || self.brush.opacity <= 0.0
+                    || buf.pixels().iter().all(|p| p.alpha() == 0)
+                {
                     before.restore(target);
                 } else if let Some(pixels) = target.kind.pixels_mut() {
-                    if let Some(mut destination) = pixels.to_pixmap() {
+                    if pixels.native.is_some() {
+                        if let Err(error) = Pixels::from_pixmap(&buf)
+                            .and_then(|overlay| pixels.paint_overlay(&overlay, self.brush.opacity))
+                        {
+                            self.status = error;
+                            before.restore(target);
+                            return true;
+                        }
+                    } else if let Some(mut destination) = pixels.to_pixmap() {
                         paint::blend_onto(&mut destination, &buf, self.brush.opacity);
-                        *pixels = Pixels::from_pixmap(&destination);
+                        match Pixels::from_pixmap(&destination) {
+                            Ok(after) => *pixels = after,
+                            Err(error) => {
+                                self.status = error;
+                                before.restore(target);
+                                return true;
+                            }
+                        }
                     }
-                    if pixels.data != before.kind.pixels().unwrap().data
+                    if pixels.native != before.kind.pixels().unwrap().native
+                        || pixels.data != before.kind.pixels().unwrap().data
                         || target.kind.raster_xform() != before.kind.raster_xform()
                     {
                         let after = crate::document::RasterState::capture(target).unwrap();
@@ -151,7 +203,7 @@ impl Studio {
                 pixels.data = before;
                 pixels.touch();
             } else {
-                if pixels.data != before {
+                if pixels.data.as_slice() != before.as_slice() {
                     self.history.push(Cmd::Pixels {
                         layer,
                         mask,
@@ -215,7 +267,7 @@ impl Studio {
             return Some(SelectionMask::Mapped(values.clone()));
         }
         self.pixel_sel_cache.clear();
-        let values: std::sync::Arc<[u8]> = resample(mask, source, target)?.into();
+        let values = resample_admitted(mask, source, target).ok()?;
         // Keep at most one derived mask, never one per open tab or layer. The
         // image size limit is 64M pixels; oversized inputs remain uncached.
         if values.len() <= 64 * 1024 * 1024 {
@@ -645,22 +697,51 @@ impl Studio {
         else {
             return false;
         };
+        if pixels.native.is_some() {
+            let before = pixels.clone();
+            let samples = crate::deep_color::storage::collect(
+                (0..pixels.w as usize * pixels.h as usize).flat_map(|i| {
+                    if mask[i] > 0 {
+                        [0.; 4]
+                    } else {
+                        pixels.sample(i)
+                    }
+                }),
+            );
+            let mut after = before.clone();
+            match samples.and_then(|samples| after.set_sample_allocation(samples)) {
+                Ok(()) => self.commit(Cmd::NativePixels {
+                    layer,
+                    mask: false,
+                    before,
+                    after,
+                }),
+                Err(error) => self.status = error,
+            };
+            return true;
+        }
         let before = pixels.data.clone();
-        let mut after = before.clone();
+        let mut after = match before.try_clone_now(&crate::deep_color::storage::check) {
+            Ok(value) => value,
+            Err(error) => {
+                self.status = error;
+                return false;
+            }
+        };
         for (index, &selected) in mask.iter().enumerate() {
             if selected != 0 {
                 let offset = index * 4;
-                after[offset..offset + 4].fill(0);
+                after.as_mut_slice()[offset..offset + 4].fill(0);
             }
         }
-        if after == before {
+        if after.as_slice() == before.as_slice() {
             return true;
         }
         self.commit(Cmd::Pixels {
             layer,
             mask: false,
             before,
-            after,
+            after: std::sync::Arc::new(after),
         });
         self.status = "Selected pixels cleared".into();
         true
@@ -734,8 +815,14 @@ impl Studio {
             return;
         };
         let value = if reveal { 255 } else { 0 };
-        let mut pixels = Pixels::new(w, h);
-        for pixel in pixels.data.as_chunks_mut::<4>().0 {
+        let mut pixels = match Pixels::new(w, h) {
+            Ok(pixels) => pixels,
+            Err(error) => {
+                self.status = error;
+                return;
+            }
+        };
+        for pixel in pixels.bytes_mut().unwrap().as_chunks_mut::<4>().0 {
             pixel.copy_from_slice(&[value, value, value, 255]);
         }
         pixels.touch();
@@ -771,7 +858,30 @@ impl Studio {
         let Some(mut mask) = layer.mask.clone() else {
             return;
         };
-        for pixel in mask.data.as_chunks_mut::<4>().0 {
+        if mask.native.is_some() {
+            let samples = crate::deep_color::storage::collect(
+                (0..mask.w as usize * mask.h as usize).flat_map(|i| {
+                    let p = mask.sample(i);
+                    let v = 1. - (p[0] * 0.2126 + p[1] * 0.7152 + p[2] * 0.0722) * p[3];
+                    [v, v, v, 1.]
+                }),
+            );
+            if let Err(error) = samples.and_then(|samples| mask.set_sample_allocation(samples)) {
+                self.status = error;
+                return;
+            }
+            self.replace_layer_mask(index, Some(mask));
+            self.status = "Mask inverted".into();
+            return;
+        }
+        let bytes = match mask.bytes_mut() {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                self.status = error;
+                return;
+            }
+        };
+        for pixel in bytes.as_chunks_mut::<4>().0 {
             // Include alpha, so an erased/transparent mask pixel inverts to white.
             let amount = mask_amount(pixel);
             let value = 255 - amount;
@@ -815,9 +925,43 @@ impl Studio {
             self.status = "Mask size does not match its pixel layer".into();
             return;
         }
+        if pixels.native.is_some() || mask.native.is_some() {
+            let after = match pixels.masked(mask) {
+                Ok(after) => after,
+                Err(error) => {
+                    self.status = error;
+                    return;
+                }
+            };
+            let cmd = Cmd::NativePixels {
+                layer: index,
+                mask: false,
+                before: pixels.clone(),
+                after,
+            };
+            let old_mask = mask.clone();
+            self.commit(Cmd::Batch(vec![
+                cmd,
+                Cmd::SetLayerMask {
+                    index,
+                    before: Some(old_mask),
+                    after: None,
+                },
+            ]));
+            self.paint_mask = false;
+            self.status = "Native-precision mask applied".into();
+            return;
+        }
         let before = pixels.data.clone();
-        let mut after = before.clone();
+        let mut after = match before.try_clone_now(&crate::deep_color::storage::check) {
+            Ok(value) => value,
+            Err(error) => {
+                self.status = error;
+                return;
+            }
+        };
         for (pixel, mask_pixel) in after
+            .as_mut_slice()
             .as_chunks_mut::<4>()
             .0
             .iter_mut()
@@ -832,7 +976,7 @@ impl Studio {
                 layer: index,
                 mask: false,
                 before,
-                after,
+                after: std::sync::Arc::new(after),
             },
             Cmd::SetLayerMask {
                 index,
@@ -900,8 +1044,13 @@ mod tests {
         let mut studio = Studio::new();
         studio.doc = Document::new("Mask", 4.0, 1.0, 96.0);
         studio.doc.transparent = true;
-        let mut layer = Layer::raster("Pixels", 4, 1);
-        layer.kind.pixels_mut().unwrap().data = [220, 50, 20, 255].repeat(4);
+        let mut layer = Layer::raster("Pixels", 4, 1).unwrap();
+        layer
+            .kind
+            .pixels_mut()
+            .unwrap()
+            .replace_bytes([220, 50, 20, 255].repeat(4))
+            .unwrap();
         layer.kind.pixels_mut().unwrap().touch();
         studio.doc.layers = vec![layer];
         studio.active_layer = Some(0);
@@ -925,7 +1074,7 @@ mod tests {
         studio.doc.height = 48.0;
         studio.doc.layers[0] = Layer::placed_raster(
             "Placed",
-            Pixels::new(16, 12),
+            Pixels::new(16, 12).unwrap(),
             Pt::new(5.0, 7.0),
             Pt::new(40.0, 30.0),
         );
@@ -945,7 +1094,7 @@ mod tests {
         studio
     }
 
-    fn mapped(studio: &Studio) -> std::sync::Arc<[u8]> {
+    fn mapped(studio: &Studio) -> std::sync::Arc<crate::resources::Allocation<u8>> {
         let SelectionMask::Mapped(values) = studio.cached_pixel_sel_mask(0).unwrap() else {
             panic!("transformed mask");
         };
@@ -955,7 +1104,7 @@ mod tests {
             studio.layer_selection_space(0).unwrap(),
         )
         .unwrap();
-        assert_eq!(&*values, expected);
+        assert_eq!(values.as_slice(), expected.as_slice());
         values
     }
 
@@ -965,7 +1114,7 @@ mod tests {
         let first = mapped(&studio);
         assert!(std::sync::Arc::ptr_eq(&first, &mapped(&studio)));
         // Preserve the public Cow API for callers that need an owned snapshot.
-        assert_eq!(&*studio.pixel_sel_mask(0).unwrap(), &*first);
+        assert_eq!(&*studio.pixel_sel_mask(0).unwrap(), first.as_slice());
         if let LayerKind::Raster { origin, .. } = &mut studio.doc.layers[0].kind {
             origin.x += 6.0;
         }
@@ -973,7 +1122,7 @@ mod tests {
         assert!(!std::sync::Arc::ptr_eq(&first, &moved));
         assert_ne!(first, moved);
         if let LayerKind::Raster { pixels, .. } = &mut studio.doc.layers[0].kind {
-            *pixels = Pixels::new(24, 8);
+            *pixels = Pixels::new(24, 8).unwrap();
         }
         let resized = mapped(&studio);
         assert_eq!(
@@ -1000,8 +1149,8 @@ mod tests {
     #[test]
     fn cancelling_a_brush_restores_pixels_without_preparing_its_transformed_selection() {
         let mut studio = transformed_selection_studio();
-        let before = studio.doc.layers[0].kind.pixels().unwrap().data.clone();
-        let mut buf = tiny_skia::Pixmap::new(16, 12).unwrap();
+        let before = studio.doc.layers[0].kind.pixels().unwrap().data.to_vec();
+        let mut buf = crate::deep_color::surface::Surface::new(16, 12).unwrap();
         buf.fill(tiny_skia::Color::from_rgba8(200, 50, 20, 255));
         studio.op = Some(Op::Brush {
             layer: 0,
@@ -1017,7 +1166,10 @@ mod tests {
             studio.pixel_sel_cache.entry.borrow().is_none(),
             "discarded paint must not resample a selection"
         );
-        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data, before);
+        assert_eq!(
+            studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(),
+            before
+        );
         assert!(studio.op.is_none());
         assert_eq!(studio.history.len(), 0);
     }
@@ -1061,7 +1213,7 @@ mod tests {
         studio.undo();
         assert_eq!(alphas(&studio.doc), masked);
 
-        let original = studio.doc.layers[0].kind.pixels().unwrap().data.clone();
+        let original = studio.doc.layers[0].kind.pixels().unwrap().data.to_vec();
         studio.apply_layer_mask(0);
         assert!(studio.doc.layers[0].mask.is_none());
         let applied = alphas(&studio.doc);
@@ -1069,7 +1221,10 @@ mod tests {
             assert!(a.abs_diff(*b) <= 1);
         }
         studio.undo();
-        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data, original);
+        assert_eq!(
+            studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(),
+            original
+        );
         assert!(studio.doc.layers[0].mask.is_some());
         assert_eq!(alphas(&studio.doc), masked);
         studio.redo();

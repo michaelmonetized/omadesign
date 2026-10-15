@@ -326,7 +326,7 @@ impl<'a> Parser<'a> {
         };
         if apply_mask && mask_at != 0 && !group {
             let mask = self.mask(mask_at, width, height, compression, bpc)?;
-            apply_layer_mask(layer.kind.pixels_mut().unwrap(), &mask);
+            apply_layer_mask(layer.kind.pixels_mut().unwrap(), &mask)?;
         } else if mask_at != 0 && !group {
             self.warn("A disabled GIMP layer mask is not applied.");
         }
@@ -782,13 +782,15 @@ fn rgba_from_raw(
     Pixels::from_rgba(width, height, rgba).ok_or_else(|| "Invalid GIMP pixels".into())
 }
 
-fn apply_layer_mask(pixels: &mut Pixels, mask: &[u8]) {
+fn apply_layer_mask(pixels: &mut Pixels, mask: &[u8]) -> Result<(), String> {
     if mask.len() * 4 != pixels.data.len() {
-        return;
+        return Err("GIMP mask dimensions do not match pixels".into());
     }
-    for (i, chunk) in pixels.data.chunks_exact_mut(4).enumerate() {
+    let bytes = pixels.bytes_mut()?;
+    for (i, chunk) in bytes.chunks_exact_mut(4).enumerate() {
         chunk[3] = ((u16::from(chunk[3]) * u16::from(mask[i])) / 255) as u8;
     }
+    Ok(())
 }
 
 fn colormap_from(payload: &[u8]) -> Result<Vec<[u8; 3]>, String> {
@@ -1206,11 +1208,11 @@ mod tests {
             Pt::new(-2., 3.)
         );
         assert_eq!(
-            doc.layers[1].kind.pixels().unwrap().data,
+            doc.layers[1].kind.pixels().unwrap().data.as_slice(),
             [250, 20, 10, 128]
         );
         assert_eq!(
-            doc.layers[0].kind.pixels().unwrap().data,
+            doc.layers[0].kind.pixels().unwrap().data.as_slice(),
             [10, 20, 250, 255, 10, 20, 250, 255]
         );
     }
@@ -1219,7 +1221,10 @@ mod tests {
     fn reads_64bit_pointers_and_zlib_tiles() {
         let bytes = rgba_layer(11, "Zlib", 1, 1, &[9, 8, 7, 255], (4, 5), 2, &[], false);
         let (doc, _) = read(&bytes, "Wide").unwrap();
-        assert_eq!(doc.layers[0].kind.pixels().unwrap().data, [9, 8, 7, 255]);
+        assert_eq!(
+            doc.layers[0].kind.pixels().unwrap().data.as_slice(),
+            [9, 8, 7, 255]
+        );
         assert_eq!(
             doc.layers[0].kind.raster_xform().unwrap().0,
             Pt::new(4., 5.)

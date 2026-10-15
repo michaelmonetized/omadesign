@@ -206,7 +206,7 @@ impl Capture {
                 self.inference_seconds = self.inference_started.elapsed().as_secs_f64();
                 assert_eq!(self.studio.history.len(), 1);
                 assert_eq!(
-                    self.studio.doc.layers[0].kind.pixels().unwrap().data,
+                    self.studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(),
                     self.original
                 );
                 assert!(self.studio.doc.layers[0].mask.is_some());
@@ -234,7 +234,7 @@ impl Capture {
             10 => {
                 assert_eq!(self.studio.history.len(), 1);
                 assert_eq!(
-                    self.studio.doc.layers[0].kind.pixels().unwrap().data,
+                    self.studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(),
                     self.original
                 );
                 self.click("Remove Background…");
@@ -268,7 +268,7 @@ impl Capture {
             }
             15 => {
                 assert_eq!(
-                    self.studio.doc.layers[0].kind.pixels().unwrap().data,
+                    self.studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(),
                     self.original
                 );
                 self.key(egui::Key::Z, true);
@@ -280,12 +280,12 @@ impl Capture {
                 let reopened =
                     omadesign::project::decode(&std::fs::read_to_string(path).unwrap()).unwrap();
                 assert_eq!(
-                    reopened.layers[0].kind.pixels().unwrap().data,
-                    self.studio.doc.layers[0].kind.pixels().unwrap().data
+                    reopened.layers[0].kind.pixels().unwrap().data.as_slice(),
+                    self.studio.doc.layers[0].kind.pixels().unwrap().data.as_slice()
                 );
                 assert_eq!(
-                    reopened.layers[0].mask.as_ref().unwrap().data,
-                    self.studio.doc.layers[0].mask.as_ref().unwrap().data
+                    reopened.layers[0].mask.as_ref().unwrap().data.as_slice(),
+                    self.studio.doc.layers[0].mask.as_ref().unwrap().data.as_slice()
                 );
                 self.key(egui::Key::E, false);
                 self.next(17);
@@ -380,7 +380,7 @@ impl Capture {
                 && ctx.memory(|m| m.top_modal_layer()).is_none() =>
             {
                 self.assert_no_modal(ctx);
-                assert_eq!(self.studio.photo.images[0].full.data, self.original);
+                assert_eq!(self.studio.photo.images[0].full.data.as_slice(), self.original);
                 assert_eq!(
                     self.studio.photo.images[1].full.data.len(),
                     self.original.len() * 4
@@ -441,7 +441,7 @@ impl Capture {
             {
                 self.assert_no_modal(ctx);
                 assert_eq!(self.studio.photo.images[2].dimensions(), (800, 530));
-                assert_eq!(self.studio.photo.images[0].full.data, self.original);
+                assert_eq!(self.studio.photo.images[0].full.data.as_slice(), self.original);
                 self.studio.show_preferences = true;
                 self.next(27);
             }
@@ -559,8 +559,8 @@ pub fn run(input: PathBuf, output: PathBuf) -> eframe::Result {
     let mut studio = Studio::new();
     studio.doc = Document::new("AI upscaling QA", w as f32, h as f32, 96.);
     studio.doc.transparent = true;
-    let mut layer = omadesign::document::Layer::raster("Cat portrait", w, h);
-    layer.kind.pixels_mut().unwrap().data = original.clone();
+    let mut layer = omadesign::document::Layer::raster("Cat portrait", w, h).unwrap();
+    layer.kind.pixels_mut().unwrap().replace_bytes(original.clone()).unwrap();
     studio.doc.layers = vec![layer];
     studio.active_layer = Some(0);
     studio.persona = Persona::Pixel;

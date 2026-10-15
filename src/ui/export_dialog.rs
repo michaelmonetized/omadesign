@@ -194,11 +194,11 @@ fn preview_image(source: &Source, format: Format) -> Result<crate::photo::RgbaIm
         Source::Photo(photo) => photo.render_thumbnail(420),
         Source::Document(doc) => {
             let pm = crate::compositor::render_export_preview(doc, 420)?;
-            let pixels = crate::document::Pixels::from_pixmap(&pm);
+            let pixels = crate::document::Pixels::from_pixmap(&pm)?;
             crate::photo::RgbaImage {
                 w: pixels.w,
                 h: pixels.h,
-                data: pixels.data,
+                data: pixels.data.to_vec(),
             }
         }
     };

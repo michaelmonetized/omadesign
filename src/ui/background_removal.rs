@@ -167,9 +167,9 @@ pub(super) fn open(ctx: &Context, studio: &mut Studio) {
     let source = Source {
         w: pixels.w,
         h: pixels.h,
-        rgba: Arc::new(pixels.data.clone()),
+        rgba: Arc::new(pixels.data.to_vec()),
         selection,
-        existing_mask: layer.mask.as_ref().map(|m| Arc::new(m.data.clone())),
+        existing_mask: layer.mask.as_ref().map(|m| Arc::new(m.data.to_vec())),
     };
     if let Err(e) = source.region() {
         studio.status = e;
@@ -269,8 +269,8 @@ fn commit(studio: &mut Studio, s: &Session) -> Result<(), String> {
         );
     }
     let layer = &studio.doc.layers[i];
-    if layer.kind.pixels().unwrap().data != *s.source.rgba
-        || layer.mask.as_ref().map(|m| &m.data) != s.source.existing_mask.as_deref()
+    if layer.kind.pixels().unwrap().data.as_slice() != s.source.rgba.as_slice()
+        || layer.mask.as_ref().map(|m| m.data.as_slice()) != s.source.existing_mask.as_deref().map(Vec::as_slice)
     {
         return Err("The source pixels or mask changed. Open Remove Background again.".into());
     }
@@ -282,6 +282,7 @@ fn commit(studio: &mut Studio, s: &Session) -> Result<(), String> {
     let pixels = Pixels::from_rgba(result.w, result.h, mask.as_ref().clone())
         .ok_or("Invalid mask dimensions")?;
     if result.w != s.source.w || result.h != s.source.h || result.rgba != s.source.rgba {
+        if layer.kind.pixels().is_some_and(|p|p.native.is_some()) {return Err("AI upscaling produces 8-bit pixels. Use the editable mask-only workflow to preserve this layer’s native precision, or convert an explicit copy to 8-bit first.".into());}
         let after = Pixels::from_rgba(result.w, result.h, result.rgba.as_ref().clone())
             .ok_or("Invalid upscaled pixels")?;
         let kind = &studio.doc.layers[i].kind;
@@ -724,8 +725,8 @@ mod tests {
     fn studio() -> Studio {
         let mut s = Studio::new();
         s.doc = Document::new("Removal QA", 4., 1., 96.);
-        s.doc.layers = vec![Layer::raster("Pixels", 4, 1)];
-        s.doc.layers[0].kind.pixels_mut().unwrap().data = vec![255; 16];
+        s.doc.layers = vec![Layer::raster("Pixels", 4, 1).unwrap()];
+        s.doc.layers[0].kind.pixels_mut().unwrap().replace_bytes(vec![255;16]).unwrap();
         s.active_layer = Some(0);
         s.persona = Persona::Pixel;
         s.show_welcome = false;
@@ -746,26 +747,26 @@ mod tests {
         let s = completed(&ctx, &mut studio);
         commit(&mut studio, &s).unwrap();
         assert_eq!(
-            studio.doc.layers[0].kind.pixels().unwrap().data,
+            studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(),
             vec![255; 16]
         );
         assert_eq!(
-            studio.doc.layers[0].mask.as_ref().unwrap().data,
+            studio.doc.layers[0].mask.as_ref().unwrap().data.as_slice(),
             vec![20; 16]
         );
         studio.undo();
         assert_eq!(
-            studio.doc.layers[0].mask.as_ref().unwrap().data,
+            studio.doc.layers[0].mask.as_ref().unwrap().data.as_slice(),
             vec![128; 16]
         );
         studio.redo();
         assert_eq!(
-            studio.doc.layers[0].mask.as_ref().unwrap().data,
+            studio.doc.layers[0].mask.as_ref().unwrap().data.as_slice(),
             vec![20; 16]
         );
         let doc: Document =
             serde_json::from_str(&serde_json::to_string(&studio.doc).unwrap()).unwrap();
-        assert_eq!(doc.layers[0].mask.as_ref().unwrap().data, vec![20; 16]);
+        assert_eq!(doc.layers[0].mask.as_ref().unwrap().data.as_slice(), vec![20; 16]);
     }
     #[test]
     fn upscaled_pixels_and_mask_share_one_undo_step_and_keep_placement() {
@@ -792,22 +793,22 @@ mod tests {
         assert_eq!(studio.doc.layers[0].kind.raster_xform(), before_transform);
         studio.undo();
         assert_eq!(
-            studio.doc.layers[0].kind.pixels().unwrap().data,
+            studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(),
             vec![255; 16]
         );
         assert_eq!(
-            studio.doc.layers[0].mask.as_ref().unwrap().data,
+            studio.doc.layers[0].mask.as_ref().unwrap().data.as_slice(),
             vec![128; 16]
         );
         studio.redo();
         assert_eq!(studio.doc.layers[0].kind.raster_xform(), before_transform);
         assert_eq!(
-            studio.doc.layers[0].kind.pixels().unwrap().data,
+            studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(),
             vec![220; 64]
         );
         let doc: Document =
             serde_json::from_str(&serde_json::to_string(&studio.doc).unwrap()).unwrap();
-        assert_eq!(doc.layers[0].mask.as_ref().unwrap().data, vec![100; 64]);
+        assert_eq!(doc.layers[0].mask.as_ref().unwrap().data.as_slice(), vec![100; 64]);
         assert_eq!(doc.layers[0].kind.pixels().unwrap().w, 8);
     }
     #[test]
@@ -818,8 +819,8 @@ mod tests {
             let s = completed(&ctx, &mut studio);
             match change {
                 0 => studio.swap_id = "other document".into(),
-                1 => studio.doc.layers[0].kind.pixels_mut().unwrap().data[0] = 3,
-                2 => studio.doc.layers[0].mask = Some(Pixels::new(4, 1)),
+                1 => studio.doc.layers[0].kind.pixels_mut().unwrap().bytes_mut().unwrap()[0] = 3,
+                2 => studio.doc.layers[0].mask = Some(Pixels::new(4, 1).unwrap()),
                 3 => studio.set_pixel_sel(Some(vec![255; 4])),
                 4 => studio.doc.layers[0].locked = true,
                 5 => studio.active_layer = None,

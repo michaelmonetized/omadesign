@@ -395,3 +395,51 @@ describe("Authenticated live sessions", () => {
     ).rejects.toThrow("access");
   });
 });
+
+describe("Native preservation protocol", () => {
+  const native = { Pixels: { w: 1, h: 1, data: "display", native: {
+    depth: "F32" as const, samples: "samples", cmyk: "inks",
+    icc_profile: "icc", icc_bytes: 128, intent: 0,
+  } } };
+  it("refuses native seeds and old joins before quota/session/actor writes", async () => {
+    const {t,owner,projectId} = await setup();
+    const seed=JSON.stringify({"":"Object","/@entities/1/mask":native});
+    const rows=()=>t.run(async ctx=>({rooms:await ctx.db.query("cloudLiveSessions").take(10),quota:await ctx.db.query("cloudLiveQuotas").take(10),clients:await ctx.db.query("cloudLiveClients").take(10)}));
+    const before=await rows();
+    await expect(owner.mutation(api.live.create,{projectId,seed})).rejects.toThrow("native-preservation");
+    expect(await rows()).toEqual(before);
+    const session=await owner.mutation(api.live.create,{projectId,seed,protocol:2});
+    await expect(owner.mutation(api.live.join,{session,actor:"c".repeat(64)})).rejects.toThrow("native-preservation");
+    expect(await t.run(ctx=>ctx.db.query("cloudLiveClients").withIndex("by_session_actor",q=>q.eq("session",session)).take(10))).toEqual([]);
+    const joined=await owner.mutation(api.live.join,{session,actor:"c".repeat(64),protocol:2});
+    expect(joined.protocol).toBe(2);expect(joined.supportedProtocol).toBe(2);
+    expect(JSON.parse(joined.seed)["/@entities/1/mask"]).toEqual(native);
+  });
+  it("upgrades neutral rooms atomically and rejects old mutations and empty polls", async()=>{
+    const {t,owner,editor,session,left,right,exchange}=await setup();
+    const operation={...write(alice,1,"native"),edit:{type:"write" as const,writes:[{path:"/@entities/1/mask",value:native}]}};
+    const before=await t.run(ctx=>ctx.db.get(session));
+    await expect(owner.mutation(api.live.exchange,{...left,...exchange,changes:[operation]})).rejects.toThrow("native-preservation");
+    expect(await t.run(ctx=>ctx.db.get(session))).toEqual(before);
+    expect((await editor.mutation(api.live.exchange,{...right,...exchange})).changes).toEqual([]);
+    const accepted=await owner.mutation(api.live.exchange,{...left,...exchange,changes:[operation],protocol:2});
+    expect(accepted.acknowledged).toEqual([operation.id]);
+    const rows=()=>t.run(async ctx=>({room:await ctx.db.get(session),clients:await ctx.db.query("cloudLiveClients").withIndex("by_session_actor",q=>q.eq("session",session)).take(10),changes:await ctx.db.query("cloudLiveChanges").withIndex("by_session_revision",q=>q.eq("session",session)).take(10)}));
+    const frozen=await rows();
+    for(const changes of [[],[write(bob,1,"lost native")]])
+      await expect(editor.mutation(api.live.exchange,{...right,...exchange,changes})).rejects.toThrow("native-preservation");
+    await expect(editor.mutation(api.live.join,right)).rejects.toThrow("native-preservation");
+    expect(await rows()).toEqual(frozen);
+    expect((await editor.mutation(api.live.exchange,{...right,...exchange,protocol:2})).changes).toEqual([operation]);
+  });
+  it("gates document color separately and rolls back a failed native upgrade",async()=>{
+    const {t,owner,projectId,session,left,exchange}=await setup();
+    for(const color of [{model:"Cmyk",depth:"U8",icc_profile:[],intent:0},{model:"Rgb",depth:"F32",icc_profile:[],intent:0},{model:"Rgb",depth:"U8",icc_profile:[1,2],intent:0},{model:"Rgb",depth:"U8",icc_profile:[],intent:1}]) {
+      await expect(owner.mutation(api.live.create,{projectId,seed:JSON.stringify({"":"Object","/color":{Value:color}})})).rejects.toThrow("native-preservation");
+    }
+    const bad={...write(alice,2,"bad"),edit:{type:"write" as const,writes:[{path:"/@entities/1/mask",value:native}]}};
+    await expect(owner.mutation(api.live.exchange,{...left,...exchange,changes:[bad],protocol:2})).rejects.toThrow("in order");
+    expect((await t.run(ctx=>ctx.db.get(session)))?.protocol).toBe(1);
+    await owner.mutation(api.live.create,{projectId,seed:JSON.stringify({"":"Object","/color":{Value:{model:"Rgb",depth:"U8",icc_profile:[],intent:0}}})});
+  });
+});

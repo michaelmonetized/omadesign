@@ -31,6 +31,11 @@ const change = v.object({
                 w: v.number(),
                 h: v.number(),
                 data: v.string(),
+                native: v.optional(v.object({
+                  depth: v.union(v.literal("U8"), v.literal("U16"), v.literal("F32")),
+                  samples: v.string(), cmyk: v.optional(v.string()),
+                  icc_profile: v.string(), icc_bytes: v.number(), intent: v.number(),
+                })),
               }),
             }),
             v.object({ Variant: v.string() }),
@@ -46,6 +51,7 @@ const args = {
   ...deviceArg,
   session: v.id("cloudLiveSessions"),
   actor: v.string(),
+  protocol: v.optional(v.number()),
 };
 const cursor = v.union(v.null(), v.object({ x: v.number(), y: v.number() }));
 
@@ -66,8 +72,29 @@ function integer(n: number) {
   if (!Number.isSafeInteger(n) || n < 1) fail("Invalid live sequence.");
 }
 
+/** Check capability before any session, actor or operation mutation. */
+function requireProtocol(offered: number | undefined, required: number) {
+  if (offered !== undefined && offered !== 1 && offered !== 2)
+    fail("Unsupported live protocol.");
+  if ((offered ?? 1) < required)
+    fail("This live document requires native-preservation protocol 2.");
+}
+/** Inspect atomic native pixels and document color without decoding image buffers. */
+function nativeCell(path: string, cell: any): boolean {
+  if (cell?.Pixels?.native != null) return true;
+  if (path === "/color" && cell?.Value != null) {
+    const color = cell.Value;
+    return color.model !== "Rgb" || color.depth !== "U8" ||
+      color.intent !== 0 || !Array.isArray(color.icc_profile) || color.icc_profile.length !== 0;
+  }
+  return path.startsWith("/color/") && cell != null;
+}
+function seedProtocol(seed: string): number {
+  return Object.entries(JSON.parse(seed)).some(([path,cell]) => nativeCell(path,cell)) ? 2 : 1;
+}
+
 export const create = mutation({
-  args: { ...deviceArg, projectId: v.id("cloudProjects"), seed: v.string() },
+  args: { ...deviceArg, projectId: v.id("cloudProjects"), seed: v.string(), protocol: v.optional(v.number()) },
   returns: v.id("cloudLiveSessions"),
   handler: async (ctx, a) => {
     await access(ctx, a.projectId, a.deviceToken, "write");
@@ -88,6 +115,8 @@ export const create = mutation({
       base[""] !== "Object"
     )
       fail("Invalid live document seed.");
+    const protocol = seedProtocol(a.seed);
+    requireProtocol(a.protocol, protocol);
     let quota = await ctx.db
       .query("cloudLiveQuotas")
       .withIndex("by_project", (q) => q.eq("projectId", a.projectId))
@@ -116,6 +145,7 @@ export const create = mutation({
       projectId: a.projectId,
       seed: a.seed,
       revision: 0,
+      protocol,
     });
     await ctx.db.patch(quota._id, { count: quota.count + 1 });
     return session;
@@ -179,10 +209,12 @@ export const initializeQuota = action({
 
 export const join = mutation({
   args,
-  returns: v.object({ seed: v.string(), projectId: v.id("cloudProjects") }),
+  returns: v.object({ seed: v.string(), projectId: v.id("cloudProjects"), protocol: v.number(), supportedProtocol: v.literal(2) }),
   handler: async (ctx, a) => {
     actorId(a.actor);
     const { room, user } = await authorized(ctx, a.session, a.deviceToken);
+    const protocol = room.protocol ?? seedProtocol(room.seed);
+    requireProtocol(a.protocol, protocol);
     const old = await ctx.db
       .query("cloudLiveClients")
       .withIndex("by_session_actor", (q) =>
@@ -210,7 +242,7 @@ export const join = mutation({
         selection: [],
       });
     }
-    return { seed: room.seed, projectId: room.projectId };
+    return { seed: room.seed, projectId: room.projectId, protocol, supportedProtocol: 2 as const };
   },
 });
 
@@ -232,6 +264,8 @@ export const exchange = mutation({
   handler: async (ctx, a) => {
     actorId(a.actor);
     const { room, user } = await authorized(ctx, a.session, a.deviceToken);
+    const protocol = Math.max(room.protocol ?? seedProtocol(room.seed), a.changes.some(c => c.edit.type === "write" && c.edit.writes.some(w => nativeCell(w.path,w.value))) ? 2 : 1);
+    requireProtocol(a.protocol, protocol);
     const client = await ctx.db
       .query("cloudLiveClients")
       .withIndex("by_session_actor", (q) =>
@@ -330,7 +364,7 @@ export const exchange = mutation({
         payload,
       });
     }
-    if (revision !== room.revision) await ctx.db.patch(a.session, { revision });
+    if (revision !== room.revision || protocol !== (room.protocol ?? 1)) await ctx.db.patch(a.session, { revision, protocol });
     await ctx.db.patch(client._id, {
       seq,
       updated: Date.now(),

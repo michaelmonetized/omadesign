@@ -1305,7 +1305,7 @@ fn seed(scene: &str) -> Studio {
                     Pt::ZERO,
                     Pt::new(img.w as f32, img.h as f32),
                 ),
-                Layer::raster("Paint accents", img.w, img.h),
+                Layer::raster("Paint accents", img.w, img.h).unwrap(),
             ];
             s.active_layer = Some(1);
             s.persona = Persona::Pixel;

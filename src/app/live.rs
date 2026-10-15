@@ -93,11 +93,7 @@ impl Studio {
         let device = fingerprint(&self.cloud_identity);
         self.cloud_task(move |client| {
             let seed = serde_json::to_string(&base).map_err(|e| e.to_string())?;
-            let session = client
-                .call("live:create", json!({"projectId":project,"seed":seed}))?
-                .as_str()
-                .ok_or("Missing live session ID")?
-                .to_owned();
+            let session = client.create_live(&project, seed)?;
             let actor = crate::cloud::client::random_token()?;
             let mut replica = client.join_live(&session, &actor)?;
             replica.device = device;
@@ -175,7 +171,6 @@ impl Studio {
         let result = replica.document(&self.doc);
         self.live_runtime.conflicts = replica.conflicts().len();
         let Ok(mut doc) = result else {
-            self.doc.collaboration = Some(replica);
             return result.map(|_| ());
         };
         let selection: Vec<_> = self
@@ -227,7 +222,7 @@ impl Studio {
             self.status = error;
             return true;
         }
-        let mut replica = self.doc.collaboration.take().unwrap();
+        let mut replica = self.doc.collaboration.as_ref().unwrap().clone();
         if if redo { replica.redo() } else { replica.undo() } {
             if let Err(error) = self.apply_live(replica) {
                 self.status = error;
@@ -345,7 +340,7 @@ impl Studio {
             self.live_runtime.job = None;
             match result {
                 Ok(reply) => {
-                    let mut state = self.doc.collaboration.take().unwrap();
+                    let mut state = self.doc.collaboration.as_ref().unwrap().clone();
                     let before = state.changes.len();
                     let old_cursor = state.cursor;
                     let old_pending = state.pending.len();
@@ -481,7 +476,7 @@ mod tests {
     }
     fn studio_pair() -> (Studio, Studio) {
         let mut a = Studio::new();
-        a.doc = Document::new("Acceptance", 64., 64., 72.);
+        a.doc = crate::collaboration::native_tests::legacy_fixture("Acceptance", 64., 64., 72.);
         let mut b = Studio::new();
         b.doc = a.doc.clone();
         let seed = collaboration::snapshot(&a.doc).unwrap();
@@ -523,6 +518,26 @@ mod tests {
     }
 
     #[test]
+    fn live_collaboration_failed_native_materialization_preserves_artwork_and_history() {
+        let mut studio = Studio::new();
+        studio.doc = crate::collaboration::native_tests::fixture();
+        let seed = collaboration::snapshot(&studio.doc).unwrap();
+        studio.doc.collaboration = Some(Replica::new("native".into(), "a".repeat(64), seed));
+        let before = serde_json::to_vec(&studio.doc).unwrap();
+        let mut candidate = studio.doc.collaboration.as_ref().unwrap().clone();
+        let path = format!("/@entities/{}/kind/Raster/pixels", studio.doc.layers[2].id);
+        if let Some(collaboration::Cell::Pixels {
+            native: Some(native),
+            ..
+        }) = candidate.base.get_mut(&path)
+        {
+            native["intent"] = json!(4);
+        }
+        assert!(studio.apply_live(candidate).unwrap_err().contains("intent"));
+        assert_eq!(before, serde_json::to_vec(&studio.doc).unwrap());
+    }
+
+    #[test]
     fn live_collaboration_restores_selection_by_identity_when_remote_layers_move() {
         let (mut a, mut b) = studio_pair();
         add(&mut a, "Selected");
@@ -541,7 +556,9 @@ mod tests {
         studio.cloud_identity.token = "a".repeat(64);
         let device = fingerprint(&studio.cloud_identity);
         studio.doc.collaboration.as_mut().unwrap().device = device;
-        let root = std::env::temp_dir().join(format!("live-lease-{}", crate::document::next_id()));
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join(".artifacts/live-tests")
+            .join(format!("live-lease-{}", crate::document::next_id()));
         let claim = |actor: &str| lease_at(&root, actor);
         studio.prepare_live_ownership(claim).unwrap();
         let actor = studio.doc.collaboration.as_ref().unwrap().actor.clone();
@@ -609,7 +626,7 @@ mod tests {
                 Instant::now() < until,
                 "client failed to converge to {wanted} objects"
             );
-            std::thread::sleep(Duration::from_millis(10));
+            std::thread::sleep(Duration::from_millis(500));
         }
     }
 
@@ -649,6 +666,8 @@ mod tests {
                 json!({"session":replica.session,"actor":replica.actor}),
             )
             .unwrap();
+        crate::collaboration::native_tests::edit(&mut studio.doc, &role);
+        studio.mark();
         add(&mut studio, &format!("{role} offline"));
         studio.record_live().unwrap();
         let path = root.join(format!("{role}-offline.oma"));
@@ -695,6 +714,11 @@ mod tests {
         let final_doc = crate::project::encode(&studio.doc).unwrap();
         std::fs::write(root.join(format!("{role}-final.oma")), &final_doc).unwrap();
         let reopened = crate::project::decode(&final_doc).unwrap();
+        crate::collaboration::native_tests::assert_native_equal(&studio.doc, &reopened);
+        let mut expected = crate::collaboration::native_tests::fixture();
+        crate::collaboration::native_tests::edit(&mut expected, "Alice");
+        crate::collaboration::native_tests::edit(&mut expected, "Bob");
+        crate::collaboration::native_tests::assert_native_equal(&expected, &reopened);
         assert_eq!(
             collaboration::snapshot(&reopened).unwrap(),
             collaboration::snapshot(&studio.doc).unwrap()
@@ -724,14 +748,36 @@ mod tests {
             cloud_url: data["url"].as_str().unwrap().into(),
             ..Default::default()
         });
-        let doc = Document::new("Acceptance", 1920., 1080., 72.);
+        let mut doc = crate::collaboration::native_tests::fixture();
+        doc.width = 1920.;
+        doc.height = 1080.;
         let seed = serde_json::to_string(&collaboration::snapshot(&doc).unwrap()).unwrap();
+        assert!(
+            client
+                .call(
+                    "live:create",
+                    json!({"projectId":data["project"],"seed":seed})
+                )
+                .unwrap_err()
+                .contains("native-preservation")
+        );
         data["session"] = client
             .call(
                 "live:create",
-                json!({"projectId":data["project"],"seed":seed}),
+                json!({"projectId":data["project"],"seed":seed,"protocol":collaboration::PROTOCOL}),
             )
             .unwrap();
+        let legacy_actor = "c".repeat(64);
+        assert!(
+            client
+                .call(
+                    "live:join",
+                    json!({"session":data["session"],"actor":legacy_actor})
+                )
+                .unwrap_err()
+                .contains("native-preservation")
+        );
+        assert!(client.call("live:exchange",json!({"session":data["session"],"actor":legacy_actor,"changes":[],"cursor":null,"selection":[],"after":0})).unwrap_err().contains("native-preservation"));
         let root = fixture
             .parent()
             .unwrap()

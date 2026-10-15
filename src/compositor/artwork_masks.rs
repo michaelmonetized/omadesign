@@ -129,7 +129,7 @@ pub(crate) fn raster_export_document(doc: &Document) -> Result<Document, String>
         scene.layers[index] = original.clone();
         let replacement = &mut output.layers[index];
         replacement.kind = LayerKind::Raster {
-            pixels: crate::document::Pixels::from_pixmap(&pixels),
+            pixels: crate::document::Pixels::from_pixmap(&pixels)?,
             origin: Pt::ZERO,
             size: Pt::new(width as f32, height as f32),
             rotation: 0.,

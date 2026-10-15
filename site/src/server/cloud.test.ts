@@ -3,7 +3,7 @@ import { discoverCloud, handleCloud } from "./cloud";
 
 describe("Native cloud request bounds", () => {
   it("advertises live capability and rejects unsupported operations before a provider call", async () => {
-    expect((await discoverCloud().json()).capabilities.live).toBe(1);
+    expect((await discoverCloud().json()).capabilities.live).toBe(2);
     const response = await handleCloud(
       new Request("http://localhost/api/cloud", {
         method: "POST",

@@ -1717,7 +1717,7 @@ mod browser_relocation_tests {
         assert!(session.images[0].source.is_none());
         assert!(session.images[0].settings_path.is_none());
         assert!(session.folder.is_empty());
-        assert_eq!(session.images[0].full.data,vec![20,40,60,255]);
+        assert_eq!(session.images[0].full.data.as_slice(),vec![20,40,60,255]);
     }
 
 }

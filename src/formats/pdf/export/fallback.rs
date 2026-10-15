@@ -88,7 +88,7 @@ pub(super) fn prepare(
         let pm = crate::compositor::render_export(&scene, 1)?;
         let mut replacement = Layer::placed_raster(
             &original.name,
-            Pixels::from_pixmap(&pm),
+            Pixels::from_pixmap(&pm)?,
             bounds.min,
             Pt::new(bounds.width(), bounds.height()),
         );
@@ -266,7 +266,7 @@ fn bake_pages(document: &Document) -> Result<(Cow<'_, Document>, BTreeSet<String
         let pm = crate::compositor::render_export(&scene, 1)?;
         prepared.layers.push(Layer::placed_raster(
             &board.name,
-            Pixels::from_pixmap(&pm),
+            Pixels::from_pixmap(&pm)?,
             bounds.min,
             Pt::new(bounds.width(), bounds.height()),
         ));

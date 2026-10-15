@@ -46,7 +46,7 @@ const json = (data: unknown, status = 200) =>
 export function discoverCloud() {
   return json({
     version: 1,
-    capabilities: { live: 1 },
+    capabilities: { live: 2, native_preservation: 1 },
     convexUrl: process.env.CONVEX_URL,
     convexSiteUrl:
       process.env.CONVEX_SITE_URL || process.env.VITE_CONVEX_SITE_URL,

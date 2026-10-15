@@ -718,7 +718,7 @@ pub fn heal_stamp(dst: &mut Pixmap, source: &Pixmap, pos: Pt, source_pos: Pt, br
     }
 }
 
-fn heal_colour_field(mut equations: [[f64; 9]; 6]) -> [[f64; 3]; 6] {
+pub(crate) fn heal_colour_field(mut equations: [[f64; 9]; 6]) -> [[f64; 3]; 6] {
     let mut fallback = [[0.0; 3]; 6];
     fallback[0] = std::array::from_fn(|channel| equations[0][6 + channel] / equations[0][0]);
     // Solve all three colour channels together; small or clipped brushes can

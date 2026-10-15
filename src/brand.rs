@@ -787,13 +787,13 @@ fn prepare_preview_pixels(
     if px.data.len() as u64 != u64::from(px.w) * u64::from(px.h) * 4 {
         use base64::Engine;
         let packed = base64::engine::general_purpose::STANDARD
-            .decode(&px.data)
+            .decode(px.data.as_slice())
             .map_err(|e| e.to_string())?;
         let image = decode_image_with_budget(&packed, pixel_limit)?.to_rgba8();
         if image.dimensions() != (px.w, px.h) {
             return Err("Project raster dimensions do not match its image.".into());
         }
-        px.data = image.into_raw();
+        px.data = crate::deep_color::storage::adopt(image.into_raw())?;
     }
     Ok(())
 }
@@ -1079,7 +1079,7 @@ mod tests {
         fs::write(bank.root.join("vector.svg"), r##"<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg viewBox="0 0 60 40"><style>.brand { fill: #D72640; }</style><g transform="translate(10 8)"><path class="brand" d="M 0 0 L 40 0 L 40 24 L 0 24 Z"/></g></svg>"##).unwrap();
         let mut doc = crate::document::Document::new("Packed pixels", 40.0, 20.0, 72.0);
         let pixels = doc.layers[0].kind.pixels_mut().unwrap();
-        for pixel in pixels.data.as_chunks_mut::<4>().0 {
+        for pixel in pixels.bytes_mut().unwrap().as_chunks_mut::<4>().0 {
             pixel.copy_from_slice(&[215, 38, 64, 255]);
         }
         crate::project::save_to(&doc, &bank.root.join("project.oma")).unwrap();

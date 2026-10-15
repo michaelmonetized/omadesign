@@ -156,7 +156,7 @@ pub fn show_asset_browser(ui: &mut egui::Ui, studio: &mut Studio) {
                             image: crate::photo::RgbaImage {
                                 w: pixels.w,
                                 h: pixels.h,
-                                data: pixels.data,
+                                data: pixels.data.to_vec(),
                             },
                         };
                         if let Err(error) =
@@ -289,11 +289,8 @@ pub fn show_asset_browser(ui: &mut egui::Ui, studio: &mut Studio) {
                     let bytes = crate::asset_browser::download(&hit)?;
                     let full = crate::photo::decode_bytes(&bytes).ok_or("Could not decode this photo.")?;
                     let name = format!("{} {}", hit.provider, hit.tags.chars().take(32).collect::<String>());
-                    let mut layer = Layer::raster(name, full.w, full.h);
-                    if let crate::document::LayerKind::Raster { pixels, .. } = &mut layer.kind {
-                        *pixels = crate::document::Pixels::from_rgba(full.w, full.h, full.data)
-                            .ok_or("Invalid photo dimensions.")?;
-                    }
+                    let pixels = crate::document::Pixels::from_rgba(full.w,full.h,full.data).ok_or("Not enough memory to place this photo")?;
+                    let layer = Layer::placed_raster(name,pixels,crate::geom::Pt::ZERO,crate::geom::Pt::ZERO);
                     Ok((document, layer, target))
                 });
             }
@@ -409,9 +406,9 @@ mod tests {
         });
         let owner = studio.swap_id.clone();
         jobs::start(&ctx, PHOTO, move || {
-            let mut layer = Layer::raster("Loaded photo", 2, 2);
+            let mut layer = Layer::raster("Loaded photo", 2, 2).unwrap();
             if let crate::document::LayerKind::Raster { pixels, .. } = &mut layer.kind {
-                pixels.data = [240, 90, 20, 255].repeat(4);
+                pixels.replace_bytes([240, 90, 20, 255].repeat(4)).unwrap();
             }
             Ok((owner, layer, target))
         });

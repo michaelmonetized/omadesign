@@ -255,7 +255,8 @@ impl Reader<'_> {
                 let mut point = tiny_skia::Point::from_xy(x as f32 + 0.5, y as f32 + 0.5);
                 transform.map_point(&mut point);
                 let mask = sample(&mask, Pt::new(point.x, point.y));
-                let alpha = &mut pixels.data[(y * pixels.w as usize + x) * 4 + 3];
+                let index = (y * pixels.w as usize + x) * 4 + 3;
+                let alpha = &mut pixels.bytes_mut()?[index];
                 *alpha = ((u16::from(*alpha) * u16::from(mask) + 127) / 255) as u8;
             }
         }

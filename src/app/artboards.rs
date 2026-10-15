@@ -305,7 +305,7 @@ mod tests {
         s.doc.layers[0].kind.shapes_mut().unwrap().push(shape);
         let mut layer = Layer::vector("image");
         layer.kind = LayerKind::Raster {
-            pixels: crate::document::Pixels::new(2, 2),
+            pixels: crate::document::Pixels::new(2, 2).unwrap(),
             origin: Pt::new(30., 40.),
             size: Pt::new(20., 10.),
             rotation: 0.,

@@ -1,6 +1,6 @@
 //! Bounded authenticated exchanges; the editor owns retries and its durable queue.
 
-use super::{Change, Id, Replica};
+use super::{Change, Id, PROTOCOL, Replica};
 use crate::cloud::client::Client;
 use crate::geom::Pt;
 use serde::Deserialize;
@@ -24,10 +24,32 @@ pub struct Reply {
 }
 
 impl Client {
+    /// Publish a seed only to a service that understands explicit native capability arguments.
+    /// Args: project ID and complete seed. Returns a session ID or refusal without local mutation.
+    pub fn create_live(&self, project: &str, seed: String) -> Result<String, String> {
+        self.call(
+            "live:create",
+            json!({"projectId":project,"seed":seed,"protocol":PROTOCOL}),
+        )?
+        .as_str()
+        .map(str::to_owned)
+        .ok_or_else(|| "Missing live session ID".into())
+    }
+
     /// Register or resume an authenticated client without replacing any local work.
     /// Args: session ID and actor ID. Returns the shared immutable document seed.
     pub fn join_live(&self, session: &str, actor: &str) -> Result<Replica, String> {
-        let joined = self.call("live:join", json!({"session":session,"actor":actor}))?;
+        let joined = self.call(
+            "live:join",
+            json!({"session":session,"actor":actor,"protocol":PROTOCOL}),
+        )?;
+        if joined["supportedProtocol"].as_u64() != Some(PROTOCOL as u64)
+            || joined["protocol"]
+                .as_u64()
+                .is_none_or(|n| n > PROTOCOL as u64)
+        {
+            return Err("Live service does not negotiate native preservation".into());
+        }
         let seed = joined["seed"]
             .as_str()
             .ok_or("Missing live document seed")?;
@@ -71,6 +93,6 @@ impl Client {
             changes.push(change);
             bytes += length;
         }
-        serde_json::from_value(self.call("live:exchange", json!({"session":replica.session,"actor":replica.actor,"changes":changes,"cursor":cursor,"selection":selection,"after":replica.cursor}))?).map_err(|e| format!("Invalid live exchange: {e}"))
+        serde_json::from_value(self.call("live:exchange", json!({"session":replica.session,"actor":replica.actor,"changes":changes,"cursor":cursor,"selection":selection,"after":replica.cursor,"protocol":PROTOCOL}))?).map_err(|e| format!("Invalid live exchange: {e}"))
     }
 }

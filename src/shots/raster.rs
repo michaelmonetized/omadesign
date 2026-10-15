@@ -4,7 +4,7 @@ use crate::document::{Document, Layer};
 pub(super) fn pixel_effects(s: &mut Studio) {
     let (w, h) = (720_u32, 480_u32);
     s.doc = Document::new("Green screen studio", w as f32, h as f32, 72.0);
-    s.doc.layers = vec![Layer::raster("Product · green screen", w, h)];
+    s.doc.layers = vec![Layer::raster("Product · green screen", w, h).unwrap()];
     let pixels = s.doc.layers[0].kind.pixels_mut().unwrap();
     for y in 0..h {
         for x in 0..w {
@@ -22,9 +22,9 @@ pub(super) fn pixel_effects(s: &mut Studio) {
             let green = [12.0, 220.0 + (y as f32 / h as f32) * 30.0, 18.0];
             let i = ((y * w + x) * 4) as usize;
             for ch in 0..3 {
-                pixels.data[i + ch] = (object[ch] * coverage + green[ch] * (1.0 - coverage)) as u8;
+                pixels.bytes_mut().unwrap()[i + ch] = (object[ch] * coverage + green[ch] * (1.0 - coverage)) as u8;
             }
-            pixels.data[i + 3] = 255;
+            pixels.bytes_mut().unwrap()[i + 3] = 255;
         }
     }
     pixels.touch();

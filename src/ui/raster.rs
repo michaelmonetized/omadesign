@@ -181,7 +181,7 @@ pub(super) fn open_with_settings(ctx: &Context, studio: &mut Studio, settings: S
     let scale = (600.0 / pixels.w.max(pixels.h) as f32).min(1.0);
     let pw = (pixels.w as f32 * scale).round().max(1.0) as u32;
     let ph = (pixels.h as f32 * scale).round().max(1.0) as u32;
-    let source = Arc::new(pixels.data.clone());
+    let source = Arc::new(pixels.data.to_vec());
     let preview_source = Arc::new(thumbnail(&source, pixels.w, pixels.h, pw, ph, 4));
     let preview_selection = selection
         .as_ref()
@@ -586,22 +586,25 @@ fn commit(studio: &mut Studio, session: &Session, after: Vec<u8>) -> Result<(), 
         layer.kind.pixels()
     })
     .ok_or("The target image or mask changed")?;
-    if pixels.w != session.w || pixels.h != session.h || pixels.data != *session.source {
+    if pixels.w != session.w || pixels.h != session.h || pixels.data.as_slice() != session.source.as_slice() {
         return Err("The pixels changed while previewing. Cancel and reopen the filter.".into());
     }
     if after.len() != session.source.len() {
         return Err("The filter returned invalid pixel data".into());
     }
-    if after == *session.source {
+    let native_after = pixels.native.as_ref().map(|_|pixels.filtered(&session.settings,session.selection.as_deref().map(|s|s.as_slice()))).transpose()?;
+    if native_after.is_none() && after == *session.source {
         studio.status = format!("{} · no pixel changes", session.settings.kind.name());
         return Ok(());
     }
-    let cmd = Cmd::Pixels {
+    let cmd = if let Some(after) = native_after {
+        Cmd::NativePixels {layer:index, mask:session.mask, before:pixels.clone(), after}
+    } else {Cmd::Pixels {
         layer: index,
         mask: session.mask,
-        before: session.source.as_ref().clone(),
-        after,
-    };
+        before: pixels.data.clone(),
+        after:crate::deep_color::storage::adopt(after)?,
+    }};
     apply_command(&mut studio.doc, &cmd);
     studio.history.push(cmd);
     studio.dirty = true;
@@ -623,46 +626,46 @@ mod tests {
     fn filter_preview_cancel_is_non_destructive_and_apply_undo_round_trips() {
         let ctx = Context::default();
         let mut studio = Studio::new();
-        studio.doc.layers = vec![Layer::raster("Key", 2, 1)];
-        studio.doc.layers[0].kind.pixels_mut().unwrap().data = vec![0, 255, 0, 255, 255, 0, 0, 128];
+        studio.doc.layers = vec![Layer::raster("Key", 2, 1).unwrap()];
+        studio.doc.layers[0].kind.pixels_mut().unwrap().replace_bytes(vec![0, 255, 0, 255, 255, 0, 0, 128]).unwrap();
         studio.active_layer = Some(0);
-        let before = studio.doc.layers[0].kind.pixels().unwrap().data.clone();
+        let before = studio.doc.layers[0].kind.pixels().unwrap().data.to_vec();
         open(&ctx, &mut studio, Kind::ChromaKey);
         let session = ctx.data(|d| d.get_temp::<Session>(state_id())).unwrap();
         let after = crate::raster::apply(&session.source, 2, 1, &session.settings, None).unwrap();
-        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data, before);
+        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(), before);
         assert_eq!(studio.history.len(), 0);
         commit(&mut studio, &session, after.clone()).unwrap();
-        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data, after);
+        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(), after);
         let undo = studio.history.undo().unwrap();
         apply_command(&mut studio.doc, &undo);
-        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data, before);
+        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(), before);
         let redo = studio.history.redo().unwrap();
         apply_command(&mut studio.doc, &redo);
-        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data, after);
+        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(), after);
         let encoded = serde_json::to_string(&studio.doc).unwrap();
         let saved: crate::document::Document = serde_json::from_str(&encoded).unwrap();
-        assert_eq!(saved.layers[0].kind.pixels().unwrap().data, after);
+        assert_eq!(saved.layers[0].kind.pixels().unwrap().data.as_slice(), after);
     }
     #[test]
     fn filter_on_mask_preserves_image_and_rejects_stale_source() {
         let ctx = Context::default();
         let mut studio = Studio::new();
-        studio.doc.layers = vec![Layer::raster("Image", 1, 1)];
+        studio.doc.layers = vec![Layer::raster("Image", 1, 1).unwrap()];
         studio.doc.layers[0].mask = Pixels::from_rgba(1, 1, vec![30, 30, 30, 255]);
         studio.active_layer = Some(0);
         studio.paint_mask = true;
-        let source_image = studio.doc.layers[0].kind.pixels().unwrap().data.clone();
+        let source_image = studio.doc.layers[0].kind.pixels().unwrap().data.to_vec();
         open(&ctx, &mut studio, Kind::Invert);
         let session = ctx.data(|d| d.get_temp::<Session>(state_id())).unwrap();
         let after = crate::raster::apply(&session.source, 1, 1, &session.settings, None).unwrap();
         commit(&mut studio, &session, after.clone()).unwrap();
         assert_eq!(
-            studio.doc.layers[0].mask.as_ref().unwrap().data,
+            studio.doc.layers[0].mask.as_ref().unwrap().data.as_slice(),
             vec![225, 225, 225, 255]
         );
         assert_eq!(
-            studio.doc.layers[0].kind.pixels().unwrap().data,
+            studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(),
             source_image
         );
         assert!(commit(&mut studio, &session, after).is_err());
@@ -739,11 +742,10 @@ mod tests {
     fn dialog_opens_from_inspector_cancels_and_applies_at_minimum_window_size() {
         let ctx = Context::default();
         let mut studio = Studio::new();
-        studio.doc.layers = vec![Layer::raster("Key", 2, 1)];
-        studio.doc.layers[0].kind.pixels_mut().unwrap().data =
-            vec![0, 255, 0, 255, 220, 10, 10, 255];
+        studio.doc.layers = vec![Layer::raster("Key", 2, 1).unwrap()];
+        studio.doc.layers[0].kind.pixels_mut().unwrap().replace_bytes(vec![0, 255, 0, 255, 220, 10, 10, 255]).unwrap();
         studio.active_layer = Some(0);
-        let original = studio.doc.layers[0].kind.pixels().unwrap().data.clone();
+        let original = studio.doc.layers[0].kind.pixels().unwrap().data.to_vec();
         frame(&ctx, &mut studio, vec![]);
         let labels = frame(&ctx, &mut studio, vec![]);
         click(&ctx, &mut studio, labels["Chroma key…"].center());
@@ -755,7 +757,7 @@ mod tests {
         click(&ctx, &mut studio, labels["Cancel"].center());
         assert!(!is_open(&ctx));
         assert_eq!(studio.history.len(), 0);
-        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data, original);
+        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(), original);
         open(&ctx, &mut studio, Kind::ChromaKey);
         frame(&ctx, &mut studio, vec![]);
         let labels = frame(&ctx, &mut studio, vec![]);

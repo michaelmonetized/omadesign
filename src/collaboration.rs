@@ -6,17 +6,29 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 
+#[cfg(test)]
+pub(crate) mod native_tests;
+mod pixels;
 pub mod transport;
+
+pub const PROTOCOL: u32 = 2;
 
 type Snapshot = BTreeMap<String, Cell>;
 const PIXEL_BUDGET: u64 = 512 * 1024 * 1024;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub enum Cell {
     Object,
     List,
     Variant(String),
-    Pixels { w: u32, h: u32, data: String },
+    Pixels {
+        w: u32,
+        h: u32,
+        data: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        native: Option<Value>,
+    },
     Value(Value),
 }
 
@@ -30,13 +42,15 @@ impl PartialEq for Cell {
                     w: aw,
                     h: ah,
                     data: a,
+                    native: an,
                 },
                 Self::Pixels {
                     w: bw,
                     h: bh,
                     data: b,
+                    native: bn,
                 },
-            ) => aw == bw && ah == bh && a == b,
+            ) => aw == bw && ah == bh && a == b && an == bn,
             (Self::Value(a), Self::Value(b)) => same_json(a, b),
             _ => false,
         }
@@ -122,38 +136,25 @@ pub struct Replica {
 /// Turn native editable state into stable property addresses.
 /// Args: document to share. Returns its cells, excluding device and session metadata.
 pub fn snapshot(doc: &Document) -> Result<Snapshot, String> {
-    let mut used = 0u64;
-    for pixels in doc.layers.iter().flat_map(|layer| {
-        layer
-            .kind
-            .pixels()
-            .into_iter()
-            .chain(layer.mask.as_ref())
-            .chain(
-                layer
-                    .kind
-                    .shapes()
-                    .unwrap_or_default()
-                    .iter()
-                    .filter_map(|shape| shape.mask.as_ref()),
-            )
-    }) {
-        let expected = pixel_size(pixels)?;
-        used = used
-            .checked_add(expected)
-            .filter(|used| *used <= PIXEL_BUDGET)
-            .ok_or("Live document exceeds the total pixel budget")?;
-        if pixels.data.len() as u64 != expected {
-            return Err("Invalid live pixel buffer size".into());
-        }
+    crate::deep_color::cms::validate_profile(&doc.color.icc_profile, doc.color.model)?;
+    if doc.color.intent > 3 {
+        return Err("Invalid live document rendering intent".into());
     }
     let mut packed = doc.clone();
     packed.collaboration = None;
     packed.cloud = None;
     packed.workspace = None;
-    visit_pixels(&mut packed, |_, pixels| {
-        pixels.data =
-            zstd::stream::encode_all(pixels.data.as_slice(), 1).map_err(|e| e.to_string())?;
+    let mut buffers = BTreeMap::new();
+    let mut used = doc.color.icc_profile.len() as u64;
+    visit_pixels(&mut packed, |path, pixels| {
+        let cell = pixels::pack(pixels)?;
+        used = used
+            .checked_add(pixels::size(&cell)?)
+            .filter(|n| *n <= PIXEL_BUDGET)
+            .ok_or("Live document exceeds the total pixel budget")?;
+        buffers.insert(path.to_owned(), cell);
+        pixels.data = crate::deep_color::storage::empty_bytes();
+        pixels.native = None;
         Ok(())
     })?;
     let mut value = serde_json::to_value(&packed).map_err(|e| e.to_string())?;
@@ -168,6 +169,7 @@ pub fn snapshot(doc: &Document) -> Result<Snapshot, String> {
     }
     let mut result = BTreeMap::new();
     flatten("", &value, &mut result)?;
+    result.extend(buffers);
     Ok(result)
 }
 
@@ -211,33 +213,113 @@ fn pixel_size(pixels: &crate::document::Pixels) -> Result<u64, String> {
 /// Decode every shared buffer under one document memory budget.
 /// Args: materialized document, shared cells and total byte budget. Returns validated pixels or an error.
 fn unpack_pixels(doc: &mut Document, cells: &Snapshot, budget: u64) -> Result<(), String> {
-    let mut used = 0u64;
+    unpack_pixels_checked(doc, cells, budget, &crate::deep_color::storage::check)
+}
+
+fn unpack_pixels_checked<C: crate::resources::CancellationCheck + ?Sized>(
+    doc: &mut Document,
+    cells: &Snapshot,
+    budget: u64,
+    check: &C,
+) -> Result<(), String> {
+    let mut used = doc.color.icc_profile.len() as u64;
     visit_pixels(doc, |path, pixels| {
-        use std::io::Read;
-        let expected = pixel_size(pixels)?;
+        let size = match cells.get(path) {
+            Some(cell @ Cell::Pixels { .. }) => pixels::size(cell)?,
+            _ => pixel_size(pixels)?,
+        };
         used = used
-            .checked_add(expected)
-            .filter(|used| *used <= budget)
+            .checked_add(size)
+            .filter(|n| *n <= budget)
             .ok_or("Live document exceeds the total pixel budget")?;
-        if let Some(Cell::Pixels { data, .. }) = cells.get(path) {
-            let compressed = base64::engine::general_purpose::STANDARD
-                .decode(data)
-                .map_err(|e| e.to_string())?;
-            let decoder = zstd::stream::read::Decoder::new(compressed.as_slice())
-                .map_err(|e| e.to_string())?;
-            let mut bytes = Vec::new();
-            decoder
-                .take(expected + 1)
-                .read_to_end(&mut bytes)
-                .map_err(|e| e.to_string())?;
-            pixels.data = bytes;
-            pixels.touch();
+        Ok(())
+    })?;
+    let mut staged = doc.clone();
+    visit_pixels(&mut staged, |path, pixels| {
+        check.check()?;
+        if let Some(cell @ Cell::Pixels { .. }) = cells.get(path) {
+            *pixels = pixels::unpack(cell, check)?;
         }
-        if pixels.data.len() as u64 != expected {
+        if pixels.data.len() as u64 != pixel_size(pixels)? {
             return Err("Invalid live pixel buffer size".into());
         }
+        pixels.validate_native()
+    })?;
+    check.check()?;
+    *doc = staged;
+    Ok(())
+}
+
+/// Determine whether a cell requires lossless native-preservation support.
+/// Args: property address and value. Returns true for authoritative native or nonneutral color state.
+fn native_cell(path: &str, cell: &Cell) -> bool {
+    match cell {
+        Cell::Pixels {
+            native: Some(_), ..
+        } => true,
+        Cell::Value(value) if path == "/color" => {
+            serde_json::from_value::<crate::deep_color::cms::DocumentColor>(value.clone())
+                .map_or(true, |color| color != Default::default())
+        }
+        Cell::Value(_) if path.starts_with("/color/") => true,
+        _ => false,
+    }
+}
+
+/// Check the decoded aggregate before native allocation or legacy JSON deserialization.
+/// Args: inflated document, cells and transport quota. Returns an error before any pixel materialization.
+fn preflight_pixels(value: &Value, cells: &Snapshot, budget: u64) -> Result<(), String> {
+    let mut used = value["color"]["icc_profile"]
+        .as_array()
+        .map_or(0, |a| a.len() as u64);
+    let mut check = |path: String, p: &Value| -> Result<(), String> {
+        if p.is_null() {
+            return Ok(());
+        }
+        let size = if let Some(cell @ Cell::Pixels { .. }) = cells.get(&path) {
+            pixels::size(cell)?
+        } else {
+            if p.get("native").is_some_and(|n| !n.is_null()) {
+                return Err("Native pixels require an atomic live cell".into());
+            }
+            let w = p["w"].as_u64().ok_or("Invalid live pixel width")?;
+            let h = p["h"].as_u64().ok_or("Invalid live pixel height")?;
+            let n = w
+                .checked_mul(h)
+                .and_then(|n| n.checked_mul(4))
+                .filter(|n| *n > 0 && *n <= budget)
+                .ok_or("Live pixel dimensions exceed the decode budget")?;
+            if p["data"].as_array().map(|a| a.len() as u64) != Some(n) {
+                return Err("Invalid live pixel buffer size".into());
+            }
+            n
+        };
+        used = used
+            .checked_add(size)
+            .filter(|n| *n <= budget)
+            .ok_or("Live document exceeds the total pixel budget")?;
         Ok(())
-    })
+    };
+    for layer in value["layers"].as_array().into_iter().flatten() {
+        let path = format!("/@entities/{}", layer["id"]);
+        if let Some(p) = layer.pointer("/kind/Raster/pixels") {
+            check(format!("{path}/kind/Raster/pixels"), p)?;
+        }
+        if let Some(p) = layer.get("mask") {
+            check(format!("{path}/mask"), p)?;
+        }
+        for shape in layer
+            .pointer("/kind/Vector/shapes")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(p) = shape.get("mask") {
+                check(format!("/@entities/{}/mask", shape["id"]), p)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn child(path: &str, key: &str) -> String {
@@ -246,6 +328,9 @@ fn child(path: &str, key: &str) -> String {
 
 fn flatten(path: &str, value: &Value, out: &mut Snapshot) -> Result<(), String> {
     match value {
+        _ if path == "/color" => {
+            out.insert(path.into(), Cell::Value(value.clone()));
+        }
         Value::Object(fields) if pixel_address(path) => {
             let w = fields
                 .get("w")
@@ -266,6 +351,7 @@ fn flatten(path: &str, value: &Value, out: &mut Snapshot) -> Result<(), String> 
                     w,
                     h,
                     data: base64::engine::general_purpose::STANDARD.encode(bytes),
+                    native: None,
                 },
             );
         }
@@ -590,15 +676,48 @@ impl Replica {
     /// Materialize a converged native document, retaining this device's cloud link.
     /// Args: local document for metadata. Returns editable data or a validation error.
     pub fn document(&self, local: &Document) -> Result<Document, String> {
+        self.document_for_protocol(local, PROTOCOL)
+    }
+
+    /// Refuse unsupported native content before materializing any document buffers.
+    /// Args: local metadata and peer capability. Returns a complete document or an atomic refusal.
+    pub fn document_for_protocol(
+        &self,
+        local: &Document,
+        protocol: u32,
+    ) -> Result<Document, String> {
+        if self.required_protocol() > protocol {
+            return Err("This live document requires native-preservation protocol 2".into());
+        }
         let (mut doc, _) = self.rendered()?;
         doc.cloud = local.cloud.clone();
         doc.workspace = local.workspace;
         Ok(doc)
     }
 
+    /// Inspect the entire retained log before a peer can round-trip authoritative content.
+    /// Args: none. Returns the minimum lossless live protocol, including withdrawn native edits.
+    pub fn required_protocol(&self) -> u32 {
+        if self.base.iter().any(|(path, cell)| native_cell(path, cell))
+            || self.changes.iter().any(|c| match &c.edit {
+                Edit::Write { writes } => writes.iter().any(|w| {
+                    w.value
+                        .as_ref()
+                        .is_some_and(|cell| native_cell(&w.path, cell))
+                }),
+                _ => false,
+            })
+        {
+            2
+        } else {
+            1
+        }
+    }
+
     fn rendered(&self) -> Result<(Document, BTreeSet<String>), String> {
         let cells = self.cells();
         let value = inflate("", &cells).ok_or("Live document has no root")?;
+        preflight_pixels(&value, &cells, PIXEL_BUDGET)?;
         let mut doc: Document =
             serde_json::from_value(value).map_err(|e| format!("Invalid live document: {e}"))?;
         let mut repaired = BTreeSet::new();
@@ -657,6 +776,10 @@ impl Replica {
             doc.layers[layer].kind.shapes_mut().unwrap().push(shape);
         }
         unpack_pixels(&mut doc, &cells, PIXEL_BUDGET)?;
+        crate::deep_color::cms::validate_profile(&doc.color.icc_profile, doc.color.model)?;
+        if doc.color.intent > 3 {
+            return Err("Invalid live document rendering intent".into());
+        }
         let groups: BTreeMap<_, _> = doc
             .layers
             .iter()
@@ -887,7 +1010,7 @@ mod tests {
         shape
     }
     fn pair() -> (Document, Replica, Replica) {
-        let doc = Document::new("Live", 100., 100., 72.);
+        let doc = super::native_tests::legacy_fixture("Live", 100., 100., 72.);
         let base = snapshot(&doc).unwrap();
         (
             doc,
@@ -1396,9 +1519,9 @@ mod tests {
     }
     #[test]
     fn standard_layout_backgrounds_fit_the_live_seed_and_pixels_round_trip_losslessly() {
-        let mut doc = Document::new("Desktop layout", 1920., 1080., 72.);
+        let mut doc = super::native_tests::legacy_fixture("Desktop layout", 1920., 1080., 72.);
         let pixels = doc.layers[0].kind.pixels_mut().unwrap();
-        pixels.data[10..18].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8]);
+        pixels.bytes_mut().unwrap()[10..18].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8]);
         pixels.touch();
         let seed = snapshot(&doc).unwrap();
         assert!(serde_json::to_vec(&seed).unwrap().len() < 64_000);
@@ -1412,7 +1535,7 @@ mod tests {
     }
     #[test]
     fn pixel_masks_and_legacy_buffers_share_one_validated_decode_budget() {
-        let mut doc = Document::new("Masks", 1., 1., 72.);
+        let mut doc = super::native_tests::legacy_fixture("Masks", 1., 1., 72.);
         doc.layers[0].mask = crate::document::Pixels::from_rgba(1, 1, vec![1, 2, 3, 4]);
         let mut item = shape("Masked");
         item.mask = crate::document::Pixels::from_rgba(1, 1, vec![5, 6, 7, 8]);
@@ -1421,7 +1544,10 @@ mod tests {
         let cells = snapshot(&doc).unwrap();
         let state = Replica::new("masks".into(), "a".repeat(64), cells.clone());
         let merged = state.document(&doc).unwrap();
-        assert_eq!(merged.layers[0].mask.as_ref().unwrap().data, [1, 2, 3, 4]);
+        assert_eq!(
+            merged.layers[0].mask.as_ref().unwrap().data.as_slice(),
+            [1, 2, 3, 4]
+        );
         assert_eq!(
             merged
                 .find_shape(1, id)
@@ -1429,7 +1555,8 @@ mod tests {
                 .mask
                 .as_ref()
                 .unwrap()
-                .data,
+                .data
+                .as_slice(),
             [5, 6, 7, 8]
         );
         let mut packed: Document = serde_json::from_value(inflate("", &cells).unwrap()).unwrap();
@@ -1451,7 +1578,8 @@ mod tests {
                 .kind
                 .pixels()
                 .unwrap()
-                .data,
+                .data
+                .as_slice(),
             [9, 8, 7, 6]
         );
         let mut packed: Document = serde_json::from_value(inflate("", &legacy).unwrap()).unwrap();
@@ -1464,7 +1592,7 @@ mod tests {
 
     #[test]
     fn malformed_and_mis_sized_compressed_pixels_fail_before_materialization() {
-        let doc = Document::new("Malformed", 1., 1., 72.);
+        let doc = super::native_tests::legacy_fixture("Malformed", 1., 1., 72.);
         let mut state = Replica::new("pixels".into(), "a".repeat(64), snapshot(&doc).unwrap());
         let path = format!("/@entities/{}/kind/Raster/pixels", doc.layers[0].id);
         for bytes in [vec![1, 2, 3], vec![1, 2, 3, 4, 5]] {
@@ -1475,6 +1603,7 @@ mod tests {
                     w: 1,
                     h: 1,
                     data: base64::engine::general_purpose::STANDARD.encode(compressed),
+                    native: None,
                 },
             );
             assert!(state.document(&doc).unwrap_err().contains("buffer size"));
@@ -1485,6 +1614,7 @@ mod tests {
                 w: 1,
                 h: 1,
                 data: "invalid base64 !".into(),
+                native: None,
             },
         );
         assert!(state.document(&doc).is_err());
