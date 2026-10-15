@@ -9,8 +9,10 @@ extensions in `src/formats/raw.rs::EXTENSIONS` and the format guide. It includes
 80 candidate cases: 61 independently pinned public source URLs/hashes and 19
 cases awaiting a licensed source. The inventory names concrete capture axes and
 records every remaining axis as unqualified. It is not an exhaustive camera
-support list. The M50 RAW case has verified identity and reference pins ready for
-application checks. No camera case has passed those checks yet.
+support list. The exact M50 RAW case passed its strict workflow at
+`b3041919d443dad35ec3387b76a13e275fb41db9`. The other 79 cases remain
+unqualified. X2D 100C references are prepared; reference preparation does not
+qualify application decoding, placement or export.
 
 ## Provenance
 
@@ -244,45 +246,115 @@ Never pass the internal lock marker yourself.
 
 The 512 MiB per-source and 1 GiB temporary budgets are acquisition/test scheduling
 limits, **not product RAW size or pixel caps**. Larger phone/high-resolution cases
-need parent resource scheduling. A case keeps at most one source copy and one
-export on disk; the runner checks a conservative export allowance before writing.
+need parent resource scheduling. The approved `coverage-6565` exception retains
+a 3 GiB aggregate allowance and at least 6 GiB free after reserving that full
+allowance. Its source still must fit 512 MiB.
+
+The workflow counts the original, reference files, explicitly listed compact
+evidence and owned source/export/settings files. It checks each source-copy
+chunk and each shared export write, includes the codec output bound before
+encoding, and rejects links or unrecognized scheduled exceptions.
+`OMA_RAW_SCHEDULED_CASE_STORAGE` points to a private JSON descriptor containing
+`case`, `source_sha256`, `temporary_bytes`, `minimum_free_bytes` and `files`. Only
+the exact approved X2D source and 3/6 GiB values can enlarge the default allowance.
+This descriptor grants test storage, never product support or a camera pass.
+A case keeps at most one source copy and one export on disk.
 It removes only its exact owned source/export/settings paths and retains compact
 JSON/log receipts. Original files, their sidecars and cached/public fixtures are
 never deleted. No resource measurement runs concurrently with a compiler here.
 
-## Remaining evidence
+## Exact receipts and remaining evidence
 
-Seventy-nine cases still lack complete pinned references and verified in-file
-identity. Nineteen cases also lack source URLs and
-source hashes. The 61 public source pins establish provenance, not local corpus
-presence or decoding success. The pinned CC0 Canon M50 RAW and official
-hash-verified DNGLab 0.8.0 executable are locally acquired. Its canonical sensor
-reference matches the attributed DNGLab FNV exactly, and its separate LibRaw
-integration reference is pinned at 6024x4020. Full sensor CMP1 tags confirm 14-bit
-encoding at 6288x4056; decoded samples use 16-bit storage. DNGLab reports an active
-rectangle of 6022x4018 and a 6000x4000 shot inset, which remain distinct from the
-measured LibRaw output. Original source hashes before/after match. These are tool
-and reference receipts; application comparison, settings reopen and active
-cancellation have not passed. The remaining sources are not claimed present.
-The eight DNGLab metadata pins alone cannot close the native sensor-plane
-comparison. Historical private fixtures/reference bundles need recovery and rights
-review before binding or sharing.
+The original optics/local/catalog stack retains its 87-test receipt at
+`984245418d82bd6c396d879e89837cbbaafa7828`. The RAW affected cohort passed
+103 tests at `6492b77debebc9628f433d42236b9a860fb953f9`; its original linker I/O
+failure and authorized identical retry are both preserved. These receipts remain
+bound to their original commits.
 
-Contract tests cover missing corpora, hash changes, missing references, zero
-comparisons, future/invalid schemas, wrong sensor planes, optional skips, safe
-outputs and an original generated 64x48 DNG through the real Photo workflow. They
-passed at `6492b77debebc9628f433d42236b9a860fb953f9`: 103 passed, zero failed,
-three ignored. The first final link failed with `Input/output error`; one
-authorized identical retry linked and passed. Both receipts are preserved.
-Actual synthetic AHD cancellation stopped in 39.6 ms and the immediate next
-64x48 decode succeeded. The strict corpus, private camera fixture and real M50
-cancellation tests were ignored. Targeted Rust formatting and Node syntax checks
-passed. The authorized narrow Node self-test
-passed: `{"command":"self-test","status":"passed","contract_mutations":10,"camera_decodes":0}`.
-It also checks missing/changed file pins, reference corruption, zero required runs
-and optional skip accounting using four original bytes, then removes its own
-scratch files. It downloads nothing and runs no compiler or decoder.
-Native resource/cancellation/precision implementation is under exact-commit
-qualification in PRs #259, #261, #263 and #264. Actual corpus/reference execution
-and active cancellation proof remain pending. Precise Design placement waits for
-the full qualified native/color dependency; no partial native cut bypass is allowed.
+At `b3041919d443dad35ec3387b76a13e275fb41db9`, the pinned Canon M50 RAW strict
+workflow passed one case. Full sensor samples matched DNGLab exactly (25,504,128
+samples); developed RGB matched the LibRaw integration reference exactly
+(72,649,440 samples). Independently decoded PNG16 and TIFF16 pixels matched.
+Normalized preview/full maximum error was 0.001960779; edited settings save/reopen
+maximum transfer error was 0.000007728. Original source hashes before/after matched.
+The sampled process-lifetime high-water was 876,068,864 bytes; it includes
+reference and workflow work and is not an isolated decoder peak.
+
+The same commit passed 25 resource/cancellation/preset tests, including actual
+M50 native cancellation in 283.503 ms, immediate distinct-source next-open in
+4022.665 ms, preserved current edits/source, no stale publication, and isolated
+preset persistence/reopen. Its test executable hash was
+`b115c23686e4b4dd35214dbe947a26ca79a5e35c59c554f99fca8deeef1b1330`.
+FNV-1a64 `62261f0ba81cfcd2` is over each little-endian sensor u16 byte,
+including masked borders; it is not a per-u16 word xor. Native qualification
+compares sensor samples with the pinned file; it does not itself compute that FNV.
+Suite's reviewed pure-Node consumer retains this exact producer and one qualified
+row, leaving 79 unqualified and the full candidate false. It does not replay a
+camera job or promote the receipt to later source.
+
+RAW-to-Design software consumer checks passed 7/7 at
+`56c9805fe465cf58f329209a4cf2040e734a35c1`. They exercise actual placement
+handlers, stale source/destination refusal, cancellation, undo, independent scalar
+OETF, F32 native storage, exact project reopen, actual destination ICC/model/intent,
+float TIFF and explicit conversion before PNG16 export. Direct CMYK TIFF preserves
+ink bits exactly. The float compositor's `1-(1-ink)` arithmetic is measured
+separately: maximum 2.98023224e-8, within the 5.96046448e-8 bound. The earlier
+6/1 result at `198a5013` is preserved as an overly strict composite comparison.
+These calibration/handler checks do not prove 102 MP placement or a native window.
+
+The exact CC0 X2D 100C source was acquired at 213,311,488 bytes, SHA-256
+`dcc5a4abe3498e6f25e89bb491995fd12c3b669d9277c71b45b49210d3e56280`.
+Scheduled reference preparation passed 1/1 at
+`8d5a6f7a9e82916620746b8fb0af826147f9c993`. DNGLab's 11904x8842 sensor plane
+matches attributed byte-FNV `c07a267c0bc60a5f`; the separately generated LibRaw
+RGB16 reference is 11664x8750 (102.06 MP). Sensor/reference SHA-256, executable
+hashes, command flags and original before/after hashes are retained. PNM is
+converted directly to canonical little-endian samples without another full PNM
+file. Actual case files used 1,036,187,252 bytes. Measured tool peaks were
+437,072 KiB for DNGLab and 1,229,888 KiB for LibRaw. A shared 2,818,572,288-byte
+reservation covered the serial tools and bounded streaming process; child address
+space was limited to 2.5 GiB. These are reference-process measurements, not
+application decode/placement acceptance or a product memory limit.
+
+X2D's independent EXIF model, LibRaw camera label and internal normalized model
+remain distinct. Its source default crop `[128,96,11656,8742]` does not replace
+the measured LibRaw output. The independent active-area value is absent. Standard
+TIFF tag inspection also finds no ActiveArea tag, DNGVersion or OpcodeList1/2/3;
+MakerNotes are not interpreted as DNG opcodes. `active_dimensions` remains null,
+and required preflight refuses this case rather than inventing an active area.
+At `c8093a50fca4dc38104d7c7a4f1f22bf2bdf881b`, the real Photo load returned
+11664x8750 with 306,180,000 linear u16 samples. Process-lifetime sampled high
+water was 1,905,360,896 bytes; retained admission was 673,613,632 bytes and returned
+to zero after final owners dropped. Source hashes were unchanged. The affected
+cohort was 11 passed / 1 failed: a second open while retaining the current photo
+was refused at the generic 3,982 MiB native request, before sensor stage 8. The
+1.12 ms cancellation of that admission wait is not active decode proof; next-open
+failed safely and current edits/source stayed intact. The full failed receipt is
+preserved. Application precision, settings reopen, native placement/export and
+active cancellation for this X2D source remain unproven.
+
+The follow-up demand repair recognizes only `unpacked_load_raw()` with ordinary
+three-color Bayer, single-frame, unit-aspect, non-Fuji layout, normal ushort pitch
+and at most 32 MiB metadata. With the adapter's fixed AHD settings, LibRaw 0.22.2
+`unpack.cpp`, `raw2image.cpp`, `ahd_demosaic.cpp` and `mem_image.cpp` bound the
+simultaneously live padded ushort sensor, padded four-channel ushort image and
+RGB16 output. The request is their sum plus 64 MiB for metadata/tile scratch, or
+two RGB16 outputs during the later native-to-Rust copy, whichever is greater.
+Other decoders/layouts retain the generic estimate. No vendor source, shared-pool
+policy or host-pressure test changes. The token records actual requests, including
+refusals, so the real fixture check must prove which bound was used. This repair
+still requires exact-source execution.
+
+Nineteen cases still lack licensed source URLs/hashes. Other missing inputs,
+references and mode identities remain explicit required failures. No body, firmware,
+phone HDR mode, proprietary compression mode or other combination is inferred from
+a representative fixture. Historical private fixtures need recovery and rights
+review before binding or sharing. No camera-JPEG look match is claimed.
+
+The complete qualified native/color dependency was consumed before the placement
+adapter. The later shared admitted encoded-output/common integration is a separate
+qualification stream; legacy bare-Vec encoder helpers remain outside aggregate
+output-lifetime proof. The new scheduled workflow write guard and current high-res
+case pins are source changes awaiting their coherent affected checks. No additional
+Rust build is run just to refresh Suite pins. No installed/native-window/device,
+physical, human or all-camera acceptance is claimed by these headless receipts.

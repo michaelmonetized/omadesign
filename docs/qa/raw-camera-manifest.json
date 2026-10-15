@@ -1158,49 +1158,68 @@
       "required": true,
       "status": "not_yet_qualified",
       "identity": {
-        "make": null,
-        "model": null,
+        "make": "Hasselblad",
+        "model": "X2D 100C-100c",
         "firmware": null,
-        "compression": null,
-        "cfa": null,
+        "compression": "Uncompressed CFA16 (TIFF tag259=1)",
+        "cfa": "RGGB",
         "bit_depth": 16,
-        "sensor_dimensions": null,
+        "sensor_dimensions": [
+          11904,
+          8842
+        ],
         "active_dimensions": null,
-        "output_dimensions": null,
-        "orientation": null,
-        "camera_wb": null,
-        "profile": null,
-        "crop": null,
-        "opcodes": null,
-        "frames": null
+        "output_dimensions": [
+          11664,
+          8750
+        ],
+        "orientation": 0,
+        "camera_wb": [
+          2.63037109375,
+          1,
+          1.5908203125,
+          0
+        ],
+        "profile": "LibRaw0.22.2 camera matrix to linear sRGB; no embeddedICC",
+        "crop": [
+          128,
+          96,
+          11656,
+          8742
+        ],
+        "opcodes": "OpcodeList1/2/3 and DNGVersion absent from inspected standardTIFFIFDs; no MakerNote opcode interpretation",
+        "frames": 1
       },
       "source": {
         "filename": "coverage-6565.3fr",
         "url": "https://raw.pixls.us/getfile.php/6565/nice/Hasselblad%20-%20X2D%20100C%20-%2016bit%20%284:3%29.3FR",
         "sha256": "dcc5a4abe3498e6f25e89bb491995fd12c3b669d9277c71b45b49210d3e56280",
-        "size_bytes": null,
+        "size_bytes": 213311488,
         "license": "CC0-1.0",
-        "provenance": "https://github.com/storytold/lightcraft/blob/0da998f24dfc03069d49867f8877af2bf7c51f94/xtask/src/main.rs#L569; upstream CC0 declaration lines 463-464; metadata only, actual file tags not read."
+        "provenance": "https://github.com/storytold/lightcraft/blob/0da998f24dfc03069d49867f8877af2bf7c51f94/xtask/src/main.rs#L569; upstream CC0 declaration463-464. Exactsource acquired and SHA/length matched; boundedTIFFtags,DNGLab0.8.0 metadata andsystemLibRaw0.22.2 raw-identify observed."
       },
       "required_reference_kinds": [
         "libraw_integration",
-        "independent_render"
+        "independent_sensor"
       ],
       "references": [
         {
           "id": "libraw-integration",
           "kind": "libraw_integration",
           "representation": "oriented-linear-srgb-rgb16le",
-          "filename": null,
-          "sha256": null,
-          "dimensions": null,
+          "filename": "x2d-linear-srgb.rgb16le",
+          "sha256": "9e4348cf58b967973b78d588393fab13ca11c4bbe0fb49495a42297d403c3678",
+          "dimensions": [
+            11664,
+            8750
+          ],
           "sensor_fnv1a64": null,
           "toolchain": {
             "name": "system/upstream LibRaw",
             "version": "0.22.2",
-            "executable_sha256": null,
+            "executable_sha256": "842a5537970389e3441909891447b4d143fe58fbddff6d8f88b2ec1edb5596e8",
             "archive_sha256": null,
-            "platform": null,
+            "platform": "linux-aarch64",
             "command": [
               "dcraw_emu",
               "-disars",
@@ -1215,33 +1234,44 @@
               "3",
               "-H",
               "0",
-              "-T",
+              "-o",
+              "1",
+              "-Z",
+              "-",
               "SOURCE"
             ]
           },
-          "provenance": "Separate system/upstream LibRaw invocation plus lossless RGB16LE extraction; integration reference, not an independent decoder implementation. Reference generation and toolchain identity remain missing.",
+          "provenance": "Separate systemLibRaw0.22.2 render with pinned flags; streamedP6header removal/u16BE-to-LE. Same decoder implementation asapp, integrationonly. Originalsourcebefore/afterSHA unchanged.",
           "tolerance": {
             "mean": 0,
             "max": 0
           }
         },
         {
-          "id": "independent-render",
-          "kind": "independent_render",
-          "representation": "oriented-linear-srgb-rgb16le",
-          "filename": null,
-          "sha256": null,
-          "dimensions": null,
-          "sensor_fnv1a64": null,
+          "id": "independent-sensor",
+          "kind": "independent_sensor",
+          "representation": "sensor-u16le-masked",
+          "filename": "x2d-sensor.u16le",
+          "sha256": "1162dd43aab3f433fae7d525b9c6c7879a4846f68007e3276fdf10b0d0f1b5fa",
+          "dimensions": [
+            11904,
+            8842
+          ],
+          "sensor_fnv1a64": "c07a267c0bc60a5f",
           "toolchain": {
-            "name": "independent decoder and explicit sRGB normalization",
-            "version": null,
-            "executable_sha256": null,
+            "name": "DNGLab",
+            "version": "0.8.0",
+            "executable_sha256": "141a438add075718308c833f9b070aa77944dc843d8b12ac44c5f2432005c6e0",
             "archive_sha256": null,
-            "platform": null,
-            "command": []
+            "platform": "linux-aarch64",
+            "command": [
+              "dnglab_linux_aarch64",
+              "analyze",
+              "--raw-pixel",
+              "SOURCE"
+            ]
           },
-          "provenance": "An independently implemented decoder with pinned transform/white-balance/color-space/geometry recipe is required; no output reference has been acquired.",
+          "provenance": "ActualDNGLab0.8.0 sensor plane; exact streamedP5header removal andu16BE-to-LE. Fullsensor FNVc07a267c0bc60a5f matches independently attributed LightCraft0da998f docs/raw/coverage-sweep.tsv26. Pinnedsource/tool/output hashes; no camera color/look claim.",
           "tolerance": {
             "mean": 0,
             "max": 0
@@ -1253,10 +1283,12 @@
         "max": 0.011764705882352941
       },
       "notes": [
-        "Candidate camera/mode: Hasselblad - X2D 100C - 16bit (4:3).3FR",
-        "Source URL/hash/license reused with attribution only; not downloaded or decoded. Unknown in-file identity remains null and fails required qualification.",
-        "All unlisted body/firmware and cross-axis combinations remain unqualified. No camera-JPEG look is required.",
-        "High-resolution case: acquisition/processing beyond 512 MiB source or 1 GiB temporary budget requires parent resource scheduling; no unsupported-by-size inference."
+        "ExactpinnedCC0X2D100C source only; otherbody/firmware/mode combinations unqualified. Firmwareunknown; TIFFSoftware1.1.0 is not asserted asfirmware.",
+        "IndependentEXIF modelX2D100C, LibRawcamera labelX2D100C-100c andinternal norm_model100-20-Coated6-3FR remain distinct. Nativebridge usescamera label.",
+        "Source/DNGLabdefaultcrop[128,96,11656,8742] differs from LibRawoutput11664x8750. DNGLabactiveArea absent; active_dimensions deliberatelynull andrequiredpreflightfails ratherthan inventing anactivearea.",
+        "Raw sensor11904x8842,16bituncompressedTIFF; oneRAWplane reported byLibRaw. Source-bound standardIFD tag-ID traversal found noDNGVersion/OpcodeList1/2/3; proprietary MakerNotes are not interpreted asDNG opcodes.",
+        "Scheduledindependent/integration referenceprep1/1 at8d5a6f7a; source/sensor/RGB/tool hashes andFNV checked; sourceunaltered. Applicationdecode,precision,sidecar/nativeplacement/export andactivecancel stillunrun.",
+        "Approvedsinglecase3GiBaggregate/6GiBremaining/source512MiB is test logistics, notproductcap. Requiredactualcasequalification remainsfailed untilmissingidentity andapplication evidence resolved."
       ]
     },
     {
