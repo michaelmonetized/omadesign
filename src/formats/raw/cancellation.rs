@@ -12,6 +12,38 @@ pub struct Cancellation {
 }
 
 impl Cancellation {
+    /// Bridge an existing export owner into bounded photo work checkpoints.
+    /// Args: progress owner and synchronous operation. Returns its result after joining the cancellation monitor.
+    pub fn with_progress<T>(
+        progress: &dyn crate::ml::Progress,
+        operation: impl FnOnce(&Self) -> Result<T, String>,
+    ) -> Result<T, String> {
+        struct Done<'a>(&'a AtomicBool);
+        impl Drop for Done<'_> {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Release);
+            }
+        }
+        let done = AtomicBool::new(false);
+        let token = Self::default();
+        std::thread::scope(|scope| {
+            let _done = Done(&done);
+            let token_ref = &token;
+            let done_ref = &done;
+            scope.spawn(move || {
+                while !done_ref.load(Ordering::Acquire) {
+                    if progress.cancelled() {
+                        token_ref.cancel();
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(2));
+                }
+            });
+            if progress.cancelled() {
+                token.cancel();
+            }
+            operation(&token)
+        })
+    }
     pub(crate) fn from_flag(flag: Arc<AtomicBool>) -> Self {
         Self {
             flag,
@@ -44,6 +76,19 @@ impl Cancellation {
         } else {
             Ok(())
         }
+    }
+}
+
+impl crate::ml::Progress for Cancellation {
+    fn report(&self, _: &str, _: usize, _: usize) {}
+    fn cancelled(&self) -> bool {
+        self.is_cancelled()
+    }
+}
+
+impl crate::resources::CancellationCheck for Cancellation {
+    fn check(&self) -> Result<(), String> {
+        Cancellation::check(self)
     }
 }
 

@@ -1044,6 +1044,40 @@ mod tests {
     }
 
     #[test]
+    fn cancelling_imports_preserves_current_edits_disconnects_stale_owner_and_opens_next() {
+        let fixture = Fixture::new();
+        let mut session = PhotoSession::new();
+        session.import_photo(image());
+        session.selected_mut().unwrap().develop.exposure = 1.25;
+        let before = session.selected().unwrap().develop.clone();
+        let cancel = crate::formats::raw::Cancellation::default();
+        let (tx, receiver) = mpsc::channel();
+        session.import_jobs.push(ImportJob {
+            cancelled: false,
+            cancel: cancel.clone(),
+            path: fixture.0.join("stale.dng"),
+            receiver,
+        });
+        session.import_queue.push_back(fixture.0.join("queued.dng"));
+        session.cancel_imports();
+        assert!(cancel.is_cancelled());
+        assert!(!session.is_loading());
+        assert!(tx.send(Ok(image())).is_err());
+        assert_eq!(session.images[0].develop, before);
+        let next = fixture.0.join("next.dng");
+        std::fs::write(&next, include_bytes!("../formats/raw/synthetic.dng")).unwrap();
+        session.import_file(&next);
+        wait(&mut session);
+        assert_eq!(session.images.len(), 2);
+        assert_eq!(session.images[0].develop, before);
+        assert_eq!(
+            session.images[1].source.as_ref(),
+            Some(&next.canonicalize().unwrap())
+        );
+        assert!(session.import_errors().is_empty());
+    }
+
+    #[test]
     fn opening_more_than_two_photos_queues_every_request_and_reports_failures() {
         let fixture = Fixture::new();
         let original = image().full.encode_png().unwrap();
@@ -1475,7 +1509,7 @@ mod tests {
             let before = session.selected().unwrap().develop.clone();
             session.selected_mut().unwrap().develop = params.clone();
             session.record_edit(before, false);
-            let rendered = session.selected().unwrap().render_full();
+            let rendered = session.selected().unwrap().render_full().unwrap();
             session.save_settings();
             wait(&mut session);
             assert!(session.save_error().is_empty());
@@ -1493,7 +1527,7 @@ mod tests {
             wait(&mut reopened);
             let loaded = reopened.selected().unwrap();
             assert_eq!(loaded.develop, params);
-            assert_eq!(loaded.render_full(), rendered);
+            assert_eq!(loaded.render_full().unwrap(), rendered);
             assert_eq!(loaded.source.as_ref(), Some(&source));
             assert_eq!(loaded.settings_path.as_ref(), Some(&settings));
             assert_eq!(loaded.raw.is_some(), name.ends_with("DNG"));
@@ -1548,7 +1582,7 @@ mod tests {
         let before = session.selected().unwrap().develop.clone();
         session.selected_mut().unwrap().develop.exposure = -0.5;
         session.record_edit(before, false);
-        let expected = session.selected().unwrap().render_full();
+        let expected = session.selected().unwrap().render_full().unwrap();
         std::fs::write(&settings, b"not valid settings").unwrap();
         session.import_file(&settings);
         wait(&mut session);
@@ -1556,7 +1590,7 @@ mod tests {
         assert_eq!(session.images.len(), 1);
         assert_eq!(session.selected, Some(0));
         assert!(session.settings_dirty());
-        assert_eq!(session.selected().unwrap().render_full(), expected);
+        assert_eq!(session.selected().unwrap().render_full().unwrap(), expected);
         let original = PhotoImage::load(&source).unwrap();
         assert!(original.develop.is_default());
         assert!(
@@ -1571,7 +1605,7 @@ mod tests {
         wait(&mut session);
         assert!(session.status.contains("original photo, photo.png"));
         assert_eq!(session.images.len(), 1);
-        assert_eq!(session.selected().unwrap().render_full(), expected);
+        assert_eq!(session.selected().unwrap().render_full().unwrap(), expected);
     }
 
     #[test]

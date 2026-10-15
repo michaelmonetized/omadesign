@@ -265,14 +265,14 @@ mod tests {
         let reopened = PhotoImage::load(&source).unwrap();
         assert_eq!(reopened.develop, photo.develop);
         assert_eq!(photo.raw.as_ref().unwrap().pixels, sensor);
-        assert_eq!(reopened.render_preview(), photo.render_full());
+        assert_eq!(reopened.render_preview(), photo.render_full().unwrap());
         for extension in ["png", "tiff"] {
             let decoded =
                 image::load_from_memory(&reopened.export_bytes(extension).unwrap()).unwrap();
             assert_eq!((decoded.width(), decoded.height()), (64, 48));
             assert_eq!(decoded.color(), image::ColorType::Rgba16);
             let rgba = decoded.to_rgba16();
-            let expected = reopened.render_full();
+            let expected = reopened.render_full().unwrap();
             for (a, b) in rgba.as_raw().iter().zip(&expected.data) {
                 assert!(((u32::from(*a) + 128) / 257).abs_diff(u32::from(*b)) <= 1);
             }
@@ -381,7 +381,7 @@ mod resized_camera_tests {
         )
         .unwrap();
         let photo = PhotoImage::load(&settings).unwrap();
-        let full = photo.render_full();
+        let full = photo.render_full().unwrap();
         let reduced = photo.render_preview();
         assert_ne!((reduced.w, reduced.h), (full.w, full.h));
         assert!(mean_error(&reduced, &full.resized(reduced.w, reduced.h)) < 2.);

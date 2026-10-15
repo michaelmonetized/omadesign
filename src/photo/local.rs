@@ -374,7 +374,7 @@ mod tests {
         .unwrap();
         let reopened = PhotoImage::load(&settings).unwrap();
         assert_eq!(reopened.develop, photo.develop);
-        let full = photo.render_full();
+        let full = photo.render_full().unwrap();
         for edge in [16, 32, 64] {
             let preview = photo.render_thumbnail(edge);
             let reference = full.resized(preview.w, preview.h);

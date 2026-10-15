@@ -113,6 +113,24 @@ pub fn encode(
     settings: Settings,
     progress: &dyn Progress,
 ) -> Result<(Vec<u8>, Vec<String>), String> {
+    if matches!(source, Source::Photo(_)) {
+        return crate::formats::raw::Cancellation::with_progress(progress, |cancel| {
+            encode_inner(source, settings, progress, cancel)
+        });
+    }
+    encode_inner(
+        source,
+        settings,
+        progress,
+        &crate::formats::raw::Cancellation::default(),
+    )
+}
+fn encode_inner(
+    source: &Source,
+    settings: Settings,
+    progress: &dyn Progress,
+    cancel: &crate::formats::raw::Cancellation,
+) -> Result<(Vec<u8>, Vec<String>), String> {
     dimensions(source, settings)?;
     progress.check()?;
     progress.report("Rendering export", 0, 1);
@@ -140,16 +158,31 @@ pub fn encode(
         && settings.ai.is_none()
         && settings.scale == 1
     {
-        let bytes = photo.export_bytes(settings.format.extension())?;
+        let bytes = photo.export_bytes_cancellable(settings.format.extension(), cancel)?;
         progress.check()?;
-        return Ok((bytes, vec![]));
+        return Ok((bytes.into_vec(), vec![]));
     }
+    let _photo_transform = if let Source::Photo(photo) = source {
+        let (w, h) = dimensions(source, settings)?;
+        let (sw, sh) = photo.dimensions();
+        let demand = (u64::from(w) * u64::from(h))
+            .checked_mul(32)
+            .and_then(|n| n.checked_add((u64::from(sw) * u64::from(sh)).checked_mul(16)?))
+            .and_then(|n| n.checked_add(64 * 1024 * 1024))
+            .ok_or("Photo export memory demand overflow")?;
+        Some(crate::formats::raw::resources::global().reserve(demand, cancel)?)
+    } else {
+        None
+    };
     let mut raster = match source {
         Source::Photo(photo) => {
             let raster = if settings.ai.is_none() && photo.raw.is_some() {
-                image::load_from_memory(&photo.export_bytes("png")?).map_err(|e| e.to_string())?
+                image::load_from_memory(&photo.export_bytes_cancellable("png", cancel)?)
+                    .map_err(|e| e.to_string())?
             } else {
-                let out = photo.render_full();
+                let out = photo.render_full_cancellable(cancel)?;
+                let _memory = out.memory;
+                let out = out.image;
                 DynamicImage::ImageRgba8(
                     RgbaImage::from_raw(out.w, out.h, out.data).ok_or("Invalid developed photo")?,
                 )
@@ -236,6 +269,18 @@ pub fn save(
                 );
             }
         }
+    }
+    if let Source::Photo(photo) = source
+        && settings.ai.is_none()
+        && settings.scale == 1
+        && settings.format.raster()
+    {
+        dimensions(source, settings)?;
+        return crate::formats::raw::Cancellation::with_progress(progress, |cancel| {
+            let bytes = photo.export_bytes_cancellable(settings.format.extension(), cancel)?;
+            write_atomic(path, &bytes, progress)?;
+            Ok(vec![])
+        });
     }
     let (bytes, notes) = encode(source, settings, progress)?;
     write_atomic(path, &bytes, progress)?;

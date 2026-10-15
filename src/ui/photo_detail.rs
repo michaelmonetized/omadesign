@@ -1,6 +1,7 @@
 //! Full-resolution RAW inspection without sending whole camera images to the GPU.
 use crate::app::Studio;
-use crate::photo::{DevelopParams, RgbaImage};
+use crate::formats::raw::Cancellation;
+use crate::photo::{AdmittedImage, DevelopParams, RgbaImage};
 use eframe::egui::{self, Color32, ColorImage, Rect, TextureHandle, TextureOptions, Ui, Vec2};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
@@ -39,21 +40,27 @@ struct Tile {
 
 #[derive(Debug)]
 struct Rendered {
-    full: Arc<RgbaImage>,
+    full: Arc<AdmittedImage>,
     region: Region,
     pixels: RgbaImage,
 }
 
 struct Job {
     key: Key,
+    cancel: Cancellation,
     receiver: mpsc::Receiver<Option<Rendered>>,
+}
+impl Drop for Job {
+    fn drop(&mut self) {
+        self.cancel.cancel();
+    }
 }
 
 #[derive(Default)]
 struct State {
     desired: Option<Key>,
     changed: Option<Instant>,
-    full: Option<Arc<RgbaImage>>,
+    full: Option<Arc<AdmittedImage>>,
     tile: Option<Tile>,
     job: Option<Job>,
     failed: bool,
@@ -66,6 +73,7 @@ impl State {
             self.changed = Some(Instant::now());
             self.full = None;
             self.tile = None;
+            self.job = None;
             self.failed = false;
         }
     }
@@ -176,24 +184,35 @@ pub(super) fn draw(ui: &Ui, studio: &Studio, dest: Rect, viewport: Rect, preview
             let source = cached.is_none().then(|| image.clone());
             let (tx, receiver) = mpsc::channel();
             let ctx = ui.ctx().clone();
-            state.job = Some(Job { key, receiver });
+            let cancel = Cancellation::default();
+            let worker_cancel = cancel.clone();
+            state.job = Some(Job {
+                key,
+                receiver,
+                cancel,
+            });
             std::thread::spawn(move || {
                 let rendered = std::panic::catch_unwind(|| {
-                    let full = cached.unwrap_or_else(|| {
+                    let full = if let Some(cached) = cached {
+                        cached
+                    } else {
                         let mut photo = source.expect("uncached RAW source");
                         if key.original {
                             photo.develop = DevelopParams::default();
                         }
-                        Arc::new(photo.render_full())
-                    });
+                        Arc::new(photo.render_full_cancellable(&worker_cancel)?)
+                    };
+                    worker_cancel.check()?;
                     let pixels = tile_pixels(&full, requested, limit);
-                    Rendered {
+                    worker_cancel.check()?;
+                    Ok::<_, String>(Rendered {
                         full,
                         region: requested,
                         pixels,
-                    }
+                    })
                 })
-                .ok();
+                .ok()
+                .and_then(Result::ok);
                 let _ = tx.send(rendered);
                 ctx.request_repaint();
             });
@@ -367,31 +386,22 @@ mod tests {
             source: 2,
         };
         let (tx, receiver) = mpsc::channel();
+        let cancel = Cancellation::default();
         let mut state = State {
             desired: Some(old),
-            job: Some(Job { key: old, receiver }),
+            job: Some(Job {
+                key: old,
+                receiver,
+                cancel: cancel.clone(),
+            }),
             ..Default::default()
         };
         state.select(Some(current));
-        tx.send(Some(Rendered {
-            full: Arc::new(RgbaImage {
-                w: 1,
-                h: 1,
-                data: vec![0, 0, 0, 255],
-            }),
-            region: Region {
-                x: 0,
-                y: 0,
-                w: 1,
-                h: 1,
-            },
-            pixels: RgbaImage {
-                w: 1,
-                h: 1,
-                data: vec![0, 0, 0, 255],
-            },
-        }))
-        .unwrap();
+        assert!(cancel.is_cancelled());
+        assert!(
+            tx.send(None).is_err(),
+            "old ownership channel must disconnect immediately"
+        );
         state.poll(&ctx);
         assert!(state.full.is_none() && state.tile.is_none() && state.job.is_none());
         assert!(!state.failed);

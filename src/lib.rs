@@ -61,3 +61,4 @@ pub mod deform;
 pub mod outline;
 
 pub mod telemetry;
+pub mod resources;

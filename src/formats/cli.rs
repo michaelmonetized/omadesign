@@ -25,7 +25,9 @@ pub fn document(path: &Path) -> Result<Document, String> {
 
 /// Design documents receive developed pixels; the Photo source/settings stay separate.
 pub fn photo_document(photo: &crate::photo::PhotoImage) -> Result<Document, String> {
-    let image = photo.render_full();
+    let image = photo.render_full()?;
+    let _memory = image.memory;
+    let image = image.image;
     let mut doc = Document::new(&photo.name, image.w as f32, image.h as f32, 72.);
     doc.transparent = true;
     let size = Pt::new(image.w as f32, image.h as f32);
