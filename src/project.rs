@@ -18,7 +18,7 @@ pub fn encode(doc: &Document) -> Result<String, String> {
     pack_rasters(&mut packed)?;
     serde_json::to_string(&File {
         // Older readers must not silently strip a mask or change stroke placement.
-        // Keep plain documents compatible with v5; v1-v13 remain readable here.
+        // Keep plain documents compatible with v5; v1-v14 remain readable here.
         version: if !doc.publishing.is_empty() || doc.layers.iter().filter_map(|l| l.kind.shapes()).flatten().any(|s| matches!(&s.geom, crate::geom::Geom::Text(t) if t.spans.iter().any(|s| s.font.is_some() || s.publishing_style.is_some()) || t.paragraphs.iter().any(|p| p.publishing_style.is_some()))) {
             14
         } else if !doc.mask_sources().is_empty() {
@@ -255,6 +255,7 @@ const PLACE_EXTS: &[&str] = &[
     "psd",
     "psb",
     "ora",
+    "idml",
     "xcf",
     "af",
     "afdesign",
@@ -294,6 +295,7 @@ pub fn dialog_open() -> Option<PathBuf> {
                 "psd",
                 "psb",
                 "ora",
+                "idml",
                 "xcf",
                 "af",
                 "afdesign",

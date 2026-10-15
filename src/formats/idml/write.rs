@@ -21,6 +21,7 @@ pub fn write(doc: &Document) -> Result<(Vec<u8>, Vec<String>), String> {
         colors: doc.publishing.swatches.clone(),
         stories: BTreeMap::new(),
         frames: HashMap::new(),
+        fonts: BTreeMap::new(),
     };
     let boards = if doc.artboards.is_empty() {
         vec![Artboard::new(0, Pt::ZERO, Pt::new(doc.width, doc.height))]
@@ -69,6 +70,17 @@ pub fn write(doc: &Document) -> Result<(Vec<u8>, Vec<String>), String> {
         for s in l.kind.shapes().unwrap_or(&[]) {
             if let Geom::Text(t) = &s.geom {
                 ex.frames.insert(s.id, t);
+            }
+        }
+    }
+    for t in ex.frames.values() {
+        for path in
+            std::iter::once(t.font.as_str()).chain(t.spans.iter().filter_map(|s| s.font.as_deref()))
+        {
+            if !ex.fonts.contains_key(path) {
+                if let Some(info) = font_info(path) {
+                    ex.fonts.insert(path.into(), info);
+                }
             }
         }
     }
@@ -202,7 +214,9 @@ pub fn write(doc: &Document) -> Result<(Vec<u8>, Vec<String>), String> {
         parts.push((name.clone(), package("Story", story).into_bytes()));
         map.push_str(&format!("<idPkg:Story src=\"{name}\"/>"));
     }
-    let bleed = if doc.publishing.is_empty() {
+    let bleed = if doc.publishing.is_empty()
+        || doc.bleed != doc.publishing.bleed.into_iter().fold(0., f32::max)
+    {
         [doc.bleed; 4]
     } else {
         doc.publishing.bleed
@@ -260,7 +274,7 @@ pub fn write(doc: &Document) -> Result<(Vec<u8>, Vec<String>), String> {
     ));
     parts.push((
         "Resources/Fonts.xml".into(),
-        package("Fonts", "").into_bytes(),
+        package("Fonts", &font_resources(&ex.fonts, &doc.publishing.styles)).into_bytes(),
     ));
     let mut layers = String::new();
     for (id, source) in &doc.publishing.master_layers {
@@ -347,6 +361,7 @@ struct Exporter<'a> {
     colors: BTreeMap<String, Rgba>,
     stories: BTreeMap<u64, String>,
     frames: HashMap<u64, &'a TypeRun>,
+    fonts: BTreeMap<String, (String, String)>,
 }
 impl Exporter<'_> {
     fn layer_id(&self, id: u64) -> String {
@@ -431,6 +446,11 @@ impl Exporter<'_> {
             offset.y
         );
         let fill = self.color(&s.style.fill);
+        let frame_fill = if matches!(s.geom, Geom::Text(_)) {
+            "Swatch/None"
+        } else {
+            &fill
+        };
         let stroke = s
             .style
             .stroke
@@ -438,7 +458,7 @@ impl Exporter<'_> {
             .map(|s| (self.color(&Fill::Solid(s.color)), s.width))
             .unwrap_or(("Swatch/None".into(), 0.));
         common += &format!(
-            " FillColor=\"{fill}\" StrokeColor=\"{}\" StrokeWeight=\"{}\"",
+            " FillColor=\"{frame_fill}\" StrokeColor=\"{}\" StrokeWeight=\"{}\"",
             stroke.0, stroke.1
         );
         let opacity = format!(
@@ -454,7 +474,7 @@ impl Exporter<'_> {
         if let Geom::Text(t) = &s.geom {
             let story = t.thread.as_ref().map_or(s.id, |t| t.story);
             if t.thread.as_ref().is_none_or(|t| t.prev.is_none()) {
-                let xml = self.story(story, t)?;
+                let xml = self.story(story, t, &fill)?;
                 self.stories.insert(story, xml);
             }
             let b = shape_bounds(s);
@@ -545,10 +565,16 @@ impl Exporter<'_> {
             )
             .map_err(|e| e.to_string())?;
             data = format!(
-                "<Properties><Contents><![CDATA[{}]]></Contents></Properties>",
+                "<Contents><![CDATA[{}]]></Contents>",
                 base64::engine::general_purpose::STANDARD.encode(png.into_inner())
             );
         }
+        let embedded = l.kind.pixels().is_some();
+        let state = if embedded { "Embedded" } else { "Normal" };
+        data = format!(
+            "<Properties>{data}<GraphicBounds Left=\"{}\" Top=\"{}\" Right=\"{}\" Bottom=\"{}\"/></Properties>",
+            b.min.x, b.min.y, b.max.x, b.max.y
+        );
         if let LayerKind::Raster {
             rotation, shear, ..
         } = &l.kind
@@ -561,7 +587,7 @@ impl Exporter<'_> {
             }
         }
         Ok(format!(
-            "<Rectangle Self=\"graphic{}\" Name=\"{}\" ItemLayer=\"{}\" Visible=\"{}\" Locked=\"{}\" ItemTransform=\"1 0 0 1 {} {}\" FillColor=\"Swatch/None\" StrokeColor=\"Swatch/None\" StrokeWeight=\"0\" GeometricBounds=\"{} {} {} {}\">{}<Image Self=\"image{}\" ItemTransform=\"1 0 0 1 0 0\" GeometricBounds=\"{} {} {} {}\">{data}<Link Self=\"link{}\" LinkResourceURI=\"{}\" LinkResourceFormat=\"PNG\" StoredState=\"Embedded\" LinkClassID=\"35906\" LinkClientID=\"257\"/></Image><TransparencySetting><BlendingSetting Opacity=\"{}\" BlendMode=\"Normal\"/></TransparencySetting></Rectangle>",
+            "<Rectangle Self=\"graphic{}\" Name=\"{}\" ItemLayer=\"{}\" Visible=\"{}\" Locked=\"{}\" ItemTransform=\"1 0 0 1 {} {}\" FillColor=\"Swatch/None\" StrokeColor=\"Swatch/None\" StrokeWeight=\"0\" GeometricBounds=\"{} {} {} {}\">{}<Image Self=\"image{}\" ItemTransform=\"1 0 0 1 0 0\" GeometricBounds=\"{} {} {} {}\">{data}<Link Self=\"link{}\" LinkResourceURI=\"{}\" LinkResourceFormat=\"PNG\" StoredState=\"{state}\" LinkClassID=\"35906\" LinkClientID=\"257\"/></Image><TransparencySetting><BlendingSetting Opacity=\"{}\" BlendMode=\"Normal\"/></TransparencySetting></Rectangle>",
             l.id,
             xml(&l.name),
             self.layer_id(l.id),
@@ -584,7 +610,7 @@ impl Exporter<'_> {
             l.opacity * 100.
         ))
     }
-    fn story(&self, id: u64, t: &TypeRun) -> Result<String, String> {
+    fn story(&self, id: u64, t: &TypeRun, color: &str) -> Result<String, String> {
         let mut out = format!(
             "<Story Self=\"story{id}\" TrackChanges=\"false\"><StoryPreference OpticalMarginAlignment=\"false\" FrameType=\"TextFrameType\" StoryOrientation=\"Horizontal\" StoryDirection=\"LeftToRightDirection\"/>"
         );
@@ -612,10 +638,16 @@ impl Exporter<'_> {
                 style.hyphenate
             );
             for s in t.character_style_runs(start, start + count) {
-                let font = font_name(s.font.as_deref().unwrap_or(&t.font));
+                let font = self.fonts.get(s.font.as_deref().unwrap_or(&t.font));
+                let face_attr = font.map_or(String::new(), |(_, style)| {
+                    format!(" FontStyle=\"{}\"", xml(style))
+                });
+                let face_prop = font.map_or(String::new(), |(family, _)| {
+                    format!("<AppliedFont type=\"string\">{}</AppliedFont>", xml(family))
+                });
                 let leading = s.leading.map_or(t.line_height(), |l| l.pixels(t.px));
                 out += &format!(
-                    "<CharacterStyleRange AppliedCharacterStyle=\"{}\" PointSize=\"{}\" Tracking=\"{}\" HorizontalScale=\"{}\" VerticalScale=\"{}\" BaselineShift=\"{}\" NoBreak=\"{}\"><Properties><AppliedFont type=\"string\">{}</AppliedFont><Leading type=\"unit\">{leading}</Leading></Properties>",
+                    "<CharacterStyleRange AppliedCharacterStyle=\"{}\" FillColor=\"{color}\" PointSize=\"{}\" Tracking=\"{}\" HorizontalScale=\"{}\" VerticalScale=\"{}\" BaselineShift=\"{}\" NoBreak=\"{}\"{face_attr}><Properties>{face_prop}<Leading type=\"unit\">{leading}</Leading></Properties>",
                     xml(s
                         .publishing_style
                         .as_deref()
@@ -625,8 +657,7 @@ impl Exporter<'_> {
                     s.hscale.unwrap_or(100.),
                     s.vscale.unwrap_or(100.),
                     s.baseline_shift.unwrap_or(0.),
-                    s.no_break,
-                    xml(&font)
+                    s.no_break
                 );
                 let text = t
                     .content
@@ -657,12 +688,63 @@ impl Exporter<'_> {
         Ok(out)
     }
 }
-fn font_name(path: &str) -> String {
-    crate::text::fonts()
-        .iter()
-        .find(|f| f.path.to_string_lossy() == path)
-        .map(|f| f.name.clone())
-        .unwrap_or_else(|| "sans-serif".into())
+/// Resolve portable font names. Args: local font path or project ID. Returns family and style when available.
+fn font_info(path: &str) -> Option<(String, String)> {
+    if path.is_empty() {
+        return None;
+    }
+    let bytes = crate::text::font_bytes_for(&TypeRun {
+        font: path.into(),
+        ..Default::default()
+    })?;
+    let face = rustybuzz::ttf_parser::Face::parse(&bytes, 0).ok()?;
+    let name = |id| {
+        face.names()
+            .into_iter()
+            .filter(|n| n.name_id == id)
+            .find_map(|n| n.to_string())
+    };
+    Some((name(1)?, name(2).unwrap_or_else(|| "Regular".into())))
+}
+fn font_resources(
+    fonts: &BTreeMap<String, (String, String)>,
+    styles: &[crate::publishing::PublishingStyle],
+) -> String {
+    let mut families: BTreeMap<String, std::collections::BTreeSet<String>> = BTreeMap::new();
+    for (family, style) in fonts.values() {
+        families
+            .entry(family.clone())
+            .or_default()
+            .insert(style.clone());
+    }
+    for s in styles {
+        if let Some(family) = s.attributes.get("AppliedFont") {
+            families.entry(family.clone()).or_default().insert(
+                s.attributes
+                    .get("FontStyle")
+                    .cloned()
+                    .unwrap_or_else(|| "Regular".into()),
+            );
+        }
+    }
+    let mut body = String::new();
+    for (i, (family, styles)) in families.iter().enumerate() {
+        body += &format!(
+            "<FontFamily Self=\"omaFontFamily{i}\" Name=\"{}\">",
+            xml(family)
+        );
+        for (j, style) in styles.iter().enumerate() {
+            body += &format!(
+                "<Font Self=\"omaFont{i}_{j}\" Name=\"{} {}\" FontFamily=\"{}\" FontStyleName=\"{}\" Status=\"NotAvailable\" FontType=\"OpenTypeTT\"/>",
+                xml(family),
+                xml(style),
+                xml(family),
+                xml(style)
+            );
+        }
+        body.push_str("</FontFamily>");
+    }
+    body
 }
 fn shape_bounds(s: &Shape) -> Bounds {
     if let Geom::Text(t) = &s.geom {

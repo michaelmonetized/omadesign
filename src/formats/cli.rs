@@ -52,7 +52,8 @@ pub fn export(doc: &Document, path: &Path) -> Result<Vec<String>, String> {
         "psd"|"psb"=>{let exported=super::psd::encode(doc,extension=="psb")?;(exported.bytes,exported.warnings)},
         "pdf"=>super::pdf::write(doc)?,
         "ora"=>super::openraster::write(doc)?,
-        _=>return Err("Export as .oma, .svg, .png, .jpg, .psd, .psb, .ora or .pdf. Affinity and Illustrator native writers are not available.".into())
+        "idml"=>super::idml::write(doc)?,
+        _=>return Err("Export as .oma, .svg, .png, .jpg, .psd, .psb, .ora, .idml or .pdf. Affinity and Illustrator native writers are not available.".into())
     };
     super::write_atomic(path, &bytes)?;
     Ok(notes)

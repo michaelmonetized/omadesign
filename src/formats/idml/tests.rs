@@ -1,6 +1,7 @@
 use super::*;
 use crate::{document::Document, geom::Geom};
 mod review;
+mod route_review;
 const FIXTURE: &[u8] = include_bytes!("../../../tests/assets/idml/publishing.idml");
 fn texts(doc: &Document) -> Vec<&crate::geom::TypeRun> {
     doc.layers
@@ -226,5 +227,155 @@ fn styled_font_ranges_shape_and_edit_with_native_character_indices() {
     assert_eq!(
         run.spans[0].publishing_style.as_deref(),
         Some("CharacterStyle/Emphasis")
+    );
+}
+
+#[test]
+fn idml_open_native_save_reopen_and_both_export_routes() {
+    use crate::{
+        export::{Format, Settings, Source},
+        import::Imported,
+    };
+    assert_eq!(
+        crate::import::classify(std::path::Path::new("book.IDML")),
+        "idml"
+    );
+    let Imported::Document(mut doc) = crate::import::open_any(std::path::Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/assets/idml/publishing.idml"
+    )))
+    .unwrap() else {
+        panic!("expected editable document")
+    };
+    let head = doc
+        .layers
+        .iter_mut()
+        .filter_map(|l| l.kind.shapes_mut())
+        .flatten()
+        .find_map(|s| {
+            if let Geom::Text(t) = &mut s.geom {
+                if t.thread.as_ref().unwrap().prev.is_none() {
+                    Some(t)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        })
+        .unwrap();
+    head.replace_text(0, 4, "Edited café", None);
+    let keep = std::env::var_os("OMADESIGN_IDML_RECEIPTS");
+    let dir = keep
+        .clone()
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
+                ".artifacts/idml-test-{}",
+                crate::document::next_id()
+            ))
+        });
+    assert!(dir.starts_with("/home"));
+    std::fs::create_dir_all(&dir).unwrap();
+    let oma = dir.join("publishing.oma");
+    crate::formats::cli::export(&doc, &oma).unwrap();
+    let reopened = crate::formats::cli::document(&oma).unwrap();
+    assert_eq!(reopened.publishing, doc.publishing);
+    assert!(reopened.import_notes.iter().any(|n| n.contains("Table")));
+    let output = dir.join("publishing.idml");
+    crate::formats::cli::export(&reopened, &output).unwrap();
+    let round = crate::formats::cli::document(&output).unwrap();
+    assert_eq!(round.artboards.len(), 2);
+    assert_eq!(round.publishing.bleed, [9., 12., 15., 18.]);
+    assert!(
+        texts(&round)
+            .iter()
+            .any(|t| t.content.starts_with("Edited café"))
+    );
+    let (bytes, _) = crate::export::encode(
+        &Source::Document(reopened),
+        Settings {
+            format: Format::Idml,
+            ..Default::default()
+        },
+        &crate::ml::NoProgress,
+    )
+    .unwrap();
+    assert_eq!(read(&bytes, "Dialog export").unwrap().0.artboards.len(), 2);
+    std::fs::write(dir.join("dialog.idml"), bytes).unwrap();
+    if keep.is_none() {
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+}
+
+#[test]
+fn idml_story_color_does_not_become_an_opaque_text_frame() {
+    let (doc, _) = read(FIXTURE, "Publishing").unwrap();
+    let color = crate::color::Rgba::rgb(12, 50, 90);
+    let head=doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().find(|s|matches!(&s.geom,Geom::Text(t) if t.thread.as_ref().is_some_and(|t|t.prev.is_none()))).unwrap();
+    assert_eq!(head.style.fill, crate::document::Fill::Solid(color));
+    let (bytes, _) = write(&doc).unwrap();
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&bytes)).unwrap();
+    for i in 0..zip.len() {
+        let mut f = zip.by_index(i).unwrap();
+        if !f.name().starts_with("Spreads/") {
+            continue;
+        }
+        let mut xml = String::new();
+        std::io::Read::read_to_string(&mut f, &mut xml).unwrap();
+        let tree = roxmltree::Document::parse(&xml).unwrap();
+        for frame in tree.descendants().filter(|n| n.has_tag_name("TextFrame")) {
+            assert_eq!(frame.attribute("FillColor"), Some("Swatch/None"));
+        }
+        assert!(
+            tree.descendants()
+                .filter(|n| n.has_tag_name("Image"))
+                .all(|n| n.descendants().any(|n| n.has_tag_name("GraphicBounds")))
+        );
+    }
+    let (round, _) = read(&bytes, "Again").unwrap();
+    assert!(
+        round
+            .layers
+            .iter()
+            .filter_map(|l| l.kind.shapes())
+            .flatten()
+            .any(|s| matches!(&s.geom, Geom::Text(_))
+                && s.style.fill == crate::document::Fill::Solid(color))
+    );
+}
+
+#[test]
+fn idml_native_bleed_edits_override_imported_asymmetric_bleed() {
+    let (mut doc, _) = read(FIXTURE, "Publishing").unwrap();
+    doc.bleed = 24.;
+    let (bytes, _) = write(&doc).unwrap();
+    let (round, _) = read(&bytes, "Edited bleed").unwrap();
+    assert_eq!(round.publishing.bleed, [24.; 4]);
+}
+
+#[test]
+fn idml_rejects_unsafe_archive_paths_and_a_directory_before_mimetype() {
+    use std::io::{Cursor, Write};
+    let options =
+        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    let mut w = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    w.start_file("mimetype", options).unwrap();
+    w.write_all(MIMETYPE.as_bytes()).unwrap();
+    w.start_file("../designmap.xml", options).unwrap();
+    w.write_all(b"<Document/>").unwrap();
+    assert!(
+        read(&w.finish().unwrap().into_inner(), "unsafe")
+            .unwrap_err()
+            .contains("Unsafe IDML package path")
+    );
+    let mut w = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    w.add_directory("folder/", options).unwrap();
+    w.start_file("mimetype", options).unwrap();
+    w.write_all(MIMETYPE.as_bytes()).unwrap();
+    assert!(
+        read(&w.finish().unwrap().into_inner(), "directory")
+            .unwrap_err()
+            .contains("must start with stored mimetype")
     );
 }
