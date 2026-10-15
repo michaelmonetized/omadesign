@@ -225,6 +225,7 @@ impl TypeRun {
     }
     pub fn scale_character_metrics(&mut self,ratio:f32) {
         for span in &mut self.spans {
+            if let Some(px)=&mut span.px {*px*=ratio.abs();}
             if let Some(crate::geom::Leading::Fixed(value))=&mut span.leading {*value*=ratio.abs();}
             if let Some(shift)=&mut span.baseline_shift {*shift*=ratio;}
         }

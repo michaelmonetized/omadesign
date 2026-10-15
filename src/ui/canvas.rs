@@ -3483,13 +3483,8 @@ fn draw_type_caret(
     let visible = run.layout.as_ref().is_none_or(|l| {
         run.frame.is_none() || (caret >= l.visible_start && caret <= l.visible_end)
     });
-    let c = crate::text::caret_pt(run, caret);
-    let height = crate::text::caret_height(run, caret);
-    let tangent = crate::text_geometry::caret_frame(run, caret)
-        .map(|(_, t)| t)
-        .unwrap_or(Pt::new(1., 0.));
-    let top = screen(c - tangent.perp() * height * 0.9);
-    let bot = screen(c + tangent.perp() * height * 0.2);
+    let (top,bot)=crate::text::caret_segment(run,caret);
+    let (top,bot)=(screen(top),screen(bot));
     let area = Rect::from_two_pos(top, bot).expand(1.0);
     let phase = (p.ctx().input(|i| i.time) * 2.0).fract();
     let on = phase < 0.5
@@ -3500,13 +3495,8 @@ fn draw_type_caret(
     p.ctx()
         .request_repaint_after(std::time::Duration::from_secs_f64(next * 0.5 + 0.001));
     if on {
-        let c = crate::text::caret_pt(run, caret);
-        let height = crate::text::caret_height(run, caret);
-        let tangent = crate::text_geometry::caret_frame(run, caret)
-            .map(|(_, t)| t)
-            .unwrap_or(Pt::new(1., 0.));
-        let top = screen(c - tangent.perp() * height * 0.9);
-        let bot = screen(c + tangent.perp() * height * 0.2);
+        let (top,bot)=crate::text::caret_segment(run,caret);
+        let (top,bot)=(screen(top),screen(bot));
         p.line_segment([top, bot], Stroke::new(1.5, select()));
     }
     visible.then_some(area)
