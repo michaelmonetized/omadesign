@@ -29,6 +29,7 @@ pub enum StackAlign {
     Center,
     End,
     Stretch,
+    Baseline,
 }
 
 impl StackAlign {
@@ -38,6 +39,7 @@ impl StackAlign {
             StackAlign::Center => "Center",
             StackAlign::End => "End",
             StackAlign::Stretch => "Stretch",
+            StackAlign::Baseline => "Baseline",
         }
     }
 }
@@ -159,6 +161,68 @@ fn default_columns() -> u32 {
     3
 }
 
+/// A grid track's authored sizing rule, in pixels or a share of remaining space.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub enum GridTrackSize {
+    Fixed(f32),
+    Hug,
+    Fraction(f32),
+}
+
+/// A row or column with optional pixel limits applied to its sizing rule.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GridTrack {
+    pub size: GridTrackSize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max: Option<f32>,
+}
+
+impl Default for GridTrack {
+    fn default() -> Self {
+        Self {
+            size: GridTrackSize::Fraction(1.0),
+            min: None,
+            max: None,
+        }
+    }
+}
+
+fn default_span() -> u32 {
+    1
+}
+
+/// Zero-based grid anchors; missing anchors auto-place without occupying absolute children.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridPlacement {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub column: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row: Option<u32>,
+    #[serde(default = "default_span")]
+    pub column_span: u32,
+    #[serde(default = "default_span")]
+    pub row_span: u32,
+}
+
+impl Default for GridPlacement {
+    fn default() -> Self {
+        Self {
+            column: None,
+            row: None,
+            column_span: 1,
+            row_span: 1,
+        }
+    }
+}
+
+impl GridPlacement {
+    pub fn is_auto(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
 /// Auto-stack settings on a frame.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AutoStack {
@@ -174,6 +238,10 @@ pub struct AutoStack {
     pub cross_gap: f32,
     #[serde(default = "default_columns")]
     pub columns: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub column_tracks: Vec<GridTrack>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub row_tracks: Vec<GridTrack>,
 }
 
 impl Default for AutoStack {
@@ -187,6 +255,8 @@ impl Default for AutoStack {
             justify: StackJustify::Start,
             cross_gap: default_cross_gap(),
             columns: default_columns(),
+            column_tracks: Vec::new(),
+            row_tracks: Vec::new(),
         }
     }
 }
@@ -310,6 +380,8 @@ pub struct FrameLayout {
     /// Exclude this child from automatic flow while retaining resize constraints.
     #[serde(default)]
     pub absolute: bool,
+    #[serde(default, skip_serializing_if = "GridPlacement::is_auto")]
+    pub grid: GridPlacement,
     #[serde(default)]
     pub clip: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -347,6 +419,7 @@ impl FrameLayout {
             && self.min_height.is_none()
             && self.max_height.is_none()
             && !self.absolute
+            && self.grid.is_auto()
             && !self.clip
             && self.text_size.is_none()
             && self.aspect_ratio.is_none()
@@ -517,6 +590,8 @@ pub fn containing_frame(doc: &Document, layer: usize, point: Pt) -> Option<u64> 
     best
 }
 
+mod grid;
+pub(crate) use grid::grid_cells;
 mod solver;
 pub use solver::{apply_resize, reflow, reflow_roots, repair_hierarchy, validate_hierarchy};
 

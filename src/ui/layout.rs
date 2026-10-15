@@ -4,10 +4,15 @@ use crate::app::Studio;
 use crate::document::Cmd;
 use crate::geom::Geom;
 use crate::layout::{
-    AutoStack, Constraint, Sizing, StackAlign, StackAxis, StackFlow, StackJustify,
+    AutoStack, Constraint, GridTrack, GridTrackSize, Sizing, StackAlign, StackAxis, StackFlow,
+    StackJustify,
 };
 use crate::tools::{Persona, Tool};
 use eframe::egui::{self, ComboBox, DragValue, RichText, Ui};
+
+#[cfg(test)]
+#[path = "layout_field_tests.rs"]
+mod field_tests;
 
 fn label(ui: &mut Ui, text: &str) {
     ui.add_space(8.0);
@@ -24,6 +29,150 @@ fn sizing(ui: &mut Ui, id: &str, value: &mut Sizing) -> bool {
             }
         });
     old != *value
+}
+
+fn layout_number<N: egui::emath::Numeric>(
+    ui: &mut Ui,
+    selection: (usize, u64),
+    property: impl std::hash::Hash + std::fmt::Debug,
+    name: &str,
+    value: &mut N,
+    range: std::ops::RangeInclusive<N>,
+    unit: &str,
+) -> bool {
+    let field = super::fields::number(
+        ui,
+        (selection, property),
+        name,
+        value,
+        range,
+        unit,
+        None,
+        Default::default(),
+    );
+    crate::app::input_history::record(field.response, field.changed)
+}
+
+fn grid_tracks(
+    ui: &mut Ui,
+    selection: (usize, u64),
+    axis: &str,
+    tracks: &mut Vec<GridTrack>,
+) -> bool {
+    let mut changed = false;
+    egui::CollapsingHeader::new(format!("{axis} tracks"))
+        .id_salt((selection, axis, "tracks"))
+        .show(ui, |ui| {
+            let mut remove = None;
+            for (index, track) in tracks.iter_mut().enumerate() {
+                ui.push_id((selection, axis, index), |ui| {
+                    ui.horizontal(|ui| {
+                        let label = ui.label(format!("{axis} {index}"));
+                        let mut kind = match track.size {
+                            GridTrackSize::Fixed(_) => 0,
+                            GridTrackSize::Hug => 1,
+                            GridTrackSize::Fraction(_) => 2,
+                        };
+                        let old = kind;
+                        ComboBox::from_id_salt("sizing")
+                            .selected_text(["Fixed", "Hug", "Fraction"][kind])
+                            .show_ui(ui, |ui| {
+                                for (index, name) in ["Fixed", "Hug", "Fraction"].iter().enumerate()
+                                {
+                                    ui.selectable_value(&mut kind, index, *name);
+                                }
+                            })
+                            .response
+                            .labelled_by(label.id);
+                        if kind != old {
+                            track.size = match kind {
+                                0 => GridTrackSize::Fixed(100.0),
+                                1 => GridTrackSize::Hug,
+                                _ => GridTrackSize::Fraction(1.0),
+                            };
+                            changed = true;
+                        }
+                        if ui
+                            .small_button("Remove")
+                            .on_hover_text(format!("Remove {axis} track {index}"))
+                            .clicked()
+                        {
+                            remove = Some(index);
+                        }
+                    });
+                    match &mut track.size {
+                        GridTrackSize::Fixed(value) => {
+                            changed |= layout_number(
+                                ui,
+                                selection,
+                                (axis, index, "size"),
+                                &format!("{axis} {index} size"),
+                                value,
+                                0.0..=1_000_000.0,
+                                " px",
+                            )
+                        }
+                        GridTrackSize::Fraction(value) => {
+                            changed |= layout_number(
+                                ui,
+                                selection,
+                                (axis, index, "fraction"),
+                                &format!("{axis} {index} share"),
+                                value,
+                                0.001..=1_000_000.0,
+                                " fr",
+                            )
+                        }
+                        GridTrackSize::Hug => {}
+                    }
+                    for (name, value) in [("Minimum", &mut track.min), ("Maximum", &mut track.max)]
+                    {
+                        ui.push_id(name, |ui| {
+                            let mut enabled = value.is_some();
+                            if ui
+                                .checkbox(&mut enabled, format!("{name} {axis} {index}"))
+                                .changed()
+                            {
+                                *value = enabled.then_some(if name == "Minimum" {
+                                    0.0
+                                } else {
+                                    1_000_000.0
+                                });
+                                changed = true;
+                            }
+                            if let Some(value) = value {
+                                changed |= layout_number(
+                                    ui,
+                                    selection,
+                                    (axis, index, name),
+                                    &format!("{axis} {index} {name}"),
+                                    value,
+                                    0.0..=1_000_000.0,
+                                    " px",
+                                );
+                            }
+                        });
+                    }
+                    ui.separator();
+                });
+            }
+            if let Some(index) = remove {
+                tracks.remove(index);
+                changed = true;
+            }
+            if tracks.len() < 1024 && ui.button(format!("Add {axis} track")).clicked() {
+                tracks.push(if axis == "Row" {
+                    GridTrack {
+                        size: GridTrackSize::Hug,
+                        ..Default::default()
+                    }
+                } else {
+                    GridTrack::default()
+                });
+                changed = true;
+            }
+        });
+    changed
 }
 
 pub fn inspector(ui: &mut Ui, studio: &mut Studio) {
@@ -68,375 +217,470 @@ pub fn inspector(ui: &mut Ui, studio: &mut Studio) {
     let Some(shape) = studio.doc.find_shape(layer, id).cloned() else {
         return;
     };
-    let mut props = shape.layout.clone();
-    let mut changed = false;
-    egui::CollapsingHeader::new("Image fill")
-        .default_open(shape.layout.image.is_some())
-        .show(ui, |ui| {
-            if super::jobs::is_running::<LoadedImage>(ui.ctx(), "layout-image-load") {
-                ui.spinner();
-                ui.label("Loading image…");
-            } else if ui
-                .button(if props.image.is_some() {
-                    "Replace image…"
-                } else {
-                    "Choose image…"
-                })
-                .clicked()
-            {
-                let document = studio.swap_id.clone();
-                studio.request_file_dialog(
-                    || {
-                        rfd::FileDialog::new()
-                            .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "tiff"])
-                            .pick_file()
-                    },
-                    move |ctx, _, path| {
-                        super::jobs::start(ctx, "layout-image-load", move || {
-                            let image = crate::layout_images::load(&path)?;
-                            Ok(LoadedImage {
-                                document,
-                                layer,
-                                id,
-                                image,
-                            })
-                        });
-                    },
-                );
-            }
-            if let Some(image) = &mut props.image {
-                ui.horizontal(|ui| {
-                    for fit in [
-                        crate::layout_images::ImageFit::Cover,
-                        crate::layout_images::ImageFit::Contain,
-                        crate::layout_images::ImageFit::Stretch,
-                    ] {
-                        changed |= ui
-                            .selectable_value(&mut image.fit, fit, fit.name())
-                            .changed();
-                    }
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Focus");
-                    changed |= ui
-                        .add(
-                            DragValue::new(&mut image.focal.x)
-                                .range(0.0..=1.0)
-                                .speed(0.01),
-                        )
-                        .changed();
-                    changed |= ui
-                        .add(
-                            DragValue::new(&mut image.focal.y)
-                                .range(0.0..=1.0)
-                                .speed(0.01),
-                        )
-                        .changed();
-                });
-                if ui.small_button("Remove image").clicked() {
-                    props.image = None;
-                    changed = true;
+    studio.with_field_history(ui, "layout-properties", |ui, studio| {
+        let mut props = shape.layout.clone();
+        let Some(layout_target) = studio.layout_inspector_target() else {
+            return;
+        };
+        let mut changed = false;
+        egui::CollapsingHeader::new("Image fill")
+            .default_open(shape.layout.image.is_some())
+            .show(ui, |ui| {
+                if super::jobs::is_running::<LoadedImage>(ui.ctx(), "layout-image-load") {
+                    ui.spinner();
+                    ui.label("Loading image…");
+                } else if ui
+                    .button(if props.image.is_some() {
+                        "Replace image…"
+                    } else {
+                        "Choose image…"
+                    })
+                    .clicked()
+                {
+                    let document = studio.swap_id.clone();
+                    studio.request_file_dialog(
+                        || {
+                            rfd::FileDialog::new()
+                                .add_filter(
+                                    "Images",
+                                    &["png", "jpg", "jpeg", "webp", "gif", "tiff"],
+                                )
+                                .pick_file()
+                        },
+                        move |ctx, _, path| {
+                            super::jobs::start(ctx, "layout-image-load", move || {
+                                let image = crate::layout_images::load(&path)?;
+                                Ok(LoadedImage {
+                                    document,
+                                    layer,
+                                    id,
+                                    image,
+                                })
+                            });
+                        },
+                    );
                 }
-            }
-        });
-    label(ui, "Sizing");
-    ui.horizontal(|ui| {
-        ui.label("W");
-        changed |= sizing(ui, "layout-width", &mut props.width);
-        ui.label("H");
-        changed |= sizing(ui, "layout-height", &mut props.height);
-    });
-    egui::CollapsingHeader::new("Min / max size").show(ui, |ui| {
-        for (name, val) in [
-            ("Min W", &mut props.min_width),
-            ("Max W", &mut props.max_width),
-            ("Min H", &mut props.min_height),
-            ("Max H", &mut props.max_height),
-        ] {
-            ui.horizontal(|ui| {
-                let mut enabled = val.is_some();
-                if ui.checkbox(&mut enabled, name).changed() {
-                    *val = enabled.then_some(1.0);
-                    changed = true;
-                }
-                if let Some(v) = val {
-                    changed |= ui.add(DragValue::new(v).range(1.0..=10000.0)).changed();
-                }
-            });
-        }
-    });
-    if props.frame {
-        changed |= ui.checkbox(&mut props.clip, "Clip content").changed();
-        label(ui, "Responsive frame");
-        ui.horizontal(|ui| {
-            for (name, width) in [("Phone", 390.0), ("Tablet", 768.0), ("Desktop", 1440.0)] {
-                if ui.small_button(name).clicked() {
-                    studio.resize_layout_frame(width, shape.geom.bbox().height());
-                }
-            }
-        });
-        label(ui, "Layout");
-        let mut enabled = props.stack.is_some();
-        if ui
-            .checkbox(&mut enabled, "Arrange children automatically")
-            .changed()
-        {
-            props.stack = enabled.then(AutoStack::default);
-            changed = true;
-        }
-        if let Some(stack) = &mut props.stack {
-            ui.horizontal(|ui| {
-                for (name, v) in [
-                    ("Stack", StackFlow::Stack),
-                    ("Wrap", StackFlow::Wrap),
-                    ("Grid", StackFlow::Grid),
-                ] {
-                    changed |= ui.selectable_value(&mut stack.flow, v, name).changed();
-                }
-            });
-            if stack.flow == StackFlow::Grid {
-                ui.horizontal(|ui| {
-                    ui.label("Columns");
-                    changed |= ui
-                        .add(DragValue::new(&mut stack.columns).range(1..=24))
-                        .changed();
-                });
-            } else {
-                ui.horizontal(|ui| {
-                    changed |= ui
-                        .selectable_value(&mut stack.direction, StackAxis::Horizontal, "Horizontal")
-                        .changed();
-                    changed |= ui
-                        .selectable_value(&mut stack.direction, StackAxis::Vertical, "Vertical")
-                        .changed();
-                });
-            }
-            ui.horizontal(|ui| {
-                ui.label("Align");
-                ComboBox::from_id_salt("layout-align")
-                    .selected_text(format!("{:?}", stack.align))
-                    .show_ui(ui, |ui| {
-                        for v in [
-                            StackAlign::Start,
-                            StackAlign::Center,
-                            StackAlign::End,
-                            StackAlign::Stretch,
+                if let Some(image) = &mut props.image {
+                    ui.horizontal(|ui| {
+                        for fit in [
+                            crate::layout_images::ImageFit::Cover,
+                            crate::layout_images::ImageFit::Contain,
+                            crate::layout_images::ImageFit::Stretch,
                         ] {
                             changed |= ui
-                                .selectable_value(&mut stack.align, v, format!("{v:?}"))
+                                .selectable_value(&mut image.fit, fit, fit.name())
                                 .changed();
                         }
                     });
-            });
-            ui.horizontal(|ui| {
-                ui.label("Distribute");
-                ComboBox::from_id_salt("layout-justify")
-                    .selected_text(format!("{:?}", stack.justify))
-                    .show_ui(ui, |ui| {
-                        for (name, v) in [
-                            ("Start", StackJustify::Start),
-                            ("Center", StackJustify::Center),
-                            ("End", StackJustify::End),
-                            ("Space between", StackJustify::SpaceBetween),
-                            ("Space around", StackJustify::SpaceAround),
-                            ("Space evenly", StackJustify::SpaceEvenly),
-                        ] {
-                            changed |= ui.selectable_value(&mut stack.justify, v, name).changed();
-                        }
-                    });
-            });
-            ui.horizontal(|ui| {
-                ui.label("Gap");
-                changed |= ui
-                    .add(DragValue::new(&mut stack.gap).range(0.0..=1000.0))
-                    .changed();
-                if stack.flow != StackFlow::Stack {
-                    ui.label("Rows");
-                    changed |= ui
-                        .add(DragValue::new(&mut stack.cross_gap).range(0.0..=1000.0))
-                        .changed();
-                }
-            });
-            ui.label(
-                RichText::new("Padding · top / right / bottom / left")
-                    .small()
-                    .color(fg_weak()),
-            );
-            ui.horizontal(|ui| {
-                for p in &mut stack.padding {
-                    changed |= ui
-                        .add(
-                            DragValue::new(p)
-                                .range(0.0..=1000.0)
-                                .max_decimals(0)
-                                .speed(1),
-                        )
-                        .changed();
-                }
-            });
-        }
-    }
-    if props.parent.is_some() {
-        label(ui, "Position in frame");
-        changed |= ui
-            .checkbox(&mut props.absolute, "Absolute position")
-            .changed();
-        for (name, value) in [
-            ("Horizontal", &mut props.constraint_x),
-            ("Vertical", &mut props.constraint_y),
-        ] {
-            ui.horizontal(|ui| {
-                ui.label(name);
-                ComboBox::from_id_salt(name)
-                    .selected_text(value.name())
-                    .show_ui(ui, |ui| {
-                        for v in Constraint::all() {
-                            changed |= ui.selectable_value(value, v, v.name()).changed();
-                        }
-                    });
-            });
-        }
-        ui.horizontal(|ui| {
-            if ui.small_button("Earlier").clicked() {
-                studio.reorder_layout_selection(false);
-            }
-            if ui.small_button("Later").clicked() {
-                studio.reorder_layout_selection(true);
-            }
-            if ui.small_button("Detach from frame").clicked() {
-                studio.reparent_layout_selection(None);
-            }
-        });
-    }
-    if props.frame {
-        let mut locked = props.aspect_ratio.is_some();
-        if ui.checkbox(&mut locked, "Lock aspect ratio").changed() {
-            props.aspect_ratio =
-                locked.then_some(shape.geom.bbox().width() / shape.geom.bbox().height().max(1.0));
-            changed = true;
-        }
-    }
-    if props.frame || matches!(shape.geom, Geom::Text(_)) {
-        egui::CollapsingHeader::new("Breakpoint overrides").show(ui, |ui| {
-            ui.label(
-                RichText::new("Rules apply at or below this viewport width.")
-                    .small()
-                    .color(fg_weak()),
-            );
-            let mut remove = None;
-            for (index, point) in props.breakpoints.iter_mut().enumerate() {
-                ui.push_id(index, |ui| {
                     ui.horizontal(|ui| {
+                        ui.label("Focus");
                         changed |= ui
                             .add(
-                                DragValue::new(&mut point.max_width)
-                                    .range(240.0..=3840.0)
-                                    .prefix("≤ ")
-                                    .suffix(" px"),
+                                DragValue::new(&mut image.focal.x)
+                                    .range(0.0..=1.0)
+                                    .speed(0.01),
                             )
                             .changed();
-                        if ui.small_button("×").clicked() {
-                            remove = Some(index);
-                        }
-                    });
-                    if props.frame {
-                        let mut flow = point.flow;
-                        ComboBox::from_id_salt("breakpoint-flow")
-                            .selected_text(
-                                flow.map_or("Inherit layout".into(), |v| format!("{v:?}")),
-                            )
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(&mut flow, None, "Inherit layout");
-                                for v in [StackFlow::Stack, StackFlow::Wrap, StackFlow::Grid] {
-                                    ui.selectable_value(&mut flow, Some(v), format!("{v:?}"));
-                                }
-                            });
-                        if flow != point.flow {
-                            point.flow = flow;
-                            changed = true;
-                        }
-                        ui.horizontal(|ui| {
-                            for (name, axis) in [
-                                ("Inherit", None),
-                                ("Row", Some(StackAxis::Horizontal)),
-                                ("Column", Some(StackAxis::Vertical)),
-                            ] {
-                                changed |= ui
-                                    .selectable_value(&mut point.direction, axis, name)
-                                    .changed();
-                            }
-                        });
-                        ui.horizontal(|ui| {
-                            let mut set = point.gap.is_some();
-                            if ui.checkbox(&mut set, "Gap").changed() {
-                                point.gap = set.then_some(16.0);
-                                changed = true;
-                            }
-                            if let Some(v) = &mut point.gap {
-                                changed |= ui.add(DragValue::new(v).range(0.0..=1000.0)).changed();
-                            }
-                        });
-                        ui.horizontal(|ui| {
-                            let mut set = point.padding.is_some();
-                            if ui.checkbox(&mut set, "Padding").changed() {
-                                point.padding = set.then_some([24.0; 4]);
-                                changed = true;
-                            }
-                            if let Some(p) = &mut point.padding {
-                                let mut n = p[0];
-                                if ui.add(DragValue::new(&mut n).range(0.0..=1000.0)).changed() {
-                                    *p = [n; 4];
-                                    changed = true;
-                                }
-                            }
-                        });
-                        if point.flow == Some(StackFlow::Grid) {
-                            let v = point.columns.get_or_insert(2);
-                            changed |= ui
-                                .add(DragValue::new(v).range(1..=24).prefix("Columns "))
-                                .changed();
-                        }
-                    }
-                    if let Geom::Text(run) = &shape.geom {
-                        let size = point.text_size.get_or_insert(run.px);
                         changed |= ui
-                            .add(DragValue::new(size).range(1.0..=500.0).suffix(" px type"))
+                            .add(
+                                DragValue::new(&mut image.focal.y)
+                                    .range(0.0..=1.0)
+                                    .speed(0.01),
+                            )
                             .changed();
-                    }
-                    ui.separator();
-                });
-            }
-            if let Some(index) = remove {
-                props.breakpoints.remove(index);
-                changed = true;
-            }
-            ui.horizontal(|ui| {
-                for (name, width) in [("+ Phone", 600.0), ("+ Tablet", 1024.0)] {
-                    if ui.button(name).clicked() {
-                        props.breakpoints.push(crate::layout::LayoutBreakpoint {
-                            max_width: width,
-                            ..Default::default()
-                        });
-                        if let Geom::Text(run) = &shape.geom {
-                            props.text_size.get_or_insert(run.px);
-                        }
+                    });
+                    if ui.small_button("Remove image").clicked() {
+                        props.image = None;
                         changed = true;
                     }
                 }
             });
+        label(ui, "Sizing");
+        ui.horizontal(|ui| {
+            ui.label("W");
+            changed |= sizing(ui, "layout-width", &mut props.width);
+            ui.label("H");
+            changed |= sizing(ui, "layout-height", &mut props.height);
         });
-    }
-    if changed {
-        studio.edit_layout(|l| {
-        macro_rules! copy_changed {($($field:ident),*)=>{$(if shape.layout.$field!=props.$field{l.$field=props.$field.clone();})*};}
-        copy_changed!(width,height,min_width,max_width,min_height,max_height,clip,absolute,constraint_x,constraint_y,stack,breakpoints,text_size,aspect_ratio,image);
+        egui::CollapsingHeader::new("Min / max size").show(ui, |ui| {
+            for (name, val) in [
+                ("Min W", &mut props.min_width),
+                ("Max W", &mut props.max_width),
+                ("Min H", &mut props.min_height),
+                ("Max H", &mut props.max_height),
+            ] {
+                ui.horizontal(|ui| {
+                    let mut enabled = val.is_some();
+                    if ui.checkbox(&mut enabled, name).changed() {
+                        *val = enabled.then_some(1.0);
+                        changed = true;
+                    }
+                    if let Some(v) = val {
+                        changed |= ui.add(DragValue::new(v).range(1.0..=10000.0)).changed();
+                    }
+                });
+            }
+        });
+        if props.frame {
+            changed |= ui.checkbox(&mut props.clip, "Clip content").changed();
+            label(ui, "Responsive frame");
+            ui.horizontal(|ui| {
+                for (name, width) in [("Phone", 390.0), ("Tablet", 768.0), ("Desktop", 1440.0)] {
+                    if ui.small_button(name).clicked() {
+                        studio.resize_layout_frame(width, shape.geom.bbox().height());
+                    }
+                }
+            });
+            label(ui, "Layout");
+            let mut enabled = props.stack.is_some();
+            if ui
+                .checkbox(&mut enabled, "Arrange children automatically")
+                .changed()
+            {
+                props.stack = enabled.then(AutoStack::default);
+                changed = true;
+            }
+            if let Some(stack) = &mut props.stack {
+                ui.horizontal(|ui| {
+                    for (name, v) in [
+                        ("Stack", StackFlow::Stack),
+                        ("Wrap", StackFlow::Wrap),
+                        ("Grid", StackFlow::Grid),
+                    ] {
+                        changed |= ui.selectable_value(&mut stack.flow, v, name).changed();
+                    }
+                });
+                if stack.flow == StackFlow::Grid {
+                    if stack.column_tracks.is_empty() {
+                        changed |= layout_number(
+                            ui,
+                            (layer, id),
+                            "uniform-columns",
+                            "Uniform columns",
+                            &mut stack.columns,
+                            1..=1024,
+                            " columns",
+                        );
+                    }
+                    changed |= grid_tracks(ui, (layer, id), "Column", &mut stack.column_tracks);
+                    changed |= grid_tracks(ui, (layer, id), "Row", &mut stack.row_tracks);
+                } else {
+                    ui.horizontal(|ui| {
+                        changed |= ui
+                            .selectable_value(
+                                &mut stack.direction,
+                                StackAxis::Horizontal,
+                                "Horizontal",
+                            )
+                            .changed();
+                        changed |= ui
+                            .selectable_value(&mut stack.direction, StackAxis::Vertical, "Vertical")
+                            .changed();
+                    });
+                }
+                ui.horizontal(|ui| {
+                    let label = ui.label("Align");
+                    ComboBox::from_id_salt((layer, id, "layout-align"))
+                        .selected_text(format!("{:?}", stack.align))
+                        .show_ui(ui, |ui| {
+                            for v in [
+                                StackAlign::Start,
+                                StackAlign::Center,
+                                StackAlign::End,
+                                StackAlign::Stretch,
+                                StackAlign::Baseline,
+                            ] {
+                                changed |= ui
+                                    .selectable_value(&mut stack.align, v, format!("{v:?}"))
+                                    .changed();
+                            }
+                        })
+                        .response
+                        .labelled_by(label.id);
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Distribute");
+                    ComboBox::from_id_salt((layer, id, "layout-justify"))
+                        .selected_text(format!("{:?}", stack.justify))
+                        .show_ui(ui, |ui| {
+                            for (name, v) in [
+                                ("Start", StackJustify::Start),
+                                ("Center", StackJustify::Center),
+                                ("End", StackJustify::End),
+                                ("Space between", StackJustify::SpaceBetween),
+                                ("Space around", StackJustify::SpaceAround),
+                                ("Space evenly", StackJustify::SpaceEvenly),
+                            ] {
+                                changed |=
+                                    ui.selectable_value(&mut stack.justify, v, name).changed();
+                            }
+                        });
+                });
+                ui.horizontal(|ui| {
+                    changed |= layout_number(
+                        ui,
+                        (layer, id),
+                        "layout-gap",
+                        "Gap",
+                        &mut stack.gap,
+                        0.0..=1000.0,
+                        " px",
+                    );
+                    if stack.flow != StackFlow::Stack {
+                        changed |= layout_number(
+                            ui,
+                            (layer, id),
+                            "layout-cross-gap",
+                            "Row gap",
+                            &mut stack.cross_gap,
+                            0.0..=1000.0,
+                            " px",
+                        );
+                    }
+                });
+                ui.label(
+                    RichText::new("Padding · top / right / bottom / left")
+                        .small()
+                        .color(fg_weak()),
+                );
+                ui.horizontal(|ui| {
+                    for (name, p) in ["Top", "Right", "Bottom", "Left"]
+                        .into_iter()
+                        .zip(&mut stack.padding)
+                    {
+                        changed |= layout_number(
+                            ui,
+                            (layer, id),
+                            ("padding", name),
+                            name,
+                            p,
+                            0.0..=1000.0,
+                            " px",
+                        );
+                    }
+                });
+            }
+        }
+        if props.parent.is_some() {
+            if props
+                .parent
+                .and_then(|parent| studio.doc.find_shape(layer, parent))
+                .and_then(|shape| shape.layout.stack.as_ref())
+                .is_some_and(|s| s.flow == StackFlow::Grid)
+            {
+                label(ui, "Grid placement");
+                ui.label(
+                    RichText::new(
+                        "Rows and columns start at zero. Unset anchors place automatically.",
+                    )
+                    .small()
+                    .color(fg_weak()),
+                );
+                for (name, anchor) in [
+                    ("Column", &mut props.grid.column),
+                    ("Row", &mut props.grid.row),
+                ] {
+                    ui.push_id((layer, id, "grid-anchor", name), |ui| {
+                        let mut enabled = anchor.is_some();
+                        if ui.checkbox(&mut enabled, format!("Set {name}")).changed() {
+                            *anchor = enabled.then_some(0);
+                            changed = true;
+                        }
+                        if let Some(value) = anchor {
+                            changed |= layout_number(
+                                ui,
+                                (layer, id),
+                                ("grid-anchor", name),
+                                name,
+                                value,
+                                0..=1023,
+                                " index",
+                            );
+                        }
+                    });
+                }
+                ui.horizontal(|ui| {
+                    changed |= layout_number(
+                        ui,
+                        (layer, id),
+                        "grid-column-span",
+                        "Column span",
+                        &mut props.grid.column_span,
+                        1..=1024,
+                        " tracks",
+                    );
+                    changed |= layout_number(
+                        ui,
+                        (layer, id),
+                        "grid-row-span",
+                        "Row span",
+                        &mut props.grid.row_span,
+                        1..=1024,
+                        " tracks",
+                    );
+                });
+            }
+            label(ui, "Position in frame");
+            changed |= ui
+                .checkbox(&mut props.absolute, "Absolute position")
+                .changed();
+            for (name, value) in [
+                ("Horizontal", &mut props.constraint_x),
+                ("Vertical", &mut props.constraint_y),
+            ] {
+                ui.horizontal(|ui| {
+                    ui.label(name);
+                    ComboBox::from_id_salt(name)
+                        .selected_text(value.name())
+                        .show_ui(ui, |ui| {
+                            for v in Constraint::all() {
+                                changed |= ui.selectable_value(value, v, v.name()).changed();
+                            }
+                        });
+                });
+            }
+            ui.horizontal(|ui| {
+                if ui.small_button("Earlier").clicked() {
+                    studio.reorder_layout_selection(false);
+                }
+                if ui.small_button("Later").clicked() {
+                    studio.reorder_layout_selection(true);
+                }
+                if ui.small_button("Detach from frame").clicked() {
+                    studio.reparent_layout_selection(None);
+                }
+            });
+        }
+        if props.frame {
+            let mut locked = props.aspect_ratio.is_some();
+            if ui.checkbox(&mut locked, "Lock aspect ratio").changed() {
+                props.aspect_ratio = locked
+                    .then_some(shape.geom.bbox().width() / shape.geom.bbox().height().max(1.0));
+                changed = true;
+            }
+        }
+        if props.frame || matches!(shape.geom, Geom::Text(_)) {
+            egui::CollapsingHeader::new("Breakpoint overrides").show(ui, |ui| {
+                ui.label(
+                    RichText::new("Rules apply at or below this viewport width.")
+                        .small()
+                        .color(fg_weak()),
+                );
+                let mut remove = None;
+                for (index, point) in props.breakpoints.iter_mut().enumerate() {
+                    ui.push_id(index, |ui| {
+                        ui.horizontal(|ui| {
+                            changed |= ui
+                                .add(
+                                    DragValue::new(&mut point.max_width)
+                                        .range(240.0..=3840.0)
+                                        .prefix("≤ ")
+                                        .suffix(" px"),
+                                )
+                                .changed();
+                            if ui.small_button("×").clicked() {
+                                remove = Some(index);
+                            }
+                        });
+                        if props.frame {
+                            let mut flow = point.flow;
+                            ComboBox::from_id_salt("breakpoint-flow")
+                                .selected_text(
+                                    flow.map_or("Inherit layout".into(), |v| format!("{v:?}")),
+                                )
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(&mut flow, None, "Inherit layout");
+                                    for v in [StackFlow::Stack, StackFlow::Wrap, StackFlow::Grid] {
+                                        ui.selectable_value(&mut flow, Some(v), format!("{v:?}"));
+                                    }
+                                });
+                            if flow != point.flow {
+                                point.flow = flow;
+                                changed = true;
+                            }
+                            ui.horizontal(|ui| {
+                                for (name, axis) in [
+                                    ("Inherit", None),
+                                    ("Row", Some(StackAxis::Horizontal)),
+                                    ("Column", Some(StackAxis::Vertical)),
+                                ] {
+                                    changed |= ui
+                                        .selectable_value(&mut point.direction, axis, name)
+                                        .changed();
+                                }
+                            });
+                            ui.horizontal(|ui| {
+                                let mut set = point.gap.is_some();
+                                if ui.checkbox(&mut set, "Gap").changed() {
+                                    point.gap = set.then_some(16.0);
+                                    changed = true;
+                                }
+                                if let Some(v) = &mut point.gap {
+                                    changed |=
+                                        ui.add(DragValue::new(v).range(0.0..=1000.0)).changed();
+                                }
+                            });
+                            ui.horizontal(|ui| {
+                                let mut set = point.padding.is_some();
+                                if ui.checkbox(&mut set, "Padding").changed() {
+                                    point.padding = set.then_some([24.0; 4]);
+                                    changed = true;
+                                }
+                                if let Some(p) = &mut point.padding {
+                                    let mut n = p[0];
+                                    if ui.add(DragValue::new(&mut n).range(0.0..=1000.0)).changed()
+                                    {
+                                        *p = [n; 4];
+                                        changed = true;
+                                    }
+                                }
+                            });
+                            if point.flow == Some(StackFlow::Grid) {
+                                let v = point.columns.get_or_insert(2);
+                                changed |= ui
+                                    .add(DragValue::new(v).range(1..=24).prefix("Columns "))
+                                    .changed();
+                            }
+                        }
+                        if let Geom::Text(run) = &shape.geom {
+                            let size = point.text_size.get_or_insert(run.px);
+                            changed |= ui
+                                .add(DragValue::new(size).range(1.0..=500.0).suffix(" px type"))
+                                .changed();
+                        }
+                        ui.separator();
+                    });
+                }
+                if let Some(index) = remove {
+                    props.breakpoints.remove(index);
+                    changed = true;
+                }
+                ui.horizontal(|ui| {
+                    for (name, width) in [("+ Phone", 600.0), ("+ Tablet", 1024.0)] {
+                        if ui.button(name).clicked() {
+                            props.breakpoints.push(crate::layout::LayoutBreakpoint {
+                                max_width: width,
+                                ..Default::default()
+                            });
+                            if let Geom::Text(run) = &shape.geom {
+                                props.text_size.get_or_insert(run.px);
+                            }
+                            changed = true;
+                        }
+                    }
+                });
+            });
+        }
+        if changed {
+            studio.apply_layout_inspector(&layout_target, &props);
+        }
     });
-    }
     if matches!(shape.geom, Geom::Text(_)) {
         super::paragraph::show(ui, studio);
     }
     super::layout_preview::interaction_editor(ui, studio);
     super::layout_preview::component_editor(ui, studio);
+    super::layout_properties::inspector(ui, studio);
     variables(ui, studio);
     if shape.layout.frame {
         label(ui, "Export frame");
@@ -602,38 +846,38 @@ pub fn hierarchy(ui: &mut Ui, studio: &mut Studio) {
         .size_range(170.0..=320.0)
         .frame(egui::Frame::new().fill(bg_panel()).inner_margin(12))
         .show(ui, |ui| {
-            hierarchy_content(ui,studio);
+            hierarchy_content(ui, studio);
         });
 }
 
 /// Draw Layout's existing node hierarchy inside a movable panel.
 /// Args: panel UI and studio. Returns no value; node/component operations remain app-owned.
-pub(super) fn hierarchy_content(ui: &mut Ui,studio: &mut Studio) {
-            ui.horizontal(|ui| {
-                ui.label(RichText::new("Layers").strong());
-                if ui.small_button("+ Frame").clicked() {
-                    studio.insert_layout_frame("Frame", 390.0, 844.0);
-                }
-            });
-            ui.add_space(8.0);
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                let mut rows = Vec::new();
-                let roots: Vec<_> = studio
-                    .doc
-                    .layers
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, layer)| layer.parent.is_none())
-                    .map(|(li, _)| li)
-                    .rev()
-                    .collect();
-                for li in roots {
-                    layer_row(ui, studio, li, 0, &mut rows);
-                }
-                if let Some(drop) = super::layer_drag::drop_target(ui, studio, &rows) {
-                    drop.apply(studio);
-                }
-            });
+pub(super) fn hierarchy_content(ui: &mut Ui, studio: &mut Studio) {
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Layers").strong());
+        if ui.small_button("+ Frame").clicked() {
+            studio.insert_layout_frame("Frame", 390.0, 844.0);
+        }
+    });
+    ui.add_space(8.0);
+    egui::ScrollArea::vertical().show(ui, |ui| {
+        let mut rows = Vec::new();
+        let roots: Vec<_> = studio
+            .doc
+            .layers
+            .iter()
+            .enumerate()
+            .filter(|(_, layer)| layer.parent.is_none())
+            .map(|(li, _)| li)
+            .rev()
+            .collect();
+        for li in roots {
+            layer_row(ui, studio, li, 0, &mut rows);
+        }
+        if let Some(drop) = super::layer_drag::drop_target(ui, studio, &rows) {
+            drop.apply(studio);
+        }
+    });
 }
 
 fn layer_row(

@@ -380,7 +380,7 @@ pub(crate) fn font_bytes_for(run: &TypeRun) -> Option<Arc<Vec<u8>>> {
 pub(crate) fn font_metrics_for(run: &TypeRun) -> Option<(f32, f32, f32)> {
     let bytes = font_bytes_for(run)?;
     let face = rustybuzz::Face::from_slice(&bytes, 0)?;
-    let scale = run.px / face.units_per_em() as f32;
+    let scale = run.px * character_metrics(run, 0).vscale.unwrap_or(100.0) / 100.0 / face.units_per_em() as f32;
     Some((face.ascender() as f32 * scale, -(face.descender() as f32) * scale, face.line_gap() as f32 * scale))
 }
 
