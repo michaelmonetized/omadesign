@@ -1,9 +1,28 @@
 use crate::app::Studio;
 use eframe::egui::{self, Ui};
+
+#[cfg(test)]
+#[path = "opentype_keyboard_tests.rs"]
+mod keyboard_tests;
+
+/// Scope feature controls to the artwork owner while keeping edited values out of their IDs.
+/// Args: studio. Returns the document and selection feature namespace.
+fn feature_owner(studio: &Studio) -> egui::Id {
+    egui::Id::new(("opentype",&studio.swap_id,&studio.selection,studio.active_layer.and_then(|layer|studio.doc.layers.get(layer).map(|layer|layer.id))))
+}
+
+/// Reveal native feature focus and describe an existing mixed selection.
+/// Args: UI, actual response and mixed flag. Returns no value.
+fn feature_response(ui: &Ui, response: &egui::Response, mixed: bool) {
+    if mixed{ui.ctx().accesskit_node_builder(response.id,|node|{node.set_state_description("Mixed");node.set_value("Mixed");});}
+    super::welcome::focus_control(ui,response);
+}
+
 pub fn show(ui: &mut Ui, studio: &mut Studio, font: &str) {
+    let owner=feature_owner(studio);
     let features = crate::text::font_features(font);
     let has = |tag: &[u8; 4]| features.iter().any(|(t, _)| t.to_bytes() == *tag);
-    egui::CollapsingHeader::new("OpenType features").show(ui, |ui| {
+    let section=egui::CollapsingHeader::new("OpenType features").id_salt(owner.with("section")).show(ui, |ui| {
         if features.is_empty() {
             ui.small("This font has no OpenType features.");
             return;
@@ -41,7 +60,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio, font: &str) {
                     _ => "Default",
                 }
             };
-            egui::ComboBox::from_label("Figures")
+            let response=super::fields::native_scope(ui,owner.with("figures"),|ui|egui::ComboBox::from_label("Figures")
                 .selected_text(label)
                 .show_ui(ui, |ui| {
                     for (name, values, tags) in [
@@ -60,7 +79,9 @@ pub fn show(ui: &mut Ui, studio: &mut Studio, font: &str) {
                         ("Tabular lining", [0, 1, 0, 1], Some([*b"lnum", *b"tnum"])),
                     ] {
                         if tags.is_none_or(|tags| tags.iter().all(has))
-                            && ui.selectable_label(label == name, name).clicked()
+                            && super::fields::native_scope(ui,owner.with(("figures-choice",values)),|ui|{
+                                let response=ui.selectable_label(label==name,name);feature_response(ui,&response,false);response
+                            }).inner.clicked()
                         {
                             let features: Vec<_> = [*b"onum", *b"lnum", *b"pnum", *b"tnum"]
                                 .into_iter().zip(values).collect();
@@ -68,7 +89,8 @@ pub fn show(ui: &mut Ui, studio: &mut Studio, font: &str) {
                             restore_edit_focus(ui, studio);
                         }
                     }
-                });
+                }).response).inner;
+            feature_response(ui,&response,current.iter().any(Option::is_none));
         }
         if has(b"sups") || has(b"subs") || has(b"ordn") {
             let current = [*b"sups", *b"subs", *b"ordn"].map(|tag| studio.selection_feature(tag));
@@ -83,7 +105,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio, font: &str) {
             } else {
                 "Normal"
             };
-            egui::ComboBox::from_label("Position")
+            let response=super::fields::native_scope(ui,owner.with("position"),|ui|egui::ComboBox::from_label("Position")
                 .selected_text(label)
                 .show_ui(ui, |ui| {
                     for (name, tag) in [
@@ -93,13 +115,16 @@ pub fn show(ui: &mut Ui, studio: &mut Studio, font: &str) {
                         ("Ordinal", Some(*b"ordn")),
                     ] {
                         if tag.is_none_or(|t| has(&t))
-                            && ui.selectable_label(name == label, name).clicked()
+                            && super::fields::native_scope(ui,owner.with(("position-choice",tag)),|ui|{
+                                let response=ui.selectable_label(name==label,name);feature_response(ui,&response,false);response
+                            }).inner.clicked()
                         {
                             studio.patch_features(&[*b"sups", *b"subs", *b"ordn"].map(|t| (t, u32::from(Some(t) == tag))));
                             restore_edit_focus(ui, studio);
                         }
                     }
-                });
+                }).response).inner;
+            feature_response(ui,&response,current.iter().any(Option::is_none));
         }
         let sets: Vec<_> = features
             .iter()
@@ -118,6 +143,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio, font: &str) {
             }
         }
     });
+    super::welcome::focus_control(ui,&section.header_response);
 }
 fn restore_edit_focus(ui: &mut Ui, studio: &Studio) {
     if studio.type_edit.is_some() {
@@ -129,9 +155,10 @@ fn toggle(ui: &mut Ui, studio: &mut Studio, tag: [u8; 4], label: &str) {
         studio.selection_feature(tag).zip(studio.selection_feature(*b"smcp")).map(|(a,b)|u32::from(a>0&&b>0))
     } else { studio.selection_feature(tag) };
     let mut on = value.unwrap_or(0) > 0;
-    if ui
-        .add(egui::Checkbox::new(&mut on, label).indeterminate(value.is_none()))
-        .changed()
+    let response=super::fields::native_scope(ui,feature_owner(studio).with(("feature",tag)),|ui|
+        ui.add(egui::Checkbox::new(&mut on,label).indeterminate(value.is_none()))).inner;
+    feature_response(ui,&response,value.is_none());
+    if response.changed()
     {
         if tag == *b"liga" {
             studio.patch_features(&[(tag, u32::from(on)), (*b"clig", u32::from(on))]);
