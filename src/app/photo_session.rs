@@ -22,8 +22,13 @@ const MAX_UNDO: usize = 128;
 
 struct ImportJob {
     cancelled: bool,
+    cancel: crate::formats::raw::Cancellation,
     path: PathBuf,
     receiver: mpsc::Receiver<Result<PhotoImage, String>>,
+}
+
+impl Drop for ImportJob {
+    fn drop(&mut self) { self.cancel.cancel(); }
 }
 
 struct FolderListing {
@@ -264,7 +269,9 @@ impl PhotoSession {
         self.import_queue.clear();
         for job in &mut self.import_jobs {
             job.cancelled = true;
+            job.cancel.cancel();
         }
+        self.import_jobs.clear();
         self.status = "Photo opening cancelled.".into();
     }
 
@@ -274,12 +281,14 @@ impl PhotoSession {
                 break;
             };
             let input = path.clone();
+            let cancel = crate::formats::raw::Cancellation::default();
+            let worker_cancel = cancel.clone();
             let (tx, receiver) = mpsc::channel();
             if let Err(error) =
                 std::thread::Builder::new()
                     .name("photo-open".into())
                     .spawn(move || {
-                        let _ = tx.send(PhotoImage::load(&input));
+                        let _ = tx.send(PhotoImage::load_cancellable(&input, &worker_cancel));
                     })
             {
                 self.status = format!("Could not start opening the photo: {error}");
@@ -294,6 +303,7 @@ impl PhotoSession {
                 path,
                 receiver,
                 cancelled: false,
+                cancel,
             });
         }
     }
@@ -1669,7 +1679,7 @@ impl PhotoSession {
                 {
                     return Err("Invalid original camera pixels in restart snapshot".into());
                 }
-                PhotoImage::from_raw(p.name, raw)
+                PhotoImage::from_raw(p.name, raw)?
             } else {
                 PhotoImage::from_full(
                     p.name,

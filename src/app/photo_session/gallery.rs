@@ -66,7 +66,11 @@ impl FolderGallery {
                         if worker_cancel.load(Ordering::Relaxed) {
                             break;
                         }
-                        PhotoImage::load(&path).map(|image| image.render_thumbnail(edge))
+                        PhotoImage::load_cancellable(
+                            &path,
+                            &crate::formats::raw::Cancellation::from_flag(worker_cancel.clone()),
+                        )
+                        .map(|image| image.render_thumbnail(edge))
                     };
                     if worker_cancel.load(Ordering::Relaxed)
                         || sender.send((index, pixels)).is_err()

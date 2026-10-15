@@ -654,11 +654,12 @@ mod tests {
             crate::formats::raw::RawImage {
                 width: 1800,
                 height: 12,
-                pixels: [5000, 10000, 15000].repeat(1800 * 12),
+                pixels: [5000, 10000, 15000].repeat(1800 * 12).into(),
+                memory: None,
                 metadata: Default::default(),
                 warnings: vec![],
             },
-        )
+        ).unwrap()
     }
 
     #[test]

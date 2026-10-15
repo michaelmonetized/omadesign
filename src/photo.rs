@@ -1004,14 +1004,15 @@ mod tests {
             crate::formats::raw::RawImage {
                 width: 80,
                 height: 40,
-                pixels: [4096, 4096, 4096].repeat(80 * 40),
+                pixels: [4096, 4096, 4096].repeat(80 * 40).into(),
+                memory: None,
                 metadata: crate::formats::raw::RawMetadata {
                     baseline_exposure: 0.5,
                     ..Default::default()
                 },
                 warnings: vec![],
             },
-        );
+        ).unwrap();
         for mut image in [raster, raw] {
             let before = image.render_thumbnail(80);
             assert_eq!(before, image.render_preview());

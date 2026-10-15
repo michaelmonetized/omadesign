@@ -2,6 +2,83 @@ use super::*;
 
 const DNG: &[u8] = include_bytes!("synthetic.dng");
 
+/// Create a bounded Bayer frame that takes the real native interpolation path.
+/// Args: sensor width and height. Returns an original MIT calibration DNG without an embedded preview.
+fn calibration_dng(w: u32, h: u32) -> Vec<u8> {
+    let mut bytes = DNG.to_vec();
+    let offset = bytes.len() as u32;
+    for (tag, value) in [
+        (256, w),
+        (257, h),
+        (278, h),
+        (273, offset),
+        (279, w * h * 2),
+    ] {
+        set_tag(&mut bytes, tag, &value.to_le_bytes());
+    }
+    for y in 0..h {
+        for x in 0..w {
+            let value = 3000 + (x * 13 + y * 7) % 25000;
+            bytes.extend_from_slice(&(value as u16).to_le_bytes());
+        }
+    }
+    bytes
+}
+
+#[test]
+fn active_native_interpolation_cancels_promptly_then_next_decode_succeeds() {
+    use std::time::{Duration, Instant};
+    let bytes = calibration_dng(2048, 1536);
+    let token = Cancellation::default();
+    let worker_token = token.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        let _ = tx.send(decode_cancellable(&bytes, &worker_token));
+    });
+    let started = Instant::now();
+    while token.native_progress() < (1 << 11) && started.elapsed() < Duration::from_secs(20) {
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    let phase = token.native_progress();
+    let cancelled = Instant::now();
+    token.cancel();
+    let result = rx.recv().unwrap();
+    let latency = cancelled.elapsed();
+    worker.join().unwrap();
+    assert_eq!(
+        phase,
+        1 << 11,
+        "must cancel inside actual native interpolation, stage={phase}"
+    );
+    assert!(result.unwrap_err().contains("cancelled"));
+    assert!(
+        latency < Duration::from_millis(500),
+        "native cancel latency {latency:?}"
+    );
+    let next = decode(DNG).unwrap();
+    assert_eq!((next.width, next.height), (64, 48));
+    eprintln!("active native AHD cancellation: {latency:?}; immediate next decode 64x48 succeeded");
+}
+
+#[test]
+fn shared_raw_samples_keep_legacy_json_array_and_restore_admission() {
+    let image = decode(DNG).unwrap();
+    let encoded = serde_json::to_string(&image).unwrap();
+    assert!(encoded.contains("\"pixels\":["));
+    assert!(!encoded.contains("memory"));
+    let mut restored: RawImage = serde_json::from_str(&encoded).unwrap();
+    let before = resources::global().usage().0;
+    restored.admit_memory(&Cancellation::default()).unwrap();
+    assert_eq!(
+        before,
+        resources::global().usage().0,
+        "restored samples must reuse their preallocation lease"
+    );
+    assert_eq!(image.pixels, restored.pixels);
+    let clone = restored.clone();
+    assert!(std::sync::Arc::ptr_eq(&clone.pixels, &restored.pixels));
+}
+
 fn set_tag(bytes: &mut [u8], tag: u16, value: &[u8]) {
     let count = u16::from_le_bytes(bytes[8..10].try_into().unwrap()) as usize;
     for index in 0..count {

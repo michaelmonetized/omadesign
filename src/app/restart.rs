@@ -219,11 +219,12 @@ mod tests {
         let raw = crate::formats::raw::RawImage {
             width: 2,
             height: 1,
-            pixels: vec![1, 256, 65535, 300, 400, 500],
+            pixels: vec![1, 256, 65535, 300, 400, 500].into(),
+                memory: None,
             metadata: Default::default(),
             warnings: vec![],
         };
-        let mut photo = crate::photo::PhotoImage::from_raw("Camera original".into(), raw);
+        let mut photo = crate::photo::PhotoImage::from_raw("Camera original".into(), raw).unwrap();
         photo.source = Some(root.join("missing-camera-file.dng"));
         s.photo.import_photo(photo);
         s.photo.selected_mut().unwrap().develop.exposure = 2.;
@@ -231,8 +232,8 @@ mod tests {
         let mut restored = Studio::new();
         restored.restore_restart_from(&manifest, &root).unwrap();
         assert_eq!(
-            restored.photo.images[0].raw.as_ref().unwrap().pixels,
-            vec![1, 256, 65535, 300, 400, 500]
+            restored.photo.images[0].raw.as_ref().unwrap().pixels.as_slice(),
+            &[1, 256, 65535, 300, 400, 500]
         );
         assert!(restored.photo.has_unsaved_settings());
         assert_eq!(restored.photo.images[0].develop.exposure, 2.);
