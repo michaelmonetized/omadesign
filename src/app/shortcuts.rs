@@ -44,10 +44,14 @@ pub(super) enum Shortcut {
     NextDocument,
     PreviousDocument,
     CloseDocument,
+    ToolPoints,
+    NewPixelLayer,
 }
 
 impl Shortcut {
     pub(super) fn available(self, persona: Persona) -> bool {
+        if self == Self::ToolPoints { return true; }
+        if self == Self::NewPixelLayer { return persona == Persona::Pixel; }
         if self == Self::CreateArtwork {
             return matches!(persona, Persona::Design | Persona::Layout | Persona::Motion);
         }
@@ -109,6 +113,7 @@ pub(super) fn key_shortcut(key: Key, mods: Modifiers) -> Option<Shortcut> {
     if key == Key::F8 && mods.is_none() {
         return Some(FocusCanvas);
     }
+    if key == Key::F9 && mods.is_none() { return Some(ToolPoints); }
     if !(mods.command || mods.ctrl || mods.mac_cmd) {
         return match (key, mods.shift, mods.alt) {
             (Key::H, true, false) => Some(FlipHorizontal),
@@ -132,6 +137,7 @@ pub(super) fn key_shortcut(key: Key, mods: Modifiers) -> Option<Shortcut> {
         (Key::O, false) => Open,
         (Key::P, true) => Place,
         (Key::N, false) => New,
+        (Key::N, true) => NewPixelLayer,
         (Key::E, false) => Export,
         (Key::K, true) => CreateArtwork,
         (Key::Tab, false) => NextDocument,
@@ -374,6 +380,8 @@ impl Studio {
     fn run_shortcut(&mut self, ctx: &egui::Context, shortcut: Shortcut, payload: Option<&str>) {
         match shortcut {
             Shortcut::CreateArtwork => crate::ui::keyboard_authoring::open(ctx, self),
+            Shortcut::ToolPoints => crate::ui::keyboard_tools::open(ctx, self),
+            Shortcut::NewPixelLayer => self.add_layer(true),
             Shortcut::NextDocument | Shortcut::PreviousDocument => {
                 self.ensure_tabs();
                 let count = self.tab_count();
@@ -613,6 +621,17 @@ impl Studio {
         if self.persona == Persona::Photo {
             if self.photo.is_batching() {
                 return false;
+            }
+            if matches!(key, Key::PageUp | Key::PageDown) && !self.photo.images.is_empty() {
+                let count = self.photo.images.len();
+                let index = match (self.photo.selected, key == Key::PageUp) {
+                    (Some(0), true) | (None, true) => count - 1,
+                    (Some(i), true) => (i - 1).min(count - 1),
+                    (Some(i), false) => (i + 1) % count,
+                    (None, false) => 0,
+                };
+                self.photo.select_with(index, false, shift);
+                return true;
             }
             if matches!(key, Key::Enter | Key::Escape) {
                 if let Some((start, cur)) = self.photo.crop_drag.take() {

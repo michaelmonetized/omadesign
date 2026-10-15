@@ -64,6 +64,8 @@ impl Shortcut {
             NextDocument => ("Ctrl+Tab", "Next document"),
             PreviousDocument => ("Ctrl+Shift+Tab", "Previous document"),
             CloseDocument => ("Ctrl+W", "Close document"),
+            ToolPoints => ("F9", "Use tool with keyboard coordinates"),
+            NewPixelLayer => ("Ctrl+Shift+N", "New pixel layer"),
         }
     }
 

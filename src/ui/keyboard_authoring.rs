@@ -9,6 +9,7 @@ const ID: &str = "keyboard-create-artwork";
 #[derive(Clone)]
 struct Dialog {
     draft: ArtworkDraft,
+    scope: Id,
     focus: bool,
     error: Option<String>,
 }
@@ -33,11 +34,21 @@ pub(crate) fn open(ctx: &egui::Context, studio: &mut Studio) {
     }
     let kind = ArtworkKind::for_tool(studio.tool).unwrap_or(ArtworkKind::Rectangle);
     let draft = ArtworkDraft::new(studio, kind);
+    let scope = Id::new((
+        ID,
+        &studio.swap_id,
+        &studio.selection,
+        studio
+            .active_layer
+            .and_then(|i| studio.doc.layers.get(i).map(|l| l.id)),
+        studio.persona,
+    ));
     ctx.data_mut(|data| {
         data.insert_temp(
             Id::new(ID),
             Dialog {
                 draft,
+                scope,
                 focus: true,
                 error: None,
             },
@@ -47,7 +58,7 @@ pub(crate) fn open(ctx: &egui::Context, studio: &mut Studio) {
 
 /// Draw a named input and associate its validation failure.
 /// Args: UI, identity, label, draft text, error and multiline mode. Returns the native widget response.
-fn input(
+pub(super) fn input(
     ui: &mut egui::Ui,
     id: &str,
     label: &str,
@@ -56,13 +67,17 @@ fn input(
     multiline: bool,
 ) -> egui::Response {
     ui.push_id((ID, id), |ui| {
-        let label = ui.label(label);
+        let label_response = ui.label(label);
         let edit = if multiline {
             egui::TextEdit::multiline(text).desired_rows(3)
         } else {
             egui::TextEdit::singleline(text)
         };
-        let response = ui.add(edit.id(Id::new((ID, id)))).labelled_by(label.id);
+        let response = ui
+            .add(edit.id(ui.make_persistent_id((ID, id))))
+            .labelled_by(label_response.id);
+        ui.ctx()
+            .accesskit_node_builder(response.id, |node| node.set_label(label));
         if response.has_focus() {
             ui.painter().rect_stroke(
                 response.rect.expand(2.),
@@ -95,102 +110,105 @@ pub(super) fn show(ctx: &egui::Context, studio: &mut Studio) {
     let mut create = false;
     let mut cancel = false;
     let response = egui::Modal::new(Id::new(ID)).show(ctx, |ui| {
-        ui.set_width(360.);
-        ui.heading("Create artwork");
-        let kind_label = ui.label("Artwork type");
-        egui::ComboBox::from_id_salt((ID, "kind"))
-            .selected_text(dialog.draft.kind.label())
-            .show_ui(ui, |ui| {
-                for kind in ArtworkKind::ALL {
-                    ui.selectable_value(&mut dialog.draft.kind, kind, kind.label());
+        ui.push_id(dialog.scope, |ui| {
+            ui.set_width(360.);
+            ui.heading("Create artwork");
+            let kind_label = ui.label("Artwork type");
+            egui::ComboBox::from_id_salt((ID, "kind"))
+                .selected_text(dialog.draft.kind.label())
+                .show_ui(ui, |ui| {
+                    for kind in ArtworkKind::ALL {
+                        ui.selectable_value(&mut dialog.draft.kind, kind, kind.label());
+                    }
+                })
+                .response
+                .labelled_by(kind_label.id);
+            for (index, (id, label)) in [
+                ("x", "Position X (px)"),
+                ("y", "Position Y (px)"),
+                ("width", "Width (px)"),
+                ("height", "Height (px)"),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                if index >= 2 && matches!(dialog.draft.kind, ArtworkKind::Path | ArtworkKind::Text)
+                {
+                    continue;
                 }
-            })
-            .response
-            .labelled_by(kind_label.id);
-        for (index, (id, label)) in [
-            ("x", "Position X (px)"),
-            ("y", "Position Y (px)"),
-            ("width", "Width (px)"),
-            ("height", "Height (px)"),
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            if index >= 2 && matches!(dialog.draft.kind, ArtworkKind::Path | ArtworkKind::Text) {
-                continue;
+                let error = dialog.draft.number(index).err();
+                let field = input(
+                    ui,
+                    id,
+                    label,
+                    &mut dialog.draft.coordinates[index],
+                    error.as_deref(),
+                    false,
+                );
+                if dialog.focus && index == 0 {
+                    field.request_focus();
+                }
             }
-            let error = dialog.draft.number(index).err();
-            let field = input(
-                ui,
-                id,
-                label,
-                &mut dialog.draft.coordinates[index],
-                error.as_deref(),
-                false,
-            );
-            if dialog.focus && index == 0 {
-                field.request_focus();
+            if dialog.draft.kind == ArtworkKind::Text {
+                let error = dialog
+                    .draft
+                    .text
+                    .trim()
+                    .is_empty()
+                    .then_some("Text: enter some text");
+                input(ui, "text", "Text", &mut dialog.draft.text, error, true);
             }
-        }
-        if dialog.draft.kind == ArtworkKind::Text {
-            let error = dialog
-                .draft
-                .text
-                .trim()
-                .is_empty()
-                .then_some("Text: enter some text");
-            input(ui, "text", "Text", &mut dialog.draft.text, error, true);
-        }
-        if dialog.draft.kind == ArtworkKind::Path {
-            let error = dialog
-                .draft
-                .validate()
-                .err()
-                .filter(|s| s.starts_with("Path points:"));
-            input(
-                ui,
-                "points",
-                "Path points relative to position (x,y; x,y)",
-                &mut dialog.draft.points,
-                error.as_deref(),
-                true,
-            );
-            ui.checkbox(&mut dialog.draft.closed, "Close path");
-        }
-        if !current {
-            let warning = ui.colored_label(
-                ui.visuals().error_fg_color,
-                "The document or selection changed. Cancel and open Create artwork again.",
-            );
-            ui.ctx().accesskit_node_builder(warning.id, |node| {
-                node.set_live(egui::accesskit::Live::Polite)
+            if dialog.draft.kind == ArtworkKind::Path {
+                let error = dialog
+                    .draft
+                    .validate()
+                    .err()
+                    .filter(|s| s.starts_with("Path points:"));
+                input(
+                    ui,
+                    "points",
+                    "Path points relative to position (x,y; x,y)",
+                    &mut dialog.draft.points,
+                    error.as_deref(),
+                    true,
+                );
+                ui.checkbox(&mut dialog.draft.closed, "Close path");
+            }
+            if !current {
+                let warning = ui.colored_label(
+                    ui.visuals().error_fg_color,
+                    "The document or selection changed. Cancel and open Create artwork again.",
+                );
+                ui.ctx().accesskit_node_builder(warning.id, |node| {
+                    node.set_live(egui::accesskit::Live::Polite)
+                });
+            }
+            if let Some(error) = &dialog.error {
+                let warning = ui.colored_label(ui.visuals().error_fg_color, error);
+                ui.ctx().accesskit_node_builder(warning.id, |node| {
+                    node.set_live(egui::accesskit::Live::Polite)
+                });
+            }
+            let valid = dialog.draft.validate().is_ok();
+            ui.horizontal(|ui| {
+                create = ui
+                    .add_enabled(
+                        available && valid,
+                        egui::Button::new("Create").shortcut_text("Ctrl+Enter"),
+                    )
+                    .clicked();
+                cancel = ui.button("Cancel").clicked();
             });
-        }
-        if let Some(error) = &dialog.error {
-            let warning = ui.colored_label(ui.visuals().error_fg_color, error);
-            ui.ctx().accesskit_node_builder(warning.id, |node| {
-                node.set_live(egui::accesskit::Live::Polite)
-            });
-        }
-        let valid = dialog.draft.validate().is_ok();
-        ui.horizontal(|ui| {
-            create = ui
-                .add_enabled(
-                    available && valid,
-                    egui::Button::new("Create").shortcut_text("Ctrl+Enter"),
-                )
-                .clicked();
-            cancel = ui.button("Cancel").clicked();
+            if available
+                && valid
+                && ui.input_mut(|input| {
+                    input.consume_key(Modifiers::CTRL, Key::Enter)
+                        || input.consume_key(Modifiers::COMMAND, Key::Enter)
+                })
+            {
+                create = true;
+            }
         });
-        if available
-            && valid
-            && ui.input_mut(|input| {
-                input.consume_key(Modifiers::CTRL, Key::Enter)
-                    || input.consume_key(Modifiers::COMMAND, Key::Enter)
-            })
-        {
-            create = true;
-        }
     });
     dialog.focus = false;
     let created = if create {
@@ -417,7 +435,7 @@ mod tests {
         let (_, field) = tree
             .nodes
             .iter()
-            .find(|(id, _)| *id == Id::new((ID, "x")).accesskit_id())
+            .find(|(_, node)| node.label() == Some("Position X (px)"))
             .unwrap();
         assert_eq!(field.invalid(), Some(egui::accesskit::Invalid::True));
         assert!(field.error_message().is_some());
@@ -425,6 +443,56 @@ mod tests {
         frame(&ctx, &mut studio, vec![key(Key::Enter, chord())]);
         assert!(!is_open(&ctx));
         assert_eq!(studio.selection.len(), 1);
+    }
+
+    #[test]
+    fn keyboard_authoring_field_identity_follows_the_document_owner() {
+        let (ctx, mut studio) = editor();
+        frame(
+            &ctx,
+            &mut studio,
+            vec![key(Key::K, chord() | Modifiers::SHIFT)],
+        );
+        let first = frame(&ctx, &mut studio, vec![]);
+        let field = |output: &egui::FullOutput| {
+            output
+                .platform_output
+                .accesskit_update
+                .as_ref()
+                .unwrap()
+                .nodes
+                .iter()
+                .find(|(_, node)| node.label() == Some("Position X (px)"))
+                .unwrap()
+                .0
+        };
+        let first_id = field(&first);
+        replace(&ctx, &mut studio, "27");
+        frame(&ctx, &mut studio, vec![key(Key::Escape, Modifiers::NONE)]);
+        frame(&ctx, &mut studio, vec![]);
+        frame(&ctx, &mut studio, vec![key(Key::N, chord())]);
+        frame(
+            &ctx,
+            &mut studio,
+            vec![key(Key::K, chord() | Modifiers::SHIFT)],
+        );
+        let second = frame(&ctx, &mut studio, vec![]);
+        assert_ne!(field(&second), first_id);
+        let before = ctx
+            .data(|d| d.get_temp::<Dialog>(Id::new(ID)))
+            .unwrap()
+            .draft
+            .coordinates[0]
+            .clone();
+        frame(&ctx, &mut studio, vec![key(Key::Z, chord())]);
+        let after = ctx
+            .data(|d| d.get_temp::<Dialog>(Id::new(ID)))
+            .unwrap()
+            .draft
+            .coordinates[0]
+            .clone();
+        assert_eq!(after, before);
+        assert!(studio.selection.is_empty());
     }
 
     #[test]

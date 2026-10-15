@@ -347,6 +347,8 @@ pub fn shortcut_groups() -> &'static [(&'static str, &'static [ShortcutRow])] {
                 ShortcutRow { action: "Previous / next artwork", keys: "Page Up / Page Down" },
                 ShortcutRow { action: "Extend artwork selection", keys: "Shift+Page Up / Page Down" },
                 ShortcutRow { action: "Focus canvas", keys: "F8" },
+                ShortcutRow { action: "Use current tool at typed coordinates", keys: "F9" },
+                ShortcutRow { action: "New pixel layer (Pixel)", keys: "Ctrl+Shift+N" },
             ],
         ),
         (
