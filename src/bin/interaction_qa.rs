@@ -27,11 +27,11 @@ fn fixture(name: &str, shapes: usize) -> Document {
     let mut doc = Document::new(name, SIZE.x, SIZE.y, 72.0);
     doc.workspace = Some(Persona::Design);
     doc.grid.visible = false;
-    let mut pixels = Pixels::new(320, 200);
+    let mut pixels = Pixels::new(320, 200).unwrap();
     for y in 0..pixels.h {
         for x in 0..pixels.w {
             let i = ((y * pixels.w + x) * 4) as usize;
-            pixels.data[i..i + 4].copy_from_slice(&[
+            pixels.bytes_mut().unwrap()[i..i + 4].copy_from_slice(&[
                 225 + ((x + y) % 25) as u8,
                 230 + ((x / 8 + y / 8) % 20) as u8,
                 240,
@@ -79,8 +79,8 @@ fn fixture(name: &str, shapes: usize) -> Document {
         );
         shape.opacity = 0.82;
         if i % 40 == 0 {
-            let mut mask = Pixels::new(128, 128);
-            for (pixel, rgba) in mask.data.chunks_exact_mut(4).enumerate() {
+            let mut mask = Pixels::new(128, 128).unwrap();
+            for (pixel, rgba) in mask.bytes_mut().unwrap().chunks_exact_mut(4).enumerate() {
                 rgba.copy_from_slice(&[255, 255, 255, 96 + (pixel % 160) as u8]);
             }
             mask.touch();

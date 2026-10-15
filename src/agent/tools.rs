@@ -770,7 +770,7 @@ pub fn execute_prepared(
                     if w == 0 || h == 0 || w > 32768 || h > 32768 || w * h > 64_000_000 {
                         return Err("Raster dimensions must be positive, at most 32768 per edge and 64 megapixels".into());
                     }
-                    Layer::raster(name, w as u32, h as u32)
+                    Layer::raster(name, w as u32, h as u32)?
                 }
                 _ => return Err("Choose vector, raster or group".into()),
             };

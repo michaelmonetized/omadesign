@@ -13,6 +13,7 @@ pub mod color;
 pub mod compositor;
 pub mod compound;
 pub mod document;
+pub mod deep_color;
 pub mod filter;
 pub mod formats;
 pub mod geom;
@@ -61,3 +62,4 @@ pub mod deform;
 pub mod outline;
 
 pub mod telemetry;
+pub mod resources;

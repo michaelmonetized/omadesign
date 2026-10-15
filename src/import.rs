@@ -40,7 +40,10 @@ pub fn open_any(path: &Path) -> Result<Imported, String> {
     open_with_progress(path, |_| {})
 }
 
-pub(crate) fn open_with_progress(path: &Path, stage: impl Fn(&'static str)) -> Result<Imported, String> {
+pub(crate) fn open_with_progress(
+    path: &Path,
+    stage: impl Fn(&'static str),
+) -> Result<Imported, String> {
     stage("Reading document");
     let name = file_name(path);
     let kind = classify(path);
@@ -69,14 +72,19 @@ pub(crate) fn open_with_progress(path: &Path, stage: impl Fn(&'static str)) -> R
     if kind == "eps" {
         return import_eps(path, &name);
     }
-    let bytes = read_bounded(path)?;
+    let admitted;
+    let legacy;
+    let bytes: &[u8] = if matches!(kind, "psd" | "raster") {
+        admitted = crate::project::read_admitted(path)?;
+        &admitted
+    } else {legacy = read_bounded(path)?; &legacy};
     if kind == "svg" || looks_svg(&bytes) {
         stage("Reading SVG objects");
         let decoded;
         let data = if bytes.starts_with(&[0x1f, 0x8b]) {
             use std::io::Read;
             let mut output = Vec::new();
-            flate2::read::GzDecoder::new(bytes.as_slice())
+            flate2::read::GzDecoder::new(bytes)
                 .take(256 * 1024 * 1024 + 1)
                 .read_to_end(&mut output)
                 .map_err(|e| format!("Invalid SVGZ: {e}"))?;
@@ -86,7 +94,7 @@ pub(crate) fn open_with_progress(path: &Path, stage: impl Fn(&'static str)) -> R
             decoded = output;
             decoded.as_slice()
         } else {
-            bytes.as_slice()
+            bytes
         };
         let svg = std::str::from_utf8(data).map_err(|e| format!("Invalid SVG text: {e}"))?;
         let (doc, notes) = crate::formats::svg::read(svg, &name)?;
@@ -123,12 +131,26 @@ pub(crate) fn open_with_progress(path: &Path, stage: impl Fn(&'static str)) -> R
         return document(doc, notes);
     }
     match crate::formats::decode_image(&bytes) {
+        Ok(pixels) if pixels.native.is_some() => {
+            let mut doc = crate::document::Document::new(&name, 1., 1., 72.);
+            doc.width = pixels.w as f32;
+            doc.height = pixels.h as f32;
+            doc.transparent = true;
+            doc.artboards = crate::document::Artboard::tiled(1, doc.width, doc.height);
+            doc.layers = vec![crate::document::Layer::placed_raster(
+                &name,
+                pixels,
+                crate::geom::Pt::ZERO,
+                crate::geom::Pt::new(doc.width, doc.height),
+            )];
+            document(doc, vec![])
+        }
         Ok(pixels) => Ok(Imported::Raster {
             name,
             image: RgbaImage {
                 w: pixels.w,
                 h: pixels.h,
-                data: pixels.data,
+                data: {let allocation = std::sync::Arc::try_unwrap(pixels.data).map_err(|_| "Shared imported image storage")?;let (bytes, _memory) = allocation.into_parts(); bytes},
             },
         }),
         Err(error) if kind == "raster" => Err(error),

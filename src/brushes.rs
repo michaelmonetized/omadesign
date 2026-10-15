@@ -355,7 +355,7 @@ fn artwork(path: &Path, name: &str) -> Result<Pack, String> {
             doc.artboards.clear();
             let scale = (512.0 / doc.width.max(doc.height).max(1.0)).min(1.0);
             let pm = crate::compositor::render_export_at(&doc, scale, 0.0, true)?;
-            let pixels = crate::document::Pixels::from_pixmap(&pm);
+            let pixels = crate::document::Pixels::from_pixmap(&pm)?;
             tip_from_rgba(pixels.w, pixels.h, &pixels.data)?
         }
         _ => return Err("Use a static image or vector brush tip".into()),

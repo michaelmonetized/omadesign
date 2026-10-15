@@ -175,7 +175,7 @@ fn canvas_context_paginates_and_never_sends_pixel_mask_buffers() {
         call(&mut s, "add_shape", json!({"layer":0,"shape":{}}));
     }
     let id = s.doc.layers[0].kind.shapes().unwrap()[0].id;
-    s.doc.find_shape_mut(0, id).unwrap().mask = Some(crate::document::Pixels::new(512, 512));
+    s.doc.find_shape_mut(0, id).unwrap().mask = Some(crate::document::Pixels::new(512, 512).unwrap());
     let document = call(&mut s, "get_document", json!({}));
     assert_eq!(document["layers"][0]["objects"], 52);
     assert_eq!(document["layers"][0]["items"].as_array().unwrap().len(), 20);

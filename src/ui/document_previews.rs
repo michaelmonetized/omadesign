@@ -127,7 +127,9 @@ impl Cache {
                 .map(|preview| REFRESH.saturating_sub(preview.updated.elapsed()))
                 .unwrap_or_default();
             if wait.is_zero() {
-                let doc = snapshot(doc);
+                let Ok(doc) = snapshot(doc) else {
+                    return cached.map(|preview| &preview.texture);
+                };
                 let id = id.to_owned();
                 super::super::jobs::start(ctx, JOB, move || {
                     render(&doc, revision.motion.map(f32::from_bits))
@@ -164,17 +166,23 @@ pub(super) fn ready(ctx: &egui::Context) -> bool {
         && !super::super::jobs::is_running::<Rendered>(ctx, JOB)
 }
 
-/// Raster buffers are Vecs, not shared storage. Build a bounded image proxy on
-/// the UI thread instead of repeatedly cloning a full-resolution photograph.
-fn snapshot(doc: &Document) -> Document {
+/// Build a bounded display proxy while retaining authoritative samples in the document.
+fn snapshot(doc: &Document) -> Result<Document, String> {
+    let mut failure = None;
     let mut out = doc.layout_snapshot_with_shapes(|shape| {
-        shape.clone_with_mask(
-            shape
-                .mask
-                .as_ref()
-                .map(|mask| proxy_pixels(mask, (256.0 / mask.w.max(mask.h) as f32).min(1.0))),
-        )
+        shape.clone_with_mask(shape.mask.as_ref().and_then(|mask| {
+            match proxy_pixels(mask, (256.0 / mask.w.max(mask.h) as f32).min(1.0)) {
+                Ok(mask) => Some(mask),
+                Err(error) => {
+                    failure = Some(error);
+                    None
+                }
+            }
+        }))
     });
+    if let Some(error) = failure {
+        return Err(error);
+    }
     out.transparent = doc.transparent;
     out.motion = doc.motion.clone();
     for (source, target) in doc.layers.iter().zip(&mut out.layers) {
@@ -190,7 +198,11 @@ fn snapshot(doc: &Document) -> Document {
             }
             LayerKind::Vector { .. } => (256.0 / largest_mask as f32).min(1.0),
         };
-        target.mask = source.mask.as_ref().map(|mask| proxy_pixels(mask, ratio));
+        target.mask = source
+            .mask
+            .as_ref()
+            .map(|mask| proxy_pixels(mask, ratio))
+            .transpose()?;
         match &source.kind {
             LayerKind::Raster {
                 pixels,
@@ -200,7 +212,7 @@ fn snapshot(doc: &Document) -> Document {
                 shear,
             } => {
                 target.kind = LayerKind::Raster {
-                    pixels: proxy_pixels(pixels, ratio),
+                    pixels: proxy_pixels(pixels, ratio)?,
                     origin: *origin,
                     size: if size.x.abs() > 0.5 && size.y.abs() > 0.5 {
                         *size
@@ -221,13 +233,14 @@ fn snapshot(doc: &Document) -> Document {
             }
         }
     }
-    out
+    Ok(out)
 }
 
-fn proxy_pixels(source: &Pixels, ratio: f32) -> Pixels {
+fn proxy_pixels(source: &Pixels, ratio: f32) -> Result<Pixels, String> {
     let width = (source.w as f32 * ratio).round().max(1.0) as u32;
     let height = (source.h as f32 * ratio).round().max(1.0) as u32;
-    let mut out = Pixels::new(width, height);
+    let mut out = Pixels::new(width, height)?;
+    let bytes = out.bytes_mut()?;
     // Four samples per destination pixel bound work by thumbnail size, including
     // masks. Full-resolution data is never copied or scanned for a preview.
     for y in 0..height {
@@ -245,12 +258,12 @@ fn proxy_pixels(source: &Pixels, ratio: f32) -> Pixels {
             }
             let index = ((y * width + x) * 4) as usize;
             for (channel, total) in channels.into_iter().enumerate() {
-                out.data[index + channel] = (total / 4) as u8;
+                bytes[index + channel] = (total / 4) as u8;
             }
         }
     }
     out.touch();
-    out
+    Ok(out)
 }
 
 fn bounds(doc: &Document) -> Bounds {
@@ -326,7 +339,7 @@ mod tests {
     #[test]
     fn raster_snapshot_bounds_memory_and_preserves_placement_and_masks() {
         let mut doc = Document::new("Large photo", 2048.0, 1024.0, 72.0);
-        doc.layers[0].mask = Some(Pixels::new(2048, 1024));
+        doc.layers[0].mask = Some(Pixels::new(2048, 1024).unwrap());
         let LayerKind::Raster {
             origin,
             size,
@@ -339,7 +352,7 @@ mod tests {
         *origin = Pt::new(30.0, 70.0);
         *size = Pt::new(800.0, 400.0);
         *rotation = 0.5;
-        let proxy = snapshot(&doc);
+        let proxy = snapshot(&doc).unwrap();
         let layer = &proxy.layers[0];
         let LayerKind::Raster {
             pixels,
@@ -379,7 +392,7 @@ mod tests {
         );
         shape.mask = Pixels::from_rgba(2048, 1024, vec![255; 2048 * 1024 * 4]);
         doc.layers[1].kind.shapes_mut().unwrap().push(shape);
-        let proxy = snapshot(&doc);
+        let proxy = snapshot(&doc).unwrap();
         let mask = proxy.layers[1].kind.shapes().unwrap()[0]
             .mask
             .as_ref()
@@ -416,8 +429,8 @@ mod tests {
                 stroke: None,
             },
         );
-        let mut mask = Pixels::new(1024, 512);
-        for (i, pixel) in mask.data.chunks_exact_mut(4).enumerate() {
+        let mut mask = Pixels::new(1024, 512).unwrap();
+        for (i, pixel) in mask.bytes_mut().unwrap().chunks_exact_mut(4).enumerate() {
             let value = ((i % 1024) * 255 / 1023) as u8;
             pixel.copy_from_slice(&[value, value, value, 255]);
         }
@@ -426,7 +439,7 @@ mod tests {
         shape.rotation = 0.37;
         doc.layers[1].kind.shapes_mut().unwrap().push(shape);
         let original = render(&doc, None).unwrap();
-        let proxy = render(&snapshot(&doc), None).unwrap();
+        let proxy = render(&snapshot(&doc).unwrap(), None).unwrap();
         let errors: Vec<_> = original
             .pixels
             .iter()
@@ -541,24 +554,29 @@ mod tests {
         );
         let texture_id = texture.id();
         let mut cache = Cache::default();
-        cache.images.insert(id.clone(), Preview {
-            revision: Revision {
-                edited,
-                motion: Some(0.0f32.to_bits()),
-                dark: ctx.theme() == egui::Theme::Dark,
+        cache.images.insert(
+            id.clone(),
+            Preview {
+                revision: Revision {
+                    edited,
+                    motion: Some(0.0f32.to_bits()),
+                    dark: ctx.theme() == egui::Theme::Dark,
+                },
+                texture,
+                // Even an updated texture inside the ordinary refresh interval
+                // must immediately become eligible after playback stops.
+                updated: Instant::now() + REFRESH,
             },
-            texture,
-            // Even an updated texture inside the ordinary refresh interval
-            // must immediately become eligible after playback stops.
-            updated: Instant::now() + REFRESH,
-        });
+        );
         cache.store(&ctx);
         studio.playing = true;
         for playhead in [0.25, 0.5, 0.75] {
             studio.playhead = playhead;
             let mut cache = begin(&ctx, &studio);
             assert_eq!(cache.image(&ctx, &studio, 0).unwrap().id(), texture_id);
-            assert!(!super::super::super::jobs::is_running::<Rendered>(&ctx, JOB));
+            assert!(!super::super::super::jobs::is_running::<Rendered>(
+                &ctx, JOB
+            ));
             cache.store(&ctx);
         }
         studio.playing = false;
@@ -582,7 +600,9 @@ mod tests {
         for i in 0..studio.tab_count() {
             assert!(cache.image(&ctx, &studio, i).is_none());
         }
-        assert!(!super::super::super::jobs::is_running::<Rendered>(&ctx, JOB));
+        assert!(!super::super::super::jobs::is_running::<Rendered>(
+            &ctx, JOB
+        ));
         cache.store(&ctx);
         assert!(!ready(&ctx));
 

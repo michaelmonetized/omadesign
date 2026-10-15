@@ -364,7 +364,7 @@ mod tests {
     fn fixture() -> Studio {
         let mut s = Studio::new();
         s.doc = crate::document::Document::new("Bezier gestures", 400., 300., 96.);
-        s.doc.layers = vec![crate::document::Layer::raster("Pixels", 400, 300)];
+        s.doc.layers = vec![crate::document::Layer::raster("Pixels", 400, 300).unwrap()];
         s.active_layer = Some(0);
         s.persona = Persona::Pixel;
         s.tool = Tool::BezierLasso;

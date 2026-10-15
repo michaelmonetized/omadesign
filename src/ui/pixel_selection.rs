@@ -265,7 +265,7 @@ mod tests {
     fn studio() -> Studio {
         let mut s = Studio::new();
         s.doc = crate::document::Document::new("Selection UI", 32.0, 24.0, 96.0);
-        s.doc.layers = vec![crate::document::Layer::raster("Pixels", 32, 24)];
+        s.doc.layers = vec![crate::document::Layer::raster("Pixels", 32, 24).unwrap()];
         s.active_layer = Some(0);
         s.persona = crate::tools::Persona::Pixel;
         s.set_pixel_sel(Some(crate::paint::fill_rect_mask(
@@ -362,7 +362,7 @@ mod tests {
         let ctx = Context::default();
         let mut studio = studio();
         let original = studio.pixel_sel.clone();
-        let pixels = studio.doc.layers[0].kind.pixels().unwrap().data.clone();
+        let pixels = studio.doc.layers[0].kind.pixels().unwrap().data.to_vec();
         for label in ["Grow…", "Shrink…", "Feather…"] {
             frame(&ctx, &mut studio, vec![]);
             click(&ctx, &mut studio, "Select");
@@ -374,7 +374,7 @@ mod tests {
             click(&ctx, &mut studio, "Cancel");
             assert!(!is_open(&ctx));
             assert_eq!(studio.pixel_sel, original);
-            assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data, pixels);
+            assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(), pixels);
         }
     }
 

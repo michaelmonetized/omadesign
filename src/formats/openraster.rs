@@ -327,11 +327,14 @@ fn png(pixels: &Pixels) -> Result<Vec<u8>, String> {
 }
 
 pub fn write(doc: &Document) -> Result<(Vec<u8>, Vec<String>), String> {
+    if crate::deep_color::has_native(doc) {
+        return Err("This exchange writer cannot preserve native pixel or mask samples. Export PSD, PSB, TIFF or an explicit 8-bit document copy.".into());
+    }
     if !doc.mask_sources().is_empty() {
-        let prepared=crate::compositor::raster_export_document(doc)?;
-        let (bytes,mut notes)=write(&prepared)?;
+        let prepared = crate::compositor::raster_export_document(doc)?;
+        let (bytes, mut notes) = write(&prepared)?;
         notes.push("Live artwork masks were rendered into their affected layers or groups. Save .oma or export SVG to retain editable mask sources.".into());
-        return Ok((bytes,notes));
+        return Ok((bytes, notes));
     }
     if !doc.width.is_finite() || !doc.height.is_finite() || doc.width < 1. || doc.height < 1. {
         return Err("OpenRaster needs a finite, positive canvas size.".into());
@@ -570,7 +573,7 @@ mod tests {
             Pt::new(-2., 3.)
         );
         assert_eq!(
-            doc.layers[1].kind.pixels().unwrap().data,
+            doc.layers[1].kind.pixels().unwrap().data.as_slice(),
             [250, 20, 10, 128]
         );
         let rendered =
@@ -627,7 +630,7 @@ mod tests {
             Pt::new(-2., 3.)
         );
         assert_eq!(
-            opened.layers[0].kind.pixels().unwrap().data,
+            opened.layers[0].kind.pixels().unwrap().data.as_slice(),
             vec![255, 0, 0, 128]
         );
     }
@@ -662,7 +665,10 @@ mod tests {
         let (opened, _) = read(&bytes, "Mask opened").unwrap();
         assert_eq!(opened.layers.len(), 1);
         let pixels = opened.layers[0].kind.pixels().unwrap();
-        assert_eq!(pixels.data, [0, 0, 0, 0, 255, 0, 0, 255, 0, 0, 0, 0]);
+        assert_eq!(
+            pixels.data.as_slice(),
+            [0, 0, 0, 0, 255, 0, 0, 255, 0, 0, 0, 0]
+        );
     }
 
     #[test]

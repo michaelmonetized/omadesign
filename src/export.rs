@@ -105,6 +105,10 @@ pub fn dimensions(source: &Source, settings: Settings) -> Result<(u32, u32), Str
     } else {
         upscale::dimensions(w, h, settings.scale as f64)?
     };
+    if matches!(source, Source::Document(doc) if crate::deep_color::has_native(doc)) && settings.ai.is_none() {
+        crate::deep_color::storage::count(w,h,4)?;
+        return Ok((w,h));
+    }
     upscale::dimensions(w, h, settings.ai.map_or(1., |s| s.factor))
 }
 
@@ -117,6 +121,7 @@ pub fn encode(
     progress.check()?;
     progress.report("Rendering export", 0, 1);
     if !settings.format.raster() {
+        if let Source::Document(doc)=source && matches!(settings.format,Format::Svg|Format::Pdf|Format::Ora) && crate::deep_color::has_native(doc) {return Err("This exchange route cannot preserve native sample precision yet. Export .oma, PSD, PSB, TIFF or 16-bit RGB PNG, or convert an explicit document copy to 8-bit.".into());}
         if settings.ai.is_some() {
             return Err("AI upscaling is available for PNG, TIFF and JPEG".into());
         }
@@ -144,6 +149,7 @@ pub fn encode(
         progress.check()?;
         return Ok((bytes, vec![]));
     }
+    let _native_memory;
     let mut raster = match source {
         Source::Photo(photo) => {
             let raster = if settings.ai.is_none() && photo.raw.is_some() {
@@ -162,6 +168,31 @@ pub fn encode(
                 )
             } else {
                 raster
+            }
+        }
+        Source::Document(doc) if crate::deep_color::has_native(doc) => {
+            if settings.ai.is_some() || settings.format == Format::Jpeg {return Err("This export would reduce native document precision. Export PNG, TIFF or PSD without AI upscaling.".into());}
+            let mut pixels = crate::deep_color::composite(doc, settings.scale)?;
+            let depth = crate::deep_color::document_depth(doc);
+            if depth == crate::deep_color::Depth::F32 && settings.format != Format::Tiff {
+                return Err("Floating-point export requires TIFF or PSD to retain float samples".into());
+            }
+            let (w, h) = (pixels.w, pixels.h);
+            let samples = pixels.native.take().ok_or("Missing native export samples")?.samples;
+            drop(pixels);
+            if depth == crate::deep_color::Depth::F32 {
+                let samples = std::sync::Arc::try_unwrap(samples).map_err(|_| "Native export unexpectedly shares working samples")?;
+                let (data, memory) = samples.into_parts();
+                _native_memory = Some(memory);
+                DynamicImage::ImageRgba32F(image::ImageBuffer::from_raw(w, h, data).ok_or("Invalid float export")?)
+            } else {
+                let mut data = crate::resources::global().allocate_now::<u16, _>(samples.len(), &crate::deep_color::storage::check)?;
+                for (dst, &src) in data.as_mut_slice().iter_mut().zip(samples.iter()) {
+                    *dst = (src.clamp(0., 1.) * 65535.).round() as u16;
+                }
+                let (data, memory) = data.into_parts();
+                _native_memory = Some(memory);
+                DynamicImage::ImageRgba16(image::ImageBuffer::from_raw(w, h, data).ok_or("Invalid native export")?)
             }
         }
         Source::Document(doc) => {
@@ -185,7 +216,7 @@ pub fn encode(
             DynamicImage::ImageRgba8(upscale::upscale(&raster.into_rgba8(), settings, progress)?);
     }
     progress.report("Encoding export", 0, 1);
-    let mut bytes = std::io::Cursor::new(Vec::new());
+    let mut bytes = crate::deep_color::storage::Encoded::new()?;
     if settings.format == Format::Jpeg {
         let mut rgba = raster.into_rgba8();
         for p in rgba.pixels_mut() {
@@ -211,7 +242,9 @@ pub fn encode(
             .map_err(|e| e.to_string())?;
     }
     progress.check()?;
-    Ok((bytes.into_inner(), vec![]))
+    let bytes = std::sync::Arc::try_unwrap(bytes.finish()?).map_err(|_| "Encoded image unexpectedly shares working storage")?;
+    let (bytes, _memory) = bytes.into_parts();
+    Ok((bytes, vec![]))
 }
 
 pub fn save(

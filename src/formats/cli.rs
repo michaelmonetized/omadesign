@@ -44,6 +44,31 @@ pub fn export(doc: &Document, path: &Path) -> Result<Vec<String>, String> {
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
+    if matches!(extension.as_str(), "png" | "tif" | "tiff" | "jpg" | "jpeg") {
+        let format = match extension.as_str() {
+            "png" => crate::export::Format::Png,
+            "tif" | "tiff" => crate::export::Format::Tiff,
+            _ => crate::export::Format::Jpeg,
+        };
+        let (bytes, notes) = crate::export::encode(
+            &crate::export::Source::Document(doc.clone()),
+            crate::export::Settings {
+                format,
+                ..Default::default()
+            },
+            &crate::ml::NoProgress,
+        )?;
+        super::write_atomic(path, &bytes)?;
+        return Ok(notes);
+    }
+    if matches!(extension.as_str(), "svg" | "pdf" | "ora")
+        && doc.layers.iter().any(|l| {
+            l.kind.pixels().is_some_and(|p| p.native.is_some())
+                || l.mask.as_ref().is_some_and(|p| p.native.is_some())
+        })
+    {
+        return Err("This exchange route cannot retain native precision. Use .oma, PSD/PSB or TIFF, or explicitly convert a copy to 8-bit.".into());
+    }
     let (bytes,notes)=match extension.as_str(){
         "oma"=>{crate::project::save_to(doc,path)?;return Ok(vec![]);}
         "svg"=>(crate::svg::export(doc)?.into_bytes(),vec![]),

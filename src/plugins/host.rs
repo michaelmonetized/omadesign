@@ -67,7 +67,9 @@ impl State {
                 .map(|v| v.len())
                 .unwrap_or(usize::MAX)
         };
+        if let Cmd::Pixels{layer,mask,..}=&command && self.doc.layers.get(*layer).and_then(|l|if *mask{l.mask.as_ref()}else{l.kind.pixels()}).is_some_and(|p|p.native.is_some()){return Err(Error::runtime("This plugin pixel API accepts RGBA8. Native samples were preserved; convert an explicit copy before applying it."));}
         let bytes = match &command {
+            Cmd::NativePixels {before,after,..} => before.data.len().max(after.data.len())*5,
             Cmd::Pixels { before, after, .. } => before.len().max(after.len()),
             Cmd::AddShape { shape, .. } => json_size(serde_json::json!(shape)),
             Cmd::RemoveShapes { shapes, .. } => json_size(serde_json::json!(shapes)),
@@ -121,7 +123,7 @@ impl State {
         if pm.width() == 0 || pm.height() == 0 {
             return Err(Error::runtime("Nothing visible to filter"));
         }
-        let pixels = document::Pixels::from_pixmap(&pm);
+        let pixels = document::Pixels::from_pixmap(&pm).map_err(Error::runtime)?;
         if pixels.data.len() > 512 * 1024 * 1024 {
             return Err(Error::runtime("Raster filter input exceeds 512 MiB"));
         }
@@ -839,7 +841,7 @@ pub(super) fn register(lua: &Lua, state: Shared) -> LuaResult<()> {
                 (p.w, p.h, p.data.clone())
             };
             let row_fn: Function = lua.load(PIXEL_ROW).eval()?;
-            let mut after = before.clone();
+            let mut after = before.try_clone_now(&crate::deep_color::storage::check).map_err(Error::runtime)?;
             let row_bytes = w as usize * 4;
             for y in 0..h {
                 if y % 8 == 0 {
@@ -852,13 +854,13 @@ pub(super) fn register(lua: &Lua, state: Shared) -> LuaResult<()> {
                 if bytes.len() != row_bytes {
                     return Err(Error::runtime("Filter row came back the wrong size"));
                 }
-                after[start..start + row_bytes].copy_from_slice(&bytes);
+                after.as_mut_slice()[start..start + row_bytes].copy_from_slice(&bytes);
             }
             s.borrow_mut().push(Cmd::Pixels {
                 layer,
                 mask: false,
                 before,
-                after,
+                after:Arc::new(after),
             })
         })?,
     )?;

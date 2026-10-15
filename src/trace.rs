@@ -75,7 +75,7 @@ fn downsample(px: &Pixels, max_edge: u32) -> (Raster, f32) {
             Raster {
                 w: px.w,
                 h: px.h,
-                data: px.data.clone(),
+                data: px.data.to_vec(),
             },
             1.0,
         );

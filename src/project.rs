@@ -5,7 +5,7 @@ use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub(crate) const VERSION: u32 = 13;
+pub(crate) const VERSION: u32 = 14;
 
 #[derive(Serialize, Deserialize)]
 struct File {
@@ -16,10 +16,13 @@ struct File {
 pub fn encode(doc: &Document) -> Result<String, String> {
     let mut packed = doc.clone();
     pack_rasters(&mut packed)?;
-    serde_json::to_string(&File {
+    let mut output = crate::deep_color::storage::Builder::new()?;
+    serde_json::to_writer(&mut output, &File {
         // Older readers must not silently strip a mask or change stroke placement.
         // Keep plain documents compatible with v5; v1-v13 remain readable here.
-        version: if !doc.mask_sources().is_empty() {
+        version: if doc.layers.iter().any(|l| l.kind.pixels().is_some_and(|p|p.native.is_some()) || l.mask.as_ref().is_some_and(|p|p.native.is_some()) || l.kind.shapes().is_some_and(|ss|ss.iter().any(|s|s.mask.as_ref().is_some_and(|p|p.native.is_some())))) {
+            14
+        } else if !doc.mask_sources().is_empty() {
             13
         } else if doc.layers.iter().filter_map(|l| l.kind.shapes()).flatten().any(|s| matches!(&s.geom, crate::geom::Geom::Text(t) if !t.manual_kern.is_empty() || t.spans.iter().any(|s| s.tracking.is_some() || s.kerning.is_some() || s.leading.is_some() || s.baseline_shift.is_some() || s.hscale.is_some() || s.vscale.is_some()))) {
             12
@@ -60,21 +63,37 @@ pub fn encode(doc: &Document) -> Result<String, String> {
         },
         doc: packed,
     })
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+    let allocation = std::sync::Arc::try_unwrap(output.finish()?).map_err(|_| "Shared project encoded storage")?;
+    let (bytes, _memory) = allocation.into_parts();
+    String::from_utf8(bytes).map_err(|e| e.to_string())
 }
 
 pub fn decode(s: &str) -> Result<Document, String> {
+    let _input_memory = crate::resources::global()
+        .reserve_now(s.len() as u64, &crate::deep_color::storage::check)?;
+    decode_admitted(s)
+}
+
+fn decode_admitted(s: &str) -> Result<Document, String> {
+    let _parser = crate::resources::global().reserve_now(s.len() as u64, &crate::deep_color::storage::check)?;
     let file: File = serde_json::from_str(s).map_err(|e| e.to_string())?;
     if !(1..=VERSION).contains(&file.version) {
         return Err("Unsupported omadesign project version".into());
     }
     let mut doc = file.doc;
     for layer in &mut doc.layers {
-        if let Some(px) = layer.kind.pixels_mut() { *px = decompress_pixels(px)?; }
-        if let Some(mask) = layer.mask.as_mut() { *mask = decompress_pixels(mask)?; }
+        if let Some(px) = layer.kind.pixels_mut() {
+            *px = decompress_pixels(px)?;
+        }
+        if let Some(mask) = layer.mask.as_mut() {
+            *mask = decompress_pixels(mask)?;
+        }
         if let Some(shapes) = layer.kind.shapes_mut() {
             for shape in shapes {
-                if let Some(mask) = shape.mask.as_mut() { *mask = decompress_pixels(mask)?; }
+                if let Some(mask) = shape.mask.as_mut() {
+                    *mask = decompress_pixels(mask)?;
+                }
             }
         }
     }
@@ -82,15 +101,26 @@ pub fn decode(s: &str) -> Result<Document, String> {
 }
 
 /// Shared normalization after pixels have been decoded under the caller's budgets.
-pub(crate) fn normalize_decoded_document(mut doc: Document, version: u32) -> Result<Document, String> {
+pub(crate) fn normalize_decoded_document(
+    mut doc: Document,
+    version: u32,
+) -> Result<Document, String> {
     for layer in &mut doc.layers {
-        if version < 7 { layer.filters.migrate_legacy(layer.blend); }
+        if version < 7 {
+            layer.filters.migrate_legacy(layer.blend);
+        }
         if let Some(shapes) = layer.kind.shapes_mut() {
             for shape in shapes {
-                if version < 7 { shape.filters.migrate_legacy(shape.blend); }
+                if version < 7 {
+                    shape.filters.migrate_legacy(shape.blend);
+                }
                 if version < 8 {
-                    if let crate::geom::Geom::Text(t) = &mut shape.geom && t.wrap_width.is_some() {
-                        t.update_paragraphs(0, t.content.chars().count(), |p| p.overflow_wrap = true);
+                    if let crate::geom::Geom::Text(t) = &mut shape.geom
+                        && t.wrap_width.is_some()
+                    {
+                        t.update_paragraphs(0, t.content.chars().count(), |p| {
+                            p.overflow_wrap = true
+                        });
                     }
                 }
                 crate::text::fill_contours(&mut shape.geom);
@@ -138,13 +168,25 @@ pub fn decode_clipboard_shapes(text: &str) -> Result<Vec<crate::document::Shape>
 }
 
 fn compress_pixels(px: &Pixels) -> Result<Pixels, String> {
-    let pm = px.to_pixmap().ok_or("pixmap")?;
-    let png = pm.encode_png().map_err(|e| e.to_string())?;
-    let b64 = base64::engine::general_purpose::STANDARD.encode(png);
+    use image::ImageEncoder;
+    let mut png = crate::deep_color::storage::Builder::<u8>::new()?;
+    image::codecs::png::PngEncoder::new(&mut png)
+        .write_image(&px.data, px.w, px.h, image::ExtendedColorType::Rgba8)
+        .map_err(|e| e.to_string())?;
+    let png = png.finish()?;
+    let encoded_memory = crate::resources::global().reserve_now(
+        (png.len() as u64).div_ceil(3).saturating_mul(4),
+        &crate::deep_color::storage::check,
+    )?;
+    let mut b64 = String::new();
+    b64.try_reserve_exact(usize::try_from(encoded_memory.bytes()).map_err(|_| "Project encoded pixels overflow")?).map_err(|_| "Not enough memory to encode project pixels")?;
+    base64::engine::general_purpose::STANDARD.encode_string(png.as_slice(), &mut b64);
+    encoded_memory.resize_now(b64.capacity() as u64, &crate::deep_color::storage::check)?;
     Ok(Pixels {
+        native: px.native.clone(),
         w: px.w,
         h: px.h,
-        data: b64.into_bytes(),
+        data: crate::resources::global().adopt(b64.into_bytes(), encoded_memory)?,
         version: px.version,
         cached_pm: std::cell::RefCell::new(None),
         cached_uniform: Default::default(),
@@ -158,15 +200,55 @@ fn decompress_pixels(px: &Pixels) -> Result<Pixels, String> {
         .and_then(|count| count.checked_mul(4))
         && px.data.len() == expected
     {
+        px.validate_native()?;
         return Ok(px.clone());
     }
+    use image::ImageDecoder;
+    use std::io::Read;
     let b64 = std::str::from_utf8(&px.data).map_err(|e| e.to_string())?;
-    let png = base64::engine::general_purpose::STANDARD
-        .decode(b64)
+    let mut input = base64::read::DecoderReader::new(
+        b64.as_bytes(),
+        &base64::engine::general_purpose::STANDARD,
+    );
+    let mut packed = crate::deep_color::storage::Builder::<u8>::new()?;
+    let mut chunk = [0u8; 16384];
+    loop {
+        let read = input.read(&mut chunk).map_err(|e| e.to_string())?;
+        if read == 0 {
+            break;
+        }
+        packed.extend(&chunk[..read])?;
+    }
+    let packed = packed.finish()?;
+    let expected = crate::deep_color::storage::count(px.w, px.h, 4)?;
+    let _codec = crate::resources::global()
+        .reserve_now(64 * 1024 * 1024, &crate::deep_color::storage::check)?;
+    let mut limits = image::Limits::default();
+    limits.max_alloc = Some((expected as u64).saturating_add(64 * 1024 * 1024));
+    let decoder = image::codecs::png::PngDecoder::with_limits(
+        std::io::Cursor::new(packed.as_slice()),
+        limits,
+    )
+    .map_err(|e| e.to_string())?;
+    if decoder.dimensions() != (px.w, px.h) || decoder.color_type() != image::ColorType::Rgba8 {
+        return Err("Packed project raster must contain matching straight RGBA8 cache data".into());
+    }
+    let mut data = crate::resources::global()
+        .allocate_now::<u8, _>(expected, &crate::deep_color::storage::check)?;
+    decoder
+        .read_image(data.as_mut_slice())
         .map_err(|e| e.to_string())?;
-    let img = image::load_from_memory(&png).map_err(|e| e.to_string())?;
-    let rgba = img.to_rgba8();
-    Pixels::from_rgba(rgba.width(), rgba.height(), rgba.into_raw()).ok_or_else(|| "size".into())
+    let mut out = Pixels::from_byte_allocation(px.w, px.h, std::sync::Arc::new(data))?;
+    out.native = px.native.clone();
+    out.validate_native()?;
+    if out
+        .native
+        .as_ref()
+        .is_some_and(|n| n.samples.len() != out.data.len())
+    {
+        return Err("Native sample dimensions mismatch".into());
+    }
+    Ok(out)
 }
 
 pub fn save_to(doc: &Document, path: &Path) -> Result<(), String> {
@@ -213,12 +295,29 @@ pub fn save_to(doc: &Document, path: &Path) -> Result<(), String> {
     result
 }
 
+pub(crate) fn read_admitted(path: &Path) -> Result<crate::resources::Allocation<u8>, String> {
+    use std::io::Read;
+    let mut file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let size = usize::try_from(file.metadata().map_err(|e| e.to_string())?.len())
+        .map_err(|_| "Project file length overflows")?;
+    let mut bytes = crate::resources::global()
+        .allocate_now::<u8, _>(size, &crate::deep_color::storage::check)?;
+    file.read_exact(bytes.as_mut_slice())
+        .map_err(|e| e.to_string())?;
+    let mut extra = [0u8; 1];
+    if file.read(&mut extra).map_err(|e| e.to_string())? != 0 {
+        return Err("Project changed while reading; reopen it again".into());
+    }
+    Ok(bytes)
+}
+
 pub fn load_from(path: &Path) -> Result<Document, String> {
-    let s = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    let bytes = read_admitted(path)?;
+    let s = std::str::from_utf8(&bytes).map_err(|e| e.to_string())?;
     if s.contains("omatype:") {
         crate::typography::load_for_document(path)?;
     }
-    let doc = decode(&s)?;
+    let doc = decode_admitted(s)?;
     crate::typography::validate_document_fonts(&doc)?;
     Ok(doc)
 }
@@ -547,8 +646,10 @@ pub(crate) fn prepare_swap(
 }
 
 pub fn load_swap(path: &Path) -> Result<SwapMeta, String> {
-    let s = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    let mut meta: SwapMeta = serde_json::from_str(&s).map_err(|e| e.to_string())?;
+    let bytes = read_admitted(path)?;
+    let s = std::str::from_utf8(&bytes).map_err(|e| e.to_string())?;
+    let _parser = crate::resources::global().reserve_now(bytes.len() as u64, &crate::deep_color::storage::check)?;
+    let mut meta: SwapMeta = serde_json::from_str(s).map_err(|e| e.to_string())?;
     let archive = swap_font_archive(path);
     if archive.is_dir() {
         crate::typography::register_archive(&archive)?;
@@ -679,15 +780,27 @@ mod tests {
         use crate::text_geometry::{TextFrame, TextOnPath};
         let mut doc = Document::new("Combined typography", 640., 480., 96.);
         let guide = Shape::new(
-            Geom::Ellipse { center: Pt::new(160., 160.), radii: Pt::splat(100.) },
+            Geom::Ellipse {
+                center: Pt::new(160., 160.),
+                radii: Pt::splat(100.),
+            },
             Style::default(),
         );
         let guide_id = guide.id;
-        let text = Shape::new(Geom::Text(TypeRun {
-            content: "AV typography".into(), px: 24., ..Default::default()
-        }), Style::default());
+        let text = Shape::new(
+            Geom::Text(TypeRun {
+                content: "AV typography".into(),
+                px: 24.,
+                ..Default::default()
+            }),
+            Style::default(),
+        );
         let id = text.id;
-        doc.layers[1].kind.shapes_mut().unwrap().extend([guide, text]);
+        doc.layers[1]
+            .kind
+            .shapes_mut()
+            .unwrap()
+            .extend([guide, text]);
         let check = |doc: &Document, expected: u32| {
             let encoded = encode(doc).unwrap();
             let file: serde_json::Value = serde_json::from_str(&encoded).unwrap();
@@ -696,7 +809,8 @@ mod tests {
         };
         check(&doc, 5);
         doc.find_shape_mut(1, id).unwrap().style.stroke = Some(crate::document::Stroke {
-            alignment: crate::document::StrokeAlignment::Outside, ..Default::default()
+            alignment: crate::document::StrokeAlignment::Outside,
+            ..Default::default()
         });
         check(&doc, 6);
         doc.find_shape_mut(1, id).unwrap().fill_opacity = 0.4;
@@ -709,7 +823,10 @@ mod tests {
         }
         run(&mut doc, id).wrap_width = Some(260.);
         check(&doc, 8);
-        run(&mut doc, id).on_path = Some(TextOnPath { path_id: guide_id, ..Default::default() });
+        run(&mut doc, id).on_path = Some(TextOnPath {
+            path_id: guide_id,
+            ..Default::default()
+        });
         check(&doc, 9);
         run(&mut doc, id).on_path = None;
         run(&mut doc, id).frame = Some(TextFrame::default());
@@ -718,15 +835,23 @@ mod tests {
         check(&doc, 11);
         run(&mut doc, id).manual_kern.insert(1, -30.);
         run(&mut doc, id).spans.push(CharSpan {
-            start: 0, end: 2, leading: Some(Leading::Fixed(45.)),
-            tracking: Some(80.), baseline_shift: Some(3.), ..Default::default()
+            start: 0,
+            end: 2,
+            leading: Some(Leading::Fixed(45.)),
+            tracking: Some(80.),
+            baseline_shift: Some(3.),
+            ..Default::default()
         });
         check(&doc, 12);
         let restored = decode(&encode(&doc).unwrap()).unwrap();
         let shape = restored.find_shape(1, id).unwrap();
         assert_eq!(shape.fill_opacity, 0.4);
-        let Geom::Text(actual) = &shape.geom else { unreachable!() };
-        let Geom::Text(expected) = &doc.find_shape(1, id).unwrap().geom else { unreachable!() };
+        let Geom::Text(actual) = &shape.geom else {
+            unreachable!()
+        };
+        let Geom::Text(expected) = &doc.find_shape(1, id).unwrap().geom else {
+            unreachable!()
+        };
         assert_eq!(actual.content, expected.content);
         assert_eq!(actual.frame, expected.frame);
         assert_eq!(actual.features, expected.features);
@@ -1077,15 +1202,18 @@ mod tests {
         let encoded = encode(&doc).unwrap();
         let restored = decode(&encoded).unwrap();
         assert_eq!(
-            restored.layers[0].kind.pixels().unwrap().data,
-            doc.layers[0].kind.pixels().unwrap().data
+            restored.layers[0].kind.pixels().unwrap().data.as_slice(),
+            doc.layers[0].kind.pixels().unwrap().data.as_slice()
         );
 
         let mut file: serde_json::Value = serde_json::from_str(&encoded).unwrap();
         file["doc"]["layers"][0]["kind"]["Raster"]["pixels"]["data"] =
             serde_json::json!([9, 8, 7, 6]);
         let raw = decode(&file.to_string()).unwrap();
-        assert_eq!(raw.layers[0].kind.pixels().unwrap().data, [9, 8, 7, 6]);
+        assert_eq!(
+            raw.layers[0].kind.pixels().unwrap().data.as_slice(),
+            [9, 8, 7, 6]
+        );
 
         file["doc"]["layers"][0]["kind"]["Raster"]["pixels"]["w"] =
             serde_json::json!(2_147_483_648u64);

@@ -64,7 +64,7 @@ fn raster_motion_pasted_images_key_independently_and_roundtrip() {
 fn raster_motion_all_image_presets_render_and_preserve_pixels() {
     for preset in Preset::ALL {
         let mut s = fixture();
-        let before = s.doc.layers[0].kind.pixels().unwrap().data.clone();
+        let before = s.doc.layers[0].kind.pixels().unwrap().data.to_vec();
         assert_eq!(
             s.motion_preset_count(preset),
             if preset == Preset::DrawStroke { 0 } else { 2 }
@@ -83,7 +83,7 @@ fn raster_motion_all_image_presets_render_and_preserve_pixels() {
             "{} did not animate",
             preset.name()
         );
-        assert_eq!(s.doc.layers[0].kind.pixels().unwrap().data, before);
+        assert_eq!(s.doc.layers[0].kind.pixels().unwrap().data.as_slice(), before);
         let svg = crate::svg::export_animated(&s.doc).unwrap();
         roxmltree::Document::parse(&svg).unwrap();
         for layer in &s.doc.layers {

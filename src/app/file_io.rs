@@ -816,7 +816,7 @@ mod tests {
         assert!(studio.photo.images.is_empty());
         let placed = studio.doc.layers.last().unwrap().kind.pixels().unwrap();
         assert_eq!((placed.w, placed.h), (13, 9));
-        assert_eq!(placed.data, image.data);
+        assert_eq!(placed.data.as_slice(), image.data.as_slice());
         assert!(studio.pending_place.is_none());
     }
 

@@ -1,20 +1,26 @@
 use crate::app::Studio;
+use crate::deep_color::surface::Surface;
 use crate::document::{LayerKind, Pixels};
 use crate::geom::{Bounds, Pt};
-use tiny_skia::{Pixmap, Point};
+use tiny_skia::Point;
 
 const MAX_PIXELS: u64 = 64_000_000;
 
 /// Copy a pixel grid into new bounds without resampling.
 /// Takes RGBA bytes, old/new dimensions, and the old grid's new offset;
 /// returns transparent-padded bytes, or None if allocation fails.
-fn reframe(data: &[u8], old: (u32, u32), new: (u32, u32), offset: (i64, i64)) -> Option<Vec<u8>> {
+fn reframe(
+    data: &[u8],
+    old: (u32, u32),
+    new: (u32, u32),
+    offset: (i64, i64),
+) -> Option<crate::resources::Allocation<u8>> {
     let len = (new.0 as usize)
         .checked_mul(new.1 as usize)?
         .checked_mul(4)?;
-    let mut output = Vec::new();
-    output.try_reserve_exact(len).ok()?;
-    output.resize(len, 0);
+    let mut output = crate::resources::global()
+        .allocate_now::<u8, _>(len, &crate::deep_color::storage::check)
+        .ok()?;
     let left = offset.0.max(0);
     let right = (offset.0 + i64::from(old.0)).min(i64::from(new.0));
     if left >= right {
@@ -24,7 +30,8 @@ fn reframe(data: &[u8], old: (u32, u32), new: (u32, u32), offset: (i64, i64)) ->
         let source = ((y - offset.1) as usize * old.0 as usize + (left - offset.0) as usize) * 4;
         let target = (y as usize * new.0 as usize + left as usize) * 4;
         let count = (right - left) as usize * 4;
-        output[target..target + count].copy_from_slice(&data[source..source + count]);
+        output.as_mut_slice()[target..target + count]
+            .copy_from_slice(&data[source..source + count]);
     }
     Some(output)
 }
@@ -37,8 +44,8 @@ pub(super) fn ensure(
     layer: usize,
     from: Pt,
     to: Pt,
-    overlay: &mut Pixmap,
-    preview: &mut Option<Pixmap>,
+    overlay: &mut Surface,
+    preview: &mut Option<Surface>,
     first: bool,
 ) -> Result<(), &'static str> {
     let from = studio.mask_point(layer, from);
@@ -134,21 +141,32 @@ pub(super) fn ensure(
     if bottom > i64::from(pixels.h) || rebase {
         bottom = (bottom + 63).div_euclid(64) * 64;
     }
-    if (right - left) as u64 * (bottom - top) as u64 > MAX_PIXELS {
+    if pixels.native.is_none() && (right - left) as u64 * (bottom - top) as u64 > MAX_PIXELS {
         (left, top, right, bottom) = exact;
     }
     if (right - left) as u64 * (bottom - top) as u64 > MAX_PIXELS {
         return Err("Pixel layer reached 64 megapixels. Add a pixel layer to keep painting here");
     }
-    let (w, h) = ((right - left) as u32, (bottom - top) as u32);
+    let (w, h) = (
+        u32::try_from(right - left).map_err(|_| "Pixel width overflows")?,
+        u32::try_from(bottom - top).map_err(|_| "Pixel height overflows")?,
+    );
     let offset = (-left, -top);
     let allocation = "Not enough memory to extend this pixel layer";
-    let resized = Pixels::from_rgba(
-        w,
-        h,
-        reframe(&pixels.data, (pixels.w, pixels.h), (w, h), offset).ok_or(allocation)?,
-    )
-    .ok_or(allocation)?;
+    let resized = if pixels.native.is_some() {
+        pixels
+            .reframed(w, h, offset.0, offset.1)
+            .map_err(|_| allocation)?
+    } else {
+        Pixels::from_byte_allocation(
+            w,
+            h,
+            std::sync::Arc::new(
+                reframe(&pixels.data, (pixels.w, pixels.h), (w, h), offset).ok_or(allocation)?,
+            ),
+        )
+        .map_err(|_| allocation)?
+    };
     let overlay_data = reframe(
         overlay.data(),
         (overlay.width(), overlay.height()),
@@ -156,30 +174,28 @@ pub(super) fn ensure(
         offset,
     )
     .ok_or(allocation)?;
-    let resized_overlay = Pixmap::from_vec(
-        overlay_data,
-        tiny_skia::IntSize::from_wh(w, h).ok_or(allocation)?,
-    )
-    .ok_or(allocation)?;
+    let resized_overlay = Surface::from_allocation(w, h, overlay_data).map_err(|_| allocation)?;
     let resized_preview = if let Some(pm) = preview {
         let data =
             reframe(pm.data(), (pm.width(), pm.height()), (w, h), offset).ok_or(allocation)?;
-        Some(
-            Pixmap::from_vec(data, tiny_skia::IntSize::from_wh(w, h).ok_or(allocation)?)
-                .ok_or(allocation)?,
-        )
+        Some(Surface::from_allocation(w, h, data).map_err(|_| allocation)?)
     } else {
         None
     };
     let mask = if let Some(mask) = &target.mask {
-        Some(
-            Pixels::from_rgba(
+        Some(if mask.native.is_some() {
+            mask.reframed(w, h, offset.0, offset.1)
+                .map_err(|_| allocation)?
+        } else {
+            Pixels::from_byte_allocation(
                 w,
                 h,
-                reframe(&mask.data, (mask.w, mask.h), (w, h), offset).ok_or(allocation)?,
+                std::sync::Arc::new(
+                    reframe(&mask.data, (mask.w, mask.h), (w, h), offset).ok_or(allocation)?,
+                ),
             )
-            .ok_or(allocation)?,
-        )
+            .map_err(|_| allocation)?
+        })
     } else {
         None
     };

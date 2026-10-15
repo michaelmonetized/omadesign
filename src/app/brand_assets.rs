@@ -593,7 +593,7 @@ mod tests {
         let (origin, size, _) = raster.kind.raster_xform().unwrap();
         assert_eq!(origin, Pt::new(92.0, 96.0));
         assert_eq!(size, Pt::new(4.0, 4.0));
-        assert_eq!(raster.kind.pixels().unwrap().data, data);
+        assert_eq!(raster.kind.pixels().unwrap().data.as_slice(), data);
         studio.doc.validate_hierarchy().unwrap();
         let placed = serde_json::to_value(&studio.doc).unwrap();
         studio.undo();
@@ -776,7 +776,7 @@ mod tests {
             )
             .unwrap();
         let layer = studio.doc.layers.last().unwrap();
-        assert_eq!(layer.kind.pixels().unwrap().data, data);
+        assert_eq!(layer.kind.pixels().unwrap().data.as_slice(), data);
         assert_eq!(
             layer.kind.raster_bounds().unwrap().center(),
             Pt::new(150.0, 120.0)
@@ -794,11 +794,11 @@ mod tests {
             Pt::new(16.0, 16.0),
             Rgba::WHITE,
         ));
-        let mut mask = Pixels::new(32, 16);
+        let mut mask = Pixels::new(32, 16).unwrap();
         for y in 0..16 {
             for x in 0..8 {
                 let i = (y * 32 + x) * 4;
-                mask.data[i..i + 4].copy_from_slice(&[255, 255, 255, 255]);
+                mask.bytes_mut().unwrap()[i..i + 4].copy_from_slice(&[255, 255, 255, 255]);
             }
         }
         source.layers[0].mask = Some(mask);

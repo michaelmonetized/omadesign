@@ -441,7 +441,7 @@ mod tests {
         let mut s = Studio::new();
         s.show_welcome = false;
         s.doc = crate::document::Document::new("Selection", 64., 48., 96.);
-        s.doc.layers = vec![crate::document::Layer::raster("Pixels", 64, 48)];
+        s.doc.layers = vec![crate::document::Layer::raster("Pixels", 64, 48).unwrap()];
         s.active_layer = Some(0);
         s.persona = crate::tools::Persona::Pixel;
         s.replace_pixel_selection(

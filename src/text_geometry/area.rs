@@ -1748,10 +1748,10 @@ mod shape_frame_tests {
         let mut nested = Layer::group("Nested");
         nested.parent = Some(group_id);
         let nested_id = nested.id;
-        let mut pixels = Pixels::new(10, 10);
+        let mut pixels = Pixels::new(10, 10).unwrap();
         for y in 0..10 {
             for x in 4..6 {
-                pixels.data[((y * 10 + x) * 4 + 3) as usize] = 255;
+                pixels.bytes_mut().unwrap()[((y * 10 + x) * 4 + 3) as usize] = 255;
             }
         }
         let mut raster =

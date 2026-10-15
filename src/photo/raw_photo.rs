@@ -115,7 +115,7 @@ impl PhotoImage {
                 RgbaImage {
                     w: pixels.w,
                     h: pixels.h,
-                    data: pixels.data,
+                    data: pixels.data.to_vec(),
                 },
             )
         };
