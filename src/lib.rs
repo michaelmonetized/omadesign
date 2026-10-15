@@ -48,6 +48,7 @@ pub mod simplify;
 pub mod shots;
 pub mod snap;
 pub mod svg;
+pub mod svg_source;
 pub mod templates;
 pub mod text;
 pub mod text_geometry;

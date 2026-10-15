@@ -215,7 +215,8 @@ fn gradient_reference(
             )
         };
         defs.push_str(&format!(
-            "<{tag} id=\"{id}\" gradientUnits=\"userSpaceOnUse\" {geometry}>"
+            "<{tag} id=\"{id}\" gradientUnits=\"userSpaceOnUse\" spreadMethod=\"{}\" {geometry}>",
+            gradient.spread.svg()
         ));
         for stop in &gradient.stops {
             defs.push_str(&format!(
@@ -372,6 +373,15 @@ fn write_shape(
             "fill=\"{}\"",
             gradient_reference(defs, grad_id, g, shape, 0.)
         ),
+        Fill::Pattern(pattern) => {
+            *grad_id += 1;
+            let reference = pattern.append_definition(
+                defs,
+                &format!("oma-pattern-{grad_id}-"),
+                shape.geom.bbox(),
+            );
+            format!("fill=\"{reference}\" fill-opacity=\"{}\"", pattern.opacity)
+        }
         Fill::None => "fill=\"none\"".to_string(),
         Fill::Solid(c) => format!("fill=\"{}\"", svg_color(*c)),
         Fill::Linear { from, to, c0, c1 } => {
@@ -615,7 +625,7 @@ fn spin_placement(shape: &Shape) -> Option<(SpinTarget, Pt)> {
             let gradient = shape.style.fill.gradient()?;
             Some((SpinTarget::Fill, center_of(&gradient)))
         }
-        Fill::Gradient(_) => None,
+        Fill::Gradient(_) | Fill::Pattern(_) => None,
         _ => {
             let gradient = shape.style.stroke.as_ref()?.gradient.as_ref()?;
             svg_gradient(gradient.kind).then(|| (SpinTarget::Stroke, center_of(gradient)))

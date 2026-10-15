@@ -555,7 +555,7 @@ fn recolor_fill(fill: Fill, color: Rgba) -> Fill {
             }
             Fill::Gradient(gradient)
         }
-        Fill::None | Fill::Solid(_) => Fill::Solid(color),
+        Fill::None | Fill::Solid(_) | Fill::Pattern(_) => Fill::Solid(color),
     }
 }
 

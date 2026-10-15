@@ -11,18 +11,18 @@ pub(crate) const VERSION: u32 = 14;
 struct File {
     version: u32,
     doc: Document,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    svg_sources: std::collections::BTreeMap<String, std::sync::Arc<str>>,
 }
 
 pub fn encode(doc: &Document) -> Result<String, String> {
     let mut packed = doc.clone();
     pack_rasters(&mut packed)?;
+    let svg_sources = crate::svg_source::pack_sources(&mut packed);
     serde_json::to_string(&File {
         // Older readers must not silently strip a mask or change stroke placement.
         // Keep plain documents compatible with v5; v1-v13 remain readable here.
-        version: if doc.layers.iter().filter_map(|l|l.kind.shapes()).flatten().any(|s| {
-            let advanced = |g: &crate::gradient::Gradient| g.radial_axis.is_some() || g.focal != [0.,0.] || g.inner_radius != 0.;
-            s.style.fill.gradient().as_ref().is_some_and(advanced) || s.style.stroke.as_ref().and_then(|s|s.gradient.as_ref()).is_some_and(advanced)
-        }) {
+        version: if crate::svg_source::requires_advanced_paint(doc) {
             14
         } else if !doc.mask_sources().is_empty() {
             13
@@ -64,6 +64,7 @@ pub fn encode(doc: &Document) -> Result<String, String> {
             5
         },
         doc: packed,
+        svg_sources,
     })
     .map_err(|e| e.to_string())
 }
@@ -74,6 +75,7 @@ pub fn decode(s: &str) -> Result<Document, String> {
         return Err("Unsupported omadesign project version".into());
     }
     let mut doc = file.doc;
+    crate::svg_source::unpack_sources(&mut doc, &file.svg_sources)?;
     for layer in &mut doc.layers {
         if let Some(px) = layer.kind.pixels_mut() { *px = decompress_pixels(px)?; }
         if let Some(mask) = layer.mask.as_mut() { *mask = decompress_pixels(mask)?; }

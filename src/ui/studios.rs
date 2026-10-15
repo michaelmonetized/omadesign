@@ -387,6 +387,7 @@ fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
             Fill::Solid(c) | Fill::Linear { c0: c, .. } | Fill::Radial { c0: c, .. } => Some(*c),
             Fill::Gradient(g) => Some(g.sample(0.)),
             Fill::None => None,
+            Fill::Pattern(_) => Some(crate::color::Rgba::BLACK),
         }
     } else {
         source_stroke.as_ref().map(|stroke| {
@@ -421,7 +422,7 @@ fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
                     | Fill::Linear { c0: color, .. }
                     | Fill::Radial { c0: color, .. } => *color,
                     Fill::Gradient(g) => g.sample(0.),
-                    Fill::None => studio.brush.color,
+                    Fill::None | Fill::Pattern(_) => studio.brush.color,
                 }
             };
             color.a = 255;
@@ -611,17 +612,19 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
             .color(fg_weak()),
         );
         let current = gradient.as_ref().map(|g| g.kind);
+        let pattern = matches!(style.fill, Fill::Pattern(_));
+        let mut replace_pattern = false;
         let mut chosen = current;
         ComboBox::from_id_salt("paint-type")
-            .selected_text(current.map(|k| k.name()).unwrap_or("Solid"))
+            .selected_text(if pattern { "Pattern" } else { current.map(|k| k.name()).unwrap_or("Solid") })
             .width(108.)
             .show_ui(ui, |ui| {
-                ui.selectable_value(&mut chosen, None, "Solid");
+                replace_pattern = ui.selectable_value(&mut chosen, None, "Solid").clicked() && pattern;
                 for kind in crate::gradient::GradientKind::ALL {
                     ui.selectable_value(&mut chosen, Some(kind), kind.name());
                 }
             });
-        if chosen != current {
+        if chosen != current || replace_pattern {
             gradient = chosen.map(|kind| {
                 let mut g = gradient.clone().unwrap_or_else(|| {
                     crate::gradient::Gradient::new(
@@ -652,6 +655,7 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
             apply_gradient(studio, gradient.clone());
         }
     });
+    super::svg_paint::show(ui, studio);
     if let Some(mut gradient) = gradient {
         let bounds = studio
             .primary()
@@ -788,7 +792,7 @@ fn color_grid(ui: &mut Ui, studio: &mut Studio, recent: bool) {
                         | Fill::Linear { c0: current, .. }
                         | Fill::Radial { c0: current, .. } => *current,
                         Fill::Gradient(gradient) => gradient.sample(0.),
-                        Fill::None => color,
+                        Fill::None | Fill::Pattern(_) => color,
                     };
                     if studio.is_motion()
                         && !style.fill.is_none()

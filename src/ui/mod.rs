@@ -40,6 +40,7 @@ mod retouch;
 mod brushes;
 mod selection;
 mod studios;
+mod svg_paint;
 mod text_geometry;
 mod templates;
 pub mod theme;

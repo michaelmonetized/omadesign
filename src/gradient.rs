@@ -28,6 +28,33 @@ pub struct GradientStop {
     pub offset: f32,
     pub color: Rgba,
 }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Spread {
+    #[default]
+    Pad,
+    Repeat,
+    Reflect,
+}
+impl Spread {
+    /// Select the native shader tiling rule.
+    /// Returns the drawing mode corresponding to this saved spread mode.
+    pub fn skia(self) -> tiny_skia::SpreadMode {
+        match self {
+            Self::Pad => tiny_skia::SpreadMode::Pad,
+            Self::Repeat => tiny_skia::SpreadMode::Repeat,
+            Self::Reflect => tiny_skia::SpreadMode::Reflect,
+        }
+    }
+    /// Name the portable SVG spread mode.
+    /// Returns its standards-defined attribute value.
+    pub fn svg(self) -> &'static str {
+        match self {
+            Self::Pad => "pad",
+            Self::Repeat => "repeat",
+            Self::Reflect => "reflect",
+        }
+    }
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Gradient {
     pub kind: GradientKind,
@@ -37,6 +64,8 @@ pub struct Gradient {
     pub stops: Vec<GradientStop>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub radial_axis: Option<[f32; 2]>,
+    #[serde(default)]
+    pub spread: Spread,
     #[serde(default)]
     pub focal: [f32; 2],
     #[serde(default)]
@@ -53,6 +82,7 @@ impl Gradient {
             },
             to: [1., 0.5],
             radial_axis: None,
+            spread: Spread::Pad,
             focal: [0., 0.],
             inner_radius: 0.,
             stops: vec![
@@ -90,7 +120,11 @@ impl Gradient {
         let Some(first) = self.stops.first() else {
             return Rgba::TRANSPARENT;
         };
-        let position = position.clamp(0., 1.);
+        let position = match self.spread {
+            Spread::Pad => position.clamp(0., 1.),
+            Spread::Repeat => position.rem_euclid(1.),
+            Spread::Reflect => 1. - (position.rem_euclid(2.) - 1.).abs(),
+        };
         if position < first.offset {
             return first.color;
         }
@@ -228,7 +262,7 @@ impl Gradient {
                 a,
                 b,
                 stops,
-                tiny_skia::SpreadMode::Pad,
+                self.spread.skia(),
                 tiny_skia::Transform::identity(),
             ),
             _ => tiny_skia::RadialGradient::new(
@@ -237,7 +271,7 @@ impl Gradient {
                 tiny_skia::Point::from_xy(0., 0.),
                 1.,
                 stops,
-                tiny_skia::SpreadMode::Pad,
+                self.spread.skia(),
                 self.radial_transform(bounds),
             ),
         };

@@ -36,6 +36,18 @@ pub(super) fn editor(ui: &mut Ui, gradient: &mut Gradient, bounds: Bounds) -> bo
             gradient.inner_radius = gradient.inner_radius.clamp(0., 0.9999);
         });
     }
+    ui.horizontal(|ui| {
+        ui.label("Spread");
+        for mode in [
+            crate::gradient::Spread::Pad,
+            crate::gradient::Spread::Repeat,
+            crate::gradient::Spread::Reflect,
+        ] {
+            changed |= ui
+                .selectable_value(&mut gradient.spread, mode, mode.svg())
+                .changed();
+        }
+    });
     let id = ui.make_persistent_id("gradient-stop");
     let mut selected = ui
         .data(|d| d.get_temp::<usize>(id))

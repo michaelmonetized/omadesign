@@ -145,7 +145,7 @@ fn needs_pixels(layer: &Layer) -> bool {
                         })
                         || matches!(
                             shape.style.fill,
-                            Fill::Gradient(_) | Fill::Linear { .. } | Fill::Radial { .. }
+                            Fill::Gradient(_) | Fill::Pattern(_) | Fill::Linear { .. } | Fill::Radial { .. }
                         )
                 })
             })

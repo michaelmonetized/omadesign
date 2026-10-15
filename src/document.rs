@@ -72,6 +72,7 @@ impl Join {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Fill {
+    Pattern(crate::svg_source::SvgPattern),
     Gradient(crate::gradient::Gradient),
     None,
     Solid(Rgba),
@@ -119,7 +120,7 @@ impl Fill {
             Fill::Solid(c) => c,
             Fill::Gradient(g) => g.sample(0.),
             Fill::Linear { c0, .. } | Fill::Radial { c0, .. } => c0,
-            Fill::None => fallback,
+            Fill::None | Fill::Pattern(_) => fallback,
         }
     }
 }
