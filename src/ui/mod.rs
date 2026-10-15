@@ -1,3 +1,7 @@
+#[path = "../../vendor/oma-ui/fields.rs"]
+pub(crate) mod fields;
+#[path = "../../vendor/oma-ui/workspace.rs"]
+pub(crate) mod workspace;
 mod artboard_dialog;
 mod agent;
 mod agent_attachments;
@@ -373,3 +377,6 @@ fn egui_shortcuts(ui: &mut Ui, studio: &mut Studio) {
             }
         });
 }
+
+#[cfg(test)]
+mod shared_fields_tests;

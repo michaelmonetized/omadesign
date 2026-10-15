@@ -328,34 +328,7 @@ fn number_field<N: eframe::egui::emath::Numeric>(
     range: std::ops::RangeInclusive<N>,
     suffix: &str,
 ) -> bool {
-    let width = ui.available_width();
-    Frame::new()
-        .fill(bg_widget())
-        .corner_radius(6.0)
-        .inner_margin(Margin::symmetric(8, 3))
-        .show(ui, |ui| {
-            ui.set_min_width((width - 16.0).max(24.0));
-            ui.spacing_mut().interact_size.y = 20.0;
-            ui.spacing_mut().button_padding = vec2(2.0, 1.0);
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 4.0;
-                ui.label(RichText::new(label).size(11.0).color(fg_weak()));
-                ui.with_layout(Layout::right_to_left(eframe::egui::Align::Center), |ui| {
-                    ui.add(
-                        eframe::egui::DragValue::new(value)
-                            .speed(0.5)
-                            .range(range)
-                            .max_decimals(2)
-                            .min_decimals(0)
-                            .suffix(suffix),
-                    )
-                    .changed()
-                })
-                .inner
-            })
-            .inner
-        })
-        .inner
+    super::fields::number(ui, label, label, value, range, suffix, None, Default::default()).changed
 }
 
 fn bounds_fields(
