@@ -2,10 +2,10 @@ use crate::app::Studio;
 #[path = "photo_workflow.rs"]
 mod workflow;
 use crate::photo::{self, DevelopParams, HSL_NAMES, Histogram};
-use crate::ui::theme::{accent, bg_canvas, bg_extreme, bg_panel, fg_weak};
+use crate::ui::theme::{accent, bg_canvas, bg_extreme, fg_weak};
 use eframe::egui::{
-    Align, Button, Color32, ColorImage, DragValue, Frame, Layout, Margin, PointerButton, Pos2,
-    Rect, RichText, ScrollArea, Sense, Slider, Stroke, TextureOptions, Ui, pos2, vec2,
+    Align, Button, Color32, ColorImage, DragValue, Layout, PointerButton, Pos2, Rect, RichText,
+    ScrollArea, Sense, Slider, Stroke, TextureOptions, Ui, pos2, vec2,
 };
 
 pub(crate) fn is_exporting(ctx: &eframe::egui::Context) -> bool {
@@ -38,27 +38,8 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     }
     upload_textures(ui, studio);
 
-    eframe::egui::Panel::left("filmstrip")
-        .resizable(true)
-        .default_size(200.0)
-        .size_range(176.0..=300.0)
-        .frame(Frame::new().fill(bg_panel()).inner_margin(Margin::same(10)))
-        .show(ui, |ui| {
-            filmstrip(ui, studio);
-        });
     super::chrome::left_toolbar(ui, studio);
-    eframe::egui::Panel::right("develop")
-        .resizable(true)
-        .default_size(288.0)
-        .size_range(256.0..=420.0)
-        .frame(Frame::new().fill(bg_panel()).inner_margin(Margin::same(14)))
-        .show(ui, |ui| {
-            if studio.libraries.sidebar == crate::app::libraries::Sidebar::Inspector {
-                ui.add_enabled_ui(!studio.photo.is_batching(), |ui| develop_panel(ui, studio));
-            } else {
-                super::library::show(ui, studio);
-            }
-        });
+    let center = super::panel_workspace::panels(ui, studio);
     if let Some((index, params, revision)) = before
         && index == studio.photo.selected
         && revision == studio.photo.edit_revision
@@ -67,7 +48,9 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
             .photo
             .record_edit(params, ui.input(|i| i.pointer.primary_down()));
     }
-    ui.add_enabled_ui(!studio.photo.is_batching(), |ui| viewer(ui, studio));
+    ui.scope_builder(eframe::egui::UiBuilder::new().max_rect(center), |ui| {
+        ui.add_enabled_ui(!studio.photo.is_batching(), |ui| viewer(ui, studio));
+    });
     if !ui.input(|i| i.pointer.primary_down()) {
         studio.photo.finish_edit();
     }
@@ -119,7 +102,7 @@ fn upload_textures(ui: &mut Ui, studio: &mut Studio) {
     }
 }
 
-fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
+pub(super) fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
     ui.horizontal(|ui| {
         ui.label(RichText::new("Library").strong());
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -207,6 +190,16 @@ fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
     });
     ui.add_space(4.0);
     library_cards(ui, studio);
+}
+
+/// Retain the current inspector or library inside the registered Photo panel.
+/// Args: panel UI and studio. Returns no value.
+pub(super) fn develop_content(ui: &mut Ui, studio: &mut Studio) {
+    if studio.libraries.sidebar == crate::app::libraries::Sidebar::Inspector {
+        ui.add_enabled_ui(!studio.photo.is_batching(), |ui| develop_panel(ui, studio));
+    } else {
+        super::library::show(ui, studio);
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -324,7 +317,7 @@ fn library_cards(ui: &mut Ui, studio: &mut Studio) {
                 };
                 let owner = if let Some(index) = opened {
                     let image = &studio.photo.images[index];
-                    ui.make_persistent_id((
+                    eframe::egui::Id::new((
                         "photo-card",
                         &studio.swap_id,
                         index,
@@ -332,7 +325,7 @@ fn library_cards(ui: &mut Ui, studio: &mut Studio) {
                         std::sync::Arc::as_ptr(&image.full) as usize,
                     ))
                 } else if let LibraryCard::Folder(index, _) = card {
-                    ui.make_persistent_id((
+                    eframe::egui::Id::new((
                         "photo-file-card",
                         &studio.swap_id,
                         &studio.photo.folder_files[index].1,
@@ -442,7 +435,7 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
                 .map(|raw| std::sync::Arc::as_ptr(raw) as usize),
         )
     });
-    let owner = ui.make_persistent_id((
+    let owner = eframe::egui::Id::new((
         "photo-develop",
         &studio.swap_id,
         studio.photo.selected,
@@ -1622,6 +1615,146 @@ mod keyboard_field_tests {
         press(&ctx, &mut studio, "Photo First photo");
         let output = keys::tab_to(&ctx, "Exposure", |events| frame(&ctx, &mut studio, events));
         assert_eq!(keys::named(&output, "Exposure").0, exposure);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    fn panel_action(ctx: &egui::Context, studio: &mut Studio, action: usize) {
+        frame(
+            ctx,
+            studio,
+            keys::key(Key::F6, Modifiers::CTRL | Modifiers::COMMAND),
+        );
+        frame(ctx, studio, vec![]);
+        keys::tab_to(ctx, "Panel", |events| frame(ctx, studio, events));
+        frame(ctx, studio, keys::key(Key::End, Modifiers::NONE));
+        keys::tab_to(ctx, "Panel action", |events| frame(ctx, studio, events));
+        frame(ctx, studio, keys::key(Key::Home, Modifiers::NONE));
+        for _ in 0..action {
+            frame(ctx, studio, keys::key(Key::ArrowDown, Modifiers::NONE));
+        }
+    }
+
+    fn apply_panel(ctx: &egui::Context, studio: &mut Studio) -> egui::FullOutput {
+        press(ctx, studio, "Apply panel");
+        assert!(!super::super::panel_keyboard::is_open(ctx));
+        let mut output = frame(ctx, studio, vec![]);
+        for _ in 0..2 {
+            output = frame(ctx, studio, vec![]);
+        }
+        output
+    }
+
+    #[test]
+    fn keyboard_photo_workspace_native_float_close_restore_edit_and_book_reopen() {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        crate::ui::theme::apply(&ctx);
+        let mut studio = Studio::new();
+        studio.show_welcome = false;
+        studio.persona = crate::tools::Persona::Photo;
+        studio
+            .photo
+            .images
+            .push(crate::photo::PhotoImage::from_full(
+                "Panel source".into(),
+                crate::photo::RgbaImage::new(16, 16, vec![128; 16 * 16 * 4]).unwrap(),
+            ));
+        let artwork = crate::project::encode(&studio.doc).unwrap();
+        frame(&ctx, &mut studio, vec![]);
+        assert_eq!(studio.panel_workspaces.active, "Photo");
+        assert!(studio.photo.selected.is_none());
+        press(&ctx, &mut studio, "Photo Panel source");
+        let output = keys::tab_to(&ctx, "Exposure", |events| frame(&ctx, &mut studio, events));
+        let exposure = keys::named(&output, "Exposure").0;
+        panel_action(&ctx, &mut studio, 5);
+        for (label, text) in [("Window width", "480"), ("Window height", "700")] {
+            keys::tab_to(&ctx, label, |events| frame(&ctx, &mut studio, events));
+            keys::replace(text, |events| frame(&ctx, &mut studio, events));
+        }
+        let output = apply_panel(&ctx, &mut studio);
+        keys::focused(&ctx, &output, "Photo develop");
+        assert_eq!(keys::named(&output, "Exposure").0, exposure);
+        let group = studio.panel_workspaces.tasks["Photo"]
+            .groups
+            .iter()
+            .find(|group| group.panels.iter().any(|id| id == "photo-develop"))
+            .unwrap();
+        assert_eq!(group.place, crate::ui::workspace::Place::Floating);
+        assert!((group.rect[2] - 480.).abs() <= 1.);
+        assert!((group.rect[3] - 700.).abs() <= 1.);
+        keys::tab_to(&ctx, "Exposure", |events| frame(&ctx, &mut studio, events));
+        keys::replace("1.25", |events| frame(&ctx, &mut studio, events));
+        frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        frame(&ctx, &mut studio, keys::key(Key::F8, Modifiers::NONE));
+        assert_eq!(studio.photo.images[0].develop.exposure, 1.25);
+        frame(
+            &ctx,
+            &mut studio,
+            keys::key(Key::Z, Modifiers::CTRL | Modifiers::COMMAND),
+        );
+        assert_eq!(studio.photo.images[0].develop.exposure, 0.);
+        frame(
+            &ctx,
+            &mut studio,
+            keys::key(
+                Key::Z,
+                Modifiers::CTRL | Modifiers::COMMAND | Modifiers::SHIFT,
+            ),
+        );
+        assert_eq!(studio.photo.images[0].develop.exposure, 1.25);
+        for action in [7, 8, 0, 0] {
+            panel_action(&ctx, &mut studio, action);
+            let output = apply_panel(&ctx, &mut studio);
+            if action == 7 {
+                assert!(
+                    studio.panel_workspaces.tasks["Photo"]
+                        .hidden
+                        .contains_key("photo-develop")
+                );
+            } else {
+                keys::focused(&ctx, &output, "Photo develop");
+            }
+        }
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(".artifacts")
+            .join(format!(
+                "keyboard-photo-workspace-{}-{}",
+                std::process::id(),
+                crate::document::next_id()
+            ));
+        let path = root.join("workspaces.json");
+        studio.panel_workspaces.write(&path).unwrap();
+        let saved = crate::ui::workspace::Book::read(&path).unwrap();
+        for scale in [1., 1.5, 2.] {
+            let reopened = egui::Context::default();
+            reopened.enable_accesskit();
+            reopened.set_pixels_per_point(scale);
+            crate::ui::theme::apply(&reopened);
+            studio.panel_workspaces = saved.clone();
+            let mut output = frame(&reopened, &mut studio, vec![]);
+            for _ in 0..3 {
+                output = frame(&reopened, &mut studio, vec![]);
+            }
+            let tree = output.platform_output.accesskit_update.as_ref().unwrap();
+            let window = tree
+                .nodes
+                .iter()
+                .find(|(_, node)| {
+                    node.role() == egui::accesskit::Role::Window
+                        && node.label() == Some("Photo develop")
+                })
+                .unwrap()
+                .1
+                .bounds()
+                .unwrap();
+            assert!((window.x1 - window.x0 - 480.).abs() <= 1.);
+            assert!((window.y1 - window.y0 - 700.).abs() <= 1.);
+            let field = keys::named(&output, "Exposure").1.bounds().unwrap();
+            assert!(field.x0 >= window.x0 && field.x1 <= window.x1);
+            assert!(field.y0 >= window.y0 && field.y1 <= window.y1);
+            assert_eq!(studio.photo.images[0].develop.exposure, 1.25);
+        }
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), artwork);
         std::fs::remove_dir_all(root).unwrap();
     }
 }

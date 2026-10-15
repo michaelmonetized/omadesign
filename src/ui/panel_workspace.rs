@@ -8,12 +8,23 @@ const PANELS: &[(&str, &str)] = &[
     ("layers", "Layers"),
     ("timeline", "Timeline"),
     ("hierarchy", "Layout hierarchy"),
+    ("photo-library", "Photo library"),
+    ("photo-develop", "Photo develop"),
 ];
 
 /// Draw task panels around the document canvas.
 /// Args: root UI and studio. Returns no value; saved layout changes never enter artwork undo.
 #[allow(deprecated)]
 pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
+    let center = panels(ui, studio);
+    ui.scope_builder(egui::UiBuilder::new().max_rect(center), |ui| {
+        super::canvas::show(ui, studio)
+    });
+}
+
+/// Draw the registered panels around an app-owned viewer.
+/// Args: root UI and studio. Returns the remaining center rectangle.
+pub(super) fn panels(ui: &mut Ui, studio: &mut Studio) -> egui::Rect {
     let mut book = std::mem::take(&mut studio.panel_workspaces);
     let before = book.clone();
     let presets = [
@@ -37,6 +48,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                 ("timeline", Place::Bottom),
             ]),
         ),
+        ("Photo", photo_preset()),
     ];
     for (_, layout) in &mut book.tasks {
         layout.normalize(&PANELS.iter().map(|p| p.0).collect::<Vec<_>>());
@@ -46,6 +58,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
         crate::tools::Persona::Layout => "Layout",
         crate::tools::Persona::Pixel => "Pixel",
         crate::tools::Persona::Motion => "Motion",
+        crate::tools::Persona::Photo => "Photo",
         _ => "Design",
     };
     let previous_persona: Option<String> = ui.ctx().data_mut(|data| data.get_temp(persona_key));
@@ -57,6 +70,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
         "Layout" => crate::tools::Persona::Layout,
         "Pixel" => crate::tools::Persona::Pixel,
         "Motion" => crate::tools::Persona::Motion,
+        "Photo" => crate::tools::Persona::Photo,
         _ => crate::tools::Persona::Design,
     };
     if studio.persona != active_persona {
@@ -84,11 +98,10 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                 "layers" => super::studios::layers_content(ui, studio),
                 "timeline" => super::timeline::content(ui, studio),
                 "hierarchy" => super::layout::hierarchy_content(ui, studio),
+                "photo-library" => super::photo::filmstrip(ui, studio),
+                "photo-develop" => super::photo::develop_content(ui, studio),
                 _ => {}
             });
-    ui.scope_builder(egui::UiBuilder::new().max_rect(center), |ui| {
-        super::canvas::show(ui, studio)
-    });
     let changed = before != book;
     studio.panel_workspaces = book;
     let dirty_key = egui::Id::new("oma-workspaces-dirty");
@@ -103,6 +116,24 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
     } else if dirty {
         ui.ctx().data_mut(|data| data.insert_temp(dirty_key, true));
     }
+    center
+}
+
+/// Keep the existing Photo panel widths in its workspace preset.
+/// Args: none. Returns an ordinary workspace with the two Photo panels.
+fn photo_preset() -> Workspace {
+    let mut layout = Workspace::preset(&[
+        ("photo-library", Place::Left),
+        ("photo-develop", Place::Right),
+    ]);
+    for group in &mut layout.groups {
+        group.extent = if group.panels.iter().any(|id| id == "photo-library") {
+            200.0
+        } else {
+            288.0
+        };
+    }
+    layout
 }
 
 #[cfg(test)]
