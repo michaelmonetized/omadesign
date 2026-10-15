@@ -106,6 +106,7 @@ pub(super) struct Parsed {
     pub mode: u16,
     pub depth: u16,
     pub dpi: f32,
+    pub icc_profile: Vec<u8>,
     pub layers: Vec<Record>,
     pub merged: Option<Arc<Allocation<u8>>>,
     pub merged_alpha: bool,
@@ -154,15 +155,10 @@ pub(super) fn parse(bytes: &[u8]) -> Result<Parsed, String> {
         return Err("Photoshop file has too few color channels".into());
     }
     let mut warnings = Vec::new();
-    if mode == 4 {
-        warn(
-            &mut warnings,
-            "CMYK pixels were converted to RGB without an ICC color transform; print colors can differ.",
-        );
-    }
     let _ = r.section(false)?;
     let mut resources = r.section(false)?;
     let mut dpi = 72.0;
+    let mut icc_profile = Vec::new();
     while resources.remaining() >= 12 {
         if resources.take(4)? != b"8BIM" {
             return Err("Invalid Photoshop image resource signature".into());
@@ -177,10 +173,7 @@ pub(super) fn parse(bytes: &[u8]) -> Result<Parsed, String> {
             }
         }
         if id == 1039 {
-            warn(
-                &mut warnings,
-                "The embedded color profile is not applied; pixels are displayed in the document's RGB space.",
-            );
+            icc_profile = data.bytes.to_vec();
         }
         if data.bytes.len() % 2 != 0 {
             resources.take(1)?;
@@ -238,6 +231,7 @@ pub(super) fn parse(bytes: &[u8]) -> Result<Parsed, String> {
         mode,
         depth,
         dpi,
+        icc_profile,
         layers,
         merged,
         merged_alpha,

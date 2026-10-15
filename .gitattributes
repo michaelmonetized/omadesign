@@ -3,3 +3,7 @@ vendor/** linguist-vendored
 vendor/libraw/LICENSE* -whitespace
 vendor/libraw/COPYRIGHT -whitespace
 *.onnx binary
+
+# Keep the pinned color engine and its MIT notice unchanged.
+vendor/lcms2/** -whitespace
+vendor/native-notices/LICENSE-LittleCMS -whitespace

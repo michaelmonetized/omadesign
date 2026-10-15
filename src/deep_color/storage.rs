@@ -176,3 +176,51 @@ pub fn pixmap(w: u32, h: u32) -> Result<(tiny_skia::Pixmap, Arc<Lease>), String>
     let pixels = tiny_skia::Pixmap::from_vec(bytes, size).ok_or("Invalid paint surface storage")?;
     Ok((pixels, memory))
 }
+
+pub fn empty_bytes() -> Arc<Allocation<u8>> {
+    adopt(Vec::new()).expect("Empty storage needs no memory")
+}
+pub fn empty(bytes: &Arc<Allocation<u8>>) -> bool {
+    bytes.is_empty()
+}
+pub mod optional_floats {
+    use super::*;
+    use serde::{
+        Deserialize, Deserializer, Serialize, Serializer,
+        de::{SeqAccess, Visitor},
+    };
+    pub fn serialize<S: Serializer>(
+        value: &Option<Arc<Allocation<f32>>>,
+        s: S,
+    ) -> Result<S::Ok, S::Error> {
+        value.as_ref().map(|v| v.as_slice()).serialize(s)
+    }
+    struct Floats(Arc<Allocation<f32>>);
+    impl<'de> Deserialize<'de> for Floats {
+        fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+            struct Values;
+            impl<'de> Visitor<'de> for Values {
+                type Value = Floats;
+                fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    f.write_str("finite color samples")
+                }
+                fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Floats, A::Error> {
+                    let mut out = Builder::new().map_err(serde::de::Error::custom)?;
+                    while let Some(value) = seq.next_element::<f32>()? {
+                        if !value.is_finite() {
+                            return Err(serde::de::Error::custom("Nonfinite ink sample"));
+                        }
+                        out.extend(&[value]).map_err(serde::de::Error::custom)?;
+                    }
+                    Ok(Floats(out.finish().map_err(serde::de::Error::custom)?))
+                }
+            }
+            d.deserialize_seq(Values)
+        }
+    }
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        d: D,
+    ) -> Result<Option<Arc<Allocation<f32>>>, D::Error> {
+        Ok(Option::<Floats>::deserialize(d)?.map(|v| v.0))
+    }
+}

@@ -1,8 +1,11 @@
 //! Native document samples. RGBA8 is a display cache; authored samples remain authoritative.
+pub mod cms;
+mod color_pixels;
 mod composite;
 pub mod retouch;
 pub mod storage;
 pub mod surface;
+pub mod tiff;
 pub use composite::{blend_pixel, composite};
 
 use crate::document::Pixels;
@@ -31,6 +34,20 @@ impl Depth {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct NativePixels {
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "storage::optional_floats"
+    )]
+    pub cmyk: Option<Arc<Allocation<f32>>>,
+    #[serde(
+        default = "storage::empty_bytes",
+        skip_serializing_if = "storage::empty",
+        with = "storage::bytes"
+    )]
+    pub icc_profile: Arc<Allocation<u8>>,
+    #[serde(default = "cms::relative_intent")]
+    pub intent: u32,
     pub depth: Depth,
     #[serde(with = "sample_bytes")]
     pub samples: Arc<Allocation<f32>>,
@@ -90,7 +107,13 @@ impl Pixels {
             }
         }
         let mut out = Self::from_byte_allocation(w, h, Arc::new(data))?;
-        out.native = Some(NativePixels { depth, samples });
+        out.native = Some(NativePixels {
+            depth,
+            samples,
+            cmyk: None,
+            icc_profile: storage::empty_bytes(),
+            intent: 1,
+        });
         Ok(out)
     }
 
@@ -147,6 +170,7 @@ impl Pixels {
     pub fn set_sample_allocation(&mut self, samples: Arc<Allocation<f32>>) -> Result<(), String> {
         let depth = self.native.as_ref().map_or(Depth::F32, |n| n.depth);
         let mut out = Self::from_sample_allocation(self.w, self.h, depth, samples)?;
+        self.retain_edited_color(&mut out)?;
         out.version = self.version.wrapping_add(1);
         *self = out;
         Ok(())
@@ -163,12 +187,9 @@ impl Pixels {
             let m = mask.sample(i);
             p[3] *= ((m[0] * 0.2126 + m[1] * 0.7152 + m[2] * 0.0722) * m[3]).clamp(0., 1.);
         }
-        Self::from_sample_allocation(
-            self.w,
-            self.h,
-            self.native.as_ref().map_or(Depth::F32, |n| n.depth),
-            Arc::new(samples),
-        )
+        let mut out = self.clone();
+        out.set_sample_allocation(Arc::new(samples))?;
+        Ok(out)
     }
 
     /// Apply a native raster filter.
@@ -192,12 +213,9 @@ impl Pixels {
         {
             *dst = *src;
         }
-        Self::from_sample_allocation(
-            self.w,
-            self.h,
-            self.native.as_ref().map_or(Depth::F32, |n| n.depth),
-            Arc::new(output),
-        )
+        let mut out = self.clone();
+        out.set_sample_allocation(Arc::new(output))?;
+        Ok(out)
     }
 }
 
@@ -309,10 +327,10 @@ impl Pixels {
     /// Pad or crop a native grid without resampling.
     /// Args: new dimensions and old-grid offset. Returns a buffer preserving all copied samples.
     pub fn reframed(&self, w: u32, h: u32, dx: i64, dy: i64) -> Result<Self, String> {
-        let count = (w as usize)
-            .checked_mul(h as usize)
-            .and_then(|n| n.checked_mul(4))
-            .ok_or("Native reframe exceeds working limit")?;
+        if let Some(result) = self.reframe_inks(w, h, dx, dy) {
+            return result;
+        }
+        let count = storage::count(w, h, 4)?;
         let mut out = resources::global().allocate_now::<f32, _>(count, &storage::check)?;
         for y in 0..self.h {
             let ny = y as i64 + dy;
@@ -329,12 +347,16 @@ impl Pixels {
                     .copy_from_slice(&self.sample(y as usize * self.w as usize + x as usize));
             }
         }
-        Self::from_sample_allocation(
+        let mut pixels = Self::from_sample_allocation(
             w,
             h,
             self.native.as_ref().map_or(Depth::U8, |n| n.depth),
             Arc::new(out),
-        )
+        )?;
+        if let Some(native) = &self.native {
+            if !native.icc_profile.is_empty(){pixels.assign_rgb_profile(native.icc_profile.to_vec(),native.intent)?;}
+        }
+        Ok(pixels)
     }
 
     /// Paint an overlay into authored samples.
@@ -366,24 +388,34 @@ impl Pixels {
             .checked_mul(self.h as usize)
             .filter(|&n| n > 0)
             .ok_or("Invalid native dimensions")?;
-        if native.samples.len() != count * 4 || native.samples.iter().any(|s| !s.is_finite()) {
+        let components = count
+            .checked_mul(4)
+            .ok_or("Invalid native sample dimensions")?;
+        if native.cmyk.as_ref().is_some_and(|inks| {
+            count.checked_mul(5) != Some(inks.len()) || inks.iter().any(|s| !s.is_finite())
+        }) {
+            return Err("Invalid native CMYKA samples".into());
+        }
+        if native.intent>3 {return Err("Invalid native rendering intent".into());}
+        cms::validate_profile(
+            &native.icc_profile,
+            if native.cmyk.is_some() {
+                cms::Model::Cmyk
+            } else {
+                cms::Model::Rgb
+            },
+        )?;
+        if native.samples.len() != components || native.samples.iter().any(|s| !s.is_finite()) {
             return Err("Invalid native sample dimensions or values".into());
         }
         Ok(())
     }
-    /// Read a display paint color in the untagged RGB working space.
-    /// Args: brush color. Returns straight floating-point RGBA.
-    pub fn paint_color(&self, color: crate::color::Rgba) -> Result<[f32; 4], String> {
-        Ok([
-            color.r as f32 / 255.,
-            color.g as f32 / 255.,
-            color.b as f32 / 255.,
-            color.a as f32 / 255.,
-        ])
-    }
     /// Resample authored samples with premultiplied bilinear interpolation.
     /// Args: output dimensions. Returns native samples without an RGBA8 intermediate.
     pub fn resized(&self, w: u32, h: u32) -> Result<Self, String> {
+        if let Some(result) = self.resize_inks(w, h) {
+            return result;
+        }
         let count = (w as usize)
             .checked_mul(h as usize)
             .filter(|&n| n > 0)
@@ -395,12 +427,16 @@ impl Pixels {
                 ((i / w as usize) as f32 + 0.5) * self.h as f32 / h as f32,
             )
         }))?;
-        Self::from_sample_allocation(
+        let mut out = Self::from_sample_allocation(
             w,
             h,
             self.native.as_ref().map_or(Depth::U8, |n| n.depth),
             samples,
-        )
+        )?;
+        if let Some(native) = &self.native {
+            if !native.icc_profile.is_empty(){out.assign_rgb_profile(native.icc_profile.to_vec(),native.intent)?;}
+        }
+        Ok(out)
     }
 }
 
@@ -427,7 +463,10 @@ pub fn buffers(doc: &crate::document::Document) -> impl Iterator<Item = &Pixels>
 /// Check whether an export needs the precise rendering route.
 /// Args: document. Returns true when any authored pixel or mask has native samples.
 pub fn has_native(doc: &crate::document::Document) -> bool {
-    buffers(doc).any(|p| p.native.is_some())
+    doc.color.model != cms::Model::Rgb
+        || doc.color.depth != Depth::U8
+        || !doc.color.icc_profile.is_empty()
+        || buffers(doc).any(|p| p.native.is_some())
 }
 
 /// Find the greatest authored sample width, including masks.
@@ -435,6 +474,7 @@ pub fn has_native(doc: &crate::document::Document) -> bool {
 pub fn document_depth(doc: &crate::document::Document) -> Depth {
     buffers(doc)
         .filter_map(|p| p.native.as_ref().map(|n| n.depth))
+        .chain(std::iter::once(doc.color.depth))
         .max_by_key(|d| d.bits())
         .unwrap_or_default()
 }

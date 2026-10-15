@@ -668,16 +668,18 @@ pub(super) fn fill(studio: &mut Studio, world: Pt) {
         } else {
             studio.brush.color
         };
+        let c = match before.paint_color(c) {
+            Ok(color) => color,
+            Err(error) => {
+                studio.status = error;
+                return;
+            }
+        };
         let samples = crate::deep_color::storage::collect(
             (0..before.w as usize * before.h as usize).flat_map(|i| {
                 crate::deep_color::blend_pixel(
                     before.sample(i),
-                    [
-                        c.r as f32 / 255.,
-                        c.g as f32 / 255.,
-                        c.b as f32 / 255.,
-                        c.a as f32 / 255.,
-                    ],
+                    c,
                     crate::color::Blend::Normal,
                     region[i] as f32 / 255.,
                 )
@@ -2069,7 +2071,9 @@ pub(super) fn native_drag(studio: &mut Studio, world: Pt) {
         studio.status = "Cannot map the selection under current memory pressure".into();return;
     }
     paint::stroke_to(&mut coverage, from, point, &coverage_brush, false);
-    let samples = crate::deep_color::storage::collect(
+    let samples = (|| {
+        let color = before.paint_color(brush.color)?;
+        crate::deep_color::storage::collect(
         (0..before.w as usize * before.h as usize).flat_map(|i| {
             let p = before.sample(i);
             let amount = coverage.pixels()[i].alpha() as f32 / 255.
@@ -2077,21 +2081,16 @@ pub(super) fn native_drag(studio: &mut Studio, world: Pt) {
             if erase && !mask {
                 [p[0], p[1], p[2], p[3] * (1. - amount)]
             } else {
-                let c = brush.color;
                 crate::deep_color::blend_pixel(
                     p,
-                    [
-                        c.r as f32 / 255.,
-                        c.g as f32 / 255.,
-                        c.b as f32 / 255.,
-                        c.a as f32 / 255.,
-                    ],
+                    color,
                     crate::color::Blend::Normal,
                     amount,
                 )
             }
         }),
-    );
+    )
+    })();
     drop(selection);
     let target = if mask {
         studio.doc.layers[layer].mask.as_mut()

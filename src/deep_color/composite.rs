@@ -127,6 +127,9 @@ pub fn composite(doc: &Document, scale: u32) -> Result<Pixels, String> {
     {
         return Err("Native vector-shape masks need a precise coverage renderer; save .oma to preserve their original samples.".into());
     }
+    if doc.color.model == super::cms::Model::Cmyk {
+        return composite_cmyk(doc, scale);
+    }
     let scale = scale.clamp(1, 8);
     let w = (doc.width * scale as f32).round() as u32;
     let h = (doc.height * scale as f32).round() as u32;
@@ -145,7 +148,11 @@ pub fn composite(doc: &Document, scale: u32) -> Result<Pixels, String> {
         scale,
         0,
     )?;
-    Pixels::from_sample_allocation(w, h, Depth::F32, std::sync::Arc::new(out))
+    let mut pixels = Pixels::from_sample_allocation(w, h, Depth::F32, std::sync::Arc::new(out))?;
+    if !doc.color.icc_profile.is_empty() {
+        pixels.assign_rgb_profile(doc.color.icc_profile.clone(), doc.color.intent)?;
+    }
+    Ok(pixels)
 }
 fn render(
     doc: &Document,
@@ -212,7 +219,8 @@ fn render(
                     *dst = blend_pixel(*dst, src, layer.blend, amount);
                 }
             }
-        } else if let Some(pixels) = layer.kind.pixels() {
+        } else if let Some(source) = layer.kind.pixels() {
+            let pixels = source.in_document_color(&doc.color)?;
             if layer.filters.active() {
                 return Err("Apply pixel effects before high-depth export; native layer effect rendering is not yet supported".into());
             }
@@ -226,7 +234,7 @@ fn render(
                 );
                 let mut local = tiny_skia::Point::from_xy(p.x, p.y);
                 inv.map_point(&mut local);
-                let src = sample(pixels, local.x, local.y);
+                let src = sample(&pixels, local.x, local.y);
                 *dst = blend_pixel(
                     *dst,
                     src,
@@ -255,7 +263,7 @@ fn render(
             vector.blend = Blend::Normal;
             single.layers = vec![vector];
             let pm = crate::compositor::render_export(&single, scale)?;
-            let pixels = Pixels::try_from_pixmap(&pm)?;
+            let pixels = Pixels::try_from_pixmap(&pm)?.in_document_color(&doc.color)?;
             for (i, dst) in out.iter_mut().enumerate() {
                 let p = Pt::new(
                     ((i % w as usize) as f32 + 0.5) / scale as f32,
@@ -322,4 +330,95 @@ fn mask(layer: &Layer, p: Pt, local: Option<(f32, f32)>) -> f32 {
     };
     let m = sample(mask, x, y);
     ((m[0] * 0.2126 + m[1] * 0.7152 + m[2] * 0.0722) * m[3]).clamp(0., 1.)
+}
+
+fn composite_cmyk(doc: &Document, scale: u32) -> Result<Pixels, String> {
+    if doc.layers.iter().any(|l| {
+        matches!(
+            l.blend,
+            Blend::Hue | Blend::Saturation | Blend::Color | Blend::Luminosity
+        )
+    }) {
+        let mut rgb = doc.clone();
+        rgb.color = super::cms::DocumentColor {
+            depth: Depth::F32,
+            ..Default::default()
+        };
+        for layer in &mut rgb.layers {
+            if let Some(p) = layer.kind.pixels_mut() {
+                *p = p.in_document_color(&rgb.color)?;
+            }
+        }
+        return composite(&rgb, scale)?.in_document_color(&doc.color);
+    }
+    let mut inks = None;
+    let mut dimensions = (0, 0);
+    for component in 0..4 {
+        let mut plane = doc.clone();
+        plane.color = Default::default();
+        for layer in &mut plane.layers {
+            if layer.is_group {
+                continue;
+            }
+            let source = if let Some(p) = layer.kind.pixels() {
+                p.clone()
+            } else {
+                let mut one = doc.clone();
+                one.color = Default::default();
+                let mut single = layer.clone();
+                single.parent = None;
+                single.blend = Blend::Normal;
+                single.opacity = 1.;
+                one.layers = vec![single];
+                one.transparent = true;
+                let p = composite(&one, 1)?;
+                layer.kind = crate::document::LayerKind::Raster {
+                    pixels: p.clone(),
+                    origin: Pt::ZERO,
+                    size: Pt::new(doc.width, doc.height),
+                    rotation: 0.,
+                    shear: 0.,
+                };
+                layer.mask = None;
+                layer.filters = Default::default();
+                p
+            };
+            let source = source.in_document_color(&doc.color)?;
+            let native = source.native.as_ref().ok_or("Missing CMYK samples")?;
+            let authored = native.cmyk.as_ref().ok_or("Missing CMYK inks")?;
+            let values = super::storage::collect(authored.chunks_exact(5).flat_map(|p| {
+                let v = 1. - p[component];
+                [v, v, v, p[4]]
+            }))?;
+            *layer.kind.pixels_mut().unwrap() =
+                Pixels::from_sample_allocation(source.w, source.h, Depth::F32, values)?;
+        }
+        let result = composite(&plane, scale)?;
+        dimensions = (result.w, result.h);
+        if inks.is_none() {
+            inks = Some(crate::resources::global().allocate_now::<f32, _>(
+                super::storage::count(result.w, result.h, 5)?,
+                &super::storage::check,
+            )?);
+        }
+        for (i, p) in inks
+            .as_mut()
+            .unwrap()
+            .as_mut_slice()
+            .chunks_exact_mut(5)
+            .enumerate()
+        {
+            let value = result.sample(i);
+            p[component] = 1. - value[0];
+            p[4] = value[3];
+        }
+    }
+    Pixels::from_cmyk_allocation(
+        dimensions.0,
+        dimensions.1,
+        doc.color.depth,
+        std::sync::Arc::new(inks.ok_or("Missing composite ink planes")?),
+        doc.color.icc_profile.clone(),
+        doc.color.intent,
+    )
 }

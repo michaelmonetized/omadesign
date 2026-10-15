@@ -91,6 +91,14 @@ pub(super) fn show(ui: &mut egui::Ui) {
             ][..],
         ),
         (
+            "Little CMS 2.19",
+            "Copyright (c) 2023 Marti Maria Saguer",
+            "MIT",
+            &[include_str!(
+                "../../vendor/native-notices/LICENSE-LittleCMS"
+            )][..],
+        ),
+        (
             "zlib",
             "Copyright (C) 1995–2026 Jean-loup Gailly and Mark Adler",
             "Zlib",

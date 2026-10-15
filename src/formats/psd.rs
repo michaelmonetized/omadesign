@@ -122,6 +122,27 @@ pub fn decode(bytes: &[u8], name: &str) -> Result<PsdImport, String> {
     doc.transparent = true;
     doc.artboards = crate::document::Artboard::tiled(1, doc.width, doc.height);
     doc.layers.clear();
+    doc.color = crate::deep_color::cms::DocumentColor {
+        model: if parsed.mode == 4 {
+            crate::deep_color::cms::Model::Cmyk
+        } else {
+            crate::deep_color::cms::Model::Rgb
+        },
+        depth: match parsed.depth {
+            16 => crate::deep_color::Depth::U16,
+            32 => crate::deep_color::Depth::F32,
+            _ => crate::deep_color::Depth::U8,
+        },
+        icc_profile: parsed.icc_profile.clone(),
+        intent: 1,
+    };
+    crate::deep_color::cms::validate_profile(&doc.color.icc_profile, doc.color.model)?;
+    if parsed.mode == 4 && parsed.icc_profile.is_empty() {
+        warn(
+            &mut warnings,
+            "Untagged CMYK retains original ink coverage. Its preview uses an uncalibrated device formula; assign an ICC profile for qualified color conversion.",
+        );
+    }
     let mut stack: Vec<Layer> = Vec::new();
     let mut clipping: Vec<u64> = Vec::new();
     for record in parsed.layers {
@@ -148,12 +169,8 @@ pub fn decode(bytes: &[u8], name: &str) -> Result<PsdImport, String> {
                 layer.parent = stack.last().map(|g| g.id);
                 layer
             } else {
-                let rgba = rgba_channels(w, h, parsed.mode, parsed.depth, false, |id| {
-                    record
-                        .pixels
-                        .iter()
-                        .find(|(key, _)| *key == id)
-                        .map(|(_, data)| data.as_slice())
+                let rgba = rgba_channels(w, h, parsed.mode, parsed.depth, &parsed.icc_profile, false, |id| {
+                    record.pixels.iter().find(|(key, _)| *key == id).map(|(_, data)| data.as_slice())
                 })?;
                 let pixels = rgba;
                 let mut layer = Layer::placed_raster(
@@ -213,6 +230,7 @@ pub fn decode(bytes: &[u8], name: &str) -> Result<PsdImport, String> {
             parsed.height,
             parsed.mode,
             parsed.depth,
+            &parsed.icc_profile,
             parsed.merged_alpha,
             |id| {
                 if id == -1 && !parsed.merged_alpha {return None;}
@@ -247,6 +265,7 @@ fn rgba_channels<'a>(
     h: u32,
     mode: u16,
     depth: u16,
+    profile: &[u8],
     white_matte: bool,
     channel: impl Fn(i16) -> Option<&'a [u8]>,
 ) -> Result<Pixels, String> {
@@ -255,6 +274,34 @@ fn rgba_channels<'a>(
     let channels = [channel(0), channel(1), channel(2), channel(3), channel(-1)];
     if channels.iter().flatten().any(|v| v.len() != n * bps) {
         return Err("Photoshop channel dimensions do not match layer".into());
+    }
+    if mode == 4 {
+        let mut inks = crate::resources::global().allocate_now::<f32,_>(n.checked_mul(5).ok_or("Photoshop ink dimensions overflow")?, &crate::deep_color::storage::check)?;
+        for (i, p) in inks.as_mut_slice().chunks_exact_mut(5).enumerate() {
+            for c in 0..4 {
+                p[c] = 1.
+                    - channels[c]
+                        .map(|v| sample_value(v, i, depth))
+                        .transpose()?
+                        .unwrap_or(1.);
+            }
+            p[4] = channels[4]
+                .map(|v| sample_value(v, i, depth))
+                .transpose()?
+                .unwrap_or(1.);
+        }
+        return Pixels::from_cmyk_allocation(
+            w,
+            h,
+            match depth {
+                16 => crate::deep_color::Depth::U16,
+                32 => crate::deep_color::Depth::F32,
+                _ => crate::deep_color::Depth::U8,
+            },
+            std::sync::Arc::new(inks),
+            profile.to_vec(),
+            1,
+        );
     }
     let mut samples = crate::resources::global().allocate_now::<f32, _>(
         n.checked_mul(4).ok_or("Photoshop dimensions overflow")?,
@@ -294,6 +341,20 @@ fn rgba_channels<'a>(
                 }
             }
         }
+    }
+    if !profile.is_empty() {
+        let mut pixels = Pixels::from_sample_allocation(
+            w,
+            h,
+            match depth {
+                16 => crate::deep_color::Depth::U16,
+                32 => crate::deep_color::Depth::F32,
+                _ => crate::deep_color::Depth::U8,
+            },
+            std::sync::Arc::new(samples),
+        )?;
+        pixels.assign_rgb_profile(profile.to_vec(), 1)?;
+        return Ok(pixels);
     }
     if depth == 8 {
         Pixels::from_byte_allocation(

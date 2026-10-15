@@ -135,6 +135,7 @@ fn mode_tabs_rect(row: eframe::egui::Rect) -> eframe::egui::Rect {
 
 fn file_menu(ui: &mut Ui, studio: &mut Studio) {
     ui.menu_button("File", |ui| {
+        if studio.persona!=Persona::Photo {super::document_color::menu(ui,studio);ui.separator();}
         if ui.button("Template library…").clicked() {
             studio.show_templates = true;
             ui.close();

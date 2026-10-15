@@ -20,7 +20,7 @@ pub fn encode(doc: &Document) -> Result<String, String> {
     serde_json::to_writer(&mut output, &File {
         // Older readers must not silently strip a mask or change stroke placement.
         // Keep plain documents compatible with v5; v1-v13 remain readable here.
-        version: if doc.layers.iter().any(|l| l.kind.pixels().is_some_and(|p|p.native.is_some()) || l.mask.as_ref().is_some_and(|p|p.native.is_some()) || l.kind.shapes().is_some_and(|ss|ss.iter().any(|s|s.mask.as_ref().is_some_and(|p|p.native.is_some())))) {
+        version: if doc.color!=crate::deep_color::cms::DocumentColor::default() || doc.layers.iter().any(|l| l.kind.pixels().is_some_and(|p|p.native.is_some()) || l.mask.as_ref().is_some_and(|p|p.native.is_some()) || l.kind.shapes().is_some_and(|ss|ss.iter().any(|s|s.mask.as_ref().is_some_and(|p|p.native.is_some())))) {
             14
         } else if !doc.mask_sources().is_empty() {
             13
@@ -101,10 +101,9 @@ fn decode_admitted(s: &str) -> Result<Document, String> {
 }
 
 /// Shared normalization after pixels have been decoded under the caller's budgets.
-pub(crate) fn normalize_decoded_document(
-    mut doc: Document,
-    version: u32,
-) -> Result<Document, String> {
+pub(crate) fn normalize_decoded_document(mut doc: Document, version: u32) -> Result<Document, String> {
+    crate::deep_color::cms::validate_profile(&doc.color.icc_profile,doc.color.model)?;
+    if doc.color.intent>3{return Err("Invalid document color rendering intent".into());}
     for layer in &mut doc.layers {
         if version < 7 {
             layer.filters.migrate_legacy(layer.blend);

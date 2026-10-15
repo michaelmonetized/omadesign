@@ -6,6 +6,10 @@ use std::path::PathBuf;
 
 fn main() -> eframe::Result {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.iter().any(|arg|arg=="--color-runtime-check") {
+        match omadesign::deep_color::cms::runtime_probe(){Ok(version)=>println!("Little CMS {version} · statically bundled"),Err(error)=>{eprintln!("{error}");std::process::exit(2);}}
+        return Ok(());
+    }
     if let Some(result) = omadesign::brushes::cli(&args) {
         if let Err(error) = result { eprintln!("{error}"); std::process::exit(2); }
         return Ok(());

@@ -22,6 +22,7 @@ path = "src/bin/gen_media.rs"
 [dependencies]
 ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "load-dynamic", "api-27"] }
 sha2 = "0.10"
+tiff = "0.11.3"
 zstd = "0.13"
 mlua = { version = "0.12", features = ["lua54", "vendored", "serde"] }
 ab_glyph = "0.2.32"

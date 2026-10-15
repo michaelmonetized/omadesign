@@ -124,6 +124,7 @@ pub fn encode(doc: &Document, large: bool) -> Result<PsdExport, String> {
             &mut record,
             &Pixels::from_rgba(w, h, pixels.into_raw()).ok_or("Invalid paper")?,
             depth,
+            &doc.color,
         )?;
         records.push(record);
         used = dimensions(w, h)? * 8;
@@ -179,11 +180,11 @@ pub fn encode(doc: &Document, large: bool) -> Result<PsdExport, String> {
     out.write_all(b"8BPS").map_err(|e| e.to_string())?;
     u16(&mut out, if large { 2 } else { 1 })?;
     out.write_all(&[0; 6]).map_err(|e| e.to_string())?;
-    u16(&mut out, 4)?;
+    u16(&mut out, if doc.color.model == crate::deep_color::cms::Model::Cmyk {5} else {4})?;
     u32(&mut out, h)?;
     u32(&mut out, w)?;
     u16(&mut out, depth)?;
-    u16(&mut out, 3)?;
+    u16(&mut out, if doc.color.model == crate::deep_color::cms::Model::Cmyk {4} else {3})?;
     u32(&mut out, 0)?; // RGB color-mode data.
     let mut resources = Vec::new();
     resources.extend_from_slice(b"8BIM");
@@ -200,13 +201,23 @@ pub fn encode(doc: &Document, large: bool) -> Result<PsdExport, String> {
         u16(&mut resources, 1)?;
         u16(&mut resources, 1)?;
     }
+    if !doc.color.icc_profile.is_empty() {
+        crate::deep_color::cms::validate_profile(&doc.color.icc_profile, doc.color.model)?;
+        resources.extend_from_slice(b"8BIM");
+        u16(&mut resources, 1039)?;
+        resources.extend_from_slice(&[0, 0]);
+        section(&mut resources, &doc.color.icc_profile, false)?;
+        if doc.color.icc_profile.len() % 2 != 0 {
+            resources.push(0);
+        }
+    }
     section(&mut out, &resources, false)?;
     let mask_size = layer_info.len().checked_add(if large {12} else {8}).ok_or("Photoshop layer section size overflows")?;
     length(&mut out, mask_size, large)?;
     section(&mut out, &layer_info, large)?;
     u32(&mut out, 0)?;
     drop(layer_info);
-    let merged = if depth == 8 {
+    let merged = if depth == 8 && doc.color.model == crate::deep_color::cms::Model::Rgb && doc.color.icc_profile.is_empty() {
         let png = crate::compositor::export_png(doc, 1)?;
         let image = image::load_from_memory(&png)
             .map_err(|e| e.to_string())?
@@ -216,8 +227,9 @@ pub fn encode(doc: &Document, large: bool) -> Result<PsdExport, String> {
         crate::deep_color::composite(doc, 1)?
     };
     u16(&mut out, 0)?;
-    for ch in 0..4 {
-        out.write_all(&plane(&merged, ch, depth, true)?).map_err(|e| e.to_string())?;
+    let merged = merged.in_document_color(&doc.color)?;
+    for ch in 0..if doc.color.model == crate::deep_color::cms::Model::Cmyk {5} else {4} {
+        out.write_all(&plane(&merged, ch, depth, doc.color.model == crate::deep_color::cms::Model::Rgb)?).map_err(|e| e.to_string())?;
     }
     Ok(PsdExport {
         bytes: {let output = Arc::try_unwrap(out.finish()?).map_err(|_| "Shared Photoshop encoded storage")?; let (bytes, _memory) = output.into_parts(); bytes},
@@ -317,7 +329,7 @@ fn collect(
                 .checked_add(amount)
                 .ok_or("Photoshop export size overflow")?;
             record.rect = bounds;
-            add_pixels(&mut record, &pixels, sample_depth)?;
+            add_pixels(&mut record, &pixels, sample_depth, &doc.color)?;
             if let Some(mask) = mask {
                 add_mask(&mut record, &mask, bounds, sample_depth)?;
             }
@@ -332,18 +344,24 @@ fn plane(pixels: &Pixels, component: usize, depth: u16, white_matte: bool) -> Re
     let mut out = resources::global().allocate_now::<u8, _>(count, &storage::check)?;
     for (i, bytes) in out.as_mut_slice().chunks_exact_mut(depth as usize / 8).enumerate() {
         let sample = pixels.sample(i);
-        let value = if white_matte && component < 3 {sample[component] * sample[3] + (1. - sample[3])} else {sample[component]};
+        let value = if let Some(inks) = pixels.native.as_ref().and_then(|n| n.cmyk.as_ref()) {if component == 4 {inks[i*5+4]} else {1. - inks[i*5+component]}} else if white_matte && component < 3 {sample[component] * sample[3] + (1. - sample[3])} else {sample[component]};
         match depth {8 => bytes[0] = crate::deep_color::byte(value),16 => bytes.copy_from_slice(&((value.clamp(0., 1.) * 65535.).round() as u16).to_be_bytes()),_ => bytes.copy_from_slice(&value.to_be_bytes())}
     } Ok(Arc::new(out))
 }
 
-fn add_pixels(record: &mut Record, pixels: &Pixels, depth: u16) -> Result<(), String> {
-    for ch in [-1i16, 0, 1, 2] {
+fn add_pixels(record: &mut Record, pixels: &Pixels, depth: u16, color: &crate::deep_color::cms::DocumentColor) -> Result<(), String> {
+    let pixels = pixels.in_document_color(color)?;
+    let cmyk = color.model == crate::deep_color::cms::Model::Cmyk;
+    for &ch in if cmyk {&[-1i16, 0, 1, 2, 3][..]} else {&[-1i16, 0, 1, 2][..]} {
         record.channels.push((
             ch,
             zip_channel(&plane(
-                pixels,
-                if ch == -1 { 3 } else { ch as usize },
+                &pixels,
+                if ch == -1 {
+                    if cmyk { 4 } else { 3 }
+                } else {
+                    ch as usize
+                },
                 depth,
                 false,
             )?)?,
@@ -497,6 +515,7 @@ fn layer_pixels(
         );
     }
     let mut single = Document::new("Photoshop layer", 1.0, 1.0, doc.dpi);
+    single.color = doc.color.clone();
     single.width = doc.width;
     single.height = doc.height;
     single.artboards = doc.artboards.clone();

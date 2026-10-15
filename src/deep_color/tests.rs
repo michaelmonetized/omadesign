@@ -426,3 +426,501 @@ fn byte_vector_effects_are_refused_before_native_export_reduction() {
     assert_eq!(reopened.layers[0].mask.as_ref().unwrap().sample(0),before);
     assert!(reopened.layers[0].kind.shapes().unwrap()[0].filters.active());
 }
+
+#[test]
+fn cmyk_profile_authoring_survives_masks_edits_projects_and_psd() {
+    use super::cms::{DocumentColor, Model};
+    let profile = include_bytes!("../formats/psd/fixtures/fogra39l-cc0.icc").to_vec();
+    let inks = vec![
+        1001. / 65535.,
+        0.25,
+        0.5,
+        0.125,
+        1.,
+        1002. / 65535.,
+        0.5,
+        0.1,
+        0.7,
+        1.,
+    ];
+    let pixels = Pixels::from_cmyk(2, 1, Depth::U16, inks.clone(), profile.clone(), 1).unwrap();
+    let device = Pixels::from_cmyk(2, 1, Depth::U16, inks.clone(), Vec::new(), 1).unwrap();
+    assert_ne!(pixels.data.as_slice(), device.data.as_slice());
+    let mut doc = Document::new("CMYK", 2., 1., 72.);
+    doc.transparent = true;
+    doc.color = DocumentColor {
+        model: Model::Cmyk,
+        depth: Depth::U16,
+        icc_profile: profile.clone(),
+        intent: 1,
+    };
+    doc.layers = vec![Layer::placed_raster(
+        "Ink",
+        pixels.clone(),
+        Pt::ZERO,
+        Pt::new(2., 1.),
+    )];
+    let doc = crate::project::decode(&crate::project::encode(&doc).unwrap()).unwrap();
+    assert_eq!(doc.color.icc_profile, profile);
+    assert_eq!(
+        doc.layers[0]
+            .kind
+            .pixels()
+            .unwrap()
+            .native
+            .as_ref()
+            .unwrap()
+            .cmyk
+            .as_ref()
+            .unwrap()
+            .as_slice(),
+        inks.as_slice()
+    );
+    let composite = super::composite(&doc, 1).unwrap();
+    for (&a, &b) in composite
+        .native
+        .as_ref()
+        .unwrap()
+        .cmyk
+        .as_ref()
+        .unwrap()
+        .iter()
+        .zip(&inks)
+    {
+        assert!((a - b).abs() < 1e-6);
+    }
+    let mask = Pixels::from_samples(
+        2,
+        1,
+        Depth::U16,
+        vec![0.333333, 0.333333, 0.333333, 1., 1., 1., 1., 1.],
+    )
+    .unwrap();
+    let masked = pixels.masked(&mask).unwrap();
+    let got = masked.native.as_ref().unwrap().cmyk.as_ref().unwrap();
+    assert_eq!(&got[..4], &inks[..4]);
+    assert!((got[4] - 0.333333).abs() < 1e-6);
+    let mut exposure = crate::raster::Settings::new(crate::raster::Kind::Exposure);
+    exposure.values[0] = 0.2;
+    let edited = pixels.filtered(&exposure, Some(&[255, 0])).unwrap();
+    let got = edited.native.as_ref().unwrap().cmyk.as_ref().unwrap();
+    assert_ne!(&got[..4], &inks[..4]);
+    assert_eq!(&got[5..], &inks[5..]);
+    for large in [false, true] {
+        let out = crate::formats::psd::encode(&doc, large).unwrap();
+        assert_eq!(out.bytes[25], 4);
+        let reopened = crate::formats::psd::decode(&out.bytes, "Ink")
+            .unwrap()
+            .document;
+        assert_eq!(reopened.color.icc_profile, profile);
+        let got = reopened.layers[0]
+            .kind
+            .pixels()
+            .unwrap()
+            .native
+            .as_ref()
+            .unwrap()
+            .cmyk
+            .as_ref()
+            .unwrap();
+        for (&a, &b) in got.iter().zip(&inks) {
+            assert!((a - b).abs() < 1. / 65535. + 1e-7);
+        }
+    }
+}
+
+#[test]
+fn invalid_and_mismatched_icc_profiles_are_rejected() {
+    let rgb = include_bytes!("../formats/psd/fixtures/srgb-cc0.icc");
+    assert!(cms::validate_profile(rgb, cms::Model::Cmyk).is_err());
+    assert!(cms::transform(&[0.1, 0.2, 0.3], cms::Model::Rgb, b"not ICC", true, 1).is_err());
+    let values = [0.1234567, 0.5, 0.9];
+    let expected = [31.5843 / 255., 127.5015 / 255., 229.4919 / 255.];
+    let converted = cms::transform(&values, cms::Model::Rgb, rgb, true, 1).unwrap();
+    for (a, b) in expected.iter().zip(converted.iter()) {
+        assert!((a - b).abs() < 0.0002);
+    }
+}
+
+#[test]
+fn cmyk_tiff_keeps_ink_alpha_profile_and_depth() {
+    let profile = include_bytes!("../formats/psd/fixtures/fogra39l-cc0.icc").to_vec();
+    for depth in [Depth::U8, Depth::U16, Depth::F32] {
+        let inks = vec![0.1234567, 0.25, 0.5, 0.7, 0.333333];
+        let pixels = Pixels::from_cmyk(1, 1, depth, inks.clone(), profile.clone(), 1).unwrap();
+        let bytes = super::tiff::encode(&pixels).unwrap();
+        let got = super::tiff::decode(&bytes).unwrap().unwrap();
+        let native = got.native.unwrap();
+        assert_eq!(native.depth, depth);
+        assert_eq!(native.icc_profile.as_slice(), profile);
+        let tolerance = match depth {
+            Depth::U8 => 1. / 255.,
+            Depth::U16 => 1. / 65535.,
+            Depth::F32 => 1e-7,
+        };
+        for (&a, &b) in native.cmyk.unwrap().iter().zip(&inks) {
+            assert!((a - b).abs() < tolerance);
+        }
+    }
+}
+
+#[test]
+fn profile_aware_export_and_document_conversion_preserve_real_authoring_data() {
+    use crate::export::{self, Format, Settings, Source};
+    let profile = include_bytes!("../formats/psd/fixtures/srgb-cc0.icc").to_vec();
+    let mut pixels = Pixels::from_samples(
+        2,
+        1,
+        Depth::U16,
+        vec![1000. / 65535., 0.25, 0.5, 1., 1001. / 65535., 0.5, 0.75, 1.],
+    )
+    .unwrap();
+    pixels.assign_rgb_profile(profile.clone(), 1).unwrap();
+    let mut doc = Document::new("Tagged export", 2., 1., 72.);
+    doc.transparent = true;
+    doc.color = cms::DocumentColor {
+        depth: Depth::U16,
+        icc_profile: profile.clone(),
+        intent: 1,
+        ..Default::default()
+    };
+    doc.layers = vec![Layer::placed_raster(
+        "Tagged",
+        pixels,
+        Pt::ZERO,
+        Pt::new(2., 1.),
+    )];
+    for format in [Format::Png, Format::Tiff] {
+        let (bytes, _) = export::encode(
+            &Source::Document(doc.clone()),
+            Settings {
+                format,
+                scale: 1,
+                ai: None,
+            },
+            &crate::ml::NoProgress,
+        )
+        .unwrap();
+        let decoded = crate::formats::decode_image(&bytes).unwrap();
+        assert_eq!(
+            decoded.native.as_ref().unwrap().icc_profile.as_slice(),
+            profile
+        );
+        assert!((decoded.sample(0)[0] - 1000. / 65535.).abs() < 1e-6);
+        if let Ok(dir) = std::env::var("OMADESIGN_DEEP_QA_DIR") {
+            std::fs::write(
+                std::path::Path::new(&dir).join(format!("profile-16.{}", format.extension())),
+                bytes,
+            )
+            .unwrap();
+        }
+    }
+    let before = doc.layers[0]
+        .kind
+        .pixels()
+        .unwrap()
+        .samples()
+        .unwrap()
+        .as_slice()
+        .to_vec();
+    let inks = include_bytes!("../formats/psd/fixtures/fogra39l-cc0.icc").to_vec();
+    let command = doc
+        .color_conversion(cms::DocumentColor {
+            model: cms::Model::Cmyk,
+            depth: Depth::U16,
+            icc_profile: inks.clone(),
+            intent: 1,
+        })
+        .unwrap();
+    crate::document::apply(&mut doc, &command);
+    let (bytes, _) = export::encode(
+        &Source::Document(doc.clone()),
+        Settings {
+            format: Format::Tiff,
+            scale: 1,
+            ai: None,
+        },
+        &crate::ml::NoProgress,
+    )
+    .unwrap();
+    let decoded = crate::formats::decode_image(&bytes).unwrap();
+    assert_eq!(decoded.native.as_ref().unwrap().depth, Depth::U16);
+    assert_eq!(
+        decoded.native.as_ref().unwrap().icc_profile.as_slice(),
+        inks
+    );
+    assert!(decoded.native.as_ref().unwrap().cmyk.is_some());
+    if let Ok(dir) = std::env::var("OMADESIGN_DEEP_QA_DIR") {
+        std::fs::write(
+            std::path::Path::new(&dir).join("profile-cmyk-16.tif"),
+            bytes,
+        )
+        .unwrap();
+    }
+    doc = crate::project::decode(&crate::project::encode(&doc).unwrap()).unwrap();
+    assert_eq!(doc.color.model, cms::Model::Cmyk);
+    crate::document::apply(&mut doc, &crate::document::invert_cmd(command));
+    assert_eq!(
+        doc.layers[0]
+            .kind
+            .pixels()
+            .unwrap()
+            .samples()
+            .unwrap()
+            .as_slice()
+            .to_vec(),
+        before
+    );
+}
+
+#[test]
+fn authoritative_sample_validation_rejects_malformed_project_inks() {
+    let pixels = Pixels::from_cmyk(
+        1,
+        1,
+        Depth::U16,
+        vec![0.1, 0.2, 0.3, 0.4, 1.],
+        Vec::new(),
+        1,
+    )
+    .unwrap();
+    let mut doc = Document::new("Malformed", 1., 1., 72.);
+    doc.layers = vec![Layer::placed_raster(
+        "Ink",
+        pixels,
+        Pt::ZERO,
+        Pt::new(1., 1.),
+    )];
+    let mut value: serde_json::Value =
+        serde_json::from_str(&crate::project::encode(&doc).unwrap()).unwrap();
+    value["doc"]["layers"][0]["kind"]["Raster"]["pixels"]["native"]["cmyk"] = serde_json::json!([]);
+    assert!(crate::project::decode(&value.to_string()).is_err());
+    assert_eq!(cms::runtime_probe().unwrap(), 2190);
+}
+
+#[test]
+fn native_brush_growth_and_group_mask_resize_preserve_sub_byte_values() {
+    let pixels = Pixels::from_cmyk(
+        1,
+        1,
+        Depth::U16,
+        vec![0.123456, 0.2, 0.3, 0.4, 0.5],
+        Vec::new(),
+        1,
+    )
+    .unwrap();
+    let grown = pixels.reframed(3, 3, 1, 1).unwrap();
+    assert_eq!(
+        grown.native.as_ref().unwrap().cmyk.as_ref().unwrap()[20..25],
+        [0.123456, 0.2, 0.3, 0.4, 0.5]
+    );
+    let mask = Pixels::from_samples(
+        2,
+        1,
+        Depth::U16,
+        vec![
+            1001. / 65535.,
+            1001. / 65535.,
+            1001. / 65535.,
+            1.,
+            1002. / 65535.,
+            1002. / 65535.,
+            1002. / 65535.,
+            1.,
+        ],
+    )
+    .unwrap();
+    let resized = mask.resized(4, 1).unwrap();
+    assert!(resized.sample(1)[0] > mask.sample(0)[0]);
+    assert!(resized.sample(1)[0] < mask.sample(1)[0]);
+}
+
+#[test]
+fn cmyk_native_retouch_and_all_blends_preserve_ink_authoring() {
+    let profile = include_bytes!("../formats/psd/fixtures/fogra39l-cc0.icc").to_vec();
+    let inks: Vec<f32> = (0..8 * 8)
+        .flat_map(|i| [0.1 + i as f32 / 65535., 0.2, 0.3, 0.4, 0.75])
+        .collect();
+    let p = Pixels::from_cmyk(8, 8, Depth::U16, inks.clone(), profile.clone(), 1).unwrap();
+    let brush = crate::paint::Brush {
+        size: 4.,
+        flow: 1.,
+        opacity: 0.5,
+        ..Default::default()
+    };
+    let edited = super::retouch::stroke(
+        &p,
+        &p,
+        Pt::new(4., 4.),
+        Pt::new(4., 4.),
+        Pt::new(-2., 0.),
+        crate::tools::Tool::Clone,
+        &brush,
+    )
+    .unwrap();
+    let n = edited.native.as_ref().unwrap();
+    assert_eq!(n.depth, Depth::U16);
+    assert_eq!(n.icc_profile.as_slice(),profile);
+    assert_eq!(&n.cmyk.as_ref().unwrap()[..5], &inks[..5]);
+    assert_ne!(
+        edited.samples().unwrap().as_slice().to_vec(),
+        p.samples().unwrap().as_slice().to_vec()
+    );
+    let mut doc = Document::new("Blend inks", 8., 8., 72.);
+    doc.transparent = true;
+    doc.color = cms::DocumentColor {
+        model: cms::Model::Cmyk,
+        depth: Depth::U16,
+        icc_profile: profile.clone(),
+        intent: 1,
+    };
+    doc.layers = vec![
+        Layer::placed_raster("Ink", p, Pt::ZERO, Pt::new(8., 8.)),
+        Layer::placed_raster("Edited", edited, Pt::ZERO, Pt::new(8., 8.)),
+    ];
+    for blend in [
+        crate::color::Blend::Normal,
+        crate::color::Blend::Multiply,
+        crate::color::Blend::Screen,
+        crate::color::Blend::Overlay,
+        crate::color::Blend::Darken,
+        crate::color::Blend::Lighten,
+        crate::color::Blend::ColorDodge,
+        crate::color::Blend::ColorBurn,
+        crate::color::Blend::HardLight,
+        crate::color::Blend::SoftLight,
+        crate::color::Blend::Difference,
+        crate::color::Blend::Exclusion,
+        crate::color::Blend::Hue,
+        crate::color::Blend::Saturation,
+        crate::color::Blend::Color,
+        crate::color::Blend::Luminosity,
+    ] {
+        doc.layers[1].blend = blend;
+        let out = super::composite(&doc, 1).unwrap();
+        let native = out.native.unwrap();
+        assert_eq!(native.icc_profile.as_slice(),profile);
+        assert_eq!(native.cmyk.unwrap().len(), 8 * 8 * 5);
+        assert!(native.samples.iter().all(|v| v.is_finite()));
+    }
+    assert_eq!(
+        doc.layers[0]
+            .kind
+            .pixels()
+            .unwrap()
+            .native
+            .as_ref()
+            .unwrap()
+            .cmyk
+            .as_ref()
+            .unwrap().as_slice(),
+        inks.as_slice()
+    );
+}
+
+#[test]
+fn cmyk_float_ffi_matches_independent_transicc_reference() {
+    let profile = include_bytes!("../formats/psd/fixtures/fogra39l-cc0.icc");
+    let samples = [
+        0., 0., 0., 0., 0.1, 0.2, 0.3, 0.4, 1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 1.,
+    ];
+    let expected = [
+        255., 255., 255., 163.3108, 148.8488, 132.5648, -590.2940, 160.5262, 227.7222, 230.1068,
+        12.1681, 128.1444, 43.0867, 42.7438, 41.8995,
+    ];
+    let transformed = cms::transform(&samples, cms::Model::Cmyk, profile, true, 1).unwrap();
+    for (a, b) in transformed.iter().zip(expected) {
+        assert!((a - b / 255.).abs() < 0.0002, "{a} != {b}/255");
+    }
+}
+
+#[test]
+fn interleaved_profile_conversion_preserves_alpha_and_matches_independent_transicc() {
+    let profile = include_bytes!("../formats/psd/fixtures/srgb-cc0.icc");
+    let source = [0.1234567, 0.5, 0.9, 0.333333];
+    let got = cms::transform_alpha(&source,cms::Model::Rgb,profile,true,1).unwrap();
+    let expected = [31.5843 / 255.,127.5015 / 255.,229.4919 / 255.];
+    for (&a,b) in got[..3].iter().zip(expected) {assert!((a-b).abs() < 0.0002);}
+    assert_eq!(got[3],source[3]);
+    let profile = include_bytes!("../formats/psd/fixtures/fogra39l-cc0.icc");
+    let rgba = [0.3,0.4,0.5,0.00001];
+    let ink = cms::transform_alpha(&rgba,cms::Model::Cmyk,profile,false,1).unwrap();
+    let components = cms::transform(&rgba[..3],cms::Model::Cmyk,profile,false,1).unwrap();
+    assert_eq!(&ink[..4],components.as_slice());assert_eq!(ink[4],rgba[3]);
+    let display = cms::transform_alpha(&ink,cms::Model::Cmyk,profile,true,1).unwrap();
+    let components = cms::transform(&ink[..4],cms::Model::Cmyk,profile,true,1).unwrap();
+    assert_eq!(&display[..3],components.as_slice());assert_eq!(display[3],rgba[3]);
+}
+
+#[test]
+fn cmyk_to_rgb_uses_requested_source_rendering_intent() {
+    let profile = include_bytes!("../formats/psd/fixtures/fogra39l-cc0.icc").to_vec();
+    let inks = vec![0.,0.,0.,0.,0.5, 0.1,0.2,0.3,0.4,0.333333, 1.,0.,0.,0.,0.00001];
+    let source = Pixels::from_cmyk(3,1,Depth::F32,inks.clone(),profile.clone(),1).unwrap();
+    let expected = Pixels::from_cmyk(3,1,Depth::F32,inks,profile,0).unwrap();
+    assert!(source.samples().unwrap().iter().zip(expected.samples().unwrap().iter()).any(|(a,b)| (a-b).abs() > 0.001));
+    let converted = source.in_document_color(&cms::DocumentColor {model:cms::Model::Rgb,depth:Depth::F32,icc_profile:Vec::new(),intent:0}).unwrap();
+    assert_eq!(converted.samples().unwrap().as_slice(),expected.samples().unwrap().as_slice());
+    assert_eq!(converted.native.as_ref().unwrap().intent,0);
+    for (a,b) in converted.samples().unwrap().chunks_exact(4).zip(source.samples().unwrap().chunks_exact(4)) {assert_eq!(a[3],b[3]);}
+}
+
+#[test]
+fn admitted_tiff_decode_accepts_uncompressed_strips_larger_than_64k() {
+    use ::tiff::encoder::{TiffEncoder,colortype};
+    let mut values=[1000u16,2000,3000].repeat(256*128);
+    values[3]=1001;
+    let mut bytes=std::io::Cursor::new(Vec::new());
+    {
+        let mut encoder=TiffEncoder::new(&mut bytes).unwrap();
+        let mut image=encoder.new_image::<colortype::RGB16>(256,128).unwrap();
+        image.rows_per_strip(128).unwrap();
+        image.write_data(&values).unwrap();
+    }
+    assert!(bytes.get_ref().len()>64*1024);
+    let pixels=super::tiff::decode(bytes.get_ref()).unwrap().unwrap();
+    assert_eq!((pixels.w,pixels.h),(256,128));
+    assert_eq!(pixels.native.as_ref().unwrap().depth,Depth::U16);
+    let samples=pixels.samples().unwrap();
+    assert_eq!(samples[0],1000. / 65535.);
+    assert_eq!(samples[4],1001. / 65535.);
+    assert_eq!(pixels.data[0],pixels.data[4]);
+}
+
+#[test]
+fn tiff_auxiliary_samples_are_refused_before_native_pixel_decode() {
+    use ::tiff::{encoder::{TiffEncoder,colortype},tags::ExtraSamples};
+    for alpha in [false,true] {
+        let mut bytes = std::io::Cursor::new(Vec::new());
+        {
+            let mut encoder = TiffEncoder::new(&mut bytes).unwrap();
+            let mut image = encoder.new_image::<colortype::RGB16>(2,1).unwrap();
+            if alpha {
+                image.extra_samples(&[ExtraSamples::UnassociatedAlpha,ExtraSamples::Unspecified]).unwrap();
+                image.write_data(&[1000,2000,3000,32768,17,4000,5000,6000,16384,29]).unwrap();
+            } else {
+                image.extra_samples(&[ExtraSamples::Unspecified]).unwrap();
+                image.write_data(&[1000,2000,3000,17,4000,5000,6000,29]).unwrap();
+            }
+        }
+        let error = super::tiff::decode(bytes.get_ref()).err().expect("Auxiliary samples must not be treated as ordinary RGB(A)");
+        assert!(error.contains("auxiliary samples"),"{error}");
+    }
+}
+
+#[test]
+fn unsupported_tagged_tiff_models_do_not_fall_back_to_unmanaged_pixels() {
+    use ::tiff::{encoder::{TiffEncoder,colortype},tags::Tag};
+    for tagged in [false,true] {
+        let mut bytes = std::io::Cursor::new(Vec::new());
+        {
+            let mut encoder = TiffEncoder::new(&mut bytes).unwrap();
+            let mut image = encoder.new_image::<colortype::Gray16>(1,1).unwrap();
+            if tagged {image.encoder().write_tag(Tag::IccProfile,include_bytes!("../formats/psd/fixtures/srgb-cc0.icc").as_slice()).unwrap();}
+            image.write_data(&[1001]).unwrap();
+        }
+        let result = super::tiff::decode(bytes.get_ref());
+        if tagged {assert!(result.err().expect("Unsupported tagged model must not drop ICC").contains("profile-aware native decoder"));}
+        else {assert!(result.unwrap().is_none());}
+    }
+}

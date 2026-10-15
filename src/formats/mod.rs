@@ -16,6 +16,7 @@ pub fn decode_image(bytes: &[u8]) -> Result<crate::document::Pixels, String> {
     };
     use image::{DynamicImage, ImageDecoder};
     let _input = resources::global().reserve_now(bytes.len() as u64, &storage::check)?;
+    if let Some(pixels) = crate::deep_color::tiff::decode(bytes)? {return Ok(pixels);}
     let _codec = resources::global().reserve_now(16 * 1024 * 1024, &storage::check)?;
     let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes))
         .with_guessed_format()
@@ -30,6 +31,7 @@ pub fn decode_image(bytes: &[u8]) -> Result<crate::document::Pixels, String> {
     let mut limits = image::Limits::default();
     limits.max_alloc = Some(decoder.total_bytes().saturating_add(16 * 1024 * 1024));
     decoder.set_limits(limits).map_err(|e| e.to_string())?;
+    let profile = decoder.icc_profile().map_err(|e| e.to_string())?.unwrap_or_default();
     let decoded =
         DynamicImage::from_decoder(decoder).map_err(|e| format!("Could not decode image: {e}"))?;
     let native = matches!(
@@ -41,7 +43,7 @@ pub fn decode_image(bytes: &[u8]) -> Result<crate::document::Pixels, String> {
             | image::ColorType::Rgb32F
             | image::ColorType::Rgba32F
     );
-    if native {
+    let mut pixels = if native {
         let depth = if matches!(
             decoded.color(),
             image::ColorType::Rgb32F | image::ColorType::Rgba32F
@@ -116,7 +118,9 @@ pub fn decode_image(bytes: &[u8]) -> Result<crate::document::Pixels, String> {
             _ => return Err("Unsupported decoded image samples".into()),
         }
         Pixels::from_byte_allocation(w, h, std::sync::Arc::new(rgba))
-    }
+    }?;
+    if !profile.is_empty() {pixels.assign_rgb_profile(profile,1)?;}
+    Ok(pixels)
 }
 
 pub fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {

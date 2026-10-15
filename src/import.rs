@@ -136,6 +136,7 @@ pub(crate) fn open_with_progress(
             doc.width = pixels.w as f32;
             doc.height = pixels.h as f32;
             doc.transparent = true;
+            if let Some(n)=&pixels.native {doc.color=crate::deep_color::cms::DocumentColor {model:if n.cmyk.is_some(){crate::deep_color::cms::Model::Cmyk}else{crate::deep_color::cms::Model::Rgb},depth:n.depth,icc_profile:n.icc_profile.to_vec(),intent:n.intent};}
             doc.artboards = crate::document::Artboard::tiled(1, doc.width, doc.height);
             doc.layers = vec![crate::document::Layer::placed_raster(
                 &name,
