@@ -1098,24 +1098,17 @@ fn paint(p: &usvg::Paint, alpha: f32, t: Transform, b: crate::geom::Bounds) -> O
                     from,
                     to,
                     stops,
+                    radial_axis: None,
+                    focal: [0., 0.],
+                    inner_radius: 0.,
                 }))
             }
         }
-        usvg::Paint::RadialGradient(g)
-            if g.spread_method() == usvg::SpreadMethod::Pad
-                && g.fr().get() == 0.
-                && (g.fx() - g.cx()).abs() < 0.0001
-                && (g.fy() - g.cy()).abs() < 0.0001 =>
-        {
+        usvg::Paint::RadialGradient(g) if g.spread_method() == usvg::SpreadMethod::Pad => {
             let xf = t.pre_concat(g.transform());
-            let (sx, sy) = xf.get_scale();
-            if (sx - sy).abs() > 0.0001 * sx.max(sy).max(1.)
-                || (xf.sx * xf.kx + xf.ky * xf.sy).abs() > 0.0001 * (sx * sy).max(1.)
-            {
-                return None;
-            }
+            let r = g.r().get();
             let mut center = tiny_skia::Point::from_xy(g.cx(), g.cy());
-            let mut radius = tiny_skia::Point::from_xy(g.cx() + g.r().get(), g.cy());
+            let mut radius = tiny_skia::Point::from_xy(g.cx() + r, g.cy());
             xf.map_point(&mut center);
             xf.map_point(&mut radius);
             let point = |p: tiny_skia::Point| {
@@ -1126,6 +1119,12 @@ fn paint(p: &usvg::Paint, alpha: f32, t: Transform, b: crate::geom::Bounds) -> O
             };
             Some(Fill::Gradient(crate::gradient::Gradient {
                 kind: crate::gradient::GradientKind::Radial,
+                radial_axis: Some([
+                    xf.kx * r / b.width().max(0.001),
+                    xf.sy * r / b.height().max(0.001),
+                ]),
+                focal: [(g.fx() - g.cx()) / r, (g.fy() - g.cy()) / r],
+                inner_radius: g.fr().get() / r,
                 from: point(center),
                 to: point(radius),
                 stops: g
@@ -1253,6 +1252,75 @@ mod tests {
             assert!(maximum <= 64 && mean < 0.05, "max={maximum}, mean={mean}");
             doc.validate_hierarchy().unwrap();
         }
+    }
+
+    #[test]
+    fn svg_affine_radial_strokes_preserve_zero_width_or_height_paint_bounds() {
+        for path in ["M10 40H150", "M80 10V110"] {
+            let source = format!(
+                r##"<svg xmlns="http://www.w3.org/2000/svg" width="160" height="120"><defs><radialGradient id="r" gradientUnits="userSpaceOnUse" cx="70" cy="60" r="40" fx="62" fy="55" fr="4" gradientTransform="skewX(15)"><stop stop-color="#28a"/><stop offset="1" stop-color="#f64"/></radialGradient></defs><path d="{path}" fill="none" stroke="url(#r)" stroke-width="12" stroke-linecap="round"/></svg>"##
+            );
+            let (doc, notes, maximum, mean) = compare_render(&source);
+            assert!(notes.is_empty(), "{notes:?}");
+            assert!(doc.layers.iter().all(|l| l.kind.pixels().is_none()));
+            assert!(
+                maximum <= 2 && mean < 0.02,
+                "{path}: max={maximum} mean={mean}"
+            );
+            let restored = crate::project::decode(&crate::project::encode(&doc).unwrap()).unwrap();
+            let exported = crate::svg::export(&restored).unwrap();
+            assert!(!exported.contains("<image"));
+            let (_, notes, maximum, mean) = compare_render(&exported);
+            assert!(notes.is_empty(), "{notes:?}");
+            assert!(
+                maximum <= 2 && mean < 0.02,
+                "export {path}: max={maximum} mean={mean}"
+            );
+        }
+    }
+
+    #[test]
+    fn svg_affine_focal_radial_survives_edit_save_and_vector_export() {
+        for fr in [0., 7.] {
+            let source = format!(
+                r##"<svg xmlns="http://www.w3.org/2000/svg" width="160" height="120"><defs><radialGradient id="p" gradientUnits="userSpaceOnUse" cx="55" cy="50" r="43" fx="47" fy="43" fr="{fr}" gradientTransform="matrix(1 .15 .4 .65 -8 6)"><stop stop-color="#128"/><stop offset=".4" stop-color="#4cc" stop-opacity=".6"/><stop offset="1" stop-color="white"/></radialGradient></defs><path d="M8 8H152V112H8Z" fill="url(#p)"/></svg>"##
+            );
+            let (mut doc, notes, maximum, mean) = compare_render(&source);
+            assert!(notes.is_empty(), "{notes:?}");
+            assert!(doc.layers.iter().all(|l| l.kind.pixels().is_none()));
+            assert!(maximum <= 2 && mean < 0.1, "max={maximum}, mean={mean}");
+            let original = crate::compositor::export_png(&doc, 1).unwrap();
+            let reopened: Document =
+                serde_json::from_slice(&serde_json::to_vec(&doc).unwrap()).unwrap();
+            assert_eq!(
+                original,
+                crate::compositor::export_png(&reopened, 1).unwrap()
+            );
+            let exported = crate::svg::export(&reopened).unwrap();
+            assert!(!exported.contains("<image"));
+            let (_, notes, maximum, mean) = compare_render(&exported);
+            assert!(notes.is_empty(), "{notes:?}");
+            assert!(maximum <= 2 && mean < 0.1, "max={maximum}, mean={mean}");
+            let shape = doc
+                .layers
+                .iter_mut()
+                .filter_map(|l| l.kind.shapes_mut())
+                .flatten()
+                .next()
+                .unwrap();
+            let Fill::Gradient(g) = &mut shape.style.fill else {
+                panic!("native radial")
+            };
+            g.focal[0] += 0.25;
+            g.inner_radius = 0.1;
+            g.set_angle(35., shape.geom.bbox());
+            assert_ne!(original, crate::compositor::export_png(&doc, 1).unwrap());
+        }
+        let legacy = r#"{"kind":"Radial","from":[0.5,0.5],"to":[1.0,0.5],"stops":[]}"#;
+        let g: crate::gradient::Gradient = serde_json::from_str(legacy).unwrap();
+        assert!(g.radial_axis.is_none());
+        assert_eq!(g.focal, [0., 0.]);
+        assert_eq!(g.inner_radius, 0.);
     }
 
     #[test]
