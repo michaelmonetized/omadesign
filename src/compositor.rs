@@ -10,6 +10,7 @@ mod effects_cache;
 mod mask_cache;
 mod frames;
 mod groups;
+mod svg_effects;
 pub(crate) mod interaction;
 #[cfg(test)]
 mod performance_tests;
@@ -593,7 +594,7 @@ fn layer_region(
 
 /// A mask bounds all output unless a filter expands or replaces the masked pixels.
 fn masked_outside_view(layer: &Layer, view: Transform, width: u32, height: u32) -> bool {
-    if layer.filters.active() {
+    if layer.filters.active() || layer.svg_filter.is_some() {
         return false;
     }
     let Some(mask) = &layer.mask else {

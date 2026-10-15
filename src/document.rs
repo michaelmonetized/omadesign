@@ -786,6 +786,8 @@ impl LayerKind {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Layer {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub svg_filter: Option<crate::svg_source::SvgFilterGraph>,
     pub id: u64,
     pub name: String,
     pub visible: bool,
@@ -836,6 +838,7 @@ impl Layer {
             fill_opacity: 1.0,
             blend_interior: false,
             blend: Blend::Normal,
+            svg_filter: None,
             parent: None,
             is_group: false,
             pass_through: false,
@@ -859,6 +862,7 @@ impl Layer {
             fill_opacity: 1.0,
             blend_interior: false,
             blend: Blend::Normal,
+            svg_filter: None,
             parent: None,
             is_group: false,
             pass_through: false,
@@ -888,6 +892,7 @@ impl Layer {
             fill_opacity: 1.0,
             blend_interior: false,
             blend: Blend::Normal,
+            svg_filter: None,
             parent: None,
             is_group: false,
             pass_through: false,
@@ -1696,6 +1701,7 @@ impl RasterState {
 
 #[derive(Clone, Debug)]
 pub enum Cmd {
+    SetSvgFilter { index: usize, before: Option<crate::svg_source::SvgFilterGraph>, after: Option<crate::svg_source::SvgFilterGraph> },
     SetCanvas { before: CanvasSettings, after: CanvasSettings },
     SetFillOpacity {
         layer: usize,
@@ -2189,6 +2195,7 @@ pub(crate) fn invert_cmd(cmd: Cmd) -> Cmd {
             before: after,
             after: before,
         },
+        Cmd::SetSvgFilter { index, before, after } => Cmd::SetSvgFilter { index, before: after, after: before },
         Cmd::SetLayerParent {
             index,
             before,
@@ -2521,6 +2528,7 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
                 shape.blend = *after;
             }
         }
+        Cmd::SetSvgFilter { index, after, .. } => { if let Some(layer) = doc.layers.get_mut(*index) { layer.svg_filter = after.clone(); } },
         Cmd::SetLayerParent { index, after, .. } => {
             if let Some(layer) = doc.layers.get_mut(*index) {
                 layer.parent = *after;

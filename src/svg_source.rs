@@ -15,24 +15,62 @@ pub struct SvgPattern {
 /// Rebind definition IDs for an independent exported object.
 /// Args: normalized SVG definitions and a unique prefix. Returns collision-free XML.
 pub fn namespace(source: &str, prefix: &str) -> String {
-    let mut output = source.to_string();
-    let wrapper = format!("<svg>{source}</svg>");
+    let header = "<svg xmlns:xlink=\"http://www.w3.org/1999/xlink\">";
+    let wrapper = format!("{header}{source}</svg>");
     let Ok(xml) = roxmltree::Document::parse(&wrapper) else {
-        return output;
+        return source.to_string();
     };
-    let ids: Vec<_> = xml
+    let ids: std::collections::HashSet<_> = xml
         .descendants()
         .filter_map(|n| n.attribute("id"))
-        .map(str::to_string)
         .collect();
-    for id in ids {
-        output = output
-            .replace(&format!("id=\"{id}\""), &format!("id=\"{prefix}{id}\""))
-            .replace(&format!("url(#{id})"), &format!("url(#{prefix}{id})"))
-            .replace(
-                &format!("href=\"#{id}\""),
-                &format!("href=\"#{prefix}{id}\""),
-            );
+    let mut edits = Vec::new();
+    for node in xml.descendants().filter(|n| n.is_element()) {
+        for attr in node.attributes() {
+            let value = attr.value();
+            let replacement = if attr.name() == "id" {
+                format!("{prefix}{value}")
+            } else if attr.name() == "href"
+                && value.strip_prefix('#').is_some_and(|id| ids.contains(id))
+            {
+                format!("#{prefix}{}", &value[1..])
+            } else {
+                let lower = value.to_ascii_lowercase();
+                let mut output = String::new();
+                let mut cursor = 0;
+                while let Some(start) = lower[cursor..].find("url(").map(|i| cursor + i) {
+                    let Some(end) = lower[start + 4..].find(')').map(|i| start + 4 + i) else {
+                        break;
+                    };
+                    output.push_str(&value[cursor..start]);
+                    let argument = value[start + 4..end].trim().trim_matches(['\'', '"']);
+                    if let Some(id) = argument.strip_prefix('#').filter(|id| ids.contains(id)) {
+                        output.push_str(&format!("url(#{prefix}{id})"));
+                    } else {
+                        output.push_str(&value[start..=end]);
+                    }
+                    cursor = end + 1;
+                }
+                output.push_str(&value[cursor..]);
+                output
+            };
+            if replacement != value && attr.range_value().start >= header.len() {
+                let escaped = replacement
+                    .replace('&', "&amp;")
+                    .replace('<', "&lt;")
+                    .replace('"', "&quot;")
+                    .replace('\'', "&apos;");
+                edits.push((
+                    attr.range_value().start - header.len()..attr.range_value().end - header.len(),
+                    escaped,
+                ));
+            }
+        }
+    }
+    edits.sort_by_key(|(range, _)| std::cmp::Reverse(range.start));
+    let mut output = source.to_string();
+    for (range, text) in edits {
+        output.replace_range(range, &text);
     }
     output
 }
@@ -147,6 +185,111 @@ pub fn path_data(path: &tiny_skia::Path) -> String {
     out
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SvgFilterGraph {
+    pub definitions: Arc<str>,
+    pub original_definitions: Arc<str>,
+    pub filters: Vec<String>,
+    pub transform: [f32; 6],
+    #[serde(default)]
+    pub reductions: Vec<String>,
+}
+
+impl SvgFilterGraph {
+    /// Apply the retained filter graph in its original coordinate system.
+    /// Args: export definitions, unique prefix and current editable vector content.
+    /// Returns a vector group; invalid singular placement leaves the content intact.
+    pub fn wrap(&self, definitions: &mut String, _prefix: &str, content: String) -> String {
+        let placement = transform(self.transform);
+        let Some(inverse) = placement.invert() else {
+            return content;
+        };
+        let prefix = append_source(definitions, &self.definitions);
+        let filters = self
+            .filters
+            .iter()
+            .map(|id| format!("url(#{prefix}{id})"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        format!(
+            "<g transform=\"{}\" filter=\"{filters}\"><g transform=\"{}\">{content}</g></g>",
+            matrix(placement),
+            matrix(inverse)
+        )
+    }
+}
+
+/// Identify SVG operations the current renderer cannot execute.
+/// Args: filter XML. Returns one explicit reduction per unsupported primitive or external input.
+pub fn reductions(source: &str) -> Vec<String> {
+    let Ok(xml) = roxmltree::Document::parse_with_options(
+        source,
+        roxmltree::ParsingOptions {
+            allow_dtd: true,
+            nodes_limit: 400_000,
+            entity_resolver: None,
+        },
+    ) else {
+        return vec!["Invalid SVG effect source".into()];
+    };
+    let mut notes = Vec::new();
+    for node in xml.descendants().filter(|n| n.is_element()) {
+        let tag = node.tag_name().name();
+        if tag.starts_with("fe")
+            && !matches!(
+                tag,
+                "feBlend"
+                    | "feColorMatrix"
+                    | "feComponentTransfer"
+                    | "feComposite"
+                    | "feConvolveMatrix"
+                    | "feDiffuseLighting"
+                    | "feDisplacementMap"
+                    | "feDistantLight"
+                    | "feDropShadow"
+                    | "feFlood"
+                    | "feFuncR"
+                    | "feFuncG"
+                    | "feFuncB"
+                    | "feFuncA"
+                    | "feGaussianBlur"
+                    | "feImage"
+                    | "feMerge"
+                    | "feMergeNode"
+                    | "feMorphology"
+                    | "feOffset"
+                    | "fePointLight"
+                    | "feSpecularLighting"
+                    | "feSpotLight"
+                    | "feTile"
+                    | "feTurbulence"
+            )
+        {
+            notes.push(format!(
+                "SVG filter operation {tag} is not rendered; original source retained."
+            ));
+        }
+        if tag == "feImage"
+            && node.attributes().any(|a| {
+                a.name() == "href" && !a.value().starts_with('#') && !a.value().starts_with("data:")
+            })
+        {
+            notes.push("SVG filter linked feImage is not loaded; embed the image first.".into());
+        }
+        for attribute in ["in", "in2"] {
+            if let Some(
+                input @ ("BackgroundImage" | "BackgroundAlpha" | "FillPaint" | "StrokePaint"),
+            ) = node.attribute(attribute)
+            {
+                notes.push(format!(
+                    "SVG filter input {input} is reduced by the renderer; original source retained."
+                ));
+            }
+        }
+    }
+    notes
+}
+
 /// Parse only self-contained vector source.
 /// Returns SVG options that resolve embedded data while refusing file or network references.
 pub fn options() -> usvg::Options<'static> {
@@ -165,18 +308,19 @@ pub fn requires_advanced_paint(doc: &crate::document::Document) -> bool {
             || g.spread != crate::gradient::Spread::Pad
     };
     doc.layers.iter().any(|layer| {
-        layer.kind.shapes().is_some_and(|shapes| {
-            shapes.iter().any(|shape| {
-                matches!(&shape.style.fill, crate::document::Fill::Pattern(_))
-                    || shape.style.fill.gradient().as_ref().is_some_and(gradient)
-                    || shape
-                        .style
-                        .stroke
-                        .as_ref()
-                        .and_then(|s| s.gradient.as_ref())
-                        .is_some_and(gradient)
+        layer.svg_filter.is_some()
+            || layer.kind.shapes().is_some_and(|shapes| {
+                shapes.iter().any(|shape| {
+                    matches!(&shape.style.fill, crate::document::Fill::Pattern(_))
+                        || shape.style.fill.gradient().as_ref().is_some_and(gradient)
+                        || shape
+                            .style
+                            .stroke
+                            .as_ref()
+                            .and_then(|s| s.gradient.as_ref())
+                            .is_some_and(gradient)
+                })
             })
-        })
     })
 }
 
@@ -322,6 +466,10 @@ pub fn unpack_sources(
 /// Args: mutable document and an operation on each shared definition reference.
 fn visit_sources(doc: &mut crate::document::Document, visit: &mut impl FnMut(&mut Arc<str>)) {
     for layer in &mut doc.layers {
+        if let Some(graph) = &mut layer.svg_filter {
+            visit(&mut graph.definitions);
+            visit(&mut graph.original_definitions);
+        }
         for shape in layer.kind.shapes_mut().into_iter().flatten() {
             if let crate::document::Fill::Pattern(pattern) = &mut shape.style.fill {
                 visit(&mut pattern.definitions);
@@ -486,5 +634,27 @@ mod independent_tests {
             mean < 1.5,
             "independent librsvg SVG paint mean channel error={mean}"
         );
+    }
+}
+
+#[cfg(test)]
+mod reference_tests {
+    use super::*;
+    #[test]
+    fn svg_resource_namespaces_preserve_quoted_urls_and_linked_patterns() {
+        let defs = r##"<linearGradient id="g"><stop stop-color="#28a"/><stop offset="1" stop-color="#fa6"/></linearGradient><pattern id="p" patternUnits="userSpaceOnUse" width="12" height="12"><rect width="8" height="12" style="fill: url( '#g' )"/></pattern><pattern id="alias" xlink:href="#p"/>"##;
+        let draw = |defs: &str, id: &str| {
+            let source = format!(
+                r##"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="48" height="36"><defs>{defs}</defs><path d="M0 0H48V36H0Z" fill="url(#{id})"/></svg>"##
+            );
+            let tree = usvg::Tree::from_str(&source, &options()).unwrap();
+            let mut pixels = tiny_skia::Pixmap::new(48, 36).unwrap();
+            resvg::render(&tree, Transform::identity(), &mut pixels.as_mut());
+            pixels
+        };
+        let expected = draw(defs, "alias");
+        assert!(expected.pixels().iter().any(|p| p.alpha() > 0));
+        let actual = draw(&namespace(defs, "copy-"), "copy-alias");
+        assert_eq!(expected.data(), actual.data());
     }
 }

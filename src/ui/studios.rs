@@ -1971,6 +1971,7 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
 }
 
 fn fx_studio(ui: &mut Ui, studio: &mut Studio) {
+    super::svg_effect::show(ui, studio);
     let group_active = studio
         .active_layer
         .and_then(|i| studio.doc.layers.get(i))

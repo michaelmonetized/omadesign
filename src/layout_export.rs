@@ -767,7 +767,7 @@ impl<'a> Html<'a> {
 }
 
 pub fn export_html(doc: &Document, layer: usize, frame_id: u64) -> Result<String, String> {
-    if doc.layers.iter().any(|l| l.kind.shapes().is_some_and(|s| s.iter().any(|s| matches!(s.style.fill, Fill::Pattern(_))))) { return Err("HTML export cannot preserve SVG patterns or source filter graphs. Export SVG to retain them.".into()); }
+    if doc.layers.iter().any(|l| l.svg_filter.is_some() || l.kind.shapes().is_some_and(|s| s.iter().any(|s| matches!(s.style.fill, Fill::Pattern(_))))) { return Err("HTML export cannot preserve SVG patterns or source filter graphs. Export SVG to retain them.".into()); }
     let frame = doc
         .find_shape(layer, frame_id)
         .filter(|s| s.layout.frame)

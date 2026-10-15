@@ -41,6 +41,7 @@ mod brushes;
 mod selection;
 mod studios;
 mod svg_paint;
+mod svg_effect;
 mod text_geometry;
 mod templates;
 pub mod theme;

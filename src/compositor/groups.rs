@@ -14,7 +14,7 @@ pub(super) fn draw(
     if doc
         .layers
         .iter()
-        .all(|layer| !layer.is_group && layer.parent.is_none())
+        .all(|layer| !layer.is_group && layer.parent.is_none() && layer.svg_filter.is_none())
     {
         for (index, layer) in doc.layers.iter().enumerate() {
             if sources.contains(&MaskSource {
@@ -102,7 +102,7 @@ impl Context<'_, '_> {
         {
             return;
         }
-        if !layer.is_group {
+        if !layer.is_group && layer.svg_filter.is_none() {
             if is_paper_raster(layer) {
                 return;
             }
@@ -129,12 +129,15 @@ impl Context<'_, '_> {
             && layer.mask.is_none()
             && layer.artwork_masks.is_empty()
             && !layer.filters.active()
+            && layer.svg_filter.is_none()
         {
             self.draw_children(pm, Some(layer.id), depth + 1);
             return;
         }
-        let passthrough =
-            layer.pass_through && layer.artwork_masks.is_empty() && !layer.filters.active();
+        let passthrough = layer.pass_through
+            && layer.artwork_masks.is_empty()
+            && !layer.filters.active()
+            && layer.svg_filter.is_none();
         let Some(mut temp) = (if passthrough {
             Some(pm.clone())
         } else {
@@ -142,7 +145,25 @@ impl Context<'_, '_> {
         }) else {
             return;
         };
-        self.draw_children(&mut temp, Some(layer.id), depth + 1);
+        if layer.svg_filter.is_some() {
+            match svg_effects::render(
+                self.doc,
+                index,
+                self.transform,
+                pm.width(),
+                pm.height(),
+                self.motion,
+                self.overrides,
+            ) {
+                Ok(surface) => temp = surface,
+                Err(error) => {
+                    eprintln!("SVG effect graph: {error}");
+                    self.draw_children(&mut temp, Some(layer.id), depth + 1);
+                }
+            }
+        } else {
+            self.draw_children(&mut temp, Some(layer.id), depth + 1);
+        }
         let mask = layer.mask.as_ref().and_then(|pixels| {
             let mut placed = Pixmap::new(pm.width(), pm.height())?;
             pixels.with_pm(|mask| {

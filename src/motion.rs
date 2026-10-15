@@ -750,7 +750,7 @@ pub fn hits_in_rect(
 /// Lottie shape export. Unsupported raster masks/effects fail explicitly;
 /// animated SVG remains the complete document export for those compositions.
 pub fn export_lottie(doc: &Document) -> Result<String, String> {
-    if doc.layers.iter().any(|l| l.kind.shapes().is_some_and(|shapes| shapes.iter().any(|s| matches!(s.style.fill, Fill::Pattern(_))))) { return Err("Lottie cannot preserve SVG patterns or source filter graphs. Export SVG to retain them.".into()); }
+    if doc.layers.iter().any(|l| l.svg_filter.is_some() || l.kind.shapes().is_some_and(|shapes| shapes.iter().any(|s| matches!(s.style.fill, Fill::Pattern(_))))) { return Err("Lottie cannot preserve SVG patterns or source filter graphs. Export SVG to retain them.".into()); }
     if !doc.mask_sources().is_empty() {return Err("Lottie cannot preserve live artwork masks here. Export animated SVG to keep them.".into());}
     let fps = doc.motion.fps.clamp(1.0, 120.0);
     let op = (doc.motion.duration * fps).max(1.0);

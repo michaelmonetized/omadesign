@@ -129,6 +129,7 @@ fn needs_pixels(layer: &Layer) -> bool {
             || layer.opacity < 1.
             || layer.mask.is_some()
             || layer.filters.active()
+            || layer.svg_filter.is_some()
     } else {
         layer.fill_opacity < 1.
             || layer.mask.is_some()
