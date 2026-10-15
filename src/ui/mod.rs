@@ -134,7 +134,9 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     brushes::window(&ctx, studio);
     studio.poll_pixel_edit(&ctx);
     agent::tick(&ctx, studio);
-    if !studio.file_dialog_pending()
+    let browser_closed = browsers::before_shortcuts(&ctx, studio);
+    if !browser_closed
+        && !studio.file_dialog_pending()
         && !studio.show_preferences
         && !studio.updates.freezing
         && !pixel_selection::is_open(&ctx)
@@ -151,7 +153,8 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     {
         guides::handle_shortcuts(&ctx, studio);
     }
-    if !studio.file_dialog_pending()
+    if !browser_closed
+        && !studio.file_dialog_pending()
         && !studio.show_preferences
         && !studio.updates.freezing
         && !layout_preview::is_open(&ctx)
