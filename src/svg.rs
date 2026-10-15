@@ -495,7 +495,7 @@ fn xml_escape(s: &str) -> String {
 }
 
 pub fn export(doc: &Document) -> Result<String, String> {
-    if !doc.motion.compositions.is_empty() {return Err("CompositionUnsupported: SVG cannot preserve nested composition timing; use Lottie, motion project or raster animation".into());}
+    if !doc.motion.compositions.is_empty() || doc.motion.scene3d.is_some() {return Err("CompositionUnsupported: SVG cannot preserve nested composition timing; use Lottie, motion project or raster animation".into());}
     export_inner(doc, false, false)
 }
 

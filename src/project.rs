@@ -19,7 +19,7 @@ pub fn encode(doc: &Document) -> Result<String, String> {
     serde_json::to_string(&File {
         // Older readers must not silently strip a mask or change stroke placement.
         // Keep plain documents compatible with v5; v1-v13 remain readable here.
-        version: if !doc.motion.expressions.is_empty() || !doc.motion.compositions.is_empty() || doc.motion.tracks.iter().any(|t|t.keys.iter().any(|k| matches!(k.ease, crate::motion::Ease::Hold | crate::motion::Ease::CubicBezier {..}))) {
+        version: if doc.motion.scene3d.is_some() || !doc.motion.expressions.is_empty() || !doc.motion.compositions.is_empty() || doc.motion.tracks.iter().any(|t|t.keys.iter().any(|k| matches!(k.ease, crate::motion::Ease::Hold | crate::motion::Ease::CubicBezier {..}))) {
             14
         } else if !doc.mask_sources().is_empty() {
             13
@@ -105,6 +105,7 @@ pub(crate) fn normalize_decoded_document(mut doc: Document, version: u32) -> Res
     crate::text_geometry::reflow(&mut doc);
     crate::motion::compositions::validate(&doc)?;
     for comp in &doc.motion.compositions {crate::document::bump_id(comp.id);}
+    if let Some(scene)=&doc.motion.scene3d {for object in &scene.objects {crate::document::bump_id(object.id);}}
     doc.ensure_ids()?;
     doc.validate_hierarchy()?;
     Ok(doc)

@@ -234,6 +234,8 @@ pub struct Motion {
     pub expressions: Vec<expressions::Expression>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub compositions: Vec<compositions::Composition>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scene3d: Option<crate::scene3d::Scene>,
 }
 
 impl Default for Motion {
@@ -245,6 +247,7 @@ impl Default for Motion {
             tracks: vec![],
             expressions: vec![],
             compositions: vec![],
+            scene3d: None,
         }
     }
 }
@@ -941,6 +944,9 @@ pub fn hits_in_rect(
 /// Lottie shape export. Unsupported raster masks/effects fail explicitly;
 /// animated SVG remains the complete document export for those compositions.
 pub fn export_lottie(doc: &Document) -> Result<String, String> {
+    if doc.motion.scene3d.is_some() {
+        return Err("SceneUnsupported: Lottie cannot preserve model scenes; use motion project or raster animation".into());
+    }
     compositions::validate(doc)?;
     for id in doc.motion.shapes() {
         for time in doc.motion.sample_times(id) {

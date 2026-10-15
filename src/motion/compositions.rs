@@ -105,6 +105,9 @@ pub fn validate(doc: &Document) -> Result<(), String> {
             return Err("CompositionSize: dimensions must be finite and positive".into());
         }
         let motion = &doc.motion;
+        if let Some(scene) = &motion.scene3d {
+            scene.validate()?;
+        }
         if !motion.duration.is_finite()
             || !(0.01..=3600.).contains(&motion.duration)
             || !motion.fps.is_finite()
