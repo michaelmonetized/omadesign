@@ -764,7 +764,7 @@ mod tests {
         data["session"] = client
             .call(
                 "live:create",
-                json!({"projectId":data["project"],"seed":seed,"protocol":collaboration::PROTOCOL}),
+                json!({"projectId":data["project"],"seed":seed,"protocol":collaboration::supported_protocol()}),
             )
             .unwrap();
         let legacy_actor = "c".repeat(64);

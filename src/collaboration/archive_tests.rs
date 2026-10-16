@@ -141,8 +141,9 @@ fn retained_archives_cold_reopen_undo_remote_restore_and_recovery_pruning() {
         let mut doc = replica.document(&neutral()).unwrap();
         assert!(doc.layers.is_empty() && doc.sources.is_empty());
         assert_eq!(doc.color, Default::default());
-        assert_eq!(replica.required_protocol(), 2);
+        assert_eq!(replica.required_protocol(), 3);
         assert!(replica.document_for_protocol(&doc, 1).is_err());
+        assert!(replica.document_for_protocol(&doc, 2).is_err());
         let pixels = pixel_cells(&replica);
         doc.collaboration = Some(replica);
         let before = serde_json::to_value(&doc).unwrap();
@@ -272,7 +273,7 @@ fn cold_archive_child() {
         assert!(crate::text::project_font_loaded(font.as_str().unwrap()));
     }
     let mut replica = doc.collaboration.clone().unwrap();
-    assert_eq!(replica.required_protocol(), 2);
+    assert_eq!(replica.required_protocol(), 3);
     let mut remote = Replica::new(
         replica.session.clone(),
         "b".repeat(64),

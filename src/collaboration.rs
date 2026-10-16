@@ -11,10 +11,11 @@ mod archive_tests;
 #[cfg(test)]
 pub(crate) mod native_tests;
 mod pixels;
+pub mod protocol;
 pub(crate) mod resources;
 pub mod transport;
 
-pub const PROTOCOL: u32 = 2;
+pub use protocol::local_maximum as supported_protocol;
 
 type Snapshot = BTreeMap<String, Cell>;
 const PIXEL_BUDGET: u64 = 512 * 1024 * 1024;
@@ -521,6 +522,9 @@ impl Replica {
         let raw = self.cells();
         let before = snapshot(&self.document(doc)?)?;
         let after = snapshot(doc)?;
+        for (path, cell) in &after {
+            protocol::require_minimum(protocol::cell(path, cell)?, supported_protocol())?;
+        }
         if before == after {
             return Ok(false);
         }
@@ -575,6 +579,17 @@ impl Replica {
                 added.push(change);
             }
         }
+        let mut required = self.protocol_requirement()?;
+        for change in &added {
+            if let Edit::Write { writes } = &change.edit {
+                for write in writes {
+                    if let Some(cell) = &write.value {
+                        required = required.max(protocol::cell(&write.path, cell)?);
+                    }
+                }
+            }
+        }
+        protocol::require_minimum(required, supported_protocol())?;
         self.changes.extend(added);
         Ok(())
     }
@@ -679,19 +694,17 @@ impl Replica {
     /// Materialize a converged native document, retaining this device's cloud link.
     /// Args: local document for metadata. Returns editable data or a validation error.
     pub fn document(&self, local: &Document) -> Result<Document, String> {
-        self.document_for_protocol(local, PROTOCOL)
+        self.document_for_protocol(local, supported_protocol())
     }
 
-    /// Refuse unsupported native content before materializing any document buffers.
+    /// Refuse unsupported retained content before materializing any document buffers.
     /// Args: local metadata and peer capability. Returns a complete document or an atomic refusal.
     pub fn document_for_protocol(
         &self,
         local: &Document,
         protocol: u32,
     ) -> Result<Document, String> {
-        if self.required_protocol() > protocol {
-            return Err("This live document requires native-preservation protocol 2".into());
-        }
+        protocol::require(self, protocol)?;
         let (mut doc, _) = self.rendered()?;
         doc.cloud = local.cloud.clone();
         doc.workspace = local.workspace;
@@ -699,16 +712,17 @@ impl Replica {
     }
 
     /// Inspect the entire retained log before a peer can round-trip authoritative content.
-    /// Args: none. Returns the minimum lossless live protocol, including withdrawn native edits.
+    /// Args: none. Returns the minimum lossless live protocol, including withdrawn native, common and Motion edits.
     pub fn required_protocol(&self) -> u32 {
-        if self
-            .retained_cells()
-            .any(|(path, cell)| native_cell(path, cell))
-        {
-            2
-        } else {
-            1
-        }
+        self.protocol_requirement().unwrap_or(u32::MAX)
+    }
+
+    /// Classify every retained write, including withdrawn and removed Motion state.
+    /// Args: none. Returns the minimum protocol or an unknown-feature refusal.
+    pub fn protocol_requirement(&self) -> Result<u32, String> {
+        self.retained_cells().try_fold(1, |required, (path, cell)| {
+            Ok(required.max(protocol::cell(path, cell)?))
+        })
     }
 
     /// Visit every retained payload, including withdrawn edits and deleted objects.

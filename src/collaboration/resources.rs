@@ -32,9 +32,9 @@ fn source_slot(path: &str) -> bool {
 
 /// Walk serialized native subtrees while leaving original-source bytes opaque.
 /// Args: logical root, value and visitor. Calls the visitor for each native property.
-fn values(path: &str, value: &Value, visit: &mut impl FnMut(&str, &Value)) {
+pub(super) fn values(path: &str, value: &Value, visit: &mut impl FnMut(&str, &Value)) {
     visit(path, value);
-    if path == "/sources" {
+    if super::protocol::relative_path(path) == "/sources" {
         return;
     }
     match value {

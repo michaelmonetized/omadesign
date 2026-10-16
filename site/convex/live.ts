@@ -1,9 +1,33 @@
-import { action, internalMutation, mutation } from "./_generated/server";
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  mutation,
+} from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { access, deviceArg, fail } from "./cloudAuth";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import * as policy from "../shared/liveProtocol";
+import type { Doc, Id } from "./_generated/dataModel";
+
+const { POLICY_VERSION } = policy;
+function checked<T>(operation: () => T): T {
+  try {
+    return operation();
+  } catch (error) {
+    if (error instanceof policy.LiveProtocolError) fail(error.message);
+    throw error;
+  }
+}
+const requireProtocol: typeof policy.requireProtocol = (...args) =>
+  checked(() => policy.requireProtocol(...args));
+const seedProtocol: typeof policy.seedProtocol = (...args) =>
+  checked(() => policy.seedProtocol(...args));
+const changesProtocol: typeof policy.changesProtocol = (...args) =>
+  checked(() => policy.changesProtocol(...args));
+const preflightCreate: typeof policy.preflightCreate = (...args) =>
+  checked(() => policy.preflightCreate(...args));
 
 const presence = v.object({
   actor: v.string(),
@@ -31,11 +55,20 @@ const change = v.object({
                 w: v.number(),
                 h: v.number(),
                 data: v.string(),
-                native: v.optional(v.object({
-                  depth: v.union(v.literal("U8"), v.literal("U16"), v.literal("F32")),
-                  samples: v.string(), cmyk: v.optional(v.string()),
-                  icc_profile: v.string(), icc_bytes: v.number(), intent: v.number(),
-                })),
+                native: v.optional(
+                  v.object({
+                    depth: v.union(
+                      v.literal("U8"),
+                      v.literal("U16"),
+                      v.literal("F32"),
+                    ),
+                    samples: v.string(),
+                    cmyk: v.optional(v.string()),
+                    icc_profile: v.string(),
+                    icc_bytes: v.number(),
+                    intent: v.number(),
+                  }),
+                ),
               }),
             }),
             v.object({ Variant: v.string() }),
@@ -72,51 +105,155 @@ function integer(n: number) {
   if (!Number.isSafeInteger(n) || n < 1) fail("Invalid live sequence.");
 }
 
-/** Check capability before any session, actor or operation mutation. */
-function requireProtocol(offered: number | undefined, required: number) {
-  if (offered !== undefined && offered !== 1 && offered !== 2)
-    fail("Unsupported live protocol.");
-  if ((offered ?? 1) < required)
-    fail("This live document requires native-preservation protocol 2.");
-}
-/** Inspect atomic native pixels and document color without decoding image buffers. */
-function nativeCell(path: string, cell: any): boolean {
-  if (cell?.Pixels?.native != null) return true;
-  if (path === "/color" && cell?.Value != null) {
-    const color = cell.Value;
-    return color.model !== "Rgb" || color.depth !== "U8" ||
-      color.intent !== 0 || !Array.isArray(color.icc_profile) || color.icc_profile.length !== 0;
+async function certifiedProtocol(
+  ctx: QueryCtx | MutationCtx,
+  room: Doc<"cloudLiveSessions">,
+) {
+  if (
+    room.protocolPolicy !== undefined &&
+    room.protocolPolicy !== POLICY_VERSION
+  )
+    fail("Unsupported live capability policy.");
+  if (room.protocolPolicy === POLICY_VERSION) {
+    requireProtocol(3, room.protocol ?? 1);
+    return room.protocol ?? 1;
   }
-  return path.startsWith("/color/") && cell != null;
-}
-function seedProtocol(seed: string): number {
-  return Object.entries(JSON.parse(seed)).some(([path,cell]) => nativeCell(path,cell)) ? 2 : 1;
+  const page = await ctx.db
+    .query("cloudLiveChanges")
+    .withIndex("by_session_revision", (q) => q.eq("session", room._id))
+    .paginate({ cursor: null, numItems: 8, maximumBytesRead: 2_000_000 });
+  if (!page.isDone)
+    fail("Live history requires complete capability certification before use.");
+  return Math.max(
+    room.protocol ?? 1,
+    seedProtocol(room.seed),
+    changesProtocol(page.page.map((row) => JSON.parse(row.payload))),
+  );
 }
 
+/** Certify the actual seed and every stored write with bounded read-only pages.
+ * Args: authenticated room, offer and scan cursor. Returns a capability summary without mutation.
+ */
+export const certificationPage = internalQuery({
+  args: {
+    ...deviceArg,
+    session: v.id("cloudLiveSessions"),
+    protocol: v.optional(v.number()),
+    cursor: v.union(v.null(), v.string()),
+  },
+  returns: v.object({
+    revision: v.number(),
+    required: v.number(),
+    cursor: v.union(v.null(), v.string()),
+    done: v.boolean(),
+    bytesRead: v.number(),
+  }),
+  handler: async (ctx, a) => {
+    const { room } = await authorized(ctx, a.session, a.deviceToken);
+    if (
+      room.protocolPolicy !== undefined &&
+      room.protocolPolicy !== POLICY_VERSION
+    )
+      fail("Unsupported live capability policy.");
+    requireProtocol(a.protocol, room.protocol ?? 1);
+    const page = await ctx.db
+      .query("cloudLiveChanges")
+      .withIndex("by_session_revision", (q) => q.eq("session", a.session))
+      .paginate({ cursor: a.cursor, numItems: 8, maximumBytesRead: 2_000_000 });
+    const required = Math.max(
+      room.protocol ?? 1,
+      seedProtocol(room.seed),
+      changesProtocol(page.page.map((row) => JSON.parse(row.payload))),
+    );
+    requireProtocol(a.protocol, required);
+    return {
+      revision: room.revision,
+      required,
+      cursor: page.isDone ? null : page.continueCursor,
+      done: page.isDone,
+      bytesRead: (await ctx.meta.getTransactionMetrics()).bytesRead.used,
+    };
+  },
+});
+export const certifyComplete = internalMutation({
+  args: {
+    ...deviceArg,
+    session: v.id("cloudLiveSessions"),
+    protocol: v.optional(v.number()),
+    revision: v.number(),
+    required: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, a) => {
+    const { room } = await authorized(ctx, a.session, a.deviceToken);
+    if (
+      room.protocolPolicy !== undefined &&
+      room.protocolPolicy !== POLICY_VERSION
+    )
+      fail("Unsupported live capability policy.");
+    if (room.revision !== a.revision)
+      fail("Live history changed during certification. Retry.");
+    const required = Math.max(
+      room.protocol ?? 1,
+      a.required,
+      seedProtocol(room.seed),
+    );
+    requireProtocol(a.protocol, required);
+    await ctx.db.patch(a.session, {
+      protocol: required,
+      protocolPolicy: POLICY_VERSION,
+    });
+    return null;
+  },
+});
+export const certify = action({
+  args: {
+    ...deviceArg,
+    session: v.id("cloudLiveSessions"),
+    protocol: v.optional(v.number()),
+  },
+  returns: v.null(),
+  handler: async (ctx, a): Promise<null> => {
+    let cursor: string | null = null,
+      revision: number | undefined,
+      required = 1;
+    for (let count = 0; count < 256; count++) {
+      const page: {
+        revision: number;
+        required: number;
+        cursor: string | null;
+        done: boolean;
+        bytesRead: number;
+      } = await ctx.runQuery(internal.live.certificationPage, { ...a, cursor });
+      if (revision !== undefined && revision !== page.revision)
+        fail("Live history changed during certification. Retry.");
+      revision = page.revision;
+      required = Math.max(required, page.required);
+      if (page.done)
+        return await ctx.runMutation(internal.live.certifyComplete, {
+          ...a,
+          revision,
+          required,
+        });
+      cursor = page.cursor;
+    }
+    fail(
+      "Live history exceeds the bounded certification window; keep the room closed.",
+    );
+  },
+});
+
 export const create = mutation({
-  args: { ...deviceArg, projectId: v.id("cloudProjects"), seed: v.string(), protocol: v.optional(v.number()) },
+  args: {
+    ...deviceArg,
+    projectId: v.id("cloudProjects"),
+    seed: v.string(),
+    protocol: v.optional(v.number()),
+  },
   returns: v.id("cloudLiveSessions"),
   handler: async (ctx, a) => {
     await access(ctx, a.projectId, a.deviceToken, "write");
-    if (new TextEncoder().encode(a.seed).length > 500_000)
-      fail(
-        "Live document exceeds 500 KB. Keep a local copy or use snapshot sharing.",
-      );
-    let base;
-    try {
-      base = JSON.parse(a.seed);
-    } catch {
-      fail("Invalid live document seed.");
-    }
-    if (
-      !base ||
-      typeof base !== "object" ||
-      Array.isArray(base) ||
-      base[""] !== "Object"
-    )
-      fail("Invalid live document seed.");
-    const protocol = seedProtocol(a.seed);
-    requireProtocol(a.protocol, protocol);
+    const protocol = preflightCreate(a.seed, a.protocol);
     let quota = await ctx.db
       .query("cloudLiveQuotas")
       .withIndex("by_project", (q) => q.eq("projectId", a.projectId))
@@ -146,6 +283,7 @@ export const create = mutation({
       seed: a.seed,
       revision: 0,
       protocol,
+      protocolPolicy: POLICY_VERSION,
     });
     await ctx.db.patch(quota._id, { count: quota.count + 1 });
     return session;
@@ -209,12 +347,17 @@ export const initializeQuota = action({
 
 export const join = mutation({
   args,
-  returns: v.object({ seed: v.string(), projectId: v.id("cloudProjects"), protocol: v.number(), supportedProtocol: v.literal(2) }),
+  returns: v.object({
+    seed: v.string(),
+    projectId: v.id("cloudProjects"),
+    protocol: v.number(),
+    supportedProtocol: v.number(),
+  }),
   handler: async (ctx, a) => {
     actorId(a.actor);
     const { room, user } = await authorized(ctx, a.session, a.deviceToken);
-    const protocol = room.protocol ?? seedProtocol(room.seed);
-    requireProtocol(a.protocol, protocol);
+    const protocol = await certifiedProtocol(ctx, room);
+    const supportedProtocol = requireProtocol(a.protocol, protocol);
     const old = await ctx.db
       .query("cloudLiveClients")
       .withIndex("by_session_actor", (q) =>
@@ -242,7 +385,17 @@ export const join = mutation({
         selection: [],
       });
     }
-    return { seed: room.seed, projectId: room.projectId, protocol, supportedProtocol: 2 as const };
+    if (room.protocolPolicy !== POLICY_VERSION)
+      await ctx.db.patch(a.session, {
+        protocol,
+        protocolPolicy: POLICY_VERSION,
+      });
+    return {
+      seed: room.seed,
+      projectId: room.projectId,
+      protocol,
+      supportedProtocol: Math.max(2, supportedProtocol),
+    };
   },
 });
 
@@ -260,12 +413,17 @@ export const exchange = mutation({
     cursor: v.number(),
     more: v.boolean(),
     presence: v.array(presence),
+    protocol: v.number(),
+    supportedProtocol: v.number(),
   }),
   handler: async (ctx, a) => {
     actorId(a.actor);
     const { room, user } = await authorized(ctx, a.session, a.deviceToken);
-    const protocol = Math.max(room.protocol ?? seedProtocol(room.seed), a.changes.some(c => c.edit.type === "write" && c.edit.writes.some(w => nativeCell(w.path,w.value))) ? 2 : 1);
-    requireProtocol(a.protocol, protocol);
+    const protocol = Math.max(
+      await certifiedProtocol(ctx, room),
+      changesProtocol(a.changes),
+    );
+    const supportedProtocol = requireProtocol(a.protocol, protocol);
     const client = await ctx.db
       .query("cloudLiveClients")
       .withIndex("by_session_actor", (q) =>
@@ -364,7 +522,16 @@ export const exchange = mutation({
         payload,
       });
     }
-    if (revision !== room.revision || protocol !== (room.protocol ?? 1)) await ctx.db.patch(a.session, { revision, protocol });
+    if (
+      revision !== room.revision ||
+      protocol !== (room.protocol ?? 1) ||
+      room.protocolPolicy !== POLICY_VERSION
+    )
+      await ctx.db.patch(a.session, {
+        revision,
+        protocol,
+        protocolPolicy: POLICY_VERSION,
+      });
     await ctx.db.patch(client._id, {
       seq,
       updated: Date.now(),
@@ -386,6 +553,8 @@ export const exchange = mutation({
       )
       .take(100);
     return {
+      protocol,
+      supportedProtocol: Math.max(2, supportedProtocol),
       acknowledged: a.changes.map((c) => c.id),
       changes: page.map((r) => JSON.parse(r.payload)),
       cursor: page.at(-1)?.revision ?? a.after,
