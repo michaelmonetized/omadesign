@@ -184,6 +184,9 @@ impl Asset {
     pub fn document(&self, doc: &Document) -> Result<Document, String> {
         doc.validate_hierarchy()?;
         let mut output = export::target::selection(doc, &self.selection(doc)?)?;
+        if output.layers.iter().any(|layer| layer.svg_filter.is_some()) {
+            return Err("Asset bounds for SVG filter graphs are not supported yet. Export the document or an artboard instead".into());
+        }
         output.screen_export = Catalog::default();
         Ok(output)
     }

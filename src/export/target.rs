@@ -13,6 +13,49 @@ pub enum Scope {
     Selection,
 }
 
+/// Bound the cached artwork and stroke that the existing renderer paints.
+/// Args: concrete shape. Returns its exact path extents with ordinary effect padding.
+fn paint_bounds(shape: &crate::document::Shape) -> Result<Bounds, String> {
+    let path = shape.get_cached_path(96);
+    let mut bounds = path
+        .as_ref()
+        .map(|path| {
+            let b = path.compute_tight_bounds().unwrap_or_else(|| path.bounds());
+            Bounds {
+                min: Pt::new(b.left(), b.top()),
+                max: Pt::new(b.right(), b.bottom()),
+            }
+        })
+        .unwrap_or_else(|| shape.world_bbox());
+    if let Some(stroke) = &shape.style.stroke
+        && stroke.width > 0.
+        && !(shape.geom.is_closed() && stroke.alignment == crate::document::StrokeAlignment::Inside)
+    {
+        let path = path.ok_or("Could not bound the selected stroke")?;
+        let aligned =
+            shape.geom.is_closed() && stroke.alignment == crate::document::StrokeAlignment::Outside;
+        let outline = path
+            .stroke(
+                &tiny_skia::Stroke {
+                    width: stroke.width * if aligned { 2. } else { 1. },
+                    line_cap: stroke.cap.to_skia(),
+                    line_join: stroke.join.to_skia(),
+                    ..Default::default()
+                },
+                1.,
+            )
+            .ok_or("Could not bound the selected stroke")?;
+        let b = outline
+            .compute_tight_bounds()
+            .unwrap_or_else(|| outline.bounds());
+        bounds = bounds.union(Bounds {
+            min: Pt::new(b.left(), b.top()),
+            max: Pt::new(b.right(), b.bottom()),
+        });
+    }
+    Ok(bounds.inflate(crate::filter::svg_pad(&shape.filters)))
+}
+
 pub fn artboard(doc: &Document, id: u64) -> Result<Document, String> {
     let board = doc
         .artboards
@@ -43,33 +86,51 @@ pub fn selection(doc: &Document, selected: &[(usize, u64)]) -> Result<Document, 
         let next = if id == 0 {
             item.kind.raster_bounds()
         } else {
-            doc.find_shape(layer, id).map(|shape| {
-                let b = shape.world_bbox();
-                let mut points = [
-                    tiny_skia::Point::from_xy(b.min.x, b.min.y),
-                    tiny_skia::Point::from_xy(b.max.x, b.min.y),
-                    tiny_skia::Point::from_xy(b.max.x, b.max.y),
-                    tiny_skia::Point::from_xy(b.min.x, b.max.y),
-                ];
-                crate::compositor::shape_parent_transform(doc, layer, id).map_points(&mut points);
-                let mut b = Bounds::from_pt(Pt::new(points[0].x, points[0].y));
-                for point in &points[1..] {
-                    b.union_pt(Pt::new(point.x, point.y));
-                }
-                let mut parent = shape.layout.parent;
-                for _ in 0..64 {
-                    let Some(parent_id) = parent else { break };
-                    if !containers.insert((layer, parent_id)) {
-                        break;
+            doc.find_shape(layer, id)
+                .map(|shape| -> Result<Bounds, String> {
+                    let b = paint_bounds(shape)?;
+                    let mut points = [
+                        tiny_skia::Point::from_xy(b.min.x, b.min.y),
+                        tiny_skia::Point::from_xy(b.max.x, b.min.y),
+                        tiny_skia::Point::from_xy(b.max.x, b.max.y),
+                        tiny_skia::Point::from_xy(b.min.x, b.max.y),
+                    ];
+                    crate::compositor::shape_parent_transform(doc, layer, id)
+                        .map_points(&mut points);
+                    let mut b = Bounds::from_pt(Pt::new(points[0].x, points[0].y));
+                    for point in &points[1..] {
+                        b.union_pt(Pt::new(point.x, point.y));
                     }
-                    parent = doc
-                        .find_shape(layer, parent_id)
-                        .and_then(|s| s.layout.parent);
-                }
-                b
-            })
+                    let mut parent = shape.layout.parent;
+                    for _ in 0..64 {
+                        let Some(parent_id) = parent else { break };
+                        if !containers.insert((layer, parent_id)) {
+                            break;
+                        }
+                        parent = doc
+                            .find_shape(layer, parent_id)
+                            .and_then(|s| s.layout.parent);
+                    }
+                    Ok(b)
+                })
+                .transpose()?
         };
-        if let Some(next) = next {
+        if let Some(mut next) = next {
+            let mut pad = crate::filter::svg_pad(&item.filters);
+            for index in doc.layer_ancestors(layer) {
+                pad += crate::filter::svg_pad(&doc.layers[index].filters);
+            }
+            if id != 0 {
+                let mut parent = doc.find_shape(layer, id).and_then(|s| s.layout.parent);
+                for _ in 0..64 {
+                    let Some(shape) = parent.and_then(|id| doc.find_shape(layer, id)) else {
+                        break;
+                    };
+                    pad += crate::filter::svg_pad(&shape.filters);
+                    parent = shape.layout.parent;
+                }
+            }
+            next = next.inflate(pad);
             bounds = Some(bounds.map_or(next, |b| b.union(next)));
             layers.insert(layer);
             layers.extend(doc.layer_ancestors(layer));
@@ -281,7 +342,12 @@ mod tests {
     fn export_pixel_selection_preserves_feather_and_native_layers() {
         let mut doc = Document::new("Mask", 8., 8., 96.);
         let mut layer = Layer::raster("Pixels", 8, 8).unwrap();
-        layer.kind.pixels_mut().unwrap().replace_bytes([220, 60, 30, 255].repeat(64)).unwrap();
+        layer
+            .kind
+            .pixels_mut()
+            .unwrap()
+            .replace_bytes([220, 60, 30, 255].repeat(64))
+            .unwrap();
         doc.layers = vec![layer];
         let mut coverage = vec![0; 64];
         coverage[2 * 8 + 3] = 128;

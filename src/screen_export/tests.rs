@@ -247,3 +247,118 @@ fn craft_screen_export_retained_list_markers_and_deleted_nested_fields_require_r
         }
     }
 }
+
+#[test]
+fn craft_screen_export_keeps_actual_inside_center_outside_strokes_and_blur_tails() {
+    use crate::{
+        color::Rgba,
+        document::{Stroke, StrokeAlignment},
+        filter::{FilterStack, Fx},
+    };
+    for (alignment, dimensions) in [
+        (StrokeAlignment::Inside, (16, 12)),
+        (StrokeAlignment::Center, (20, 16)),
+        (StrokeAlignment::Outside, (24, 20)),
+    ] {
+        let mut s = fixture();
+        let (layer, id) = s.selection[0];
+        s.doc.find_shape_mut(layer, id).unwrap().style.stroke = Some(Stroke {
+            alignment,
+            width: 4.,
+            color: Rgba::BLACK,
+            ..Default::default()
+        });
+        let before = crate::project::encode(&s.doc).unwrap();
+        let root = folder();
+        Plan::new(&s.doc, &[Scope::Asset(s.doc.screen_export.assets[0].id)])
+            .unwrap()
+            .save(&root, &NoProgress)
+            .unwrap();
+        let image = image::open(root.join("Badge.png")).unwrap().to_rgba8();
+        assert_eq!(image.dimensions(), dimensions, "{alignment:?}");
+        assert_eq!(
+            image.get_pixel(0, dimensions.1 / 2).0,
+            [0, 0, 0, 255],
+            "{alignment:?}"
+        );
+        assert_eq!(
+            image.get_pixel(dimensions.0 / 2, dimensions.1 / 2).0,
+            [240, 30, 20, 255]
+        );
+        assert_eq!(crate::project::encode(&s.doc).unwrap(), before);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    let mut s = fixture();
+    let (layer, id) = s.selection[0];
+    s.doc.find_shape_mut(layer, id).unwrap().filters = FilterStack {
+        enabled: true,
+        items: vec![Fx::Blur { std: 1. }],
+        ..Default::default()
+    };
+    let root = folder();
+    Plan::new(&s.doc, &[Scope::Asset(s.doc.screen_export.assets[0].id)])
+        .unwrap()
+        .save(&root, &NoProgress)
+        .unwrap();
+    let image = image::open(root.join("Badge.png")).unwrap().to_rgba8();
+    assert_eq!(image.dimensions(), (40, 36));
+    assert!(image.get_pixel(11, 18)[3] > 0);
+    assert_eq!(image.get_pixel(0, 18)[3], 0);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn craft_screen_export_graph_overflow_has_an_explicit_asset_bounds_refusal() {
+    let (doc,_)=crate::formats::svg::read(r##"<svg xmlns="http://www.w3.org/2000/svg" width="60" height="40"><defs><filter id="blur"><feGaussianBlur stdDeviation="2"/></filter></defs><g filter="url(#blur)"><rect x="10" y="10" width="20" height="20" fill="#f00"/></g></svg>"##,"Graph asset").unwrap();
+    let (layer, shape) = doc
+        .layers
+        .iter()
+        .find_map(|layer| {
+            layer
+                .kind
+                .shapes()
+                .and_then(|s| s.first())
+                .map(|s| (layer.id, s.id))
+        })
+        .unwrap();
+    let asset = Asset {
+        id: 100,
+        name: "Graph".into(),
+        objects: vec![Object { layer, shape }],
+    };
+    assert!(
+        asset
+            .document(&doc)
+            .unwrap_err()
+            .contains("SVG filter graphs")
+    );
+    assert!(crate::export::encode(&Source::Document(doc), Default::default(), &NoProgress).is_ok());
+}
+
+#[test]
+fn craft_screen_export_cubic_crop_uses_actual_extrema_not_sampled_points() {
+    use crate::geom::{Anchor, Geom, Pt};
+    let mut s = fixture();
+    let (layer, id) = s.selection[0];
+    let mut start = Anchor::corner(Pt::new(10., 10.));
+    start.h_out = Pt::new(0., 1000.);
+    let end = Anchor::corner(Pt::new(50., 10.));
+    s.doc.find_shape_mut(layer, id).unwrap().geom = Geom::Path {
+        anchors: vec![start, end],
+        closed: true,
+    };
+    let asset = &s.doc.screen_export.assets[0];
+    let doc = asset.document(&s.doc).unwrap();
+    assert_eq!(doc.width, 40.);
+    assert!((doc.height - 4000. / 9.).abs() < 0.001);
+    s.doc.screen_export.rows[0].scale = 8;
+    let root = folder();
+    Plan::new(&s.doc, &[Scope::Asset(asset.id)])
+        .unwrap()
+        .save(&root, &NoProgress)
+        .unwrap();
+    let image = image::open(root.join("Badge.png")).unwrap().to_rgba8();
+    assert_eq!(image.dimensions(), (320, 3556));
+    assert!(image.rows().skip(3553).flatten().any(|pixel| pixel[3] > 0));
+    std::fs::remove_dir_all(root).unwrap();
+}
