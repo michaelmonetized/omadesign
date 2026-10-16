@@ -713,8 +713,9 @@ fn load_preview_document_with_budget(path: &Path, recovery: bool, complex: bool)
     let bytes = read_bounded(path, 64 * 1024 * 1024)?;
     crate::project::validate_retained_json(std::str::from_utf8(&bytes).map_err(|e| e.to_string())?)?;
     if recovery {
-        let meta: crate::project::SwapMeta =
-            serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        let meta = crate::project::decode_swap_archive(
+            std::str::from_utf8(&bytes).map_err(|e| e.to_string())?,
+        )?;
         let archive = path.with_extension("swp-fonts");
         if archive.is_dir() {
             crate::typography::register_archive(&archive)?;

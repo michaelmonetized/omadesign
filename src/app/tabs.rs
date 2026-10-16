@@ -13,6 +13,7 @@ pub(super) struct TabState {
     individual_object: Option<(usize, u64)>,
     active_layer: Option<usize>,
     history: History,
+    pub(super) live_runtime: super::live::LiveRuntime,
     clone_source: Option<Pt>,
     pixel_sel: Option<Vec<u8>>,
     pixel_sel_space: Option<masking::SelectionSpace>,
@@ -61,6 +62,7 @@ impl TabState {
             individual_object: None,
             active_layer,
             history: History::default(),
+            live_runtime: Default::default(),
             clone_source: None,
             pixel_sel: None,
             pixel_sel_space: None,
@@ -111,6 +113,7 @@ impl Studio {
         swap(&mut self.individual_object, &mut t.individual_object);
         swap(&mut self.active_layer, &mut t.active_layer);
         swap(&mut self.history, &mut t.history);
+        swap(&mut self.live_runtime, &mut t.live_runtime);
         swap(&mut self.clone_source, &mut t.clone_source);
         swap(&mut self.pixel_sel, &mut t.pixel_sel);
         swap(&mut self.pixel_sel_space, &mut t.pixel_sel_space);
@@ -657,6 +660,22 @@ mod tests {
 }
 
 impl Studio {
+    /// Attach a completed live session to its originating tab.
+    /// Args: original tab ID and session state. Returns nothing; closed tabs stay closed.
+    pub(super) fn attach_live_tab(&mut self, swap_id: &str, replica: crate::collaboration::Replica) {
+        if self.swap_id == swap_id {
+            self.doc.collaboration = Some(replica);
+            self.live_runtime = Default::default();
+            self.history.clear();
+            self.dirty = true;
+        } else if let Some(tab) = self.tabs.iter_mut().find(|tab| tab.swap_id == swap_id) {
+            tab.doc.collaboration = Some(replica);
+            tab.live_runtime = Default::default();
+            tab.history.clear();
+            tab.dirty = true;
+        }
+    }
+
     /// A background upload must never link whichever document happens to be active.
     pub(super) fn link_cloud_tab(&mut self, swap_id: &str, link: crate::cloud::CloudLink) {
         if self.swap_id == swap_id {

@@ -9,6 +9,7 @@ pub mod brand;
 pub mod brushes;
 pub mod clipboard;
 pub mod cloud;
+pub mod collaboration;
 pub mod color;
 pub mod compositor;
 pub mod compound;

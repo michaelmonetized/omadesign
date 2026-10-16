@@ -303,6 +303,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     draw_artboard_frames(&painter, rect, studio);
     draw_layout_frames(&painter, rect, studio);
     draw_comment_pins(&painter, rect, studio);
+    super::cloud::paint_presence(&painter, rect, studio);
     draw_bleed_safe(&painter, rect, studio);
     draw_overlays(&painter, rect, studio, pen_preview);
     if let Some(edit)=studio.type_edit.as_ref() && edit.caret!=edit.anchor && let Some(run)=studio.selected_type() {

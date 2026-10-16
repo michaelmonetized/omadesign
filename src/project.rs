@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 mod features;
 
-pub(crate) const VERSION: u32 = features::PUBLISHING;
+pub(crate) const VERSION: u32 = features::COLLABORATION;
 
 /// Check whether this build implements a project version.
 /// Args: envelope version. Returns false for unimplemented reserved formats.
@@ -550,6 +550,16 @@ pub struct SwapMeta {
     pub doc: crate::document::Document,
 }
 
+#[derive(Serialize, Deserialize)]
+struct SwapArchive {
+    #[serde(flatten)]
+    meta: SwapMeta,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    version: Option<u32>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    svg_sources: std::collections::BTreeMap<String, std::sync::Arc<str>>,
+}
+
 pub fn swap_path(id: &str) -> PathBuf {
     swap_dir().join(format!("{id}.oma.swp"))
 }
@@ -627,6 +637,10 @@ pub(crate) fn prepare_swap(
 ) -> Result<PreparedSwap, String> {
     use std::io::Write;
 
+    meta.doc.validate_sources()?;
+    if features::required_version(&meta.doc) > VERSION {
+        return Err("Unsupported omadesign project version".into());
+    }
     pack_rasters(&mut meta.doc)?;
     if let Some(dir) = destination.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
@@ -648,19 +662,42 @@ pub(crate) fn prepare_swap(
         &meta.doc,
         &swap_font_archive(&prepared.destination),
     )?;
+    let version = Some(features::required_version(&meta.doc));
+    let svg_sources = crate::svg_source::pack_sources(&mut meta.doc);
     let mut writer = std::io::BufWriter::new(file);
-    serde_json::to_writer(&mut writer, &meta).map_err(|e| e.to_string())?;
+    serde_json::to_writer(
+        &mut writer,
+        &SwapArchive {
+            meta,
+            version,
+            svg_sources,
+        },
+    )
+    .map_err(|e| e.to_string())?;
     writer.flush().map_err(|e| e.to_string())?;
     writer.get_ref().sync_all().map_err(|e| e.to_string())?;
     Ok(prepared)
 }
 
+/// Restore recovery resource references before recovery or previews use the document.
+/// Args: original recovery JSON. Returns metadata with every current and retained SVG reference restored.
+pub(crate) fn decode_swap_archive(s: &str) -> Result<SwapMeta, String> {
+    validate_retained_json(s)?;
+    let archive: SwapArchive = serde_json::from_str(s).map_err(|e| e.to_string())?;
+    let mut meta = archive.meta;
+    let version = archive
+        .version
+        .unwrap_or_else(|| features::required_version(&meta.doc));
+    restore_sources(&mut meta.doc, version, &archive.svg_sources)?;
+    Ok(meta)
+}
+
 pub fn load_swap(path: &Path) -> Result<SwapMeta, String> {
     let bytes = read_admitted(path)?;
     let s = std::str::from_utf8(&bytes).map_err(|e| e.to_string())?;
-    let _parser = crate::resources::global().reserve_now(bytes.len() as u64, &crate::deep_color::storage::check)?;
-    validate_retained_json(s)?;
-    let mut meta: SwapMeta = serde_json::from_str(s).map_err(|e| e.to_string())?;
+    let _parser = crate::resources::global()
+        .reserve_now(bytes.len() as u64, &crate::deep_color::storage::check)?;
+    let mut meta = decode_swap_archive(s)?;
     let archive = swap_font_archive(path);
     if archive.is_dir() {
         crate::typography::register_archive(&archive)?;
@@ -668,6 +705,7 @@ pub fn load_swap(path: &Path) -> Result<SwapMeta, String> {
         crate::typography::load_for_document(original)?;
     }
     crate::typography::validate_document_fonts(&meta.doc)?;
+    meta.doc.validate_sources()?;
     for layer in &mut meta.doc.layers {
         if let Some(px) = layer.kind.pixels_mut() {
             *px = decompress_pixels(px)?;
@@ -735,10 +773,9 @@ pub fn list_swaps() -> Vec<(PathBuf, SwapMeta)> {
         }
         // Listing needs metadata only. Keep older snapshots visible even when
         // restoring one needs a missing font; Recover reports that error.
-        if let Some(meta) = std::fs::read_to_string(&p)
-            .ok()
-            .and_then(|json| serde_json::from_str::<SwapMeta>(&json).ok())
-        {
+        if let Some(meta) = std::fs::read_to_string(&p).ok().and_then(|json| {
+            decode_swap_archive(&json).ok()
+        }) {
             out.push((p, meta));
         }
     }
@@ -1209,7 +1246,8 @@ mod tests {
         // Packed rasters are base64 PNGs. A buffer is raw only when its length
         // is exactly w*h*4. Dimensions whose product does not fit in usize must
         // take that same fallback, not abort the multiply.
-        let doc = Document::new("overflow", 1.0, 1.0, 72.0);
+        let mut doc = Document::new("overflow", 1.0, 1.0, 72.0);
+        doc.layers[0] = crate::document::Layer::raster("Overflow raster", 1, 1).unwrap();
         let encoded = encode(&doc).unwrap();
         let restored = decode(&encoded).unwrap();
         assert_eq!(

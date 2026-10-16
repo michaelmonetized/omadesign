@@ -16,17 +16,21 @@ pub(super) const COLOR: u32 = 20;
 pub(super) const PSD_TYPE: u32 = 21;
 pub(super) const SMART: u32 = 22;
 pub(super) const PUBLISHING: u32 = 23;
+pub(super) const COLLABORATION: u32 = 24;
 
 /// Identify implemented project readers.
 /// Args: envelope version. Returns false for reserved formats whose models are absent.
 pub(super) fn supports_version(version: u32) -> bool {
-    (1..=PUBLISHING).contains(&version)
+    (1..=COLLABORATION).contains(&version)
 }
 
 /// Find the oldest reader that preserves this document.
 /// Args: document with unpacked editable objects. Returns its highest required feature version.
 pub(super) fn required_version(doc: &Document) -> u32 {
     let mut version = if doc.mask_sources().is_empty() { 5 } else { 13 };
+    if doc.collaboration.is_some() {
+        version = version.max(COLLABORATION);
+    }
     for source in &doc.sources {
         version = version.max(retained::source_version(source));
     }
@@ -399,11 +403,11 @@ mod tests {
 
         let mut neutral: serde_json::Value =
             serde_json::from_str(&super::super::encode(&plain()).unwrap()).unwrap();
-        for implemented in 1..=PUBLISHING {
+        for implemented in 1..=COLLABORATION {
             neutral["version"] = implemented.into();
             super::super::decode(&neutral.to_string()).unwrap();
         }
-        for reserved in [PUBLISHING + 1, u32::MAX] {
+        for reserved in [COLLABORATION + 1, u32::MAX] {
             neutral["version"] = reserved.into();
             assert!(
                 super::super::decode(&neutral.to_string())

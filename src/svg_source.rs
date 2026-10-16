@@ -439,8 +439,7 @@ pub fn pack_sources(
     let mut sources = BTreeMap::new();
     let mut seen = HashMap::new();
     visit_sources(doc, &mut |source| {
-        let pointer = Arc::as_ptr(source) as *const u8 as usize;
-        let key = seen.entry(pointer).or_insert_with(|| {
+        let key = seen.entry(source.clone()).or_insert_with(|| {
             let key = format!("@oma-svg-source-{}", sources.len());
             sources.insert(key.clone(), source.clone());
             key
@@ -483,6 +482,9 @@ fn visit_sources(doc: &mut crate::document::Document, visit: &mut impl FnMut(&mu
                 }
             }
         }
+    }
+    if let Some(replica) = &mut doc.collaboration {
+        crate::collaboration::resources::visit_sources(replica, visit);
     }
 }
 

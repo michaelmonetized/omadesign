@@ -8,6 +8,7 @@ mod type_clipboard;
 pub(crate) mod type_ime;
 mod clipboard_insert;
 mod cloud;
+mod live;
 pub mod deform;
 mod file_dialogs;
 mod file_io;
@@ -477,6 +478,8 @@ pub struct Studio {
     pub cloud_identity: crate::cloud::Identity,
     pub cloud_modal: CloudModal,
     pub cloud_panel: crate::cloud::client::Panel,
+    live_runtime: live::LiveRuntime,
+    pub live_join_id: String,
     cloud_job: Option<std::sync::mpsc::Receiver<Result<crate::cloud::client::Event, String>>>,
     pub pinning_comment: bool,
     pub comment_draft: String,
@@ -489,6 +492,7 @@ pub struct Studio {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum CloudModal {
+    Live,
     None,
     SignIn,
     Invite,
@@ -728,6 +732,8 @@ impl Studio {
             cloud_identity: crate::cloud::load_identity(),
             cloud_modal: CloudModal::None,
             cloud_panel: Default::default(),
+            live_runtime: Default::default(),
+            live_join_id: String::new(),
             cloud_job: None,
             pinning_comment: false,
             comment_draft: String::new(),
@@ -1572,6 +1578,7 @@ impl Studio {
         if dragging {
             return;
         }
+        if self.live_undo(false) { return; }
         if let Some(inv) = self.history.undo() {
             self.apply_with_layer_selection(&inv);
             self.dirty = true;
@@ -1593,6 +1600,7 @@ impl Studio {
         }
         self.end_deform(true);
         self.reset_snap_gesture();
+        if self.live_undo(true) { return; }
         if let Some(cmd) = self.history.redo() {
             self.apply_with_layer_selection(&cmd);
             self.dirty = true;

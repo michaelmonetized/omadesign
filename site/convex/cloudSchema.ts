@@ -37,6 +37,16 @@ export const annotationGeometry = {
   opacity: v.optional(v.number()),
 };
 export const cloudTables = {
+  cloudLiveQuotas: defineTable({ projectId: v.id("cloudProjects"), count: v.number(), ready: v.boolean(), cursor: v.union(v.string(), v.null()) })
+    .index("by_project", ["projectId"]),
+  cloudLiveSessions: defineTable({ projectId: v.id("cloudProjects"), seed: v.string(), revision: v.number(), protocol: v.optional(v.number()) })
+    .index("by_project", ["projectId"]),
+  cloudLiveClients: defineTable({ session: v.id("cloudLiveSessions"), actor: v.string(), userId: v.string(), name: v.string(), seq: v.number(), updated: v.number(), cursor: v.union(v.null(), v.object({ x: v.number(), y: v.number() })), selection: v.array(v.string()) })
+    .index("by_session_actor", ["session", "actor"])
+    .index("by_session_updated", ["session", "updated"]),
+  cloudLiveChanges: defineTable({ session: v.id("cloudLiveSessions"), actor: v.string(), seq: v.number(), revision: v.number(), payload: v.string() })
+    .index("by_session_actor_seq", ["session", "actor", "seq"])
+    .index("by_session_revision", ["session", "revision"]),
   cloudLimits: defineTable({
     key: v.string(),
     count: v.number(),
