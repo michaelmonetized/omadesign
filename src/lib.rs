@@ -21,6 +21,7 @@ pub mod publishing;
 pub mod geom;
 pub mod google_fonts;
 pub mod gradient;
+pub(crate) mod graphic_styles;
 pub mod import;
 pub mod layout;
 pub mod layout_components;

@@ -2,7 +2,7 @@
 use super::icons::{self, ph};
 use crate::{
     app::Studio,
-    document::{Cmd, Style},
+    document::Cmd,
     geom::{Geom, Pt},
     tools::{Persona, Tool},
 };
@@ -66,7 +66,7 @@ fn contents(ui: &mut Ui, studio: &mut Studio, panel: &str) {
         "navigator" => navigator(ui, studio),
         "history" => history(ui, studio),
         "actions" => actions(ui, studio),
-        "styles" => styles(ui, studio),
+        "styles" => super::graphic_styles::show(ui, studio),
         "symbols" => super::symbols::show(ui,studio),
         "shapes" => shapes(ui, studio),
         "paths" => paths(ui, studio),
@@ -461,50 +461,6 @@ fn actions(ui: &mut Ui, studio: &mut Studio) {
         });
     }
     ui.ctx().data_mut(|d| d.insert_persisted(key, actions));
-}
-
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
-struct SavedStyle {
-    name: String,
-    style: Style,
-}
-fn styles(ui: &mut Ui, studio: &mut Studio) {
-    let key = egui::Id::new("editor-graphic-styles");
-    let mut styles = ui
-        .ctx()
-        .data_mut(|d| d.get_persisted::<Vec<SavedStyle>>(key))
-        .unwrap_or_default();
-    let mut remove = None;
-    for (index, saved) in styles.iter_mut().enumerate() {
-        ui.push_id(index, |ui| {
-            ui.horizontal(|ui| {
-                if icons::tiny_icon(ui, ph::PALETTE, &saved.name, false) {
-                    let before = studio.style_clip.replace(saved.style.clone());
-                    studio.paste_style();
-                    studio.style_clip = before;
-                }
-                ui.add(
-                    egui::TextEdit::singleline(&mut saved.name)
-                        .desired_width((ui.available_width() - 30.0).max(30.0)),
-                );
-                if icons::tiny_icon(ui, ph::TRASH, "Delete style", false) {
-                    remove = Some(index);
-                }
-            });
-        });
-    }
-    if let Some(index) = remove {
-        styles.remove(index);
-    }
-    if styles.len() < 64
-        && icons::tiny_icon(ui, ph::PLUS, "Save selection appearance as a style", false)
-    {
-        styles.push(SavedStyle {
-            name: format!("Style {}", styles.len() + 1),
-            style: super::studios::inspected_style(studio).clone(),
-        });
-    }
-    ui.ctx().data_mut(|d| d.insert_persisted(key, styles));
 }
 
 fn shapes(ui: &mut Ui, studio: &mut Studio) {

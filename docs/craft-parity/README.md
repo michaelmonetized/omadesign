@@ -11,9 +11,9 @@ Run `node scripts/craft-parity.mjs REFERENCE_REPOS OUTPUT_JSON` against the pinn
 | Workspace, #332 | Theme-derived chrome, one mode control, actual dock nesting/splits, recoverable sizing, Layers thumbnails/footer, ratio lock, native paste | Full panel and workflow parity |
 | Color workflows, #333 | 21 harmony choices, compact variation grid, five-color themes, linked/custom wheel edits, atomic file-backed theme library, guarded swatch saving, explicit recolor mappings | Pattern-internal recoloring, CMYK/spot-color models, color reduction, global swatch linkage and recolor preview remain open |
 | Actions | Session-local ordered duplicate/group/flip/outline/stack commands | Actual command recording, persistent libraries, editable parameters, import/export, atomic playback |
-| Styles | Session-local capture and application | Durable portable libraries and complete appearance/resource preservation |
+| Styles, #339 | File-backed appearance presets, rendered previews, atomic multi-object apply | Linked document styles, additive appearances, character-color override and dedicated import/export |
 | Channels | Bounded composite-channel viewing | Channel selection, editable alpha/spot channels, native channel operations |
-| Symbols | Existing Layout component/instance system | Vector symbol creation, placement, breaking links and symbol tools |
+| Symbols, #335/#337 | Linked vector creation/place/edit, independent copies, select instances, batch reset/break, rename and source-fitted thumbnails | Hidden library definitions, cross-definition replacement, alternate-artwork redefinition, external libraries and symbolism tools |
 | Export | Existing document/artboard export and admitted native writers | Asset collection, per-asset format/scale rows and export-for-screens workflow |
 | Other vector panes | Existing type, path, appearance, paint, effects and library bodies | Attributes, CSS properties, document info, flattener/separation previews and remaining reference commands |
 | Photo, Layout, Motion | Existing source and exact-source qualified work retained | Complete reference workflows still need item-by-item reconciliation and implementation |
