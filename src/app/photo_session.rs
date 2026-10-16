@@ -753,6 +753,11 @@ impl PhotoSession {
     pub fn finish_edit(&mut self) {
         self.coalescing = None;
     }
+    /// List completed photo edits without exposing mutable history.
+    /// Args: none. Returns the number of affected images for each undo step.
+    pub(crate) fn history_steps(&self) -> Vec<usize> {
+        self.undo_edits.iter().map(|edit| edit.images.len().max(edit.disk.len())).collect()
+    }
     pub fn can_undo(&self) -> bool {
         !self.undo_edits.is_empty() && !self.is_saving()
     }

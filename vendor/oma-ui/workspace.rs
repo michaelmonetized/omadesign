@@ -21,6 +21,7 @@ pub struct Group {
     pub active: usize,
     pub place: Place,
     pub extent: f32,
+    pub weight: f32,
     pub rect: [f32; 4],
 }
 impl Default for Group {
@@ -30,6 +31,7 @@ impl Default for Group {
             active: 0,
             place: Place::Right,
             extent: 288.0,
+            weight: 1.0,
             rect: [40.0, 40.0, 320.0, 420.0],
         }
     }
@@ -174,6 +176,9 @@ impl Workspace {
                 group.extent = 288.0;
             }
             group.extent = group.extent.clamp(80.0, 1200.0);
+            if !group.weight.is_finite() || group.weight <= 0.0 {
+                group.weight = 1.0;
+            }
             if !group.rect.iter().all(|v| v.is_finite()) {
                 group.rect = Group::default().rect;
             }
@@ -335,7 +340,7 @@ impl Workspace {
             .ctx()
             .data_mut(|data| data.remove_temp::<Requests>(requests_id(id)))
             .unwrap_or_default();
-        let mut center = ui.available_rect_before_wrap();
+        let available = ui.available_rect_before_wrap();
         let viewport = ui
             .ctx()
             .input(|input| input.viewport().inner_rect)
@@ -378,6 +383,10 @@ impl Workspace {
         ui.ctx()
             .data_mut(|d| d.insert_temp(focus_key, self.focus.clone().unwrap_or_default()));
         let before = self.groups.clone();
+        let (center, rectangles) = dock_rectangles(available, &before);
+        let mut targets = Vec::new();
+        let mut column_sizes = Vec::new();
+        let mut group_weights = Vec::new();
         let mut focus_delivered = false;
         let mut command = None;
         for (index, saved) in before.iter().enumerate() {
@@ -391,76 +400,101 @@ impl Workspace {
             };
             let mut content = |ui: &mut Ui| {
                 ui.set_clip_rect(ui.max_rect().intersect(ui.clip_rect()));
-                ui.horizontal_wrapped(|ui| {
-                    for (tab, panel) in saved.panels.iter().enumerate() {
-                        let response = scope::native_scope(
-                            ui,
-                            egui::Id::new(id).with(("panel-tab", panel)),
-                            |ui| ui.selectable_label(tab == group.active, panel_label(panel)),
-                        )
-                        .inner;
-                        if response.has_focus() {
-                            ui.painter().rect_stroke(
-                                response.rect.expand(2.),
-                                3.,
-                                egui::Stroke::new(2., ui.visuals().selection.stroke.color),
-                                egui::StrokeKind::Outside,
-                            );
-                        }
-                        if focus_next.as_ref() == Some(panel)
-                            && response.enabled()
-                            && ui.memory(|memory| memory.allows_interaction(response.layer_id))
-                        {
-                            let already_focused = response.has_focus();
-                            response.request_focus();
-                            if !already_focused && response.gained_focus() {
-                                response.widget_info(|| {
-                                    egui::WidgetInfo::selected(
-                                        egui::WidgetType::Button,
-                                        response.enabled(),
-                                        tab == group.active,
-                                        panel_label(panel),
-                                    )
+                egui::ScrollArea::horizontal()
+                    .animated(false)
+                    .id_salt((id, "dock-tabs", saved.panels.first()))
+                    .max_height(28.0)
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            for (tab, panel) in saved.panels.iter().enumerate() {
+                                let response = scope::native_scope(
+                                    ui,
+                                    egui::Id::new(id).with(("panel-tab", panel)),
+                                    |ui| {
+                                        ui.add(
+                                            egui::Button::new(panel_label(panel))
+                                                .wrap_mode(egui::TextWrapMode::Extend)
+                                                .selected(tab == group.active)
+                                                .sense(egui::Sense::click_and_drag()),
+                                        )
+                                    },
+                                )
+                                .inner;
+                                response.dnd_set_drag_payload(PanelDrag {
+                                    workspace: id.into(),
+                                    panel: panel.clone(),
                                 });
-                            }
-                            focus_delivered = true;
-                        }
-                        if response.clicked() {
-                            group.active = tab;
-                            self.focus = Some(panel.clone());
-                        }
-                        response.context_menu(|ui| {
-                            for (label, place) in [
-                                ("Move left", Place::Left),
-                                ("Move right", Place::Right),
-                                ("Move top", Place::Top),
-                                ("Move bottom", Place::Bottom),
-                                ("Float", Place::Floating),
-                            ] {
-                                if ui.button(label).clicked() {
-                                    command = Some((panel.clone(), Some(place), None));
-                                    ui.close();
+                                if response.has_focus() {
+                                    ui.painter().rect_stroke(
+                                        response.rect.expand(2.),
+                                        3.,
+                                        egui::Stroke::new(2., ui.visuals().selection.stroke.color),
+                                        egui::StrokeKind::Outside,
+                                    );
                                 }
-                            }
-                            ui.menu_button("Tab with", |ui| {
-                                for other in before
-                                    .iter()
-                                    .flat_map(|g| &g.panels)
-                                    .filter(|other| *other != panel)
+                                if focus_next.as_ref() == Some(panel)
+                                    && response.enabled()
+                                    && ui.memory(|memory| {
+                                        memory.allows_interaction(response.layer_id)
+                                    })
                                 {
-                                    if ui.button(panel_label(other)).clicked() {
-                                        command = Some((panel.clone(), None, Some(other.clone())));
+                                    let already_focused = response.has_focus();
+                                    response.request_focus();
+                                    response.scroll_to_me(Some(egui::Align::Center));
+                                    if !already_focused && response.gained_focus() {
+                                        response.widget_info(|| {
+                                            egui::WidgetInfo::selected(
+                                                egui::WidgetType::Button,
+                                                response.enabled(),
+                                                tab == group.active,
+                                                panel_label(panel),
+                                            )
+                                        });
+                                    }
+                                    focus_delivered = true;
+                                }
+                                if response.clicked() {
+                                    group.active = tab;
+                                    self.focus = Some(panel.clone());
+                                }
+                                response.context_menu(|ui| {
+                                    for (label, place) in [
+                                        ("Move left", Place::Left),
+                                        ("Move right", Place::Right),
+                                        ("Move top", Place::Top),
+                                        ("Move bottom", Place::Bottom),
+                                        ("Float", Place::Floating),
+                                    ] {
+                                        if ui.button(label).clicked() {
+                                            command = Some((panel.clone(), Some(place), None));
+                                            ui.close();
+                                        }
+                                    }
+                                    ui.menu_button("Tab with", |ui| {
+                                        for other in before
+                                            .iter()
+                                            .flat_map(|g| &g.panels)
+                                            .filter(|other| *other != panel)
+                                        {
+                                            if ui.button(panel_label(other)).clicked() {
+                                                command = Some((
+                                                    panel.clone(),
+                                                    None,
+                                                    Some(other.clone()),
+                                                ));
+                                                ui.close();
+                                            }
+                                        }
+                                    });
+                                    if ui.button("Close").clicked() {
+                                        command = Some((panel.clone(), None, None));
                                         ui.close();
                                     }
-                                }
-                            });
-                            if ui.button("Close").clicked() {
-                                command = Some((panel.clone(), None, None));
-                                ui.close();
+                                });
                             }
                         });
-                    }
-                });
+                    });
                 ui.separator();
                 if let Some(panel) = saved.panels.get(group.active) {
                     ui.push_id(panel, |ui| body(ui, panel));
@@ -510,6 +544,7 @@ impl Workspace {
                     window = window.fixed_size(size);
                 }
                 if let Some(shown) = window.show(ui.ctx(), |ui| content(ui)) {
+                    targets.push((saved.panels[saved.active].clone(), shown.response.rect));
                     group.rect = [
                         shown.response.rect.min.x,
                         shown.response.rect.min.y,
@@ -521,41 +556,25 @@ impl Workspace {
                     self.close_group(saved);
                 }
             } else {
-                let horizontal = matches!(saved.place, Place::Left | Place::Right);
-                let available = if horizontal {
-                    center.width()
-                } else {
-                    center.height()
-                };
-                let reserve = if horizontal { 240.0 } else { 160.0 };
-                let extent = saved.extent.min((available - reserve).max(0.0)).max(0.0);
-                let mut rect = center;
-                match saved.place {
-                    Place::Left => {
-                        rect.max.x = rect.min.x + extent;
-                        center.min.x = rect.max.x;
-                    }
-                    Place::Right => {
-                        rect.min.x = rect.max.x - extent;
-                        center.max.x = rect.min.x;
-                    }
-                    Place::Top => {
-                        rect.max.y = rect.min.y + extent;
-                        center.min.y = rect.max.y;
-                    }
-                    Place::Bottom => {
-                        rect.min.y = rect.max.y - extent;
-                        center.max.y = rect.min.y;
-                    }
-                    Place::Floating => {}
-                }
-                if extent > 20.0 {
-                    ui.scope_builder(egui::UiBuilder::new().max_rect(rect.shrink(4.0)), |ui| {
-                        egui::Frame::group(ui.style()).show(ui, |ui| {
-                            ui.set_min_size((rect.size() - vec2(24.0, 24.0)).max(vec2(0.0, 0.0)));
-                            content(ui);
-                        });
+                let rect = rectangles[index];
+                targets.push((saved.panels[saved.active].clone(), rect));
+                if rect.width() > 8.0 && rect.height() > 8.0 {
+                    ui.scope_builder(egui::UiBuilder::new().max_rect(rect.shrink(1.0)), |ui| {
+                        ui.set_clip_rect(rect.intersect(ui.clip_rect()));
+                        egui::Frame::new()
+                            .fill(ui.visuals().panel_fill)
+                            .inner_margin(6.0)
+                            .show(ui, |ui| {
+                                ui.set_min_size(
+                                    (rect.size() - vec2(14.0, 14.0)).max(vec2(0.0, 0.0)),
+                                );
+                                ui.set_max_size(
+                                    (rect.size() - vec2(14.0, 14.0)).max(vec2(0.0, 0.0)),
+                                );
+                                content(ui);
+                            });
                     });
+                    let horizontal = matches!(saved.place, Place::Left | Place::Right);
                     let (edge, sign) = match saved.place {
                         Place::Left => (
                             Rect::from_center_size(rect.right_center(), vec2(6.0, rect.height())),
@@ -574,20 +593,85 @@ impl Workspace {
                             -1.0,
                         ),
                     };
-                    let drag = ui.interact(edge, window_id.with("resize"), egui::Sense::drag());
+                    let drag = ui
+                        .interact(edge, window_id.with("resize"), egui::Sense::drag())
+                        .on_hover_cursor(if horizontal {
+                            egui::CursorIcon::ResizeHorizontal
+                        } else {
+                            egui::CursorIcon::ResizeVertical
+                        });
                     if drag.dragged() {
                         let delta = ui.input(|i| i.pointer.delta());
+                        let extent = if horizontal {
+                            rect.width()
+                        } else {
+                            rect.height()
+                        };
                         group.extent = (extent + sign * if horizontal { delta.x } else { delta.y })
                             .clamp(80.0, 1200.0);
+                        column_sizes.push((saved.place, group.extent));
                     }
-                } else {
-                    group.place = Place::Floating;
-                    let safe = safe_rect(group.rect, viewport);
-                    group.rect = [safe.min.x, safe.min.y, safe.width(), safe.height()];
+                    if let Some((next, next_rect)) = before
+                        .iter()
+                        .enumerate()
+                        .skip(index + 1)
+                        .find(|(_, candidate)| candidate.place == saved.place)
+                        .map(|(i, _)| (i, rectangles[i]))
+                    {
+                        let edge = if horizontal {
+                            Rect::from_center_size(rect.center_bottom(), vec2(rect.width(), 6.0))
+                        } else {
+                            Rect::from_center_size(rect.right_center(), vec2(6.0, rect.height()))
+                        };
+                        let drag = ui
+                            .interact(edge, window_id.with("split-resize"), egui::Sense::drag())
+                            .on_hover_cursor(if horizontal {
+                                egui::CursorIcon::ResizeVertical
+                            } else {
+                                egui::CursorIcon::ResizeHorizontal
+                            });
+                        if drag.dragged() {
+                            let delta = ui.input(|input| {
+                                if horizontal {
+                                    input.pointer.delta().y
+                                } else {
+                                    input.pointer.delta().x
+                                }
+                            });
+                            let first = if horizontal {
+                                rect.height()
+                            } else {
+                                rect.width()
+                            };
+                            let second = if horizontal {
+                                next_rect.height()
+                            } else {
+                                next_rect.width()
+                            };
+                            let total = (first + second).max(1.0);
+                            let fraction = ((first + delta) / total).clamp(0.1, 0.9);
+                            let weight = saved.weight + before[next].weight;
+                            group.weight = weight * fraction;
+                            group_weights
+                                .push((before[next].panels.clone(), weight * (1.0 - fraction)));
+                        }
+                    }
                 }
             }
             if let Some(actual) = self.groups.iter_mut().find(|g| g.panels == saved.panels) {
                 *actual = group;
+            }
+        }
+        for (place, extent) in column_sizes {
+            for group in &mut self.groups {
+                if group.place == place {
+                    group.extent = extent;
+                }
+            }
+        }
+        for (panels, weight) in group_weights {
+            if let Some(group) = self.groups.iter_mut().find(|g| g.panels == panels) {
+                group.weight = weight;
             }
         }
         if requests.focus.is_some() && explicitly_requested.is_some() && !focus_delivered {
@@ -610,8 +694,195 @@ impl Workspace {
                 self.close(&panel);
             }
         }
+        if let Some(payload) = egui::DragAndDrop::payload::<PanelDrag>(ui.ctx()) {
+            if payload.workspace == id {
+                if let Some(pointer) = ui.input(|input| input.pointer.interact_pos()) {
+                    let target = targets.iter().find(|(_, rect)| rect.contains(pointer));
+                    let mut destination = None;
+                    if let Some((panel, rect)) = target {
+                        let horizontal = before
+                            .iter()
+                            .find(|group| group.panels.contains(panel))
+                            .is_some_and(|group| matches!(group.place, Place::Top | Place::Bottom));
+                        let edge = if pointer.y < rect.top() + 30.0 {
+                            None
+                        } else if horizontal {
+                            if pointer.x < rect.left() + rect.width() * 0.25 {
+                                Some(false)
+                            } else if pointer.x > rect.right() - rect.width() * 0.25 {
+                                Some(true)
+                            } else {
+                                None
+                            }
+                        } else if pointer.y < rect.top() + rect.height() * 0.25 {
+                            Some(false)
+                        } else if pointer.y > rect.bottom() - rect.height() * 0.25 {
+                            Some(true)
+                        } else {
+                            None
+                        };
+                        let mut highlight = *rect;
+                        if let Some(after) = edge {
+                            if horizontal {
+                                if after {
+                                    highlight.min.x = rect.center().x;
+                                } else {
+                                    highlight.max.x = rect.center().x;
+                                }
+                            } else if after {
+                                highlight.min.y = rect.center().y;
+                            } else {
+                                highlight.max.y = rect.center().y;
+                            }
+                        }
+                        ui.ctx()
+                            .layer_painter(egui::LayerId::new(
+                                egui::Order::Tooltip,
+                                egui::Id::new((id, "dock-drop")),
+                            ))
+                            .rect_filled(
+                                highlight.shrink(2.0),
+                                3.0,
+                                ui.visuals().selection.bg_fill.gamma_multiply(0.65),
+                            );
+                        destination = Some((panel.clone(), edge));
+                    }
+                    if ui.input(|input| input.pointer.any_released()) {
+                        if let Some((target, edge)) = destination {
+                            if let Some(after) = edge {
+                                self.split_with(&payload.panel, &target, after);
+                            } else {
+                                self.tab_with(&payload.panel, &target);
+                            }
+                        } else if center.contains(pointer) {
+                            let place = if pointer.x < center.left() + 48.0 {
+                                Place::Left
+                            } else if pointer.x > center.right() - 48.0 {
+                                Place::Right
+                            } else if pointer.y < center.top() + 48.0 {
+                                Place::Top
+                            } else if pointer.y > center.bottom() - 48.0 {
+                                Place::Bottom
+                            } else {
+                                Place::Floating
+                            };
+                            self.move_panel(&payload.panel, place);
+                            if place == Place::Floating {
+                                if let Some(group) = self
+                                    .groups
+                                    .iter_mut()
+                                    .find(|g| g.panels.contains(&payload.panel))
+                                {
+                                    group.rect = [pointer.x - 80.0, pointer.y - 12.0, 320.0, 420.0];
+                                }
+                            }
+                        }
+                        egui::DragAndDrop::clear_payload(ui.ctx());
+                        ui.ctx().request_repaint();
+                    }
+                }
+            }
+        }
         center
     }
+
+    /// Split one panel into a neighboring group without changing its artwork.
+    /// Args: panel, visible target and insertion side. Returns false for stale or identical panels.
+    pub fn split_with(&mut self, panel: &str, target: &str, after: bool) -> bool {
+        if panel == target
+            || !self
+                .groups
+                .iter()
+                .any(|g| g.panels.iter().any(|p| p == target))
+        {
+            return false;
+        }
+        let mut moved = self.remove(panel).unwrap_or_default();
+        let index = self
+            .groups
+            .iter()
+            .position(|g| g.panels.iter().any(|p| p == target))
+            .unwrap();
+        let destination = &mut self.groups[index];
+        destination.weight *= 0.5;
+        moved.panels = vec![panel.into()];
+        moved.active = 0;
+        moved.place = destination.place;
+        moved.extent = destination.extent;
+        moved.weight = destination.weight;
+        self.groups.insert(index + usize::from(after), moved);
+        self.focus = Some(panel.into());
+        true
+    }
+}
+
+#[derive(Clone)]
+struct PanelDrag {
+    workspace: String,
+    panel: String,
+}
+
+/// Fit dock columns and their stacked groups without modifying saved geometry.
+/// Args: current viewport and saved groups. Returns the canvas and one rectangle per group.
+fn dock_rectangles(available: Rect, groups: &[Group]) -> (Rect, Vec<Rect>) {
+    let desired = |place| {
+        groups
+            .iter()
+            .filter(|g| g.place == place)
+            .map(|g| g.extent)
+            .fold(0.0, f32::max)
+    };
+    let horizontal = (desired(Place::Left) + desired(Place::Right)).max(1.0);
+    let vertical = (desired(Place::Top) + desired(Place::Bottom)).max(1.0);
+    let sx = ((available.width() - 240.0_f32.min(available.width() * 0.45)).max(0.0) / horizontal)
+        .min(1.0);
+    let sy = ((available.height() - 160.0_f32.min(available.height() * 0.45)).max(0.0) / vertical)
+        .min(1.0);
+    let left = desired(Place::Left) * sx;
+    let right = desired(Place::Right) * sx;
+    let top = desired(Place::Top) * sy;
+    let bottom = desired(Place::Bottom) * sy;
+    let center = Rect::from_min_max(
+        available.min + vec2(left, top),
+        available.max - vec2(right, bottom),
+    );
+    let mut output = vec![Rect::NOTHING; groups.len()];
+    for place in [Place::Left, Place::Right, Place::Top, Place::Bottom] {
+        let dock = match place {
+            Place::Left => Rect::from_min_max(
+                pos2(available.left(), center.top()),
+                pos2(center.left(), center.bottom()),
+            ),
+            Place::Right => Rect::from_min_max(
+                pos2(center.right(), center.top()),
+                pos2(available.right(), center.bottom()),
+            ),
+            Place::Top => Rect::from_min_max(available.min, pos2(available.right(), center.top())),
+            _ => Rect::from_min_max(pos2(available.left(), center.bottom()), available.max),
+        };
+        let total: f32 = groups
+            .iter()
+            .filter(|g| g.place == place)
+            .map(|g| g.weight)
+            .sum();
+        let mut cursor = 0.0;
+        for (index, group) in groups.iter().enumerate().filter(|(_, g)| g.place == place) {
+            let share = group.weight / total.max(f32::EPSILON);
+            output[index] = if matches!(place, Place::Left | Place::Right) {
+                Rect::from_min_max(
+                    pos2(dock.left(), dock.top() + dock.height() * cursor),
+                    pos2(dock.right(), dock.top() + dock.height() * (cursor + share)),
+                )
+            } else {
+                Rect::from_min_max(
+                    pos2(dock.left() + dock.width() * cursor, dock.top()),
+                    pos2(dock.left() + dock.width() * (cursor + share), dock.bottom()),
+                )
+            };
+            cursor += share;
+        }
+    }
+    (center, output)
 }
 
 /// Keep floating geometry visible after a monitor or scale change.

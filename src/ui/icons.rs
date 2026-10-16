@@ -36,6 +36,9 @@ pub mod ph {
     pub const PAINT_BUCKET: &str = "\u{E392}";
     pub const BANDAIDS: &str = "\u{E0B2}";
     pub const COPY: &str = "\u{E1CA}";
+    pub const TRASH: &str = "\u{E4A6}";
+    pub const ARROW_UP: &str = "\u{E08E}";
+    pub const ARROW_DOWN: &str = "\u{E04C}";
     pub const DROP: &str = "\u{E210}";
     pub const CROP: &str = "\u{E1D4}";
     pub const SELECTION: &str = "\u{E69A}";

@@ -4,6 +4,14 @@ use eframe::egui::{self, Id, Key, Modifiers, Ui};
 
 const ID: &str = "keyboard-panels";
 
+/// Open the existing keyboard panel arranger from the Window menu.
+/// Args: context, current workspace and registry. Returns nothing; Apply retains its existing validation.
+pub(super) fn open(ctx: &egui::Context, book: &Book, registry: &[(&str, &str)]) {
+    if let Some(dialog) = Dialog::new(book, registry, ctx) {
+        ctx.data_mut(|data| data.insert_temp(Id::new(ID), dialog));
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Action {
     Focus,
@@ -218,14 +226,12 @@ pub(super) fn show(
     registry: &[(&str, &str)],
 ) -> Option<PanelRequest> {
     let ctx = ui.ctx().clone();
-    let button = ui.small_button("Arrange panels… · Ctrl+F6");
-    super::welcome::focus_control(ui, &button);
     let activate = ui.input_mut(|input| {
         input.consume_key(Modifiers::CTRL, Key::F6)
             || input.consume_key(Modifiers::COMMAND, Key::F6)
     });
     let mut dialog = ctx.data(|data| data.get_temp::<Dialog>(Id::new(ID)));
-    if (activate || button.clicked()) && ui.is_enabled() && dialog.is_none() {
+    if activate && ui.is_enabled() && dialog.is_none() {
         dialog = Dialog::new(book, registry, &ctx);
     }
     let Some(mut dialog) = dialog else {

@@ -109,8 +109,9 @@ fn upload_textures(ui: &mut Ui, studio: &mut Studio) {
 }
 
 pub(super) fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
+    let docked=ui.data(|data|data.get_temp::<bool>(eframe::egui::Id::new("dock-pane-content"))).unwrap_or(false);
     ui.horizontal(|ui| {
-        ui.label(RichText::new("Library").strong());
+        if !docked {ui.label(RichText::new("Library").strong());}
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             ui.menu_button("···", |ui| {
                 if ui.button("Open photo or settings…").clicked() {
@@ -146,10 +147,12 @@ pub(super) fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
             });
         });
     });
+    if !docked || !studio.photo.status.starts_with("Open a folder, drop photos,") {
     ui.add(
         eframe::egui::Label::new(RichText::new(&studio.photo.status).small().color(fg_weak()))
             .wrap(),
     );
+    }
     ui.horizontal(|ui| {
         ui.selectable_value(&mut studio.photo.catalog.visible, false, "Folder");
         ui.selectable_value(&mut studio.photo.catalog.visible, true, "Catalog");
@@ -209,11 +212,7 @@ pub(super) fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
 /// Retain the current inspector or library inside the registered Photo panel.
 /// Args: panel UI and studio. Returns no value.
 pub(super) fn develop_content(ui: &mut Ui, studio: &mut Studio) {
-    if studio.libraries.sidebar == crate::app::libraries::Sidebar::Inspector {
-        ui.add_enabled_ui(!studio.photo.is_batching(), |ui| develop_panel(ui, studio));
-    } else {
-        super::library::show(ui, studio);
-    }
+    ui.add_enabled_ui(!studio.photo.is_batching(), |ui| develop_panel(ui, studio));
 }
 
 #[derive(Clone, Copy)]
@@ -471,16 +470,13 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
 }
 
 fn develop_controls(ui: &mut Ui, studio: &mut Studio) {
+    let docked=ui.data(|data|data.get_temp::<bool>(eframe::egui::Id::new("dock-pane-content"))).unwrap_or(false);
     ui.horizontal(|ui| {
-        ui.label(RichText::new("Develop").size(16.0).strong());
+        if !docked {ui.label(RichText::new("Develop").size(16.0).strong());}
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if ui
-                .add_enabled(
-                    studio.photo.selected().is_some(),
-                    Button::new("Reset").frame(false),
-                )
-                .on_hover_text("Reset all adjustments for this photo")
-                .clicked()
+            let reset=ui.add_enabled(studio.photo.selected().is_some(),Button::new("↺").frame(false)).on_hover_text("Reset all adjustments for this photo");
+            let reset=super::agent::named(ui,reset,"Reset");
+            if reset.clicked()
                 && let Some(img) = studio.photo.selected_mut()
             {
                 img.develop = DevelopParams::default();
@@ -490,9 +486,13 @@ fn develop_controls(ui: &mut Ui, studio: &mut Studio) {
         });
     });
     let Some(img) = studio.photo.selected() else {
-        ui.add_space(24.0);
-        ui.label(RichText::new("A little light. A little color.").strong());
-        ui.label(RichText::new("Open a photo to make it yours.").color(fg_weak()));
+        if !docked {
+            ui.add_space(24.0);
+            ui.label(RichText::new("A little light. A little color.").strong());
+            ui.label(RichText::new("Open a photo to make it yours.").color(fg_weak()));
+        } else if super::icons::icon_button(ui,super::icons::ph::FOLDER_OPEN,"Open photo",false) {
+            studio.request_file_dialog(crate::project::dialog_photo,|_,studio,path|{studio.photo.import_file(&path);});
+        }
         return;
     };
     ui.add(eframe::egui::Label::new(RichText::new(&img.name).small().color(fg_weak())).truncate());
@@ -814,7 +814,7 @@ fn slider(ui: &mut Ui, label: &str, v: &mut f32, lo: f32, hi: f32) -> bool {
     changed
 }
 
-fn draw_hist(ui: &mut Ui, hists: &[Histogram; 4]) {
+pub(super) fn draw_hist(ui: &mut Ui, hists: &[Histogram; 4]) {
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 64.0), Sense::hover());
     ui.painter().rect_filled(rect, 3.0, bg_extreme());
     let cols = [

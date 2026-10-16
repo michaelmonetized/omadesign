@@ -1,5 +1,5 @@
 #[path = "document_previews.rs"]
-mod document_previews;
+pub(super) mod document_previews;
 
 use crate::app::Studio;
 use crate::geom::Pt;
@@ -21,7 +21,7 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
         .show(ui, |ui| {
             let row = ui.max_rect();
             let modes = mode_tabs_rect(row);
-            let compact = row.width() < 1120.0;
+            let compact = modes.left() - row.left() < 660.0;
             let left = eframe::egui::Rect::from_min_max(
                 row.min,
                 eframe::egui::pos2(modes.left() - 12.0, row.bottom()),
@@ -54,7 +54,6 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
                     }
                 });
             });
-            // Center against the entire title bar, independently of menu widths.
             ui.scope_builder(eframe::egui::UiBuilder::new().max_rect(modes), |ui| {
                 persona_picker(ui, studio);
             });
@@ -65,14 +64,8 @@ pub fn top_bar(ui: &mut Ui, studio: &mut Studio) {
                 );
                 ui.scope_builder(eframe::egui::UiBuilder::new().max_rect(right), |ui| {
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        let photo = studio.persona == Persona::Photo;
                         super::library::tabs(ui, studio);
-                        if photo {
-                            library_buttons(ui, studio);
-                        }
-                        if !compact && photo && ui.button("Place in Design").clicked() {
-                            studio.send_photo_to_design();
-                        }
+
                     });
                 });
             }
@@ -121,16 +114,58 @@ fn zoom_corner(ui: &mut Ui, studio: &mut Studio) {
 fn main_menus(ui: &mut Ui, studio: &mut Studio) {
     file_menu(ui, studio);
     edit_menu(ui, studio);
-    ui.menu_button("Select", |ui| super::selection::menu(ui, studio));
-    ui.add_enabled_ui(studio.persona != Persona::Photo, |ui| {
-        object_menu(ui, studio);
-    });
+    if studio.persona == Persona::Photo {
+        ui.menu_button("Photo", |ui| {
+            if ui.button("Copy adjustments").clicked() {super::photo::copy_adjustments(studio);ui.close();}
+            if ui.button("Paste adjustments…").clicked() {super::photo::paste_adjustments(ui.ctx(),studio);ui.close();}
+            if ui.button("Presets…").clicked() {super::photo::preset_library(ui.ctx(),studio);ui.close();}
+            if ui.button("Place in Design").clicked() {studio.send_photo_to_design();ui.close();}
+            ui.separator();
+            if ui.button("Shape library…").clicked(){studio.show_shape_browser=true;ui.close();}
+            if ui.button("Free photos…").clicked(){studio.show_asset_browser=true;ui.close();}
+        });
+        pane_menu(ui,studio,"Develop",&["photo-develop","histogram","presets","history"]);
+    } else {
+        if studio.persona == Persona::Pixel {
+            pane_menu(ui,studio,"Image",&["transform","adjustments","channels","info"]);
+            ui.menu_button("Layer",|ui| {
+                if ui.button("New pixel layer").clicked(){studio.add_layer(true);ui.close();}
+                if ui.button("New group").clicked(){studio.add_layer_group();ui.close();}
+                if ui.button("Duplicate").clicked(){studio.duplicate_selection();ui.close();}
+                if ui.button("Delete").clicked(){studio.delete_layer();ui.close();}
+                ui.separator();
+                if let Some(layer)=studio.active_layer {
+                    if ui.button("Add layer mask").clicked(){studio.add_layer_mask(layer,true);ui.close();}
+                }
+            });
+        } else { object_menu(ui, studio); }
+        pane_menu(ui,studio,"Type",&["character","paragraph","opentype","glyphs","typography"]);
+        ui.menu_button("Select", |ui| super::selection::menu(ui, studio));
+        if studio.persona==Persona::Layout {
+            pane_menu(ui,studio,"Layout",&["layout","hierarchy","components","variables","prototype"]);
+        } else if studio.persona==Persona::Motion {
+            pane_menu(ui,studio,"Animation",&["timeline","keyframes","compositions","scene3d"]);
+        } else {
+            pane_menu(ui,studio,if studio.persona==Persona::Pixel {"Filter"} else {"Effect"},&["effects","adjustments","appearance","transparency"]);
+        }
+    }
     view_menu(ui, studio);
+    super::panel_workspace::menu(ui,studio);
     super::plugins::menu(ui, studio);
 }
 
+fn pane_menu(ui: &mut Ui, studio: &mut Studio, title: &str, panels: &[&str]) {
+    ui.menu_button(title,|ui| {
+        for panel in panels {
+            if let Some((_,label))=super::panel_workspace::PANELS.iter().find(|entry|entry.0==*panel) {
+                if ui.button(*label).clicked() {super::panel_workspace::open(ui.ctx(),studio,panel);ui.close();}
+            }
+        }
+    });
+}
+
 fn mode_tabs_rect(row: eframe::egui::Rect) -> eframe::egui::Rect {
-    eframe::egui::Rect::from_center_size(row.center(), vec2(7.0 * 36.0 + 6.0 * 6.0, 30.0))
+    eframe::egui::Rect::from_min_size(eframe::egui::pos2((row.right() - 144.0 - 288.0).max(row.left() + 180.0), row.center().y - 15.0), vec2(288.0, 30.0))
 }
 
 fn file_menu(ui: &mut Ui, studio: &mut Studio) {
@@ -992,11 +1027,11 @@ pub fn document_previews_ready(ctx: &eframe::egui::Context) -> bool {
 pub fn left_toolbar(ui: &mut Ui, studio: &mut Studio) {
     Panel::left("tools")
         .resizable(false)
-        .exact_size(52.0)
+        .exact_size(76.0)
         .frame(
             Frame::new()
                 .fill(bg_panel())
-                .inner_margin(Margin::symmetric(8, 8)),
+                .inner_margin(Margin::symmetric(4, 8)),
         )
         .show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 3.0;
@@ -1018,7 +1053,8 @@ pub fn left_toolbar(ui: &mut Ui, studio: &mut Studio) {
                 .scroll_bar_visibility(eframe::egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
                 .show(ui, |ui| {
                     let mut last_group = "";
-                    for t in well.iter().copied() {
+                    for row in well.chunks(2) {
+                        let t = row[0];
                         let group = match t {
                             Tool::Select | Tool::Node => "sel",
                             Tool::Pen | Tool::Pencil => "path",
@@ -1045,9 +1081,14 @@ pub fn left_toolbar(ui: &mut Ui, studio: &mut Studio) {
                             icons::well_separator(ui);
                         }
                         last_group = group;
-                        if icons::tool_button(ui, t, studio.tool == t) {
-                            studio.set_tool(t);
-                        }
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 2.0;
+                            for &tool in row {
+                                if icons::tool_button(ui, tool, studio.tool == tool) {
+                                    studio.set_tool(tool);
+                                }
+                            }
+                        });
                     }
                 });
             if libraries {

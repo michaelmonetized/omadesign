@@ -4660,6 +4660,10 @@ impl Studio {
 }
 
 impl eframe::App for Studio {
+    fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
+        visuals.panel_fill.to_normalized_gamma_f32()
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         if self.allow_close || ctx.input(|i| i.viewport().close_requested()) {

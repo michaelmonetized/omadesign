@@ -167,7 +167,7 @@ pub(super) fn ready(ctx: &egui::Context) -> bool {
 }
 
 /// Build a bounded display proxy while retaining authoritative samples in the document.
-fn snapshot(doc: &Document) -> Result<Document, String> {
+pub(in crate::ui) fn snapshot(doc: &Document) -> Result<Document, String> {
     let mut failure = None;
     let mut out = doc.layout_snapshot_with_shapes(|shape| {
         shape.clone_with_mask(shape.mask.as_ref().and_then(|mask| {
@@ -266,7 +266,7 @@ fn proxy_pixels(source: &Pixels, ratio: f32) -> Result<Pixels, String> {
     Ok(out)
 }
 
-fn bounds(doc: &Document) -> Bounds {
+pub(in crate::ui) fn bounds(doc: &Document) -> Bounds {
     let mut bounds = doc
         .artboards
         .iter()
@@ -287,7 +287,7 @@ fn bounds(doc: &Document) -> Bounds {
     bounds
 }
 
-fn render(doc: &Document, playhead: Option<f32>) -> Result<egui::ColorImage, String> {
+pub(in crate::ui) fn render(doc: &Document, playhead: Option<f32>) -> Result<egui::ColorImage, String> {
     let bounds = bounds(doc);
     let edge = SIDE as f32;
     let scale =

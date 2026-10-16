@@ -119,6 +119,51 @@ pub(crate) fn color_edit(ui: &mut Ui, salt: impl Hash + std::fmt::Debug, color: 
     *color != before
 }
 
+/// Draw one color plane and its native numeric controls inside the Color pane.
+/// Args: pane UI and selected paint color. Returns accepted edits recorded against their real responses.
+pub(super) fn inline(ui: &mut Ui, color: &mut Rgba) -> bool {
+    let id=ui.make_persistent_id("inline-color");
+    let mut state=ui.data(|d|d.get_temp::<PickerState>(id)).unwrap_or_else(||PickerState {
+        previous:*color,last:*color,hsv:egui::ecolor::Hsva::from_srgba_unmultiplied(color.to_array()),
+    });
+    if state.last!=*color {state.hsv=egui::ecolor::Hsva::from_srgba_unmultiplied(color.to_array());}
+    let before=*color;
+    let width=ui.available_width().clamp(40.0,360.0);
+    let (rect,response)=ui.allocate_exact_size(vec2(width,width*0.64),Sense::click_and_drag());
+    response.widget_info(||egui::WidgetInfo::labeled(egui::WidgetType::Slider,response.enabled(),"Saturation and brightness"));
+    let mut mesh=egui::Mesh::default();
+    for y in 0..=12 {for x in 0..=12 {
+        let s=x as f32/12.0;let v=1.0-y as f32/12.0;
+        mesh.colored_vertex(rect.min+vec2(s*rect.width(),(1.0-v)*rect.height()),egui::ecolor::Hsva::new(state.hsv.h,s,v,1.0).into());
+    }}
+    for y in 0..12 {for x in 0..12 {let a=y*13+x;mesh.add_triangle(a,a+1,a+13);mesh.add_triangle(a+1,a+14,a+13);}}
+    ui.painter().add(egui::Shape::mesh(mesh));
+    let old=state.hsv;
+    if response.enabled()&&(response.clicked()||response.dragged())&&let Some(pointer)=response.interact_pointer_pos(){
+        state.hsv.s=((pointer.x-rect.left())/rect.width()).clamp(0.0,1.0);
+        state.hsv.v=(1.0-(pointer.y-rect.top())/rect.height()).clamp(0.0,1.0);
+        response.request_focus();
+    }
+    if response.has_focus(){
+        let delta=ui.input(|i| {let down=|key| if i.key_pressed(key) {1.0} else {0.0};vec2(down(egui::Key::ArrowRight)-down(egui::Key::ArrowLeft),down(egui::Key::ArrowUp)-down(egui::Key::ArrowDown))});
+        state.hsv.s=(state.hsv.s+delta.x*0.01).clamp(0.0,1.0);state.hsv.v=(state.hsv.v+delta.y*0.01).clamp(0.0,1.0);
+    }
+    crate::app::input_history::record(response,old!=state.hsv);
+    let center=rect.min+vec2(state.hsv.s*rect.width(),(1.0-state.hsv.v)*rect.height());
+    ui.painter().circle_stroke(center,4.0,egui::Stroke::new(1.5,egui::Color32::WHITE));
+    let hue=ui.add(egui::Slider::new(&mut state.hsv.h,0.0..=1.0).text("Hue").show_value(false));
+    crate::app::input_history::changed(hue);
+    let alpha=ui.add(egui::Slider::new(&mut state.hsv.a,0.0..=1.0).text("Alpha").show_value(false));
+    crate::app::input_history::changed(alpha);
+    if state.hsv!=old {*color=Rgba::from_array(state.hsv.to_srgba_unmultiplied());}
+    let hex=id.with("hex");
+    let edited=hex_field(ui,hex,color,0.0,false);
+    if let Some(response)=ui.ctx().read_response(hex.with("edit")){crate::app::input_history::record(response,edited);}
+    if edited {state.hsv=egui::ecolor::Hsva::from_srgba_unmultiplied(color.to_array());}
+    state.last=*color;ui.data_mut(|d|d.insert_temp(id,state));
+    *color!=before
+}
+
 fn picker_contents(ui: &mut Ui, id: Id, color: &mut Rgba, state: &mut PickerState) {
     ui.spacing_mut().slider_width = 240.0;
     ui.horizontal(|ui| {

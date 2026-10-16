@@ -3,7 +3,7 @@ use crate::document::Shape;
 use crate::geom::Geom;
 use eframe::egui;
 
-pub(super) const HEIGHT: f32 = 30.0;
+pub(super) const HEIGHT: f32 = 34.0;
 
 pub(super) struct ObjectRow {
     pub index: usize,

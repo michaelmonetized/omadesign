@@ -9,36 +9,15 @@ pub(super) fn arrange_panel(ui: &mut Ui, studio: &mut Studio) {
     use super::icons::{self, ph};
     use crate::align::{Align, Distribute};
     let selected = !studio.selection.is_empty() || studio.selected_layer.is_some();
-    egui::CollapsingHeader::new("Arrange")
-        .default_open(true)
-        .show(ui, |ui| {
-            ui.add_enabled_ui(selected, |ui| {
-                egui::Grid::new("arrange-order")
-                    .num_columns(2)
-                    .spacing([6.0, 4.0])
-                    .show(ui, |ui| {
-                        if ui
-                            .button("To front")
-                            .on_hover_text("Ctrl+Shift+]")
-                            .clicked()
-                        {
-                            studio.bring_to_front();
-                        }
-                        if ui.button("Forward").on_hover_text("Ctrl+]").clicked() {
-                            studio.bring_forward();
-                        }
-                        ui.end_row();
-                        if ui.button("To back").on_hover_text("Ctrl+Shift+[").clicked() {
-                            studio.send_to_back();
-                        }
-                        if ui.button("Backward").on_hover_text("Ctrl+[").clicked() {
-                            studio.send_backward();
-                        }
-                        ui.end_row();
-                    });
-            });
-
+    ui.add_enabled_ui(selected, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            if icons::icon_button(ui,ph::SKIP_FORWARD,"Bring to front · Ctrl+Shift+]",false) {studio.bring_to_front();}
+            if icons::icon_button(ui,ph::ARROW_UP,"Bring forward · Ctrl+]",false) {studio.bring_forward();}
+            if icons::icon_button(ui,ph::SKIP_BACK,"Send to back · Ctrl+Shift+[",false) {studio.send_to_back();}
+            if icons::icon_button(ui,ph::ARROW_DOWN,"Send backward · Ctrl+[",false) {studio.send_backward();}
         });
+    });
+    ui.separator();
     egui::CollapsingHeader::new("Align")
         .default_open(true)
         .show(ui, |ui| {
@@ -70,17 +49,17 @@ pub(super) fn arrange_panel(ui: &mut Ui, studio: &mut Studio) {
                 ui.horizontal_wrapped(|ui| {
                     for (label, hint, distribution) in [
                         (
-                            "Distribute H",
+                            ph::ALIGN_CENTER_H,
                             "Distribute horizontally",
                             Distribute::Horizontal,
                         ),
                         (
-                            "Distribute V",
+                            ph::ALIGN_CENTER_V,
                             "Distribute vertically",
                             Distribute::Vertical,
                         ),
                     ] {
-                        if ui.button(label).on_hover_text(hint).clicked() {
+                        if icons::icon_button(ui, label, hint, false) {
                             studio.distribute_sel(distribution);
                         }
                     }

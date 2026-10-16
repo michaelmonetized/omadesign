@@ -80,7 +80,7 @@ fn import_project(studio: &mut Studio, path: &std::path::Path) {
 
 /// Keep continuous composition properties in the accepted field scope.
 /// Args: existing menu UI and studio. Returns after the original typed validation/commit path.
-fn controls(ui: &mut Ui, studio: &mut Studio) {
+pub(super) fn controls(ui: &mut Ui, studio: &mut Studio) {
     if super::keyboard_controls::button(ui, "add-project", "Add project…").clicked()
         && let Some(path) = rfd::FileDialog::new()
             .add_filter("Motion project", &["oma", "omamotion"])

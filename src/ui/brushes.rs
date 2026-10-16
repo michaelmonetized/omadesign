@@ -443,3 +443,33 @@ mod tests {
         assert!(first.is_some(), "visible brush previews were drawn");
     }
 }
+
+/// Draw real brush presets in a dock, using the existing brush renderer and selection route.
+/// Args: pane UI and editor. Returns nothing; imports retain the same native picker and worker.
+pub(super) fn pane(ui:&mut egui::Ui,studio:&mut Studio){
+    let mut selected=None;
+    for (pack_index,pack) in studio.brushes.packs.iter().enumerate(){
+        for (brush_index,preset) in pack.brushes.iter().enumerate(){
+            let key=egui::Id::new(("dock-brush",pack_index,brush_index,Arc::as_ptr(&preset.tip),super::theme::fg().to_array()));
+            let texture=ui.data(|d|d.get_temp::<egui::TextureHandle>(key)).unwrap_or_else(||{
+                let mut pixels=tiny_skia::Pixmap::new(120,32).unwrap();
+                let mut brush=crate::paint::Brush::default();preset.apply(&mut brush);brush.size=20.0;
+                brush.color=crate::color::Rgba::from_array(super::theme::fg().to_array());
+                crate::brushes::stroke(&mut pixels,crate::geom::Pt::new(12.0,16.0),crate::geom::Pt::new(108.0,16.0),&brush,&preset.tip,false);
+                let image=egui::ColorImage::from_rgba_premultiplied([120,32],pixels.data());
+                let texture=ui.ctx().load_texture(format!("brush-{key:?}"),image,TextureOptions::LINEAR);
+                ui.data_mut(|d|d.insert_temp(key,texture.clone()));texture
+            });
+            ui.horizontal(|ui|{
+                let response=ui.add(egui::Button::image(egui::Image::new(&texture).fit_to_exact_size(egui::vec2(96.0,26.0)))
+                    .selected(studio.brushes.selected==Some((pack_index,brush_index)))).on_hover_text(&preset.name);
+                if response.clicked(){selected=Some((pack_index,brush_index));}
+                ui.add(egui::Label::new(&preset.name).truncate());
+            });
+        }
+    }
+    if let Some((pack,brush))=selected {studio.select_brush(pack,brush);studio.set_tool(Tool::Brush);}
+    if super::icons::tiny_icon(ui,super::icons::ph::PLUS,"Import brushes",false){
+        studio.request_file_dialog(||rfd::FileDialog::new().add_filter("Brushes",&["omabrush","abr","svg","png"]).pick_file(),|_,studio,path|studio.import_brush_pack(&path));
+    }
+}

@@ -4,6 +4,9 @@ use eframe::egui::{self, Id, InnerResponse, Ui};
 /// Args: parent UI, unique absolute owner ID and native control body.
 /// Returns the body result and allocated response, retaining the parent's presentation.
 pub fn native_scope<R>(ui: &mut Ui, id: Id, body: impl FnOnce(&mut Ui) -> R) -> InnerResponse<R> {
+    let id = ui
+        .data(|data| data.get_temp::<Id>(Id::new("oma-native-view")))
+        .map_or(id, |view| id.with(view));
     #[cfg(not(feature = "oma-ui-egui032"))]
     {
         ui.scope_builder(egui::UiBuilder::new().id(id), body)
@@ -32,4 +35,21 @@ pub fn native_scope<R>(ui: &mut Ui, id: Id, body: impl FnOnce(&mut Ui) -> R) -> 
         drop(child);
         InnerResponse::new(inner, ui.allocate_rect(rect, egui::Sense::hover()))
     }
+}
+
+/// Keep simultaneous views of the same property independent.
+/// Args: UI, document/view identity and native content. Returns the content result.
+pub fn with_native_view<R>(ui: &mut Ui, view: Id, body: impl FnOnce(&mut Ui) -> R) -> R {
+    let key = Id::new("oma-native-view");
+    let previous = ui.data(|data| data.get_temp::<Id>(key));
+    ui.data_mut(|data| data.insert_temp(key, view));
+    let result = body(ui);
+    ui.data_mut(|data| {
+        if let Some(previous) = previous {
+            data.insert_temp(key, previous);
+        } else {
+            data.remove::<Id>(key);
+        }
+    });
+    result
 }

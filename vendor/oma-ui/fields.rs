@@ -3,7 +3,7 @@ use eframe::egui::{self, Response, Ui};
 use std::cell::RefCell;
 #[path = "native_scope.rs"]
 mod scope;
-pub use scope::native_scope;
+pub use scope::{native_scope, with_native_view};
 
 #[derive(Clone, Copy, Default)]
 pub struct FieldState<'a> {
@@ -72,8 +72,9 @@ pub fn number<N: egui::emath::Numeric>(
                 .add_enabled_ui(enabled, |ui| {
                     ui.horizontal(|ui| {
                         let width = (ui.available_width()
-                            - if reset.is_some() { 48.0 } else { 0.0 })
+                            - if reset.is_some() { 28.0 } else { 0.0 })
                         .max(24.0);
+                        ui.spacing_mut().interact_size.x = width;
                         let mut drag = egui::DragValue::new(value)
                             .range(range)
                             .clamp_existing_to_range(false)
@@ -93,7 +94,12 @@ pub fn number<N: egui::emath::Numeric>(
                             .on_hover_text(label);
                         if let Some(reset) = reset {
                             let reset_response = ui
-                                .small_button("Reset")
+                                .add(
+                                    egui::Button::new("↺")
+                                        .small()
+                                        .frame(false)
+                                        .min_size(egui::vec2(22.0, 22.0)),
+                                )
                                 .on_hover_text(format!("Reset {label}"));
                             reset_response.widget_info(|| {
                                 egui::WidgetInfo::labeled(

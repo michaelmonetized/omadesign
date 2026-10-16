@@ -506,7 +506,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
 
 /// Draw the key picker and one captured edit draft.
 /// Args: menu UI and editor. Returns no value; changing targets creates a fresh draft.
-fn editor(ui: &mut Ui, studio: &mut Studio) {
+pub(super) fn editor(ui: &mut Ui, studio: &mut Studio) {
     let state_id = Id::new((ID, "draft", &studio.swap_id, &studio.selection));
     let mut draft = ui
         .data(|data| data.get_temp::<Draft>(state_id))

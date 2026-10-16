@@ -61,6 +61,12 @@ fn mixed_contents(ui: &mut Ui, studio: &mut Studio) -> bool {
         .collect();
     let mut after = values[0];
     let mut changed = [false; 5];
+    let lock_id = ui.make_persistent_id("constrain-proportions");
+    let mut linked = ui.data_mut(|data| data.get_persisted::<bool>(lock_id)).unwrap_or(false);
+    if super::icons::tiny_icon(ui, if linked { super::icons::ph::LOCK } else { super::icons::ph::LOCK_OPEN }, "Constrain proportions", linked) {
+        linked = !linked;
+        ui.data_mut(|data| data.insert_persisted(lock_id, linked));
+    }
     for (index, (label, unit, range, reset)) in [
         ("X", " px", -100000.0..=100000.0, Some(0.0)),
         ("Y", " px", -100000.0..=100000.0, Some(0.0)),
@@ -89,7 +95,7 @@ fn mixed_contents(ui: &mut Ui, studio: &mut Studio) -> bool {
         );
         changed[index] = crate::app::input_history::record(field.response, field.changed);
     }
-    apply(studio, after, changed);
+    apply_constrained(studio, after, changed, linked);
     true
 }
 
@@ -97,6 +103,10 @@ fn mixed_contents(ui: &mut Ui, studio: &mut Studio) -> bool {
 /// Args: studio, desired X/Y/width/height/rotation and changed-property flags.
 /// Returns whether an editable selection changed; locked or invalid edits leave artwork untouched.
 fn apply(studio: &mut Studio, after: [f32; 5], changed: [bool; 5]) -> bool {
+    apply_constrained(studio, after, changed, false)
+}
+
+fn apply_constrained(studio: &mut Studio, after: [f32; 5], changed: [bool; 5], linked: bool) -> bool {
     if !changed.iter().any(|changed| *changed) || !after.iter().all(|value| value.is_finite()) {
         return false;
     }
@@ -125,18 +135,23 @@ fn apply(studio: &mut Studio, after: [f32; 5], changed: [bool; 5]) -> bool {
             let bounds = shape.world_bbox();
             let pose = studio.live_pose(shape.id);
             let shown = pose.map_bounds(bounds);
+            let mut desired = after;
+            if linked && changed[2] != changed[3] {
+                if changed[2] { desired[3] = after[2] * shown.height() / shown.width().max(1.0); }
+                else { desired[2] = after[3] * shown.width() / shown.height().max(1.0); }
+            }
             for (index, prop, value) in [
                 (0, crate::motion::Prop::X, pose.dx + after[0] - shown.min.x),
                 (1, crate::motion::Prop::Y, pose.dy + after[1] - shown.min.y),
                 (
                     2,
                     crate::motion::Prop::Width,
-                    pose.width_scale * after[2] / shown.width().max(1.0),
+                    pose.width_scale * desired[2] / shown.width().max(1.0),
                 ),
                 (
                     3,
                     crate::motion::Prop::Height,
-                    pose.height_scale * after[3] / shown.height().max(1.0),
+                    pose.height_scale * desired[3] / shown.height().max(1.0),
                 ),
                 (
                     4,
@@ -144,7 +159,7 @@ fn apply(studio: &mut Studio, after: [f32; 5], changed: [bool; 5]) -> bool {
                     after[4].to_radians() - shape.rotation,
                 ),
             ] {
-                if changed[index] {
+                if changed[index] || (linked && matches!(index,2|3) && (changed[2] || changed[3])) {
                     motion.set_key(
                         shape.id,
                         prop,
@@ -174,6 +189,10 @@ fn apply(studio: &mut Studio, after: [f32; 5], changed: [bool; 5]) -> bool {
                     if changed[index] {
                         value[index] = after[index];
                     }
+                }
+                if linked && changed[2] != changed[3] {
+                    if changed[2] { value[3] = after[2] * bounds.height() / bounds.width().max(1.0); }
+                    else { value[2] = after[3] * bounds.width() / bounds.height().max(1.0); }
                 }
                 let before = shape.geom.clone();
                 let mut geometry = before.clone();
@@ -253,6 +272,21 @@ mod tests {
         studio.active_layer = Some(0);
         studio.show_welcome = false;
         studio
+    }
+    #[test]
+    fn human_qa_linked_selection_preserves_each_object_ratio_and_one_undo() {
+        let mut studio=fixture();
+        let id=studio.selection[1].1;
+        studio.doc.find_shape_mut(0,id).unwrap().geom=crate::geom::Geom::Rect {origin:Pt::new(220.0,30.0),size:Pt::new(50.0,100.0),radius:0.0};
+        let before=crate::project::encode(&studio.doc).unwrap();
+        assert!(apply_constrained(&mut studio,[20.0,30.0,200.0,80.0,0.0],[false,false,true,false,false],true));
+        let shapes=studio.doc.layers[0].kind.shapes().unwrap();
+        assert_eq!(shapes[0].geom.bbox().size(),Pt::new(200.0,160.0));
+        assert_eq!(shapes[1].geom.bbox().size(),Pt::new(200.0,400.0));
+        let after=crate::project::encode(&studio.doc).unwrap();
+        assert_eq!(crate::project::encode(&crate::project::decode(&after).unwrap()).unwrap(),after);
+        studio.undo();assert_eq!(crate::project::encode(&studio.doc).unwrap(),before);
+        studio.redo();assert_eq!(crate::project::encode(&studio.doc).unwrap(),after);
     }
     #[test]
     fn shared_transform_preserves_mixed_values_undo_and_native_roundtrip() {

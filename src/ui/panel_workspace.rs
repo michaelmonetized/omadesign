@@ -1,20 +1,181 @@
-//! Application panel registry. Canvas and document commands remain outside docking.
-use super::workspace::{Place, Workspace};
-use crate::app::Studio;
+//! Docked editor panes. Workspace changes never enter document history.
+use super::workspace::{Group, Place, Workspace};
+use crate::{app::Studio, tools::Persona};
 use eframe::egui::{self, Ui};
 
-const PANELS: &[(&str, &str)] = &[
-    ("properties", "Properties"),
+pub(super) const PANELS: &[(&str, &str)] = &[
+    ("transform", "Transform"),
+    ("align", "Align"),
+    ("pathfinder", "Pathfinder"),
+    ("appearance", "Appearance"),
+    ("color", "Color"),
+    ("swatches", "Swatches"),
+    ("stroke", "Stroke"),
+    ("gradients", "Gradients"),
+    ("patterns", "Patterns"),
+    ("styles", "Styles"),
     ("layers", "Layers"),
+    ("paths", "Paths"),
+    ("channels", "Channels"),
+    ("navigator", "Navigator"),
+    ("history", "History"),
+    ("actions", "Actions"),
+    ("shapes", "Shapes"),
+    ("brushes", "Brushes"),
+    ("character", "Character"),
+    ("paragraph", "Paragraph"),
+    ("opentype", "OpenType"),
+    ("glyphs", "Glyphs"),
+    ("typography", "Typography"),
+    ("assets", "Assets"),
+    ("links", "Links"),
+    ("artboards", "Artboards"),
+    ("info", "Info"),
+    ("transparency", "Transparency"),
+    ("effects", "Effects"),
+    ("trace", "Image Trace"),
+    ("mask", "Masks"),
+    ("selection", "Selection"),
+    ("layout", "Auto Layout"),
+    ("hierarchy", "Hierarchy"),
+    ("components", "Components"),
+    ("variables", "Variables"),
+    ("prototype", "Prototype"),
     ("timeline", "Timeline"),
-    ("hierarchy", "Layout hierarchy"),
-    ("photo-library", "Photo library"),
-    ("photo-develop", "Photo develop"),
+    ("keyframes", "Keyframes"),
+    ("compositions", "Compositions"),
+    ("scene3d", "3D Scene"),
+    ("photo-library", "Photo Library"),
+    ("photo-develop", "Develop"),
+    ("histogram", "Histogram"),
+    ("presets", "Presets"),
+    ("adjustments", "Adjustments"),
 ];
 
-/// Draw task panels around the document canvas.
-/// Args: root UI and studio. Returns no value; saved layout changes never enter artwork undo.
-#[allow(deprecated)]
+fn task(persona: Persona) -> &'static str {
+    match persona {
+        Persona::Layout => "Layout",
+        Persona::Pixel => "Pixel",
+        Persona::Motion => "Motion",
+        Persona::Photo => "Photo",
+        _ => "Design",
+    }
+}
+
+fn group(panels: &[&str], place: Place, extent: f32, weight: f32) -> Group {
+    Group {
+        panels: panels.iter().map(|id| (*id).into()).collect(),
+        place,
+        extent,
+        weight,
+        ..Default::default()
+    }
+}
+
+fn preset(name: &str) -> Workspace {
+    let right = |panels: &[&str], weight| group(panels, Place::Right, 320.0, weight);
+    let groups = match name {
+        "Pixel" => vec![
+            right(&["color", "swatches", "gradients", "patterns"], 0.25),
+            right(&["brushes", "transform", "adjustments"], 0.25),
+            right(&["layers", "channels", "paths"], 0.5),
+        ],
+        "Layout" => vec![
+            right(&["layout", "transform", "align"], 0.4),
+            right(&["appearance", "stroke", "variables"], 0.2),
+            right(&["layers", "hierarchy", "components"], 0.4),
+        ],
+        "Motion" => vec![
+            right(&["transform", "keyframes", "appearance"], 0.4),
+            right(&["layers", "compositions", "scene3d"], 0.6),
+            group(&["timeline"], Place::Bottom, 220.0, 1.0),
+        ],
+        "Photo" => vec![
+            group(&["photo-library"], Place::Left, 200.0, 1.0),
+            right(&["photo-develop", "presets"], 0.75),
+            right(&["histogram", "history"], 0.25),
+        ],
+        _ => vec![
+            right(&["transform", "align", "pathfinder"], 0.3),
+            right(&["appearance", "stroke", "color", "swatches"], 0.35),
+            right(&["layers", "paths", "channels"], 0.5),
+        ],
+    };
+    Workspace {
+        groups,
+        ..Default::default()
+    }
+}
+
+fn prepare(book: &mut super::workspace::Book, persona: Persona) {
+    book.active = task(persona).into();
+    for name in ["Design", "Pixel", "Layout", "Motion", "Photo"] {
+        let layout = book
+            .tasks
+            .entry(name.into())
+            .or_insert_with(|| preset(name));
+        if layout
+            .groups
+            .iter()
+            .flat_map(|g| &g.panels)
+            .any(|p| p == "properties")
+        {
+            *layout = preset(name);
+        }
+        layout.normalize(&PANELS.iter().map(|p| p.0).collect::<Vec<_>>());
+    }
+}
+
+/// Open and focus one real editor pane.
+/// Args: context, current editor and registered pane. Returns false for unknown panes.
+pub(super) fn open(ctx: &egui::Context, studio: &mut Studio, panel: &str) -> bool {
+    if !PANELS.iter().any(|p| p.0 == panel) {
+        return false;
+    }
+    prepare(&mut studio.panel_workspaces, studio.persona);
+    let layout = studio
+        .panel_workspaces
+        .tasks
+        .get_mut(task(studio.persona))
+        .unwrap();
+    layout.restore(panel);
+    layout.request_focus(ctx, "oma-workspace", panel);
+    true
+}
+
+/// Draw the native Window menu with working pane and recovery commands.
+/// Args: menu UI and editor. Returns nothing; only workspace preferences are changed.
+pub(super) fn menu(ui: &mut Ui, studio: &mut Studio) {
+    ui.menu_button("Window", |ui| {
+        if ui.button("Reset workspace").clicked() {
+            studio
+                .panel_workspaces
+                .tasks
+                .insert(task(studio.persona).into(), preset(task(studio.persona)));
+            studio.save_panel_workspaces();
+            ui.close();
+        }
+        if ui.button("Arrange panels…   Ctrl+F6").clicked() {
+            prepare(&mut studio.panel_workspaces, studio.persona);
+            super::panel_keyboard::open(ui.ctx(), &studio.panel_workspaces, PANELS);
+            ui.close();
+        }
+        ui.separator();
+        egui::ScrollArea::vertical()
+            .max_height(ui.available_height().min(520.0))
+            .show(ui, |ui| {
+                for &(id, label) in PANELS {
+                    if ui.button(label).clicked() {
+                        open(ui.ctx(), studio, id);
+                        ui.close();
+                    }
+                }
+            });
+    });
+}
+
+/// Draw editor panes around the current canvas.
+/// Args: root UI and editor. Returns nothing; document commands remain app-owned.
 pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
     let center = panels(ui, studio);
     ui.scope_builder(egui::UiBuilder::new().max_rect(center), |ui| {
@@ -22,66 +183,14 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
     });
 }
 
-/// Draw the registered panels around an app-owned viewer.
-/// Args: root UI and studio. Returns the remaining center rectangle.
+/// Draw persistent pane groups around an application viewer.
+/// Args: root UI and editor. Returns the visible canvas rectangle.
 pub(super) fn panels(ui: &mut Ui, studio: &mut Studio) -> egui::Rect {
     let mut book = std::mem::take(&mut studio.panel_workspaces);
     let before = book.clone();
-    let presets = [
-        (
-            "Design",
-            Workspace::preset(&[("properties", Place::Right), ("layers", Place::Left)]),
-        ),
-        (
-            "Layout",
-            Workspace::preset(&[("properties", Place::Right), ("hierarchy", Place::Left)]),
-        ),
-        (
-            "Pixel",
-            Workspace::preset(&[("properties", Place::Right), ("layers", Place::Right)]),
-        ),
-        (
-            "Motion",
-            Workspace::preset(&[
-                ("properties", Place::Right),
-                ("layers", Place::Left),
-                ("timeline", Place::Bottom),
-            ]),
-        ),
-        ("Photo", photo_preset()),
-    ];
-    for (_, layout) in &mut book.tasks {
-        layout.normalize(&PANELS.iter().map(|p| p.0).collect::<Vec<_>>());
-    }
-    let persona_key = egui::Id::new("oma-workspace-persona");
-    let persona_name = match studio.persona {
-        crate::tools::Persona::Layout => "Layout",
-        crate::tools::Persona::Pixel => "Pixel",
-        crate::tools::Persona::Motion => "Motion",
-        crate::tools::Persona::Photo => "Photo",
-        _ => "Design",
-    };
-    let previous_persona: Option<String> = ui.ctx().data_mut(|data| data.get_temp(persona_key));
-    if previous_persona.as_deref() != Some(persona_name) {
-        book.active = persona_name.into();
-    }
-    book.toolbar_for(ui, "oma-workspace", &presets, PANELS);
-    let active_persona = match book.active.as_str() {
-        "Layout" => crate::tools::Persona::Layout,
-        "Pixel" => crate::tools::Persona::Pixel,
-        "Motion" => crate::tools::Persona::Motion,
-        "Photo" => crate::tools::Persona::Photo,
-        _ => crate::tools::Persona::Design,
-    };
-    if studio.persona != active_persona {
-        studio.switch_persona(active_persona);
-    }
-    ui.ctx()
-        .data_mut(|data| data.insert_temp(persona_key, book.active.clone()));
-    let active = book.active.clone();
+    prepare(&mut book, studio.persona);
     if let Some(request) = super::panel_keyboard::show(ui, &mut book, PANELS) {
-        let layout = book.tasks.get_mut(&active).unwrap();
-        layout.normalize(&PANELS.iter().map(|panel| panel.0).collect::<Vec<_>>());
+        let layout = book.tasks.get_mut(task(studio.persona)).unwrap();
         if let Some((panel, size)) = request.size {
             layout.request_floating_size(ui.ctx(), "oma-workspace", &panel, size);
         }
@@ -89,62 +198,46 @@ pub(super) fn panels(ui: &mut Ui, studio: &mut Studio) -> egui::Rect {
             layout.request_focus(ui.ctx(), "oma-workspace", &panel);
         }
     }
-    let center =
-        book.tasks
-            .get_mut(&active)
-            .unwrap()
-            .show(ui, "oma-workspace", PANELS, |ui, panel| match panel {
-                "properties" => super::studios::inspector_content(ui, studio),
-                "layers" => super::studios::layers_content(ui, studio),
-                "timeline" => super::timeline::content(ui, studio),
-                "hierarchy" => super::layout::hierarchy_content(ui, studio),
-                "photo-library" => super::photo::filmstrip(ui, studio),
-                "photo-develop" => super::photo::develop_content(ui, studio),
-                _ => {}
-            });
+    let center = book.tasks.get_mut(task(studio.persona)).unwrap().show(
+        ui,
+        "oma-workspace",
+        PANELS,
+        |ui, panel| {
+            if panel == "layers" {
+                super::studios::layers_content(ui, studio);
+            } else {
+                egui::ScrollArea::vertical()
+                    .min_scrolled_height(0.0)
+                    .id_salt(("pane-body", panel))
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| super::panes::show(ui, studio, panel));
+            }
+        },
+    );
     let changed = before != book;
     studio.panel_workspaces = book;
     let dirty_key = egui::Id::new("oma-workspaces-dirty");
     let dirty = ui
         .ctx()
-        .data_mut(|data| data.get_temp::<bool>(dirty_key))
+        .data(|d| d.get_temp::<bool>(dirty_key))
         .unwrap_or(false)
         || changed;
-    if dirty && !ui.input(|input| input.pointer.any_down()) {
+    if dirty && !ui.input(|i| i.pointer.any_down()) {
         studio.save_panel_workspaces();
-        ui.ctx().data_mut(|data| data.insert_temp(dirty_key, false));
+        ui.ctx().data_mut(|d| d.insert_temp(dirty_key, false));
     } else if dirty {
-        ui.ctx().data_mut(|data| data.insert_temp(dirty_key, true));
+        ui.ctx().data_mut(|d| d.insert_temp(dirty_key, true));
     }
     center
 }
 
-/// Keep the existing Photo panel widths in its workspace preset.
-/// Args: none. Returns an ordinary workspace with the two Photo panels.
 fn photo_preset() -> Workspace {
-    let mut layout = Workspace::preset(&[
-        ("photo-library", Place::Left),
-        ("photo-develop", Place::Right),
-    ]);
-    for group in &mut layout.groups {
-        group.extent = if group.panels.iter().any(|id| id == "photo-library") {
-            200.0
-        } else {
-            288.0
-        };
-    }
-    layout
+    preset("Photo")
 }
 
-/// Return a closed app dialog to the current registered native panel.
-/// Args: context and studio. Returns no value; the canonical request handles modal handoff.
 pub(super) fn return_focus(ctx: &egui::Context, studio: &mut Studio) {
-    if let Some(layout) = studio
-        .panel_workspaces
-        .tasks
-        .get_mut(&studio.panel_workspaces.active)
-    {
-        layout.normalize(&PANELS.iter().map(|panel| panel.0).collect::<Vec<_>>());
+    prepare(&mut studio.panel_workspaces, studio.persona);
+    if let Some(layout) = studio.panel_workspaces.tasks.get_mut(task(studio.persona)) {
         if let Some(panel) = layout.focus.clone() {
             layout.request_focus(ctx, "oma-workspace", &panel);
         }
@@ -291,6 +384,100 @@ mod persona_tests {
             },
             |ui| show(ui, &mut studio),
         );
-        assert_eq!(studio.persona, crate::tools::Persona::Design);
+        assert_eq!(studio.persona, crate::tools::Persona::Pixel);
+        assert_eq!(studio.panel_workspaces.active, "Pixel");
+    }
+}
+
+#[cfg(test)]
+mod human_qa_tests {
+    use super::*;
+    fn frame(ctx:&egui::Context, layout:&mut Workspace, size:egui::Vec2, events:Vec<egui::Event>)->egui::FullOutput {
+        crate::ui::shared_fields_tests::headless(ctx,egui::RawInput{screen_rect:Some(egui::Rect::from_min_size(egui::Pos2::ZERO,size)),events,..Default::default()},|ui| {
+            let center=layout.show(ui,"human-qa-dock",PANELS,|ui,_|{ui.label("Actual pane body");});
+            assert!(center.width()>0.0&&center.height()>0.0);
+        })
+    }
+    #[test]
+    fn human_qa_docks_survive_shrink_and_recover_saved_sizes() {
+        let ctx=egui::Context::default();
+        let mut layout=preset("Motion");
+        let original=layout.groups.clone();
+        for size in [egui::vec2(1600.0,1000.0),egui::vec2(320.0,220.0),egui::vec2(1600.0,1000.0)] {
+            frame(&ctx,&mut layout,size,vec![]);
+            for (before,after) in original.iter().zip(&layout.groups) {
+                assert_eq!(before.place,after.place);
+                assert_eq!(before.extent,after.extent);
+                assert_eq!(before.weight,after.weight);
+            }
+        }
+        let encoded=serde_json::to_vec(&layout).unwrap();
+        assert_eq!(layout,serde_json::from_slice(&encoded).unwrap());
+    }
+    #[test]
+    fn human_qa_native_tab_drag_nests_and_reopens() {
+        let ctx=egui::Context::default();ctx.enable_accesskit();
+        let mut layout=Workspace::preset(&[("layers",Place::Left),("color",Place::Right)]);
+        let size=egui::vec2(1200.0,800.0);
+        frame(&ctx,&mut layout,size,vec![]);
+        let output=frame(&ctx,&mut layout,size,vec![]);
+        let center=|name| {
+            let (_,node)=crate::ui::welcome::keyboard_tests::named(&output,name);
+            let r=node.bounds().unwrap();egui::pos2(((r.x0+r.x1)*0.5) as f32,((r.y0+r.y1)*0.5) as f32)
+        };
+        let from=center("Layers");let to=center("Color");
+        let pointer=|pos,pressed|egui::Event::PointerButton{pos,button:egui::PointerButton::Primary,pressed,modifiers:egui::Modifiers::NONE};
+        frame(&ctx,&mut layout,size,vec![egui::Event::PointerMoved(from),pointer(from,true)]);
+        frame(&ctx,&mut layout,size,vec![egui::Event::PointerMoved(from+egui::vec2(20.0,0.0))]);
+        frame(&ctx,&mut layout,size,vec![egui::Event::PointerMoved(to)]);
+        frame(&ctx,&mut layout,size,vec![pointer(to,false)]);
+        assert_eq!(layout.groups.len(),1,"actual tab drag must nest panes");
+        assert!(layout.groups[0].panels.iter().any(|p|p=="layers"));
+        assert!(layout.groups[0].panels.iter().any(|p|p=="color"));
+        let reopened:Workspace=serde_json::from_slice(&serde_json::to_vec(&layout).unwrap()).unwrap();
+        assert_eq!(layout,reopened);
+    }
+}
+
+#[cfg(test)]
+mod split_tests {
+    use super::*;
+    #[test]
+    fn human_qa_bottom_dock_drop_splits_along_its_real_horizontal_axis() {
+        let ctx=egui::Context::default();ctx.enable_accesskit();
+        let mut layout=Workspace::preset(&[("color",Place::Left),("timeline",Place::Bottom)]);
+        let mut areas=std::collections::HashMap::new();
+        let mut frame=|events|crate::ui::shared_fields_tests::headless(&ctx,egui::RawInput{screen_rect:Some(egui::Rect::from_min_size(egui::Pos2::ZERO,egui::vec2(1200.0,800.0))),events,..Default::default()},|ui|{
+            layout.show(ui,"split-test",PANELS,|ui,panel|{areas.insert(panel.to_owned(),ui.available_rect_before_wrap());ui.label(panel);});
+        });
+        frame(vec![]);let output=frame(vec![]);
+        let (_,node)=crate::ui::welcome::keyboard_tests::named(&output,"Color");let r=node.bounds().unwrap();let from=egui::pos2(((r.x0+r.x1)*0.5) as f32,((r.y0+r.y1)*0.5) as f32);
+        drop(frame);let target=areas["timeline"];let to=egui::pos2(target.left()+16.0,target.center().y);
+        let pointer=|pos,pressed|egui::Event::PointerButton{pos,button:egui::PointerButton::Primary,pressed,modifiers:egui::Modifiers::NONE};
+        for events in [vec![egui::Event::PointerMoved(from),pointer(from,true)],vec![egui::Event::PointerMoved(from+egui::vec2(20.0,0.0))],vec![egui::Event::PointerMoved(to)],vec![pointer(to,false)],vec![]] {
+            let _=crate::ui::shared_fields_tests::headless(&ctx,egui::RawInput{screen_rect:Some(egui::Rect::from_min_size(egui::Pos2::ZERO,egui::vec2(1200.0,800.0))),events,..Default::default()},|ui|{layout.show(ui,"split-test",PANELS,|ui,panel|{areas.insert(panel.to_owned(),ui.available_rect_before_wrap());ui.label(panel);});});
+        }
+        assert_eq!(layout.groups.len(),2);assert!(layout.groups.iter().all(|group|group.place==Place::Bottom));
+        let color=areas["color"];let timeline=areas["timeline"];assert!(color.right()<=timeline.left());assert_eq!(color.top(),timeline.top());assert_eq!(color.bottom(),timeline.bottom());
+        assert_eq!(layout,serde_json::from_slice(&serde_json::to_vec(&layout).unwrap()).unwrap());
+    }
+}
+
+#[cfg(test)]
+mod tab_visibility_tests {
+    use super::*;
+    #[test]
+    fn human_qa_opening_a_far_tab_reveals_its_actual_native_control() {
+        let ctx=egui::Context::default();ctx.enable_accesskit();
+        let ids=["transform","align","pathfinder","appearance","color","swatches","stroke","gradients","patterns","transparency"];
+        let mut layout=Workspace{groups:vec![group(&ids,Place::Right,320.0,1.0)],..Default::default()};
+        let mut output=None;
+        for step in 0..5 {
+            if step==1 {assert!(layout.request_focus(&ctx,"tab-reveal","transparency"));}
+            output=Some(crate::ui::shared_fields_tests::headless(&ctx,egui::RawInput{screen_rect:Some(egui::Rect::from_min_size(egui::Pos2::ZERO,egui::vec2(1200.0,800.0))),..Default::default()},|ui|{layout.show(ui,"tab-reveal",PANELS,|ui,_|{ui.label("Pane body");});}));
+        }
+        let output=output.unwrap();let (id,node)=crate::ui::welcome::keyboard_tests::named(&output,"Transparency");
+        assert_eq!(ctx.memory(|m|m.focused()).map(|id|id.accesskit_id()),Some(id));
+        let bounds=node.bounds().unwrap();assert!(bounds.x0>=880.0&&bounds.x1<=1200.0,"the actual active tab must be visible: {bounds:?}");
     }
 }

@@ -470,9 +470,20 @@ pub fn tabs(ui: &mut Ui, studio: &mut Studio) {
             let id=egui::Id::new(("library-tab",&studio.swap_id,tab as u8));
             if super::fields::native_scope(ui,id,|ui|super::icons::icon_button(ui,glyph,name,studio.libraries.sidebar==tab)).inner {
                 studio.libraries.sidebar = tab;
+                let pane = match tab {Sidebar::Inspector=>"transform",Sidebar::Typography=>"character",Sidebar::Palettes=>"swatches",Sidebar::Brand=>"assets"};
+                super::panel_workspace::open(ui.ctx(),studio,pane);
             }
         }
     });
+}
+
+/// Draw a chosen library inside its docked pane.
+/// Args: pane UI, editor and library. Returns nothing; the existing collection jobs remain shared.
+pub(super) fn pane(ui: &mut Ui, studio: &mut Studio, sidebar: Sidebar) {
+    let before=studio.libraries.sidebar;
+    studio.libraries.sidebar=sidebar;
+    show(ui,studio);
+    studio.libraries.sidebar=before;
 }
 pub fn show(ui: &mut Ui, studio: &mut Studio) {
     if studio.libraries.sidebar == Sidebar::Typography {

@@ -55,6 +55,9 @@ mod brushes;
 mod selection;
 mod studios;
 mod panel_workspace;
+mod panes;
+mod pane_previews;
+mod field_clipboard;
 mod shared_transform;
 mod svg_paint;
 mod svg_effect;
@@ -118,6 +121,7 @@ pub fn set_capture_catalog_root(ctx: &eframe::egui::Context, root: &std::path::P
 
 pub fn run(ui: &mut Ui, studio: &mut Studio) {
     let ctx = ui.ctx().clone();
+    field_clipboard::tick(&ctx,studio);
     if studio.updates.freezing {
         studio.poll_updates(&ctx, false);
         preferences::show(&ctx, studio);
@@ -137,6 +141,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     plugins::tick(&ctx, studio);
     canvas::poll_screen_pick(&ctx, studio);
     theme::poll(&ctx);
+    ui.painter().rect_filled(ui.max_rect(), 0.0, theme::bg_window());
     ctx.data_mut(|data| {
         data.insert_temp(
             eframe::egui::Id::new("oma-recent-colors"),
@@ -410,3 +415,6 @@ fn egui_shortcuts(ui: &mut Ui, studio: &mut Studio) {
 mod shared_fields_tests;
 #[cfg(test)]
 mod shared_keyboard_tests;
+
+#[cfg(test)]
+mod workspace_qa_tests;

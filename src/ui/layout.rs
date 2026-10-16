@@ -1263,7 +1263,7 @@ fn focus_new_variable(ui: &Ui, response: &egui::Response, key: egui::Id, token: 
     }
 }
 
-fn variables(ui: &mut Ui, studio: &mut Studio) {
+pub(super) fn variables(ui: &mut Ui, studio: &mut Studio) {
     use crate::layout_tokens::{DesignToken, TokenProperty, TokenValue};
     egui::CollapsingHeader::new("Design variables").show(ui, |ui| {
         let blocked = keyboard::blocked(studio);

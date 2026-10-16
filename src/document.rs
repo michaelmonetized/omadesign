@@ -2124,6 +2124,12 @@ impl History {
     pub fn len(&self) -> usize {
         self.undo.len()
     }
+
+    /// Inspect the actual committed edit sequence without copying document data.
+    /// Args: none. Returns commands from oldest to newest.
+    pub fn entries(&self) -> &[Cmd] {
+        &self.undo
+    }
 }
 
 fn coalesce(prev: &mut Cmd, next: &Cmd) -> bool {

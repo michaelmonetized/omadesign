@@ -327,8 +327,15 @@ fn triple(
     changed
 }
 
-pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
+pub(super) fn show(ui: &mut Ui, studio: &mut Studio) { show_at(ui,studio,false); }
+
+/// Draw the existing scene editor directly inside its dock.
+/// Args: pane UI and editor. Returns nothing; the same validated Motion command owns edits.
+pub(super) fn pane(ui: &mut Ui, studio: &mut Studio) { show_at(ui,studio,true); }
+
+fn show_at(ui: &mut Ui, studio: &mut Studio, docked: bool) {
     let document = Id::new(("scene3d", &studio.swap_id));
+    let document = if docked {document.with("pane")} else {document};
     let registry = document.with("row-owners");
     let error_key = document.with("candidate-error");
     let mut rows = ui
@@ -381,11 +388,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
     let mut menu_open = ui
         .data(|data| data.get_temp::<bool>(menu_key))
         .unwrap_or(false);
-    let menu = super::fields::native_scope(ui, document.with("menu"), |ui| {
-        ui.add_enabled_ui(available, |ui| {
-            let response = ui.button("3D Scene");
-            if response.clicked() { menu_open = !menu_open; }
-            egui::Popup::menu(&response).open_bool(&mut menu_open).show(|ui| {
+    let mut controls=|ui: &mut Ui| {
             super::fields::native_scope(ui, owner, |ui| {
                 if !available { ui.disable(); }
                 egui::ScrollArea::vertical().max_height(480.).show(ui, |ui| {
@@ -752,20 +755,23 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                     }
                 });
             });
-            });
-            response
-        }).inner
-    }).inner;
-    let popup = egui::Popup::default_response_id(&menu);
-    if menu_open {
-        if !egui::Popup::is_any_open(ui.ctx()) || egui::Popup::is_id_open(ui.ctx(), popup) {
-            egui::Popup::open_id(ui.ctx(), popup);
-        }
-    } else if egui::Popup::is_id_open(ui.ctx(), popup) {
-        egui::Popup::close_id(ui.ctx(), popup);
+
+    };
+    if docked { controls(ui); } else {
+        let menu=super::fields::native_scope(ui,document.with("menu"),|ui| {
+            ui.add_enabled_ui(available,|ui| {
+                let response=ui.button("3D Scene");
+                if response.clicked(){menu_open=!menu_open;}
+                egui::Popup::menu(&response).open_bool(&mut menu_open).show(|ui|controls(ui));
+                response
+            }).inner
+        }).inner;
+        let popup=egui::Popup::default_response_id(&menu);
+        if menu_open {if !egui::Popup::is_any_open(ui.ctx())||egui::Popup::is_id_open(ui.ctx(),popup){egui::Popup::open_id(ui.ctx(),popup);}}
+        else if egui::Popup::is_id_open(ui.ctx(),popup){egui::Popup::close_id(ui.ctx(),popup);}
+        ui.data_mut(|d|d.insert_temp(menu_key,menu_open));
+        super::welcome::focus_control(ui,&menu);
     }
-    ui.data_mut(|data| data.insert_temp(menu_key, menu_open));
-    super::welcome::focus_control(ui, &menu);
     if let Some(focused) = ui.memory(|memory| memory.focused())
         && rows.widgets.contains(&focused)
         && !feedback
