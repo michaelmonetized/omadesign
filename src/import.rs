@@ -24,6 +24,7 @@ pub fn classify(path: &Path) -> &'static str {
         "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" | "tif" | "tiff" => "raster",
         "pdf" => "pdf",
         "ora" => "ora",
+        "idml" => "idml",
         "xcf" => "xcf",
         "ai" => "ai",
         "eps" | "ps" => "eps",
@@ -52,6 +53,7 @@ pub(crate) fn open_with_progress(
     }
     let document = |mut doc: crate::document::Document, notes: Vec<String>| {
         doc.import_notes.extend(notes);
+        doc.validate_sources()?;
         doc.validate_hierarchy()?;
         Ok(Imported::Document(doc))
     };
@@ -98,6 +100,16 @@ pub(crate) fn open_with_progress(
         };
         let svg = std::str::from_utf8(data).map_err(|e| format!("Invalid SVG text: {e}"))?;
         let (doc, notes) = crate::formats::svg::read(svg, &name)?;
+        return document(doc, notes);
+    }
+    if kind == "idml" {
+        let root = path.parent().unwrap_or(Path::new(".")).canonicalize().map_err(|e|e.to_string())?;
+        let (doc, notes) = crate::formats::idml::read_with_links(&bytes, &name, &|uri| {
+            let candidate = match url::Url::parse(uri) { Ok(url) if url.scheme()=="file" => url.to_file_path().ok()?, Ok(_) => return None, Err(_) => root.join(uri) };
+            let candidate=candidate.canonicalize().ok()?;
+            if !candidate.starts_with(&root) { return None; }
+            read_bounded(&candidate).ok()
+        })?;
         return document(doc, notes);
     }
     if kind == "ora" {
@@ -156,7 +168,7 @@ pub(crate) fn open_with_progress(
         }),
         Err(error) if kind == "raster" => Err(error),
         Err(_) => Err(format!(
-            "Cannot open {name}. Choose OMA, OMAPHOTO, camera RAW, SVG/SVGZ, PNG, JPEG, WebP, GIF, TIFF, BMP, PSD/PSB, XCF, PDF, AI, EPS, or an Affinity document."
+            "Cannot open {name}. Choose OMA, OMAPHOTO, camera RAW, SVG/SVGZ, PNG, JPEG, WebP, GIF, TIFF, BMP, PSD/PSB, XCF, IDML, PDF, AI, EPS, or an Affinity document."
         )),
     }
 }

@@ -1,6 +1,7 @@
 //! Layered interchange formats. Conversion notes are part of the imported document.
 pub mod affinity;
 pub mod cli;
+pub mod idml;
 pub mod openraster;
 pub mod pdf;
 pub(crate) mod photo_placement;

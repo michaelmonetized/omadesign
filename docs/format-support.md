@@ -8,6 +8,7 @@ Omadesign imports supported content into its native layer tree and records conve
 | `.af`, `.affinity` | Supported new Affinity document objects through the optional converter | No native writer | Upstream V3 support is installed; no real unified `.af` fixture has yet been verified in this change. |
 | `.afdesign`, `.afphoto`, `.afpub`, `.aftemplate`, `.afpackage` | Supported Affinity vectors, text, pixel layers, groups, visibility, opacity, masks and artboards via SVG | No native writer | Partial Affinity interoperability. Most adjustments/live effects, publishing structures, custom profiles and edit history are not retained. Multi-spread documents can fail. |
 | `.psd`, `.psb` | Native layered reader, including groups, names, placement, visibility, opacity, blends, pixel masks and supported Normal color overlays | Native layered RGB/8-bit PSD and PSB | Text and smart objects import as their saved layer pixels. Other effects, fills, adjustments and high-depth/color-management limits produce notes. |
+| `.idml` | Editable multipage text stories, styles, threaded frames, paths, masters, bleed and placed image links | Standard IDML ZIP/XML | Explicit conversion notes for unsupported tables/notes and other structures. [Support and limits](idml.md). |
 | `.pdf` | Pages/artboards, paths, supported text, images and optional-content layers | PDF with pages, vector artwork and optional-content layers | Complex layer/group appearances export as pixels with notes; backdrop-dependent effects can require rasterized pages. PDF artwork is not a full source document. |
 | `.ai` | PDF-compatible Illustrator artwork; older PostScript artwork through conversion | No Illustrator-native writer | Private Illustrator data, live effects, symbols and appearance stacks are not reconstructed. Export PDF or SVG for interchange. |
 | `.svg`, `.svgz` | Objects, layer/group hierarchy, names, transforms, text, images, styles, visibility and supported masks | SVG | Vector canvas area has no megapixel cap. Clips and alpha/luminance masks retain editable source artwork and export as vector mask content. Complex text can become editable outlines; unsupported paint/effects may become pixel layers, limited to 64 megapixels each and 512 MiB of decoded pixels in total. Scripts, animation and foreign content are not imported. |
@@ -75,13 +76,13 @@ Verification includes independent Photoshop samples and a real 37 MB PSD. Indepe
 
 ## PDF and Illustrator
 
-PDF import creates artboards for all pages, editable paths and strokes, nested optional-content layer groups, and pixel layers for embedded images. It reads supported axial gradients, blending, opacity, clipped artwork and alpha/luminosity soft masks; clips and soft masks become cropped pixel masks. Supported straightforward text and embedded OpenType remain editable; embedded CFF and transformed/complex text can become editable outlines. Embedded subset fonts may not contain characters needed for later edits.
+PDF import creates artboards for all pages, editable paths and strokes, nested optional-content layer groups, and pixel layers for embedded images. It reads supported axial/radial gradients and multi-stop shading functions, blending, opacity, clipped artwork and alpha/luminosity soft masks; clips and soft masks become cropped pixel masks. Supported straightforward text and embedded OpenType remain editable; CID horizontal widths and full embedded TrueType fonts are read. Embedded CFF and transformed/complex text can become editable outlines. Embedded subset fonts may not contain characters needed for later edits.
 
-Import reports approximations for unsupported drawing operators, radial/mesh/pattern shading, dash phases/patterns, custom miter limits, font substitutions, ICC/spot/pattern colors, overprint and knockout. PDF transparency groups are imported, but nonisolated groups are approximated as isolated groups. Annotations and form fields are not artwork. Encrypted PDFs must be saved as unlocked copies before importing. Illustrator's private editing data is not interpreted: `.ai` support means its PDF-compatible or older PostScript artwork.
+Import reports approximations for unsupported drawing operators, focal/two-circle radial, mesh and pattern shading, dash phases/patterns, custom miter limits, font substitutions, ICC/spot/pattern colors, overprint and knockout. PDF transparency groups are imported, but nonisolated groups are approximated as isolated groups. Annotations and form fields are not artwork. Encrypted PDFs must be saved as unlocked copies before importing. Illustrator's private editing data is not interpreted: `.ai` support means its PDF-compatible or older PostScript artwork.
 
-PDF export writes pages, paths, raster images with alpha, opacity/blending and optional-content layer metadata, including names, order, visibility and locks. Text becomes vector outlines. Gradients, masks, effects and complex compositing are rendered at document resolution into the affected layer or group, while unaffected vector layers remain editable. A rendered group becomes one named PDF layer; its internal objects and hierarchy remain in the `.oma` master. Hidden layers retain their visibility state. Backdrop-dependent pass-through effects can require rendering entire pages. Every fallback produces a note explaining the reduction in editability; effects are not silently dropped or replaced with a single gradient color. Fallback images are limited to 64 megapixels each and a 512 MiB total pixel budget.
+PDF export writes pages, paths, raster images with alpha, opacity/blending and optional-content layer metadata, including names, order, visibility and locks. Linear and affine two-circle radial fills and gradient strokes use vector shadings, including focal placement, inner radius, multiple stops and varying stop opacity. Repeat and reflect fields use explicit repeated axial/radial shading segments, avoiding periodic calculator-field undersampling in independent renderers. Retained SVG patterns use reusable vector PDF tiles; effects inside a tile have a named appearance reduction when necessary. Live alpha/luminance artwork masks retain vector sources in PDF soft-mask groups; mask regions remain clipping paths. Pixel masks remain gray mask images without rasterizing their painted artwork. Isolated groups preserve group opacity and blending through transparency forms. Permitted standalone TrueType fonts are embedded once per face, with positioned PDF text, CID glyph mappings, Unicode extraction and ActualText. Native point text uses the composer’s effective face and size for every range, including affine transforms, kerning, tracking, wrapping and rotation. Solid range paints remain text paint; gradient and pattern range paints use glyph text clipping with the same embedded font and logical Unicode. Full faces retain unused characters for later editing. Fonts that restrict editable embedding, variable/CFF/collection fonts, path/area text and multi-glyph clusters retain correctly painted outlines with an object-specific note. Positioned, vertical and path SVG text use the resolved source layout’s painted outlines, retaining range paints and the editable native text in .oma. Retained SVG filter graphs render the current edited subtree and live masks into a bounded RGBA8 appearance layer, respecting filter extent and artboard coordinates. This path does not claim high-depth fidelity. Unsupported filters, shape/conic gradients, frame composition and noncentered stroke alignment still use bounded appearance fallback. A rendered group becomes one named PDF layer; its internal objects and hierarchy remain in the `.oma` master. Hidden layers retain their visibility state. Backdrop-dependent pass-through effects can require rendering entire pages. Every fallback produces a note explaining the reduction in editability; effects are not silently dropped or replaced with a single gradient color. Fallback images are limited to 64 megapixels each and a 512 MiB total pixel budget.
 
-A real four-page kitchen drawing imported with 608 shapes, 48 groups and 142 layers and was visually compared with Poppler rendering. A 28-artboard Illustrator document exposed blank PDF-compatible pages; an independent PDF renderer also showed them as blank. Artwork present only in Illustrator's private data cannot be recovered through the PDF path. Independent export checks cover hidden optional-content layers, raster alpha, masked gradients, shadows and group opacity. The page fallback for backdrop-dependent blending retained the exact native composite pixels and rendered pixel for pixel with Poppler's Cairo backend; a separate Splash-backend check covers layers and alpha.
+A real four-page kitchen drawing imported with 608 shapes, 48 groups and 142 layers and was visually compared with Poppler rendering. A 28-artboard Illustrator document exposed blank PDF-compatible pages; an independent PDF renderer also showed them as blank. Artwork present only in Illustrator's private data cannot be recovered through the PDF path. Independent export checks cover hidden optional-content layers, raster alpha, vector masked multi-stop/radial gradients, shadows, group opacity, embedded fonts and Unicode text extraction. Vector-only fixtures are checked for zero image objects. Imported PDF text is saved to .oma and reopened in a fresh process to verify portable font bytes. The page fallback for backdrop-dependent blending retained the exact native composite pixels and rendered pixel for pixel with Poppler's Cairo backend; a separate Splash-backend check covers layers and alpha. Poppler’s Cairo backend treats nonisolated masked groups as isolated; strict native/Splash mask bands and an isolated Cairo control distinguish this renderer limitation.
 
 Legacy PostScript Illustrator, EPS and PS files use an installed Ghostscript executable to create PDF before native import. The process uses a private temporary directory and bounded runtime and output; missing Ghostscript produces setup guidance.
 
@@ -117,7 +118,7 @@ omadesign --convert artwork.oma --output artwork.pdf
 omadesign --convert artwork.oma --output artwork.ora
 ```
 
-Headless document output formats are `.oma`, `.svg`, `.png`, `.jpg`/`.jpeg`, `.psd`, `.psb`, `.pdf` and `.ora`. RAW inspection includes camera metadata, source dimensions, precision and saved development settings. RAW-to-PNG/TIFF conversion uses the full-resolution 16-bit Photo pipeline; RAW-to-JPEG produces an 8-bit image. Saved `.omaphoto` settings are applied automatically. Converting RAW to a document format renders an 8-bit pixel layer. Same-file conversion is refused to protect the original. General source-file size is limited to 512 MiB; specific readers also enforce object, pixel, decompression or process limits.
+Headless document output formats are `.oma`, `.svg`, `.png`, `.jpg`/`.jpeg`, `.psd`, `.psb`, `.pdf`, `.ora` and `.idml`. RAW inspection includes camera metadata, source dimensions, precision and saved development settings. RAW-to-PNG/TIFF conversion uses the full-resolution 16-bit Photo pipeline; RAW-to-JPEG produces an 8-bit image. Saved `.omaphoto` settings are applied automatically. Converting RAW to a document format renders an 8-bit pixel layer. Same-file conversion is refused to protect the original. General source-file size is limited to 512 MiB; specific readers also enforce object, pixel, decompression or process limits.
 
 Primary references: [Affinity V3 converter source](https://gitlab.com/inkscape/extras/extension-afdesign/-/commit/cd5cf29d5df22e07b1e9209219079ca44015b7fe), [OpenRaster archive specification](https://www.openraster.org/baseline/file-layout-spec.html), [OpenRaster layer-stack specification](https://www.openraster.org/baseline/layer-stack-spec.html).
 
@@ -148,3 +149,41 @@ are implemented. These limits are explicit; they do not imply a completed FMT-04
 Native compositing and ICC transforms are software paths. The live canvas uses an
 RGBA8 display surface. Monitor profiles, physical display accuracy and print matching
 have not been qualified by these headless checks.
+
+### Editable PSD type
+
+PSD TySh and EngineData map to native TypeRun/CharSpan objects: Unicode text,
+full affine transform, requested font, per-run size/color, tracking, leading,
+baseline shift and horizontal/vertical scale remain editable. Export regenerates
+standard TySh/EngineData from current native text. Multiple type objects in one
+native layer become separate type layers in a Photoshop group. Original descriptor
+fields and unsupported warp settings remain in the project and exported PSD.
+
+Missing fonts produce an explicit note and native fallback preview while retaining
+the requested name. Text warp and vertical orientation currently retain their
+Photoshop parameters but use horizontal, unwarped native previews. Native path/SVG
+positioning exports as editable Photoshop point text with an explicit note. Saved
+pixels remain the fallback when a type descriptor cannot be parsed. These limits
+are separate from the independent editable horizontal type acceptance fixture.
+
+### Placed PSD sources and smart filters
+
+SoLd/SoLE and legacy PlLd records retain their source association, full perspective
+quad and complete Photoshop descriptor. Embedded lnk2/lnk3/lnkD sources use the
+shared immutable SourceAttachment store once. Linked source descriptors and missing
+source state survive .oma and PSD export; no linked path is followed automatically.
+
+The raster inspector can make a placed source, edit a separate PSD source copy,
+reload that edited source, replace/relink the source, adjust/toggle supported smart
+filters, and rasterize explicitly. Each replacement/filter change is one undo step;
+previous original bytes remain recoverable. Native moves, scales, rotations and
+shears update the exported placed-object quad. Perspective preview recomputation
+samples native floating-point source pixels. Gaussian blur, motion blur,
+brightness/contrast and invert have native filter mappings. Their parameters and
+unknown filter descriptors remain standard Photoshop data in exported files.
+
+An unsupported active filter or warp keeps the imported saved preview and gives
+an explicit explanation before native recomputation. Missing external sources can
+be relinked without discarding their stored placement/filter parameters. Native
+source editing/filter recomputation is software-qualified separately from Adobe
+Photoshop/GIMP application testing and native desktop interaction.

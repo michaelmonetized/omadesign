@@ -92,6 +92,9 @@ pub fn execute(studio: &mut Studio, name: &str, args: &Value) -> Result<Value, S
             studio.replace_pixel_selection(values, space);
             studio.mark();
         } else if name == "paint_stroke" {
+            if layer.psd_smart.is_some() && !boolean(args, "mask", false)? {
+                return Err("Edit or replace the smart source, or rasterize an explicit copy before painting".into());
+            }
             let mask = boolean(args, "mask", false)?;
             let original = if mask {
                 layer

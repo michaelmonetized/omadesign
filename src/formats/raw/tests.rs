@@ -141,30 +141,20 @@ fn real_camera_active_cancel_keeps_edits_and_immediately_opens_next() {
     let expected = std::env::var("OMA_RAW_SOURCE_SHA256").expect("OMA_RAW_SOURCE_SHA256");
     assert_eq!(expected.len(), 64);
     assert_eq!(hash(&source), expected);
-    struct NextSource(std::path::PathBuf, std::path::PathBuf);
+    struct NextSource(super::qualification::ScheduledScratch, std::path::PathBuf);
     impl Drop for NextSource {
         fn drop(&mut self) {
             let _ = std::fs::remove_file(&self.1);
-            let _ = std::fs::remove_dir(&self.0);
+            let _ = std::fs::remove_dir(self.0.path());
         }
     }
-    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(".qa-runs")
-        .join(format!(
-            "raw-cancel-next-{}-{}",
-            std::process::id(),
-            crate::document::next_id()
-        ));
-    std::fs::create_dir_all(directory.parent().unwrap()).unwrap();
-    std::fs::create_dir(&directory).unwrap();
-    let next_source = NextSource(
-        directory.clone(),
-        directory.join(source.file_name().unwrap()),
-    );
+    let directory = super::qualification::scheduled_scratch("raw-cancel-next").unwrap();
+    let next_path = directory.path().join(source.file_name().unwrap());
+    let next_source = NextSource(directory, next_path);
     let fixture_storage = super::qualification::copy_scheduled_fixture(
         &source,
         &next_source.1,
-        &directory,
+        next_source.0.path(),
         &expected,
     )
     .unwrap();

@@ -9,6 +9,8 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 
+#[path = "qualification/consumer.rs"]
+mod consumer;
 #[path = "qualification/reference.rs"]
 mod reference;
 #[path = "qualification/storage.rs"]
@@ -17,6 +19,7 @@ mod storage;
 mod tests;
 #[path = "qualification/workflow.rs"]
 mod workflow;
+pub(super) use storage::root::{Scratch as ScheduledScratch, scratch as scheduled_scratch};
 
 const MANIFEST: &str = include_str!("../../../docs/qa/raw-camera-manifest.json");
 const SOURCE_BUDGET: u64 = 512 * 1024 * 1024;

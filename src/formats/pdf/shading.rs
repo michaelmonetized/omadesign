@@ -16,9 +16,9 @@ impl Reader<'_> {
             .ok()
             .and_then(number_value)
             .unwrap_or(0.) as i32;
-        if kind != 2 {
+        if kind != 2 && kind != 3 {
             return Err(format!(
-                "shading type {kind} is unsupported; axial gradients are supported"
+                "shading type {kind} is unsupported; axial and radial gradients are supported"
             ));
         }
         let coords = shading
@@ -27,17 +27,24 @@ impl Reader<'_> {
             .and_then(|object| resolve(self.pdf, object))
             .and_then(|object| object.as_array().ok())
             .ok_or("Axial gradient coordinates missing")?;
-        if coords.len() != 4 {
+        if coords.len() != if kind == 3 { 6 } else { 4 } {
             return Err("Invalid axial gradient coordinates".into());
         }
-        let from = state.matrix.map(Pt::new(
-            number_value(&coords[0]).ok_or("Invalid gradient coordinate")?,
-            number_value(&coords[1]).ok_or("Invalid gradient coordinate")?,
-        ));
-        let to = state.matrix.map(Pt::new(
-            number_value(&coords[2]).ok_or("Invalid gradient coordinate")?,
-            number_value(&coords[3]).ok_or("Invalid gradient coordinate")?,
-        ));
+        let coordinate = |i| number_value(&coords[i]).ok_or("Invalid gradient coordinate");
+        let from = state.matrix.map(Pt::new(coordinate(0)?, coordinate(1)?));
+        let to = if kind == 2 {
+            state.matrix.map(Pt::new(coordinate(2)?, coordinate(3)?))
+        } else {
+            let center = Pt::new(coordinate(3)?, coordinate(4)?);
+            if coordinate(2)?.abs() > 0.0001
+                || (Pt::new(coordinate(0)?, coordinate(1)?) - center).length() > 0.0001
+            {
+                self.warn(
+                    "PDF focal/two-circle radial gradients use a centered radial approximation.",
+                );
+            }
+            state.matrix.map(center + Pt::new(coordinate(5)?, 0.))
+        };
         let function = shading
             .get(b"Function")
             .map_err(|_| "Gradient function missing")?;
@@ -83,17 +90,19 @@ impl Reader<'_> {
         if bounds.width() <= 0. || bounds.height() <= 0. {
             return Ok(());
         }
-        let fill = if color0 == color1 {
+        let fill = if color0 == color1 && values(self.pdf, function, (start + end) * 0.5, 0)? == c0
+        {
             Fill::Solid(color0)
-        } else {
-            let midpoint = values(self.pdf, function, (start + end) * 0.5, 0)?;
-            if midpoint
-                .iter()
-                .zip(c0.iter().zip(&c1))
-                .any(|(middle, (a, b))| (middle - (a + b) * 0.5).abs() > 0.002)
-            {
-                self.warn("PDF gradients with nonlinear functions or multiple stops are approximated by two endpoint colors.");
-            }
+        } else if kind == 2
+            && dictionary(self.pdf, function)
+                .and_then(|d| d.get(b"FunctionType").ok())
+                .and_then(number_value)
+                == Some(2.)
+            && dictionary(self.pdf, function)
+                .and_then(|d| d.get(b"N").ok())
+                .and_then(number_value)
+                == Some(1.)
+        {
             Fill::Linear {
                 from: [
                     (from.x - bounds.min.x) / bounds.width(),
@@ -106,6 +115,53 @@ impl Reader<'_> {
                 c0: color0,
                 c1: color1,
             }
+        } else {
+            let mut positions = vec![start, end];
+            if let Some(dict) = dictionary(self.pdf, function) {
+                if let Some(cuts) = dict.get(b"Bounds").ok().and_then(|o| o.as_array().ok()) {
+                    positions.extend(cuts.iter().filter_map(number_value));
+                }
+                if dict
+                    .get(b"N")
+                    .ok()
+                    .and_then(number_value)
+                    .is_some_and(|n| (n - 1.).abs() > 0.001)
+                {
+                    positions.extend((1..32).map(|i| start + (end - start) * i as f32 / 32.));
+                }
+            }
+            positions.sort_by(f32::total_cmp);
+            positions.dedup_by(|a, b| (*a - *b).abs() < 1e-7);
+            let stops = positions
+                .into_iter()
+                .map(|t| {
+                    let mut c = color(&values(self.pdf, function, t, 0)?);
+                    c.a = byte(state.fill_alpha);
+                    Ok(crate::gradient::GradientStop {
+                        offset: (t - start) / (end - start).max(1e-9),
+                        color: c,
+                    })
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+            let mut gradient = crate::gradient::Gradient::new(
+                if kind == 3 {
+                    crate::gradient::GradientKind::Radial
+                } else {
+                    crate::gradient::GradientKind::Linear
+                },
+                color0,
+                color1,
+            );
+            gradient.from = [
+                (from.x - bounds.min.x) / bounds.width(),
+                (from.y - bounds.min.y) / bounds.height(),
+            ];
+            gradient.to = [
+                (to.x - bounds.min.x) / bounds.width(),
+                (to.y - bounds.min.y) / bounds.height(),
+            ];
+            gradient.stops = stops;
+            Fill::Gradient(gradient)
         };
         if shading
             .get(b"Extend")

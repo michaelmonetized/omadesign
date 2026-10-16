@@ -1,6 +1,8 @@
 //! Count the actual serial case files and guard each write against its scheduled disk allowance.
 use super::*;
 use std::sync::atomic::{AtomicU64, Ordering};
+#[path = "storage_root.rs"]
+pub(super) mod root;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -10,6 +12,32 @@ struct Scheduled {
     temporary_bytes: u64,
     minimum_free_bytes: u64,
     files: Vec<PathBuf>,
+    #[serde(default)]
+    destination: Option<root::Destination>,
+}
+
+/// Read the explicitly scheduled case, without changing ordinary corpus paths.
+/// Args: none. Returns the private plan when selected, or no exception.
+fn scheduled() -> Result<Option<(Scheduled, String)>, String> {
+    let Some(plan) = std::env::var_os("OMA_RAW_SCHEDULED_CASE_STORAGE") else {
+        return Ok(None);
+    };
+    let plan = PathBuf::from(plan);
+    if !plan.is_absolute() || !plan.starts_with("/home") {
+        return Err("Scheduled case storage must remain under /home".into());
+    }
+    let bytes = fs::read(&plan).map_err(|e| e.to_string())?;
+    let scheduled = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    Ok(Some((scheduled, format!("{:x}", Sha256::digest(&bytes)))))
+}
+
+fn approved(scheduled: &Scheduled) -> bool {
+    scheduled.case == "coverage-6565"
+        && scheduled.source_sha256
+            == "dcc5a4abe3498e6f25e89bb491995fd12c3b669d9277c71b45b49210d3e56280"
+        && scheduled.temporary_bytes == 3 * TEMP_BUDGET
+        && scheduled.minimum_free_bytes == 6 * TEMP_BUDGET
+        && scheduled.files.len() <= 64
 }
 
 pub(super) struct CaseStorage {
@@ -20,6 +48,9 @@ pub(super) struct CaseStorage {
     schedule_sha256: Option<String>,
     peak: AtomicU64,
     samples: AtomicU64,
+    mount: Option<root::Mounted>,
+    _directory: Option<File>,
+    receipts: Option<PathBuf>,
 }
 
 impl CaseStorage {
@@ -36,39 +67,61 @@ impl CaseStorage {
         let mut limit = TEMP_BUDGET;
         let mut minimum_free = 0;
         let mut schedule_sha256 = None;
-        if let Some(plan) = std::env::var_os("OMA_RAW_SCHEDULED_CASE_STORAGE") {
-            let plan = PathBuf::from(plan);
-            if !plan.is_absolute() || !plan.starts_with("/home") {
-                return Err("Scheduled case storage must remain under /home".into());
-            }
-            let scheduled: Scheduled =
-                serde_json::from_slice(&fs::read(&plan).map_err(|e| e.to_string())?)
-                    .map_err(|e| e.to_string())?;
+        let mut destination = None;
+        if let Some((scheduled, digest)) = scheduled()? {
             if scheduled.case == case.id {
-                if scheduled.case != "coverage-6565"
-                    || scheduled.source_sha256
-                        != "dcc5a4abe3498e6f25e89bb491995fd12c3b669d9277c71b45b49210d3e56280"
+                if !approved(&scheduled)
                     || case.source.sha256.as_deref() != Some(scheduled.source_sha256.as_str())
-                    || scheduled.temporary_bytes != 3 * TEMP_BUDGET
-                    || scheduled.minimum_free_bytes != 6 * TEMP_BUDGET
-                    || scheduled.files.len() > 64
                 {
                     return Err("Unrecognized scheduled case storage exception".into());
                 }
                 external.extend(scheduled.files);
                 limit = scheduled.temporary_bytes;
                 minimum_free = scheduled.minimum_free_bytes;
-                schedule_sha256 = Some(hash_file(&plan)?);
+                schedule_sha256 = Some(digest);
+                destination = scheduled.destination;
             }
         }
+        let (directory, pinned, mount) = if directory.starts_with("/home") {
+            if destination.is_some() {
+                return Err("Scheduled Mac case cannot fall back to /home".into());
+            }
+            (directory.to_path_buf(), None, None)
+        } else {
+            let mount = root::Mounted::open(
+                destination
+                    .as_ref()
+                    .ok_or("No scheduled external destination")?,
+            )?;
+            let pinned = mount.pin_directory(directory)?;
+            (root::fd_path(&pinned), Some(pinned), Some(mount))
+        };
+        let receipts = if mount.is_some() {
+            let path = PathBuf::from(
+                std::env::var_os("OMA_RAW_CONSUMER_RECEIPTS")
+                    .ok_or("External case needs its protected home receipt directory")?,
+            );
+            if !path.starts_with("/home") || path.canonicalize().map_err(|e| e.to_string())? != path
+            {
+                return Err(
+                    "External case receipts must remain in their canonical home directory".into(),
+                );
+            }
+            Some(path)
+        } else {
+            None
+        };
         let storage = Self {
-            directory: directory.to_path_buf(),
+            directory,
             external,
             limit,
             minimum_free,
             schedule_sha256,
             peak: AtomicU64::new(0),
             samples: AtomicU64::new(0),
+            mount,
+            _directory: pinned,
+            receipts,
         };
         if storage.available()?
             < limit
@@ -86,6 +139,9 @@ impl CaseStorage {
 
     /// Read currently available filesystem bytes. Args: none. Returns the live statvfs count or an I/O error.
     fn available(&self) -> Result<u64, String> {
+        if let Some(mount) = &self.mount {
+            mount.validate()?;
+        }
         let stat = rustix::fs::statvfs(&self.directory).map_err(|e| e.to_string())?;
         stat.f_bavail
             .checked_mul(stat.f_frsize)
@@ -95,16 +151,23 @@ impl CaseStorage {
     /// Count original, reference and newly owned files. Args: none. Returns actual bytes, refusing links or unknown file types.
     fn used(&self) -> Result<u64, String> {
         let mut paths = self.external.clone();
-        let entries = fs::read_dir(&self.directory).map_err(|e| e.to_string())?;
-        for (index, entry) in entries.enumerate() {
-            if index >= 64 {
-                return Err("Case scratch contains too many files".into());
+        for directory in std::iter::once(&self.directory).chain(self.receipts.iter()) {
+            let entries = fs::read_dir(directory).map_err(|e| e.to_string())?;
+            for (index, entry) in entries.enumerate() {
+                if index >= 64 {
+                    return Err("Case scratch contains too many files".into());
+                }
+                paths.insert(entry.map_err(|e| e.to_string())?.path());
             }
-            paths.insert(entry.map_err(|e| e.to_string())?.path());
         }
         paths.into_iter().try_fold(0u64, |used, path| {
-            if !path.is_absolute() || !path.starts_with("/home") {
-                return Err("Case files must remain under /home".into());
+            if !path.is_absolute()
+                || (!path.starts_with("/home")
+                    && !(self.mount.is_some() && path.parent() == Some(self.directory.as_path())))
+            {
+                return Err(
+                    "Case file is outside its protected sources or pinned destination".into(),
+                );
             }
             let size = match fs::symlink_metadata(&path) {
                 Ok(meta) if meta.is_file() => meta.len(),
@@ -169,7 +232,7 @@ impl CaseStorage {
 
     /// Capture case storage before owned scratch cleanup. Args: none. Returns compact limits, peaks and current counts without paths.
     pub(super) fn report(&self) -> Value {
-        json!({"temporary_limit_bytes":self.limit,"minimum_remaining_free_bytes":self.minimum_free,"schedule_sha256":self.schedule_sha256,"peak_actual_case_file_bytes":self.peak.load(Ordering::Relaxed),"write_checks":self.samples.load(Ordering::Relaxed),"before_owned_cleanup_bytes":self.used().ok(),"final_free_bytes":self.available().ok(),"boundary":"Serial fixture logistics only; no product image-size limit. Original, references and owned workflow files counted; every export write guarded."})
+        json!({"temporary_limit_bytes":self.limit,"minimum_remaining_free_bytes":self.minimum_free,"schedule_sha256":self.schedule_sha256,"destination":self.mount.as_ref().map(|mount| mount.report()),"peak_actual_case_file_bytes":self.peak.load(Ordering::Relaxed),"write_checks":self.samples.load(Ordering::Relaxed),"before_owned_cleanup_bytes":self.used().ok(),"final_free_bytes":self.available().ok(),"boundary":"Serial fixture logistics only; no product image-size limit. Original and references across volumes plus owned workflow files counted; every export write guarded. SSHFS API/fsync is not physical Mac durability."})
     }
 }
 
@@ -248,6 +311,9 @@ mod tests {
             schedule_sha256: None,
             peak: AtomicU64::new(0),
             samples: AtomicU64::new(0),
+            mount: None,
+            _directory: None,
+            receipts: None,
         };
         guard.check_next(0).unwrap();
         assert!(

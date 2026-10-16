@@ -4,7 +4,11 @@
 //! Parsing is bounded and never invokes a shell or an external converter.
 
 mod codec;
+pub mod descriptor;
 mod effects;
+mod engine_data;
+pub mod smart;
+pub mod type_layer;
 
 use crate::color::Blend;
 use crate::document::{Document, Layer, LayerKind, Pixels};
@@ -17,6 +21,12 @@ pub struct PsdImport {
 
 pub struct PsdExport {
     pub bytes: Vec<u8>,
+    pub warnings: Vec<String>,
+}
+
+/// Encoded Photoshop output whose allocation remains admitted until its final consumer drops it.
+pub struct AdmittedPsdExport {
+    pub bytes: crate::export::EncodedBytes,
     pub warnings: Vec<String>,
 }
 
@@ -143,6 +153,21 @@ pub fn decode(bytes: &[u8], name: &str) -> Result<PsdImport, String> {
             "Untagged CMYK retains original ink coverage. Its preview uses an uncalibrated device formula; assign an ICC profile for qualified color conversion.",
         );
     }
+    let mut linked = std::collections::HashMap::new();
+    for file in parsed.linked {
+        let id = if let Some(bytes) = file.bytes {
+            let format = std::path::Path::new(&file.name)
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("data");
+            let source =
+                crate::source_attachment::SourceAttachment::new(&file.name, format, bytes)?;
+            Some(doc.retain_source(source))
+        } else {
+            None
+        };
+        linked.insert(file.id, (id, file.external));
+    }
     let mut stack: Vec<Layer> = Vec::new();
     let mut clipping: Vec<u64> = Vec::new();
     for record in parsed.layers {
@@ -183,6 +208,60 @@ pub fn decode(bytes: &[u8], name: &str) -> Result<PsdImport, String> {
                 layer
             }
         };
+        if let Some(data) = &record.type_data {
+            match type_layer::decode(data, &mut warnings) {
+                Ok((mut shape, metadata)) => {
+                    shape.name = record.name.clone();
+                    layer.kind = LayerKind::Vector {
+                        shapes: vec![shape],
+                    };
+                    layer.psd_type = Some(metadata);
+                }
+                Err(error) => warn(
+                    &mut warnings,
+                    format!(
+                        "PSD text '{}' uses saved pixels because its editable type record could not be read: {error}",
+                        record.name
+                    ),
+                ),
+            }
+        }
+        if let Some((key, data)) = &record.smart_data {
+            match smart::decode(*key, data, &layer, None, &mut warnings) {
+                Ok(mut smart) => {
+                    smart.retained_blocks = record.smart_blocks.clone();
+                    if !smart.retained_blocks.is_empty() {
+                        warn(&mut warnings, "Photoshop smart-filter masks are retained for export with the saved preview; native recomputation requires disabling those filters.");
+                    }
+                    let psd_id = smart
+                        .descriptor
+                        .get("Idnt")
+                        .and_then(descriptor::Value::text)
+                        .unwrap_or("");
+                    if let Some((source, external)) = linked.get(psd_id) {
+                        layer.source_attachment = source.clone();
+                        smart.external_link = external.clone();
+                    }
+                    if layer.source_attachment.is_none() {
+                        warn(
+                            &mut warnings,
+                            format!(
+                                "Smart object '{}' has no embedded source. Saved pixels, placement and filters are retained; use Replace source to relink the original.",
+                                record.name
+                            ),
+                        );
+                    }
+                    layer.psd_smart = Some(smart);
+                }
+                Err(error) => warn(
+                    &mut warnings,
+                    format!(
+                        "Smart object '{}' uses its saved pixels because editable placement data could not be read: {error}",
+                        record.name
+                    ),
+                ),
+            }
+        }
         layer.visible = record.flags & 2 == 0;
         layer.locked = record.flags & 1 != 0;
         layer.opacity = record.opacity as f32 / 255.0;
@@ -201,6 +280,11 @@ pub fn decode(bytes: &[u8], name: &str) -> Result<PsdImport, String> {
                 } else {
                     record.rect
                 };
+                if layer.kind.shapes().is_some() && !layer.is_group {
+                    layer.mask_origin = Pt::new(record.rect.left as f32, record.rect.top as f32);
+                    let (w, h) = record.rect.size()?;
+                    layer.mask_size = Pt::new(w as f32, h as f32);
+                }
                 layer.mask = Some(convert_mask(
                     mask,
                     values,
@@ -593,7 +677,7 @@ fn bake_clipping(
 }
 
 mod writer;
-pub use writer::encode;
+pub use writer::{encode, encode_admitted};
 
 #[cfg(test)]
 mod tests {

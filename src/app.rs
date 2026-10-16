@@ -459,6 +459,7 @@ pub struct Studio {
     pub allow_close: bool,
     pub welcome_page: WelcomePage,
     pub startup_preferences: startup::Preferences,
+    pub(crate) panel_workspaces: crate::ui::workspace::Book,
     startup_preferences_path: Option<PathBuf>,
     pub font_query: String,
     pub font_recents: Vec<String>,
@@ -557,7 +558,7 @@ fn recolor_fill(fill: Fill, color: Rgba) -> Fill {
             }
             Fill::Gradient(gradient)
         }
-        Fill::None | Fill::Solid(_) => Fill::Solid(color),
+        Fill::None | Fill::Solid(_) | Fill::Pattern(_) => Fill::Solid(color),
     }
 }
 
@@ -709,6 +710,7 @@ impl Studio {
             allow_close: false,
             welcome_page: WelcomePage::New,
             startup_preferences: startup::Preferences::default(),
+            panel_workspaces: Default::default(),
             startup_preferences_path: None,
             font_query: String::new(),
             font_recents: crate::project::load_font_recents(),
@@ -5178,6 +5180,13 @@ mod tests {
     fn place_svg_adds_a_shape() {
         let mut s = Studio::new();
         s.show_welcome = false;
+        let before: usize = s
+            .doc
+            .layers
+            .iter()
+            .filter_map(|l| l.kind.shapes())
+            .map(|ss| ss.len())
+            .sum();
         let svg = r##"<svg viewBox="0 0 10 10"><path d="M0 0 L10 0 L10 10 L0 10 Z" fill="#112233"/></svg>"##;
         s.pending_place = Some(PendingPlace::Svg {
             name: "box.svg".into(),
@@ -5191,7 +5200,7 @@ mod tests {
             .filter_map(|l| l.kind.shapes())
             .map(|ss| ss.len())
             .sum();
-        assert_eq!(n, 1);
+        assert_eq!(n, before + 1);
         assert_eq!(s.selection.len(), 1);
     }
 

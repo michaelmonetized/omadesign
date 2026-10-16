@@ -681,16 +681,17 @@ fn check_filters(stack: &crate::filter::FilterStack, budget: &mut usize) -> Resu
 }
 
 fn oma_document(bytes: &[u8]) -> Result<crate::document::Document, String> {
+    crate::project::validate_retained_json(std::str::from_utf8(bytes).map_err(|e| e.to_string())?)?;
     #[derive(Deserialize)]
     struct Project {
         version: u32,
         doc: crate::document::Document,
+        #[serde(default)]
+        svg_sources: std::collections::BTreeMap<String, std::sync::Arc<str>>,
     }
-    let Project { version, doc } = serde_json::from_slice(bytes)
+    let Project { version, mut doc, svg_sources } = serde_json::from_slice(bytes)
         .map_err(|e| format!("Could not read project preview: {e}"))?;
-    if !(1..=crate::project::VERSION).contains(&version) {
-        return Err("Unsupported omadesign project version.".into());
-    }
+    crate::project::restore_sources(&mut doc, version, &svg_sources)?;
     crate::project::normalize_decoded_document(checked_preview_document(doc)?, version)
 }
 
@@ -710,6 +711,7 @@ pub(crate) fn load_full_preview_document(path: &Path, recovery: bool) -> Result<
 
 fn load_preview_document_with_budget(path: &Path, recovery: bool, complex: bool) -> Result<crate::document::Document, String> {
     let bytes = read_bounded(path, 64 * 1024 * 1024)?;
+    crate::project::validate_retained_json(std::str::from_utf8(&bytes).map_err(|e| e.to_string())?)?;
     if recovery {
         let meta: crate::project::SwapMeta =
             serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
@@ -723,9 +725,14 @@ fn load_preview_document_with_budget(path: &Path, recovery: bool, complex: bool)
     } else {
         crate::typography::load_for_document(path)?;
         #[derive(Deserialize)]
-        struct Project { version: u32, doc: crate::document::Document }
-        let Project { version, doc } = serde_json::from_slice(&bytes).map_err(|e| format!("Could not read project preview: {e}"))?;
-        if !(1..=crate::project::VERSION).contains(&version) { return Err("Unsupported omadesign project version.".into()); }
+        struct Project {
+            version: u32,
+            doc: crate::document::Document,
+            #[serde(default)]
+            svg_sources: std::collections::BTreeMap<String, std::sync::Arc<str>>,
+        }
+        let Project { version, mut doc, svg_sources } = serde_json::from_slice(&bytes).map_err(|e| format!("Could not read project preview: {e}"))?;
+        crate::project::restore_sources(&mut doc, version, &svg_sources)?;
         crate::project::normalize_decoded_document(checked_preview_document_with_budget(doc, complex)?, version)
     }
 }
@@ -795,6 +802,7 @@ fn prepare_preview_pixels(
         }
         px.data = crate::deep_color::storage::adopt(image.into_raw())?;
     }
+    px.validate_native()?;
     Ok(())
 }
 
@@ -1078,6 +1086,7 @@ mod tests {
         png(&bank.root.join("raster.png"), 80, 40);
         fs::write(bank.root.join("vector.svg"), r##"<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg viewBox="0 0 60 40"><style>.brand { fill: #D72640; }</style><g transform="translate(10 8)"><path class="brand" d="M 0 0 L 40 0 L 40 24 L 0 24 Z"/></g></svg>"##).unwrap();
         let mut doc = crate::document::Document::new("Packed pixels", 40.0, 20.0, 72.0);
+        doc.layers = vec![crate::document::Layer::raster("Packed pixels", 40, 20).unwrap()];
         let pixels = doc.layers[0].kind.pixels_mut().unwrap();
         for pixel in pixels.bytes_mut().unwrap().as_chunks_mut::<4>().0 {
             pixel.copy_from_slice(&[215, 38, 64, 255]);

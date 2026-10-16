@@ -540,7 +540,7 @@ fn pdf_effect_fallback_preserves_unaffected_vectors_and_hidden_layer_state() {
     assert!(
         notes
             .iter()
-            .any(|note| note.contains("complex group appearance"))
+            .any(|note| note.contains("unsupported filters"))
     );
     let (loaded, _) = read(&bytes, "effects.pdf").unwrap();
     assert!(
@@ -739,7 +739,8 @@ fn imports_cairo_generated_pdf_as_editable_vector_artwork() {
 }
 
 fn pdf_subpaths(geom: Geom, rotation: f32) -> Vec<Vec<Operation>> {
-    let mut document = Document::new("Compound", 220., 160., 72.);
+    let mut document =
+        Document::new_with_options("Compound", 220., 160., 72., true, 1, false, false);
     let mut shape = Shape::new(
         geom,
         Style {
@@ -753,10 +754,35 @@ fn pdf_subpaths(geom: Geom, rotation: f32) -> Vec<Vec<Operation>> {
     assert!(warnings.is_empty(), "{warnings:?}");
     let pdf = Pdf::load_mem(&bytes).unwrap();
     let page = pdf.get_pages()[&1];
-    let content = pdf.get_and_decode_page_content(page).unwrap();
+    fn content(pdf: &Pdf, bytes: &[u8], resources: &Dictionary) -> Vec<Operation> {
+        let mut operations = vec![];
+        for operation in Content::decode(bytes).unwrap().operations {
+            if operation.operator == "Do" {
+                let name = operation.operands[0].as_name().unwrap();
+                if let Some(form) =
+                    resource(pdf, resources, b"XObject", name).and_then(|o| o.as_stream().ok())
+                {
+                    let own = form
+                        .dict
+                        .get(b"Resources")
+                        .ok()
+                        .and_then(|o| dictionary(pdf, o))
+                        .unwrap_or(resources);
+                    operations.extend(content(pdf, &decoded(form, STREAM_LIMIT).unwrap(), own));
+                }
+            } else {
+                operations.push(operation);
+            }
+        }
+        operations
+    }
+    let resources = inherited(&pdf, page, b"Resources")
+        .and_then(|o| dictionary(&pdf, o))
+        .unwrap();
+    let operations = content(&pdf, &pdf.get_page_content(page), resources);
     let mut subpaths = Vec::new();
     let mut current = Vec::new();
-    for operation in content.operations {
+    for operation in operations {
         match operation.operator.as_str() {
             "m" => {
                 if !current.is_empty() {
@@ -1011,6 +1037,7 @@ fn image_integer_width_past_24_bits_keeps_every_column() {
 #[test]
 fn rejects_oversized_raster_dimensions_without_overflow() {
     let mut small = Document::new("Small", 8., 8., 72.);
+    small.layers = vec![Layer::raster("Small pixels", 8, 8).unwrap()];
     {
         let pixels = small.layers[0].kind.pixels_mut().unwrap();
         pixels.w = 2;
@@ -1024,6 +1051,7 @@ fn rejects_oversized_raster_dimensions_without_overflow() {
     assert!(write(&small).is_ok());
 
     let mut huge = Document::new("Huge", 32., 32., 72.);
+    huge.layers = vec![Layer::raster("Invalid pixel dimensions", 32, 32).unwrap()];
     {
         let pixels = huge.layers[0].kind.pixels_mut().unwrap();
         // 3e9 * 3e9 fits in u64, but * 4 does not. The length check must

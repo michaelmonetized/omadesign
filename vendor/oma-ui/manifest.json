@@ -1,0 +1,16 @@
+{
+  "contract": 1,
+  "canonical": "https://github.com/michaelmonetized/omadesign",
+  "license": "MIT",
+  "source": "Original Oma implementation; pinned Craft MIT source read as design reference only",
+  "egui": [
+    "0.32",
+    "0.36"
+  ],
+  "sha256": {
+    "fields.rs": "937d791cb5efbd3ccb12032acd507331ae14e758cbd719d6438eccc27a20289d",
+    "workspace.rs": "d7721e064a53304e8acdee5f79c1f3051abae8065edd70aa5d1f7c08574b6b74"
+  },
+  "directory": "vendor/oma-ui",
+  "revision": 2
+}

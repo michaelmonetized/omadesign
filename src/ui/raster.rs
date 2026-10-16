@@ -592,7 +592,19 @@ fn commit(studio: &mut Studio, session: &Session, after: Vec<u8>) -> Result<(), 
     if after.len() != session.source.len() {
         return Err("The filter returned invalid pixel data".into());
     }
-    let native_after = pixels.native.as_ref().map(|_|pixels.filtered(&session.settings,session.selection.as_deref().map(|s|s.as_slice()))).transpose()?;
+    if !session.mask && layer.psd_smart.is_some() {
+        return Err("Edit the placed source or use its smart-filter controls; rasterize an explicit copy for destructive pixel filters".into());
+    }
+    let native_after = pixels
+        .native
+        .as_ref()
+        .map(|_| {
+            pixels.filtered(
+                &session.settings,
+                session.selection.as_deref().map(|s| s.as_slice()),
+            )
+        })
+        .transpose()?;
     if native_after.is_none() && after == *session.source {
         studio.status = format!("{} · no pixel changes", session.settings.kind.name());
         return Ok(());

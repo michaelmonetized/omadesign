@@ -6,7 +6,9 @@ pub mod retouch;
 pub mod storage;
 pub mod surface;
 pub mod tiff;
-pub use composite::{blend_pixel, composite};
+pub use composite::{blend_pixel, composite, composite_with_cancel};
+#[cfg(test)]
+mod common_tests;
 
 use crate::document::Pixels;
 use crate::resources::{self, Allocation, CancellationCheck, Lease};
@@ -71,7 +73,11 @@ impl Pixels {
         memory: Arc<Lease>,
         cancel: &C,
     ) -> Result<Self, String> {
-        cancel.check()?;
+        if let Err(error) = cancel.check() {
+            drop(samples);
+            drop(memory);
+            return Err(error);
+        }
         let samples = resources::global().adopt(samples, memory)?;
         Self::from_sample_allocation_checked(w, h, depth, samples, cancel)
     }
@@ -225,40 +231,162 @@ pub(crate) fn byte(v: f32) -> u8 {
 
 mod sample_bytes {
     use super::*;
-    use base64::Engine;
     use serde::{Deserializer, Serializer};
-    use std::io::{Read, Write};
+    use std::{
+        cell::Cell,
+        fmt,
+        io::{self, Read, Write},
+    };
+
+    struct TextWriter<'a, 'b> {
+        formatter: &'a mut fmt::Formatter<'b>,
+        failed: &'a Cell<bool>,
+    }
+    impl Write for TextWriter<'_, '_> {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            if self.failed.get() {
+                return Err(io::Error::other("Native sample output failed"));
+            }
+            let text = std::str::from_utf8(bytes).map_err(io::Error::other)?;
+            if self.formatter.write_str(text).is_err() {
+                self.failed.set(true);
+                return Err(io::Error::other("Native sample output failed"));
+            }
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    struct SampleText<'a> {
+        samples: &'a [f32],
+        error: Cell<Option<String>>,
+    }
+    impl fmt::Display for SampleText<'_> {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            let failed = Cell::new(false);
+            let result = (|| -> io::Result<()> {
+                let text = TextWriter {
+                    formatter,
+                    failed: &failed,
+                };
+                let base64 = base64::write::EncoderWriter::new(
+                    text,
+                    &base64::engine::general_purpose::STANDARD,
+                );
+                let mut encoder = zstd::stream::write::Encoder::new(base64, 3)?;
+                for chunk in self.samples.chunks(1024) {
+                    let mut bytes = [0u8; 4096];
+                    for (value, dst) in chunk.iter().zip(bytes.chunks_exact_mut(4)) {
+                        dst.copy_from_slice(&value.to_le_bytes());
+                    }
+                    encoder.write_all(&bytes[..chunk.len() * 4])?;
+                }
+                encoder.finish()?.finish()?;
+                Ok(())
+            })();
+            if let Err(error) = result {
+                self.error.set(Some(error.to_string()));
+                if failed.get() {
+                    return Err(fmt::Error);
+                }
+            }
+            Ok(())
+        }
+    }
+
     pub fn serialize<S: Serializer>(
         samples: &Arc<Allocation<f32>>,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        let writer = storage::Builder::<u8>::new().map_err(serde::ser::Error::custom)?;
-        let mut encoder =
-            zstd::stream::write::Encoder::new(writer, 3).map_err(serde::ser::Error::custom)?;
-        for chunk in samples.chunks(1024) {
-            let mut bytes = [0u8; 4096];
-            for (value, dst) in chunk.iter().zip(bytes.chunks_exact_mut(4)) {
-                dst.copy_from_slice(&value.to_le_bytes());
-            }
-            encoder
-                .write_all(&bytes[..chunk.len() * 4])
-                .map_err(serde::ser::Error::custom)?;
+        let text = SampleText {
+            samples,
+            error: Cell::new(None),
+        };
+        let output = serializer.collect_str(&text)?;
+        if let Some(error) = text.error.take() {
+            return Err(serde::ser::Error::custom(error));
         }
-        let packed = encoder
-            .finish()
-            .map_err(serde::ser::Error::custom)?
-            .finish()
-            .map_err(serde::ser::Error::custom)?;
-        let length = packed
-            .len()
-            .checked_add(2)
-            .and_then(|n| (n / 3).checked_mul(4))
-            .ok_or_else(|| serde::ser::Error::custom("Encoded samples overflow"))?;
-        let _memory = resources::global()
-            .reserve_now(length as u64, &storage::check)
-            .map_err(serde::ser::Error::custom)?;
-        serializer
-            .serialize_str(&base64::engine::general_purpose::STANDARD.encode(packed.as_slice()))
+        Ok(output)
+    }
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use base64::Engine;
+
+        #[test]
+        fn streaming_samples_preserve_exact_standard_zstd_le_float_wire() {
+            #[derive(serde::Serialize, serde::Deserialize)]
+            struct Samples(
+                #[serde(serialize_with = "serialize", deserialize_with = "deserialize")]
+                Arc<Allocation<f32>>,
+            );
+            let values: Vec<_> = (0..8193)
+                .map(|i| match i % 4 {
+                    0 => f32::from_bits(0x3e800001 + i),
+                    1 => -0.25,
+                    2 => 2.5,
+                    _ => 0.,
+                })
+                .collect();
+            let mut reference = zstd::stream::write::Encoder::new(Vec::new(), 3).unwrap();
+            for chunk in values.chunks(1024) {
+                let mut bytes = [0u8; 4096];
+                for (value, target) in chunk.iter().zip(bytes.chunks_exact_mut(4)) {
+                    target.copy_from_slice(&value.to_le_bytes());
+                }
+                reference.write_all(&bytes[..chunk.len() * 4]).unwrap();
+            }
+            let expected = serde_json::to_vec(
+                &base64::engine::general_purpose::STANDARD.encode(reference.finish().unwrap()),
+            )
+            .unwrap();
+            let source = Samples(storage::adopt(values.clone()).unwrap());
+            let mut writer = storage::Builder::new().unwrap();
+            serde_json::to_writer(&mut writer, &source).unwrap();
+            let encoded = writer.finish().unwrap();
+            assert_eq!(encoded.as_slice(), expected);
+            let reopened: Samples = serde_json::from_slice(&encoded).unwrap();
+            assert!(
+                reopened
+                    .0
+                    .iter()
+                    .zip(values)
+                    .all(|(a, b)| a.to_bits() == b.to_bits())
+            );
+        }
+
+        #[test]
+        fn streaming_samples_propagate_output_failure_without_partial_success() {
+            struct Refuse {
+                remaining: usize,
+            }
+            impl Write for Refuse {
+                fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                    if self.remaining == 0 {
+                        return Err(io::Error::other("fixture output refused"));
+                    }
+                    let count = bytes.len().min(self.remaining);
+                    self.remaining -= count;
+                    Ok(count)
+                }
+                fn flush(&mut self) -> io::Result<()> {
+                    Ok(())
+                }
+            }
+            #[derive(serde::Serialize)]
+            struct Samples(#[serde(serialize_with = "serialize")] Arc<Allocation<f32>>);
+            let source = Samples(
+                storage::adopt((0..8193).map(|i| f32::from_bits(0x3e800001 + i)).collect())
+                    .unwrap(),
+            );
+            let encoded = serde_json::to_vec(&source).unwrap();
+            for remaining in [0, 1, 17, 257, encoded.len() - 2, encoded.len() - 1] {
+                let error = serde_json::to_writer(Refuse { remaining }, &source).unwrap_err();
+                assert!(error.to_string().contains("fixture output refused"));
+            }
+        }
     }
     pub fn deserialize<'de, D: Deserializer<'de>>(
         deserializer: D,

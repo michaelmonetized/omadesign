@@ -39,7 +39,7 @@ pub fn export(doc: &Document, path: &Path) -> Result<Vec<String>, String> {
             "tif" | "tiff" => crate::export::Format::Tiff,
             _ => crate::export::Format::Jpeg,
         };
-        let (bytes, notes) = crate::export::encode(
+        let (bytes, notes) = crate::export::encode_admitted(
             &crate::export::Source::Document(doc.clone()),
             crate::export::Settings {
                 format,
@@ -47,8 +47,13 @@ pub fn export(doc: &Document, path: &Path) -> Result<Vec<String>, String> {
             },
             &crate::ml::NoProgress,
         )?;
-        super::write_atomic(path, &bytes)?;
+        super::write_atomic(path, bytes.as_slice())?;
         return Ok(notes);
+    }
+    if matches!(extension.as_str(), "psd" | "psb") {
+        let output = super::psd::encode_admitted(doc, extension == "psb")?;
+        super::write_atomic(path, output.bytes.as_slice())?;
+        return Ok(output.warnings);
     }
     if matches!(extension.as_str(), "svg" | "pdf" | "ora")
         && doc.layers.iter().any(|l| {
@@ -66,7 +71,8 @@ pub fn export(doc: &Document, path: &Path) -> Result<Vec<String>, String> {
         "psd"|"psb"=>{let exported=super::psd::encode(doc,extension=="psb")?;(exported.bytes,exported.warnings)},
         "pdf"=>super::pdf::write(doc)?,
         "ora"=>super::openraster::write(doc)?,
-        _=>return Err("Export as .oma, .svg, .png, .jpg, .psd, .psb, .ora or .pdf. Affinity and Illustrator native writers are not available.".into())
+        "idml"=>super::idml::write(doc)?,
+        _=>return Err("Export as .oma, .svg, .png, .jpg, .psd, .psb, .ora, .idml or .pdf. Affinity and Illustrator native writers are not available.".into())
     };
     super::write_atomic(path, &bytes)?;
     Ok(notes)

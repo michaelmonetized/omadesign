@@ -190,3 +190,11 @@ fn project_fonts_copy_reopen_and_edit_without_an_installed_font_path() {
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+#[test]
+fn svg_type_native_span_only_portable_faces_are_validated_and_archived(){
+    let bytes=Arc::new(include_bytes!("../tests/assets/fonts/EBGaramond.ttf").to_vec());let id=format!("omatype:{:032x}",fingerprint(&bytes));crate::text::register_memory_font(&id,"Span face",bytes).unwrap();
+    let mut doc=Document::new("Span fonts",100.,100.,96.);doc.layers.clear();let mut layer=Layer::vector("Type");let mut run=TypeRun{content:"A B".into(),..Default::default()};run.set_character_style(2,3,|s|s.font=Some(id.clone()));layer.kind.shapes_mut().unwrap().push(Shape::new(Geom::Text(run),Style::default()));doc.layers.push(layer);
+    validate_document_fonts(&doc).unwrap();let archive=document_fonts(&doc).unwrap();assert_eq!(archive.len(),1);assert_eq!(archive[0].id,id);
+    let Geom::Text(run)=&mut doc.layers[0].kind.shapes_mut().unwrap()[0].geom else{unreachable!()};run.set_character_style(2,3,|s|s.font=Some("omatype:missing-span-face".into()));assert!(validate_document_fonts(&doc).is_err());
+}

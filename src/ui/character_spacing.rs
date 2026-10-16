@@ -57,6 +57,12 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         .num_columns(2)
         .spacing([8., 7.])
         .show(ui, |ui| {
+            ui.label("Text color");
+            let color=values.first().and_then(|s|s.fill.as_ref()).and_then(|f|if let crate::document::Fill::Solid(c)=f{Some(*c)}else{None}).unwrap_or(crate::color::Rgba::BLACK);
+            let mut color=color.to_egui();
+            if ui.color_edit_button_srgba(&mut color).changed(){studio.patch_character(|s|s.fill=Some(crate::document::Fill::Solid(crate::color::Rgba::from_egui(color))));}
+            ui.end_row();
+
             ui.label("Leading");
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.;

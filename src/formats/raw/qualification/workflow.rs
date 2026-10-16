@@ -111,6 +111,7 @@ pub(super) fn run(
             storage.copy(&source, &mut destination)?;
             drop(destination);
             verify_hash(&copy, case.source.sha256.as_deref())?;
+            resources.push(resource_sample("camera_open_begin", started));
             let mut photo = PhotoImage::load(&copy)?;
             resources.push(resource_sample("camera_opened", started));
             if !photo.develop.is_default() {
@@ -174,6 +175,7 @@ pub(super) fn run(
                 .iter()
                 .any(|(reference, _)| reference.representation == "sensor-u16le-masked")
             {
+                resources.push(resource_sample("sensor_reference_begin", started));
                 let cancel = super::super::Cancellation::default();
                 let mut encoded =
                     crate::resources::global().allocate::<u8, _>(size as usize, &cancel)?;
@@ -197,10 +199,15 @@ pub(super) fn run(
                     }
                 }
             }
+            resources.push(resource_sample("baseline_preview_full_begin", started));
             check_render(&photo, &mut checks, case.preview_tolerance)?;
             resources.push(resource_sample("baseline_preview_full_checked", started));
             let mut baseline_export_hash = None;
             for extension in ["png", "tif"] {
+                resources.push(resource_sample(
+                    &format!("baseline_{extension}_encode_begin"),
+                    started,
+                ));
                 let output = directory.join(format!("baseline.{extension}"));
                 owned.0.push(output.clone());
                 save_photo(
@@ -213,6 +220,10 @@ pub(super) fn run(
                     },
                     storage,
                 )?;
+                resources.push(resource_sample(
+                    &format!("baseline_{extension}_decode_begin"),
+                    started,
+                ));
                 let decoded = decode_export(&output, photo.dimensions())?;
                 let pixels = decoded.as_raw().as_slice();
                 let digest = hash_samples(pixels);
@@ -247,7 +258,9 @@ pub(super) fn run(
             photo.develop.exposure = 0.75;
             photo.develop.rotate = 90;
             photo.develop.crop = Some([0.0, 0.0, 1.0, 0.5]);
+            resources.push(resource_sample("edited_preview_full_begin", started));
             check_render(&photo, &mut checks, case.preview_tolerance)?;
+            resources.push(resource_sample("edited_tiff_encode_begin", started));
             let output = directory.join("edited.tif");
             owned.0.push(output.clone());
             save_photo(&photo, &output, crate::export::Format::Tiff, storage)?;
@@ -274,6 +287,7 @@ pub(super) fn run(
             storage.check_next(1024 * 1024)?;
             edits::save(&copy, identity, &develop)?;
             drop(photo);
+            resources.push(resource_sample("settings_reopen_begin", started));
             let reopened = PhotoImage::load(&sidecar)?;
             resources.push(resource_sample("settings_reopened", started));
             if reopened.develop != develop {
@@ -386,9 +400,11 @@ pub(super) fn resource_sample(stage: &str, started: Instant) -> Value {
         })
     };
     let (admitted, limit) = crate::resources::global().usage();
-    json!({"stage":stage,"elapsed_ms":started.elapsed().as_secs_f64()*1000.,
+    let sample = json!({"stage":stage,"elapsed_ms":started.elapsed().as_secs_f64()*1000.,
         "rss_bytes":bytes("VmRSS:"),"process_high_water_bytes":bytes("VmHWM:"),
-        "host_available_bytes":crate::resources::available_memory(),"admitted_bytes":admitted,"pool_limit_bytes":limit})
+        "host_available_bytes":crate::resources::available_memory(),"admitted_bytes":admitted,"pending_bytes":crate::resources::global().pending_bytes(),"pool_limit_bytes":limit});
+    eprintln!("RAW_WORKFLOW_STAGE {sample}");
+    sample
 }
 
 /// Keep unknown camera/mode identity visible as missing evidence.
@@ -530,6 +546,11 @@ fn record_reference(
     kinds: &mut BTreeSet<String>,
     errors: &mut Vec<Problem>,
 ) {
+    eprintln!(
+        "RAW_REFERENCE_BEGIN {} samples={}",
+        reference.id,
+        pixels.len()
+    );
     let result = (|| -> Result<Stats, String> {
         if reference.dimensions != Some(dimensions)
             || pixels.len() != dimensions[0] as usize * dimensions[1] as usize * channels
@@ -576,6 +597,7 @@ fn record_reference(
         }
         Err(error) => problem(errors, "invalid", format!("{}: {error}", reference.id)),
     }
+    eprintln!("RAW_REFERENCE_END {}", reference.id);
 }
 
 /// Keep codec validation samples admitted until their final owner drops.
@@ -629,10 +651,28 @@ fn decode_export(path: &Path, dimensions: (u32, u32)) -> Result<DecodedExport, S
 /// Args: sample slice. Returns its SHA-256.
 fn hash_samples(samples: &[u16]) -> String {
     let mut hash = Sha256::new();
-    for sample in samples {
-        hash.update(sample.to_le_bytes());
+    for chunk in samples.chunks(4096) {
+        let mut bytes = [0u8; 8192];
+        for (sample, target) in chunk.iter().zip(bytes.chunks_exact_mut(2)) {
+            target.copy_from_slice(&sample.to_le_bytes());
+        }
+        hash.update(&bytes[..chunk.len() * 2]);
     }
     format!("{:x}", hash.finalize())
+}
+
+#[cfg(test)]
+#[test]
+fn canonical_u16_hash_keeps_little_endian_bytes_across_chunk_boundaries() {
+    let samples: Vec<_> = (0..8201u32).map(|i| (i * 137) as u16).collect();
+    let mut reference = Sha256::new();
+    for sample in &samples {
+        reference.update(sample.to_le_bytes());
+    }
+    assert_eq!(
+        hash_samples(&samples),
+        format!("{:x}", reference.finalize())
+    );
 }
 
 /// Evaluate the simple qualification exposure/framing recipe independently.

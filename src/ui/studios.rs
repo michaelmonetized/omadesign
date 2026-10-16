@@ -46,6 +46,35 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                 .inner_margin(Margin::symmetric(14, 14)),
         )
         .show(ui, |ui| {
+            inspector_content(ui, studio);
+            layers_content(ui, studio);
+        });
+    let edge = eframe::egui::Rect::from_min_max(
+        panel.response.rect.left_top() - vec2(3.0, 0.0),
+        panel.response.rect.left_bottom() + vec2(3.0, 0.0),
+    );
+    let resize = ui
+        .interact(edge, width_id.with("drag"), eframe::egui::Sense::drag())
+        .on_hover_cursor(eframe::egui::CursorIcon::ResizeHorizontal);
+    if resize.dragged() {
+        let width = (width - resize.drag_delta().x).clamp(256.0, 420.0);
+        ui.ctx()
+            .data_mut(|data| data.insert_persisted(width_id, width));
+    }
+}
+
+/// Draw property commands inside an application-placed panel.
+/// Args: panel UI and studio. Returns no value; typed history stays studio-owned.
+pub(super) fn inspector_content(ui: &mut Ui, studio: &mut Studio) {
+    if studio.paint_mask
+        && studio
+            .active_layer
+            .and_then(|index| studio.doc.layers.get(index))
+            .is_none_or(|layer| layer.mask.is_none())
+    {
+        studio.paint_mask = false;
+    }
+
             ui.set_max_width(ui.available_width());
             ui.spacing_mut().item_spacing = vec2(8.0, 6.0);
             if studio.libraries.sidebar != crate::app::libraries::Sidebar::Inspector {
@@ -53,6 +82,9 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                 return;
             }
             inspector_title(ui, studio);
+            let locked = studio.selection.iter().any(|&(layer,id)| !studio.layer_unlocked(layer) || studio.doc.find_shape(layer,id).is_some_and(|shape|shape.locked));
+            if locked {ui.label("Selection locked");}
+            ui.add_enabled_ui(!locked, |ui| {
             section_gap(ui);
             let design = studio.persona == Persona::Design || studio.persona == Persona::Layout;
             let motion = studio.persona == Persona::Motion;
@@ -62,7 +94,7 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
             let typing = studio.type_edit.is_some()
                 || studio.tool == Tool::Text
                 || studio.selected_type().is_some();
-            let properties_height = (ui.available_height() - 152.0).max(170.0);
+            let properties_height = ui.available_height().max(0.0);
             ScrollArea::vertical()
                 .id_salt("properties-scroll")
                 .max_height(properties_height)
@@ -134,6 +166,13 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                             .show(ui, |ui| fx_studio(ui, studio));
                     }
                 });
+            });
+
+}
+
+/// Draw layer commands inside an application-placed panel.
+/// Args: panel UI and studio. Returns no value; layer edits retain typed history.
+pub(super) fn layers_content(ui: &mut Ui, studio: &mut Studio) {
             ui.add_space(10.0);
             ui.separator();
             ui.add_space(8.0);
@@ -141,19 +180,6 @@ pub fn right_panel(ui: &mut Ui, studio: &mut Studio) {
                 .id_salt("layers-scroll")
                 .auto_shrink([false, false])
                 .show(ui, |ui| layers_studio(ui, studio));
-        });
-    let edge = eframe::egui::Rect::from_min_max(
-        panel.response.rect.left_top() - vec2(3.0, 0.0),
-        panel.response.rect.left_bottom() + vec2(3.0, 0.0),
-    );
-    let resize = ui
-        .interact(edge, width_id.with("drag"), eframe::egui::Sense::drag())
-        .on_hover_cursor(eframe::egui::CursorIcon::ResizeHorizontal);
-    if resize.dragged() {
-        let width = (width - resize.drag_delta().x).clamp(256.0, 420.0);
-        ui.ctx()
-            .data_mut(|data| data.insert_persisted(width_id, width));
-    }
 }
 
 fn section_gap(ui: &mut Ui) {
@@ -328,34 +354,7 @@ fn number_field<N: eframe::egui::emath::Numeric>(
     range: std::ops::RangeInclusive<N>,
     suffix: &str,
 ) -> bool {
-    let width = ui.available_width();
-    Frame::new()
-        .fill(bg_widget())
-        .corner_radius(6.0)
-        .inner_margin(Margin::symmetric(8, 3))
-        .show(ui, |ui| {
-            ui.set_min_width((width - 16.0).max(24.0));
-            ui.spacing_mut().interact_size.y = 20.0;
-            ui.spacing_mut().button_padding = vec2(2.0, 1.0);
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 4.0;
-                ui.label(RichText::new(label).size(11.0).color(fg_weak()));
-                ui.with_layout(Layout::right_to_left(eframe::egui::Align::Center), |ui| {
-                    ui.add(
-                        eframe::egui::DragValue::new(value)
-                            .speed(0.5)
-                            .range(range)
-                            .max_decimals(2)
-                            .min_decimals(0)
-                            .suffix(suffix),
-                    )
-                    .changed()
-                })
-                .inner
-            })
-            .inner
-        })
-        .inner
+    super::fields::number(ui, label, label, value, range, suffix, matches!(label, "X" | "Y" | "Rotate").then(|| N::from_f64(0.0)), Default::default()).changed
 }
 
 fn bounds_fields(
@@ -387,6 +386,7 @@ fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
             Fill::Solid(c) | Fill::Linear { c0: c, .. } | Fill::Radial { c0: c, .. } => Some(*c),
             Fill::Gradient(g) => Some(g.sample(0.)),
             Fill::None => None,
+            Fill::Pattern(_) => Some(crate::color::Rgba::BLACK),
         }
     } else {
         source_stroke.as_ref().map(|stroke| {
@@ -421,7 +421,7 @@ fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
                     | Fill::Linear { c0: color, .. }
                     | Fill::Radial { c0: color, .. } => *color,
                     Fill::Gradient(g) => g.sample(0.),
-                    Fill::None => studio.brush.color,
+                    Fill::None | Fill::Pattern(_) => studio.brush.color,
                 }
             };
             color.a = 255;
@@ -611,17 +611,19 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
             .color(fg_weak()),
         );
         let current = gradient.as_ref().map(|g| g.kind);
+        let pattern = matches!(style.fill, Fill::Pattern(_));
+        let mut replace_pattern = false;
         let mut chosen = current;
         ComboBox::from_id_salt("paint-type")
-            .selected_text(current.map(|k| k.name()).unwrap_or("Solid"))
+            .selected_text(if pattern { "Pattern" } else { current.map(|k| k.name()).unwrap_or("Solid") })
             .width(108.)
             .show_ui(ui, |ui| {
-                ui.selectable_value(&mut chosen, None, "Solid");
+                replace_pattern = ui.selectable_value(&mut chosen, None, "Solid").clicked() && pattern;
                 for kind in crate::gradient::GradientKind::ALL {
                     ui.selectable_value(&mut chosen, Some(kind), kind.name());
                 }
             });
-        if chosen != current {
+        if chosen != current || replace_pattern {
             gradient = chosen.map(|kind| {
                 let mut g = gradient.clone().unwrap_or_else(|| {
                     crate::gradient::Gradient::new(
@@ -652,6 +654,7 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
             apply_gradient(studio, gradient.clone());
         }
     });
+    super::svg_paint::show(ui, studio);
     if let Some(mut gradient) = gradient {
         let bounds = studio
             .primary()
@@ -788,7 +791,7 @@ fn color_grid(ui: &mut Ui, studio: &mut Studio, recent: bool) {
                         | Fill::Linear { c0: current, .. }
                         | Fill::Radial { c0: current, .. } => *current,
                         Fill::Gradient(gradient) => gradient.sample(0.),
-                        Fill::None => color,
+                        Fill::None | Fill::Pattern(_) => color,
                     };
                     if studio.is_motion()
                         && !style.fill.is_none()
@@ -952,9 +955,10 @@ pub(super) fn character_studio(ui: &mut Ui, studio: &mut Studio) {
     super::text_geometry::frame_inspector(ui, studio);
     super::text_geometry::path_inspector(ui, studio);
     let live = studio.selected_type();
-    let font = live
+    let metrics=studio.selected_character_metrics();
+    let font = metrics.first().and_then(|s|s.font.clone()).or_else(||live
         .as_ref()
-        .map(|t| t.font.clone())
+        .map(|t| t.font.clone()))
         .unwrap_or_else(|| studio.text_font.clone());
     let label = crate::text::label_for(&font);
     let mut chosen = font.clone();
@@ -1033,7 +1037,7 @@ pub(super) fn character_studio(ui: &mut Ui, studio: &mut Studio) {
     if chosen != font {
         let path = chosen.clone();
         studio.remember_font(&path);
-        studio.patch_type(|t| t.font = path.clone());
+        if live.is_some(){studio.patch_character(|s|s.font=Some(path.clone()));}else{studio.patch_type(|t| t.font = path.clone());}
         studio.text_font = path;
         studio.font_scroll_once = true;
     }
@@ -1041,9 +1045,9 @@ pub(super) fn character_studio(ui: &mut Ui, studio: &mut Studio) {
         .default_open(false)
         .show(ui, |ui| google_fonts_ui(ui, studio));
 
-    let mut px = live.as_ref().map(|t| t.px).unwrap_or(studio.text_px);
+    let mut px = metrics.first().and_then(|s|s.px).or_else(||live.as_ref().map(|t|t.px)).unwrap_or(studio.text_px);
     if number_field(ui, "Size", &mut px, 8.0..=400.0, " px") {
-        studio.patch_type(|t| t.px = px);
+        if live.is_some(){studio.patch_character(|s|s.px=Some(px));}else{studio.patch_type(|t| t.px = px);}
     }
     super::character_spacing::show(ui,studio);
     super::opentype::show(ui, studio, &font);
@@ -1451,6 +1455,7 @@ fn artboard_transform(ui: &mut Ui, studio: &mut Studio) {
 }
 
 fn raster_transform(ui: &mut Ui, studio: &mut Studio, li: usize) {
+    super::psd_smart::inspector(ui,studio,li);
     let Some(layer) = studio.doc.layers.get(li) else {
         return;
     };
@@ -1565,6 +1570,7 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
         }
         return;
     }
+    if super::shared_transform::mixed(ui, studio) { return; }
     let Some((layer, id)) = studio.primary() else {
         return;
     };
@@ -1967,6 +1973,7 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
 }
 
 fn fx_studio(ui: &mut Ui, studio: &mut Studio) {
+    super::svg_effect::show(ui, studio);
     let group_active = studio
         .active_layer
         .and_then(|i| studio.doc.layers.get(i))

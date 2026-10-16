@@ -1,6 +1,12 @@
 {
   "schema": 1,
-  "versioning": "0.6.4–0.6.31 are Omadesign milestones only. Omatainer and EditBay retain their current versioning schemes. Version bumps happen on working integrated changes, never placeholder-only increments.",
+  "versioning": "0.6.4–0.6.40 are approved Omadesign milestones only: the original28 cuts plus9 follow-on cuts accepted after individual exploration alignment. Omatainer and EditBay retain their current version schemes. Version bumps happen on working integrated changes, never placeholder-only increments.",
+  "prepared_milestones": [
+    {"version":"0.6.4","pr":220,"scope":"Qualified installed brush/SVG/import baseline and coordinator tooling"},
+    {"version":"0.6.5","pr":223,"source_commit":"516b965e984d9791bbd373a8389b429cd7b6934e","validation":"6 focused tests passed; canonical source hashes match all three apps","publication":"Source preparation only; binary and release qualification remain separate"},
+    {"version":"0.6.6","pr":225,"source_commit":"64bb31a84a611200d2d8ed1fcf1251fb20b39fa6","validation":"9 focused contextual-field tests passed at the stated source; lock-held executable receipt 8dc3d1fce7640bafcbf1253b5bb57c3065d567d6b627835a3b7221a807e37d66","publication":"Consistent source metadata only; no new binary or release qualification"},
+    {"version":"0.6.7","pr":229,"source_commit":"8a50bc900aeae58f83e32e485c54339151781a34","validation":"13 focused saved-panel tests passed at the stated source; lock-held executable receipt 24e06424f0d7e72e317b0ba235a4749689cdf516a53b4b83e7ae14d47182369d","publication":"Consistent source metadata only; no new binary or release qualification"}
+  ],
   "groups": [
     {"key":"shared-ui","gaps":["SUITE-01","UI-02","UI-01","AUDIO-01","VIDEO-01","VIDEO-02"],"repos":["omadesign","omatainer","editbay"],"milestones":["0.6.5","0.6.6","0.6.7"]},
     {"key":"svg-type","gaps":["SVG-06"],"repos":["omadesign"],"milestones":["0.6.8"]},
@@ -43,7 +49,16 @@
     {"version":"0.6.28","scope":"Deterministic bounded expressions","owner":"motion-3d","gaps":["MOTION-01","MOTION-02"]},
     {"version":"0.6.29","scope":"Composition/keyframe/interchange depth","owner":"motion-3d","gaps":["MOTION-01","MOTION-02"]},
     {"version":"0.6.30","scope":"3D model/material import","owner":"motion-3d","gaps":["MOTION-01","MOTION-02"]},
-    {"version":"0.6.31","scope":"3D camera/light/animation rendering","owner":"motion-3d","gaps":["MOTION-01","MOTION-02"]}
+    {"version":"0.6.31","scope":"3D camera/light/animation rendering","owner":"motion-3d","gaps":["MOTION-01","MOTION-02"]},
+    {"version":"0.6.32","scope":"Keyboard artwork creation, selection and document navigation","owner":"keyboard-access","gaps":["UI-05"]},
+    {"version":"0.6.33","scope":"Keyboard pixel/photo tools and keyframe editing","owner":"keyboard-access","gaps":["UI-05"]},
+    {"version":"0.6.34","scope":"Keyboard panels/dialogs and complete field error/mixed semantics","owner":"keyboard-access","gaps":["UI-05"]},
+    {"version":"0.6.35","scope":"RAW/native memory admission and prompt active cancellation","owner":"raw-camera-qualification","gaps":["PHOTO-03"]},
+    {"version":"0.6.36","scope":"Precise high-resolution RAW placement and export","owner":"raw-camera-qualification","gaps":["PHOTO-03"]},
+    {"version":"0.6.37","scope":"All advertised RAW families/modes with strict real-file qualification","owner":"raw-camera-qualification","gaps":["PHOTO-03"]},
+    {"version":"0.6.38","scope":"Prototype authoring/export agreement and nested variants","owner":"layout-prototype-depth","gaps":["LAYOUT-02"]},
+    {"version":"0.6.39","scope":"Advanced grids, text baselines and named component properties","owner":"layout-prototype-depth","gaps":["LAYOUT-02"]},
+    {"version":"0.6.40","scope":"Shared affected-fixture runner and full public-candidate gate","owner":"suite-fixture-qualification","gaps":["SUITE-02"]}
   ],
   "explorations": [
     {"id":"UI-03","title":"One gesture, one undo step","product":"All three"},
@@ -61,7 +76,7 @@
     "No live desktop/audio/controller benchmarks; use focused nonintrusive tests for authorized changes",
     "Preserve all user edits, original artwork, accepted QA and rollback support",
     "No unreviewed release/tag/install actions by child agents",
-    "Exploration findings are proposals pending user alignment, not new implementation scope",
+    "All eight explorations were discussed individually and approved; follow-on milestone map is in follow-on-scope.md",
     "Never claim a gap closed from an inventory or a skeleton; meet behavior and acceptance evidence"
   ]
 }

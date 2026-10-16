@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="240">
+  <defs><path id="curve" d="M15 185 Q205 100 395 185"/></defs>
+  <g font-family="DejaVu Sans" font-size="26" fill="#264b80">
+    <text x="22" y="44" transform="matrix(1 .16 -.18 1 12 2)">Editable <tspan fill="#c42c53" font-size="35" font-weight="bold">styles</tspan></text>
+    <text x="24 70 121" y="93 107 93" rotate="-10 20 -14">ABC</text>
+    <text x="380" y="107" direction="rtl" unicode-bidi="bidi-override">مرحبا بالعالم</text>
+    <text x="405" y="20" writing-mode="tb" font-size="18">Vertical</text>
+    <text><textPath href="#curve" startOffset="22">Text follows the editable curve</textPath></text>
+  </g>
+</svg>

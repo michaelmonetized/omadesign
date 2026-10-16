@@ -469,13 +469,15 @@ impl Studio {
         let (tx, receiver) = mpsc::channel();
         std::thread::spawn(move || {
             let result = (|| {
+                if matches!(extension.as_str(), "psd" | "psb") {
+                    let encoded = crate::formats::psd::encode_admitted(&doc, extension == "psb")?;
+                    crate::formats::write_atomic(&output, encoded.bytes.as_slice())?;
+                    return Ok(Completed::Exported(encoded.warnings));
+                }
                 let (bytes, notes) = match extension.as_str() {
-                    "psd" | "psb" => {
-                        let output = crate::formats::psd::encode(&doc, extension == "psb")?;
-                        (output.bytes, output.warnings)
-                    }
                     "pdf" => crate::formats::pdf::write(&doc)?,
                     "ora" => crate::formats::openraster::write(&doc)?,
+                    "idml" => crate::formats::idml::write(&doc)?,
                     _ => return Err("Unsupported layered export".into()),
                 };
                 crate::formats::write_atomic(&output, &bytes)?;

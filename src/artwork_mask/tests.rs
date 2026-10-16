@@ -446,7 +446,7 @@ fn raster_interchange_keeps_masked_appearance_and_reports_the_conversion() {
         "Photoshop live mask",
     );
     let (pdf, notes) = crate::formats::pdf::write(&doc).unwrap();
-    assert!(notes.iter().any(|n| n.contains("Live artwork masks")));
+    assert!(notes.is_empty(), "{notes:?}");
     let (decoded, _) = crate::formats::pdf::read(&pdf, "PDF").unwrap();
     let mut paper = doc.clone();
     paper.transparent = false;

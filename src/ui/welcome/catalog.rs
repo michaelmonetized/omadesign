@@ -685,7 +685,7 @@ fn index_entry(
             if !recovered
                 && header
                     .version
-                    .is_none_or(|v| !(1..=crate::project::VERSION).contains(&v))
+                    .is_none_or(|v| !crate::project::supports_version(v))
             {
                 entry.error = Some("Unsupported omadesign document version".into());
                 return entry;

@@ -18,6 +18,9 @@ struct Record {
     mask_rect: Option<Rect>,
     channels: Vec<(i16, Arc<Allocation<u8>>)>,
     overlay: Option<super::effects::Overlay>,
+    type_data: Option<Vec<u8>>,
+    smart_data: Option<Vec<u8>>,
+    smart_blocks: Vec<([u8; 4], Vec<u8>)>,
 }
 
 fn u16(out: &mut impl Write, value: u16) -> Result<(), String> {out.write_all(&value.to_be_bytes()).map_err(|e| e.to_string())}
@@ -47,9 +50,55 @@ fn zip_channel(data: &[u8]) -> Result<Arc<Allocation<u8>>, String> {
     zip.finish().map_err(|e| format!("Could not finish Photoshop channel: {e}"))?.finish()
 }
 
-/// Export a standards-compliant RGB/8 PSD or PSB, with a compatibility composite.
-/// Vectors and native filters are rendered per layer; groups and pixel masks stay separate.
+/// Export legacy Photoshop bytes without a retained admission owner.
+/// Args: document and PSB flag. Returns unleased bytes and notes; use encode_admitted for retained output.
 pub fn encode(doc: &Document, large: bool) -> Result<PsdExport, String> {
+    let output = encode_admitted(doc, large)?;
+    let allocation = Arc::try_unwrap(output.bytes).map_err(|_| "Shared legacy Photoshop output")?;
+    let (bytes, _memory) = allocation.into_parts();
+    Ok(PsdExport { bytes, warnings: output.warnings })
+}
+
+/// Retain standard PSD/PSB bytes through the final caller or queued file write.
+/// Args: editable document and PSB flag. Returns admitted encoded bytes and appearance notes.
+pub fn encode_admitted(doc: &Document, large: bool) -> Result<super::AdmittedPsdExport, String> {
+    doc.validate_sources()?;
+    if doc.layers.iter().any(|l| {
+        l.kind.shapes().is_some_and(|ss| {
+            ss.len() > 1
+                && ss
+                    .iter()
+                    .any(|s| matches!(s.geom, crate::geom::Geom::Text(_)))
+        })
+    }) {
+        let mut prepared = doc.clone();
+        prepared.layers.clear();
+        for layer in &doc.layers {
+            if let Some(shapes) = layer.kind.shapes().filter(|ss| {
+                ss.len() > 1
+                    && ss
+                        .iter()
+                        .any(|s| matches!(s.geom, crate::geom::Geom::Text(_)))
+            }) {
+                let mut group = layer.clone();
+                group.kind = LayerKind::Vector { shapes: vec![] };
+                group.is_group = true;
+                group.pass_through = false;
+                for shape in shapes {
+                    let mut child = Layer::vector(&shape.name);
+                    child.parent = Some(group.id);
+                    child.kind = LayerKind::Vector {
+                        shapes: vec![shape.clone()],
+                    };
+                    prepared.layers.push(child);
+                }
+                prepared.layers.push(group);
+            } else {
+                prepared.layers.push(layer.clone());
+            }
+        }
+        return encode_admitted(&prepared, large);
+    }
     if !doc.mask_sources().is_empty() {
         if doc.layers.iter().any(|l| {
             l.kind.pixels().is_some_and(|p| p.native.is_some())
@@ -58,7 +107,7 @@ pub fn encode(doc: &Document, large: bool) -> Result<PsdExport, String> {
             return Err("High-depth artwork masks cannot be flattened by the 8-bit compatibility renderer. Export .oma to retain original samples and editable artwork masks.".into());
         }
         let prepared = crate::compositor::raster_export_document(doc)?;
-        let mut result = encode(&prepared, large)?;
+        let mut result = encode_admitted(&prepared, large)?;
         result.warnings.push("Live artwork masks were rendered into their affected layers or groups. Save .oma or export SVG to retain editable mask sources.".into());
         return Ok(result);
     }
@@ -119,6 +168,9 @@ pub fn encode(doc: &Document, large: bool) -> Result<PsdExport, String> {
             mask_rect: None,
             channels: Vec::new(),
             overlay: None,
+            type_data: None,
+            smart_data: None,
+            smart_blocks: Vec::new(),
         };
         add_pixels(
             &mut record,
@@ -161,6 +213,9 @@ pub fn encode(doc: &Document, large: bool) -> Result<PsdExport, String> {
             mask_rect: None,
             channels: Vec::new(),
             overlay: None,
+            type_data: None,
+            smart_data: None,
+            smart_blocks: Vec::new(),
         });
     }
     let mut layer_info = storage::Builder::new()?;
@@ -212,11 +267,24 @@ pub fn encode(doc: &Document, large: bool) -> Result<PsdExport, String> {
         }
     }
     section(&mut out, &resources, false)?;
-    let mask_size = layer_info.len().checked_add(if large {12} else {8}).ok_or("Photoshop layer section size overflows")?;
+    let (embedded, external) = super::smart::write_links(doc)?;
+    let links = [(b"lnk2",embedded,large),(b"lnkE",external,false)];
+    let mut mask_size = layer_info.len().checked_add(if large {12} else {8}).ok_or("Photoshop layer section size overflows")?;
+    for (_,data,wide) in &links {
+        if !data.is_empty() {mask_size = mask_size.checked_add(if *wide {16} else {12}).and_then(|n| n.checked_add(data.len())).and_then(|n|n.checked_add((4-data.len()%4)%4)).ok_or("Photoshop linked source section size overflows")?;}
+    }
     length(&mut out, mask_size, large)?;
     section(&mut out, &layer_info, large)?;
     u32(&mut out, 0)?;
     drop(layer_info);
+    for (key,data,wide) in links {
+        if data.is_empty() {continue;}
+        out.write_all(b"8BIM").map_err(|e|e.to_string())?;
+        out.write_all(key).map_err(|e|e.to_string())?;
+        length(&mut out,data.len(),wide)?;
+        out.write_all(&data).map_err(|e|e.to_string())?;
+        out.write_all(&[0;3][..(4-data.len()%4)%4]).map_err(|e|e.to_string())?;
+    }
     let merged = if depth == 8 && doc.color.model == crate::deep_color::cms::Model::Rgb && doc.color.icc_profile.is_empty() {
         let png = crate::compositor::export_png(doc, 1)?;
         let image = image::load_from_memory(&png)
@@ -231,8 +299,8 @@ pub fn encode(doc: &Document, large: bool) -> Result<PsdExport, String> {
     for ch in 0..if doc.color.model == crate::deep_color::cms::Model::Cmyk {5} else {4} {
         out.write_all(&plane(&merged, ch, depth, doc.color.model == crate::deep_color::cms::Model::Rgb)?).map_err(|e| e.to_string())?;
     }
-    Ok(PsdExport {
-        bytes: {let output = Arc::try_unwrap(out.finish()?).map_err(|_| "Shared Photoshop encoded storage")?; let (bytes, _memory) = output.into_parts(); bytes},
+    Ok(super::AdmittedPsdExport {
+        bytes: out.finish()?,
         warnings,
     })
 }
@@ -265,6 +333,9 @@ fn collect(
                 mask_rect: None,
                 channels: Vec::new(),
                 overlay: None,
+                type_data: None,
+                smart_data: None,
+                smart_blocks: Vec::new(),
             });
             collect(
                 doc,
@@ -299,7 +370,29 @@ fn collect(
             mask_rect: None,
             channels: Vec::new(),
             overlay: super::effects::overlay(&layer.filters),
+            type_data: None,
+            smart_data: None,
+            smart_blocks: Vec::new(),
         };
+        if let Some(shape) = layer
+            .kind
+            .shapes()
+            .filter(|ss| ss.len() == 1)
+            .and_then(|ss| ss.first())
+            .filter(|s| matches!(s.geom, crate::geom::Geom::Text(_)))
+        {
+            record.type_data = Some(super::type_layer::encode(
+                shape,
+                layer.psd_type.as_ref(),
+                warnings,
+            )?);
+            record.opacity =
+                (record.opacity as f32 * shape.opacity * shape.fill_opacity).round() as u8;
+        }
+        if layer.psd_smart.is_some() {
+            record.smart_data = Some(super::smart::encode(layer)?);
+            record.smart_blocks = layer.psd_smart.as_ref().unwrap().retained_blocks.clone();
+        }
         if layer.is_group {
             if layer.filters.active() && record.overlay.is_none() {
                 warn(
@@ -503,7 +596,8 @@ fn layer_pixels(
             }
         }
     }
-    if matches!(layer.kind, LayerKind::Vector { .. }) {
+    if matches!(&layer.kind, LayerKind::Vector { shapes } if !shapes.iter().all(|s|matches!(s.geom,crate::geom::Geom::Text(_))))
+    {
         warn(
             warnings,
             "Vector artwork and text are rasterized individually in Photoshop export; save .oma to retain native editing.",
@@ -607,5 +701,12 @@ fn write_record(out: &mut impl Write, record: &Record, large: bool) -> Result<()
         divider.extend_from_slice(&record.blend);
         tagged(&mut extra, b"lsct", &divider)?;
     }
+    if let Some(data) = &record.type_data {
+        tagged(&mut extra, b"TySh", data)?;
+    }
+    if let Some(data) = &record.smart_data {
+        tagged(&mut extra, b"SoLd", data)?;
+    }
+    for (key, data) in &record.smart_blocks { tagged(&mut extra, key, data)?; }
     section(out, &extra, false)
 }

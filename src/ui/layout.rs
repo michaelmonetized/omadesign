@@ -602,6 +602,13 @@ pub fn hierarchy(ui: &mut Ui, studio: &mut Studio) {
         .size_range(170.0..=320.0)
         .frame(egui::Frame::new().fill(bg_panel()).inner_margin(12))
         .show(ui, |ui| {
+            hierarchy_content(ui,studio);
+        });
+}
+
+/// Draw Layout's existing node hierarchy inside a movable panel.
+/// Args: panel UI and studio. Returns no value; node/component operations remain app-owned.
+pub(super) fn hierarchy_content(ui: &mut Ui,studio: &mut Studio) {
             ui.horizontal(|ui| {
                 ui.label(RichText::new("Layers").strong());
                 if ui.small_button("+ Frame").clicked() {
@@ -627,7 +634,6 @@ pub fn hierarchy(ui: &mut Ui, studio: &mut Studio) {
                     drop.apply(studio);
                 }
             });
-        });
 }
 
 fn layer_row(
