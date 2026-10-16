@@ -512,10 +512,11 @@ fn float_vector_unsupported_paths_refuse_without_touching_source_or_byte_routes(
     let mut cases = Vec::new();
     let mut shape = base.clone();
     shape.layout.frame = true;
-    cases.push((shape, "frame clipping"));
+    shape.opacity = 0.5;
+    cases.push((shape, "float appearance isolation"));
     let mut shape = base.clone();
-    shape.mask = Some(Pixels::new(1, 1).unwrap());
-    cases.push((shape, "precise coverage renderer"));
+    shape.mask = Some(Pixels::from_samples(1, 1, Depth::F32, vec![1.25, 0., 0., 1.]).unwrap());
+    cases.push((shape, "unit interval"));
     let mut shape = base.clone();
     shape.style.stroke = Some(Stroke {
         alignment: crate::document::StrokeAlignment::Inside,

@@ -1,7 +1,10 @@
 mod coverage;
 mod paint;
+mod shape_mask;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod clip_tests;
 mod vector;
 
 use super::Depth;
@@ -135,14 +138,15 @@ pub fn composite_with_cancel(
 ) -> Result<Pixels, String> {
     cancel.check()?;
     doc.validate_hierarchy()?;
-    if doc
-        .layers
-        .iter()
-        .filter_map(|l| l.kind.shapes())
-        .flatten()
-        .any(|s| s.mask.as_ref().is_some_and(|m| m.native.is_some()))
+    if doc.color.model == super::cms::Model::Cmyk
+        && doc
+            .layers
+            .iter()
+            .filter_map(|l| l.kind.shapes())
+            .flatten()
+            .any(|s| s.mask.is_some() || s.layout.frame || s.layout.parent.is_some())
     {
-        return Err("Native vector-shape masks need a precise coverage renderer; save .oma to preserve their original samples.".into());
+        return Err("CMYK vector clips and shape masks require an ink-aware float coverage compositor; save .oma to preserve their original samples.".into());
     }
     if doc.color.model == super::cms::Model::Cmyk {
         return composite_cmyk(doc, scale, cancel);

@@ -1,4 +1,5 @@
 //! Analytic pixel areas of the existing native compositor's floating-point paths.
+use super::shape_mask::ShapeMask;
 use crate::{
     deep_color::storage,
     resources::{self, Allocation, CancellationCheck},
@@ -11,6 +12,13 @@ const CURVE_ERROR: f64 = 0.00001;
 struct Edge {
     a: [f64; 2],
     b: [f64; 2],
+    group: usize,
+}
+
+pub(super) struct Clip {
+    pub path: std::sync::Arc<Path>,
+    pub transform: tiny_skia::Transform,
+    pub nonzero: bool,
 }
 impl Edge {
     /// Locate an edge crossing. Args: scanline coordinate. Returns its unrounded horizontal coordinate.
@@ -57,7 +65,7 @@ fn edge(
 ) -> Result<(), String> {
     check.check()?;
     if a[1] != b[1] {
-        out.extend(&[Edge { a, b }])?;
+        out.extend(&[Edge { a, b, group: 0 }])?;
     }
     Ok(())
 }
@@ -185,10 +193,97 @@ pub(super) fn rows(
     width: u32,
     height: u32,
     check: &dyn CancellationCheck,
+    consume: impl FnMut(u32, &[f64]) -> Result<(), String>,
+) -> Result<(), String> {
+    rows_clipped(
+        path,
+        transform,
+        nonzero,
+        &[],
+        tiny_skia::Transform::identity(),
+        None,
+        width,
+        height,
+        check,
+        consume,
+    )
+}
+
+/// Intersect all geometric boundaries before integrating native mask weights.
+/// Args: original path/placement/rule, frame clips, optional bitmap field, output extent, cancellation and consumer.
+/// Returns jointly covered area; masks use degree-two triangle quadrature within each bilinear texel region.
+pub(super) fn rows_clipped(
+    path: &Path,
+    transform: tiny_skia::Transform,
+    nonzero: bool,
+    clips: &[Option<Clip>],
+    clip_view: tiny_skia::Transform,
+    mask: Option<&ShapeMask<'_>>,
+    width: u32,
+    height: u32,
+    check: &dyn CancellationCheck,
     mut consume: impl FnMut(u32, &[f64]) -> Result<(), String>,
 ) -> Result<(), String> {
     check.check()?;
-    let edges = edges(path, transform, check)?;
+    let groups = 1 + clips.len() + usize::from(mask.is_some());
+    if groups > 66 {
+        return Err("Native geometric clipping exceeds the validated frame depth".into());
+    }
+    let mut rules = [false; 66];
+    rules[0] = nonzero;
+    let initial = edges(path, transform, check)?;
+    let edges = if clips.is_empty() && mask.is_none() {
+        initial
+    } else {
+        let mut out = storage::Builder::with_capacity(initial.len())?;
+        out.extend(initial.as_slice())?;
+        drop(initial);
+        for (index, clip) in clips.iter().enumerate() {
+            check.check()?;
+            let clip = clip.as_ref().ok_or("Missing native frame clip")?;
+            rules[index + 1] = clip.nonzero;
+            let part = edges(&clip.path, clip_view.pre_concat(clip.transform), check)?;
+            if part.is_empty() {
+                return Ok(());
+            }
+            for e in part.iter() {
+                out.extend(&[Edge {
+                    group: index + 1,
+                    ..*e
+                }])?;
+            }
+        }
+        if let Some(mask) = mask {
+            rules[groups - 1] = true;
+            let (w, h) = (mask.pixels.w as f32, mask.pixels.h as f32);
+            let map = |x, y| point(Point::from_xy(x, y), mask.transform);
+            let corners = [map(0., 0.)?, map(w, 0.)?, map(w, h)?, map(0., h)?];
+            for i in 0..4 {
+                out.extend(&[Edge {
+                    a: corners[i],
+                    b: corners[(i + 1) % 4],
+                    group: groups - 1,
+                }])?;
+            }
+            for x in 0..mask.pixels.w {
+                check.check()?;
+                out.extend(&[Edge {
+                    a: map(x as f32 + 0.5, 0.)?,
+                    b: map(x as f32 + 0.5, h)?,
+                    group: usize::MAX,
+                }])?;
+            }
+            for y in 0..mask.pixels.h {
+                check.check()?;
+                out.extend(&[Edge {
+                    a: map(0., y as f32 + 0.5)?,
+                    b: map(w, y as f32 + 0.5)?,
+                    group: usize::MAX,
+                }])?;
+            }
+        }
+        out.finish()?
+    };
     if edges.is_empty() {
         return Ok(());
     }
@@ -217,14 +312,15 @@ pub(super) fn rows(
         let mut boundaries = storage::Builder::new()?;
         boundaries.extend(&[lo, hi])?;
         for &e in edges.iter() {
-            if e.a[1].min(e.b[1]) < hi && e.a[1].max(e.b[1]) > lo {
+            check.check()?;
+            for v in [e.a[1], e.b[1]] {
+                if v > lo && v < hi {
+                    boundaries.extend(&[v])?;
+                }
+            }
+            if e.a[1] != e.b[1] && e.a[1].min(e.b[1]) < hi && e.a[1].max(e.b[1]) > lo {
                 active.as_mut_slice()[count] = e;
                 count += 1;
-                for v in [e.a[1], e.b[1]] {
-                    if v > lo && v < hi {
-                        boundaries.extend(&[v])?;
-                    }
-                }
             }
         }
         for i in 0..count {
@@ -257,26 +353,27 @@ pub(super) fn rows(
             let middle = (a + b) * 0.5;
             active.as_mut_slice()[..count]
                 .sort_unstable_by(|a, b| a.x(middle).total_cmp(&b.x(middle)));
-            let mut winding = 0i64;
+            let mut winding = [0i64; 66];
+            let inside = |winding: &[i64]| {
+                winding.iter().zip(&rules).all(|(&v, &nonzero)| {
+                    if nonzero {
+                        v != 0
+                    } else {
+                        v.rem_euclid(2) != 0
+                    }
+                })
+            };
             let mut left = None;
             for &edge in &active[..count] {
                 if middle < edge.a[1].min(edge.b[1]) || middle >= edge.a[1].max(edge.b[1]) {
                     continue;
                 }
-                let was = if nonzero {
-                    winding != 0
-                } else {
-                    winding.rem_euclid(2) != 0
-                };
-                winding += edge.winding();
-                let inside = if nonzero {
-                    winding != 0
-                } else {
-                    winding.rem_euclid(2) != 0
-                };
-                if !was && inside {
-                    left = Some(edge);
-                } else if was && !inside {
+                let was = inside(&winding[..groups]);
+                if edge.group != usize::MAX {
+                    winding[edge.group] += edge.winding();
+                }
+                let now = inside(&winding[..groups]);
+                if was && (!now || mask.is_some()) {
                     let left = left
                         .take()
                         .ok_or("Native coverage winding is inconsistent")?;
@@ -286,18 +383,93 @@ pub(super) fn rows(
                         if x % 4096 == 0 {
                             check.check()?;
                         }
-                        coverage.as_mut_slice()[x] +=
+                        coverage.as_mut_slice()[x] += if let Some(mask) = mask {
+                            weighted_area(left, edge, a, b, x as f64, mask)
+                        } else {
                             clamped_integral(edge.x(a) - x as f64, edge.x(b) - x as f64, b - a)
                                 - clamped_integral(
                                     left.x(a) - x as f64,
                                     left.x(b) - x as f64,
                                     b - a,
-                                );
+                                )
+                        };
                     }
+                }
+                if now && (!was || mask.is_some()) {
+                    left = Some(edge);
                 }
             }
         }
         consume(y, coverage.as_slice())?;
     }
     check.check()
+}
+
+/// Integrate a bilinear mask over the actual covered part of one pixel.
+/// Args: interval edges, vertical band, pixel column and source sampler. Returns weighted area without a mask average.
+fn weighted_area(
+    left: Edge,
+    right: Edge,
+    top: f64,
+    bottom: f64,
+    x: f64,
+    mask: &ShapeMask<'_>,
+) -> f64 {
+    let mut polygon = [[0.; 2]; 8];
+    polygon[..4].copy_from_slice(&[
+        [left.x(top), top],
+        [right.x(top), top],
+        [right.x(bottom), bottom],
+        [left.x(bottom), bottom],
+    ]);
+    let mut count = 4;
+    for (boundary, greater) in [(x, true), (x + 1., false)] {
+        let mut clipped = [[0.; 2]; 8];
+        let mut n = 0;
+        if count == 0 {
+            return 0.;
+        }
+        let mut a = polygon[count - 1];
+        for b in polygon[..count].iter().copied() {
+            let ain = if greater {
+                a[0] >= boundary
+            } else {
+                a[0] <= boundary
+            };
+            let bin = if greater {
+                b[0] >= boundary
+            } else {
+                b[0] <= boundary
+            };
+            if ain != bin {
+                let t = (boundary - a[0]) / (b[0] - a[0]);
+                clipped[n] = [boundary, a[1] + t * (b[1] - a[1])];
+                n += 1;
+            }
+            if bin {
+                clipped[n] = b;
+                n += 1;
+            }
+            a = b;
+        }
+        polygon = clipped;
+        count = n;
+    }
+    let mut total = 0.;
+    for i in 1..count.saturating_sub(1) {
+        let (a, b, c) = (polygon[0], polygon[i], polygon[i + 1]);
+        let area = ((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])).abs() * 0.5;
+        for (wa, wb, wc) in [
+            (2. / 3., 1. / 6., 1. / 6.),
+            (1. / 6., 2. / 3., 1. / 6.),
+            (1. / 6., 1. / 6., 2. / 3.),
+        ] {
+            total += area / 3.
+                * mask.at([
+                    a[0] * wa + b[0] * wb + c[0] * wc,
+                    a[1] * wa + b[1] * wb + c[1] * wc,
+                ]);
+        }
+    }
+    total
 }
