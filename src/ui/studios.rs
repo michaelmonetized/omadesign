@@ -1863,7 +1863,7 @@ impl EffectBlendOwners {
         if let Some(focused) = ctx.memory(|memory| memory.focused()) && self.widgets.contains(&focused) {
             ctx.memory_mut(|memory| memory.surrender_focus(focused));
         }
-        self.instance = eframe::egui::Id::new(uuid::Uuid::new_v4());
+        self.instance = super::keyboard_controls::draft_id(ctx, "effect-blend");
         self.widgets.clear();
     }
 }
@@ -1872,7 +1872,7 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
     let original = stack.clone();
     let key = ui.make_persistent_id(("effect-blend-owners", salt));
     let mut owners = ui.data(|data| data.get_temp::<EffectBlendOwners>(key)).unwrap_or_else(|| EffectBlendOwners {
-        expected: original.clone(), instance: eframe::egui::Id::new(uuid::Uuid::new_v4()), widgets: Vec::new(),
+        expected: original.clone(), instance: super::keyboard_controls::draft_id(ui.ctx(), "effect-blend"), widgets: Vec::new(),
     });
     if owners.expected != original { owners.retire(ui.ctx()); }
     owners.widgets.clear();

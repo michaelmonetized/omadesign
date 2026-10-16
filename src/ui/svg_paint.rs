@@ -15,12 +15,12 @@ pub(super) fn source_owner(ui: &Ui, key: egui::Id, revision: u64) -> SourceOwner
         .data(|data| data.get_temp::<SourceOwner>(key))
         .unwrap_or_else(|| SourceOwner {
             revision,
-            instance: egui::Id::new(uuid::Uuid::new_v4()),
+            instance: super::keyboard_controls::draft_id(ui.ctx(), "retained-source"),
         });
     if owner.revision != revision {
         owner = SourceOwner {
             revision,
-            instance: egui::Id::new(uuid::Uuid::new_v4()),
+            instance: super::keyboard_controls::draft_id(ui.ctx(), "retained-source"),
         };
     }
     owner

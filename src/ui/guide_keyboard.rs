@@ -55,7 +55,7 @@ pub(super) fn menu(ui: &mut Ui, studio: &Studio) {
             document: studio.swap_id.clone(),
             revision: studio.canvas_gen,
             guides: studio.doc.guides.clone(),
-            instance: Id::new(uuid::Uuid::new_v4()),
+            instance: super::keyboard_controls::draft_id(ui.ctx(), "guide-positions"),
             selected: None,
             position: 0.,
             origin: studio.doc.ruler.origin,
@@ -386,7 +386,7 @@ mod tests {
         assert_eq!(crate::project::encode(&studio.doc).unwrap(), expected);
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join(".artifacts")
-            .join(format!("keyboard-guides-{}", uuid::Uuid::new_v4()));
+            .join(format!("keyboard-guides-{}", crate::document::next_id()));
         std::fs::create_dir_all(&root).unwrap();
         let path = root.join("guides.oma");
         crate::project::save_to(&studio.doc, &path).unwrap();

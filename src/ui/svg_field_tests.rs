@@ -56,7 +56,7 @@ fn undo(ctx: &egui::Context, studio: &mut Studio, redo: bool) {
 fn reopen(doc: &crate::document::Document) {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join(".artifacts")
-        .join(format!("keyboard-svg-{}", uuid::Uuid::new_v4()));
+        .join(format!("keyboard-svg-{}", crate::document::next_id()));
     std::fs::create_dir_all(&root).unwrap();
     let path = root.join("retained.oma");
     crate::project::save_to(doc, &path).unwrap();

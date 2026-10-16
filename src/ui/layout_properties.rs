@@ -13,11 +13,17 @@ struct TextDraft {
     before: String,
 }
 
+fn property_name_error(name: &str) -> Option<&'static str> {
+    (name.trim().is_empty() || name.chars().count() > 120)
+        .then_some("Use a property name from 1 to 120 characters")
+}
+
 fn text(
     ui: &mut Ui,
     id: impl std::hash::Hash + std::fmt::Debug,
     name: &str,
     value: &str,
+    validate: fn(&str) -> Option<&'static str>,
 ) -> Option<String> {
     let key = ui.make_persistent_id(id);
     let mut draft = ui
@@ -26,19 +32,24 @@ fn text(
             value: value.into(),
             before: value.into(),
         });
-    if ui
-        .data(|d| d.get_temp::<bool>(key.with("stale")))
-        .unwrap_or(false)
-    {
-        ui.colored_label(
-            ui.visuals().error_fg_color,
-            "The property changed. Focus the field to edit its current value.",
-        );
-    }
+    let stale = ui
+        .data(|data| data.get_temp::<bool>(key.with("stale")))
+        .unwrap_or(false);
     let label = ui.label(name);
     let response = ui
         .add(egui::TextEdit::singleline(&mut draft.value).id(key))
         .labelled_by(label.id);
+    super::welcome::name_control(ui, &response, label.id, name);
+    let invalid = validate(&draft.value);
+    if let Some(message) = invalid {
+        super::welcome::control_error(ui, &[&response], message);
+    } else if stale {
+        super::welcome::control_error(
+            ui,
+            &[&response],
+            "The property changed. Focus the field to edit its current value.",
+        );
+    }
     let commit = response.lost_focus()
         || (response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
     if ui.input(|i| i.key_pressed(egui::Key::Escape)) && response.has_focus() {
@@ -47,6 +58,10 @@ fn text(
             d.remove::<bool>(key.with("stale"));
         });
         response.surrender_focus();
+        return None;
+    }
+    if invalid.is_some() {
+        ui.data_mut(|data| data.insert_temp(key, draft));
         return None;
     }
     if commit {
@@ -80,10 +95,7 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
     let main = matches!(shape.layout.component, Some(ComponentBinding::Main { .. }));
     let properties = components::properties(&studio.doc, root);
     let document = studio.swap_id.clone();
-    let blocked = studio.file_dialog_pending()
-        || studio.pending_nav.is_some()
-        || studio.updates.freezing
-        || studio.op.is_some();
+    let blocked = super::layout::keyboard::blocked(studio);
     let mut edit = None;
     let mut select = None;
     egui::CollapsingHeader::new("Named properties")
@@ -91,10 +103,18 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
         .show(ui, |ui| {
             ui.add_enabled_ui(!blocked, |ui| {
                 ui.push_id(
-                    (document, layer, root, selected, "named-properties"),
+                    (
+                        document,
+                        studio.selection.clone(),
+                        layer,
+                        root,
+                        selected,
+                        "named-properties",
+                    ),
                     |ui| {
                         for property in properties {
-                            ui.push_id(property.id, |ui| {
+                            let row = ui.make_persistent_id(("named-property", property.id));
+                            super::fields::native_scope(ui, row, |ui| {
                                 match components::property_value(
                                     &studio.doc,
                                     layer,
@@ -103,7 +123,7 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                                 ) {
                                     Ok(Value::Text(value)) => {
                                         if let Some(value) =
-                                            text(ui, "value", &property.name, &value)
+                                            text(ui, "value", &property.name, &value, |_| None)
                                         {
                                             edit = Some(Edit::Set {
                                                 id: property.id,
@@ -112,7 +132,15 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                                         }
                                     }
                                     Ok(Value::Visibility(mut value)) => {
-                                        if ui.checkbox(&mut value, &property.name).changed() {
+                                        let field = ui.make_persistent_id("visibility");
+                                        if super::svg_paint::control(
+                                            ui,
+                                            field,
+                                            &property.name,
+                                            |ui| ui.checkbox(&mut value, &property.name),
+                                        )
+                                        .changed()
+                                        {
                                             edit = Some(Edit::Set {
                                                 id: property.id,
                                                 value: Value::Visibility(value),
@@ -156,9 +184,14 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                                             "value",
                                             &format!("{} · hex", property.name),
                                             &color.hex(),
+                                            |text| {
+                                                crate::color::Rgba::parse_hex(text.trim())
+                                                    .is_none()
+                                                    .then_some("Enter a hex color, such as #336699")
+                                            },
                                         ) {
                                             if let Some(color) =
-                                                crate::color::Rgba::parse_hex(&value)
+                                                crate::color::Rgba::parse_hex(value.trim())
                                             {
                                                 edit = Some(Edit::Set {
                                                     id: property.id,
@@ -172,7 +205,13 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                                     }
                                     Ok(Value::Fill(_)) => {
                                         ui.label(&property.name);
-                                        if ui.button("Edit paint on object").clicked() {
+                                        if super::keyboard_controls::button(
+                                            ui,
+                                            "edit-paint",
+                                            "Edit paint on object",
+                                        )
+                                        .clicked()
+                                        {
                                             select = components::property_object(
                                                 &studio.doc,
                                                 layer,
@@ -185,30 +224,20 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                                     Ok(Value::Variant(mut current)) => {
                                         let old = current;
                                         let family = components::family_of(&studio.doc, current);
-                                        let label = ui.label(&property.name);
-                                        egui::ComboBox::from_id_salt("value")
-                                            .selected_text(
-                                                components::definitions(&studio.doc)
-                                                    .iter()
-                                                    .find(|(_, id, _, _)| *id == current)
-                                                    .map(|(_, _, _, v)| v.as_str())
-                                                    .unwrap_or("Missing variant"),
-                                            )
-                                            .show_ui(ui, |ui| {
-                                                for (_, id, _, variant) in
-                                                    components::definitions(&studio.doc)
-                                                        .into_iter()
-                                                        .filter(|(_, id, _, _)| {
-                                                            components::family_of(&studio.doc, *id)
-                                                                == family
-                                                        })
-                                                {
-                                                    ui.selectable_value(&mut current, id, variant);
-                                                }
+                                        let choices = components::definitions(&studio.doc)
+                                            .into_iter()
+                                            .filter(|(_, id, _, _)| {
+                                                components::family_of(&studio.doc, *id) == family
                                             })
-                                            .response
-                                            .labelled_by(label.id)
-                                            .on_hover_text(&property.name);
+                                            .map(|(_, id, _, variant)| (id, variant))
+                                            .collect::<Vec<_>>();
+                                        super::keyboard_controls::choice(
+                                            ui,
+                                            "value",
+                                            &property.name,
+                                            &mut current,
+                                            &choices,
+                                        );
                                         if current != old {
                                             edit = Some(Edit::Set {
                                                 id: property.id,
@@ -222,17 +251,24 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                                     }
                                 }
                                 if main {
-                                    if let Some(name) =
-                                        text(ui, "name", "Property name", &property.name)
-                                    {
+                                    if let Some(name) = text(
+                                        ui,
+                                        "name",
+                                        "Property name",
+                                        &property.name,
+                                        property_name_error,
+                                    ) {
                                         edit = Some(Edit::Rename {
                                             id: property.id,
                                             name,
                                         });
                                     }
-                                    if ui
-                                        .small_button(format!("Remove {}", property.name))
-                                        .clicked()
+                                    if super::keyboard_controls::button(
+                                        ui,
+                                        "remove",
+                                        &format!("Remove {}", property.name),
+                                    )
+                                    .clicked()
                                     {
                                         edit = Some(Edit::Remove { id: property.id });
                                     }
@@ -246,8 +282,20 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                             let mut name =
                                 ui.data(|d| d.get_temp::<String>(key)).unwrap_or_default();
                             let label = ui.label("New property name");
-                            ui.add(egui::TextEdit::singleline(&mut name).id(key))
+                            let response = ui
+                                .add(egui::TextEdit::singleline(&mut name).id(key))
                                 .labelled_by(label.id);
+                            super::welcome::name_control(
+                                ui,
+                                &response,
+                                label.id,
+                                "New property name",
+                            );
+                            if !name.is_empty()
+                                && let Some(message) = property_name_error(&name)
+                            {
+                                super::welcome::control_error(ui, &[&response], message);
+                            }
                             ui.data_mut(|d| d.insert_temp(key, name.clone()));
                             if let Some(shape) = studio.doc.find_shape(layer, selected) {
                                 let mut kinds = vec![Kind::Visibility, Kind::Fill, Kind::Opacity];
@@ -262,10 +310,17 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                                 }
                                 for kind in kinds {
                                     if ui
-                                        .add_enabled(
-                                            !name.trim().is_empty(),
-                                            egui::Button::new(format!("Expose {}", kind.name())),
+                                        .add_enabled_ui(
+                                            property_name_error(&name).is_none(),
+                                            |ui| {
+                                                super::keyboard_controls::button(
+                                                    ui,
+                                                    kind.name(),
+                                                    &format!("Expose {}", kind.name()),
+                                                )
+                                            },
                                         )
+                                        .inner
                                         .clicked()
                                     {
                                         edit = Some(Edit::Expose {

@@ -8,7 +8,10 @@ use crate::layout::{
     StackJustify,
 };
 use crate::tools::{Persona, Tool};
-use eframe::egui::{self, ComboBox, DragValue, RichText, Ui};
+use eframe::egui::{self, RichText, Ui};
+
+#[path = "layout_keyboard.rs"]
+pub(super) mod keyboard;
 
 #[cfg(test)]
 #[path = "layout_field_tests.rs"]
@@ -18,16 +21,29 @@ fn label(ui: &mut Ui, text: &str) {
     ui.add_space(8.0);
     ui.label(RichText::new(text).strong().size(11.0));
 }
+fn control(
+    ui: &mut Ui,
+    property: impl std::hash::Hash + std::fmt::Debug,
+    name: &str,
+    widget: impl FnOnce(&mut Ui) -> egui::Response,
+) -> egui::Response {
+    let owner = ui.make_persistent_id(property);
+    super::svg_paint::control(ui, owner, name, widget)
+}
+
 fn sizing(ui: &mut Ui, id: &str, value: &mut Sizing) -> bool {
     let old = *value;
-    ComboBox::from_id_salt(id)
-        .width(80.0)
-        .selected_text(format!("{value:?}"))
-        .show_ui(ui, |ui| {
-            for v in [Sizing::Fixed, Sizing::Hug, Sizing::Fill] {
-                ui.selectable_value(value, v, format!("{v:?}"));
-            }
-        });
+    super::keyboard_controls::choice(
+        ui,
+        id,
+        if id == "layout-width" {
+            "Width sizing"
+        } else {
+            "Height sizing"
+        },
+        value,
+        &[Sizing::Fixed, Sizing::Hug, Sizing::Fill].map(|v| (v, format!("{v:?}"))),
+    );
     old != *value
 }
 
@@ -53,19 +69,36 @@ fn layout_number<N: egui::emath::Numeric>(
     crate::app::input_history::record(field.response, field.changed)
 }
 
+fn native_number<N: egui::emath::Numeric + std::fmt::Display>(
+    ui: &mut Ui,
+    property: impl std::hash::Hash + std::fmt::Debug,
+    name: &str,
+    value: &mut N,
+    range: std::ops::RangeInclusive<N>,
+    speed: Option<f64>,
+    prefix: &str,
+    suffix: &str,
+) -> bool {
+    let field = keyboard::number(ui, property, name, value, range, speed, prefix, suffix);
+    crate::app::input_history::record(field.response, field.changed)
+}
+
 fn grid_tracks(
     ui: &mut Ui,
     selection: (usize, u64),
     axis: &str,
     tracks: &mut Vec<GridTrack>,
+    revision: u64,
 ) -> bool {
     let mut changed = false;
+    let mut rows = keyboard::Rows::begin(ui, axis, tracks, revision);
+    let mut structural = false;
     egui::CollapsingHeader::new(format!("{axis} tracks"))
         .id_salt((selection, axis, "tracks"))
         .show(ui, |ui| {
             let mut remove = None;
             for (index, track) in tracks.iter_mut().enumerate() {
-                ui.push_id((selection, axis, index), |ui| {
+                super::fields::native_scope(ui, rows.id(index), |ui| {
                     ui.horizontal(|ui| {
                         let label = ui.label(format!("{axis} {index}"));
                         let mut kind = match track.size {
@@ -74,16 +107,19 @@ fn grid_tracks(
                             GridTrackSize::Fraction(_) => 2,
                         };
                         let old = kind;
-                        ComboBox::from_id_salt("sizing")
-                            .selected_text(["Fixed", "Hug", "Fraction"][kind])
-                            .show_ui(ui, |ui| {
-                                for (index, name) in ["Fixed", "Hug", "Fraction"].iter().enumerate()
-                                {
-                                    ui.selectable_value(&mut kind, index, *name);
-                                }
-                            })
-                            .response
-                            .labelled_by(label.id);
+                        let response = super::keyboard_controls::choice(
+                            ui,
+                            "sizing",
+                            &format!("{axis} {index} sizing"),
+                            &mut kind,
+                            &[
+                                (0, "Fixed".into()),
+                                (1, "Hug".into()),
+                                (2, "Fraction".into()),
+                            ],
+                        )
+                        .labelled_by(label.id);
+                        rows.watch(response);
                         if kind != old {
                             track.size = match kind {
                                 0 => GridTrackSize::Fixed(100.0),
@@ -92,9 +128,14 @@ fn grid_tracks(
                             };
                             changed = true;
                         }
-                        if ui
-                            .small_button("Remove")
-                            .on_hover_text(format!("Remove {axis} track {index}"))
+                        let remove_id = ui.make_persistent_id("remove");
+                        if rows
+                            .watch(super::svg_paint::control(
+                                ui,
+                                remove_id,
+                                &format!("Remove {axis} track {index}"),
+                                |ui| ui.small_button("Remove"),
+                            ))
                             .clicked()
                         {
                             remove = Some(index);
@@ -102,10 +143,9 @@ fn grid_tracks(
                     });
                     match &mut track.size {
                         GridTrackSize::Fixed(value) => {
-                            changed |= layout_number(
+                            changed |= rows.shared_number(
                                 ui,
-                                selection,
-                                (axis, index, "size"),
+                                (selection, (axis, index, "size")),
                                 &format!("{axis} {index} size"),
                                 value,
                                 0.0..=1_000_000.0,
@@ -113,10 +153,9 @@ fn grid_tracks(
                             )
                         }
                         GridTrackSize::Fraction(value) => {
-                            changed |= layout_number(
+                            changed |= rows.shared_number(
                                 ui,
-                                selection,
-                                (axis, index, "fraction"),
+                                (selection, (axis, index, "fraction")),
                                 &format!("{axis} {index} share"),
                                 value,
                                 0.001..=1_000_000.0,
@@ -129,8 +168,16 @@ fn grid_tracks(
                     {
                         ui.push_id(name, |ui| {
                             let mut enabled = value.is_some();
-                            if ui
-                                .checkbox(&mut enabled, format!("{name} {axis} {index}"))
+                            let enabled_id = ui.make_persistent_id((name, "enabled"));
+                            if rows
+                                .watch(super::svg_paint::control(
+                                    ui,
+                                    enabled_id,
+                                    &format!("{name} {axis} {index}"),
+                                    |ui| {
+                                        ui.checkbox(&mut enabled, format!("{name} {axis} {index}"))
+                                    },
+                                ))
                                 .changed()
                             {
                                 *value = enabled.then_some(if name == "Minimum" {
@@ -141,10 +188,9 @@ fn grid_tracks(
                                 changed = true;
                             }
                             if let Some(value) = value {
-                                changed |= layout_number(
+                                changed |= rows.shared_number(
                                     ui,
-                                    selection,
-                                    (axis, index, name),
+                                    (selection, (axis, index, name)),
                                     &format!("{axis} {index} {name}"),
                                     value,
                                     0.0..=1_000_000.0,
@@ -158,9 +204,19 @@ fn grid_tracks(
             }
             if let Some(index) = remove {
                 tracks.remove(index);
+                structural = true;
                 changed = true;
             }
-            if tracks.len() < 1024 && ui.button(format!("Add {axis} track")).clicked() {
+            if tracks.len() < 1024
+                && control(
+                    ui,
+                    ("add-track", axis),
+                    &format!("Add {axis} track"),
+                    |ui| ui.button(format!("Add {axis} track")),
+                )
+                .clicked()
+            {
+                structural = true;
                 tracks.push(if axis == "Row" {
                     GridTrack {
                         size: GridTrackSize::Hug,
@@ -172,6 +228,195 @@ fn grid_tracks(
                 changed = true;
             }
         });
+    rows.finish(ui, tracks, structural);
+    changed
+}
+
+fn breakpoints(
+    ui: &mut Ui,
+    shape: &crate::document::Shape,
+    props: &mut crate::layout::FrameLayout,
+    revision: u64,
+) -> bool {
+    let mut changed = false;
+    let mut structural = false;
+    let mut rows = keyboard::Rows::begin(ui, "breakpoints", &props.breakpoints, revision);
+    egui::CollapsingHeader::new("Breakpoint overrides").show(ui, |ui| {
+        ui.label(
+            RichText::new("Rules apply at or below this viewport width.")
+                .small()
+                .color(fg_weak()),
+        );
+        let mut remove = None;
+        for (index, point) in props.breakpoints.iter_mut().enumerate() {
+            super::fields::native_scope(ui, rows.id(index), |ui| {
+                ui.horizontal(|ui| {
+                    changed |= rows.number(
+                        ui,
+                        "width",
+                        &format!("Breakpoint {index} width (px)"),
+                        &mut point.max_width,
+                        240.0..=3840.0,
+                        None,
+                        "≤ ",
+                        " px",
+                    );
+                    let owner = ui.make_persistent_id("remove");
+                    if rows
+                        .watch(super::svg_paint::control(
+                            ui,
+                            owner,
+                            &format!("Remove breakpoint {index}"),
+                            |ui| ui.small_button("×"),
+                        ))
+                        .clicked()
+                    {
+                        remove = Some(index);
+                    }
+                });
+                if props.frame {
+                    let old = point.flow;
+                    let response = super::keyboard_controls::choice(
+                        ui,
+                        "breakpoint-flow",
+                        &format!("Breakpoint {index} flow"),
+                        &mut point.flow,
+                        &[
+                            (None, "Inherit layout".into()),
+                            (Some(StackFlow::Stack), "Stack".into()),
+                            (Some(StackFlow::Wrap), "Wrap".into()),
+                            (Some(StackFlow::Grid), "Grid".into()),
+                        ],
+                    );
+                    rows.watch(response);
+                    changed |= old != point.flow;
+                    ui.horizontal(|ui| {
+                        for (name, axis) in [
+                            ("Inherit", None),
+                            ("Row", Some(StackAxis::Horizontal)),
+                            ("Column", Some(StackAxis::Vertical)),
+                        ] {
+                            let owner = ui.make_persistent_id(("direction", name));
+                            let response = super::svg_paint::control(
+                                ui,
+                                owner,
+                                &format!("Breakpoint {index} direction {name}"),
+                                |ui| ui.selectable_value(&mut point.direction, axis, name),
+                            );
+                            changed |= response.changed();
+                            rows.watch(response);
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        let mut set = point.gap.is_some();
+                        let owner = ui.make_persistent_id("gap-enabled");
+                        let response = super::svg_paint::control(
+                            ui,
+                            owner,
+                            &format!("Set breakpoint {index} gap"),
+                            |ui| ui.checkbox(&mut set, "Gap"),
+                        );
+                        if response.changed() {
+                            point.gap = set.then_some(16.0);
+                            changed = true;
+                        }
+                        rows.watch(response);
+                        if let Some(value) = &mut point.gap {
+                            changed |= rows.number(
+                                ui,
+                                "gap",
+                                &format!("Breakpoint {index} gap (px)"),
+                                value,
+                                0.0..=1000.0,
+                                None,
+                                "",
+                                "",
+                            );
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        let mut set = point.padding.is_some();
+                        let owner = ui.make_persistent_id("padding-enabled");
+                        let response = super::svg_paint::control(
+                            ui,
+                            owner,
+                            &format!("Set breakpoint {index} padding"),
+                            |ui| ui.checkbox(&mut set, "Padding"),
+                        );
+                        if response.changed() {
+                            point.padding = set.then_some([24.0; 4]);
+                            changed = true;
+                        }
+                        rows.watch(response);
+                        if let Some(padding) = &mut point.padding {
+                            let mut value = padding[0];
+                            if rows.number(
+                                ui,
+                                "padding",
+                                &format!("Breakpoint {index} padding (px)"),
+                                &mut value,
+                                0.0..=1000.0,
+                                None,
+                                "",
+                                "",
+                            ) {
+                                *padding = [value; 4];
+                                changed = true;
+                            }
+                        }
+                    });
+                    if point.flow == Some(StackFlow::Grid) {
+                        let columns = point.columns.get_or_insert(2);
+                        changed |= rows.number(
+                            ui,
+                            "columns",
+                            &format!("Breakpoint {index} columns"),
+                            columns,
+                            1..=24,
+                            None,
+                            "Columns ",
+                            "",
+                        );
+                    }
+                }
+                if let Geom::Text(run) = &shape.geom {
+                    let size = point.text_size.get_or_insert(run.px);
+                    changed |= rows.number(
+                        ui,
+                        "text-size",
+                        &format!("Breakpoint {index} type size (px)"),
+                        size,
+                        1.0..=500.0,
+                        None,
+                        "",
+                        " px type",
+                    );
+                }
+                ui.separator();
+            });
+        }
+        if let Some(index) = remove {
+            props.breakpoints.remove(index);
+            structural = true;
+            changed = true;
+        }
+        ui.horizontal(|ui| {
+            for (name, width) in [("+ Phone", 600.0), ("+ Tablet", 1024.0)] {
+                if super::keyboard_controls::button(ui, name, name).clicked() {
+                    props.breakpoints.push(crate::layout::LayoutBreakpoint {
+                        max_width: width,
+                        ..Default::default()
+                    });
+                    if let Geom::Text(run) = &shape.geom {
+                        props.text_size.get_or_insert(run.px);
+                    }
+                    structural = true;
+                    changed = true;
+                }
+            }
+        });
+    });
+    rows.finish(ui, &props.breakpoints, structural);
     changed
 }
 
@@ -217,7 +462,11 @@ pub fn inspector(ui: &mut Ui, studio: &mut Studio) {
     let Some(shape) = studio.doc.find_shape(layer, id).cloned() else {
         return;
     };
+    let blocked = keyboard::blocked(studio);
     studio.with_field_history(ui, "layout-properties", |ui, studio| {
+        if blocked {
+            ui.disable();
+        }
         let mut props = shape.layout.clone();
         let Some(layout_target) = studio.layout_inspector_target() else {
             return;
@@ -267,29 +516,43 @@ pub fn inspector(ui: &mut Ui, studio: &mut Studio) {
                             crate::layout_images::ImageFit::Contain,
                             crate::layout_images::ImageFit::Stretch,
                         ] {
-                            changed |= ui
-                                .selectable_value(&mut image.fit, fit, fit.name())
-                                .changed();
+                            changed |= control(
+                                ui,
+                                ("image-fit", fit.name()),
+                                &format!("Image fit {}", fit.name()),
+                                |ui| ui.selectable_value(&mut image.fit, fit, fit.name()),
+                            )
+                            .changed();
                         }
                     });
                     ui.horizontal(|ui| {
                         ui.label("Focus");
-                        changed |= ui
-                            .add(
-                                DragValue::new(&mut image.focal.x)
-                                    .range(0.0..=1.0)
-                                    .speed(0.01),
-                            )
-                            .changed();
-                        changed |= ui
-                            .add(
-                                DragValue::new(&mut image.focal.y)
-                                    .range(0.0..=1.0)
-                                    .speed(0.01),
-                            )
-                            .changed();
+                        changed |= native_number(
+                            ui,
+                            "image-focal-x",
+                            "Image focus X",
+                            &mut image.focal.x,
+                            0.0..=1.0,
+                            Some(0.01),
+                            "",
+                            "",
+                        );
+                        changed |= native_number(
+                            ui,
+                            "image-focal-y",
+                            "Image focus Y",
+                            &mut image.focal.y,
+                            0.0..=1.0,
+                            Some(0.01),
+                            "",
+                            "",
+                        );
                     });
-                    if ui.small_button("Remove image").clicked() {
+                    if control(ui, "remove-image", "Remove image", |ui| {
+                        ui.small_button("Remove image")
+                    })
+                    .clicked()
+                    {
                         props.image = None;
                         changed = true;
                     }
@@ -297,9 +560,7 @@ pub fn inspector(ui: &mut Ui, studio: &mut Studio) {
             });
         label(ui, "Sizing");
         ui.horizontal(|ui| {
-            ui.label("W");
             changed |= sizing(ui, "layout-width", &mut props.width);
-            ui.label("H");
             changed |= sizing(ui, "layout-height", &mut props.height);
         });
         egui::CollapsingHeader::new("Min / max size").show(ui, |ui| {
@@ -311,31 +572,58 @@ pub fn inspector(ui: &mut Ui, studio: &mut Studio) {
             ] {
                 ui.horizontal(|ui| {
                     let mut enabled = val.is_some();
-                    if ui.checkbox(&mut enabled, name).changed() {
+                    if control(ui, ("limit-enabled", name), &format!("Set {name}"), |ui| {
+                        ui.checkbox(&mut enabled, name)
+                    })
+                    .changed()
+                    {
                         *val = enabled.then_some(1.0);
                         changed = true;
                     }
                     if let Some(v) = val {
-                        changed |= ui.add(DragValue::new(v).range(1.0..=10000.0)).changed();
+                        changed |= native_number(
+                            ui,
+                            ("size-limit", name),
+                            name,
+                            v,
+                            1.0..=10000.0,
+                            None,
+                            "",
+                            "",
+                        );
                     }
                 });
             }
         });
         if props.frame {
-            changed |= ui.checkbox(&mut props.clip, "Clip content").changed();
+            changed |= control(ui, "clip", "Clip content", |ui| {
+                ui.checkbox(&mut props.clip, "Clip content")
+            })
+            .changed();
             label(ui, "Responsive frame");
             ui.horizontal(|ui| {
                 for (name, width) in [("Phone", 390.0), ("Tablet", 768.0), ("Desktop", 1440.0)] {
-                    if ui.small_button(name).clicked() {
+                    if control(
+                        ui,
+                        ("resize-frame", name),
+                        &format!("Resize frame {name}"),
+                        |ui| ui.small_button(name),
+                    )
+                    .clicked()
+                    {
                         studio.resize_layout_frame(width, shape.geom.bbox().height());
                     }
                 }
             });
             label(ui, "Layout");
             let mut enabled = props.stack.is_some();
-            if ui
-                .checkbox(&mut enabled, "Arrange children automatically")
-                .changed()
+            if control(
+                ui,
+                "auto-layout-enabled",
+                "Arrange children automatically",
+                |ui| ui.checkbox(&mut enabled, "Arrange children automatically"),
+            )
+            .changed()
             {
                 props.stack = enabled.then(AutoStack::default);
                 changed = true;
@@ -347,7 +635,10 @@ pub fn inspector(ui: &mut Ui, studio: &mut Studio) {
                         ("Wrap", StackFlow::Wrap),
                         ("Grid", StackFlow::Grid),
                     ] {
-                        changed |= ui.selectable_value(&mut stack.flow, v, name).changed();
+                        changed |= control(ui, ("stack-flow", name), name, |ui| {
+                            ui.selectable_value(&mut stack.flow, v, name)
+                        })
+                        .changed();
                     }
                 });
                 if stack.flow == StackFlow::Grid {
@@ -362,60 +653,72 @@ pub fn inspector(ui: &mut Ui, studio: &mut Studio) {
                             " columns",
                         );
                     }
-                    changed |= grid_tracks(ui, (layer, id), "Column", &mut stack.column_tracks);
-                    changed |= grid_tracks(ui, (layer, id), "Row", &mut stack.row_tracks);
+                    changed |= grid_tracks(
+                        ui,
+                        (layer, id),
+                        "Column",
+                        &mut stack.column_tracks,
+                        studio.canvas_gen,
+                    );
+                    changed |= grid_tracks(
+                        ui,
+                        (layer, id),
+                        "Row",
+                        &mut stack.row_tracks,
+                        studio.canvas_gen,
+                    );
                 } else {
                     ui.horizontal(|ui| {
-                        changed |= ui
-                            .selectable_value(
+                        changed |= control(ui, "stack-horizontal", "Horizontal", |ui| {
+                            ui.selectable_value(
                                 &mut stack.direction,
                                 StackAxis::Horizontal,
                                 "Horizontal",
                             )
-                            .changed();
-                        changed |= ui
-                            .selectable_value(&mut stack.direction, StackAxis::Vertical, "Vertical")
-                            .changed();
+                        })
+                        .changed();
+                        changed |= control(ui, "stack-vertical", "Vertical", |ui| {
+                            ui.selectable_value(
+                                &mut stack.direction,
+                                StackAxis::Vertical,
+                                "Vertical",
+                            )
+                        })
+                        .changed();
                     });
                 }
-                ui.horizontal(|ui| {
-                    let label = ui.label("Align");
-                    ComboBox::from_id_salt((layer, id, "layout-align"))
-                        .selected_text(format!("{:?}", stack.align))
-                        .show_ui(ui, |ui| {
-                            for v in [
-                                StackAlign::Start,
-                                StackAlign::Center,
-                                StackAlign::End,
-                                StackAlign::Stretch,
-                                StackAlign::Baseline,
-                            ] {
-                                changed |= ui
-                                    .selectable_value(&mut stack.align, v, format!("{v:?}"))
-                                    .changed();
-                            }
-                        })
-                        .response
-                        .labelled_by(label.id);
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Distribute");
-                    ComboBox::from_id_salt((layer, id, "layout-justify"))
-                        .selected_text(format!("{:?}", stack.justify))
-                        .show_ui(ui, |ui| {
-                            for (name, v) in [
-                                ("Start", StackJustify::Start),
-                                ("Center", StackJustify::Center),
-                                ("End", StackJustify::End),
-                                ("Space between", StackJustify::SpaceBetween),
-                                ("Space around", StackJustify::SpaceAround),
-                                ("Space evenly", StackJustify::SpaceEvenly),
-                            ] {
-                                changed |=
-                                    ui.selectable_value(&mut stack.justify, v, name).changed();
-                            }
-                        });
-                });
+                let old = stack.align;
+                super::keyboard_controls::choice(
+                    ui,
+                    "layout-align",
+                    "Align",
+                    &mut stack.align,
+                    &[
+                        StackAlign::Start,
+                        StackAlign::Center,
+                        StackAlign::End,
+                        StackAlign::Stretch,
+                        StackAlign::Baseline,
+                    ]
+                    .map(|v| (v, format!("{v:?}"))),
+                );
+                changed |= old != stack.align;
+                let old = stack.justify;
+                super::keyboard_controls::choice(
+                    ui,
+                    "layout-justify",
+                    "Distribute",
+                    &mut stack.justify,
+                    &[
+                        (StackJustify::Start, "Start".into()),
+                        (StackJustify::Center, "Center".into()),
+                        (StackJustify::End, "End".into()),
+                        (StackJustify::SpaceBetween, "Space between".into()),
+                        (StackJustify::SpaceAround, "Space around".into()),
+                        (StackJustify::SpaceEvenly, "Space evenly".into()),
+                    ],
+                );
+                changed |= old != stack.justify;
                 ui.horizontal(|ui| {
                     changed |= layout_number(
                         ui,
@@ -482,7 +785,14 @@ pub fn inspector(ui: &mut Ui, studio: &mut Studio) {
                 ] {
                     ui.push_id((layer, id, "grid-anchor", name), |ui| {
                         let mut enabled = anchor.is_some();
-                        if ui.checkbox(&mut enabled, format!("Set {name}")).changed() {
+                        if control(
+                            ui,
+                            ("grid-anchor-enabled", name),
+                            &format!("Set {name}"),
+                            |ui| ui.checkbox(&mut enabled, format!("Set {name}")),
+                        )
+                        .changed()
+                        {
                             *anchor = enabled.then_some(0);
                             changed = true;
                         }
@@ -521,23 +831,26 @@ pub fn inspector(ui: &mut Ui, studio: &mut Studio) {
                 });
             }
             label(ui, "Position in frame");
-            changed |= ui
-                .checkbox(&mut props.absolute, "Absolute position")
-                .changed();
+            changed |= control(ui, "absolute-position", "Absolute position", |ui| {
+                ui.checkbox(&mut props.absolute, "Absolute position")
+            })
+            .changed();
             for (name, value) in [
                 ("Horizontal", &mut props.constraint_x),
                 ("Vertical", &mut props.constraint_y),
             ] {
-                ui.horizontal(|ui| {
-                    ui.label(name);
-                    ComboBox::from_id_salt(name)
-                        .selected_text(value.name())
-                        .show_ui(ui, |ui| {
-                            for v in Constraint::all() {
-                                changed |= ui.selectable_value(value, v, v.name()).changed();
-                            }
-                        });
-                });
+                let old = *value;
+                super::keyboard_controls::choice(
+                    ui,
+                    name,
+                    &format!("{name} position constraint"),
+                    value,
+                    &Constraint::all()
+                        .into_iter()
+                        .map(|v| (v, v.name().into()))
+                        .collect::<Vec<_>>(),
+                );
+                changed |= old != *value;
             }
             ui.horizontal(|ui| {
                 if ui.small_button("Earlier").clicked() {
@@ -553,126 +866,27 @@ pub fn inspector(ui: &mut Ui, studio: &mut Studio) {
         }
         if props.frame {
             let mut locked = props.aspect_ratio.is_some();
-            if ui.checkbox(&mut locked, "Lock aspect ratio").changed() {
+            if control(ui, "aspect-ratio-locked", "Lock aspect ratio", |ui| {
+                ui.checkbox(&mut locked, "Lock aspect ratio")
+            })
+            .changed()
+            {
                 props.aspect_ratio = locked
                     .then_some(shape.geom.bbox().width() / shape.geom.bbox().height().max(1.0));
                 changed = true;
             }
         }
         if props.frame || matches!(shape.geom, Geom::Text(_)) {
-            egui::CollapsingHeader::new("Breakpoint overrides").show(ui, |ui| {
-                ui.label(
-                    RichText::new("Rules apply at or below this viewport width.")
-                        .small()
-                        .color(fg_weak()),
-                );
-                let mut remove = None;
-                for (index, point) in props.breakpoints.iter_mut().enumerate() {
-                    ui.push_id(index, |ui| {
-                        ui.horizontal(|ui| {
-                            changed |= ui
-                                .add(
-                                    DragValue::new(&mut point.max_width)
-                                        .range(240.0..=3840.0)
-                                        .prefix("≤ ")
-                                        .suffix(" px"),
-                                )
-                                .changed();
-                            if ui.small_button("×").clicked() {
-                                remove = Some(index);
-                            }
-                        });
-                        if props.frame {
-                            let mut flow = point.flow;
-                            ComboBox::from_id_salt("breakpoint-flow")
-                                .selected_text(
-                                    flow.map_or("Inherit layout".into(), |v| format!("{v:?}")),
-                                )
-                                .show_ui(ui, |ui| {
-                                    ui.selectable_value(&mut flow, None, "Inherit layout");
-                                    for v in [StackFlow::Stack, StackFlow::Wrap, StackFlow::Grid] {
-                                        ui.selectable_value(&mut flow, Some(v), format!("{v:?}"));
-                                    }
-                                });
-                            if flow != point.flow {
-                                point.flow = flow;
-                                changed = true;
-                            }
-                            ui.horizontal(|ui| {
-                                for (name, axis) in [
-                                    ("Inherit", None),
-                                    ("Row", Some(StackAxis::Horizontal)),
-                                    ("Column", Some(StackAxis::Vertical)),
-                                ] {
-                                    changed |= ui
-                                        .selectable_value(&mut point.direction, axis, name)
-                                        .changed();
-                                }
-                            });
-                            ui.horizontal(|ui| {
-                                let mut set = point.gap.is_some();
-                                if ui.checkbox(&mut set, "Gap").changed() {
-                                    point.gap = set.then_some(16.0);
-                                    changed = true;
-                                }
-                                if let Some(v) = &mut point.gap {
-                                    changed |=
-                                        ui.add(DragValue::new(v).range(0.0..=1000.0)).changed();
-                                }
-                            });
-                            ui.horizontal(|ui| {
-                                let mut set = point.padding.is_some();
-                                if ui.checkbox(&mut set, "Padding").changed() {
-                                    point.padding = set.then_some([24.0; 4]);
-                                    changed = true;
-                                }
-                                if let Some(p) = &mut point.padding {
-                                    let mut n = p[0];
-                                    if ui.add(DragValue::new(&mut n).range(0.0..=1000.0)).changed()
-                                    {
-                                        *p = [n; 4];
-                                        changed = true;
-                                    }
-                                }
-                            });
-                            if point.flow == Some(StackFlow::Grid) {
-                                let v = point.columns.get_or_insert(2);
-                                changed |= ui
-                                    .add(DragValue::new(v).range(1..=24).prefix("Columns "))
-                                    .changed();
-                            }
-                        }
-                        if let Geom::Text(run) = &shape.geom {
-                            let size = point.text_size.get_or_insert(run.px);
-                            changed |= ui
-                                .add(DragValue::new(size).range(1.0..=500.0).suffix(" px type"))
-                                .changed();
-                        }
-                        ui.separator();
-                    });
-                }
-                if let Some(index) = remove {
-                    props.breakpoints.remove(index);
-                    changed = true;
-                }
-                ui.horizontal(|ui| {
-                    for (name, width) in [("+ Phone", 600.0), ("+ Tablet", 1024.0)] {
-                        if ui.button(name).clicked() {
-                            props.breakpoints.push(crate::layout::LayoutBreakpoint {
-                                max_width: width,
-                                ..Default::default()
-                            });
-                            if let Geom::Text(run) = &shape.geom {
-                                props.text_size.get_or_insert(run.px);
-                            }
-                            changed = true;
-                        }
-                    }
-                });
-            });
+            changed |= breakpoints(ui, &shape, &mut props, studio.canvas_gen);
         }
-        if changed {
-            studio.apply_layout_inspector(&layout_target, &props);
+        if changed && studio.apply_layout_inspector(&layout_target, &props) {
+            keyboard::Rows::<GridTrack>::accepted(ui, "Column", studio.canvas_gen);
+            keyboard::Rows::<GridTrack>::accepted(ui, "Row", studio.canvas_gen);
+            keyboard::Rows::<crate::layout::LayoutBreakpoint>::accepted(
+                ui,
+                "breakpoints",
+                studio.canvas_gen,
+            );
         }
     });
     if matches!(shape.geom, Geom::Text(_)) {
@@ -734,105 +948,129 @@ pub fn poll_image(ctx: &egui::Context, studio: &mut Studio) {
 fn variables(ui: &mut Ui, studio: &mut Studio) {
     use crate::layout_tokens::{DesignToken, TokenProperty, TokenValue};
     egui::CollapsingHeader::new("Design variables").show(ui, |ui| {
-        let mut tokens = studio.doc.layout_tokens.clone();
-        let mut changed = false;
-        let mut remove = None;
-        for t in &mut tokens {
-            ui.push_id(t.id, |ui| {
-                ui.horizontal(|ui| {
-                    ui.add(egui::Label::new(&t.name).truncate());
-                    match &mut t.value {
-                        TokenValue::Color(c) => {
-                            changed |= super::color_picker::color_edit(ui, "token", c);
-                        }
-                        TokenValue::Number(n) => {
-                            changed |= ui.add(DragValue::new(n).range(0.0..=10000.0)).changed();
-                        }
-                    }
-                    if ui
-                        .small_button("×")
-                        .on_hover_text("Remove variable, keeping current appearance")
-                        .clicked()
-                    {
-                        remove = Some(t.id);
-                    }
-                });
-            });
-        }
-        if changed {
-            studio.set_layout_tokens(tokens);
-        }
-        if let Some(id) = remove {
-            studio.remove_layout_token(id);
-        }
-        let key = egui::Id::new("new-design-variable-name");
-        let mut name = ui
-            .ctx()
-            .data(|d| d.get_temp::<String>(key))
-            .unwrap_or_default();
-        ui.add(egui::TextEdit::singleline(&mut name).hint_text("Variable name"));
-        ui.ctx().data_mut(|d| d.insert_temp(key, name.clone()));
-        ui.horizontal(|ui| {
-            if ui
-                .add_enabled(!name.trim().is_empty(), egui::Button::new("+ Color"))
-                .clicked()
-            {
-                let mut ts = studio.doc.layout_tokens.clone();
-                let c = match studio.style.fill {
-                    crate::document::Fill::Solid(c) => c,
-                    _ => crate::color::Rgba::rgb(232, 106, 60),
-                };
-                ts.push(DesignToken::color(name.trim(), c));
-                studio.set_layout_tokens(ts);
+        let blocked = keyboard::blocked(studio);
+        studio.with_field_history(ui, "layout-design-variables", |ui, studio| {
+            if blocked {
+                ui.disable();
             }
-            if ui
-                .add_enabled(!name.trim().is_empty(), egui::Button::new("+ Number"))
+            let mut tokens = studio.doc.layout_tokens.clone();
+            let mut changed = false;
+            let mut remove = None;
+            for token in &mut tokens {
+                let owner = ui.make_persistent_id(("design-variable", token.id));
+                super::fields::native_scope(ui, owner, |ui| {
+                    ui.horizontal(|ui| {
+                        match &mut token.value {
+                            TokenValue::Color(color) => {
+                                ui.add(egui::Label::new(&token.name).truncate());
+                                let owner = ui.make_persistent_id("color");
+                                changed |= super::color_picker::color_edit(ui, owner, color);
+                            }
+                            TokenValue::Number(value) => {
+                                changed |= native_number(
+                                    ui,
+                                    "value",
+                                    &format!("Variable {}", token.name),
+                                    value,
+                                    0.0..=10000.0,
+                                    None,
+                                    "",
+                                    "",
+                                );
+                            }
+                        }
+                        let owner = ui.make_persistent_id("remove");
+                        let response = super::svg_paint::control(
+                            ui,
+                            owner,
+                            &format!("Remove variable {}", token.name),
+                            |ui| {
+                                ui.small_button("×")
+                                    .on_hover_text("Remove variable, keeping current appearance")
+                            },
+                        );
+                        if response.clicked() {
+                            response.surrender_focus();
+                            remove = Some(token.id);
+                        }
+                    });
+                });
+            }
+            if changed {
+                studio.set_layout_tokens(tokens);
+            }
+            if let Some(id) = remove {
+                studio.remove_layout_token(id);
+            }
+            let key = ui.make_persistent_id("new-design-variable-name");
+            let mut name = ui
+                .data(|data| data.get_temp::<String>(key))
+                .unwrap_or_default();
+            let label = ui.label("Variable name");
+            let response = ui
+                .add(
+                    egui::TextEdit::singleline(&mut name)
+                        .id(key)
+                        .hint_text("Variable name"),
+                )
+                .labelled_by(label.id);
+            super::welcome::name_control(ui, &response, label.id, "Variable name");
+            ui.data_mut(|data| data.insert_temp(key, name.clone()));
+            ui.horizontal(|ui| {
+                if control(ui, "add-color-variable", "+ Color", |ui| {
+                    ui.add_enabled(!name.trim().is_empty(), egui::Button::new("+ Color"))
+                })
                 .clicked()
+                {
+                    let mut tokens = studio.doc.layout_tokens.clone();
+                    let color = match studio.style.fill {
+                        crate::document::Fill::Solid(color) => color,
+                        _ => crate::color::Rgba::rgb(232, 106, 60),
+                    };
+                    tokens.push(DesignToken::color(name.trim(), color));
+                    studio.set_layout_tokens(tokens);
+                }
+                if control(ui, "add-number-variable", "+ Number", |ui| {
+                    ui.add_enabled(!name.trim().is_empty(), egui::Button::new("+ Number"))
+                })
+                .clicked()
+                {
+                    let mut tokens = studio.doc.layout_tokens.clone();
+                    tokens.push(DesignToken::number(name.trim(), 16.0));
+                    studio.set_layout_tokens(tokens);
+                }
+            });
+            if let Some((layer, id)) = studio.primary()
+                && let Some(shape) = studio.doc.find_shape(layer, id).cloned()
             {
-                let mut ts = studio.doc.layout_tokens.clone();
-                ts.push(DesignToken::number(name.trim(), 16.0));
-                studio.set_layout_tokens(ts);
+                for property in TokenProperty::all() {
+                    if !property.supports(&shape) {
+                        continue;
+                    }
+                    let current = shape.layout.tokens.get(property);
+                    let mut selected = current;
+                    let mut choices = vec![(None, "Local value".into())];
+                    choices.extend(
+                        studio
+                            .doc
+                            .layout_tokens
+                            .iter()
+                            .filter(|token| property.accepts(token.value))
+                            .map(|token| (Some(token.id), token.name.clone())),
+                    );
+                    super::keyboard_controls::choice(
+                        ui,
+                        property.name(),
+                        &format!("Bind {}", property.name()),
+                        &mut selected,
+                        &choices,
+                    );
+                    if selected != current {
+                        studio.bind_layout_token(property, selected);
+                    }
+                }
             }
         });
-        if let Some((li, id)) = studio.primary()
-            && let Some(shape) = studio.doc.find_shape(li, id).cloned()
-        {
-            for property in TokenProperty::all() {
-                if !property.supports(&shape) {
-                    continue;
-                }
-                let current = shape.layout.tokens.get(property);
-                ui.horizontal(|ui| {
-                    ui.label(property.name());
-                    egui::ComboBox::from_id_salt(("token-bind", property.name()))
-                        .selected_text(
-                            studio
-                                .doc
-                                .layout_tokens
-                                .iter()
-                                .find(|t| Some(t.id) == current)
-                                .map_or("Local value", |t| t.name.as_str()),
-                        )
-                        .show_ui(ui, |ui| {
-                            if ui
-                                .selectable_label(current.is_none(), "Local value")
-                                .clicked()
-                            {
-                                studio.bind_layout_token(property, None);
-                            }
-                            for token in studio.doc.layout_tokens.clone() {
-                                if property.accepts(token.value)
-                                    && ui
-                                        .selectable_label(current == Some(token.id), &token.name)
-                                        .clicked()
-                                {
-                                    studio.bind_layout_token(property, Some(token.id));
-                                }
-                            }
-                        });
-                });
-            }
-        }
     });
 }
 

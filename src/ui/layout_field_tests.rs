@@ -367,3 +367,285 @@ fn actual_named_opacity_drag_keeps_instance_override_and_one_undo() {
     assert_eq!(studio.doc.find_shape(0, instance).unwrap().opacity, after);
     assert_eq!(crate::project::encode(&studio.doc).unwrap(), after_document);
 }
+
+fn native_frame(ctx: &egui::Context, studio: &mut Studio, events: Vec<Event>) -> egui::FullOutput {
+    crate::ui::welcome::keyboard_tests::render(ctx, events, |ui| crate::ui::run(ui, studio))
+}
+fn native_press(ctx: &egui::Context, studio: &mut Studio, name: &str) {
+    use crate::ui::welcome::keyboard_tests as keys;
+    keys::tab_to(ctx, name, |events| native_frame(ctx, studio, events));
+    native_frame(ctx, studio, keys::key(Key::Enter, Modifiers::NONE));
+    native_frame(ctx, studio, vec![]);
+}
+fn native_edit(
+    ctx: &egui::Context,
+    studio: &mut Studio,
+    name: &str,
+    value: &str,
+) -> egui::FullOutput {
+    use crate::ui::welcome::keyboard_tests as keys;
+    keys::tab_to(ctx, name, |events| native_frame(ctx, studio, events));
+    keys::replace(value, |events| native_frame(ctx, studio, events))
+}
+
+#[test]
+fn keyboard_layout_inspector_empty_document_grid_named_property_and_variable_authoring_reopens() {
+    use crate::ui::welcome::keyboard_tests as keys;
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    crate::ui::theme::apply(&ctx);
+    let mut studio = Studio::new();
+    studio.doc = Document::new("Keyboard Layout", 900., 700., 96.);
+    studio.show_welcome = false;
+    studio.persona = Persona::Layout;
+    assert!(studio.selection.is_empty());
+    native_frame(&ctx, &mut studio, vec![]);
+    for key in [Key::F8, Key::F, Key::Enter] {
+        native_frame(&ctx, &mut studio, keys::key(key, Modifiers::NONE));
+    }
+    native_frame(&ctx, &mut studio, vec![]);
+    native_frame(
+        &ctx,
+        &mut studio,
+        keys::key(Key::Enter, Modifiers::CTRL | Modifiers::COMMAND),
+    );
+    native_frame(&ctx, &mut studio, vec![]);
+    let (layer, root) = studio.selected_frame().unwrap();
+    native_press(&ctx, &mut studio, "Arrange children automatically");
+    native_press(&ctx, &mut studio, "Grid");
+    native_press(&ctx, &mut studio, "Column tracks");
+    native_press(&ctx, &mut studio, "Add Column track");
+    native_edit(&ctx, &mut studio, "Column 0 share", "2.25");
+    native_frame(&ctx, &mut studio, keys::key(Key::Tab, Modifiers::NONE));
+    assert_eq!(
+        studio
+            .doc
+            .find_shape(layer, root)
+            .unwrap()
+            .layout
+            .stack
+            .as_ref()
+            .unwrap()
+            .column_tracks[0]
+            .size,
+        GridTrackSize::Fraction(2.25)
+    );
+    native_press(&ctx, &mut studio, "Create component");
+    native_press(&ctx, &mut studio, "Named properties");
+    native_edit(&ctx, &mut studio, "New property name", "Card opacity");
+    native_press(&ctx, &mut studio, "Expose Opacity");
+    native_edit(&ctx, &mut studio, "Card opacity", "70.25");
+    native_frame(&ctx, &mut studio, keys::key(Key::Tab, Modifiers::NONE));
+    assert!((studio.doc.find_shape(layer, root).unwrap().opacity - 0.7025).abs() < 0.00001);
+    native_press(&ctx, &mut studio, "Design variables");
+    native_edit(&ctx, &mut studio, "Variable name", "Space");
+    native_press(&ctx, &mut studio, "+ Number");
+    let before = crate::project::encode(&studio.doc).unwrap();
+    native_edit(&ctx, &mut studio, "Variable Space", "24.125001");
+    native_frame(&ctx, &mut studio, keys::key(Key::Tab, Modifiers::NONE));
+    assert_eq!(
+        studio.doc.layout_tokens[0].value,
+        crate::layout_tokens::TokenValue::Number(24.125001_f32)
+    );
+    let after = crate::project::encode(&studio.doc).unwrap();
+    assert_ne!(before, after);
+    native_frame(&ctx, &mut studio, keys::key(Key::F8, Modifiers::NONE));
+    native_frame(
+        &ctx,
+        &mut studio,
+        keys::key(Key::Z, Modifiers::CTRL | Modifiers::COMMAND),
+    );
+    assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+    native_frame(
+        &ctx,
+        &mut studio,
+        keys::key(
+            Key::Z,
+            Modifiers::CTRL | Modifiers::COMMAND | Modifiers::SHIFT,
+        ),
+    );
+    assert_eq!(crate::project::encode(&studio.doc).unwrap(), after);
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(".artifacts")
+        .join(format!("keyboard-layout-{}", crate::document::next_id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let path = root.join("authored.oma");
+    crate::project::save_to(&studio.doc, &path).unwrap();
+    assert_eq!(
+        crate::project::encode(&crate::project::load_from(&path).unwrap()).unwrap(),
+        after
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn keyboard_layout_inspector_index_rows_retire_invalid_drafts_after_remove_undo_and_locked_owner() {
+    use crate::ui::welcome::keyboard_tests as keys;
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    crate::ui::theme::apply(&ctx);
+    let (mut studio, root) = fixture();
+    studio
+        .doc
+        .find_shape_mut(0, root)
+        .unwrap()
+        .layout
+        .stack
+        .as_mut()
+        .unwrap()
+        .column_tracks
+        .push(GridTrack {
+            size: GridTrackSize::Fixed(160.),
+            ..Default::default()
+        });
+    let mut render =
+        |studio: &mut Studio, events| keys::render(&ctx, events, |ui| inspector(ui, studio));
+    render(&mut studio, vec![]);
+    keys::tab_to(&ctx, "Column tracks", |events| render(&mut studio, events));
+    render(&mut studio, keys::key(Key::Enter, Modifiers::NONE));
+    render(&mut studio, vec![]);
+    let output = keys::tab_to(&ctx, "Column 0 size", |events| render(&mut studio, events));
+    let old = keys::named(&output, "Column 0 size").0;
+    let second = keys::named(&output, "Column 1 size").0;
+    let output = keys::replace("-", |events| render(&mut studio, events));
+    keys::associated_error(&output, "Column 0 size");
+    keys::tab_to(&ctx, "Remove Column track 0", |events| {
+        render(&mut studio, events)
+    });
+    render(&mut studio, keys::key(Key::Enter, Modifiers::NONE));
+    let output = render(&mut studio, vec![]);
+    let current = keys::named(&output, "Column 0 size");
+    assert_ne!(current.0, old);
+    assert_ne!(current.0, second);
+    assert_eq!(current.1.numeric_value(), Some(160.));
+    assert!(current.1.invalid().is_none());
+    let before = crate::project::encode(&studio.doc).unwrap();
+    render(
+        &mut studio,
+        keys::action(
+            old,
+            egui::accesskit::Action::SetValue,
+            Some(egui::accesskit::ActionData::NumericValue(999.)),
+        ),
+    );
+    assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+    studio.undo();
+    let output = render(&mut studio, vec![]);
+    assert_ne!(keys::named(&output, "Column 0 size").0, old);
+    assert_eq!(track(&studio, root), 80.);
+    assert!(keys::named(&output, "Column 0 size").1.invalid().is_none());
+    studio.doc.layers[0].locked = true;
+    let output = render(&mut studio, vec![]);
+    assert!(keys::named(&output, "Column 0 size").1.is_disabled());
+    let before = crate::project::encode(&studio.doc).unwrap();
+    render(
+        &mut studio,
+        keys::action(
+            keys::named(&output, "Column 0 size").0,
+            egui::accesskit::Action::SetValue,
+            Some(egui::accesskit::ActionData::NumericValue(200.)),
+        ),
+    );
+    assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+}
+
+#[test]
+fn keyboard_layout_inspector_native_breakpoint_precision_conditional_ids_and_retired_errors() {
+    use crate::ui::welcome::keyboard_tests as keys;
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    crate::ui::theme::apply(&ctx);
+    let (mut studio, root) = fixture();
+    studio
+        .doc
+        .find_shape_mut(0, root)
+        .unwrap()
+        .layout
+        .breakpoints = vec![
+        crate::layout::LayoutBreakpoint {
+            max_width: 600.1235,
+            ..Default::default()
+        },
+        crate::layout::LayoutBreakpoint {
+            max_width: 1024.,
+            ..Default::default()
+        },
+    ];
+    let bits = studio.doc.find_shape(0, root).unwrap().layout.breakpoints[0]
+        .max_width
+        .to_bits();
+    let mut render =
+        |studio: &mut Studio, events| keys::render(&ctx, events, |ui| inspector(ui, studio));
+    render(&mut studio, vec![]);
+    keys::tab_to(&ctx, "Breakpoint overrides", |events| {
+        render(&mut studio, events)
+    });
+    render(&mut studio, keys::key(Key::Enter, Modifiers::NONE));
+    render(&mut studio, vec![]);
+    let output = keys::tab_to(&ctx, "Breakpoint 0 width (px)", |events| {
+        render(&mut studio, events)
+    });
+    let width = keys::named(&output, "Breakpoint 0 width (px)").0;
+    assert_eq!(
+        keys::named(&output, "Breakpoint 0 width (px)")
+            .1
+            .numeric_value(),
+        Some(f64::from(f32::from_bits(bits)))
+    );
+    keys::tab_to(&ctx, "Set breakpoint 0 gap", |events| {
+        render(&mut studio, events)
+    });
+    render(&mut studio, keys::key(Key::Enter, Modifiers::NONE));
+    let output = render(&mut studio, vec![]);
+    assert_eq!(keys::named(&output, "Breakpoint 0 width (px)").0, width);
+    assert_eq!(
+        studio.doc.find_shape(0, root).unwrap().layout.breakpoints[0]
+            .max_width
+            .to_bits(),
+        bits
+    );
+    keys::tab_to(&ctx, "Breakpoint 0 width (px)", |events| {
+        render(&mut studio, events)
+    });
+    let output = keys::replace("-", |events| render(&mut studio, events));
+    keys::associated_error(&output, "Breakpoint 0 width (px)");
+    assert_eq!(
+        studio.doc.find_shape(0, root).unwrap().layout.breakpoints[0]
+            .max_width
+            .to_bits(),
+        bits
+    );
+    keys::tab_to(&ctx, "Remove breakpoint 0", |events| {
+        render(&mut studio, events)
+    });
+    render(&mut studio, keys::key(Key::Enter, Modifiers::NONE));
+    let output = render(&mut studio, vec![]);
+    assert_ne!(keys::named(&output, "Breakpoint 0 width (px)").0, width);
+    assert_eq!(
+        keys::named(&output, "Breakpoint 0 width (px)")
+            .1
+            .numeric_value(),
+        Some(1024.)
+    );
+    assert!(
+        keys::named(&output, "Breakpoint 0 width (px)")
+            .1
+            .invalid()
+            .is_none()
+    );
+    studio.undo();
+    let output = render(&mut studio, vec![]);
+    assert_eq!(
+        studio.doc.find_shape(0, root).unwrap().layout.breakpoints[0]
+            .max_width
+            .to_bits(),
+        bits
+    );
+    assert_ne!(keys::named(&output, "Breakpoint 0 width (px)").0, width);
+    assert!(
+        keys::named(&output, "Breakpoint 0 width (px)")
+            .1
+            .invalid()
+            .is_none()
+    );
+}
