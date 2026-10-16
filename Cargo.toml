@@ -20,6 +20,7 @@ name = "gen_media"
 path = "src/bin/gen_media.rs"
 
 [dependencies]
+omadesign-affinity = { path = "vendor/affinity" }
 ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "load-dynamic", "api-27"] }
 sha2 = "0.10"
 tiff = "0.11.3"
@@ -68,6 +69,9 @@ x11-clipboard = "0.9.3"
 x11rb = "0.13.2"
 rustix = { version = "1.1", features = ["fs"] }
 
+
+[dev-dependencies]
+omadesign-affinity = { path = "vendor/affinity", features = ["synth"] }
 
 [build-dependencies]
 cc = { version = "1", features = ["parallel"] }

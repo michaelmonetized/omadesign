@@ -199,6 +199,27 @@ fn file_menu(ui: &mut Ui, studio: &mut Studio) {
             studio.save_as();
             ui.close();
         }
+        if !studio.doc.sources.is_empty() {
+            ui.menu_button("Save original source…", |ui| {
+                for source in studio.doc.sources.clone() {
+                    if ui.button(&source.name).clicked() {
+                        studio.request_file_dialog(
+                            move || {
+                                let path = rfd::FileDialog::new().set_file_name(&source.name).save_file()?;
+                                Some(source.write_original(&path).map(|()| path))
+                            },
+                            |_, studio, result| {
+                                studio.status = match result {
+                                    Ok(path) => format!("Saved original source {}", path.display()),
+                                    Err(error) => format!("Source recovery failed: {error}"),
+                                };
+                            },
+                        );
+                        ui.close();
+                    }
+                }
+            });
+        }
         ui.separator();
         if ui
             .add(Button::new("Place…").shortcut_text("Ctrl+Shift+P"))

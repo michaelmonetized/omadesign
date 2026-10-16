@@ -2952,6 +2952,7 @@ dependencies = [
  "lopdf",
  "mlua",
  "mozjpeg-sys",
+ "omadesign-affinity",
  "ort",
  "rayon",
  "resvg",
@@ -2977,6 +2978,16 @@ dependencies = [
  "x11-clipboard",
  "x11rb",
  "zip",
+ "zstd",
+]
+
+[[package]]
+name = "omadesign-affinity"
+version = "0.1.0"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "image",
  "zstd",
 ]
 

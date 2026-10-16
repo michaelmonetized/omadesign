@@ -61,17 +61,20 @@ pub(crate) fn open_with_progress(
         return Ok(Imported::Document(crate::project::load_from(path)?));
     }
     if kind == "affinity" {
-        stage("Converting Affinity artwork");
-        let (svg, mut notes) = crate::formats::affinity::read(path)?;
-        stage("Building editable vector objects");
-        let (doc, svg_notes) = crate::formats::svg::read(&svg, &name)?;
-        notes.extend(svg_notes);
+        stage("Reading native Affinity objects");
+        let (doc, notes) = crate::formats::affinity::read_document(path)?;
         return document(doc, notes);
     }
     if kind == "lottie" {
         return Err("Use File → Import Lottie for that JSON".into());
     }
     if kind == "eps" {
+        let bytes = read_bounded(path)?;
+        match crate::formats::illustrator::read_with_path(&bytes, &name, Some(path)) {
+            Ok((doc, notes)) => return document(doc, notes),
+            Err(error) if crate::formats::illustrator::picture_import_failed(&error) => return Err(error),
+            Err(_) => {}
+        }
         return import_eps(path, &name);
     }
     let admitted;
@@ -125,21 +128,35 @@ pub(crate) fn open_with_progress(
         return document(result.document, result.warnings);
     }
     if kind == "pdf" || kind == "ai" || bytes.starts_with(b"%PDF-") {
+        let editing_error = if kind == "ai" {
+            stage("Reading Illustrator editing data");
+            match crate::formats::illustrator::read_with_path(&bytes, &name, Some(path)) {
+                Ok((doc, notes)) => return document(doc, notes),
+                Err(error) if crate::formats::illustrator::picture_import_failed(&error) => return Err(error),
+                Err(error) => Some(error),
+            }
+        } else { None };
         if bytes.starts_with(b"%!") {
-            return import_eps(path, &name);
+            let imported = import_eps(path, &name)?;
+            if let Imported::Document(mut doc) = imported {
+                let id = doc.retain_source(crate::source_attachment::SourceAttachment::new(&name, "illustrator", bytes.to_vec())?);
+                for layer in &mut doc.layers { if layer.source_attachment.is_none() { layer.source_attachment = Some(id.clone()); } }
+                doc.import_notes.insert(0, format!("Illustrator editing data could not be reconstructed: {}. Opened converted PostScript artwork; unsupported live structures are not editable. Original source bytes are retained.", editing_error.unwrap_or_default()));
+                return Ok(Imported::Document(doc));
+            }
+            return Ok(imported);
         }
-        let (doc, mut notes) = crate::formats::pdf::read(&bytes, &name)?;
+        let (mut doc, mut notes) = crate::formats::pdf::read(&bytes, &name)?;
         if kind == "ai" {
-            notes.insert(0,"Opened Illustrator's PDF-compatible artwork. Illustrator private data such as live effects, symbols and appearance stacks is not editable.".into());
+            let id = doc.retain_source(crate::source_attachment::SourceAttachment::new(&name, "illustrator", bytes.to_vec())?);
+            for layer in &mut doc.layers { if layer.source_attachment.is_none() { layer.source_attachment = Some(id.clone()); } }
+            notes.insert(0,format!("Illustrator editing data could not be reconstructed: {}. Opened PDF-compatible artwork instead. Original bytes are retained; unsupported live structures are not editable.", editing_error.unwrap_or_default()));
         }
         return document(doc, notes);
     }
     if bytes.starts_with(&[0x00, 0xff, 0x4b, 0x41]) {
-        stage("Converting Affinity artwork");
-        let (svg, mut notes) = crate::formats::affinity::read(path)?;
-        stage("Building editable vector objects");
-        let (doc, more) = crate::formats::svg::read(&svg, &name)?;
-        notes.extend(more);
+        stage("Reading native Affinity objects");
+        let (doc, notes) = crate::formats::affinity::read_document(path)?;
         return document(doc, notes);
     }
     match crate::formats::decode_image(&bytes) {

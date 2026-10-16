@@ -2,6 +2,7 @@
 pub mod affinity;
 pub mod cli;
 pub mod idml;
+pub mod illustrator;
 pub mod openraster;
 pub mod pdf;
 pub mod psd;
