@@ -80,6 +80,9 @@ pub(super) fn image(
                 item.visible = keep.contains(&i);
             }
             if let Some(object) = object {
+                let children: HashSet<_> = crate::layout::descendants(&document, index, object)
+                    .into_iter()
+                    .collect();
                 if let Some(shapes) = document
                     .layers
                     .get_mut(index)
@@ -100,7 +103,9 @@ pub(super) fn image(
                             .and_then(|s| s.layout.parent);
                     }
                     for shape in shapes {
-                        shape.visible = shape.id == object || parents.contains(&shape.id);
+                        shape.visible = shape.id == object
+                            || parents.contains(&shape.id)
+                            || (shape.visible && children.contains(&shape.id));
                     }
                 }
             }
@@ -109,11 +114,23 @@ pub(super) fn image(
         let document_id = studio.swap_id.clone();
         let generation = studio.canvas_gen;
         let playhead = studio.is_motion().then_some(studio.playhead);
+        let fitted = if playhead.is_none() {
+            layer
+                .zip(object)
+                .and_then(|(layer, object)| fitted_bounds(&document, layer, object))
+        } else {
+            None
+        };
         cache.failed.retain(|(revision, _)| *revision == generation);
         cache.failed.insert((generation, target));
         super::jobs::start(ui.ctx(), JOB, move || {
             let proxy = super::chrome::document_previews::snapshot(&document)?;
-            let pixels = super::chrome::document_previews::render(&proxy, playhead)?;
+            let pixels = match fitted {
+                Some(bounds) => {
+                    super::chrome::document_previews::render_in_bounds(&proxy, playhead, bounds)?
+                }
+                None => super::chrome::document_previews::render(&proxy, playhead)?,
+            };
             Ok((document_id, generation, target, pixels))
         });
     }
@@ -126,6 +143,72 @@ pub(super) fn image(
     }
     ui.ctx().data_mut(|d| d.insert_temp(id, cache));
     texture
+}
+
+fn fitted_bounds(
+    doc: &crate::document::Document,
+    layer: usize,
+    object: u64,
+) -> Option<crate::geom::Bounds> {
+    use crate::geom::{Bounds, Pt};
+    if doc.layers.get(layer)?.svg_filter.is_some() {
+        return None;
+    }
+    let mut members: HashSet<_> = crate::layout::descendants(doc, layer, object)
+        .into_iter()
+        .collect();
+    members.insert(object);
+    let bounds = doc.layers[layer]
+        .kind
+        .shapes()?
+        .iter()
+        .filter(|s| members.contains(&s.id) && s.visible)
+        .filter_map(|shape| {
+            let padding = shape.style.stroke.as_ref().map_or(0., |s| s.width)
+                + crate::filter::svg_pad(&shape.filters);
+            let b = shape.world_bbox().inflate(padding);
+            let mut corners = [
+                tiny_skia::Point::from_xy(b.min.x, b.min.y),
+                tiny_skia::Point::from_xy(b.max.x, b.min.y),
+                tiny_skia::Point::from_xy(b.max.x, b.max.y),
+                tiny_skia::Point::from_xy(b.min.x, b.max.y),
+            ];
+            crate::compositor::shape_parent_transform(doc, layer, shape.id)
+                .map_points(&mut corners);
+            if corners.iter().any(|p| !p.x.is_finite() || !p.y.is_finite()) {
+                return None;
+            }
+            let mut bounds = Bounds::from_pt(Pt::new(corners[0].x, corners[0].y));
+            for p in &corners[1..] {
+                bounds.union_pt(Pt::new(p.x, p.y));
+            }
+            Some(bounds)
+        })
+        .reduce(|a, b| a.union(b))?;
+    Some(bounds.inflate(crate::filter::svg_pad(&doc.layers[layer].filters) + 2.))
+}
+
+#[cfg(test)]
+mod fitted_tests {
+    use super::*;
+    #[test]
+    fn craft_symbol_preview_fits_rotated_frame_children_without_changing_artwork() {
+        let mut studio = crate::app::symbols::tests::fixture();
+        assert!(studio.create_vector_symbol("Badge"));
+        let root = studio.primary().unwrap().1;
+        studio.doc.find_shape_mut(0, root).unwrap().rotation = std::f32::consts::FRAC_PI_2;
+        let before = crate::project::encode(&studio.doc).unwrap();
+        let bounds = fitted_bounds(&studio.doc, 0, root).unwrap();
+        assert!(bounds.width() < 100. && bounds.height() < 100.);
+        let image =
+            super::super::chrome::document_previews::render_in_bounds(&studio.doc, None, bounds)
+                .unwrap();
+        assert!(
+            image.pixels.iter().filter(|p| p.a() > 0).count() > 3000,
+            "the actual child artwork must fill its thumbnail rather than using page bounds"
+        );
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+    }
 }
 
 /// Draw a real layer thumbnail over a theme-derived transparency checker.

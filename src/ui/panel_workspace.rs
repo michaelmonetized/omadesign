@@ -17,6 +17,7 @@ pub(super) const PANELS: &[(&str, &str)] = &[
     ("gradients", "Gradients"),
     ("patterns", "Patterns"),
     ("styles", "Styles"),
+    ("symbols", "Symbols"),
     ("layers", "Layers"),
     ("paths", "Paths"),
     ("channels", "Channels"),

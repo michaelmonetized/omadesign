@@ -606,7 +606,7 @@ pub(super) fn queue_place(
 }
 pub(super) fn canvas_drop(ui: &Ui, studio: &mut Studio, response: &egui::Response) -> bool {
     let dragging = egui::DragAndDrop::has_payload_of_type::<BrandDrag>(ui.ctx());
-    if let Some(asset) = response.dnd_release_payload::<BrandDrag>()
+    if dragging && let Some(asset) = response.dnd_release_payload::<BrandDrag>()
         && let Some(pos) = ui.ctx().input(|i| i.pointer.interact_pos())
     {
         let at = studio.view.pointer_to_world(

@@ -90,7 +90,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         studio.cursor = Some(studio.view.to_world(from_egui(hp) - origin));
     }
 
-    let brand_input = super::library::canvas_drop(ui, studio, &resp);
+    let brand_input = super::library::canvas_drop(ui, studio, &resp) || super::symbols::canvas_drop(ui,studio,&resp);
     let shift = ctx.input(|i| i.modifiers.shift);
     studio.snap_override = ctrl;
 

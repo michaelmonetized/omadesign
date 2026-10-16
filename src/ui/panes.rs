@@ -67,6 +67,7 @@ fn contents(ui: &mut Ui, studio: &mut Studio, panel: &str) {
         "history" => history(ui, studio),
         "actions" => actions(ui, studio),
         "styles" => styles(ui, studio),
+        "symbols" => super::symbols::show(ui,studio),
         "shapes" => shapes(ui, studio),
         "paths" => paths(ui, studio),
         "channels" => channels(ui, studio),

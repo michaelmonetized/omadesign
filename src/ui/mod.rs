@@ -62,6 +62,7 @@ mod field_clipboard;
 mod shared_transform;
 mod svg_paint;
 mod svg_effect;
+mod symbols;
 #[cfg(test)]
 mod svg_field_tests;
 mod text_geometry;

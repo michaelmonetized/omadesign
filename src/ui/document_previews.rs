@@ -289,6 +289,12 @@ pub(in crate::ui) fn bounds(doc: &Document) -> Bounds {
 
 pub(in crate::ui) fn render(doc: &Document, playhead: Option<f32>) -> Result<egui::ColorImage, String> {
     let bounds = bounds(doc);
+    render_in_bounds(doc,playhead,bounds)
+}
+
+/// Render a bounded preview through the existing editor compositor.
+/// Args: display proxy, optional playhead and visible artwork bounds. Returns the actual premultiplied preview.
+pub(in crate::ui) fn render_in_bounds(doc:&Document,playhead:Option<f32>,bounds:Bounds)->Result<egui::ColorImage,String> {
     let edge = SIDE as f32;
     let scale =
         ((edge - 8.0) / bounds.width().max(1.0)).min((edge - 8.0) / bounds.height().max(1.0));

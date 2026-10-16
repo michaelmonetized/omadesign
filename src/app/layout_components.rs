@@ -124,7 +124,9 @@ impl Studio {
         true
     }
 
-    fn component_edit(
+    /// Commit a complete component operation through the existing vector command batch.
+    /// Args: isolated document edit and success text. Returns nothing; errors preserve artwork.
+    pub(super) fn component_edit(
         &mut self,
         edit: impl FnOnce(&mut Document) -> Result<Option<(usize, u64)>, String>,
         success: &str,
@@ -305,7 +307,7 @@ mod tests {
     }
 }
 
-fn component_object_editable(doc: &Document, layer: usize, object: u64) -> bool {
+pub(super) fn component_object_editable(doc: &Document, layer: usize, object: u64) -> bool {
     if !doc.layer_editable(layer) {
         return false;
     }

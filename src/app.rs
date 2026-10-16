@@ -38,6 +38,7 @@ mod alignment;
 mod shortcuts;
 pub(crate) mod input_history;
 mod snapping;
+pub(crate) mod symbols;
 pub mod startup;
 mod tabs;
 mod typography;
