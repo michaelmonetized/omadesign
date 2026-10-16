@@ -10,11 +10,12 @@ pub(super) const PUBLISHING: u32 = 23;
 pub(super) const EXPRESSIONS: u32 = 25;
 pub(super) const COMPOSITIONS: u32 = 26;
 pub(super) const SCENE3D: u32 = 27;
+pub(super) const ADVANCED_LAYOUT: u32 = 28;
 
 /// Identify implemented project readers.
 /// Args: envelope version. Returns false for reserved formats whose models are absent.
 pub(super) fn supports_version(version: u32) -> bool {
-    matches!(version, 1..=17 | 23 | 25..=27)
+    matches!(version, 1..=17 | 23 | 25..=28)
 }
 
 /// Find the oldest reader that preserves this document.
@@ -27,11 +28,14 @@ pub(super) fn required_version(doc: &Document) -> u32 {
                 .max()
                 .unwrap_or(5)
         })
-        .unwrap_or(SCENE3D)
+        .unwrap_or(ADVANCED_LAYOUT)
 }
 
 fn local_required_version(doc: &Document) -> u32 {
     let mut version = if doc.mask_sources().is_empty() { 5 } else { 13 };
+    if has_advanced_layout(doc) {
+        version = version.max(ADVANCED_LAYOUT);
+    }
     if !doc.motion.expressions.is_empty() {
         version = version.max(EXPRESSIONS);
     }
@@ -142,6 +146,44 @@ fn local_required_version(doc: &Document) -> u32 {
     version
 }
 
+fn has_advanced_layout(doc: &Document) -> bool {
+    use crate::layout::StackAlign;
+    use crate::layout_components::ComponentBinding;
+
+    let mut shapes: Vec<_> = doc
+        .layers
+        .iter()
+        .filter_map(|layer| layer.kind.shapes())
+        .flatten()
+        .collect();
+    while let Some(shape) = shapes.pop() {
+        let layout = &shape.layout;
+        if !layout.grid.is_auto()
+            || layout.stack.as_ref().is_some_and(|stack| {
+                !stack.column_tracks.is_empty()
+                    || !stack.row_tracks.is_empty()
+                    || stack.align == StackAlign::Baseline
+            })
+            || layout
+                .breakpoints
+                .iter()
+                .any(|rule| rule.align == Some(StackAlign::Baseline))
+        {
+            return true;
+        }
+        match &layout.component {
+            Some(ComponentBinding::Main { properties, .. }) if !properties.is_empty() => {
+                return true;
+            }
+            Some(ComponentBinding::Instance { nodes, .. }) => {
+                shapes.extend(nodes.iter().map(|node| node.baseline.as_ref()));
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
 fn fill_version(fill: &Fill) -> u32 {
     match fill {
         Fill::Pattern(_) => VECTOR_PATTERN,
@@ -199,6 +241,293 @@ mod tests {
             transform: [1., 0., 0., 1., 0., 0.],
             opacity: 1.,
         })
+    }
+
+    fn first_shape(doc: &mut Document) -> &mut Shape {
+        &mut doc
+            .layers
+            .iter_mut()
+            .find_map(|layer| layer.kind.shapes_mut())
+            .unwrap()[0]
+    }
+
+    fn named_property(shape: &mut Shape) {
+        use crate::layout_components::{ComponentBinding, ComponentProperty, PropertyKind};
+        shape.visible = false;
+        shape.layout.component = Some(ComponentBinding::Main {
+            family: shape.id,
+            variant: String::new(),
+            slots: Default::default(),
+            properties: vec![ComponentProperty {
+                id: 1,
+                name: "Private missing-slot field".into(),
+                slot: 987654,
+                kind: PropertyKind::Visibility,
+            }],
+        });
+    }
+
+    fn advanced_layout_cases() -> [(&'static str, fn(&mut Shape)); 9] {
+        use crate::layout::{AutoStack, GridTrack, LayoutBreakpoint, StackAlign};
+        [
+            ("explicit first column", |shape| {
+                shape.layout.grid.column = Some(0)
+            }),
+            ("explicit first row", |shape| {
+                shape.layout.grid.row = Some(0)
+            }),
+            ("column span", |shape| shape.layout.grid.column_span = 2),
+            ("row span", |shape| shape.layout.grid.row_span = 2),
+            ("inactive column tracks", |shape| {
+                shape.layout.stack = Some(AutoStack {
+                    column_tracks: vec![GridTrack::default()],
+                    ..Default::default()
+                })
+            }),
+            ("inactive row tracks", |shape| {
+                shape.layout.stack = Some(AutoStack {
+                    row_tracks: vec![GridTrack::default()],
+                    ..Default::default()
+                })
+            }),
+            ("vertical baseline fallback", |shape| {
+                shape.layout.stack = Some(AutoStack {
+                    align: StackAlign::Baseline,
+                    ..Default::default()
+                })
+            }),
+            ("inactive baseline breakpoint", |shape| {
+                shape.layout.breakpoints.push(LayoutBreakpoint {
+                    max_width: 1.,
+                    align: Some(StackAlign::Baseline),
+                    ..Default::default()
+                })
+            }),
+            ("hidden named property", named_property),
+        ]
+    }
+
+    #[test]
+    fn integrated_project_layout28_covers_stored_inactive_and_hidden_features() {
+        for (name, edit) in advanced_layout_cases() {
+            let mut doc = plain();
+            edit(first_shape(&mut doc));
+            doc.layers
+                .iter_mut()
+                .for_each(|layer| layer.visible = false);
+            let encoded = super::super::encode(&doc).unwrap();
+            let mut envelope: serde_json::Value = serde_json::from_str(&encoded).unwrap();
+            assert_eq!(envelope["version"], ADVANCED_LAYOUT, "{name}");
+            super::super::decode(&encoded).unwrap_or_else(|error| panic!("{name}: {error}"));
+            envelope["version"] = SCENE3D.into();
+            assert!(
+                super::super::decode(&envelope.to_string())
+                    .unwrap_err()
+                    .contains("requires version 28"),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn integrated_project_layout28_checks_every_baseline_without_resolving_live_ids() {
+        use crate::layout_components::{ComponentBinding, InstanceNode};
+        for (name, edit) in advanced_layout_cases().into_iter().take(8) {
+            let mut doc = plain();
+            let mut baseline = first_shape(&mut doc).clone();
+            edit(&mut baseline);
+            let expected = baseline.layout.clone();
+            let owner = first_shape(&mut doc);
+            owner.layout.component = Some(ComponentBinding::Instance {
+                main: 987650,
+                nodes: vec![InstanceNode {
+                    source: 987651,
+                    instance: 987652,
+                    slot: 987653,
+                    nested_main: Some(987654),
+                    baseline: Box::new(baseline),
+                }],
+            });
+            assert_eq!(required_version(&doc), ADVANCED_LAYOUT, "{name}");
+            let encoded = super::super::encode(&doc).unwrap();
+            let mut envelope: serde_json::Value = serde_json::from_str(&encoded).unwrap();
+            envelope["version"] = SCENE3D.into();
+            assert!(
+                super::super::decode(&envelope.to_string())
+                    .unwrap_err()
+                    .contains("requires version 28"),
+                "{name}"
+            );
+            let mut reopened = super::super::decode(&encoded).unwrap();
+            let Some(ComponentBinding::Instance { main, nodes }) =
+                &first_shape(&mut reopened).layout.component
+            else {
+                panic!("baseline lost: {name}")
+            };
+            assert_eq!(*main, 987650);
+            assert_eq!(nodes[0].instance, 987652);
+            assert_eq!(nodes[0].baseline.layout, expected, "{name}");
+        }
+    }
+
+    #[test]
+    fn integrated_project_layout28_keeps_legacy_defaults_and_exact_supported_readers() {
+        use crate::layout::{AutoStack, StackFlow};
+        use crate::layout_components::{ComponentBinding, InstanceNode};
+        let mut doc = plain();
+        first_shape(&mut doc).layout.stack = Some(AutoStack {
+            flow: StackFlow::Grid,
+            ..Default::default()
+        });
+        assert_eq!(required_version(&doc), 5);
+        first_shape(&mut doc).layout.component = Some(ComponentBinding::Main {
+            family: 42,
+            variant: "Legacy".into(),
+            slots: Default::default(),
+            properties: vec![],
+        });
+        assert_eq!(required_version(&doc), 5);
+        let mut baseline = first_shape(&mut doc).clone();
+        baseline.layout.component = None;
+        first_shape(&mut doc).layout.component = Some(ComponentBinding::Instance {
+            main: 1234,
+            nodes: vec![InstanceNode {
+                source: 1,
+                instance: 2,
+                slot: 3,
+                nested_main: Some(4),
+                baseline: Box::new(baseline),
+            }],
+        });
+        assert_eq!(required_version(&doc), 5);
+        let encoded = super::super::encode(&doc).unwrap();
+        let mut envelope: serde_json::Value = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(envelope["version"], 5);
+        for version in 0..=29 {
+            let supported = matches!(version, 1..=17 | 23 | 25..=28);
+            assert_eq!(supports_version(version), supported, "reader {version}");
+            envelope["version"] = version.into();
+            let result = super::super::decode(&envelope.to_string());
+            if supported {
+                result.unwrap_or_else(|error| panic!("reader {version}: {error}"));
+            } else {
+                assert!(
+                    result.unwrap_err().contains("Unsupported"),
+                    "reader {version}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn integrated_project_layout28_nested_motion_save_reopen_preserves_baselines() {
+        use crate::layout_components::{ComponentBinding, InstanceNode};
+        let mut child = plain();
+        let mut baseline = first_shape(&mut child).clone();
+        baseline.layout.grid.row = Some(0);
+        baseline.layout.stack = Some(crate::layout::AutoStack {
+            row_tracks: vec![crate::layout::GridTrack::default()],
+            ..Default::default()
+        });
+        let expected = baseline.layout.clone();
+        first_shape(&mut child).layout.component = Some(ComponentBinding::Instance {
+            main: 100,
+            nodes: vec![InstanceNode {
+                source: 101,
+                instance: 102,
+                slot: 103,
+                nested_main: None,
+                baseline: Box::new(baseline),
+            }],
+        });
+        let mut middle = plain();
+        middle
+            .motion
+            .compositions
+            .push(crate::motion::compositions::Composition::new(child));
+        let mut doc = plain();
+        doc.motion
+            .compositions
+            .push(crate::motion::compositions::Composition::new(middle));
+        let mut envelope: serde_json::Value =
+            serde_json::from_str(&super::super::encode(&doc).unwrap()).unwrap();
+        assert_eq!(envelope["version"], ADVANCED_LAYOUT);
+        envelope["version"] = SCENE3D.into();
+        assert!(
+            super::super::decode(&envelope.to_string())
+                .unwrap_err()
+                .contains("requires version 28")
+        );
+        let directory = std::env::current_dir()
+            .unwrap()
+            .join(".artifacts")
+            .join(format!("layout28-{}", crate::document::next_id()));
+        assert!(directory.starts_with("/home"));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("nested.oma");
+        super::super::save_to(&doc, &path).unwrap();
+        let mut reopened = super::super::load_from(&path).unwrap();
+        let child = &mut reopened.motion.compositions[0].document.motion.compositions[0].document;
+        let Some(ComponentBinding::Instance { nodes, .. }) = &first_shape(child).layout.component
+        else {
+            panic!("nested baseline lost")
+        };
+        assert_eq!(nodes[0].baseline.layout, expected);
+        assert_eq!(required_version(&reopened), ADVANCED_LAYOUT);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn integrated_project_layout28_rejects_malformed_metadata_without_deleting_missing_bindings() {
+        use crate::layout_components::{ComponentBinding, InstanceNode};
+        let mut valid = plain();
+        named_property(first_shape(&mut valid));
+        let encoded = super::super::encode(&valid).unwrap();
+        let mut reopened = super::super::decode(&encoded).unwrap();
+        assert_eq!(
+            first_shape(&mut reopened).layout.component,
+            first_shape(&mut valid).layout.component
+        );
+        for mode in 0..4 {
+            let mut doc = valid.clone();
+            let Some(ComponentBinding::Main { properties, .. }) =
+                &mut first_shape(&mut doc).layout.component
+            else {
+                unreachable!()
+            };
+            match mode {
+                0 => properties.push(properties[0].clone()),
+                1 => properties[0].name = " ".into(),
+                2 => properties[0].name = "x".repeat(121),
+                _ => *properties = vec![properties[0].clone(); 257],
+            }
+            let mut parent = plain();
+            parent
+                .motion
+                .compositions
+                .push(crate::motion::compositions::Composition::new(doc));
+            let error = super::super::decode(&super::super::encode(&parent).unwrap()).unwrap_err();
+            assert!(
+                error.contains("Component properties") || error.contains("256 properties"),
+                "{error}"
+            );
+        }
+        let mut doc = plain();
+        let mut baseline = first_shape(&mut doc).clone();
+        named_property(&mut baseline);
+        first_shape(&mut doc).layout.component = Some(ComponentBinding::Instance {
+            main: 100,
+            nodes: vec![InstanceNode {
+                source: 101,
+                instance: 102,
+                slot: 103,
+                nested_main: None,
+                baseline: Box::new(baseline),
+            }],
+        });
+        assert_eq!(required_version(&doc), ADVANCED_LAYOUT);
+        let error = super::super::decode(&super::super::encode(&doc).unwrap()).unwrap_err();
+        assert!(error.contains("Instance baselines cannot contain component bindings"));
     }
 
     #[test]

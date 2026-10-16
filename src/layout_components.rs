@@ -1,6 +1,9 @@
 //! Reusable design components. Instances retain stable object IDs and track
 //! property overrides against the last received definition, including after save.
 
+mod properties;
+pub use properties::*;
+
 use crate::document::{Document, Shape, next_id};
 use crate::geom::{Geom, Pt};
 use serde::{Deserialize, Serialize};
@@ -14,6 +17,8 @@ pub enum ComponentBinding {
         /// Local shape ID -> identity shared by corresponding variant children.
         #[serde(default)]
         slots: BTreeMap<u64, u64>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        properties: Vec<ComponentProperty>,
     },
     Instance {
         main: u64,
@@ -151,6 +156,7 @@ pub fn make_component(doc: &mut Document, layer: usize, root: u64) -> Result<(),
         family: root,
         variant: "Default".into(),
         slots,
+        properties: Vec::new(),
     });
     Ok(())
 }
@@ -182,7 +188,15 @@ pub fn remap_duplicate(shape: &mut Shape, ids: &HashMap<u64, u64>) {
         return;
     };
     match binding {
-        ComponentBinding::Main { family, slots, .. } => {
+        ComponentBinding::Main {
+            family,
+            slots,
+            properties,
+            ..
+        } => {
+            for property in properties {
+                property.slot = ids.get(&property.slot).copied().unwrap_or(property.slot);
+            }
             *family = ids.get(family).copied().unwrap_or(shape.id);
             *slots = std::mem::take(slots)
                 .into_iter()
@@ -343,10 +357,16 @@ pub fn add_variant(doc: &mut Document, main: u64, name: &str, origin: Pt) -> Res
         return Err("Give the variant a name".into());
     }
     let (layer, source) = locate(doc, main).ok_or("Component is missing")?;
-    let Some(ComponentBinding::Main { family, slots, .. }) = &source.layout.component else {
+    let Some(ComponentBinding::Main {
+        family,
+        slots,
+        properties,
+        ..
+    }) = &source.layout.component
+    else {
         return Err("Select a main component".into());
     };
-    let (family, slots) = (*family, slots.clone());
+    let (family, slots, properties) = (*family, slots.clone(), properties.clone());
     if definitions(doc)
         .iter()
         .any(|(_, id, _, variant)| family_of_main(doc, *id) == Some(family) && variant == name)
@@ -387,6 +407,7 @@ pub fn add_variant(doc: &mut Document, main: u64, name: &str, origin: Pt) -> Res
         family,
         variant: name.into(),
         slots: new_slots,
+        properties,
     });
     doc.layers[layer].kind.shapes_mut().unwrap().extend(shapes);
     Ok(root)

@@ -19,6 +19,7 @@ pub(crate) mod keyboard_authoring;
 mod layer_groups;
 mod layout;
 mod layout_components;
+pub(crate) use layout_components::{ComponentPropertyTarget, ComponentPropertyEdit};
 mod layout_edit;
 pub mod libraries;
 pub(crate) mod masking;

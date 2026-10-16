@@ -69,7 +69,7 @@ pub fn extended() -> Vec<Value> {
         ),
         (
             "set_layout",
-            "Patch native frame/child layout properties. Use get_objects and get_documentation(layout) for schema: stack, sizing, constraints, clip, breakpoints, text_size, parent, etc. Parent may be null to detach. Image bytes and component bindings are managed by their dedicated tools/actions.",
+            "Patch native frame/child layout properties. Stack supports column_tracks/row_tracks with Fixed, Hug or Fraction sizes and optional min/max; grid sets zero-based column/row anchors and column_span/row_span. Alignment includes Baseline. Use get_objects and get_documentation(layout) for the complete schema. Parent may be null to detach. Image bytes and component bindings use their dedicated tools/actions.",
             json!({"layer":i,"id":i,"changes":obj}),
             vec!["layer", "id", "changes"],
             true,

@@ -463,7 +463,7 @@ fn interaction_controls(ui: &mut Ui, studio: &mut Studio) {
 
 /// Materialize a viewport and overlays without changing the working document.
 /// Keep the full document for interaction target and variant validation.
-fn presentation(
+pub(crate) fn presentation(
     doc: &Document,
     state: &PrototypeState,
     width: f32,
