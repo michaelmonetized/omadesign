@@ -112,7 +112,7 @@ pub(super) fn render(
     out: &mut [[f32; 4]],
     w: u32,
     h: u32,
-    scale: u32,
+    scale: f32,
     cancel: &dyn CancellationCheck,
 ) -> Result<(), String> {
     cancel.check()?;
@@ -201,7 +201,7 @@ fn draw_children(
     depth: usize,
     w: u32,
     h: u32,
-    scale: u32,
+    scale: f32,
     cancel: &dyn CancellationCheck,
 ) -> Result<(), String> {
     if depth > 64 {
@@ -272,7 +272,7 @@ fn paint_shape(
     clips: &[Option<coverage::Clip>],
     w: u32,
     h: u32,
-    scale: u32,
+    scale: f32,
     cancel: &dyn CancellationCheck,
 ) -> Result<(), String> {
     cancel.check()?;

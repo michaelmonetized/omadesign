@@ -1,10 +1,10 @@
+#[cfg(test)]
+mod clip_tests;
 mod coverage;
 mod paint;
 mod shape_mask;
 #[cfg(test)]
 mod tests;
-#[cfg(test)]
-mod clip_tests;
 mod vector;
 
 use super::Depth;
@@ -139,6 +139,36 @@ pub fn composite_with_cancel(
     cancel.check()?;
     doc.validate_hierarchy()?;
     crate::motion::require_flat_artwork(doc, "Native float compositor")?;
+    let factor = scale.clamp(1, 8) as f32;
+    composite_ready(
+        doc,
+        crate::export::RenderSize {
+            factor,
+            width: (doc.width * factor).round() as u32,
+            height: (doc.height * factor).round() as u32,
+        },
+        cancel,
+    )
+}
+
+/// Render authoritative samples at a checked fractional output scale.
+/// Args: document, positive scale and cancellation. Returns the same admitted float compositor's output.
+pub fn composite_scaled_with_cancel(
+    doc: &Document,
+    scale: f64,
+    cancel: &dyn crate::resources::CancellationCheck,
+) -> Result<Pixels, String> {
+    cancel.check()?;
+    doc.validate_hierarchy()?;
+    crate::motion::require_flat_artwork(doc, "Native float compositor")?;
+    composite_ready(doc, crate::export::RenderSize::new(doc, scale)?, cancel)
+}
+
+fn composite_ready(
+    doc: &Document,
+    size: crate::export::RenderSize,
+    cancel: &dyn crate::resources::CancellationCheck,
+) -> Result<Pixels, String> {
     if doc.color.model == super::cms::Model::Cmyk
         && doc
             .layers
@@ -150,11 +180,9 @@ pub fn composite_with_cancel(
         return Err("CMYK vector clips and shape masks require an ink-aware float coverage compositor; save .oma to preserve their original samples.".into());
     }
     if doc.color.model == super::cms::Model::Cmyk {
-        return composite_cmyk(doc, scale, cancel);
+        return composite_cmyk(doc, size, cancel);
     }
-    let scale = scale.clamp(1, 8);
-    let w = (doc.width * scale as f32).round() as u32;
-    let h = (doc.height * scale as f32).round() as u32;
+    let (scale, w, h) = (size.factor, size.width, size.height);
     let count = super::storage::count(w, h, 4)?;
     let mut out = crate::resources::global().allocate_now::<f32, _>(count, cancel)?;
     if !doc.transparent {
@@ -184,7 +212,7 @@ fn render(
     out: &mut [[f32; 4]],
     w: u32,
     h: u32,
-    scale: u32,
+    scale: f32,
     depth: usize,
     cancel: &dyn crate::resources::CancellationCheck,
 ) -> Result<(), String> {
@@ -342,7 +370,7 @@ fn mask(layer: &Layer, p: Pt, local: Option<(f32, f32)>) -> f32 {
 
 fn composite_cmyk(
     doc: &Document,
-    scale: u32,
+    size: crate::export::RenderSize,
     cancel: &dyn crate::resources::CancellationCheck,
 ) -> Result<Pixels, String> {
     cancel.check()?;
@@ -362,7 +390,7 @@ fn composite_cmyk(
                 *p = p.in_document_color(&rgb.color)?;
             }
         }
-        return composite_with_cancel(&rgb, scale, cancel)?.in_document_color(&doc.color);
+        return composite_ready(&rgb, size, cancel)?.in_document_color(&doc.color);
     }
     let mut inks = None;
     let mut dimensions = (0, 0);
@@ -407,7 +435,7 @@ fn composite_cmyk(
             *layer.kind.pixels_mut().unwrap() =
                 Pixels::from_sample_allocation(source.w, source.h, Depth::F32, values)?;
         }
-        let result = composite_with_cancel(&plane, scale, cancel)?;
+        let result = composite_ready(&plane, size, cancel)?;
         dimensions = (result.w, result.h);
         if inks.is_none() {
             inks =

@@ -1,5 +1,6 @@
 use super::{
-    ADVANCED_LAYOUT, COLOR, COMPOSITIONS, EXPRESSIONS, NATIVE, PSD_TYPE, SCENE3D, SMART, SOURCE, SCREEN_EXPORT,
+    ADVANCED_LAYOUT, COLOR, COMPOSITIONS, EXPORT_RESOLUTION, EXPRESSIONS, NATIVE, PSD_TYPE,
+    SCENE3D, SCREEN_EXPORT, SMART, SOURCE,
 };
 use serde::Deserialize;
 use serde::de::{MapAccess, SeqAccess, Visitor};
@@ -61,7 +62,10 @@ fn composition_bounds<E: serde::de::Error>(value: &Seen) -> Result<(usize, usize
 }
 
 fn field_version(key: &str, value: &Seen) -> u32 {
-    if key.split('/').any(|field|field=="screen_export") {
+    if key.split('/').any(|field| field == "export_resolution") {
+        return EXPORT_RESOLUTION;
+    }
+    if key.split('/').any(|field| field == "screen_export") {
         return SCREEN_EXPORT;
     }
     if !value.exists {
@@ -151,23 +155,27 @@ impl<'de> Deserialize<'de> for Seen {
                     "Baseline" => Some("Baseline"),
                     "List" => Some("List"),
                     _ if s.starts_with('/') => {
-                        if s.split('/').any(|field|field=="screen_export") {
+                        if s.split('/').any(|field| field == "export_resolution") {
+                            Some("export_resolution")
+                        } else if s.split('/').any(|field| field == "screen_export") {
                             Some("screen_export")
-                        } else {layout_property(s).or_else(|| match s.rsplit('/').next() {
-                            Some("source_attachment") => Some("source_attachment"),
-                            Some("sources") => Some("sources"),
-                            Some("screen_export") => Some("screen_export"),
-                            Some("native") => Some("native"),
-                            Some("psd_type") => Some("psd_type"),
-                            Some("psd_smart") => Some("psd_smart"),
-                            Some("cmyk") => Some("cmyk"),
-                            Some("icc_profile") => Some("icc_profile"),
-                            Some("expressions") => Some("expressions"),
-                            Some("compositions") => Some("compositions"),
-                            Some("scene3d") => Some("scene3d"),
-                            Some("ease") => Some("ease"),
-                            _ => None,
-                        })}
+                        } else {
+                            layout_property(s).or_else(|| match s.rsplit('/').next() {
+                                Some("source_attachment") => Some("source_attachment"),
+                                Some("sources") => Some("sources"),
+                                Some("screen_export") => Some("screen_export"),
+                                Some("native") => Some("native"),
+                                Some("psd_type") => Some("psd_type"),
+                                Some("psd_smart") => Some("psd_smart"),
+                                Some("cmyk") => Some("cmyk"),
+                                Some("icc_profile") => Some("icc_profile"),
+                                Some("expressions") => Some("expressions"),
+                                Some("compositions") => Some("compositions"),
+                                Some("scene3d") => Some("scene3d"),
+                                Some("ease") => Some("ease"),
+                                _ => None,
+                            })
+                        }
                     }
                     _ => None,
                 };
@@ -312,6 +320,13 @@ pub(crate) fn value_version(value: &serde_json::Value) -> Result<u32, String> {
 /// Args: base and all writes. Returns their greatest required reader version.
 pub(super) fn replica_version(replica: &crate::collaboration::Replica) -> Result<u32, String> {
     let mut version = 24;
+    for change in &replica.changes {
+        if let crate::collaboration::Edit::Write { writes } = &change.edit {
+            for write in writes.iter().filter(|write| write.value.is_none()) {
+                version=version.max(field_version(&write.path,&Seen::default()));
+            }
+        }
+    }
     for (path, cell) in replica.retained_cells() {
         let seen = match cell {
             crate::collaboration::Cell::Value(value) => {

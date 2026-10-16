@@ -1,6 +1,176 @@
 use super::*;
 use crate::{app::Studio, ml::NoProgress};
 use std::sync::atomic::{AtomicUsize, Ordering};
+
+#[test]
+fn craft_export_sizing_reference_grammar_aspect_ratio_and_legacy_wire() {
+    let doc = Document::new("Pixels", 80., 60., 96.);
+    for (text, expected, dimensions) in [
+        (" 0.5X ", Resolution::Scale(0.5), (40, 30)),
+        ("1.5", Resolution::Scale(1.5), (120, 90)),
+        ("512w", Resolution::Width(512.), (512, 384)),
+        ("512h", Resolution::Height(512.), (683, 512)),
+        ("144PPI", Resolution::Ppi(144.), (120, 90)),
+    ] {
+        let size = Resolution::parse(text).unwrap();
+        assert_eq!(size, expected);
+        assert_eq!(
+            export::dimensions_scaled(
+                &Source::Document(doc.clone()),
+                Row::default().settings(),
+                size.options(&doc).unwrap()
+            )
+            .unwrap(),
+            dimensions
+        );
+    }
+    for text in ["", "0x", "-1w", "NaN", "infppi", "3px", "w", "1e999x"] {
+        assert!(Resolution::parse(text).is_err(), "{text}");
+    }
+    let original = r#"{"id":1,"scale":1,"format":"Png","suffix":""}"#;
+    let mut row: Row = serde_json::from_str(original).unwrap();
+    assert_eq!(serde_json::to_string(&row).unwrap(), original);
+    row.set_resolution(Resolution::Scale(1.5));
+    assert_eq!(row.scale, 1);
+    assert_eq!(row.export_resolution, Some(Resolution::Scale(1.5)));
+    row.set_resolution(Resolution::Scale(2.));
+    assert!(row.export_resolution.is_none());
+    assert_eq!(row.scale, 2);
+    let mut invalid = doc;
+    invalid.dpi = 0.;
+    assert!(Resolution::Ppi(144.).options(&invalid).is_err());
+}
+
+#[test]
+fn craft_export_sizing_feature30_current_embedded_retained_and_withdrawn_metadata() {
+    let mut studio = fixture();
+    let old = crate::project::encode(&studio.doc).unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&old).unwrap()["version"],
+        29
+    );
+    assert!(!old.contains("export_resolution"));
+    studio.doc.screen_export.rows[0].set_resolution(Resolution::Width(512.));
+    for nested in [false, true] {
+        let doc = if nested {
+            let mut parent = Document::new("Parent", 80., 60., 96.);
+            parent
+                .motion
+                .compositions
+                .push(crate::motion::compositions::Composition::new(
+                    studio.doc.clone(),
+                ));
+            parent
+        } else {
+            studio.doc.clone()
+        };
+        let encoded = crate::project::encode(&doc).unwrap();
+        let restored = crate::project::decode(&encoded).unwrap();
+        assert_eq!(crate::project::encode(&restored).unwrap(), encoded);
+        let mut wire: serde_json::Value = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(wire["version"], 30);
+        wire["version"] = 29.into();
+        assert!(
+            crate::project::decode(&wire.to_string())
+                .unwrap_err()
+                .contains("requires version 30")
+        );
+    }
+    for path in [
+        "/screen_export/rows/0/export_resolution",
+        "/@compositions/42/document/screen_export/rows/8/export_resolution/Width",
+    ] {
+        for value in [
+            serde_json::json!({"Value":null}),
+            serde_json::json!("List"),
+            serde_json::json!({"Variant":"Width"}),
+            serde_json::json!({"Value":{"Width":512}}),
+        ] {
+            for base in [false, true] {
+                let mut replica =
+                    serde_json::json!({"session":"sizes","actor":"a","base":{},"changes":[]});
+                if base {
+                    replica["base"][path] = value.clone();
+                } else {
+                    replica["changes"] = serde_json::json!([
+                        {"id":{"actor":"a","seq":1},"clock":1,"seen":{},"edit":{"type":"write","writes":[{"path":path,"value":value}]}},
+                        {"id":{"actor":"a","seq":2},"clock":2,"seen":{},"edit":{"type":"toggle","target":{"actor":"a","seq":1},"enabled":false}}
+                    ]);
+                }
+                let mut doc = Document::new("Retained", 10., 10., 96.);
+                doc.collaboration = Some(serde_json::from_value(replica).unwrap());
+                assert!(
+                    doc.collaboration
+                        .as_ref()
+                        .unwrap()
+                        .protocol_requirement()
+                        .is_err()
+                );
+                let mut wire: serde_json::Value =
+                    serde_json::from_str(&crate::project::encode(&doc).unwrap()).unwrap();
+                assert_eq!(wire["version"], 30, "{path} {base}");
+                wire["version"] = 29.into();
+                assert!(
+                    crate::project::validate_retained_json(&wire.to_string())
+                        .unwrap_err()
+                        .contains("requires version 30")
+                );
+            }
+        }
+        let mut doc=Document::new("Deleted resolution",10.,10.,96.);
+        doc.collaboration=Some(serde_json::from_value(serde_json::json!({"session":"sizes","actor":"a","base":{},"changes":[
+            {"id":{"actor":"a","seq":1},"clock":1,"seen":{},"edit":{"type":"write","writes":[{"path":path,"value":null}]}},
+            {"id":{"actor":"a","seq":2},"clock":2,"seen":{},"edit":{"type":"toggle","target":{"actor":"a","seq":1},"enabled":false}}
+        ]})).unwrap());
+        assert_eq!(doc.collaboration.as_ref().unwrap().protocol_requirement().unwrap(),1);
+        let encoded=crate::project::encode(&doc).unwrap();
+        assert_eq!(serde_json::from_str::<serde_json::Value>(&encoded).unwrap()["version"],30);
+        crate::project::decode(&encoded).unwrap();
+        let mut wire:serde_json::Value=serde_json::from_str(&encoded).unwrap();wire["version"]=29.into();
+        assert!(crate::project::validate_retained_json(&wire.to_string()).unwrap_err().contains("requires version 30"));
+    }
+}
+
+#[test]
+fn craft_export_sizing_batch_uses_actual_asset_width_height_and_fractional_sources() {
+    let mut studio = fixture();
+    studio.doc.screen_export.rows = (0..3)
+        .map(|i| Row {
+            id: i + 1,
+            suffix: format!("-{i}"),
+            export_resolution: Some(
+                [
+                    Resolution::Scale(0.5),
+                    Resolution::Width(24.),
+                    Resolution::Height(24.),
+                ][i as usize],
+            ),
+            ..Default::default()
+        })
+        .collect();
+    let before = crate::project::encode(&studio.doc).unwrap();
+    let root = folder();
+    let output = Plan::new(
+        &studio.doc,
+        &[Scope::Asset(studio.doc.screen_export.assets[0].id)],
+    )
+    .unwrap()
+    .save(&root, &NoProgress)
+    .unwrap();
+    assert_eq!(output.len(), 3);
+    for (i, size) in [(0, (8, 6)), (1, (24, 18)), (2, (32, 24))] {
+        let image = image::open(root.join(format!("Badge-{i}.png")))
+            .unwrap()
+            .to_rgba8();
+        assert_eq!(image.dimensions(), size);
+        assert_eq!(
+            image.get_pixel(size.0 / 2, size.1 / 2).0,
+            [240, 30, 20, 255]
+        );
+    }
+    assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+    std::fs::remove_dir_all(root).unwrap();
+}
 fn fixture() -> Studio {
     let mut s = crate::app::screen_export::tests::fixture();
     let target = s.capture_export_assets().unwrap();

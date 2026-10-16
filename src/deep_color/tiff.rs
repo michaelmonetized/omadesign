@@ -1,9 +1,9 @@
 //! Admitted RGB/CMYK TIFF interchange retaining native samples, alpha and embedded profiles.
 use super::{Depth, storage};
-use crate::resources;
-use std::sync::Arc;
 use crate::document::Pixels;
+use crate::resources;
 use std::io::Cursor;
+use std::sync::Arc;
 use tiff::{
     encoder::colortype,
     tags::{ExtraSamples, Tag},
@@ -17,22 +17,71 @@ pub(crate) fn write_rgb<W: std::io::Write + std::io::Seek>(
     raster: &image::DynamicImage,
     profile: &[u8],
 ) -> Result<(), String> {
+    if !matches!(
+        raster,
+        image::DynamicImage::ImageRgba16(_) | image::DynamicImage::ImageRgba32F(_)
+    ) {
+        return Err("Native RGB TIFF needs retained float or 16-bit samples".into());
+    }
+    write_rgb_with_density(writer, raster, profile, None)
+}
+
+/// Represent TIFF pixels per inch without overflowing its rational tag.
+/// Args: requested PPI. Returns the codec's four-decimal rational value.
+pub(crate) fn density(dpi: f64) -> Result<tiff::encoder::Rational, String> {
+    let n = (dpi * 10_000.).round();
+    if !dpi.is_finite() || dpi <= 0. || !(1.0..=u32::MAX as f64).contains(&n) {
+        return Err("The requested PPI cannot be represented by TIFF resolution tags".into());
+    }
+    Ok(tiff::encoder::Rational {
+        n: n as u32,
+        d: 10_000,
+    })
+}
+
+/// Encode current straight RGB samples with optional physical density.
+/// Args: admitted writer, borrowed raster/profile and PPI. Returns after the same typed TIFF writer finishes.
+pub(crate) fn write_rgb_with_density<W: std::io::Write + std::io::Seek>(
+    writer: &mut W,
+    raster: &image::DynamicImage,
+    profile: &[u8],
+    dpi: Option<f64>,
+) -> Result<(), String> {
+    let dpi = dpi.map(density).transpose()?;
     let mut encoder = tiff::encoder::TiffEncoder::new(writer).map_err(|e| e.to_string())?;
     macro_rules! write {
         ($type:ty, $data:expr) => {{
             let mut image = encoder
                 .new_image::<$type>(raster.width(), raster.height())
                 .map_err(|e| e.to_string())?;
-            image.extra_samples(&[ExtraSamples::UnassociatedAlpha])
+            image
+                .extra_samples(&[ExtraSamples::UnassociatedAlpha])
                 .map_err(|e| e.to_string())?;
             if !profile.is_empty() {
-                image.encoder().write_tag(Tag::IccProfile, profile)
+                image
+                    .encoder()
+                    .write_tag(Tag::IccProfile, profile)
+                    .map_err(|e| e.to_string())?;
+            }
+            if let Some(dpi) = &dpi {
+                image
+                    .encoder()
+                    .write_tag(Tag::ResolutionUnit, 2u16)
+                    .map_err(|e| e.to_string())?;
+                image
+                    .encoder()
+                    .write_tag(Tag::XResolution, dpi.clone())
+                    .map_err(|e| e.to_string())?;
+                image
+                    .encoder()
+                    .write_tag(Tag::YResolution, dpi.clone())
                     .map_err(|e| e.to_string())?;
             }
             image.write_data($data).map_err(|e| e.to_string())?;
         }};
     }
     match raster {
+        image::DynamicImage::ImageRgba8(image) => write!(colortype::RGB8, image.as_raw()),
         image::DynamicImage::ImageRgba32F(image) => write!(colortype::RGB32Float, image.as_raw()),
         image::DynamicImage::ImageRgba16(image) => write!(colortype::RGB16, image.as_raw()),
         _ => return Err("Native RGB TIFF needs retained float or 16-bit samples".into()),
@@ -43,7 +92,8 @@ pub(crate) fn write_rgb<W: std::io::Write + std::io::Seek>(
 /// Encode the document's CMYKA samples in TIFF.
 /// Args: authored CMYKA pixels. Returns legacy unleased bytes; use encode_admitted for retained output.
 pub fn encode(pixels: &Pixels) -> Result<Vec<u8>, String> {
-    let output = Arc::try_unwrap(encode_admitted(pixels)?).map_err(|_| "Shared legacy TIFF output")?;
+    let output =
+        Arc::try_unwrap(encode_admitted(pixels)?).map_err(|_| "Shared legacy TIFF output")?;
     let (bytes, _memory) = output.into_parts();
     Ok(bytes)
 }
@@ -51,6 +101,16 @@ pub fn encode(pixels: &Pixels) -> Result<Vec<u8>, String> {
 /// Retain encoded TIFF storage through its final consumer.
 /// Args: authored CMYKA pixels. Returns exact TIFF bytes with their shared allocation lease.
 pub fn encode_admitted(pixels: &Pixels) -> Result<crate::export::EncodedBytes, String> {
+    encode_admitted_with_density(pixels, None)
+}
+
+/// Preserve native CMYKA samples and profile while recording optional TIFF resolution.
+/// Args: admitted authored pixels and PPI. Returns the existing encoder's owned output.
+pub(crate) fn encode_admitted_with_density(
+    pixels: &Pixels,
+    dpi: Option<f64>,
+) -> Result<crate::export::EncodedBytes, String> {
+    let dpi = dpi.map(density).transpose()?;
     let native = pixels
         .native
         .as_ref()
@@ -76,6 +136,20 @@ pub fn encode_admitted(pixels: &Pixels) -> Result<crate::export::EncodedBytes, S
                         .write_tag(Tag::IccProfile, native.icc_profile.as_slice())
                         .map_err(|e| e.to_string())?;
                 }
+                if let Some(dpi) = &dpi {
+                    image
+                        .encoder()
+                        .write_tag(Tag::ResolutionUnit, 2u16)
+                        .map_err(|e| e.to_string())?;
+                    image
+                        .encoder()
+                        .write_tag(Tag::XResolution, dpi.clone())
+                        .map_err(|e| e.to_string())?;
+                    image
+                        .encoder()
+                        .write_tag(Tag::YResolution, dpi.clone())
+                        .map_err(|e| e.to_string())?;
+                }
                 image.write_data(&$data).map_err(|e| e.to_string())?;
             }};
         }
@@ -86,7 +160,11 @@ pub fn encode_admitted(pixels: &Pixels) -> Result<crate::export::EncodedBytes, S
             ),
             Depth::U16 => write!(
                 colortype::CMYK16,
-                storage::collect(inks.iter().map(|v| (v.clamp(0., 1.) * 65535.).round() as u16))?.as_slice()
+                storage::collect(
+                    inks.iter()
+                        .map(|v| (v.clamp(0., 1.) * 65535.).round() as u16)
+                )?
+                .as_slice()
             ),
             Depth::F32 => write!(colortype::CMYK32Float, inks.as_slice()),
         }

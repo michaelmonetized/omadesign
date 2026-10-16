@@ -6,7 +6,7 @@ pub mod retouch;
 pub mod storage;
 pub mod surface;
 pub mod tiff;
-pub use composite::{blend_pixel, composite, composite_with_cancel};
+pub use composite::{blend_pixel, composite, composite_scaled_with_cancel, composite_with_cancel};
 #[cfg(test)]
 mod common_tests;
 

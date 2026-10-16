@@ -43,6 +43,7 @@ struct State {
     initialized: bool,
     images: HashMap<u64, (u64, egui::TextureHandle)>,
     failed: HashMap<u64, u64>,
+    sizes: HashMap<u64, String>,
 }
 struct WorkProgress {
     inner: Arc<jobs::Progress>,
@@ -229,6 +230,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
     if !state.initialized || state.base != studio.doc.screen_export {
         state.base = studio.doc.screen_export.clone();
         state.draft = state.base.clone();
+        state.sizes.clear();
         state
             .selected
             .retain(|id| state.base.assets.iter().any(|a| a.id == *id));
@@ -394,14 +396,19 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
         .on_hover_text("Filename prefix");
         let mut remove = None;
         for row in &mut state.draft.rows {
+            let size = state
+                .sizes
+                .entry(row.id)
+                .or_insert_with(|| row.resolution().to_string());
+            let mut size_error = None;
+            let mut size_response = None;
             ui.horizontal_wrapped(|ui| {
-                let response = fields::native_scope(ui, owner.with((row.id, "scale")), |ui| {
+                let response = fields::native_scope(ui, owner.with((row.id, "size")), |ui| {
                     ui.add_enabled(
                         row.format.raster(),
-                        egui::DragValue::new(&mut row.scale)
-                            .range(1..=8)
-                            .speed(1)
-                            .suffix("×"),
+                        egui::TextEdit::singleline(size)
+                            .id(owner.with((row.id, "size-input")))
+                            .desired_width(76.),
                     )
                 })
                 .inner;
@@ -409,8 +416,22 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                     ui,
                     &response,
                     owner.with((row.id, "scale-label")),
-                    "Export row scale",
+                    "Export row size",
                 );
+                if row.format.raster() {
+                    match crate::screen_export::Resolution::parse(size) {
+                        Ok(value) => {
+                            if response.changed() {
+                                row.set_resolution(value);
+                            }
+                        }
+                        Err(error) => size_error = Some(error),
+                    }
+                }
+                response
+                    .clone()
+                    .on_hover_text("0.5x · 512w · 512h · 300ppi");
+                size_response = Some(response);
                 let previous = row.format;
                 let response = fields::native_scope(ui, owner.with((row.id, "format")), |ui| {
                     egui::ComboBox::from_id_salt("format")
@@ -426,6 +447,9 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                 .response;
                 if previous != row.format && !row.format.raster() {
                     row.scale = 1;
+                    row.export_resolution = None;
+                    *size = "1x".into();
+                    size_error = None;
                 }
                 welcome::name_control(
                     ui,
@@ -443,6 +467,9 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                     remove = Some(row.id);
                 }
             });
+            if let (Some(error), Some(response)) = (size_error, size_response) {
+                welcome::control_error(ui, &[&response], &error);
+            }
             text(
                 ui,
                 owner.with((row.id, "suffix")),
@@ -455,6 +482,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
             && let Some(id) = remove
         {
             state.draft.rows.retain(|r| r.id != id);
+            state.sizes.remove(&id);
         }
         ui.horizontal_wrapped(|ui| {
             if icon(
@@ -477,7 +505,11 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                 owner.with("save"),
                 ph::FLOPPY_DISK,
                 "Save export settings",
-                state.draft != state.base,
+                state.draft != state.base
+                    && state
+                        .sizes
+                        .values()
+                        .all(|text| crate::screen_export::Resolution::parse(text).is_ok()),
             ) {
                 match studio.set_screen_export(&state.base, state.draft.clone()) {
                     Ok(_) => state.error.clear(),
@@ -492,6 +524,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                 state.draft != state.base,
             ) {
                 state.draft = state.base.clone();
+                state.sizes.clear();
                 state.error.clear();
             }
         });
@@ -530,7 +563,11 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                 owner.with("export"),
                 ph::ARROW_UP,
                 "Export chosen assets or artboards",
-                state.draft.validate().is_ok(),
+                state.draft.validate().is_ok()
+                    && state
+                        .sizes
+                        .values()
+                        .all(|text| crate::screen_export::Resolution::parse(text).is_ok()),
             ) {
                 let applied = if state.draft == studio.doc.screen_export {
                     Ok(false)

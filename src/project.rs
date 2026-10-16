@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 mod features;
 
-pub(crate) const VERSION: u32 = features::SCREEN_EXPORT;
+pub(crate) const VERSION: u32 = features::EXPORT_RESOLUTION;
 
 /// Check whether this build implements a project version.
 /// Args: envelope version. Returns false for unimplemented reserved formats.

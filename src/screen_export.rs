@@ -27,6 +27,113 @@ pub struct Row {
     pub scale: u32,
     pub format: Format,
     pub suffix: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub export_resolution: Option<Resolution>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub enum Resolution {
+    Scale(f64),
+    Width(f64),
+    Height(f64),
+    Ppi(f64),
+}
+impl Resolution {
+    fn validate(self) -> Result<(), String> {
+        let n = match self {
+            Self::Scale(n) | Self::Width(n) | Self::Height(n) | Self::Ppi(n) => n,
+        };
+        if n.is_finite() && n > 0. {
+            Ok(())
+        } else {
+            Err("Export size must be positive and finite".into())
+        }
+    }
+    /// Parse a screen size in the reference application's native notation.
+    /// Args: scale, width, height or PPI text. Returns a positive finite resolution.
+    pub fn parse(text: &str) -> Result<Self, String> {
+        let text = text.trim().to_ascii_lowercase();
+        let (number, kind) = if let Some(n) = text.strip_suffix("ppi") {
+            (n, 3)
+        } else if let Some(n) = text.strip_suffix('w') {
+            (n, 1)
+        } else if let Some(n) = text.strip_suffix('h') {
+            (n, 2)
+        } else {
+            (text.strip_suffix('x').unwrap_or(&text), 0)
+        };
+        let n = number
+            .trim()
+            .parse::<f64>()
+            .map_err(|_| "Use a size such as 0.5x, 512w, 512h or 300ppi")?;
+        if !n.is_finite() || n <= 0. {
+            return Err("Export size must be positive and finite".into());
+        }
+        Ok(match kind {
+            1 => Self::Width(n),
+            2 => Self::Height(n),
+            3 => Self::Ppi(n),
+            _ => Self::Scale(n),
+        })
+    }
+
+    /// Resolve document pixels and physical density without changing artwork or aspect ratio.
+    /// Args: current source document. Returns scale and optional PPI for the shared raster writer.
+    pub fn options(self, doc: &Document) -> Result<export::RasterOptions, String> {
+        let (n, base, dpi) = match self {
+            Self::Scale(n) => (n, 1., None),
+            Self::Width(n) => (n, doc.width as f64, None),
+            Self::Height(n) => (n, doc.height as f64, None),
+            Self::Ppi(n) => (n, doc.dpi as f64, Some(n)),
+        };
+        if !n.is_finite() || n <= 0. || !base.is_finite() || base <= 0. {
+            return Err(
+                "Export size and document dimensions/PPI must be positive and finite".into(),
+            );
+        }
+        Ok(export::RasterOptions {
+            scale: n / base,
+            dpi,
+        })
+    }
+}
+impl std::fmt::Display for Resolution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (n, unit) = match self {
+            Self::Scale(n) => (n, "x"),
+            Self::Width(n) => (n, "w"),
+            Self::Height(n) => (n, "h"),
+            Self::Ppi(n) => (n, "ppi"),
+        };
+        write!(f, "{n}{unit}")
+    }
+}
+impl Row {
+    /// Keep ordinary integer sizes on the exact legacy wire.
+    /// Args: accepted native size. Returns nothing; only an explicit accepted edit changes these fields.
+    pub fn set_resolution(&mut self, resolution: Resolution) {
+        if let Resolution::Scale(n) = resolution
+            && (1.0..=8.0).contains(&n)
+            && n.fract() == 0.
+        {
+            self.scale = n as u32;
+            self.export_resolution = None;
+        } else {
+            self.scale = 1;
+            self.export_resolution = Some(resolution);
+        }
+    }
+    pub fn resolution(&self) -> Resolution {
+        self.export_resolution
+            .unwrap_or(Resolution::Scale(self.scale as f64))
+    }
+    fn settings(&self) -> export::Settings {
+        export::Settings {
+            format: self.format,
+            scale: self.scale,
+            ai: None,
+        }
+    }
 }
 impl Default for Row {
     fn default() -> Self {
@@ -35,6 +142,7 @@ impl Default for Row {
             scale: 1,
             format: Format::Png,
             suffix: String::new(),
+            export_resolution: None,
         }
     }
 }
@@ -129,6 +237,12 @@ impl Catalog {
                     "Layered and vector export rows use 1×; PNG, JPEG and TIFF support 1×–8×"
                         .into(),
                 );
+            }
+            if let Some(resolution) = row.export_resolution {
+                resolution.validate()?;
+                if !row.format.raster() {
+                    return Err("Custom export sizes apply to PNG, JPEG and TIFF".into());
+                }
             }
         }
         Ok(())
@@ -272,14 +386,12 @@ impl Plan {
         };
         for file in &plan.files {
             let source = plan.source(&file.scope)?;
-            export::dimensions(
-                &source,
-                export::Settings {
-                    format: file.row.format,
-                    scale: file.row.scale,
-                    ai: None,
-                },
-            )?;
+            if let (Some(resolution), Source::Document(doc)) = (file.row.export_resolution, &source)
+            {
+                export::dimensions_scaled(&source, file.row.settings(), resolution.options(doc)?)?;
+            } else {
+                export::dimensions(&source, file.row.settings())?;
+            }
         }
         Ok(plan)
     }
@@ -335,16 +447,25 @@ impl Plan {
             for (index, file) in self.files.iter().enumerate() {
                 progress.check()?;
                 progress.report("Exporting assets", index, self.files.len());
-                let notes = export::save(
-                    &self.source(&file.scope)?,
-                    export::Settings {
-                        format: file.row.format,
-                        scale: file.row.scale,
-                        ai: None,
-                    },
-                    &stage.join(&file.name),
-                    progress,
-                )?;
+                let source = self.source(&file.scope)?;
+                let notes = if let (Some(resolution), Source::Document(doc)) =
+                    (file.row.export_resolution, &source)
+                {
+                    export::save_scaled(
+                        &source,
+                        file.row.settings(),
+                        resolution.options(doc)?,
+                        &stage.join(&file.name),
+                        progress,
+                    )?
+                } else {
+                    export::save(
+                        &source,
+                        file.row.settings(),
+                        &stage.join(&file.name),
+                        progress,
+                    )?
+                };
                 outputs.push(ResultFile {
                     path: folder.join(&file.name),
                     notes,

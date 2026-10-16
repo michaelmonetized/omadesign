@@ -8,6 +8,53 @@ fn context() -> egui::Context {
     ctx
 }
 #[test]
+fn craft_export_sizing_native_size_field_invalid_draft_save_undo_and_reopen() {
+    let ctx = context();
+    let mut studio = crate::app::screen_export::tests::fixture();
+    let original = crate::project::encode(&studio.doc).unwrap();
+    let mut frame = |events| {
+        keys::render(&ctx, events, |ui| {
+            ui.set_max_width(288.);
+            show(ui, &mut studio);
+        })
+    };
+    frame(vec![]);
+    frame(vec![]);
+    keys::tab_to(&ctx, "Export row size", &mut frame);
+    keys::replace("0x", &mut frame);
+    let output = frame(vec![]);
+    assert_eq!(
+        keys::named(&output, "Export row size").1.invalid(),
+        Some(egui::accesskit::Invalid::True)
+    );
+    assert!(keys::named(&output, "Save export settings").1.is_disabled());
+    assert!(
+        keys::named(&output, "Export chosen assets or artboards")
+            .1
+            .is_disabled()
+    );
+    keys::replace("144ppi", &mut frame);
+    frame(keys::key(Key::Enter, Modifiers::NONE));
+    keys::tab_to(&ctx, "Save export settings", &mut frame);
+    frame(keys::key(Key::Space, Modifiers::NONE));
+    frame(vec![]);
+    drop(frame);
+    assert_eq!(
+        studio.doc.screen_export.rows[0].export_resolution,
+        Some(crate::screen_export::Resolution::Ppi(144.))
+    );
+    let encoded = crate::project::encode(&studio.doc).unwrap();
+    assert_eq!(
+        crate::project::decode(&encoded).unwrap().screen_export,
+        studio.doc.screen_export
+    );
+    studio.undo();
+    assert_eq!(crate::project::encode(&studio.doc).unwrap(), original);
+    studio.redo();
+    assert_eq!(crate::project::encode(&studio.doc).unwrap(), encoded);
+    jobs::cancel::<Thumb>(&ctx, THUMB_JOB);
+}
+#[test]
 fn craft_screen_export_native_keys_collect_rename_save_and_undo_reopen() {
     let ctx = context();
     let mut studio = crate::app::screen_export::tests::fixture();

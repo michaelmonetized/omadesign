@@ -1,7 +1,12 @@
 //! Still-image export pipeline, shared by the dialog and real-model QA.
+mod density;
 #[cfg(test)]
 mod ownership_tests;
 mod photo;
+mod render_size;
+#[cfg(test)]
+mod sizing_tests;
+pub(crate) use render_size::RenderSize;
 pub mod target;
 
 /// Immutable encoded bytes whose shared admission lives through the final consumer.
@@ -89,6 +94,40 @@ pub struct Settings {
     pub scale: u32,
     pub ai: Option<upscale::Settings>,
 }
+
+#[derive(Clone, Copy, Debug)]
+pub struct RasterOptions {
+    pub scale: f64,
+    pub dpi: Option<f64>,
+}
+
+/// Resolve a document's requested fractional output without changing legacy integer options.
+/// Args: immutable source, format settings and explicit sizing. Returns codec pixel dimensions.
+pub fn dimensions_scaled(
+    source: &Source,
+    settings: Settings,
+    options: RasterOptions,
+) -> Result<(u32, u32), String> {
+    let Source::Document(doc) = source else {
+        return Err(
+            "Screen sizing applies to document artwork; Photo keeps its separate export route"
+                .into(),
+        );
+    };
+    if !settings.format.raster() || settings.ai.is_some() {
+        return Err("Custom screen sizes apply to PNG, JPEG or TIFF without AI upscaling".into());
+    }
+    if let Some(dpi) = options.dpi {
+        density::validate(settings.format, dpi)?;
+    }
+    let size = RenderSize::new(doc, options.scale)?;
+    if crate::deep_color::has_native(doc) {
+        crate::deep_color::storage::count(size.width, size.height, 4)?;
+        Ok((size.width, size.height))
+    } else {
+        upscale::dimensions(size.width, size.height, 1.)
+    }
+}
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -148,7 +187,21 @@ pub fn encode_admitted(
     progress: &dyn Progress,
 ) -> Result<(EncodedBytes, Vec<String>), String> {
     crate::formats::raw::Cancellation::with_progress(progress, |cancel| {
-        encode_inner_admitted(source, settings, progress, cancel)
+        encode_inner_admitted(source, settings, progress, cancel, None)
+    })
+}
+
+/// Encode custom document sizing through the same admitted still-image writer.
+/// Args: immutable source, settings, explicit scale/density and progress. Returns owned encoded bytes and notes.
+pub fn encode_scaled_admitted(
+    source: &Source,
+    settings: Settings,
+    options: RasterOptions,
+    progress: &dyn Progress,
+) -> Result<(EncodedBytes, Vec<String>), String> {
+    dimensions_scaled(source, settings, options)?;
+    crate::formats::raw::Cancellation::with_progress(progress, |cancel| {
+        encode_inner_admitted(source, settings, progress, cancel, Some(options))
     })
 }
 fn encode_inner_admitted(
@@ -156,8 +209,13 @@ fn encode_inner_admitted(
     settings: Settings,
     progress: &dyn Progress,
     cancel: &crate::formats::raw::Cancellation,
+    options: Option<RasterOptions>,
 ) -> Result<(EncodedBytes, Vec<String>), String> {
-    dimensions(source, settings)?;
+    if let Some(options) = options {
+        dimensions_scaled(source, settings, options)?;
+    } else {
+        dimensions(source, settings)?;
+    }
     progress.check()?;
     cancel.check()?;
     if let Source::Photo(photo) = source {
@@ -203,9 +261,17 @@ fn encode_inner_admitted(
         if settings.format != Format::Tiff || settings.ai.is_some() {
             return Err("CMYK authoring exports as PSD, PSB or TIFF. Convert the document to RGB explicitly for PNG/JPEG.".into());
         }
-        let mut pixels = crate::deep_color::composite_with_cancel(doc, settings.scale, cancel)?;
+        let mut pixels = match options {
+            Some(options) => {
+                crate::deep_color::composite_scaled_with_cancel(doc, options.scale, cancel)?
+            }
+            None => crate::deep_color::composite_with_cancel(doc, settings.scale, cancel)?,
+        };
         pixels.native.as_mut().unwrap().depth = crate::deep_color::document_depth(doc);
-        let bytes = crate::deep_color::tiff::encode_admitted(&pixels)?;
+        let bytes = crate::deep_color::tiff::encode_admitted_with_density(
+            &pixels,
+            options.and_then(|o| o.dpi),
+        )?;
         progress.check()?;
         cancel.check()?;
         return Ok((bytes, vec![]));
@@ -218,7 +284,12 @@ fn encode_inner_admitted(
             if settings.ai.is_some() || settings.format == Format::Jpeg {
                 return Err("This export would reduce native document precision. Export PNG, TIFF or PSD without AI upscaling.".into());
             }
-            let mut pixels = crate::deep_color::composite_with_cancel(doc, settings.scale, cancel)?;
+            let mut pixels = match options {
+                Some(options) => {
+                    crate::deep_color::composite_scaled_with_cancel(doc, options.scale, cancel)?
+                }
+                None => crate::deep_color::composite_with_cancel(doc, settings.scale, cancel)?,
+            };
             let depth = crate::deep_color::document_depth(doc);
             if depth == crate::deep_color::Depth::F32 && settings.format != Format::Tiff {
                 return Err(
@@ -256,12 +327,21 @@ fn encode_inner_admitted(
         Source::Document(doc) => {
             // The compositor returns premultiplied RGBA; models and encoders
             // require straight RGB, especially around translucent artwork.
-            let (w, h) = dimensions(source, settings)?;
+            let (w, h) = match options {
+                Some(options) => dimensions_scaled(source, settings, options)?,
+                None => dimensions(source, settings)?,
+            };
             let _surface_memory = crate::resources::global().reserve_now(
                 crate::deep_color::storage::count(w, h, 4)? as u64,
                 &crate::deep_color::storage::check,
             )?;
-            let pm = crate::compositor::render_export(doc, settings.scale)?;
+            let pm = match options {
+                Some(options) => crate::compositor::render_export_sized(
+                    doc,
+                    RenderSize::new(doc, options.scale)?,
+                )?,
+                None => crate::compositor::render_export(doc, settings.scale)?,
+            };
             let bytes = crate::deep_color::storage::collect(pm.pixels().iter().flat_map(|p| {
                 let p = p.demultiply();
                 [p.red(), p.green(), p.blue(), p.alpha()]
@@ -286,6 +366,7 @@ fn encode_inner_admitted(
         raster =
             DynamicImage::ImageRgba8(upscale::upscale(&raster.into_rgba8(), settings, progress)?);
     }
+    let (raster_width, raster_height) = (raster.width(), raster.height());
     progress.report("Encoding export", 0, 1);
     let mut bytes = EncodedWriter {
         encoded: crate::deep_color::storage::Encoded::new()?,
@@ -305,9 +386,30 @@ fn encode_inner_admitted(
             }
             p[3] = 255;
         }
-        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, 95)
+        let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, 95);
+        if let Some(dpi) = options.and_then(|o| o.dpi) {
+            encoder.set_pixel_density(image::codecs::jpeg::PixelDensity::dpi(dpi.round() as u16));
+        }
+        encoder
             .encode_image(&DynamicImage::ImageRgba8(rgba).into_rgb8())
             .map_err(|e| e.to_string())?;
+    } else if let Some(dpi) = options.and_then(|o| o.dpi) {
+        let profile = match source {
+            Source::Document(doc) if crate::deep_color::has_native(doc) => {
+                doc.color.icc_profile.as_slice()
+            }
+            _ => &[],
+        };
+        if settings.format == Format::Png {
+            density::png(&mut bytes, &raster, profile, dpi, cancel)?;
+        } else {
+            crate::deep_color::tiff::write_rgb_with_density(
+                &mut bytes,
+                &raster,
+                profile,
+                Some(dpi),
+            )?;
+        }
     } else if let Source::Document(doc) = source
         && crate::deep_color::has_native(doc)
     {
@@ -348,7 +450,22 @@ fn encode_inner_admitted(
     }
     progress.check()?;
     cancel.check()?;
-    Ok((bytes.encoded.finish()?, vec![]))
+    let notes = options
+        .and_then(|o| o.dpi)
+        .map(|dpi| {
+            let recorded = match settings.format {
+                Format::Png => (dpi / 0.0254).round() * 0.0254,
+                Format::Jpeg => dpi.round(),
+                _ => (dpi * 10_000.).round() / 10_000.,
+            };
+            format!(
+                "{} × {} px · {recorded} PPI recorded",
+                raster_width, raster_height
+            )
+        })
+        .into_iter()
+        .collect();
+    Ok((bytes.encoded.finish()?, notes))
 }
 
 pub fn save(
@@ -375,6 +492,20 @@ pub fn save(
         }
     }
     let (bytes, notes) = encode_admitted(source, settings, progress)?;
+    write_atomic(path, bytes.as_slice(), progress)?;
+    Ok(notes)
+}
+
+/// Save custom document sizing while retaining its admitted encoded owner through atomic publication.
+/// Args: immutable source, settings, sizing, destination and progress. Returns the existing writer's notes.
+pub fn save_scaled(
+    source: &Source,
+    settings: Settings,
+    options: RasterOptions,
+    path: &Path,
+    progress: &dyn Progress,
+) -> Result<Vec<String>, String> {
+    let (bytes, notes) = encode_scaled_admitted(source, settings, options, progress)?;
     write_atomic(path, bytes.as_slice(), progress)?;
     Ok(notes)
 }

@@ -262,10 +262,17 @@ pub fn render_view_posed(
 }
 
 pub(crate) fn render_export(doc: &Document, scale: u32) -> Result<Pixmap, String> {
+    render_export_sized(doc, crate::export::RenderSize::legacy(doc, scale))
+}
+
+/// Draw the existing still frame at a checked pixel size and fractional scale.
+/// Args: document and resolved output size. Returns the same plates, layer tree and time-zero scene.
+pub(crate) fn render_export_sized(
+    doc: &Document,
+    size: crate::export::RenderSize,
+) -> Result<Pixmap, String> {
     admit_precise_export(doc)?;
-    let s = scale.clamp(1, 8);
-    let w = (doc.width * s as f32).round().max(1.0) as u32;
-    let h = (doc.height * s as f32).round().max(1.0) as u32;
+    let (s, w, h) = (size.factor, size.width, size.height);
     if (doc.motion.scene3d.is_some() || !doc.motion.compositions.is_empty())
         && w as u64 * h as u64 > 16_000_000
     {
