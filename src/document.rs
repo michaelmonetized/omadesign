@@ -1230,6 +1230,8 @@ fn deserialize_artboards<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<Artboard
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Document {
+    #[serde(default, skip_serializing_if = "crate::screen_export::Catalog::is_empty")]
+    pub screen_export: crate::screen_export::Catalog,
     #[serde(default, skip_serializing_if = "crate::publishing::Publishing::is_empty")]
     pub publishing: crate::publishing::Publishing,
     #[serde(default)]
@@ -1335,6 +1337,7 @@ impl Document {
         copy.layout_tokens = self.layout_tokens.clone();
         copy.text_wrap_above_only = self.text_wrap_above_only;
         copy.publishing = self.publishing.clone();
+        copy.screen_export = self.screen_export.clone();
         copy.layers = self
             .layers
             .iter()
@@ -1423,7 +1426,8 @@ impl Document {
         }
         self.validate_artwork_masks()?;
         crate::layout::validate_hierarchy(self)?;
-        crate::layout_tokens::validate_tokens(self)
+        crate::layout_tokens::validate_tokens(self)?;
+        self.screen_export.validate()
     }
 
     pub fn new(name: impl Into<String>, width: f32, height: f32, dpi: f32) -> Self {
@@ -1489,6 +1493,7 @@ impl Document {
             collaboration: None,
             comments: vec![],
             layout_tokens: vec![],
+            screen_export: Default::default(),
         };
         if show_bleed {
             // Outer bleed rect guides
@@ -1735,6 +1740,10 @@ impl Document {
         for token in &self.layout_tokens {
             bump_id(token.id);
             max = max.max(token.id);
+        }
+        for id in self.screen_export.assets.iter().map(|a|a.id).chain(self.screen_export.rows.iter().map(|r|r.id)) {
+            bump_id(id);
+            max = max.max(id);
         }
         // Brand asset import rejects the same range: ids at the top of u64
         // would overflow or wrap the id allocator, colliding with new objects.
@@ -2049,6 +2058,10 @@ pub enum Cmd {
     SetLayoutTokens {
         before: Vec<crate::layout_tokens::DesignToken>,
         after: Vec<crate::layout_tokens::DesignToken>,
+    },
+    SetScreenExport {
+        before: crate::screen_export::Catalog,
+        after: crate::screen_export::Catalog,
     },
     SetCloud {
         before: Option<CloudLink>,
@@ -2669,6 +2682,10 @@ pub(crate) fn invert_cmd(cmd: Cmd) -> Cmd {
             before: after,
             after: before,
         },
+        Cmd::SetScreenExport { before, after } => Cmd::SetScreenExport {
+            before: after,
+            after: before,
+        },
         Cmd::SetVectorShapes {
             layer,
             before,
@@ -3077,6 +3094,7 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
             }
         }
         Cmd::SetLayoutTokens { after, .. } => doc.layout_tokens.clone_from(after),
+        Cmd::SetScreenExport { after, .. } => doc.screen_export.clone_from(after),
         Cmd::SetVectorShapes { layer, after, .. } => {
             if let Some(shapes) = doc.layers.get_mut(*layer).and_then(|l| l.kind.shapes_mut()) {
                 shapes.clone_from(after);

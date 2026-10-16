@@ -276,6 +276,10 @@ fn file_menu(ui: &mut Ui, studio: &mut Studio) {
             }
             return;
         }
+        if ui.button("Export for Screens…").clicked() {
+            super::screen_export::open(ui.ctx(),studio);
+            ui.close();
+        }
         if ui.button("Export animated SVG…").clicked() {
             studio.export_animated_svg();
             ui.close();

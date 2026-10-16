@@ -38,6 +38,7 @@ fn contents(ui: &mut Ui, studio: &mut Studio, panel: &str) {
             super::library::pane(ui, studio, crate::app::libraries::Sidebar::Typography)
         }
         "assets" => super::library::pane(ui, studio, crate::app::libraries::Sidebar::Brand),
+        "asset-export" => super::screen_export::show(ui, studio),
         "patterns" => super::svg_paint::show(ui, studio),
         "paragraph" => super::paragraph::show(ui, studio),
         "opentype" => {
@@ -254,6 +255,7 @@ fn command_name(cmd: &Cmd) -> &'static str {
         Cmd::SetMotion { .. } => "Animation",
         Cmd::SetLayout { .. } => "Layout",
         Cmd::SetLayoutTokens { .. } => "Variable",
+        Cmd::SetScreenExport { .. } => "Export assets",
         Cmd::SetFilters { .. } | Cmd::SetShapeFilters { .. } | Cmd::SetSvgFilter { .. } => {
             "Effects"
         }

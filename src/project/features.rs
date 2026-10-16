@@ -21,6 +21,7 @@ pub(super) const EXPRESSIONS: u32 = 25;
 pub(super) const COMPOSITIONS: u32 = 26;
 pub(super) const SCENE3D: u32 = 27;
 pub(super) const ADVANCED_LAYOUT: u32 = 28;
+pub(super) const SCREEN_EXPORT: u32 = 29;
 
 /// Identify implemented project readers.
 /// Args: envelope version. Returns false for reserved formats whose models are absent.
@@ -39,6 +40,7 @@ pub(super) fn supports_version(version: u32) -> bool {
             | COMPOSITIONS
             | SCENE3D
             | ADVANCED_LAYOUT
+            | SCREEN_EXPORT
     )
 }
 
@@ -52,13 +54,16 @@ pub(super) fn required_version(doc: &Document) -> u32 {
                 .max()
                 .unwrap_or(5)
         })
-        .unwrap_or(ADVANCED_LAYOUT + 1)
+        .unwrap_or(SCREEN_EXPORT + 1)
 }
 
 fn local_required_version(doc: &Document) -> u32 {
     let mut version = if doc.mask_sources().is_empty() { 5 } else { 13 };
     if let Some(replica) = &doc.collaboration {
-        version = version.max(retained::replica_version(replica).unwrap_or(ADVANCED_LAYOUT + 1));
+        version = version.max(retained::replica_version(replica).unwrap_or(SCREEN_EXPORT + 1));
+    }
+    if !doc.screen_export.is_empty() {
+        version = version.max(SCREEN_EXPORT);
     }
     for source in &doc.sources {
         version = version.max(retained::source_version(source));
@@ -457,10 +462,10 @@ mod tests {
         let encoded = super::super::encode(&doc).unwrap();
         let mut envelope: serde_json::Value = serde_json::from_str(&encoded).unwrap();
         assert_eq!(envelope["version"], 5);
-        for version in 0..=29 {
+        for version in 0..=30 {
             let supported = matches!(
                 version,
-                1..=17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28
+                1..=17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29
             );
             assert_eq!(supports_version(version), supported, "reader {version}");
             envelope["version"] = version.into();
@@ -790,7 +795,7 @@ mod tests {
             neutral["version"] = implemented.into();
             super::super::decode(&neutral.to_string()).unwrap();
         }
-        for reserved in [ADVANCED_LAYOUT + 1, u32::MAX] {
+        for reserved in [SCREEN_EXPORT + 1, u32::MAX] {
             neutral["version"] = reserved.into();
             assert!(
                 super::super::decode(&neutral.to_string())

@@ -14,7 +14,7 @@ Run `node scripts/craft-parity.mjs REFERENCE_REPOS OUTPUT_JSON` against the pinn
 | Styles, #339 | File-backed appearance presets, rendered previews, atomic multi-object apply | Linked document styles, additive appearances, character-color override and dedicated import/export |
 | Channels | Bounded composite-channel viewing | Channel selection, editable alpha/spot channels, native channel operations |
 | Symbols, #335/#337 | Linked vector creation/place/edit, independent copies, select instances, batch reset/break, rename and source-fitted thumbnails | Hidden library definitions, cross-definition replacement, alternate-artwork redefinition, external libraries and symbolism tools |
-| Export | Existing document/artboard export and admitted native writers | Asset collection, per-asset format/scale rows and export-for-screens workflow |
+| Export, #343 | Document-owned live asset collection and shared integer-scale format rows, existing scope/writer reuse and collision-safe staged batch publication | Current implementation awaits execution; fractional/width/PPI rows, presets, extra formats/settings, bleed/subfolders and drag collection remain open |
 | Other vector panes | Existing type, path, appearance, paint, effects and library bodies | Attributes, CSS properties, document info, flattener/separation previews and remaining reference commands |
 | Photo, Layout, Motion | Existing source and exact-source qualified work retained | Complete reference workflows still need item-by-item reconciliation and implementation |
 

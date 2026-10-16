@@ -50,6 +50,7 @@ pub mod project;
 pub mod raster;
 pub mod release_version;
 pub mod screen_pick;
+pub mod screen_export;
 pub mod shape_browser;
 pub mod simplify;
 pub mod shots;

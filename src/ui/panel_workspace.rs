@@ -32,6 +32,7 @@ pub(super) const PANELS: &[(&str, &str)] = &[
     ("glyphs", "Glyphs"),
     ("typography", "Typography"),
     ("assets", "Assets"),
+    ("asset-export", "Asset Export"),
     ("links", "Links"),
     ("artboards", "Artboards"),
     ("info", "Info"),

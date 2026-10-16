@@ -34,6 +34,7 @@ mod recovery;
 pub(crate) mod recolor;
 pub(crate) mod graphic_styles;
 pub(crate) mod actions;
+pub(crate) mod screen_export;
 mod restart;
 pub(crate) mod selection;
 mod alignment;
