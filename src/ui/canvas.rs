@@ -896,7 +896,9 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
         .input(|i| i.pointer.button_down(PointerButton::Primary));
     if studio.op.is_some()
         && primary_down
-        && (resp.dragged_by(PointerButton::Primary) || pointer_down_starts_op(studio.tool, alt))
+        && (resp.dragged_by(PointerButton::Primary)
+            || (pointer_down_starts_op(studio.tool, alt)
+                && !matches!(studio.op, Some(Op::Move { .. }))))
     {
         continue_drag(studio, pick, shift, alt);
     }
@@ -4258,6 +4260,31 @@ mod tests {
         studio.dirty = false;
         canvas_frame(&ctx, &mut studio, vec![]);
         (ctx, studio, [first, second])
+    }
+
+    #[test]
+    fn selection_click_keeps_off_grid_artwork_exact_until_an_actual_drag() {
+        use eframe::egui::{Event,Modifiers};
+        for batched in [false,true] {
+            for already_selected in [false,true] {
+                let (ctx,mut studio,[first,_])=selection_input_studio();
+                studio.doc.find_shape_mut(first.0,first.1).unwrap().geom.translate(Pt::new(0.25,0.5));
+                studio.snap=crate::snap::SnapSettings{enabled:true,grid:true,guides:false,objects:false,artboards:false,spacing:false,threshold:6.};
+                studio.selection=if already_selected{vec![first]}else{vec![]};
+                studio.dirty=false;
+                canvas_frame(&ctx,&mut studio,vec![]);
+                let before=crate::project::encode(&studio.doc).unwrap();let history=studio.history.len();
+                let at=studio.canvas_rect.unwrap().min+vec2(70.25,80.5);
+                let mut down=vec![Event::PointerMoved(at),pen_pointer_button(at,true,Modifiers::NONE)];
+                let up=vec![pen_pointer_button(at,false,Modifiers::NONE)];
+                if batched {down.extend(up);canvas_frame(&ctx,&mut studio,down);}
+                else {canvas_frame(&ctx,&mut studio,down);canvas_frame(&ctx,&mut studio,vec![]);canvas_frame(&ctx,&mut studio,up);}
+                canvas_frame(&ctx,&mut studio,vec![]);
+                assert_eq!(studio.selection,vec![first]);assert!(studio.op.is_none());
+                assert_eq!(crate::project::encode(&studio.doc).unwrap(),before,"batched={batched}, selected={already_selected}");
+                assert_eq!(studio.history.len(),history);assert!(!studio.dirty);
+            }
+        }
     }
 
     #[test]
