@@ -135,7 +135,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
             place = Some(*id);
         }
     }
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         if icon(
             ui,
             owner.with("new"),
@@ -173,14 +173,50 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
             studio.enter_group_item((*layer, id));
             studio.zoom_to_objects(true);
         }
-        let instance = studio.primary().is_some_and(|(layer, id)| {
-            components::instance_ancestor(&studio.doc, layer, id).is_some()
-        });
+        if icon(
+            ui,
+            owner.with("duplicate"),
+            ph::STACK,
+            "Duplicate selected symbol independently",
+            state.selected.is_some(),
+        ) && let Some(main) = state.selected
+            && let Some(id) = studio.duplicate_vector_symbol(main)
+        {
+            state.selected = Some(id);
+            state.name = studio
+                .primary()
+                .and_then(|(li, id)| studio.doc.find_shape(li, id))
+                .map_or(String::new(), |s| s.name.clone());
+            state.original = state.name.clone();
+        }
+        if icon(
+            ui,
+            owner.with("select-instances"),
+            ph::SELECTION,
+            "Select all editable symbol instances",
+            state.selected.is_some(),
+        ) && let Some(main) = state.selected
+        {
+            studio.select_vector_symbol_instances(main);
+        }
+        let instance = studio
+            .selection
+            .iter()
+            .any(|&(layer, id)| components::instance_ancestor(&studio.doc, layer, id).is_some());
+        if icon(
+            ui,
+            owner.with("reset"),
+            ph::ARROW_CLOCKWISE,
+            "Reset selected symbol instance overrides",
+            instance,
+        ) {
+            studio.reset_vector_symbol_instances();
+        }
         if icon(
             ui,
             owner.with("break"),
             ph::VECTOR_TWO,
-            "Break selected instance link",
+            "Break selected instance links",
             instance,
         ) {
             studio.break_vector_symbol_link();
@@ -274,6 +310,72 @@ mod tests {
     use super::super::welcome::keyboard_tests as keys;
     use super::*;
     use egui::{Event, Key, Modifiers};
+    #[test]
+    fn craft_symbol_instance_commands_native_duplicate_select_and_break() {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        super::super::theme::apply(&ctx);
+        let mut studio = crate::app::symbols::tests::fixture();
+        let mut frame = |events| {
+            keys::render(&ctx, events, |ui| {
+                ui.set_max_width(256.);
+                show(ui, &mut studio);
+            })
+        };
+        frame(vec![]);
+        frame(vec![]);
+        for label in [
+            "Create symbol from selected artwork",
+            "Duplicate selected symbol independently",
+            "Place selected symbol instance",
+            "Place selected symbol instance",
+            "Select all editable symbol instances",
+        ] {
+            keys::tab_to(&ctx, label, &mut frame);
+            frame(keys::key(Key::Space, Modifiers::NONE));
+            frame(vec![]);
+        }
+        drop(frame);
+        assert_eq!(components::definitions(&studio.doc).len(), 2);
+        assert_eq!(studio.selection.len(), 2);
+        let roots = studio.selection.clone();
+        for &(li, root) in &roots {
+            assert!(matches!(
+                studio.doc.find_shape(li, root).unwrap().layout.component,
+                Some(components::ComponentBinding::Instance { .. })
+            ));
+        }
+        let before = crate::project::encode(&studio.doc).unwrap();
+        let history = studio.history.len();
+        let mut frame = |events| {
+            keys::render(&ctx, events, |ui| {
+                ui.set_max_width(256.);
+                show(ui, &mut studio);
+            })
+        };
+        frame(vec![]);
+        keys::tab_to(&ctx, "Break selected instance links", &mut frame);
+        frame(keys::key(Key::Space, Modifiers::NONE));
+        frame(vec![]);
+        drop(frame);
+        assert_eq!(studio.history.len(), history + 1);
+        assert!(roots.iter().all(|&(li, root)| {
+            studio
+                .doc
+                .find_shape(li, root)
+                .unwrap()
+                .layout
+                .component
+                .is_none()
+        }));
+        let saved = crate::project::encode(&studio.doc).unwrap();
+        assert_eq!(
+            crate::project::encode(&crate::project::decode(&saved).unwrap()).unwrap(),
+            saved
+        );
+        studio.undo();
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+    }
     #[test]
     fn craft_symbol_native_create_place_rename_and_reopen() {
         let ctx = egui::Context::default();

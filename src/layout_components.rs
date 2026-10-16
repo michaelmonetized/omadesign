@@ -352,9 +352,30 @@ pub fn insert_instance(
 /// Duplicate a definition as a named variant. Shared slots retain overrides
 /// when switching variants, even after variant children have been reordered.
 pub fn add_variant(doc: &mut Document, main: u64, name: &str, origin: Pt) -> Result<u64, String> {
+    copy_definition(doc, main, name, origin, false)
+}
+
+/// Copy a definition with its own family, slots and exposed property bindings.
+/// Args: document, source definition, new name and finite origin. Returns the new definition ID.
+pub fn duplicate_definition(
+    doc: &mut Document,
+    main: u64,
+    name: &str,
+    origin: Pt,
+) -> Result<u64, String> {
+    copy_definition(doc, main, name, origin, true)
+}
+
+fn copy_definition(
+    doc: &mut Document,
+    main: u64,
+    name: &str,
+    origin: Pt,
+    independent: bool,
+) -> Result<u64, String> {
     let name = name.trim();
-    if name.is_empty() {
-        return Err("Give the variant a name".into());
+    if name.is_empty() || !origin.x.is_finite() || !origin.y.is_finite() {
+        return Err("Give the copy a name and a finite position".into());
     }
     let (layer, source) = locate(doc, main).ok_or("Component is missing")?;
     let Some(ComponentBinding::Main {
@@ -366,10 +387,11 @@ pub fn add_variant(doc: &mut Document, main: u64, name: &str, origin: Pt) -> Res
     else {
         return Err("Select a main component".into());
     };
-    let (family, slots, properties) = (*family, slots.clone(), properties.clone());
-    if definitions(doc)
-        .iter()
-        .any(|(_, id, _, variant)| family_of_main(doc, *id) == Some(family) && variant == name)
+    let (family, slots, mut properties) = (*family, slots.clone(), properties.clone());
+    if !independent
+        && definitions(doc)
+            .iter()
+            .any(|(_, id, _, variant)| family_of_main(doc, *id) == Some(family) && variant == name)
     {
         return Err("A variant with that name already exists".into());
     }
@@ -377,9 +399,29 @@ pub fn add_variant(doc: &mut Document, main: u64, name: &str, origin: Pt) -> Res
     let source = subtree(doc, layer, main);
     let ids: HashMap<u64, u64> = source.iter().map(|s| (s.id, next_id())).collect();
     let root = ids[&main];
+    if independent {
+        for property in &mut properties {
+            let source = slots
+                .iter()
+                .find_map(|(id, slot)| (*slot == property.slot).then_some(id));
+            property.slot = source
+                .and_then(|id| ids.get(id))
+                .copied()
+                .ok_or("The definition has a missing property binding")?;
+        }
+    }
     let new_slots = source
         .iter()
-        .map(|s| (ids[&s.id], slots.get(&s.id).copied().unwrap_or(s.id)))
+        .map(|s| {
+            (
+                ids[&s.id],
+                if independent {
+                    ids[&s.id]
+                } else {
+                    slots.get(&s.id).copied().unwrap_or(s.id)
+                },
+            )
+        })
         .collect();
     let mut shapes: Vec<_> = source
         .into_iter()
@@ -402,10 +444,18 @@ pub fn add_variant(doc: &mut Document, main: u64, name: &str, origin: Pt) -> Res
         })
         .collect();
     let frame = shapes.iter_mut().find(|s| s.id == root).unwrap();
-    frame.name = format!("{} / {}", frame.name, name);
+    frame.name = if independent {
+        name.into()
+    } else {
+        format!("{} / {}", frame.name, name)
+    };
     frame.layout.component = Some(ComponentBinding::Main {
-        family,
-        variant: name.into(),
+        family: if independent { root } else { family },
+        variant: if independent {
+            "Default".into()
+        } else {
+            name.into()
+        },
         slots: new_slots,
         properties,
     });

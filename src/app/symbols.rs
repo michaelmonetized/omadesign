@@ -55,6 +55,147 @@ pub(crate) mod tests {
             .to_vec()
     }
     #[test]
+    fn craft_symbol_instance_commands_duplicate_independent_properties_and_reopen() {
+        let mut s = fixture();
+        let child = s.selection[0].1;
+        assert!(s.create_vector_symbol("Badge"));
+        let main = s.primary().unwrap().1;
+        let property = components::expose_property(
+            &mut s.doc,
+            0,
+            main,
+            child,
+            "Ink",
+            components::PropertyKind::Fill,
+        )
+        .unwrap();
+        let original = crate::project::encode(&s.doc).unwrap();
+        let history = s.history.len();
+        let copy = s.duplicate_vector_symbol(main).unwrap();
+        assert_eq!(s.history.len(), history + 1);
+        assert_ne!(
+            components::family_of(&s.doc, main),
+            components::family_of(&s.doc, copy)
+        );
+        let copy_child = components::property_object(&s.doc, 0, copy, property).unwrap();
+        assert_ne!(copy_child, child);
+        let before = s.doc.find_shape(0, copy_child).unwrap().style.clone();
+        let mut after = before.clone();
+        after.fill = Fill::Solid(Rgba::rgb(1, 222, 90));
+        s.commit(Cmd::SetStyle {
+            layer: 0,
+            id: copy_child,
+            before,
+            after,
+        });
+        assert_ne!(
+            s.doc.find_shape(0, copy_child).unwrap().style,
+            s.doc.find_shape(0, child).unwrap().style
+        );
+        let saved = crate::project::encode(&s.doc).unwrap();
+        assert_eq!(
+            crate::project::encode(&crate::project::decode(&saved).unwrap()).unwrap(),
+            saved
+        );
+        s.undo();
+        s.undo();
+        assert_eq!(crate::project::encode(&s.doc).unwrap(), original);
+        s.redo();
+        s.redo();
+        assert_eq!(crate::project::encode(&s.doc).unwrap(), saved);
+    }
+    #[test]
+    fn craft_symbol_instance_commands_select_reset_and_break_are_atomic() {
+        let mut s = fixture();
+        assert!(s.create_vector_symbol("Badge"));
+        let main = s.primary().unwrap().1;
+        assert!(s.place_vector_symbol(main, Pt::new(110., 30.)));
+        let first = s.primary().unwrap().1;
+        assert!(s.place_vector_symbol(main, Pt::new(110., 100.)));
+        let second = s.primary().unwrap().1;
+        let before_selection = crate::project::encode(&s.doc).unwrap();
+        let history = s.history.len();
+        assert!(s.select_vector_symbol_instances(main));
+        assert_eq!(s.selection, vec![(0, first), (0, second)]);
+        assert_eq!(s.history.len(), history);
+        assert_eq!(crate::project::encode(&s.doc).unwrap(), before_selection);
+        let mut commands = Vec::new();
+        for root in [first, second] {
+            let id = crate::layout::descendants(&s.doc, 0, root)[0];
+            let before = s.doc.find_shape(0, id).unwrap().style.clone();
+            let mut after = before.clone();
+            after.fill = Fill::Solid(Rgba::rgb(20, 200, 50));
+            commands.push(Cmd::SetStyle {
+                layer: 0,
+                id,
+                before,
+                after,
+            });
+        }
+        s.commit(Cmd::Batch(commands));
+        let overridden = crate::project::encode(&s.doc).unwrap();
+        let history = s.history.len();
+        assert!(s.reset_vector_symbol_instances());
+        assert_eq!(s.history.len(), history + 1);
+        let reset = crate::project::encode(&s.doc).unwrap();
+        assert_eq!(reset, before_selection);
+        s.undo();
+        assert_eq!(crate::project::encode(&s.doc).unwrap(), overridden);
+        s.redo();
+        assert_eq!(crate::project::encode(&s.doc).unwrap(), reset);
+        let pixels = image(&s);
+        let history = s.history.len();
+        assert!(s.break_vector_symbol_link());
+        assert_eq!(s.history.len(), history + 1);
+        assert_eq!(image(&s), pixels);
+        assert!(
+            [first, second].iter().all(|id| s
+                .doc
+                .find_shape(0, *id)
+                .unwrap()
+                .layout
+                .component
+                .is_none())
+        );
+        let detached = crate::project::encode(&s.doc).unwrap();
+        assert_eq!(
+            crate::project::encode(&crate::project::decode(&detached).unwrap()).unwrap(),
+            detached
+        );
+        s.undo();
+        assert_eq!(crate::project::encode(&s.doc).unwrap(), reset);
+        s.redo();
+        assert_eq!(crate::project::encode(&s.doc).unwrap(), detached);
+    }
+    #[test]
+    fn craft_symbol_instance_commands_reject_locked_or_missing_members_without_partial_edits() {
+        let mut s = fixture();
+        assert!(s.create_vector_symbol("Badge"));
+        let main = s.primary().unwrap().1;
+        assert!(s.place_vector_symbol(main, Pt::new(110., 30.)));
+        let first = s.primary().unwrap().1;
+        assert!(s.place_vector_symbol(main, Pt::new(110., 100.)));
+        let second = s.primary().unwrap().1;
+        let child = crate::layout::descendants(&s.doc, 0, second)[0];
+        s.doc.find_shape_mut(0, child).unwrap().locked = true;
+        s.selection = vec![(0, first), (0, second)];
+        let before = crate::project::encode(&s.doc).unwrap();
+        let history = s.history.len();
+        assert!(!s.reset_vector_symbol_instances());
+        assert!(!s.break_vector_symbol_link());
+        assert_eq!(crate::project::encode(&s.doc).unwrap(), before);
+        assert_eq!(s.history.len(), history);
+        s.selection = vec![(0, first), (0, u64::MAX)];
+        assert!(!s.break_vector_symbol_link());
+        assert_eq!(crate::project::encode(&s.doc).unwrap(), before);
+        s.doc.find_shape_mut(0, second).unwrap().locked = true;
+        let before = crate::project::encode(&s.doc).unwrap();
+        assert!(s.select_vector_symbol_instances(main));
+        assert_eq!(s.selection, vec![(0, first)]);
+        assert_eq!(crate::project::encode(&s.doc).unwrap(), before);
+        assert!(s.status.contains("1 hidden or locked"));
+    }
+    #[test]
     fn craft_symbol_creation_preserves_pixels_and_instance_edits_undo_and_native_reopen() {
         let mut s = fixture();
         let original = crate::project::encode(&s.doc).unwrap();
@@ -154,6 +295,46 @@ fn editable(s: &Studio, layer: usize, id: u64) -> bool {
             .find_shape(layer, id)
             .is_some_and(|shape| shape.visible && !shape.guide)
 }
+fn editable_tree(s: &Studio, layer: usize, root: u64) -> bool {
+    std::iter::once(root)
+        .chain(crate::layout::descendants(&s.doc, layer, root))
+        .all(|id| editable(s, layer, id))
+}
+
+fn selected_instances(s: &Studio) -> Result<Vec<(usize, u64)>, String> {
+    if !available(s) {
+        return Err("Finish the current edit before changing symbol instances".into());
+    }
+    let mut roots = Vec::new();
+    for &(layer, id) in &s.selection {
+        if s.doc.find_shape(layer, id).is_none() {
+            return Err("The selected artwork changed".into());
+        }
+        if let Some(root) = components::instance_ancestor(&s.doc, layer, id)
+            && !roots.contains(&(layer, root))
+        {
+            roots.push((layer, root));
+        }
+    }
+    let all = roots.clone();
+    roots.retain(|&(layer, root)| {
+        !all.iter().any(|&(li, parent)| {
+            li == layer
+                && parent != root
+                && crate::layout::descendants(&s.doc, li, parent).contains(&root)
+        })
+    });
+    if roots.is_empty() {
+        return Err("Select symbol instances first".into());
+    }
+    if roots
+        .iter()
+        .any(|&(layer, root)| !editable_tree(s, layer, root))
+    {
+        return Err("Show and unlock every selected instance before changing its artwork".into());
+    }
+    Ok(roots)
+}
 fn named(doc: &Document, wanted: &str) -> Result<String, String> {
     let text = wanted.trim();
     if text.chars().count() > 64 || text.chars().any(char::is_control) {
@@ -219,24 +400,121 @@ impl Studio {
         true
     }
 
-    /// Break only the selected instance's link while preserving its editable artwork.
-    /// Args: none. Returns whether the existing component command accepted the selection.
+    /// Break selected instance links in one transaction while preserving editable artwork.
+    /// Args: none. Returns whether all concrete selected instances were accepted.
     pub(crate) fn break_vector_symbol_link(&mut self) -> bool {
-        if !available(self) {
+        self.edit_vector_symbol_instances(false)
+    }
+
+    /// Restore inherited artwork for every selected instance in one Undo step.
+    /// Args: none. Returns whether the captured selection was accepted.
+    pub(crate) fn reset_vector_symbol_instances(&mut self) -> bool {
+        self.edit_vector_symbol_instances(true)
+    }
+
+    fn edit_vector_symbol_instances(&mut self, reset: bool) -> bool {
+        let roots = match selected_instances(self) {
+            Ok(roots) => roots,
+            Err(error) => {
+                self.status = error;
+                return false;
+            }
+        };
+        let mut accepted = false;
+        self.component_edit(
+            |doc| {
+                for &(layer, root) in &roots {
+                    if reset {
+                        components::sync_instance(doc, layer, root, true)?;
+                    } else {
+                        components::detach(doc, layer, root)?;
+                    }
+                }
+                accepted = true;
+                Ok(None)
+            },
+            if reset {
+                "Symbol instance overrides reset"
+            } else {
+                "Symbol links broken; artwork retained"
+            },
+        );
+        accepted
+    }
+
+    /// Select editable visible instances of one definition without creating a document edit.
+    /// Args: concrete definition ID. Returns whether the current symbol was found.
+    pub(crate) fn select_vector_symbol_instances(&mut self, main: u64) -> bool {
+        if !available(self)
+            || !components::definitions(&self.doc)
+                .iter()
+                .any(|p| p.1 == main)
+        {
             return false;
         }
-        let Some((layer, id)) = self.primary() else {
-            return false;
-        };
-        let Some(root) = components::instance_ancestor(&self.doc, layer, id) else {
-            return false;
-        };
-        if !editable(self, layer, root) {
-            self.status = "Unlock the instance before breaking its link".into();
-            return false;
+        let mut skipped = 0;
+        let mut selected = Vec::new();
+        for (layer, value) in self.doc.layers.iter().enumerate() {
+            for shape in value.kind.shapes().unwrap_or_default() {
+                if matches!(shape.layout.component, Some(ComponentBinding::Instance { main: id, .. }) if id == main)
+                {
+                    if editable(self, layer, shape.id) {
+                        selected.push((layer, shape.id));
+                    } else {
+                        skipped += 1;
+                    }
+                }
+            }
         }
-        self.detach_layout_instance();
+        self.selected_objects(selected);
+        if skipped > 0 {
+            self.status = format!(
+                "{} instances selected; {skipped} hidden or locked instances skipped",
+                self.selection.len()
+            );
+        }
         true
+    }
+
+    /// Copy a definition as an independent editable symbol, retaining resource and node identity mappings.
+    /// Args: source definition ID. Returns the new definition after one ordinary component transaction.
+    pub(crate) fn duplicate_vector_symbol(&mut self, main: u64) -> Option<u64> {
+        if !available(self) {
+            return None;
+        }
+        let (layer, _, name, _) = components::definitions(&self.doc)
+            .into_iter()
+            .find(|p| p.1 == main)?;
+        if !editable_tree(self, layer, main) {
+            self.status = "Show and unlock the symbol before duplicating it".into();
+            return None;
+        }
+        let name = match named(
+            &self.doc,
+            &format!("{} copy", name.chars().take(59).collect::<String>()),
+        ) {
+            Ok(name) => name,
+            Err(error) => {
+                self.status = error;
+                return None;
+            }
+        };
+        let bounds = self.doc.find_shape(layer, main)?.geom.bbox();
+        let origin = Pt::new(bounds.max.x + 24., bounds.min.y);
+        let mut created = None;
+        self.component_edit(
+            |doc| {
+                let id = components::duplicate_definition(doc, main, &name, origin)?;
+                components::validate_properties(doc)?;
+                created = Some(id);
+                Ok(Some((layer, id)))
+            },
+            "Independent symbol copied beside its definition",
+        );
+        if created.is_some() {
+            self.selected_layer = None;
+        }
+        created
     }
 
     /// Create a linked symbol definition from adjacent artwork on one vector layer.
