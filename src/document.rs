@@ -2068,12 +2068,21 @@ pub struct History {
     redo: Vec<Cmd>,
     field: Option<u64>,
     sealed: bool,
+    staging: bool,
 }
 
 #[path = "document/input_history.rs"]
 mod input_history;
 
 impl History {
+    /// Retain every command while a single atomic action is being evaluated.
+    /// Args: none. Returns an isolated history without the normal completed-entry limit.
+    pub(crate) fn staging() -> Self { Self { staging: true, sealed: true, ..Default::default() } }
+
+    /// Take the actual commands accepted by a completed action.
+    /// Args: this staging history. Returns commands in their original apply order.
+    pub(crate) fn into_commands(self) -> Vec<Cmd> { self.undo }
+
     pub fn push(&mut self, cmd: Cmd) {
         self.field = None;
         if !std::mem::take(&mut self.sealed)
@@ -2085,7 +2094,7 @@ impl History {
         }
         self.undo.push(cmd);
         self.redo.clear();
-        if self.undo.len() > MAX_HISTORY {
+        if !self.staging && self.undo.len() > MAX_HISTORY {
             self.undo.remove(0);
         }
     }

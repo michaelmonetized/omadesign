@@ -1,0 +1,9 @@
+# Recorded vector actions
+
+Actions records explicit accepted editor commands: Duplicate with its real offset, Group, Ungroup, horizontal/vertical Flip, selected-object or whole-selection outlining, Bring to Front, Send to Back, and complete graphic-style appearance application. An explicitly applied appearance is recorded even when it already matches the current object. The existing editor operators remain the only forward edit route.
+
+The current recorder supports visible, unlocked vector artwork in Design and Layout. Unsupported document edits, document replacement and selection changes outside a recorded command pause recording visibly while retaining captured steps. Pixel/photo/motion actions, selection commands, broader tool/field recording, editable parameters, conditional steps and dedicated library import/export remain open.
+
+Actions live in a bounded, versioned `actions.json` beside the personal palette. Native controls provide creation, paste/rename, recording, stop/save, playback, step removal/manual insertion, deletion and reload. Recordings append to the captured action, not a later pane selection. A concurrent action edit preserves pending steps and the current file; Save as New recovers the complete original sequence plus the new recording. Paused recordings allow explicit library cleanup. Discard is explicit. Recording checks the actual destination library's byte budget before adding another step.
+
+Playback moves the original history aside, runs ordinary editor commands in a staging history, and combines their accepted commands into one completed Undo entry. Staging retains commands beyond the ordinary 200-entry limit. A refused middle step reverses those exact commands and restores the original document, vector selection, dirty flag and original Undo/Redo history. No history clone, fabricated input event, alternate forward mutation route or separate document loader is used.

@@ -1,4 +1,5 @@
 //! Portable appearance presets retain their paint, effects and embedded resources.
+use crate::preset_file::encoded;
 use crate::{
     color::Blend,
     document::{Document, Layer, Shape, Style},
@@ -7,10 +8,7 @@ use crate::{
     layout_images::ImageFill,
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    io::{self, Write},
-    path::Path,
-};
+use std::path::Path;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Appearance {
@@ -87,25 +85,6 @@ struct File {
     library: Library,
 }
 
-struct Output(Vec<u8>);
-impl Write for Output {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        if bytes.len() > crate::palette::MAX_FILE_BYTES.saturating_sub(self.0.len()) {
-            return Err(io::Error::other("Graphic style library exceeds 4 MiB"));
-        }
-        self.0.try_reserve(bytes.len()).map_err(io::Error::other)?;
-        self.0.extend_from_slice(bytes);
-        Ok(bytes.len())
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-fn encoded<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
-    let mut output = Output(Vec::new());
-    serde_json::to_writer(&mut output, value).map_err(|e| e.to_string())?;
-    Ok(output.0)
-}
 fn validate(book: &Library) -> Result<(), String> {
     if book.entries.len() > 256 || book.next == u64::MAX {
         return Err("Graphic style library is full".into());
@@ -190,18 +169,14 @@ impl Library {
     /// Args: destination. Returns success after atomic replacement and updates the saved fingerprint.
     pub fn save(&mut self, path: &Path) -> Result<(), String> {
         validate(self)?;
-        if crate::app::libraries::file_stamp(path)? != self.stamp {
-            return Err("Graphic styles changed on disk. Reload before saving".into());
-        }
-        let bytes = encoded(&File {
-            version: 1,
-            library: self.clone(),
-        })?;
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        }
-        crate::export::write_atomic(path, &bytes, &crate::ml::NoProgress)?;
-        self.stamp = crate::app::libraries::file_stamp(path)?;
+        self.stamp = crate::preset_file::save(
+            path,
+            self.stamp,
+            &File {
+                version: 1,
+                library: self.clone(),
+            },
+        )?;
         Ok(())
     }
     /// Append a captured appearance with a stable library-local ID.

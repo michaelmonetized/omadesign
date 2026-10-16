@@ -142,6 +142,16 @@ impl Studio {
     /// Apply an appearance to all current concrete vector targets in one Undo step.
     /// Args: saved appearance. Returns whether any artwork changed; missing or locked targets refuse the whole edit.
     pub(crate) fn apply_graphic_style(&mut self, appearance: &Appearance) -> Result<bool, String> {
+        if self.actions.recording.is_none() {
+            return self.apply_graphic_style_command(appearance);
+        }
+        self.with_action_step(
+            crate::actions::Step::Appearance(Box::new(appearance.clone())),
+            |studio| studio.apply_graphic_style_command(appearance),
+        )
+    }
+
+    fn apply_graphic_style_command(&mut self, appearance: &Appearance) -> Result<bool, String> {
         ready(self)?;
         crate::graphic_styles::validate_appearance(appearance)?;
         if self.selection.is_empty() {

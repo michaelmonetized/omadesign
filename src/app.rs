@@ -33,6 +33,7 @@ mod placement;
 mod recovery;
 pub(crate) mod recolor;
 pub(crate) mod graphic_styles;
+pub(crate) mod actions;
 mod restart;
 pub(crate) mod selection;
 mod alignment;
@@ -345,6 +346,7 @@ pub struct Studio {
     pub individual_object: Option<(usize, u64)>,
     pub active_layer: Option<usize>,
     pub history: History,
+    pub(crate) actions: crate::actions::Recorder,
     field_history_context: Option<egui::Context>,
     field_history_generation: Option<u64>,
     pub style: Style,
@@ -603,6 +605,7 @@ impl Studio {
             individual_object: None,
             active_layer: Some(1),
             history: History::default(),
+            actions: Default::default(),
             field_history_context: None,
             field_history_generation: None,
             style: Style::default(),
@@ -953,6 +956,7 @@ impl Studio {
     }
 
     pub fn mark(&mut self) {
+        if self.actions.depth == 0 { self.actions.pause("This edit cannot be recorded yet. Save or discard the recorded steps"); }
         crate::compositor::reset_effect_admission();
         self.interaction_render.clear();
         crate::text_geometry::reflow(&mut self.doc);
@@ -1016,6 +1020,10 @@ impl Studio {
     }
 
     pub fn flip_selection(&mut self, horizontal: bool) {
+        self.with_action_step(crate::actions::Step::Flip { horizontal }, |studio| studio.flip_selection_command(horizontal));
+    }
+
+    fn flip_selection_command(&mut self, horizontal: bool) {
         if !self.can_flip_selection() {
             self.status = if self.selection.iter().any(|&(layer, id)| {
                 self.doc
@@ -1548,6 +1556,7 @@ impl Studio {
     }
 
     pub fn commit(&mut self, cmd: Cmd) {
+        self.actions.committed(&self.swap_id);
         let field = self.take_field_history_key();
         crate::telemetry::count("feature.edit");
         self.end_pixel_stroke(false);
@@ -1578,6 +1587,7 @@ impl Studio {
     }
 
     pub fn undo(&mut self) {
+        self.actions.pause("Undo is not recorded. Save or discard the recorded steps");
         if self.pixel_edit_history(false) { return; }
         crate::telemetry::count("feature.undo");
         if self.persona == Persona::Photo {
@@ -1607,6 +1617,7 @@ impl Studio {
     }
 
     pub fn redo(&mut self) {
+        self.actions.pause("Redo is not recorded. Save or discard the recorded steps");
         if self.pixel_edit_history(true) { return; }
         crate::telemetry::count("feature.redo");
         if self.persona == Persona::Photo {
@@ -1879,6 +1890,10 @@ impl Studio {
     }
 
     pub fn duplicate_selection_by(&mut self, delta: Pt) {
+        self.with_action_step(crate::actions::Step::Duplicate { delta }, |studio| studio.duplicate_selection_command(delta));
+    }
+
+    fn duplicate_selection_command(&mut self, delta: Pt) {
         let mut selected = Vec::new();
         let mut commands = Vec::new();
         let mut new_layers = 0;
@@ -3631,11 +3646,11 @@ impl Studio {
     }
 
     pub fn bring_to_front(&mut self) {
-        self.reorder_selected(true, true);
+        self.with_action_step(crate::actions::Step::Front, |studio| studio.reorder_selected(true, true));
     }
 
     pub fn send_to_back(&mut self) {
-        self.reorder_selected(false, true);
+        self.with_action_step(crate::actions::Step::Back, |studio| studio.reorder_selected(false, true));
     }
 
     pub fn bring_forward(&mut self) {

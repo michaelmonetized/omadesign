@@ -65,7 +65,7 @@ fn contents(ui: &mut Ui, studio: &mut Studio, panel: &str) {
         "selection" => super::masking::selection_tools(ui, studio),
         "navigator" => navigator(ui, studio),
         "history" => history(ui, studio),
-        "actions" => actions(ui, studio),
+        "actions" => super::actions::show(ui, studio),
         "styles" => super::graphic_styles::show(ui, studio),
         "symbols" => super::symbols::show(ui,studio),
         "shapes" => shapes(ui, studio),
@@ -356,113 +356,6 @@ fn history(ui: &mut Ui, studio: &mut Studio) {
     }
 }
 
-#[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
-enum Step {
-    Duplicate,
-    Group,
-    Ungroup,
-    FlipHorizontal,
-    FlipVertical,
-    Outline,
-    Front,
-    Back,
-}
-impl Step {
-    const ALL: [Self; 8] = [
-        Self::Duplicate,
-        Self::Group,
-        Self::Ungroup,
-        Self::FlipHorizontal,
-        Self::FlipVertical,
-        Self::Outline,
-        Self::Front,
-        Self::Back,
-    ];
-    fn name(self) -> &'static str {
-        match self {
-            Self::Duplicate => "Duplicate",
-            Self::Group => "Group",
-            Self::Ungroup => "Ungroup",
-            Self::FlipHorizontal => "Flip horizontal",
-            Self::FlipVertical => "Flip vertical",
-            Self::Outline => "Create outlines",
-            Self::Front => "Bring to front",
-            Self::Back => "Send to back",
-        }
-    }
-    fn apply(self, studio: &mut Studio) {
-        match self {
-            Self::Duplicate => studio.duplicate_selection(),
-            Self::Group => studio.group_selected(),
-            Self::Ungroup => studio.ungroup_selected(),
-            Self::FlipHorizontal => studio.flip_selection(true),
-            Self::FlipVertical => studio.flip_selection(false),
-            Self::Outline => {
-                for (layer, id) in studio.selection.clone() {
-                    studio.convert_object_to_path(layer, id);
-                }
-            }
-            Self::Front => studio.bring_to_front(),
-            Self::Back => studio.send_to_back(),
-        }
-    }
-}
-#[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
-struct Action {
-    name: String,
-    steps: Vec<Step>,
-}
-fn actions(ui: &mut Ui, studio: &mut Studio) {
-    let key = egui::Id::new("editor-actions");
-    let mut actions = ui
-        .ctx()
-        .data_mut(|d| d.get_persisted::<Vec<Action>>(key))
-        .unwrap_or_default();
-    let mut remove = None;
-    for (index, action) in actions.iter_mut().enumerate() {
-        ui.push_id(index, |ui| {
-            ui.horizontal(|ui| {
-                if icons::tiny_icon(ui, ph::PLAY, "Play action on the selection", false) {
-                    for step in &action.steps {
-                        step.apply(studio);
-                    }
-                }
-                ui.add(
-                    egui::TextEdit::singleline(&mut action.name)
-                        .desired_width((ui.available_width() - 30.0).max(30.0)),
-                );
-                if icons::tiny_icon(ui, ph::TRASH, "Delete action", false) {
-                    remove = Some(index);
-                }
-            });
-            for (step_index, step) in action.steps.iter().enumerate() {
-                ui.label(format!("{}  {}", step_index + 1, step.name()));
-            }
-            ui.menu_button("+", |ui| {
-                for step in Step::ALL {
-                    if ui
-                        .add_enabled(action.steps.len() < 32, egui::Button::new(step.name()))
-                        .clicked()
-                    {
-                        action.steps.push(step);
-                        ui.close();
-                    }
-                }
-            });
-        });
-    }
-    if let Some(index) = remove {
-        actions.remove(index);
-    }
-    if actions.len() < 32 && icons::tiny_icon(ui, ph::PLUS, "New action", false) {
-        actions.push(Action {
-            name: format!("Action {}", actions.len() + 1),
-            steps: vec![],
-        });
-    }
-    ui.ctx().data_mut(|d| d.insert_persisted(key, actions));
-}
-
 fn shapes(ui: &mut Ui, studio: &mut Studio) {
     type Loaded = (String, Geom, String, Option<(usize, u64)>);
     const JOB: &str = "pane-shape-place";
@@ -544,9 +437,7 @@ fn paths(ui: &mut Ui, studio: &mut Studio) {
     }
     ui.horizontal(|ui| {
         if icons::tiny_icon(ui, ph::PATH, "Convert selection to paths", false) {
-            for (layer, id) in studio.selection.clone() {
-                studio.convert_object_to_path(layer, id);
-            }
+            studio.outline_selection();
         }
         if icons::tiny_icon(ui, ph::SELECTION, "Load path as pixel selection", false) {
             if let Some((layer, id)) = studio.primary() {

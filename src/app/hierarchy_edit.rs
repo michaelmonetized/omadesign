@@ -498,6 +498,10 @@ impl Studio {
     }
 
     pub fn group_selected(&mut self) {
+        self.with_action_step(crate::actions::Step::Group, |studio| studio.group_selected_command());
+    }
+
+    fn group_selected_command(&mut self) {
         crate::telemetry::count("feature.group");
         if self.op.is_some() {
             return;
@@ -705,6 +709,10 @@ impl Studio {
     }
 
     pub fn ungroup_selected(&mut self) {
+        self.with_action_step(crate::actions::Step::Ungroup, |studio| studio.ungroup_selected_command());
+    }
+
+    fn ungroup_selected_command(&mut self) {
         let index = self
             .selected_layer
             .and_then(|id| {

@@ -10,7 +10,7 @@ Run `node scripts/craft-parity.mjs REFERENCE_REPOS OUTPUT_JSON` against the pinn
 | --- | --- | --- |
 | Workspace, #332 | Theme-derived chrome, one mode control, actual dock nesting/splits, recoverable sizing, Layers thumbnails/footer, ratio lock, native paste | Full panel and workflow parity |
 | Color workflows, #333 | 21 harmony choices, compact variation grid, five-color themes, linked/custom wheel edits, atomic file-backed theme library, guarded swatch saving, explicit recolor mappings | Pattern-internal recoloring, CMYK/spot-color models, color reduction, global swatch linkage and recolor preview remain open |
-| Actions | Session-local ordered duplicate/group/flip/outline/stack commands | Actual command recording, persistent libraries, editable parameters, import/export, atomic playback |
+| Actions, #341 | Actual recording of initial vector command set, durable libraries, atomic playback/rollback and recording recovery | Wider commands, selection/parameter editing, pixel/photo/motion actions and dedicated import/export |
 | Styles, #339 | File-backed appearance presets, rendered previews, atomic multi-object apply | Linked document styles, additive appearances, character-color override and dedicated import/export |
 | Channels | Bounded composite-channel viewing | Channel selection, editable alpha/spot channels, native channel operations |
 | Symbols, #335/#337 | Linked vector creation/place/edit, independent copies, select instances, batch reset/break, rename and source-fitted thumbnails | Hidden library definitions, cross-definition replacement, alternate-artwork redefinition, external libraries and symbolism tools |

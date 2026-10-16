@@ -1,4 +1,5 @@
 pub mod agent;
+pub(crate) mod actions;
 pub mod align;
 pub mod anim_export;
 pub mod app;
@@ -22,6 +23,7 @@ pub mod geom;
 pub mod google_fonts;
 pub mod gradient;
 pub(crate) mod graphic_styles;
+pub(crate) mod preset_file;
 pub mod import;
 pub mod layout;
 pub mod layout_components;

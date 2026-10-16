@@ -27,6 +27,14 @@ impl Studio {
 
     /// Explicit outlining may discard live text; entering the Node tool must not.
     pub fn convert_object_to_path(&mut self, layer: usize, id: u64) {
+        let selected = self.selection.iter().position(|p| *p == (layer, id));
+        if selected.is_none() && self.actions.depth == 0 {
+            self.actions.pause("This outline target is outside the recorded selection");
+        }
+        self.with_action_step(crate::actions::Step::Outline { selected }, |studio| studio.convert_object_to_path_command(layer, id));
+    }
+
+    fn convert_object_to_path_command(&mut self, layer: usize, id: u64) {
         if !self.doc.layer_editable(layer)
             || !self.doc.find_shape(layer, id).is_some_and(|shape| {
                 shape.visible && !shape.locked && (!shape.guide || self.doc.ruler.guides_visible)

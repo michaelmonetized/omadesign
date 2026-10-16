@@ -64,6 +64,7 @@ mod svg_paint;
 mod svg_effect;
 mod symbols;
 mod graphic_styles;
+mod actions;
 #[cfg(test)]
 mod svg_field_tests;
 mod text_geometry;

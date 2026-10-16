@@ -32,7 +32,7 @@ impl History {
             *self.undo.last_mut().unwrap() = pack(previous, doc);
         } else {
             self.undo.push(pack(next, doc));
-            if self.undo.len() > MAX_HISTORY {
+            if !self.staging && self.undo.len() > MAX_HISTORY {
                 self.undo.remove(0);
             }
         }
