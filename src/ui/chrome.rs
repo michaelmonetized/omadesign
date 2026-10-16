@@ -447,6 +447,7 @@ fn edit_menu(ui: &mut Ui, studio: &mut Studio) {
             });
             return;
         }
+        pane_menu(ui,studio,"Edit Colors",&["recolor","color-guide","color-themes","swatches"]);
         if ui.add(Button::new("Cut").shortcut_text("Ctrl+X")).clicked() {
             studio.cut_selection(ui.ctx());
             ui.close();

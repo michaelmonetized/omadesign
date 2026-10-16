@@ -13,6 +13,8 @@ pub mod ph {
     pub const INFO: &str = "\u{E2CE}";
     pub const TEXT_AA: &str = "\u{E6EE}";
     pub const PALETTE: &str = "\u{E6C8}";
+    pub const FLOPPY_DISK: &str = "\u{E248}";
+    pub const ARROW_CLOCKWISE: &str = "\u{E036}";
     pub const TOOLBOX: &str = "\u{ECA0}";
     pub const CURSOR: &str = "\u{E1DC}";
     pub const PATH: &str = "\u{E39C}";

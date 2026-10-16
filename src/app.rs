@@ -31,6 +31,7 @@ pub(crate) mod pixel_selection;
 pub(crate) mod pixel_edit;
 mod placement;
 mod recovery;
+pub(crate) mod recolor;
 mod restart;
 pub(crate) mod selection;
 mod alignment;

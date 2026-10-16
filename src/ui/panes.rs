@@ -33,6 +33,7 @@ fn contents(ui: &mut Ui, studio: &mut Studio, panel: &str) {
         "align" => super::selection::arrange_panel(ui, studio),
         "pathfinder" => pathfinder(ui, studio),
         "swatches" => super::library::pane(ui, studio, crate::app::libraries::Sidebar::Palettes),
+        "color-guide" | "color-themes" | "recolor" => super::color_guide::show(ui, studio, panel),
         "typography" => {
             super::library::pane(ui, studio, crate::app::libraries::Sidebar::Typography)
         }

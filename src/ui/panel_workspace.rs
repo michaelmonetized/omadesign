@@ -9,6 +9,9 @@ pub(super) const PANELS: &[(&str, &str)] = &[
     ("pathfinder", "Pathfinder"),
     ("appearance", "Appearance"),
     ("color", "Color"),
+    ("color-guide", "Color Guide"),
+    ("color-themes", "Color Themes"),
+    ("recolor", "Recolor Artwork"),
     ("swatches", "Swatches"),
     ("stroke", "Stroke"),
     ("gradients", "Gradients"),
@@ -132,15 +135,22 @@ pub(super) fn open(ctx: &egui::Context, studio: &mut Studio, panel: &str) -> boo
     if !PANELS.iter().any(|p| p.0 == panel) {
         return false;
     }
-    prepare(&mut studio.panel_workspaces, studio.persona);
-    let layout = studio
-        .panel_workspaces
-        .tasks
-        .get_mut(task(studio.persona))
-        .unwrap();
-    layout.restore(panel);
-    layout.request_focus(ctx, "oma-workspace", panel);
+    let key=egui::Id::new(("workspace-open",&studio.swap_id,task(studio.persona)));
+    let mut requests=ctx.data(|d|d.get_temp::<Vec<String>>(key)).unwrap_or_default();
+    requests.retain(|id|id!=panel);
+    requests.push(panel.into());
+    ctx.data_mut(|d|d.insert_temp(key,requests));
+    ctx.request_repaint();
     true
+}
+
+fn apply_open_requests(ctx:&egui::Context,studio:&Studio,book:&mut super::workspace::Book) {
+    let key=egui::Id::new(("workspace-open",&studio.swap_id,task(studio.persona)));
+    if let Some(requests)=ctx.data_mut(|d|d.remove_temp::<Vec<String>>(key)) {
+        let layout=book.tasks.get_mut(task(studio.persona)).unwrap();
+        for panel in requests {layout.restore(&panel);layout.request_focus(ctx,"oma-workspace",&panel);}
+        ctx.request_repaint();
+    }
 }
 
 /// Draw the native Window menu with working pane and recovery commands.
@@ -189,6 +199,7 @@ pub(super) fn panels(ui: &mut Ui, studio: &mut Studio) -> egui::Rect {
     let mut book = std::mem::take(&mut studio.panel_workspaces);
     let before = book.clone();
     prepare(&mut book, studio.persona);
+    apply_open_requests(ui.ctx(),studio,&mut book);
     if let Some(request) = super::panel_keyboard::show(ui, &mut book, PANELS) {
         let layout = book.tasks.get_mut(task(studio.persona)).unwrap();
         if let Some((panel, size)) = request.size {
@@ -214,6 +225,7 @@ pub(super) fn panels(ui: &mut Ui, studio: &mut Studio) -> egui::Rect {
             }
         },
     );
+    apply_open_requests(ui.ctx(),studio,&mut book);
     let changed = before != book;
     studio.panel_workspaces = book;
     let dirty_key = egui::Id::new("oma-workspaces-dirty");

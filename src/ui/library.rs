@@ -213,6 +213,30 @@ fn draft_at<'a>(s: &'a mut Libraries, root: &Option<PathBuf>) -> &'a mut Palette
     }
 }
 
+/// Add a generated palette through the existing guarded collection writer.
+/// Args: UI context, editor and palette. Returns an error before changing an unavailable collection.
+pub(super) fn save_generated_palette(ctx:&egui::Context,studio:&mut Studio,palette:Palette)->Result<(),String> {
+    if jobs::is_running::<PaletteResult>(ctx,PALETTE_ACTION) {return Err("Wait for the current palette save".into());}
+    let state=&mut studio.libraries;
+    let root=if state.project_scope {Some(state.root.clone().ok_or("Choose a palette project folder first")?)} else {None};
+    let path=state.palette_path().ok_or("Palette collection is unavailable")?;
+    let draft=state.draft();
+    if !draft.loaded || draft.conflict {return Err("Open Swatches and load or resolve the palette collection first".into());}
+    let mut saved=draft.palettes.clone();
+    crate::palette::merge(&mut saved,vec![palette])?;
+    let expected=draft.stamp;
+    draft.palettes=saved.clone();
+    draft.selected=draft.palettes.len().saturating_sub(1);
+    draft.selected_name();
+    draft.dirty=true;
+    start_palette(ctx,root,move || {
+        if file_stamp(&path)?!=expected {return Err("Changed on disk. Reload or export a copy before saving.".into());}
+        crate::palette::save_file(&path,&saved)?;
+        Ok(PaletteChange::Saved(saved,file_stamp(&path)?))
+    });
+    Ok(())
+}
+
 pub fn tick(ctx: &egui::Context, studio: &mut Studio) {
     if studio.file_dialog_pending() {
         return;

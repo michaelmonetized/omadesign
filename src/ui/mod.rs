@@ -16,6 +16,7 @@ mod credits;
 mod cloud;
 mod cloud_annotations;
 mod color_picker;
+mod color_guide;
 mod document_color;
 mod deform;
 pub(crate) mod export_dialog;

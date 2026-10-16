@@ -84,6 +84,12 @@ fn chip(ui: &mut Ui, color: Rgba, size: egui::Vec2) -> egui::Response {
 }
 
 pub(crate) fn color_edit(ui: &mut Ui, salt: impl Hash + std::fmt::Debug, color: &mut Rgba) -> bool {
+    color_edit_named(ui, salt, color, "Edit color and alpha")
+}
+
+/// Open the native color picker with a property-specific keyboard name.
+/// Args: UI, stable owner, color and accessible property name. Returns true on an actual edit.
+pub(crate) fn color_edit_named(ui: &mut Ui, salt: impl Hash + std::fmt::Debug, color: &mut Rgba, name: &str) -> bool {
     let id = ui.make_persistent_id(("rgba-picker", salt));
     let popup = id.with("popup");
     let mut state = ui
@@ -105,6 +111,8 @@ pub(crate) fn color_edit(ui: &mut Ui, salt: impl Hash + std::fmt::Debug, color: 
     }
     let response = chip(ui, *color, vec2(26.0, 22.0))
         .on_hover_text(format!("{} · Edit color and alpha", color.hex()));
+    super::welcome::name_control(ui, &response, id.with("label"), name);
+    super::welcome::focus_control(ui, &response);
     if response.clicked() && !Popup::is_id_open(ui.ctx(), popup) {
         state.previous = *color;
     }
@@ -252,6 +260,7 @@ pub(crate) fn hex_field(
             .desired_width(width)
             .hint_text("#RRGGBB"),
     );
+    super::welcome::name_control(ui, &response, id.with("label"), "Hex color");
     if response.changed()
         && let Some(parsed) = Rgba::parse_hex(text.trim())
     {

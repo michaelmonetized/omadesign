@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod harmony;
+
 /// Convert stored straight RGBA bytes to tiny-skia's premultiplied pixels.
 pub(crate) fn rgba_to_pixmap(w: u32, h: u32, data: &[u8]) -> Option<tiny_skia::Pixmap> {
     let len = (w as usize).checked_mul(h as usize)?.checked_mul(4)?;
