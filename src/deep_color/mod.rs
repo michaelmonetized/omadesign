@@ -315,6 +315,114 @@ mod sample_bytes {
         use super::*;
         use base64::Engine;
 
+        fn packed(bytes: &[u8]) -> Vec<u8> {
+            let mut encoder = zstd::stream::write::Encoder::new(Vec::new(), 3).unwrap();
+            encoder.write_all(bytes).unwrap();
+            encoder.finish().unwrap()
+        }
+
+        #[test]
+        fn counted_samples_keep_exact_capacity_float_bits_and_final_alias_admission() {
+            let values: Vec<_> = (0..8193).map(|i| f32::from_bits(0x3e800001 + i)).collect();
+            let bytes: Vec<_> = values
+                .iter()
+                .flat_map(|value| value.to_le_bytes())
+                .collect();
+            let text = base64::engine::general_purpose::STANDARD.encode(packed(&bytes));
+            let pool = resources::global();
+            let before = (pool.usage().0, pool.pending_bytes());
+            let result = decode::<serde::de::value::Error>(&text).unwrap();
+            assert_eq!(result.bytes(), bytes.len() as u64);
+            assert!(
+                result
+                    .iter()
+                    .zip(values)
+                    .all(|(actual, expected)| actual.to_bits() == expected.to_bits())
+            );
+            assert_eq!(
+                (pool.usage().0 - before.0, pool.pending_bytes() - before.1),
+                (bytes.len() as u64, 0)
+            );
+            let memory = Arc::downgrade(result.lease());
+            let alias = result.clone();
+            drop(result);
+            assert!(memory.upgrade().is_some());
+            drop(alias);
+            assert!(memory.upgrade().is_none());
+            assert_eq!((pool.usage().0, pool.pending_bytes()), before);
+        }
+
+        #[test]
+        fn counted_samples_refuse_partial_nonfinite_invalid_and_oversized_windows() {
+            let pool = resources::global();
+            let before = (pool.usage().0, pool.pending_bytes());
+            for bytes in [vec![1], vec![1, 2], vec![1, 2, 3], vec![0; 5], vec![0; 7]] {
+                let text = base64::engine::general_purpose::STANDARD.encode(packed(&bytes));
+                assert!(
+                    decode::<serde::de::value::Error>(&text)
+                        .unwrap_err()
+                        .to_string()
+                        .contains("Truncated")
+                );
+                assert_eq!((pool.usage().0, pool.pending_bytes()), before);
+            }
+            for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+                let text =
+                    base64::engine::general_purpose::STANDARD.encode(packed(&value.to_le_bytes()));
+                assert!(
+                    decode::<serde::de::value::Error>(&text)
+                        .unwrap_err()
+                        .to_string()
+                        .contains("Nonfinite")
+                );
+                assert_eq!((pool.usage().0, pool.pending_bytes()), before);
+            }
+            let mut window = packed(&[0; 8]);
+            assert_eq!(&window[..4], &[0x28, 0xb5, 0x2f, 0xfd]);
+            assert_eq!(window[4] & 0x20, 0);
+            window[5] = (28 - 10) << 3;
+            for text in [
+                "%%%".into(),
+                base64::engine::general_purpose::STANDARD.encode([0; 8]),
+                base64::engine::general_purpose::STANDARD.encode(window),
+            ] {
+                assert!(decode::<serde::de::value::Error>(&text).is_err());
+                assert_eq!((pool.usage().0, pool.pending_bytes()), before);
+            }
+        }
+
+        #[test]
+        fn counted_samples_stop_at_the_byte_limit_and_refuse_both_size_drifts() {
+            let pool = resources::global();
+            let before = (pool.usage().0, pool.pending_bytes());
+            let text = base64::engine::general_purpose::STANDARD.encode(packed(&[0; 8]));
+            let window = pool
+                .reserve_now(128 * 1024 * 1024, &storage::check)
+                .unwrap();
+            let accepted = Cell::new(0usize);
+            let error = read_samples::<serde::de::value::Error>(&text, 4, |part| {
+                accepted.set(accepted.get() + part.len());
+                Ok(())
+            })
+            .unwrap_err();
+            assert!(error.to_string().contains("shared pixel budget"));
+            assert_eq!(accepted.get(), 0);
+            for count in [1, 3] {
+                assert!(
+                    decode_sized::<serde::de::value::Error>(&text, count, pool.usage().1)
+                        .unwrap_err()
+                        .to_string()
+                        .contains("changed during decoding")
+                );
+                assert_eq!(
+                    (pool.usage().0 - before.0, pool.pending_bytes() - before.1),
+                    (window.bytes(), window.bytes())
+                );
+            }
+            drop(window);
+            assert_eq!((pool.usage().0, pool.pending_bytes()), before);
+        }
+
         #[test]
         fn streaming_samples_preserve_exact_standard_zstd_le_float_wire() {
             #[derive(serde::Serialize, serde::Deserialize)]
@@ -404,21 +512,56 @@ mod sample_bytes {
         deserializer.deserialize_str(Samples)
     }
     fn decode<E: serde::de::Error>(text: &str) -> Result<Arc<Allocation<f32>>, E> {
+        let _window = resources::global()
+            .reserve_now(128 * 1024 * 1024, &storage::check)
+            .map_err(serde::de::Error::custom)?;
+        let limit = resources::global().usage().1.min(isize::MAX as u64);
+        let count = read_samples::<E>(text, limit, |_| Ok(()))?;
+        decode_sized(text, count, limit)
+    }
+
+    fn decode_sized<E: serde::de::Error>(
+        text: &str,
+        count: usize,
+        limit: u64,
+    ) -> Result<Arc<Allocation<f32>>, E> {
+        let mut samples =
+            storage::Builder::with_capacity(count).map_err(serde::de::Error::custom)?;
+        let actual = read_samples::<E>(text, limit, |part| {
+            if samples
+                .len()
+                .checked_add(part.len())
+                .is_none_or(|end| end > count)
+            {
+                return Err("Native samples changed during decoding".into());
+            }
+            samples.extend(part)
+        })?;
+        if actual != count || samples.len() != count {
+            return Err(serde::de::Error::custom(
+                "Native samples changed during decoding",
+            ));
+        }
+        samples.finish().map_err(serde::de::Error::custom)
+    }
+
+    fn read_samples<E: serde::de::Error>(
+        text: &str,
+        limit: u64,
+        mut accept: impl FnMut(&[f32]) -> Result<(), String>,
+    ) -> Result<usize, E> {
         let base64 = base64::read::DecoderReader::new(
             text.as_bytes(),
             &base64::engine::general_purpose::STANDARD,
         );
         let mut decoder =
             zstd::stream::read::Decoder::new(base64).map_err(serde::de::Error::custom)?;
-        let _window = resources::global()
-            .reserve_now(128 * 1024 * 1024, &storage::check)
-            .map_err(serde::de::Error::custom)?;
         decoder
             .window_log_max(27)
             .map_err(serde::de::Error::custom)?;
-        let mut samples = storage::Builder::new().map_err(serde::de::Error::custom)?;
         let mut bytes = [0u8; 16384];
         let mut carried = 0;
+        let mut count = 0usize;
         loop {
             let read = decoder
                 .read(&mut bytes[carried..])
@@ -431,6 +574,15 @@ mod sample_bytes {
             }
             let length = carried + read;
             let complete = length / 4 * 4;
+            count = count
+                .checked_add(complete / 4)
+                .ok_or_else(|| E::custom("Native sample count overflows"))?;
+            if count
+                .checked_mul(4)
+                .is_none_or(|bytes| bytes as u64 > limit)
+            {
+                return Err(E::custom("Native samples exceed the shared pixel budget"));
+            }
             let mut values = [0f32; 4096];
             for (dst, src) in values.iter_mut().zip(bytes[..complete].chunks_exact(4)) {
                 *dst = f32::from_le_bytes(src.try_into().unwrap());
@@ -438,13 +590,12 @@ mod sample_bytes {
                     return Err(serde::de::Error::custom("Nonfinite native sample"));
                 }
             }
-            samples
-                .extend(&values[..complete / 4])
-                .map_err(serde::de::Error::custom)?;
+            accept(&values[..complete / 4]).map_err(serde::de::Error::custom)?;
             carried = length - complete;
             bytes.copy_within(complete..length, 0);
         }
-        samples.finish().map_err(serde::de::Error::custom)
+        drop(decoder);
+        Ok(count)
     }
 }
 

@@ -107,8 +107,7 @@ pub fn decode(s: &str) -> Result<Document, String> {
 }
 
 fn decode_admitted(s: &str) -> Result<Document, String> {
-    let _parser = crate::resources::global().reserve_now(s.len() as u64, &crate::deep_color::storage::check)?;
-    validate_retained_json(s)?;
+    let _parser = admit_parser(s)?;
     let file: File = serde_json::from_str(s).map_err(|e| e.to_string())?;
     let mut doc = file.doc;
     restore_sources(&mut doc, file.version, &file.svg_sources)?;
@@ -128,6 +127,168 @@ fn decode_admitted(s: &str) -> Result<Document, String> {
         }
     }
     normalize_decoded_document(doc, file.version)
+}
+
+/// Keep parser scratch charged while excluding only direct borrowed native sample text.
+/// Args: complete original file. Returns pending parser admission after the unchanged retained preflight.
+fn admit_parser(text: &str) -> Result<std::sync::Arc<crate::resources::Lease>, String> {
+    let parser = crate::resources::global()
+        .reserve_now(text.len() as u64, &crate::deep_color::storage::check)?;
+    validate_retained_json(text)?;
+    parser.resize_now(
+        text.len()
+            .saturating_sub(borrowed_native_sample_bytes(text)) as u64,
+        &crate::deep_color::storage::check,
+    )?;
+    Ok(parser)
+}
+
+/// Measure borrowed sample strings only at the native raster fields of the root document.
+/// Args: preflighted file JSON. Returns zero on ambiguous structure; other retained data remains fully charged.
+fn borrowed_native_sample_bytes(text: &str) -> usize {
+    use serde::de::{DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor};
+    use std::{borrow::Cow, cell::Cell, fmt};
+
+    struct Text<'a>(Cow<'a, str>);
+    impl<'de> Deserialize<'de> for Text<'de> {
+        fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            struct Borrow;
+            impl<'de> Visitor<'de> for Borrow {
+                type Value = Text<'de>;
+                fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                    f.write_str("sample text")
+                }
+                fn visit_borrowed_str<E: serde::de::Error>(
+                    self,
+                    value: &'de str,
+                ) -> Result<Self::Value, E> {
+                    Ok(Text(Cow::Borrowed(value)))
+                }
+                fn visit_str<E: serde::de::Error>(self, _: &str) -> Result<Self::Value, E> {
+                    Ok(Text(Cow::Owned(String::new())))
+                }
+            }
+            deserializer.deserialize_str(Borrow)
+        }
+    }
+    #[derive(Clone, Copy, PartialEq)]
+    enum At {
+        File,
+        Doc,
+        Layers,
+        Layer,
+        Kind,
+        Raster,
+        Pixels,
+        Native,
+    }
+    struct Scan<'a> {
+        at: At,
+        bytes: &'a Cell<usize>,
+        valid: &'a Cell<bool>,
+    }
+    impl<'de> DeserializeSeed<'de> for Scan<'_> {
+        type Value = ();
+        fn deserialize<D: serde::Deserializer<'de>>(self, deserializer: D) -> Result<(), D::Error> {
+            deserializer.deserialize_any(self)
+        }
+    }
+    impl<'de> Visitor<'de> for Scan<'_> {
+        type Value = ();
+        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            f.write_str("root raster structure")
+        }
+        fn visit_unit<E: serde::de::Error>(self) -> Result<(), E> {
+            if self.at == At::Native {
+                Ok(())
+            } else {
+                Err(E::custom("Unexpected root structure"))
+            }
+        }
+        fn visit_seq<A: SeqAccess<'de>>(self, mut sequence: A) -> Result<(), A::Error> {
+            if self.at != At::Layers {
+                return Err(serde::de::Error::custom("Unexpected root sequence"));
+            }
+            while sequence
+                .next_element_seed(Scan {
+                    at: At::Layer,
+                    bytes: self.bytes,
+                    valid: self.valid,
+                })?
+                .is_some()
+            {}
+            Ok(())
+        }
+        fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<(), A::Error> {
+            if self.at == At::Layers {
+                return Err(serde::de::Error::custom("Unexpected layer map"));
+            }
+            let mut seen = false;
+            let mut fields = 0usize;
+            while let Some(Text(key)) = map.next_key::<Text<'de>>()? {
+                fields += 1;
+                let key = match key {
+                    Cow::Borrowed(key) => key,
+                    Cow::Owned(_) => {
+                        self.valid.set(false);
+                        map.next_value::<IgnoredAny>()?;
+                        continue;
+                    }
+                };
+                let next = match (self.at, key) {
+                    (At::File, "doc") => Some(At::Doc),
+                    (At::Doc, "layers") => Some(At::Layers),
+                    (At::Layer, "kind") => Some(At::Kind),
+                    (At::Kind, "Raster") => Some(At::Raster),
+                    (At::Raster, "pixels") => Some(At::Pixels),
+                    (At::Pixels, "native") => Some(At::Native),
+                    _ => None,
+                };
+                if let Some(at) = next {
+                    if seen {
+                        self.valid.set(false);
+                    }
+                    seen = true;
+                    map.next_value_seed(Scan {
+                        at,
+                        bytes: self.bytes,
+                        valid: self.valid,
+                    })?;
+                } else if self.at == At::Native && key == "samples" {
+                    if seen {
+                        self.valid.set(false);
+                    }
+                    seen = true;
+                    if let Text(Cow::Borrowed(value)) = map.next_value::<Text<'de>>()? {
+                        match self.bytes.get().checked_add(value.len()) {
+                            Some(bytes) => self.bytes.set(bytes),
+                            None => self.valid.set(false),
+                        }
+                    }
+                } else {
+                    map.next_value::<IgnoredAny>()?;
+                }
+            }
+            if self.at == At::Kind && fields != 1 {
+                self.valid.set(false);
+            }
+            Ok(())
+        }
+    }
+    let bytes = Cell::new(0);
+    let valid = Cell::new(true);
+    let mut deserializer = serde_json::Deserializer::from_str(text);
+    let result = Scan {
+        at: At::File,
+        bytes: &bytes,
+        valid: &valid,
+    }
+    .deserialize(&mut deserializer);
+    if result.is_ok() && deserializer.end().is_ok() && valid.get() && bytes.get() <= text.len() {
+        bytes.get()
+    } else {
+        0
+    }
 }
 
 /// Inspect retained live/source properties without rebuilding pixels or color state.
@@ -856,6 +1017,76 @@ mod tests {
     use super::*;
     use crate::document::{Cmd, Shape, Style, apply};
     use crate::geom::{Geom, Pt};
+
+    #[test]
+    fn native_parser_deducts_only_borrowed_root_raster_samples() {
+        let raster =
+            serde_json::json!({"kind":{"Raster":{"pixels":{"native":{"samples":"AAAA"}}}}});
+        let text =
+            serde_json::json!({"version":VERSION,"doc":{"layers":[raster.clone(),raster.clone()],
+            "history":{"layers":[raster.clone()]},"opaque":{"native":{"samples":"opaque"}}},
+            "other":{"doc":{"layers":[raster.clone()]}}})
+            .to_string();
+        assert_eq!(borrowed_native_sample_bytes(&text), 8);
+        let pool = crate::resources::global();
+        let before = (pool.usage().0, pool.pending_bytes());
+        let parser = admit_parser(&text).unwrap();
+        assert_eq!(parser.bytes(), text.len() as u64 - 8);
+        assert_eq!(pool.pending_bytes() - before.1, parser.bytes());
+        drop(parser);
+        assert_eq!((pool.usage().0, pool.pending_bytes()), before);
+        let escaped = text.replace("AAAA", "\\u0041AAA");
+        assert_eq!(borrowed_native_sample_bytes(&escaped), 0);
+        let parser = admit_parser(&escaped).unwrap();
+        assert_eq!(parser.bytes(), escaped.len() as u64);
+        drop(parser);
+        assert_eq!((pool.usage().0, pool.pending_bytes()), before);
+        let mut mixed: serde_json::Value = serde_json::from_str(&text).unwrap();
+        mixed["doc"]["layers"][0]["kind"]["Raster"]["pixels"]["native"]["samples"] = "BBBB".into();
+        let mixed = mixed.to_string().replacen("BBBB", "\\u0042BBB", 1);
+        assert_eq!(borrowed_native_sample_bytes(&mixed), 4);
+        let parser = admit_parser(&mixed).unwrap();
+        assert_eq!(parser.bytes(), mixed.len() as u64 - 4);
+        drop(parser);
+        assert_eq!((pool.usage().0, pool.pending_bytes()), before);
+    }
+
+    #[test]
+    fn native_parser_keeps_ambiguous_escaped_and_opaque_paths_fully_charged() {
+        let original = r#"{"version":23,"doc":{"layers":[{"kind":{"Raster":{"pixels":{"native":{"samples":"AAAA"}}}}}]}}"#;
+        let doc = serde_json::from_str::<serde_json::Value>(original).unwrap()["doc"].to_string();
+        let cases = [
+            original.replace("\"doc\"", "\"d\\u006fc\""),
+            original.replace(
+                "\"samples\":\"AAAA\"",
+                "\"samples\":\"AAAA\",\"samples\":\"AAAA\"",
+            ),
+            original.replace("\"pixels\":", "\"wrong_pixels\":"),
+            original.replace("\"samples\":\"AAAA\"", "\"samples\":42"),
+            original.replace("\"Raster\":", "\"Vector\":{},\"Raster\":"),
+            original.replace("\"layers\":[", "\"history\":["),
+            format!(r#"{{"version":23,"doc":{doc},"doc":{doc}}}"#),
+            format!(r#"{{"project":{original}}}"#),
+        ];
+        let pool = crate::resources::global();
+        let before = (pool.usage().0, pool.pending_bytes());
+        for text in cases {
+            assert_eq!(borrowed_native_sample_bytes(&text), 0, "{text}");
+            let parser = admit_parser(&text).unwrap();
+            assert_eq!(parser.bytes(), text.len() as u64);
+            drop(parser);
+            assert_eq!((pool.usage().0, pool.pending_bytes()), before);
+        }
+        let future = original.replace("23", "4294967295");
+        assert!(admit_parser(&future).unwrap_err().contains("Unsupported"));
+        let understated = original.replace("23", "1");
+        assert!(
+            admit_parser(&understated)
+                .unwrap_err()
+                .contains("requires version")
+        );
+        assert_eq!((pool.usage().0, pool.pending_bytes()), before);
+    }
 
     #[test]
     fn admitted_project_output_refuses_size_drift_and_releases_its_owner() {
