@@ -191,3 +191,191 @@ fn font_search_escape_and_outside_click_dismiss_without_changing_type() {
     assert!(!egui::Popup::is_any_open(&ctx));
     assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
 }
+
+fn native_frame(ctx: &egui::Context, studio: &mut Studio, events: Vec<Event>) -> egui::FullOutput {
+    crate::ui::welcome::keyboard_tests::render(ctx, events, |ui| {
+        ui.set_max_width(300.);
+        character_studio(ui, studio);
+    })
+}
+
+#[test]
+fn keyboard_font_native_local_search_choice_escape_and_typed_history_keep_owner() {
+    use crate::ui::welcome::keyboard_tests as keys;
+    let (ctx, mut studio, target, label) = fixture();
+    ctx.enable_accesskit();
+    let before = crate::project::encode(&studio.doc).unwrap();
+    keys::tab_to(&ctx, "Font family", |events| {
+        native_frame(&ctx, &mut studio, events)
+    });
+    native_frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+    let output = keys::tab_to(&ctx, "Search local fonts", |events| {
+        native_frame(&ctx, &mut studio, events)
+    });
+    keys::focused(&ctx, &output, "Search local fonts");
+    let search = keys::named(&output, "Search local fonts").0;
+    keys::replace("Search target", |events| {
+        native_frame(&ctx, &mut studio, events)
+    });
+    let output = native_frame(&ctx, &mut studio, vec![]);
+    assert_eq!(keys::named(&output, "Search local fonts").0, search);
+    keys::focused(&ctx, &output, "Search local fonts");
+    assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+    let choice = format!("Project font {label}");
+    keys::tab_to(&ctx, &choice, |events| {
+        native_frame(&ctx, &mut studio, events)
+    });
+    native_frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+    assert!(!egui::Popup::is_any_open(&ctx));
+    assert_eq!(studio.selected_type().unwrap().font, target);
+    let after = crate::project::encode(&studio.doc).unwrap();
+    studio.undo();
+    assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+    studio.redo();
+    assert_eq!(crate::project::encode(&studio.doc).unwrap(), after);
+    keys::tab_to(&ctx, "Font family", |events| {
+        native_frame(&ctx, &mut studio, events)
+    });
+    native_frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+    keys::tab_to(&ctx, "Search local fonts", |events| {
+        native_frame(&ctx, &mut studio, events)
+    });
+    native_frame(&ctx, &mut studio, keys::key(Key::Escape, Modifiers::NONE));
+    assert!(!egui::Popup::is_any_open(&ctx));
+    assert_eq!(crate::project::encode(&studio.doc).unwrap(), after);
+}
+
+#[test]
+fn keyboard_font_native_offline_google_query_and_exact_variant_keys_do_not_start_jobs() {
+    use crate::ui::welcome::keyboard_tests as keys;
+    let (ctx, mut studio, _, _) = fixture();
+    ctx.enable_accesskit();
+    studio.google_catalog_loaded = true;
+    studio.google_catalog = vec![crate::google_fonts::GoogleFont {
+        id: "ui05-offline-fixture".into(),
+        family: "UI05 Offline Family".into(),
+        variants: vec![
+            "regular".into(),
+            "italic".into(),
+            "700".into(),
+            "700italic".into(),
+        ],
+        subsets: vec![],
+        category: "sans-serif".into(),
+        files: Default::default(),
+    }];
+    studio.google_status = "Offline catalog fixture".into();
+    let before = crate::project::encode(&studio.doc).unwrap();
+    keys::tab_to(&ctx, "Google Fonts", |events| {
+        native_frame(&ctx, &mut studio, events)
+    });
+    native_frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+    let output = keys::tab_to(&ctx, "Search Google fonts", |events| {
+        native_frame(&ctx, &mut studio, events)
+    });
+    let search = keys::named(&output, "Search Google fonts").0;
+    keys::replace("Offline", |events| native_frame(&ctx, &mut studio, events));
+    let output = native_frame(&ctx, &mut studio, vec![]);
+    keys::focused(&ctx, &output, "Search Google fonts");
+    assert_eq!(studio.google_query, "Offline");
+    assert!(studio.font_query.is_empty());
+    assert!(
+        !keys::named(&output, "Search Google fonts")
+            .1
+            .described_by()
+            .is_empty()
+    );
+    keys::tab_to(&ctx, "Google font variant", |events| {
+        native_frame(&ctx, &mut studio, events)
+    });
+    native_frame(
+        &ctx,
+        &mut studio,
+        keys::key(Key::ArrowDown, Modifiers::NONE),
+    );
+    assert_eq!(studio.google_variant, "italic");
+    let output = native_frame(&ctx, &mut studio, vec![]);
+    keys::focused(&ctx, &output, "Google font variant");
+    native_frame(&ctx, &mut studio, keys::key(Key::End, Modifiers::NONE));
+    assert_eq!(studio.google_variant, "700italic");
+    let output = native_frame(&ctx, &mut studio, vec![]);
+    assert_eq!(keys::named(&output, "Search Google fonts").0, search);
+    assert!(
+        keys::named(
+            &output,
+            "Download Google font UI05 Offline Family 700italic"
+        )
+        .1
+        .is_disabled()
+            == false
+    );
+    assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+    assert!(!crate::ui::jobs::any_running(&ctx));
+}
+
+#[test]
+fn keyboard_font_native_effect_blend_retirement_and_layer_owner_guards() {
+    use crate::color::Blend;
+    use crate::ui::welcome::keyboard_tests as keys;
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    crate::ui::theme::apply(&ctx);
+    let make = crate::filter::Fx::catalog()
+        .iter()
+        .find(|(_, make)| make().appearance_mut().is_some())
+        .unwrap()
+        .1;
+    let mut stack = crate::filter::FilterStack {
+        items: vec![make(), make()],
+        ..Default::default()
+    };
+    let name = format!("{} effect 1 blend", stack.items[0].name());
+    let mut frame = |events| {
+        keys::render(&ctx, events, |ui| {
+            ui.set_max_width(300.);
+            super::fx_stack_editor(ui, &mut stack, "native-blend");
+        })
+    };
+    let output = keys::tab_to(&ctx, &name, &mut frame);
+    let stale = keys::named(&output, &name).0;
+    frame(keys::key(Key::ArrowDown, Modifiers::NONE));
+    let output = frame(vec![]);
+    keys::focused(&ctx, &output, &name);
+    drop(frame);
+    assert_eq!(*stack.items[0].appearance_mut().unwrap().0, Blend::ALL[1]);
+    stack.items.remove(0);
+    let mut frame = |events| {
+        keys::render(&ctx, events, |ui| {
+            ui.set_max_width(300.);
+            super::fx_stack_editor(ui, &mut stack, "native-blend");
+        })
+    };
+    let output = frame(vec![]);
+    assert_ne!(keys::named(&output, &name).0, stale);
+    assert_ne!(
+        ctx.memory(|memory| memory.focused())
+            .map(|id| id.accesskit_id()),
+        Some(stale)
+    );
+    drop(frame);
+    let mut studio = Studio::new();
+    studio.show_welcome = false;
+    let layer = studio.active_layer.unwrap();
+    let expected = studio.doc.layers[layer].blend;
+    let mut frame = |events| {
+        keys::render(&ctx, events, |ui| {
+            ui.set_max_width(300.);
+            super::layers_studio(ui, &mut studio);
+        })
+    };
+    let output = keys::tab_to(&ctx, "Layer blend", &mut frame);
+    let first = keys::named(&output, "Layer blend").0;
+    frame(keys::key(Key::End, Modifiers::NONE));
+    drop(frame);
+    assert_eq!(studio.doc.layers[layer].blend, *Blend::ALL.last().unwrap());
+    studio.add_layer_group();
+    let output = keys::render(&ctx, vec![], |ui| super::layers_studio(ui, &mut studio));
+    assert_ne!(keys::named(&output, "Layer blend").0, first);
+    assert!(keys::named(&output, "Layer blend").1.is_disabled());
+    assert_ne!(studio.doc.layers[layer].blend, expected);
+}

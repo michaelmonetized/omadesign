@@ -1,5 +1,70 @@
 use eframe::egui::{self, Key, Modifiers, Ui};
 
+/// Add arrow and endpoint selection to an existing native combo response.
+/// Args: UI, actual response, name, current value and existing ordered choices. Returns nothing.
+pub(super) fn selection_keys<T: Clone + PartialEq>(
+    ui: &Ui,
+    response: &mut egui::Response,
+    name: &str,
+    value: &mut T,
+    options: &[(T, String)],
+) {
+    if response.enabled()
+        && response.has_focus()
+        && !egui::ComboBox::is_open(ui.ctx(), response.id)
+        && !options.is_empty()
+    {
+        ui.memory_mut(|memory| {
+            memory.set_focus_lock_filter(
+                response.id,
+                egui::EventFilter {
+                    horizontal_arrows: true,
+                    vertical_arrows: true,
+                    ..Default::default()
+                },
+            )
+        });
+        let index = options
+            .iter()
+            .position(|(key, _)| key == value)
+            .unwrap_or(0);
+        let next = ui.input_mut(|input| {
+            if input.consume_key(Modifiers::NONE, Key::ArrowDown)
+                || input.consume_key(Modifiers::NONE, Key::ArrowRight)
+            {
+                Some((index + 1).min(options.len() - 1))
+            } else if input.consume_key(Modifiers::NONE, Key::ArrowUp)
+                || input.consume_key(Modifiers::NONE, Key::ArrowLeft)
+            {
+                Some(index.saturating_sub(1))
+            } else if input.consume_key(Modifiers::NONE, Key::Home) {
+                Some(0)
+            } else if input.consume_key(Modifiers::NONE, Key::End) {
+                Some(options.len() - 1)
+            } else {
+                None
+            }
+        });
+        if let Some(index) = next {
+            if *value != options[index].0 {
+                *value = options[index].0.clone();
+                response.mark_changed();
+            }
+            ui.memory_mut(|memory| memory.move_focus(egui::FocusDirection::None));
+        }
+    }
+    response.widget_info(|| {
+        let mut info =
+            egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, response.enabled(), name);
+        info.current_text_value = options
+            .iter()
+            .find(|(key, _)| key == value)
+            .map(|(_, name)| name.clone());
+        info
+    });
+    super::welcome::focus_control(ui, response);
+}
+
 /// Decorate an existing precise motion widget without changing its native step or formatting.
 /// Args: UI, owner, name, value, range, step, suffix and optional decimal limit.
 /// Returns the actual response with accepted changes and owned draft validity; history remains app-owned.
