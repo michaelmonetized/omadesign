@@ -1,3 +1,4 @@
+import { preflightCreate, SERVER_PROTOCOL } from "../../shared/liveProtocol";
 import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
 import { ConvexError } from "convex/values";
@@ -46,7 +47,7 @@ const json = (data: unknown, status = 200) =>
 export function discoverCloud() {
   return json({
     version: 1,
-    capabilities: { live: 2, native_preservation: 1 },
+    capabilities: { live: SERVER_PROTOCOL, native_preservation: 1 },
     convexUrl: process.env.CONVEX_URL,
     convexSiteUrl:
       process.env.CONVEX_SITE_URL || process.env.VITE_CONVEX_SITE_URL,
@@ -86,13 +87,32 @@ export async function handleCloud(request: Request) {
       return json({ error: "Invalid operation" }, 400);
     if (!operation.startsWith("live:") && bytes > 16384)
       return json({ error: "Request too large" }, 413);
-    if (!queries.has(operation) && !mutations.has(operation))
+    if (
+      !queries.has(operation) &&
+      !mutations.has(operation) &&
+      operation !== "live:certify"
+    )
       return json(
         { error: "Unsupported cloud operation. Update Omadesign." },
         400,
       );
     if (!args || typeof args !== "object" || Array.isArray(args))
       return json({ error: "Invalid arguments" }, 400);
+    if (operation === "live:create") {
+      try {
+        preflightCreate(args.seed, args.protocol);
+      } catch (error) {
+        return json(
+          {
+            error:
+              error instanceof Error
+                ? error.message
+                : "Invalid live capability",
+          },
+          400,
+        );
+      }
+    }
     const client = new ConvexHttpClient(process.env.CONVEX_URL!);
     const bearer = request.headers.get("Authorization");
     if (bearer?.startsWith("Bearer ")) client.setAuth(bearer.slice(7));
@@ -107,12 +127,15 @@ export async function handleCloud(request: Request) {
         },
       );
     }
-    const value = queries.has(operation)
-      ? await client.query(makeFunctionReference<"query">(operation), args)
-      : await client.mutation(
-          makeFunctionReference<"mutation">(operation),
-          args,
-        );
+    const value =
+      operation === "live:certify"
+        ? await client.action(makeFunctionReference<"action">(operation), args)
+        : queries.has(operation)
+          ? await client.query(makeFunctionReference<"query">(operation), args)
+          : await client.mutation(
+              makeFunctionReference<"mutation">(operation),
+              args,
+            );
     return json({ ok: true, value });
   } catch (error) {
     // Validation failures may include request arguments, including device credentials.

@@ -9,12 +9,15 @@ use std::collections::{BTreeMap, BTreeSet};
 #[cfg(test)]
 mod archive_tests;
 #[cfg(test)]
+mod motion_tests;
+#[cfg(test)]
 pub(crate) mod native_tests;
 mod pixels;
+pub mod protocol;
 pub(crate) mod resources;
 pub mod transport;
 
-pub const PROTOCOL: u32 = 2;
+pub use protocol::local_maximum as supported_protocol;
 
 type Snapshot = BTreeMap<String, Cell>;
 const PIXEL_BUDGET: u64 = 512 * 1024 * 1024;
@@ -139,16 +142,13 @@ pub struct Replica {
 /// Turn native editable state into stable property addresses.
 /// Args: document to share. Returns its cells, excluding device and session metadata.
 pub fn snapshot(doc: &Document) -> Result<Snapshot, String> {
-    crate::deep_color::cms::validate_profile(&doc.color.icc_profile, doc.color.model)?;
-    if doc.color.intent > 3 {
-        return Err("Invalid live document rendering intent".into());
-    }
+    crate::motion::compositions::validate(doc)?;
+    let mut used = color_bytes(doc)?;
     let mut packed = doc.clone();
     packed.collaboration = None;
     packed.cloud = None;
     packed.workspace = None;
     let mut buffers = BTreeMap::new();
-    let mut used = doc.color.icc_profile.len() as u64;
     visit_pixels(&mut packed, |path, pixels| {
         let cell = pixels::pack(pixels)?;
         used = used
@@ -164,16 +164,43 @@ pub fn snapshot(doc: &Document) -> Result<Snapshot, String> {
     for key in ["cloud", "collaboration", "workspace"] {
         value.as_object_mut().unwrap().remove(key);
     }
-    for (index, layer) in doc.layers.iter().enumerate() {
-        for (position, shape) in layer.kind.shapes().unwrap_or_default().iter().enumerate() {
-            value["layers"][index]["kind"]["Vector"]["shapes"][position]["layout"] =
-                serde_json::to_value(&shape.layout).map_err(|e| e.to_string())?;
+    fn layouts(doc: &Document, value: &mut Value) -> Result<(), String> {
+        for (index, layer) in doc.layers.iter().enumerate() {
+            for (position, shape) in layer.kind.shapes().unwrap_or_default().iter().enumerate() {
+                value["layers"][index]["kind"]["Vector"]["shapes"][position]["layout"] =
+                    serde_json::to_value(&shape.layout).map_err(|e| e.to_string())?;
+            }
         }
+        for (index, comp) in doc.motion.compositions.iter().enumerate() {
+            layouts(
+                &comp.document,
+                &mut value["motion"]["compositions"][index]["document"],
+            )?;
+        }
+        Ok(())
     }
+    layouts(doc, &mut value)?;
     let mut result = BTreeMap::new();
     flatten("", &value, &mut result)?;
     result.extend(buffers);
     Ok(result)
+}
+
+/// Validate current embedded document color without reading retained pixel payloads.
+/// Args: bounded artwork tree. Returns the total current ICC byte footprint.
+fn color_bytes(doc: &Document) -> Result<u64, String> {
+    crate::motion::compositions::documents(doc)?
+        .into_iter()
+        .try_fold(0u64, |used, doc| {
+            crate::deep_color::cms::validate_profile(&doc.color.icc_profile, doc.color.model)?;
+            if doc.color.intent > 3 {
+                return Err("Invalid live document rendering intent".into());
+            }
+            doc.validate_sources()?;
+            used.checked_add(doc.color.icc_profile.len() as u64)
+                .filter(|n| *n <= PIXEL_BUDGET)
+                .ok_or_else(|| "Live document exceeds the total pixel budget".into())
+        })
 }
 
 /// Visit document-owned pixel buffers at their shared object addresses.
@@ -182,21 +209,23 @@ fn visit_pixels(
     doc: &mut Document,
     mut visit: impl FnMut(&str, &mut crate::document::Pixels) -> Result<(), String>,
 ) -> Result<(), String> {
-    for layer in &mut doc.layers {
-        let path = format!("/@entities/{}", layer.id);
-        if let Some(pixels) = layer.kind.pixels_mut() {
-            visit(&format!("{path}/kind/Raster/pixels"), pixels)?;
-        }
-        if let Some(pixels) = &mut layer.mask {
-            visit(&format!("{path}/mask"), pixels)?;
-        }
-        for shape in layer.kind.shapes_mut().into_iter().flatten() {
-            if let Some(pixels) = &mut shape.mask {
-                visit(&format!("/@entities/{}/mask", shape.id), pixels)?;
+    crate::motion::compositions::visit_documents_at_mut(doc, |prefix, doc| {
+        for layer in &mut doc.layers {
+            let path = format!("{prefix}/@entities/{}", layer.id);
+            if let Some(pixels) = layer.kind.pixels_mut() {
+                visit(&format!("{path}/kind/Raster/pixels"), pixels)?;
+            }
+            if let Some(pixels) = &mut layer.mask {
+                visit(&format!("{path}/mask"), pixels)?;
+            }
+            for shape in layer.kind.shapes_mut().into_iter().flatten() {
+                if let Some(pixels) = &mut shape.mask {
+                    visit(&format!("{prefix}/@entities/{}/mask", shape.id), pixels)?;
+                }
             }
         }
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 fn pixel_address(path: &str) -> bool {
@@ -225,7 +254,7 @@ fn unpack_pixels_checked<C: crate::resources::CancellationCheck + ?Sized>(
     budget: u64,
     check: &C,
 ) -> Result<(), String> {
-    let mut used = doc.color.icc_profile.len() as u64;
+    let mut used = color_bytes(doc)?;
     visit_pixels(doc, |path, pixels| {
         let size = match cells.get(path) {
             Some(cell @ Cell::Pixels { .. }) => pixels::size(cell)?,
@@ -272,9 +301,16 @@ fn native_cell(path: &str, cell: &Cell) -> bool {
 /// Check the decoded aggregate before native allocation or legacy JSON deserialization.
 /// Args: inflated document, cells and transport quota. Returns an error before any pixel materialization.
 fn preflight_pixels(value: &Value, cells: &Snapshot, budget: u64) -> Result<(), String> {
-    let mut used = value["color"]["icc_profile"]
-        .as_array()
-        .map_or(0, |a| a.len() as u64);
+    let documents = crate::motion::compositions::serialized_documents(value)?;
+    let mut used = documents.iter().try_fold(0u64, |used, (_, doc)| {
+        used.checked_add(
+            doc["color"]["icc_profile"]
+                .as_array()
+                .map_or(0, |a| a.len() as u64),
+        )
+        .filter(|used| *used <= budget)
+        .ok_or("Live document exceeds the total pixel budget")
+    })?;
     let mut check = |path: String, p: &Value| -> Result<(), String> {
         if p.is_null() {
             return Ok(());
@@ -303,22 +339,24 @@ fn preflight_pixels(value: &Value, cells: &Snapshot, budget: u64) -> Result<(), 
             .ok_or("Live document exceeds the total pixel budget")?;
         Ok(())
     };
-    for layer in value["layers"].as_array().into_iter().flatten() {
-        let path = format!("/@entities/{}", layer["id"]);
-        if let Some(p) = layer.pointer("/kind/Raster/pixels") {
-            check(format!("{path}/kind/Raster/pixels"), p)?;
-        }
-        if let Some(p) = layer.get("mask") {
-            check(format!("{path}/mask"), p)?;
-        }
-        for shape in layer
-            .pointer("/kind/Vector/shapes")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
-            if let Some(p) = shape.get("mask") {
-                check(format!("/@entities/{}/mask", shape["id"]), p)?;
+    for (prefix, value) in documents {
+        for layer in value["layers"].as_array().into_iter().flatten() {
+            let path = format!("{prefix}/@entities/{}", layer["id"]);
+            if let Some(p) = layer.pointer("/kind/Raster/pixels") {
+                check(format!("{path}/kind/Raster/pixels"), p)?;
+            }
+            if let Some(p) = layer.get("mask") {
+                check(format!("{path}/mask"), p)?;
+            }
+            for shape in layer
+                .pointer("/kind/Vector/shapes")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                if let Some(p) = shape.get("mask") {
+                    check(format!("{prefix}/@entities/{}/mask", shape["id"]), p)?;
+                }
             }
         }
     }
@@ -521,6 +559,9 @@ impl Replica {
         let raw = self.cells();
         let before = snapshot(&self.document(doc)?)?;
         let after = snapshot(doc)?;
+        for (path, cell) in &after {
+            protocol::require_minimum(protocol::cell(path, cell)?, supported_protocol())?;
+        }
         if before == after {
             return Ok(false);
         }
@@ -575,6 +616,17 @@ impl Replica {
                 added.push(change);
             }
         }
+        let mut required = self.protocol_requirement()?;
+        for change in &added {
+            if let Edit::Write { writes } = &change.edit {
+                for write in writes {
+                    if let Some(cell) = &write.value {
+                        required = required.max(protocol::cell(&write.path, cell)?);
+                    }
+                }
+            }
+        }
+        protocol::require_minimum(required, supported_protocol())?;
         self.changes.extend(added);
         Ok(())
     }
@@ -679,19 +731,17 @@ impl Replica {
     /// Materialize a converged native document, retaining this device's cloud link.
     /// Args: local document for metadata. Returns editable data or a validation error.
     pub fn document(&self, local: &Document) -> Result<Document, String> {
-        self.document_for_protocol(local, PROTOCOL)
+        self.document_for_protocol(local, supported_protocol())
     }
 
-    /// Refuse unsupported native content before materializing any document buffers.
+    /// Refuse unsupported retained content before materializing any document buffers.
     /// Args: local metadata and peer capability. Returns a complete document or an atomic refusal.
     pub fn document_for_protocol(
         &self,
         local: &Document,
         protocol: u32,
     ) -> Result<Document, String> {
-        if self.required_protocol() > protocol {
-            return Err("This live document requires native-preservation protocol 2".into());
-        }
+        protocol::require(self, protocol)?;
         let (mut doc, _) = self.rendered()?;
         doc.cloud = local.cloud.clone();
         doc.workspace = local.workspace;
@@ -699,16 +749,17 @@ impl Replica {
     }
 
     /// Inspect the entire retained log before a peer can round-trip authoritative content.
-    /// Args: none. Returns the minimum lossless live protocol, including withdrawn native edits.
+    /// Args: none. Returns the minimum lossless live protocol, including withdrawn native, common and Motion edits.
     pub fn required_protocol(&self) -> u32 {
-        if self
-            .retained_cells()
-            .any(|(path, cell)| native_cell(path, cell))
-        {
-            2
-        } else {
-            1
-        }
+        self.protocol_requirement().unwrap_or(u32::MAX)
+    }
+
+    /// Classify every retained write, including withdrawn and removed Motion state.
+    /// Args: none. Returns the minimum protocol or an unknown-feature refusal.
+    pub fn protocol_requirement(&self) -> Result<u32, String> {
+        self.retained_cells().try_fold(1, |required, (path, cell)| {
+            Ok(required.max(protocol::cell(path, cell)?))
+        })
     }
 
     /// Visit every retained payload, including withdrawn edits and deleted objects.
@@ -945,6 +996,12 @@ impl Replica {
         }
         doc.ensure_ids()?;
         doc.validate_hierarchy()?;
+        if !doc.motion.compositions.is_empty()
+            || !doc.motion.expressions.is_empty()
+            || doc.motion.scene3d.is_some()
+        {
+            doc = crate::project::normalize_decoded_document(doc, crate::project::VERSION)?;
+        }
         Ok((doc, repaired))
     }
 

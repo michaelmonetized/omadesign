@@ -1,4 +1,4 @@
-use super::{COLOR, NATIVE, PSD_TYPE, SMART, SOURCE};
+use super::{COLOR, COMPOSITIONS, EXPRESSIONS, NATIVE, PSD_TYPE, SCENE3D, SMART, SOURCE};
 use serde::Deserialize;
 use serde::de::{MapAccess, SeqAccess, Visitor};
 
@@ -10,6 +10,23 @@ struct Seen {
     exists: bool,
     word: Option<&'static str>,
     number: Option<u32>,
+    items: usize,
+    motion_count: usize,
+    motion_depth: usize,
+}
+
+fn composition_bounds<E: serde::de::Error>(value: &Seen) -> Result<(usize, usize), E> {
+    let count = value.items.saturating_add(value.motion_count);
+    let depth = value.motion_depth + usize::from(value.items > 0);
+    if count > crate::motion::compositions::MAX_COMPOSITIONS {
+        return Err(E::custom("CompositionLimit: at most 128 compositions"));
+    }
+    if depth > crate::motion::compositions::MAX_DEPTH {
+        return Err(E::custom(
+            "CompositionDepth: at most eight nested compositions",
+        ));
+    }
+    Ok((count, depth))
 }
 
 fn field_version(key: &str, value: &Seen) -> u32 {
@@ -19,6 +36,11 @@ fn field_version(key: &str, value: &Seen) -> u32 {
     let path = key.rsplit('/').next().unwrap_or(key);
     match path {
         "collaboration" => 24,
+        "expressions" if value.present => EXPRESSIONS,
+        "compositions" if value.present => COMPOSITIONS,
+        "scene3d" => SCENE3D,
+        "ease" if matches!(value.word, Some("Hold" | "CubicBezier")) => COMPOSITIONS,
+        "CubicBezier" => COMPOSITIONS,
         "sources" if value.present => SOURCE,
         "source_attachment" => SOURCE,
         "native" => NATIVE,
@@ -78,6 +100,8 @@ impl<'de> Deserialize<'de> for Seen {
                     "U16" => Some("U16"),
                     "F32" => Some("F32"),
                     "Cmyk" => Some("Cmyk"),
+                    "Hold" => Some("Hold"),
+                    "CubicBezier" => Some("CubicBezier"),
                     _ if s.starts_with('/') => match s.rsplit('/').next() {
                         Some("source_attachment") => Some("source_attachment"),
                         Some("sources") => Some("sources"),
@@ -86,6 +110,10 @@ impl<'de> Deserialize<'de> for Seen {
                         Some("psd_smart") => Some("psd_smart"),
                         Some("cmyk") => Some("cmyk"),
                         Some("icc_profile") => Some("icc_profile"),
+                        Some("expressions") => Some("expressions"),
+                        Some("compositions") => Some("compositions"),
+                        Some("scene3d") => Some("scene3d"),
+                        Some("ease") => Some("ease"),
                         _ => None,
                     },
                     _ => None,
@@ -105,6 +133,9 @@ impl<'de> Deserialize<'de> for Seen {
                 while let Some(child) = seq.next_element::<Seen>()? {
                     result.present = true;
                     result.version = result.version.max(child.version);
+                    result.items = result.items.saturating_add(1);
+                    result.motion_count = result.motion_count.saturating_add(child.motion_count);
+                    result.motion_depth = result.motion_depth.max(child.motion_depth);
                 }
                 Ok(result)
             }
@@ -123,10 +154,19 @@ impl<'de> Deserialize<'de> for Seen {
                 let mut property = None;
                 let mut written = None;
                 while let Some(key) = map.next_key::<String>()? {
-                    let child = map.next_value::<Seen>()?;
+                    let mut child = map.next_value::<Seen>()?;
+                    if key.rsplit('/').next() == Some("compositions") {
+                        (child.motion_count, child.motion_depth) =
+                            composition_bounds::<A::Error>(&child)?;
+                    }
                     count += 1;
                     result.present = true;
                     result.version = result.version.max(child.version);
+                    if key != "collaboration" {
+                        result.motion_count =
+                            result.motion_count.saturating_add(child.motion_count);
+                        result.motion_depth = result.motion_depth.max(child.motion_depth);
+                    }
                     if key == "icc_profile" {
                         profile = child.present;
                     } else {
@@ -170,11 +210,16 @@ impl<'de> Deserialize<'de> for Seen {
                     result.exists = child.exists;
                     result.word = child.word;
                     result.number = child.number;
+                    result.items = child.items;
                 }
                 if let Some(property) = property
                     && let Some(value) = written
                 {
                     result.version = result.version.max(field_version(property, &value));
+                    if property == "compositions" {
+                        (result.motion_count, result.motion_depth) =
+                            composition_bounds::<A::Error>(&value)?;
+                    }
                 }
                 Ok(result)
             }
@@ -196,6 +241,33 @@ pub(crate) fn value_version(value: &serde_json::Value) -> Result<u32, String> {
     Seen::deserialize(value)
         .map(|seen| seen.version.max(1))
         .map_err(|e| e.to_string())
+}
+
+/// Inspect every retained live property without copying or decoding historical buffers.
+/// Args: base and all writes. Returns their greatest required reader version.
+pub(super) fn replica_version(replica: &crate::collaboration::Replica) -> Result<u32, String> {
+    let mut version = 24;
+    for (path, cell) in replica.retained_cells() {
+        let seen = match cell {
+            crate::collaboration::Cell::Value(value) => {
+                Seen::deserialize(value).map_err(|e| e.to_string())?
+            }
+            crate::collaboration::Cell::Variant(name) => {
+                Seen::deserialize(serde_json::Value::String(name.clone()))
+                    .map_err(|e| e.to_string())?
+            }
+            crate::collaboration::Cell::Pixels {
+                native: Some(native),
+                ..
+            } => {
+                version = version.max(NATIVE);
+                Seen::deserialize(native).map_err(|e| e.to_string())?
+            }
+            _ => Seen::default(),
+        };
+        version = version.max(seen.version).max(field_version(path, &seen));
+    }
+    Ok(version)
 }
 
 /// Inspect an immutable original without decoding its pixels or copying its bytes.

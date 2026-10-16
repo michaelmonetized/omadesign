@@ -70,12 +70,18 @@ pub(super) fn size(cell: &Cell) -> Result<u64, String> {
     let Cell::Pixels { w, h, native, .. } = cell else {
         return Err("Expected atomic live pixels".into());
     };
-    let display = u64::from(*w)
-        .checked_mul(u64::from(*h))
+    descriptor_size(u64::from(*w), u64::from(*h), native.as_ref())
+}
+
+/// Bound a retained descriptor without copying compressed strings or decoding history.
+/// Args: dimensions and optional authoritative metadata. Returns the existing decoded-byte quota.
+pub(super) fn descriptor_size(w: u64, h: u64, native: Option<&Value>) -> Result<u64, String> {
+    let display = w
+        .checked_mul(h)
         .and_then(|n| n.checked_mul(4))
         .filter(|n| *n > 0 && *n <= PIXEL_BUDGET)
         .ok_or("Live pixel dimensions exceed the decode budget")?;
-    let Some(native) = native else {
+    let Some(native) = native.filter(|value| !value.is_null()) else {
         return Ok(display);
     };
     let fields = native.as_object().ok_or("Invalid live native payload")?;

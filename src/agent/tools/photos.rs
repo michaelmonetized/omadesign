@@ -93,11 +93,9 @@ fn save(studio: &mut Studio, args: &Value) -> Result<Value, String> {
             match format {
                 "auto" => crate::formats::cli::export(&studio.doc, &path)?,
                 "animated_svg" => {
-                    crate::formats::write_atomic(
-                        &path,
-                        crate::svg::export_animated(&studio.doc)?.as_bytes(),
-                    )?;
-                    vec![]
+                    let report = crate::svg::animated_export(&studio.doc)?;
+                    crate::formats::write_atomic(&path, report.svg.as_bytes())?;
+                    report.warnings
                 }
                 "lottie" => {
                     crate::formats::write_atomic(
@@ -121,4 +119,36 @@ fn save(studio: &mut Studio, args: &Value) -> Result<Value, String> {
     Ok(
         json!({"path":path,"notes":notes,"revision":studio.canvas_gen,"photo_revision":studio.photo.edit_revision}),
     )
+}
+
+#[cfg(test)]
+mod motion_svg_tests {
+    use super::*;
+    #[test]
+    fn save_tool_surfaces_animated_svg_reductions() {
+        let mut studio = Studio::new();
+        studio.doc = crate::svg::motion_tests::fixture("singular");
+        let root = std::env::var_os("CRAFT_MOTION_COMMON_QA_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| {
+                std::env::current_dir()
+                    .unwrap()
+                    .join(".artifacts/motion-common-save")
+            });
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join(format!("reduced-save-{}.svg", crate::document::next_id()));
+        let result = execute(
+            &mut studio,
+            "save_document",
+            &json!({"path":path,"format":"animated_svg"}),
+        )
+        .unwrap();
+        assert!(result["notes"].as_array().unwrap().iter().any(|v| {
+            v.as_str().is_some_and(|v| {
+                v.contains("singular") && v.contains("Swatch") && v.contains("Art")
+            })
+        }));
+        assert!(path.exists());
+        std::fs::remove_file(path).unwrap();
+    }
 }

@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 mod features;
 
-pub(crate) const VERSION: u32 = features::COLLABORATION;
+pub(crate) const VERSION: u32 = features::SCENE3D;
 
 /// Check whether this build implements a project version.
 /// Args: envelope version. Returns false for unimplemented reserved formats.
@@ -16,7 +16,7 @@ pub(crate) fn supports_version(version: u32) -> bool {
 }
 
 #[derive(Serialize, Deserialize)]
-struct File {
+pub(crate) struct File {
     version: u32,
     doc: Document,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
@@ -24,23 +24,49 @@ struct File {
 }
 
 pub fn encode(doc: &Document) -> Result<String, String> {
-    doc.validate_sources()?;
-    if features::required_version(doc) > VERSION {
+    let output = encode_admitted(doc)?;
+    let allocation =
+        std::sync::Arc::try_unwrap(output).map_err(|_| "Shared project encoded storage")?;
+    let (bytes, _memory) = allocation.into_parts();
+    String::from_utf8(bytes).map_err(|e| e.to_string())
+}
+
+/// Encode a native project while retaining its admitted output storage.
+/// Args: editable document. Returns the encoded allocation and its live resource owner.
+pub fn encode_admitted(
+    doc: &Document,
+) -> Result<std::sync::Arc<crate::resources::Allocation<u8>>, String> {
+    encode_envelope_admitted(doc, |project| project)
+}
+
+/// Encode one owned project inside a typed portable envelope.
+/// Args: artwork and envelope constructor. Returns one admitted serialized allocation.
+pub(crate) fn encode_envelope_admitted<T: Serialize>(
+    doc: &Document,
+    envelope: impl FnOnce(File) -> T,
+) -> Result<std::sync::Arc<crate::resources::Allocation<u8>>, String> {
+    crate::motion::compositions::validate(doc)?;
+    for document in crate::motion::compositions::documents(doc)? {
+        document.validate_sources()?;
+        if let Some(replica) = &document.collaboration {
+            crate::collaboration::resources::validate(replica)?;
+        }
+    }
+    let version = features::required_version(doc);
+    if version > VERSION {
         return Err("Unsupported omadesign project version".into());
     }
     let mut packed = doc.clone();
     pack_rasters(&mut packed)?;
-    let svg_sources = crate::svg_source::pack_sources(&mut packed);
-    let mut output = crate::deep_color::storage::Builder::new()?;
-    serde_json::to_writer(&mut output, &File {
-        version: features::required_version(doc),
+    let svg_sources = crate::svg_source::pack_sources(&mut packed)?;
+    let file = File {
+        version,
         doc: packed,
         svg_sources,
-    })
-    .map_err(|e| e.to_string())?;
-    let allocation = std::sync::Arc::try_unwrap(output.finish()?).map_err(|_| "Shared project encoded storage")?;
-    let (bytes, _memory) = allocation.into_parts();
-    String::from_utf8(bytes).map_err(|e| e.to_string())
+    };
+    let mut output = crate::deep_color::storage::Builder::<u8>::new()?;
+    serde_json::to_writer(&mut output, &envelope(file)).map_err(|e| e.to_string())?;
+    output.finish()
 }
 
 pub fn decode(s: &str) -> Result<Document, String> {
@@ -50,26 +76,13 @@ pub fn decode(s: &str) -> Result<Document, String> {
 }
 
 fn decode_admitted(s: &str) -> Result<Document, String> {
-    let _parser = crate::resources::global().reserve_now(s.len() as u64, &crate::deep_color::storage::check)?;
+    let _parser = crate::resources::global()
+        .reserve_now(s.len() as u64, &crate::deep_color::storage::check)?;
     validate_retained_json(s)?;
     let file: File = serde_json::from_str(s).map_err(|e| e.to_string())?;
     let mut doc = file.doc;
     restore_sources(&mut doc, file.version, &file.svg_sources)?;
-    for layer in &mut doc.layers {
-        if let Some(px) = layer.kind.pixels_mut() {
-            *px = decompress_pixels(px)?;
-        }
-        if let Some(mask) = layer.mask.as_mut() {
-            *mask = decompress_pixels(mask)?;
-        }
-        if let Some(shapes) = layer.kind.shapes_mut() {
-            for shape in shapes {
-                if let Some(mask) = shape.mask.as_mut() {
-                    *mask = decompress_pixels(mask)?;
-                }
-            }
-        }
-    }
+    unpack_rasters(&mut doc)?;
     normalize_decoded_document(doc, file.version)
 }
 
@@ -86,8 +99,13 @@ pub(crate) fn validate_retained_json(text: &str) -> Result<(), String> {
     if required > VERSION || declared.is_some_and(|version| !supports_version(version)) {
         return Err("Unsupported omadesign project version".into());
     }
-    if let Some(declared) = declared && required >= 18 && declared < required {
-        return Err(format!("Project declares version {declared}, but its retained data requires version {required}"));
+    if let Some(declared) = declared
+        && required >= 18
+        && declared < required
+    {
+        return Err(format!(
+            "Project declares version {declared}, but its retained data requires version {required}"
+        ));
     }
     Ok(())
 }
@@ -107,39 +125,59 @@ pub(crate) fn restore_sources(
 }
 
 /// Shared normalization after pixels have been decoded under the caller's budgets.
-pub(crate) fn normalize_decoded_document(mut doc: Document, version: u32) -> Result<Document, String> {
+pub(crate) fn normalize_decoded_document(
+    mut doc: Document,
+    version: u32,
+) -> Result<Document, String> {
     if !supports_version(version) {
         return Err("Unsupported omadesign project version".into());
     }
     features::validate_version(&doc, version, false)?;
-    crate::deep_color::cms::validate_profile(&doc.color.icc_profile,doc.color.model)?;
-    if doc.color.intent>3{return Err("Invalid document color rendering intent".into());}
-    doc.validate_sources()?;
-    for layer in &mut doc.layers {
-        if version < 7 {
-            layer.filters.migrate_legacy(layer.blend);
+    crate::motion::compositions::visit_documents_mut(&mut doc, |doc| {
+        crate::deep_color::cms::validate_profile(&doc.color.icc_profile, doc.color.model)?;
+        if doc.color.intent > 3 {
+            return Err("Invalid document color rendering intent".into());
         }
-        if let Some(shapes) = layer.kind.shapes_mut() {
-            for shape in shapes {
-                if version < 7 {
-                    shape.filters.migrate_legacy(shape.blend);
-                }
-                if version < 8 {
-                    if let crate::geom::Geom::Text(t) = &mut shape.geom
-                        && t.wrap_width.is_some()
-                    {
-                        t.update_paragraphs(0, t.content.chars().count(), |p| {
-                            p.overflow_wrap = true
-                        });
+        doc.validate_sources()?;
+        if let Some(replica) = &doc.collaboration {
+            crate::collaboration::resources::validate(replica)?;
+        }
+        for layer in &mut doc.layers {
+            if version < 7 {
+                layer.filters.migrate_legacy(layer.blend);
+            }
+            if let Some(shapes) = layer.kind.shapes_mut() {
+                for shape in shapes {
+                    if version < 7 {
+                        shape.filters.migrate_legacy(shape.blend);
                     }
+                    if version < 8 {
+                        if let crate::geom::Geom::Text(t) = &mut shape.geom
+                            && t.wrap_width.is_some()
+                        {
+                            t.update_paragraphs(0, t.content.chars().count(), |p| {
+                                p.overflow_wrap = true
+                            });
+                        }
+                    }
+                    crate::text::fill_contours(&mut shape.geom);
                 }
-                crate::text::fill_contours(&mut shape.geom);
             }
         }
-    }
-    crate::text_geometry::reflow(&mut doc);
-    doc.ensure_ids()?;
-    doc.validate_hierarchy()?;
+        crate::text_geometry::reflow(doc);
+        for comp in &doc.motion.compositions {
+            crate::document::bump_id(comp.id);
+        }
+        if let Some(scene) = &doc.motion.scene3d {
+            for object in &scene.objects {
+                crate::document::bump_id(object.id);
+            }
+        }
+        doc.ensure_ids()?;
+        doc.validate_hierarchy()?;
+        Ok(())
+    })?;
+    crate::motion::compositions::validate(&doc)?;
     Ok(doc)
 }
 
@@ -189,7 +227,10 @@ fn compress_pixels(px: &Pixels) -> Result<Pixels, String> {
         &crate::deep_color::storage::check,
     )?;
     let mut b64 = String::new();
-    b64.try_reserve_exact(usize::try_from(encoded_memory.bytes()).map_err(|_| "Project encoded pixels overflow")?).map_err(|_| "Not enough memory to encode project pixels")?;
+    b64.try_reserve_exact(
+        usize::try_from(encoded_memory.bytes()).map_err(|_| "Project encoded pixels overflow")?,
+    )
+    .map_err(|_| "Not enough memory to encode project pixels")?;
     base64::engine::general_purpose::STANDARD.encode_string(png.as_slice(), &mut b64);
     encoded_memory.resize_now(b64.capacity() as u64, &crate::deep_color::storage::check)?;
     Ok(Pixels {
@@ -262,8 +303,20 @@ fn decompress_pixels(px: &Pixels) -> Result<Pixels, String> {
 }
 
 pub fn save_to(doc: &Document, path: &Path) -> Result<(), String> {
+    let output = encode_admitted(doc)?;
+    save_encoded_to(doc, path, &output, &crate::ml::NoProgress)
+}
+
+/// Write an admitted project atomically without releasing its output reservation.
+/// Args: document for font archival, destination, encoded owner and write checks. Returns after sync and rename or rollback.
+pub(crate) fn save_encoded_to(
+    doc: &Document,
+    path: &Path,
+    output: &std::sync::Arc<crate::resources::Allocation<u8>>,
+    progress: &dyn crate::ml::Progress,
+) -> Result<(), String> {
     use std::io::Write;
-    let s = encode(doc)?;
+    progress.check()?;
     let parent = path
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
@@ -288,9 +341,12 @@ pub fn save_to(doc: &Document, path: &Path) -> Result<(), String> {
             file.set_permissions(metadata.permissions())
                 .map_err(|e| e.to_string())?;
         }
-        file.write_all(s.as_bytes())
-            .and_then(|_| file.sync_all())
-            .map_err(|e| e.to_string())?;
+        for chunk in output.as_slice().chunks(256 * 1024) {
+            progress.check()?;
+            file.write_all(chunk).map_err(|e| e.to_string())?;
+        }
+        progress.check()?;
+        file.sync_all().map_err(|e| e.to_string())?;
         drop(file);
         std::fs::rename(&temporary, path).map_err(|e| e.to_string())
     })();
@@ -361,6 +417,12 @@ const PLACE_EXTS: &[&str] = &[
     "ps",
     "psd",
     "psb",
+    "omamotion",
+    "gltf",
+    "glb",
+    "obj",
+    "stl",
+    "fbx",
     "ora",
     "xcf",
     "af",
@@ -565,22 +627,43 @@ pub fn swap_path(id: &str) -> PathBuf {
 }
 
 fn pack_rasters(doc: &mut Document) -> Result<(), String> {
-    for layer in &mut doc.layers {
-        if let Some(px) = layer.kind.pixels_mut() {
-            *px = compress_pixels(px)?;
-        }
-        if let Some(mask) = layer.mask.as_mut() {
-            *mask = compress_pixels(mask)?;
-        }
-        if let Some(shapes) = layer.kind.shapes_mut() {
-            for shape in shapes {
-                if let Some(mask) = shape.mask.as_mut() {
-                    *mask = compress_pixels(mask)?;
+    crate::motion::compositions::visit_documents_mut(doc, |doc| {
+        for layer in &mut doc.layers {
+            if let Some(px) = layer.kind.pixels_mut() {
+                *px = compress_pixels(px)?;
+            }
+            if let Some(mask) = layer.mask.as_mut() {
+                *mask = compress_pixels(mask)?;
+            }
+            if let Some(shapes) = layer.kind.shapes_mut() {
+                for shape in shapes {
+                    if let Some(mask) = shape.mask.as_mut() {
+                        *mask = compress_pixels(mask)?;
+                    }
                 }
             }
         }
-    }
-    Ok(())
+        Ok(())
+    })
+}
+
+fn unpack_rasters(doc: &mut Document) -> Result<(), String> {
+    crate::motion::compositions::visit_documents_mut(doc, |doc| {
+        for layer in &mut doc.layers {
+            if let Some(px) = layer.kind.pixels_mut() {
+                *px = decompress_pixels(px)?;
+            }
+            if let Some(mask) = layer.mask.as_mut() {
+                *mask = decompress_pixels(mask)?;
+            }
+            for shape in layer.kind.shapes_mut().into_iter().flatten() {
+                if let Some(mask) = shape.mask.as_mut() {
+                    *mask = decompress_pixels(mask)?;
+                }
+            }
+        }
+        Ok(())
+    })
 }
 
 /// A worker writes a temporary file; only the UI may publish it after checking
@@ -637,7 +720,13 @@ pub(crate) fn prepare_swap(
 ) -> Result<PreparedSwap, String> {
     use std::io::Write;
 
-    meta.doc.validate_sources()?;
+    crate::motion::compositions::validate(&meta.doc)?;
+    for doc in crate::motion::compositions::documents(&meta.doc)? {
+        doc.validate_sources()?;
+        if let Some(replica) = &doc.collaboration {
+            crate::collaboration::resources::validate(replica)?;
+        }
+    }
     if features::required_version(&meta.doc) > VERSION {
         return Err("Unsupported omadesign project version".into());
     }
@@ -663,7 +752,7 @@ pub(crate) fn prepare_swap(
         &swap_font_archive(&prepared.destination),
     )?;
     let version = Some(features::required_version(&meta.doc));
-    let svg_sources = crate::svg_source::pack_sources(&mut meta.doc);
+    let svg_sources = crate::svg_source::pack_sources(&mut meta.doc)?;
     let mut writer = std::io::BufWriter::new(file);
     serde_json::to_writer(
         &mut writer,
@@ -705,24 +794,8 @@ pub fn load_swap(path: &Path) -> Result<SwapMeta, String> {
         crate::typography::load_for_document(original)?;
     }
     crate::typography::validate_document_fonts(&meta.doc)?;
-    meta.doc.validate_sources()?;
-    for layer in &mut meta.doc.layers {
-        if let Some(px) = layer.kind.pixels_mut() {
-            *px = decompress_pixels(px)?;
-        }
-        if let Some(mask) = layer.mask.as_mut() {
-            *mask = decompress_pixels(mask)?;
-        }
-        if let Some(shapes) = layer.kind.shapes_mut() {
-            for sh in shapes {
-                crate::text::fill_contours(&mut sh.geom);
-                if let Some(mask) = sh.mask.as_mut() {
-                    *mask = decompress_pixels(mask)?;
-                }
-            }
-        }
-    }
-    meta.doc.ensure_ids()?;
+    unpack_rasters(&mut meta.doc)?;
+    meta.doc = normalize_decoded_document(meta.doc, VERSION)?;
     Ok(meta)
 }
 
@@ -773,9 +846,10 @@ pub fn list_swaps() -> Vec<(PathBuf, SwapMeta)> {
         }
         // Listing needs metadata only. Keep older snapshots visible even when
         // restoring one needs a missing font; Recover reports that error.
-        if let Some(meta) = std::fs::read_to_string(&p).ok().and_then(|json| {
-            decode_swap_archive(&json).ok()
-        }) {
+        if let Some(meta) = std::fs::read_to_string(&p)
+            .ok()
+            .and_then(|json| decode_swap_archive(&json).ok())
+        {
             out.push((p, meta));
         }
     }
@@ -1306,3 +1380,6 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 }
+
+#[cfg(test)]
+mod motion_archive_tests;

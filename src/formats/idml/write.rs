@@ -12,6 +12,7 @@ use std::{
 /// Write standard IDML parts. Args: editable document. Returns ZIP bytes and explicit conversion notes.
 pub fn write(doc: &Document) -> Result<(Vec<u8>, Vec<String>), String> {
     doc.validate_hierarchy()?;
+    crate::motion::require_flat_artwork(doc, "IDML")?;
     if doc.artboards.len() > 1024 || doc.layers.len() > 16384 {
         return Err("IDML export exceeds page or item budget".into());
     }

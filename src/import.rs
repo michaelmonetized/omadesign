@@ -19,6 +19,8 @@ pub fn classify(path: &Path) -> &'static str {
     }
     match ext.as_str() {
         "oma" => "oma",
+        "omamotion" => "motion-project",
+        "gltf"|"glb"|"obj"|"stl"|"fbx"=>"model",
         "omaphoto" => "photo-settings",
         "svg" | "svgz" => "svg",
         "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" | "tif" | "tiff" => "raster",
@@ -59,6 +61,16 @@ pub(crate) fn open_with_progress(
     };
     if kind == "oma" {
         return Ok(Imported::Document(crate::project::load_from(path)?));
+    }
+    if kind == "motion-project" {
+        return Ok(Imported::Document(crate::motion::compositions::load_from(path)?));
+    }
+    if kind == "model" {
+        let model=crate::scene3d::import_model(path)?;
+        let mut scene=crate::scene3d::Scene::default();scene.add(model,name.clone())?;
+        let mut doc=crate::document::Document::new(&name,640.,480.,96.);
+        doc.layers.clear();doc.artboards.clear();doc.artboardless=true;doc.transparent=true;
+        doc.motion.scene3d=Some(scene);return Ok(Imported::Document(doc));
     }
     if kind == "affinity" {
         stage("Converting Affinity artwork");

@@ -969,6 +969,7 @@ fn motion(s: &mut Studio) {
         fps: 30.0,
         looped: true,
         tracks: vec![],
+        ..crate::motion::Motion::default()
     };
     use crate::motion::{Ease, Prop};
     clip.set_key(star_id, Prop::X, 0.0, 0.0, Ease::EaseInOut);

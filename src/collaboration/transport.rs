@@ -1,6 +1,6 @@
 //! Bounded authenticated exchanges; the editor owns retries and its durable queue.
 
-use super::{Change, Id, PROTOCOL, Replica};
+use super::{Change, Id, Replica, protocol};
 use crate::cloud::client::Client;
 use crate::geom::Pt;
 use serde::Deserialize;
@@ -16,6 +16,10 @@ pub struct Presence {
 
 #[derive(Deserialize)]
 pub struct Reply {
+    #[serde(default)]
+    pub protocol: Option<u32>,
+    #[serde(default, rename = "supportedProtocol")]
+    pub supported_protocol: Option<u32>,
     pub acknowledged: Vec<Id>,
     pub changes: Vec<Change>,
     pub cursor: u64,
@@ -27,9 +31,14 @@ impl Client {
     /// Publish a seed only to a service that understands explicit native capability arguments.
     /// Args: project ID and complete seed. Returns a session ID or refusal without local mutation.
     pub fn create_live(&self, project: &str, seed: String) -> Result<String, String> {
+        let base = serde_json::from_str(&seed).map_err(|e| format!("Invalid live seed: {e}"))?;
+        protocol::require(
+            &Replica::new(String::new(), String::new(), base),
+            protocol::local_maximum(),
+        )?;
         self.call(
             "live:create",
-            json!({"projectId":project,"seed":seed,"protocol":PROTOCOL}),
+            json!({"projectId":project,"seed":seed,"protocol":protocol::local_maximum()}),
         )?
         .as_str()
         .map(str::to_owned)
@@ -41,12 +50,12 @@ impl Client {
     pub fn join_live(&self, session: &str, actor: &str) -> Result<Replica, String> {
         let joined = self.call(
             "live:join",
-            json!({"session":session,"actor":actor,"protocol":PROTOCOL}),
+            json!({"session":session,"actor":actor,"protocol":protocol::local_maximum()}),
         )?;
-        if joined["supportedProtocol"].as_u64() != Some(PROTOCOL as u64)
+        if joined["supportedProtocol"].as_u64() != Some(protocol::local_maximum() as u64)
             || joined["protocol"]
                 .as_u64()
-                .is_none_or(|n| n > PROTOCOL as u64)
+                .is_none_or(|n| !(1..=protocol::local_maximum() as u64).contains(&n))
         {
             return Err("Live service does not negotiate native preservation".into());
         }
@@ -55,6 +64,13 @@ impl Client {
             .ok_or("Missing live document seed")?;
         let base = serde_json::from_str(seed).map_err(|e| format!("Invalid live seed: {e}"))?;
         let mut replica = Replica::new(session.into(), actor.into(), base);
+        let required = protocol::require(&replica, protocol::local_maximum())?;
+        if joined["protocol"]
+            .as_u64()
+            .is_none_or(|n| n < required as u64)
+        {
+            return Err("Live service understated the retained capability".into());
+        }
         replica.project = joined["projectId"]
             .as_str()
             .ok_or("Missing live project ID")?
@@ -71,6 +87,7 @@ impl Client {
         selection: Vec<String>,
         reconnect: bool,
     ) -> Result<Reply, String> {
+        protocol::require(replica, protocol::local_maximum())?;
         if reconnect {
             self.join_live(&replica.session, &replica.actor)?;
         }
@@ -93,6 +110,65 @@ impl Client {
             changes.push(change);
             bytes += length;
         }
-        serde_json::from_value(self.call("live:exchange", json!({"session":replica.session,"actor":replica.actor,"changes":changes,"cursor":cursor,"selection":selection,"after":replica.cursor,"protocol":PROTOCOL}))?).map_err(|e| format!("Invalid live exchange: {e}"))
+        let reply: Reply = serde_json::from_value(self.call("live:exchange", json!({"session":replica.session,"actor":replica.actor,"changes":changes,"cursor":cursor,"selection":selection,"after":replica.cursor,"protocol":protocol::local_maximum()}))?).map_err(|e| format!("Invalid live exchange: {e}"))?;
+        validate_reply(replica, &reply)?;
+        Ok(reply)
+    }
+}
+
+fn validate_reply(replica: &Replica, reply: &Reply) -> Result<(), String> {
+    let mut required = replica.protocol_requirement()?;
+    for change in &reply.changes {
+        if let super::Edit::Write { writes } = &change.edit {
+            for write in writes {
+                if let Some(cell) = &write.value {
+                    required = required.max(protocol::cell(&write.path, cell)?);
+                }
+            }
+        }
+    }
+    protocol::require_minimum(required, protocol::local_maximum())?;
+    if reply
+        .protocol
+        .is_some_and(|n| n < required || n > protocol::local_maximum())
+        || reply
+            .supported_protocol
+            .is_some_and(|n| n != protocol::local_maximum())
+        || (protocol::local_maximum() == 3
+            && (reply.protocol.is_none() || reply.supported_protocol.is_none()))
+    {
+        return Err("Live service did not negotiate the retained capability".into());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reply_gate_checks_empty_polls_and_retained_changes_before_ack_or_presence() {
+        let document = crate::document::Document::new("Reply", 1., 1., 72.);
+        let replica = Replica::new(
+            "session".into(),
+            "a".repeat(64),
+            crate::collaboration::snapshot(&document).unwrap(),
+        );
+        let before = serde_json::to_vec(&replica).unwrap();
+        let reply = |protocol, supported, changes| {
+            serde_json::from_value::<Reply>(json!({
+                "protocol":protocol,"supportedProtocol":supported,
+                "acknowledged":[],"changes":changes,"cursor":0,"more":false,"presence":[]
+            }))
+            .unwrap()
+        };
+        assert!(validate_reply(&replica, &reply(1, protocol::local_maximum(), json!([]))).is_ok());
+        if protocol::local_maximum() == 2 {
+            assert!(validate_reply(&replica, &reply(3, 2, json!([]))).is_err());
+            assert!(validate_reply(&replica, &reply(1, 3, json!([]))).is_err());
+            let advanced = json!([{"id":{"actor":"remote","seq":1},"clock":1,"seen":{},"edit":{"type":"write","writes":[{"path":"/publishing/facing_pages","value":{"Value":true}}]}}]);
+            assert!(validate_reply(&replica, &reply(1, 2, advanced)).is_err());
+        }
+        assert_eq!(serde_json::to_vec(&replica).unwrap(), before);
     }
 }

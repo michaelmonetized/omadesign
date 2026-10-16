@@ -9,6 +9,37 @@ use tiff::{
     tags::{ExtraSamples, Tag},
 };
 
+/// Write native RGB samples with an explicit straight-alpha channel.
+/// Args: admitted/cancellable output, borrowed native raster and original ICC bytes.
+/// Returns after encoding without copying samples or transferring their lease.
+pub(crate) fn write_rgb<W: std::io::Write + std::io::Seek>(
+    writer: &mut W,
+    raster: &image::DynamicImage,
+    profile: &[u8],
+) -> Result<(), String> {
+    let mut encoder = tiff::encoder::TiffEncoder::new(writer).map_err(|e| e.to_string())?;
+    macro_rules! write {
+        ($type:ty, $data:expr) => {{
+            let mut image = encoder
+                .new_image::<$type>(raster.width(), raster.height())
+                .map_err(|e| e.to_string())?;
+            image.extra_samples(&[ExtraSamples::UnassociatedAlpha])
+                .map_err(|e| e.to_string())?;
+            if !profile.is_empty() {
+                image.encoder().write_tag(Tag::IccProfile, profile)
+                    .map_err(|e| e.to_string())?;
+            }
+            image.write_data($data).map_err(|e| e.to_string())?;
+        }};
+    }
+    match raster {
+        image::DynamicImage::ImageRgba32F(image) => write!(colortype::RGB32Float, image.as_raw()),
+        image::DynamicImage::ImageRgba16(image) => write!(colortype::RGB16, image.as_raw()),
+        _ => return Err("Native RGB TIFF needs retained float or 16-bit samples".into()),
+    }
+    Ok(())
+}
+
 /// Encode the document's CMYKA samples in TIFF.
 /// Args: authored CMYKA pixels. Returns legacy unleased bytes; use encode_admitted for retained output.
 pub fn encode(pixels: &Pixels) -> Result<Vec<u8>, String> {

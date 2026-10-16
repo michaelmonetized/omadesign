@@ -17,19 +17,33 @@ pub(super) const PSD_TYPE: u32 = 21;
 pub(super) const SMART: u32 = 22;
 pub(super) const PUBLISHING: u32 = 23;
 pub(super) const COLLABORATION: u32 = 24;
+pub(super) const EXPRESSIONS: u32 = 25;
+pub(super) const COMPOSITIONS: u32 = 26;
+pub(super) const SCENE3D: u32 = 27;
 
 /// Identify implemented project readers.
 /// Args: envelope version. Returns false for reserved formats whose models are absent.
 pub(super) fn supports_version(version: u32) -> bool {
-    (1..=COLLABORATION).contains(&version)
+    (1..=SCENE3D).contains(&version)
 }
 
 /// Find the oldest reader that preserves this document.
 /// Args: document with unpacked editable objects. Returns its highest required feature version.
 pub(super) fn required_version(doc: &Document) -> u32 {
+    crate::motion::compositions::documents(doc)
+        .map(|docs| {
+            docs.into_iter()
+                .map(local_required_version)
+                .max()
+                .unwrap_or(5)
+        })
+        .unwrap_or(SCENE3D)
+}
+
+fn local_required_version(doc: &Document) -> u32 {
     let mut version = if doc.mask_sources().is_empty() { 5 } else { 13 };
-    if doc.collaboration.is_some() {
-        version = version.max(COLLABORATION);
+    if let Some(replica) = &doc.collaboration {
+        version = version.max(retained::replica_version(replica).unwrap_or(SCENE3D + 1));
     }
     for source in &doc.sources {
         version = version.max(retained::source_version(source));
@@ -48,6 +62,28 @@ pub(super) fn required_version(doc: &Document) -> u32 {
         if native.cmyk.is_some() || !native.icc_profile.is_empty() || native.intent != 1 {
             version = version.max(COLOR);
         }
+    }
+    if !doc.motion.expressions.is_empty() {
+        version = version.max(EXPRESSIONS);
+    }
+    if !doc.motion.compositions.is_empty()
+        || doc
+            .motion
+            .tracks
+            .iter()
+            .flat_map(|t| &t.keys)
+            .chain(doc.motion.compositions.iter().flat_map(|c| &c.time_remap))
+            .any(|k| {
+                matches!(
+                    k.ease,
+                    crate::motion::Ease::Hold | crate::motion::Ease::CubicBezier { .. }
+                )
+            })
+    {
+        version = version.max(COMPOSITIONS);
+    }
+    if doc.motion.scene3d.is_some() {
+        version = version.max(SCENE3D);
     }
     if !doc.publishing.is_empty() {
         version = version.max(PUBLISHING);
@@ -173,6 +209,7 @@ pub(super) fn validate_version(
     declared: u32,
     pooled_sources: bool,
 ) -> Result<(), String> {
+    crate::motion::compositions::documents(doc)?;
     let required = required_version(doc).max(if pooled_sources { VECTOR_PATTERN } else { 5 });
     if required >= RICH_TEXT && declared < required {
         return Err(format!(
@@ -403,11 +440,11 @@ mod tests {
 
         let mut neutral: serde_json::Value =
             serde_json::from_str(&super::super::encode(&plain()).unwrap()).unwrap();
-        for implemented in 1..=COLLABORATION {
+        for implemented in 1..=SCENE3D {
             neutral["version"] = implemented.into();
             super::super::decode(&neutral.to_string()).unwrap();
         }
-        for reserved in [COLLABORATION + 1, u32::MAX] {
+        for reserved in [SCENE3D + 1, u32::MAX] {
             neutral["version"] = reserved.into();
             assert!(
                 super::super::decode(&neutral.to_string())

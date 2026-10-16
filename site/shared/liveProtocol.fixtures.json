@@ -1,0 +1,2686 @@
+[
+  {
+    "name": "neutral root",
+    "path": "",
+    "cell": "Object",
+    "required": 1
+  },
+  {
+    "name": "legacy motion",
+    "path": "/motion",
+    "cell": {
+      "Value": {
+        "duration": 2,
+        "fps": 30,
+        "looped": true,
+        "tracks": [
+          {
+            "keys": [
+              {
+                "ease": "EaseIn"
+              }
+            ]
+          }
+        ],
+        "expressions": [],
+        "compositions": [],
+        "scene3d": null
+      }
+    },
+    "required": 1
+  },
+  {
+    "name": "native atomic",
+    "path": "/@entities/1/mask",
+    "cell": {
+      "Pixels": {
+        "w": 1,
+        "h": 1,
+        "data": "",
+        "native": {}
+      }
+    },
+    "required": 2
+  },
+  {
+    "name": "neutral color",
+    "path": "/color",
+    "cell": {
+      "Value": {
+        "model": "Rgb",
+        "depth": "U8",
+        "icc_profile": [],
+        "intent": 0
+      }
+    },
+    "required": 1
+  },
+  {
+    "name": "nonneutral color",
+    "path": "/color",
+    "cell": {
+      "Value": {
+        "model": "Rgb",
+        "depth": "F32",
+        "icc_profile": [],
+        "intent": 0
+      }
+    },
+    "required": 2
+  },
+  {
+    "name": "whole document expressions",
+    "path": "",
+    "cell": {
+      "Value": {
+        "motion": {
+          "expressions": [
+            {
+              "expression": "time"
+            }
+          ]
+        }
+      }
+    },
+    "required": 3
+  },
+  {
+    "name": "motion object expressions",
+    "path": "/motion",
+    "cell": {
+      "Value": {
+        "expressions": [
+          {
+            "expression": "time"
+          }
+        ]
+      }
+    },
+    "required": 3
+  },
+  {
+    "name": "expressions array",
+    "path": "/motion/expressions",
+    "cell": {
+      "Value": [
+        {
+          "expression": "time"
+        }
+      ]
+    },
+    "required": 3
+  },
+  {
+    "name": "expression scalar",
+    "path": "/motion/expressions/0/expression",
+    "cell": {
+      "Value": "time"
+    },
+    "required": 3
+  },
+  {
+    "name": "compositions array",
+    "path": "/motion/compositions",
+    "cell": {
+      "Value": [
+        {
+          "id": 9,
+          "document": {
+            "motion": {
+              "tracks": []
+            }
+          }
+        }
+      ]
+    },
+    "required": 3
+  },
+  {
+    "name": "empty compositions",
+    "path": "/motion/compositions",
+    "cell": {
+      "Value": []
+    },
+    "required": 1
+  },
+  {
+    "name": "empty composition list",
+    "path": "/motion/compositions",
+    "cell": "List",
+    "required": 1
+  },
+  {
+    "name": "stable child object",
+    "path": "/@compositions/9/document",
+    "cell": "Object",
+    "required": 3
+  },
+  {
+    "name": "stable child neutral pixels",
+    "path": "/@compositions/9/document/@entities/2/mask",
+    "cell": {
+      "Pixels": {
+        "w": 1,
+        "h": 1,
+        "data": ""
+      }
+    },
+    "required": 3
+  },
+  {
+    "name": "stable child native pixels",
+    "path": "/@compositions/9/document/@entities/2/mask",
+    "cell": {
+      "Pixels": {
+        "w": 1,
+        "h": 1,
+        "data": "",
+        "native": {}
+      }
+    },
+    "required": 3
+  },
+  {
+    "name": "stable nested motion",
+    "path": "/@compositions/9/document/motion/expressions",
+    "cell": {
+      "Value": []
+    },
+    "required": 3
+  },
+  {
+    "name": "scene option",
+    "path": "/motion/scene3d",
+    "cell": {
+      "Value": {
+        "nodes": []
+      }
+    },
+    "required": 3
+  },
+  {
+    "name": "scene object",
+    "path": "/motion/scene3d",
+    "cell": "Object",
+    "required": 3
+  },
+  {
+    "name": "empty scene option",
+    "path": "/motion/scene3d",
+    "cell": {
+      "Value": null
+    },
+    "required": 1
+  },
+  {
+    "name": "hold scalar",
+    "path": "/motion/tracks/0/keys/0/ease",
+    "cell": {
+      "Value": "Hold"
+    },
+    "required": 3
+  },
+  {
+    "name": "hold variant",
+    "path": "/motion/tracks/0/keys/0/ease",
+    "cell": {
+      "Variant": "Hold"
+    },
+    "required": 3
+  },
+  {
+    "name": "cubic atomic",
+    "path": "/motion/tracks",
+    "cell": {
+      "Value": [
+        {
+          "keys": [
+            {
+              "ease": {
+                "CubicBezier": {
+                  "x1": 0,
+                  "y1": 0,
+                  "x2": 1,
+                  "y2": 1
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "required": 3
+  },
+  {
+    "name": "cubic variant",
+    "path": "/motion/tracks/0/keys/0/ease",
+    "cell": {
+      "Variant": "CubicBezier"
+    },
+    "required": 3
+  },
+  {
+    "name": "cubic child",
+    "path": "/motion/tracks/0/keys/0/ease/CubicBezier/x1",
+    "cell": {
+      "Value": 0.25
+    },
+    "required": 3
+  },
+  {
+    "name": "time remap hold",
+    "path": "/motion/compositions/0/time_remap",
+    "cell": {
+      "Value": [
+        {
+          "ease": "Hold"
+        }
+      ]
+    },
+    "required": 3
+  },
+  {
+    "name": "future motion root",
+    "path": "/motion",
+    "cell": {
+      "Value": {
+        "layout28": {}
+      }
+    },
+    "error": true
+  },
+  {
+    "name": "future motion property",
+    "path": "/motion/layout28",
+    "cell": "Object",
+    "error": true
+  },
+  {
+    "name": "future ease",
+    "path": "/motion/tracks/0/keys/0/ease",
+    "cell": {
+      "Value": "Spring"
+    },
+    "error": true
+  },
+  {
+    "name": "future ease child",
+    "path": "/motion/tracks/0/keys/0/ease/Spring/k",
+    "cell": {
+      "Value": 1
+    },
+    "error": true
+  },
+  {
+    "name": "future document envelope",
+    "path": "",
+    "cell": {
+      "Value": {
+        "version": 28,
+        "doc": {
+          "motion": {
+            "tracks": []
+          }
+        }
+      }
+    },
+    "error": true
+  },
+  {
+    "name": "ordinary source text stays opaque",
+    "path": "/sources",
+    "cell": {
+      "Value": [
+        {
+          "format": "svg",
+          "bytes": "<motion><scene3d/></motion>"
+        }
+      ]
+    },
+    "required": 3
+  },
+  {
+    "name": "name is not a feature",
+    "path": "/name",
+    "cell": {
+      "Value": "scene3d Hold expressions"
+    },
+    "required": 1
+  },
+  {
+    "name": "empty sources",
+    "path": "/sources",
+    "cell": {
+      "Value": []
+    },
+    "required": 1,
+    "group": "common"
+  },
+  {
+    "name": "empty source list",
+    "path": "/sources",
+    "cell": "List",
+    "required": 1,
+    "group": "common"
+  },
+  {
+    "name": "source descriptor history",
+    "path": "/sources",
+    "cell": {
+      "Value": [
+        {
+          "id": "source",
+          "format": "psd",
+          "data": "opaque original bytes",
+          "depth": 32
+        }
+      ]
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "single source descriptor child",
+    "path": "/sources/0",
+    "cell": {
+      "Value": {
+        "id": "source",
+        "data": "opaque"
+      }
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "source bytes remain opaque",
+    "path": "/sources",
+    "cell": {
+      "Value": [
+        {
+          "id": "source",
+          "bytes": [
+            1,
+            2,
+            3
+          ],
+          "unparsed": {
+            "motion": {
+              "future28": {}
+            }
+          }
+        }
+      ]
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "default publishing",
+    "path": "/publishing",
+    "cell": {
+      "Value": {
+        "facing_pages": false,
+        "bleed": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "styles": [],
+        "masters": [],
+        "master_stories": {},
+        "master_layers": {},
+        "master_assets": {},
+        "page_sides": {},
+        "page_masters": {},
+        "links": {},
+        "inherited_layers": [],
+        "inherited_fingerprints": {},
+        "inherited_pages": {},
+        "swatches": {}
+      }
+    },
+    "required": 1,
+    "group": "common"
+  },
+  {
+    "name": "facing pages",
+    "path": "/publishing/facing_pages",
+    "cell": {
+      "Value": true
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "bleed nonzero",
+    "path": "/publishing/bleed",
+    "cell": {
+      "Value": [
+        0,
+        0,
+        1,
+        0
+      ]
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "bleed child zero",
+    "path": "/publishing/bleed/0",
+    "cell": {
+      "Value": 0
+    },
+    "required": 1,
+    "group": "common"
+  },
+  {
+    "name": "bleed child nonzero",
+    "path": "/publishing/bleed/0",
+    "cell": {
+      "Value": 1
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "publishing style",
+    "path": "/publishing/styles",
+    "cell": {
+      "Value": [
+        {
+          "id": "ParagraphStyle/1",
+          "name": "Body",
+          "kind": "Paragraph",
+          "attributes": {}
+        }
+      ]
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "publishing map entry retains even empty value",
+    "path": "/publishing/links/12",
+    "cell": {
+      "Value": ""
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "publishing empty maps",
+    "path": "/publishing/links",
+    "cell": {
+      "Value": {}
+    },
+    "required": 1,
+    "group": "common"
+  },
+  {
+    "name": "layer filter",
+    "path": "/@entities/12/svg_filter",
+    "cell": {
+      "Value": {
+        "definitions": "<filter id=\"f\"/>",
+        "original_definitions": "<filter id=\"f\"/>",
+        "filters": [
+          "f"
+        ],
+        "transform": [
+          1,
+          0,
+          0,
+          1,
+          0,
+          0
+        ]
+      }
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "optional layer svg_filter",
+    "path": "/@entities/12/svg_filter",
+    "cell": {
+      "Value": {}
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "default layer svg_filter",
+    "path": "/@entities/12/svg_filter",
+    "cell": {
+      "Value": null
+    },
+    "required": 1,
+    "group": "common"
+  },
+  {
+    "name": "optional layer psd_type",
+    "path": "/@entities/12/psd_type",
+    "cell": {
+      "Value": {}
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "default layer psd_type",
+    "path": "/@entities/12/psd_type",
+    "cell": {
+      "Value": null
+    },
+    "required": 1,
+    "group": "common"
+  },
+  {
+    "name": "optional layer psd_smart",
+    "path": "/@entities/12/psd_smart",
+    "cell": {
+      "Value": {}
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "default layer psd_smart",
+    "path": "/@entities/12/psd_smart",
+    "cell": {
+      "Value": null
+    },
+    "required": 1,
+    "group": "common"
+  },
+  {
+    "name": "optional layer source_attachment",
+    "path": "/@entities/12/source_attachment",
+    "cell": {
+      "Value": "id"
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "default layer source_attachment",
+    "path": "/@entities/12/source_attachment",
+    "cell": {
+      "Value": null
+    },
+    "required": 1,
+    "group": "common"
+  },
+  {
+    "name": "whole deleted layer array",
+    "path": "/layers",
+    "cell": {
+      "Value": [
+        {
+          "id": 12,
+          "source_attachment": "id",
+          "psd_smart": {
+            "id": "smart"
+          }
+        }
+      ]
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "text transform",
+    "path": "/@entities/17/geom/Text/transform",
+    "cell": {
+      "Value": [
+        1,
+        0,
+        0,
+        1,
+        3,
+        4
+      ]
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "identity retained text transform",
+    "path": "/@entities/17/geom/Text/transform",
+    "cell": {
+      "Value": [
+        1,
+        0,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "default text transform",
+    "path": "/@entities/17/geom/Text/transform",
+    "cell": {
+      "Value": null
+    },
+    "required": 1,
+    "group": "common"
+  },
+  {
+    "name": "text svg metadata",
+    "path": "/@entities/17/geom/Text/svg_text",
+    "cell": {
+      "Value": {
+        "original": "<text>Hi</text>"
+      }
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "span publishing_style",
+    "path": "/@entities/17/geom/Text/spans/0/publishing_style",
+    "cell": {
+      "Value": "CharacterStyle/1"
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "default span publishing_style",
+    "path": "/@entities/17/geom/Text/spans/0/publishing_style",
+    "cell": {
+      "Value": null
+    },
+    "required": 1,
+    "group": "common"
+  },
+  {
+    "name": "span font",
+    "path": "/@entities/17/geom/Text/spans/0/font",
+    "cell": {
+      "Value": "omatype:face"
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "default span font",
+    "path": "/@entities/17/geom/Text/spans/0/font",
+    "cell": {
+      "Value": null
+    },
+    "required": 1,
+    "group": "common"
+  },
+  {
+    "name": "span px",
+    "path": "/@entities/17/geom/Text/spans/0/px",
+    "cell": {
+      "Value": 12
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "default span px",
+    "path": "/@entities/17/geom/Text/spans/0/px",
+    "cell": {
+      "Value": null
+    },
+    "required": 1,
+    "group": "common"
+  },
+  {
+    "name": "span fill",
+    "path": "/@entities/17/geom/Text/spans/0/fill",
+    "cell": {
+      "Value": "None"
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "default span fill",
+    "path": "/@entities/17/geom/Text/spans/0/fill",
+    "cell": {
+      "Value": null
+    },
+    "required": 1,
+    "group": "common"
+  },
+  {
+    "name": "whole text and spans array",
+    "path": "/@entities/17/geom/Text",
+    "cell": {
+      "Value": {
+        "content": "Text",
+        "spans": [
+          {
+            "start": 0,
+            "end": 4,
+            "font": "omatype:face",
+            "fill": {
+              "Solid": {
+                "r": 1,
+                "g": 2,
+                "b": 3,
+                "a": 255
+              }
+            }
+          }
+        ]
+      }
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "paragraph publishing reference",
+    "path": "/@entities/17/geom/Text/paragraphs/0/publishing_style",
+    "cell": {
+      "Value": "ParagraphStyle/1"
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "ordinary text legacy span",
+    "path": "/@entities/17/geom/Text",
+    "cell": {
+      "Value": {
+        "content": "Text",
+        "font": "",
+        "spans": [
+          {
+            "start": 0,
+            "end": 4,
+            "tracking": 1,
+            "font": null,
+            "px": null,
+            "fill": null,
+            "publishing_style": null
+          }
+        ]
+      }
+    },
+    "required": 1,
+    "group": "common"
+  },
+  {
+    "name": "pattern variant",
+    "path": "/@entities/17/style/fill",
+    "cell": {
+      "Variant": "Pattern"
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "pattern atomic",
+    "path": "/@entities/17/style/fill",
+    "cell": {
+      "Value": {
+        "Pattern": {
+          "definitions": "<pattern id=\"p\"/>",
+          "id": "p",
+          "transform": [
+            1,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "opacity": 1
+        }
+      }
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "pattern definition scalar",
+    "path": "/@entities/17/style/fill/Pattern/definitions",
+    "cell": {
+      "Value": "<pattern id=\"p\"/>"
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "span-only pattern",
+    "path": "/@entities/17/geom/Text/spans/0/fill",
+    "cell": {
+      "Value": {
+        "Pattern": {
+          "definitions": "<pattern id=\"p\"/>",
+          "id": "p"
+        }
+      }
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "default advanced gradient fields",
+    "path": "/@entities/17/style/fill/Gradient",
+    "cell": {
+      "Value": {
+        "kind": "Radial",
+        "from": [
+          0.5,
+          0.5
+        ],
+        "to": [
+          1,
+          0.5
+        ],
+        "stops": [],
+        "radial_axis": null,
+        "spread": "Pad",
+        "focal": [
+          0,
+          0
+        ],
+        "inner_radius": 0
+      }
+    },
+    "required": 1,
+    "group": "common"
+  },
+  {
+    "name": "advanced gradient radial_axis",
+    "path": "/@entities/17/style/fill/Gradient/radial_axis",
+    "cell": {
+      "Value": [
+        0,
+        0
+      ]
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "advanced gradient spread",
+    "path": "/@entities/17/style/fill/Gradient/spread",
+    "cell": {
+      "Value": "Reflect"
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "advanced gradient focal",
+    "path": "/@entities/17/style/fill/Gradient/focal",
+    "cell": {
+      "Value": [
+        0.1,
+        0
+      ]
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "advanced gradient inner_radius",
+    "path": "/@entities/17/style/fill/Gradient/inner_radius",
+    "cell": {
+      "Value": 0.5
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "advanced radial child",
+    "path": "/@entities/17/style/fill/Gradient/radial_axis/0",
+    "cell": {
+      "Value": 0
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "default focal child",
+    "path": "/@entities/17/style/fill/Gradient/focal/0",
+    "cell": {
+      "Value": 0
+    },
+    "required": 1,
+    "group": "common"
+  },
+  {
+    "name": "nondefault focal child",
+    "path": "/@entities/17/style/fill/Gradient/focal/1",
+    "cell": {
+      "Value": 0.5
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "advanced stroke gradient",
+    "path": "/@entities/17/style/stroke/gradient",
+    "cell": {
+      "Value": {
+        "spread": "Repeat"
+      }
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "future gradient spread",
+    "path": "/@entities/17/style/fill/Gradient/spread",
+    "cell": {
+      "Value": "Future"
+    },
+    "error": true,
+    "group": "common"
+  },
+  {
+    "name": "future publishing field",
+    "path": "/publishing/layout28",
+    "cell": {
+      "Value": {}
+    },
+    "error": true,
+    "group": "common"
+  },
+  {
+    "name": "future root layout",
+    "path": "/layout28",
+    "cell": {
+      "Value": {}
+    },
+    "error": true,
+    "group": "common"
+  },
+  {
+    "name": "unrelated text is not source semantics",
+    "path": "/name",
+    "cell": {
+      "Value": {
+        "Pattern": {
+          "definitions": "Motion"
+        },
+        "svg_filter": "future"
+      }
+    },
+    "required": 1,
+    "group": "common"
+  },
+  {
+    "name": "future fill variant",
+    "path": "/@entities/17/style/fill",
+    "cell": {
+      "Variant": "FutureLayout28"
+    },
+    "error": true
+  },
+  {
+    "name": "future fill subtree",
+    "path": "/@entities/17/style/fill/FutureLayout28/size",
+    "cell": {
+      "Value": 1
+    },
+    "error": true
+  },
+  {
+    "name": "arbitrary name JSON is not a document seam",
+    "path": "/name",
+    "cell": {
+      "Value": {
+        "document": {
+          "motion": {
+            "expressions": [
+              {
+                "source": "time"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "required": 1
+  },
+  {
+    "name": "composition array child document scalar",
+    "path": "/motion/compositions/0/document/name",
+    "cell": {
+      "Value": "child"
+    },
+    "required": 3
+  },
+  {
+    "name": "retained main font needs full archive",
+    "path": "/@entities/17/geom/Text/font",
+    "cell": {
+      "Value": "omatype:face"
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "retained main path font needs full archive",
+    "path": "/@entities/17/geom/Text/font",
+    "cell": {
+      "Value": "/home/fixture/face.ttf"
+    },
+    "required": 3,
+    "group": "common"
+  },
+  {
+    "name": "empty main font stays legacy",
+    "path": "/@entities/17/geom/Text/font",
+    "cell": {
+      "Value": ""
+    },
+    "required": 1
+  },
+  {
+    "name": "layout28 row zero split",
+    "path": "/@entities/91/layout/grid/row",
+    "cell": {
+      "Value": 0
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 row zero atomic layers",
+    "path": "/layers",
+    "cell": {
+      "Value": [
+        {
+          "kind": {
+            "Vector": {
+              "shapes": [
+                {
+                  "id": 91,
+                  "visible": false,
+                  "layout": {
+                    "grid": {
+                      "row": 0
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 row zero missing baseline",
+    "path": "/@entities/91/layout/component/Instance/nodes",
+    "cell": {
+      "Value": [
+        {
+          "source": 999,
+          "instance": 999,
+          "slot": 999,
+          "nested_main": 999,
+          "baseline": {
+            "id": 999,
+            "layout": {
+              "grid": {
+                "row": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 row zero nested Motion",
+    "path": "/motion/compositions",
+    "cell": {
+      "Value": [
+        {
+          "id": 7,
+          "document": {
+            "motion": {
+              "compositions": [
+                {
+                  "id": 8,
+                  "document": {
+                    "layers": [
+                      {
+                        "kind": {
+                          "Vector": {
+                            "shapes": [
+                              {
+                                "layout": {
+                                  "grid": {
+                                    "row": 0
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 row zero stable child",
+    "path": "/@compositions/7/document/@compositions/8/document/@entities/91/layout/grid/row",
+    "cell": {
+      "Value": 0
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 column zero split",
+    "path": "/@entities/91/layout/grid/column",
+    "cell": {
+      "Value": 0
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 column zero atomic layers",
+    "path": "/layers",
+    "cell": {
+      "Value": [
+        {
+          "kind": {
+            "Vector": {
+              "shapes": [
+                {
+                  "id": 91,
+                  "visible": false,
+                  "layout": {
+                    "grid": {
+                      "column": 0
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 column zero missing baseline",
+    "path": "/@entities/91/layout/component/Instance/nodes",
+    "cell": {
+      "Value": [
+        {
+          "source": 999,
+          "instance": 999,
+          "slot": 999,
+          "nested_main": 999,
+          "baseline": {
+            "id": 999,
+            "layout": {
+              "grid": {
+                "column": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 column zero nested Motion",
+    "path": "/motion/compositions",
+    "cell": {
+      "Value": [
+        {
+          "id": 7,
+          "document": {
+            "motion": {
+              "compositions": [
+                {
+                  "id": 8,
+                  "document": {
+                    "layers": [
+                      {
+                        "kind": {
+                          "Vector": {
+                            "shapes": [
+                              {
+                                "layout": {
+                                  "grid": {
+                                    "column": 0
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 column zero stable child",
+    "path": "/@compositions/7/document/@compositions/8/document/@entities/91/layout/grid/column",
+    "cell": {
+      "Value": 0
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 row span split",
+    "path": "/@entities/91/layout/grid/row_span",
+    "cell": {
+      "Value": 2
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 row span atomic layers",
+    "path": "/layers",
+    "cell": {
+      "Value": [
+        {
+          "kind": {
+            "Vector": {
+              "shapes": [
+                {
+                  "id": 91,
+                  "visible": false,
+                  "layout": {
+                    "grid": {
+                      "row_span": 2
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 row span missing baseline",
+    "path": "/@entities/91/layout/component/Instance/nodes",
+    "cell": {
+      "Value": [
+        {
+          "source": 999,
+          "instance": 999,
+          "slot": 999,
+          "nested_main": 999,
+          "baseline": {
+            "id": 999,
+            "layout": {
+              "grid": {
+                "row_span": 2
+              }
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 row span nested Motion",
+    "path": "/motion/compositions",
+    "cell": {
+      "Value": [
+        {
+          "id": 7,
+          "document": {
+            "motion": {
+              "compositions": [
+                {
+                  "id": 8,
+                  "document": {
+                    "layers": [
+                      {
+                        "kind": {
+                          "Vector": {
+                            "shapes": [
+                              {
+                                "layout": {
+                                  "grid": {
+                                    "row_span": 2
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 row span stable child",
+    "path": "/@compositions/7/document/@compositions/8/document/@entities/91/layout/grid/row_span",
+    "cell": {
+      "Value": 2
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 column span split",
+    "path": "/@entities/91/layout/grid/column_span",
+    "cell": {
+      "Value": 2
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 column span atomic layers",
+    "path": "/layers",
+    "cell": {
+      "Value": [
+        {
+          "kind": {
+            "Vector": {
+              "shapes": [
+                {
+                  "id": 91,
+                  "visible": false,
+                  "layout": {
+                    "grid": {
+                      "column_span": 2
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 column span missing baseline",
+    "path": "/@entities/91/layout/component/Instance/nodes",
+    "cell": {
+      "Value": [
+        {
+          "source": 999,
+          "instance": 999,
+          "slot": 999,
+          "nested_main": 999,
+          "baseline": {
+            "id": 999,
+            "layout": {
+              "grid": {
+                "column_span": 2
+              }
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 column span nested Motion",
+    "path": "/motion/compositions",
+    "cell": {
+      "Value": [
+        {
+          "id": 7,
+          "document": {
+            "motion": {
+              "compositions": [
+                {
+                  "id": 8,
+                  "document": {
+                    "layers": [
+                      {
+                        "kind": {
+                          "Vector": {
+                            "shapes": [
+                              {
+                                "layout": {
+                                  "grid": {
+                                    "column_span": 2
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 column span stable child",
+    "path": "/@compositions/7/document/@compositions/8/document/@entities/91/layout/grid/column_span",
+    "cell": {
+      "Value": 2
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 inactive row tracks split",
+    "path": "/@entities/91/layout/stack/row_tracks",
+    "cell": {
+      "Value": [
+        {
+          "size": "Hug"
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 inactive row tracks atomic layers",
+    "path": "/layers",
+    "cell": {
+      "Value": [
+        {
+          "kind": {
+            "Vector": {
+              "shapes": [
+                {
+                  "id": 91,
+                  "visible": false,
+                  "layout": {
+                    "stack": {
+                      "row_tracks": [
+                        {
+                          "size": "Hug"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 inactive row tracks missing baseline",
+    "path": "/@entities/91/layout/component/Instance/nodes",
+    "cell": {
+      "Value": [
+        {
+          "source": 999,
+          "instance": 999,
+          "slot": 999,
+          "nested_main": 999,
+          "baseline": {
+            "id": 999,
+            "layout": {
+              "stack": {
+                "row_tracks": [
+                  {
+                    "size": "Hug"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 inactive row tracks nested Motion",
+    "path": "/motion/compositions",
+    "cell": {
+      "Value": [
+        {
+          "id": 7,
+          "document": {
+            "motion": {
+              "compositions": [
+                {
+                  "id": 8,
+                  "document": {
+                    "layers": [
+                      {
+                        "kind": {
+                          "Vector": {
+                            "shapes": [
+                              {
+                                "layout": {
+                                  "stack": {
+                                    "row_tracks": [
+                                      {
+                                        "size": "Hug"
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 inactive row tracks stable child",
+    "path": "/@compositions/7/document/@compositions/8/document/@entities/91/layout/stack/row_tracks",
+    "cell": {
+      "Value": [
+        {
+          "size": "Hug"
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 inactive column tracks split",
+    "path": "/@entities/91/layout/stack/column_tracks",
+    "cell": {
+      "Value": [
+        {
+          "size": {
+            "Fixed": 2
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 inactive column tracks atomic layers",
+    "path": "/layers",
+    "cell": {
+      "Value": [
+        {
+          "kind": {
+            "Vector": {
+              "shapes": [
+                {
+                  "id": 91,
+                  "visible": false,
+                  "layout": {
+                    "stack": {
+                      "column_tracks": [
+                        {
+                          "size": {
+                            "Fixed": 2
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 inactive column tracks missing baseline",
+    "path": "/@entities/91/layout/component/Instance/nodes",
+    "cell": {
+      "Value": [
+        {
+          "source": 999,
+          "instance": 999,
+          "slot": 999,
+          "nested_main": 999,
+          "baseline": {
+            "id": 999,
+            "layout": {
+              "stack": {
+                "column_tracks": [
+                  {
+                    "size": {
+                      "Fixed": 2
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 inactive column tracks nested Motion",
+    "path": "/motion/compositions",
+    "cell": {
+      "Value": [
+        {
+          "id": 7,
+          "document": {
+            "motion": {
+              "compositions": [
+                {
+                  "id": 8,
+                  "document": {
+                    "layers": [
+                      {
+                        "kind": {
+                          "Vector": {
+                            "shapes": [
+                              {
+                                "layout": {
+                                  "stack": {
+                                    "column_tracks": [
+                                      {
+                                        "size": {
+                                          "Fixed": 2
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 inactive column tracks stable child",
+    "path": "/@compositions/7/document/@compositions/8/document/@entities/91/layout/stack/column_tracks",
+    "cell": {
+      "Value": [
+        {
+          "size": {
+            "Fixed": 2
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 baseline stack split",
+    "path": "/@entities/91/layout/stack/align",
+    "cell": {
+      "Value": "Baseline"
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 baseline stack atomic layers",
+    "path": "/layers",
+    "cell": {
+      "Value": [
+        {
+          "kind": {
+            "Vector": {
+              "shapes": [
+                {
+                  "id": 91,
+                  "visible": false,
+                  "layout": {
+                    "stack": {
+                      "align": "Baseline"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 baseline stack missing baseline",
+    "path": "/@entities/91/layout/component/Instance/nodes",
+    "cell": {
+      "Value": [
+        {
+          "source": 999,
+          "instance": 999,
+          "slot": 999,
+          "nested_main": 999,
+          "baseline": {
+            "id": 999,
+            "layout": {
+              "stack": {
+                "align": "Baseline"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 baseline stack nested Motion",
+    "path": "/motion/compositions",
+    "cell": {
+      "Value": [
+        {
+          "id": 7,
+          "document": {
+            "motion": {
+              "compositions": [
+                {
+                  "id": 8,
+                  "document": {
+                    "layers": [
+                      {
+                        "kind": {
+                          "Vector": {
+                            "shapes": [
+                              {
+                                "layout": {
+                                  "stack": {
+                                    "align": "Baseline"
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 baseline stack stable child",
+    "path": "/@compositions/7/document/@compositions/8/document/@entities/91/layout/stack/align",
+    "cell": {
+      "Value": "Baseline"
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 inactive baseline breakpoint split",
+    "path": "/@entities/91/layout/breakpoints/0/align",
+    "cell": {
+      "Value": "Baseline"
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 inactive baseline breakpoint atomic layers",
+    "path": "/layers",
+    "cell": {
+      "Value": [
+        {
+          "kind": {
+            "Vector": {
+              "shapes": [
+                {
+                  "id": 91,
+                  "visible": false,
+                  "layout": {
+                    "breakpoints": [
+                      {
+                        "align": "Baseline"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 inactive baseline breakpoint missing baseline",
+    "path": "/@entities/91/layout/component/Instance/nodes",
+    "cell": {
+      "Value": [
+        {
+          "source": 999,
+          "instance": 999,
+          "slot": 999,
+          "nested_main": 999,
+          "baseline": {
+            "id": 999,
+            "layout": {
+              "breakpoints": [
+                {
+                  "align": "Baseline"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 inactive baseline breakpoint nested Motion",
+    "path": "/motion/compositions",
+    "cell": {
+      "Value": [
+        {
+          "id": 7,
+          "document": {
+            "motion": {
+              "compositions": [
+                {
+                  "id": 8,
+                  "document": {
+                    "layers": [
+                      {
+                        "kind": {
+                          "Vector": {
+                            "shapes": [
+                              {
+                                "layout": {
+                                  "breakpoints": [
+                                    {
+                                      "align": "Baseline"
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 inactive baseline breakpoint stable child",
+    "path": "/@compositions/7/document/@compositions/8/document/@entities/91/layout/breakpoints/0/align",
+    "cell": {
+      "Value": "Baseline"
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 private Main property split",
+    "path": "/@entities/91/layout/component/Main/properties",
+    "cell": {
+      "Value": [
+        {
+          "id": 7,
+          "name": "private",
+          "slot": 98765,
+          "kind": "Visibility"
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 private Main property atomic layers",
+    "path": "/layers",
+    "cell": {
+      "Value": [
+        {
+          "kind": {
+            "Vector": {
+              "shapes": [
+                {
+                  "id": 91,
+                  "visible": false,
+                  "layout": {
+                    "component": {
+                      "Main": {
+                        "properties": [
+                          {
+                            "id": 7,
+                            "name": "private",
+                            "slot": 98765,
+                            "kind": "Visibility"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 private Main property missing baseline",
+    "path": "/@entities/91/layout/component/Instance/nodes",
+    "cell": {
+      "Value": [
+        {
+          "source": 999,
+          "instance": 999,
+          "slot": 999,
+          "nested_main": 999,
+          "baseline": {
+            "id": 999,
+            "layout": {
+              "component": {
+                "Main": {
+                  "properties": [
+                    {
+                      "id": 7,
+                      "name": "private",
+                      "slot": 98765,
+                      "kind": "Visibility"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 private Main property nested Motion",
+    "path": "/motion/compositions",
+    "cell": {
+      "Value": [
+        {
+          "id": 7,
+          "document": {
+            "motion": {
+              "compositions": [
+                {
+                  "id": 8,
+                  "document": {
+                    "layers": [
+                      {
+                        "kind": {
+                          "Vector": {
+                            "shapes": [
+                              {
+                                "layout": {
+                                  "component": {
+                                    "Main": {
+                                      "properties": [
+                                        {
+                                          "id": 7,
+                                          "name": "private",
+                                          "slot": 98765,
+                                          "kind": "Visibility"
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 private Main property stable child",
+    "path": "/@compositions/7/document/@compositions/8/document/@entities/91/layout/component/Main/properties",
+    "cell": {
+      "Value": [
+        {
+          "id": 7,
+          "name": "private",
+          "slot": 98765,
+          "kind": "Visibility"
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 unknown alignment split",
+    "path": "/@entities/91/layout/stack/align",
+    "cell": {
+      "Value": "Future"
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 unknown alignment atomic layers",
+    "path": "/layers",
+    "cell": {
+      "Value": [
+        {
+          "kind": {
+            "Vector": {
+              "shapes": [
+                {
+                  "id": 91,
+                  "visible": false,
+                  "layout": {
+                    "stack": {
+                      "align": "Future"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 unknown alignment missing baseline",
+    "path": "/@entities/91/layout/component/Instance/nodes",
+    "cell": {
+      "Value": [
+        {
+          "source": 999,
+          "instance": 999,
+          "slot": 999,
+          "nested_main": 999,
+          "baseline": {
+            "id": 999,
+            "layout": {
+              "stack": {
+                "align": "Future"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 unknown alignment nested Motion",
+    "path": "/motion/compositions",
+    "cell": {
+      "Value": [
+        {
+          "id": 7,
+          "document": {
+            "motion": {
+              "compositions": [
+                {
+                  "id": 8,
+                  "document": {
+                    "layers": [
+                      {
+                        "kind": {
+                          "Vector": {
+                            "shapes": [
+                              {
+                                "layout": {
+                                  "stack": {
+                                    "align": "Future"
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 unknown alignment stable child",
+    "path": "/@compositions/7/document/@compositions/8/document/@entities/91/layout/stack/align",
+    "cell": {
+      "Value": "Future"
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 unknown flow split",
+    "path": "/@entities/91/layout/stack/flow",
+    "cell": {
+      "Value": "Future"
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 unknown flow atomic layers",
+    "path": "/layers",
+    "cell": {
+      "Value": [
+        {
+          "kind": {
+            "Vector": {
+              "shapes": [
+                {
+                  "id": 91,
+                  "visible": false,
+                  "layout": {
+                    "stack": {
+                      "flow": "Future"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 unknown flow missing baseline",
+    "path": "/@entities/91/layout/component/Instance/nodes",
+    "cell": {
+      "Value": [
+        {
+          "source": 999,
+          "instance": 999,
+          "slot": 999,
+          "nested_main": 999,
+          "baseline": {
+            "id": 999,
+            "layout": {
+              "stack": {
+                "flow": "Future"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 unknown flow nested Motion",
+    "path": "/motion/compositions",
+    "cell": {
+      "Value": [
+        {
+          "id": 7,
+          "document": {
+            "motion": {
+              "compositions": [
+                {
+                  "id": 8,
+                  "document": {
+                    "layers": [
+                      {
+                        "kind": {
+                          "Vector": {
+                            "shapes": [
+                              {
+                                "layout": {
+                                  "stack": {
+                                    "flow": "Future"
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 unknown flow stable child",
+    "path": "/@compositions/7/document/@compositions/8/document/@entities/91/layout/stack/flow",
+    "cell": {
+      "Value": "Future"
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 unknown component split",
+    "path": "/@entities/91/layout/component",
+    "cell": {
+      "Value": "Future"
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 unknown component atomic layers",
+    "path": "/layers",
+    "cell": {
+      "Value": [
+        {
+          "kind": {
+            "Vector": {
+              "shapes": [
+                {
+                  "id": 91,
+                  "visible": false,
+                  "layout": {
+                    "component": "Future"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 unknown component missing baseline",
+    "path": "/@entities/91/layout/component/Instance/nodes",
+    "cell": {
+      "Value": [
+        {
+          "source": 999,
+          "instance": 999,
+          "slot": 999,
+          "nested_main": 999,
+          "baseline": {
+            "id": 999,
+            "layout": {
+              "component": "Future"
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 unknown component nested Motion",
+    "path": "/motion/compositions",
+    "cell": {
+      "Value": [
+        {
+          "id": 7,
+          "document": {
+            "motion": {
+              "compositions": [
+                {
+                  "id": 8,
+                  "document": {
+                    "layers": [
+                      {
+                        "kind": {
+                          "Vector": {
+                            "shapes": [
+                              {
+                                "layout": {
+                                  "component": "Future"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 unknown component stable child",
+    "path": "/@compositions/7/document/@compositions/8/document/@entities/91/layout/component",
+    "cell": {
+      "Value": "Future"
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 unknown grid field split",
+    "path": "/@entities/91/layout/grid/future",
+    "cell": {
+      "Value": 0
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 unknown grid field atomic layers",
+    "path": "/layers",
+    "cell": {
+      "Value": [
+        {
+          "kind": {
+            "Vector": {
+              "shapes": [
+                {
+                  "id": 91,
+                  "visible": false,
+                  "layout": {
+                    "grid": {
+                      "future": 0
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 unknown grid field missing baseline",
+    "path": "/@entities/91/layout/component/Instance/nodes",
+    "cell": {
+      "Value": [
+        {
+          "source": 999,
+          "instance": 999,
+          "slot": 999,
+          "nested_main": 999,
+          "baseline": {
+            "id": 999,
+            "layout": {
+              "grid": {
+                "future": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 unknown grid field nested Motion",
+    "path": "/motion/compositions",
+    "cell": {
+      "Value": [
+        {
+          "id": 7,
+          "document": {
+            "motion": {
+              "compositions": [
+                {
+                  "id": 8,
+                  "document": {
+                    "layers": [
+                      {
+                        "kind": {
+                          "Vector": {
+                            "shapes": [
+                              {
+                                "layout": {
+                                  "grid": {
+                                    "future": 0
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 unknown grid field stable child",
+    "path": "/@compositions/7/document/@compositions/8/document/@entities/91/layout/grid/future",
+    "cell": {
+      "Value": 0
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 default grid",
+    "path": "/@entities/91/layout/grid",
+    "cell": {
+      "Value": {
+        "row": null,
+        "column": null,
+        "row_span": 1,
+        "column_span": 1
+      }
+    },
+    "required": 1
+  },
+  {
+    "name": "layout28 empty row tracks",
+    "path": "/@entities/91/layout/stack/row_tracks",
+    "cell": {
+      "Value": []
+    },
+    "required": 1
+  },
+  {
+    "name": "layout28 empty column tracks",
+    "path": "/@entities/91/layout/stack/column_tracks",
+    "cell": {
+      "Value": []
+    },
+    "required": 1
+  },
+  {
+    "name": "layout28 legacy align",
+    "path": "/@entities/91/layout/stack/align",
+    "cell": {
+      "Value": "Stretch"
+    },
+    "required": 1
+  },
+  {
+    "name": "layout28 legacy flow",
+    "path": "/@entities/91/layout/stack/flow",
+    "cell": {
+      "Value": "Grid"
+    },
+    "required": 1
+  },
+  {
+    "name": "layout28 empty Main properties",
+    "path": "/@entities/91/layout/component/Main/properties",
+    "cell": {
+      "Value": []
+    },
+    "required": 1
+  },
+  {
+    "name": "layout28 nested main",
+    "path": "/@entities/91/layout/component/Instance/nodes/0/nested_main",
+    "cell": {
+      "Value": 123
+    },
+    "required": 1
+  },
+  {
+    "name": "layout28 nested retained base",
+    "path": "/motion/compositions",
+    "cell": {
+      "Value": [
+        {
+          "id": 8,
+          "document": {
+            "collaboration": {
+              "base": {
+                "/@entities/900/layout/grid/row": {
+                  "Value": 0
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 nested retained withdrawn write",
+    "path": "/motion/compositions",
+    "cell": {
+      "Value": [
+        {
+          "id": 8,
+          "document": {
+            "collaboration": {
+              "changes": [
+                {
+                  "edit": {
+                    "type": "write",
+                    "writes": [
+                      {
+                        "path": "/@entities/900/layout/component/Instance/nodes/0/baseline/layout/stack/align",
+                        "value": {
+                          "Value": "Baseline"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "edit": {
+                    "type": "toggle",
+                    "enabled": false
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "error": true
+  },
+  {
+    "name": "layout28 nested retained defaults",
+    "path": "/motion/compositions",
+    "cell": {
+      "Value": [
+        {
+          "id": 8,
+          "document": {
+            "collaboration": {
+              "base": {
+                "/@entities/900/layout/grid/column_span": {
+                  "Value": 1
+                },
+                "/@entities/900/layout/stack/row_tracks": "List",
+                "/@entities/900/layout/stack/align": {
+                  "Variant": "Start"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "required": 3
+  }
+]

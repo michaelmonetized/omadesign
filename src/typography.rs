@@ -627,27 +627,29 @@ pub fn export_copy(source: &Path, destination: &Path) -> Result<(), String> {
 
 /// Collect the shared save, recovery and validation font dependencies.
 /// Args: artwork and retained collaboration state. Returns unique portable face IDs.
-fn document_font_ids(doc: &crate::document::Document) -> HashSet<String> {
+fn document_font_ids(doc: &crate::document::Document) -> Result<HashSet<String>, String> {
     let mut ids = HashSet::new();
-    for layer in &doc.layers {
-        for shape in layer.kind.shapes().unwrap_or_default() {
-            if let crate::geom::Geom::Text(run) = &shape.geom {
-                ids.extend(
-                    std::iter::once(run.font.clone())
-                        .chain(run.spans.iter().filter_map(|span| span.font.clone())),
-                );
+    for doc in crate::motion::compositions::documents(doc)? {
+        for layer in &doc.layers {
+            for shape in layer.kind.shapes().unwrap_or_default() {
+                if let crate::geom::Geom::Text(run) = &shape.geom {
+                    ids.extend(
+                        std::iter::once(run.font.clone())
+                            .chain(run.spans.iter().filter_map(|span| span.font.clone())),
+                    );
+                }
             }
         }
-    }
-    if let Some(replica) = &doc.collaboration {
-        ids.extend(crate::collaboration::resources::fonts(replica));
+        if let Some(replica) = &doc.collaboration {
+            ids.extend(crate::collaboration::resources::fonts(replica)?);
+        }
     }
     ids.retain(|id| id.starts_with("omatype:"));
-    ids
+    Ok(ids)
 }
 
 pub(crate) fn validate_document_fonts(doc: &crate::document::Document) -> Result<(), String> {
-    if document_font_ids(doc)
+    if document_font_ids(doc)?
         .iter()
         .any(|font| !crate::text::project_font_loaded(font))
     {
@@ -659,7 +661,7 @@ pub(crate) fn validate_document_fonts(doc: &crate::document::Document) -> Result
 fn document_fonts(doc: &crate::document::Document) -> Result<Vec<LoadedFont>, String> {
     let mut fonts = Vec::new();
     let mut total = 0;
-    for font in document_font_ids(doc) {
+    for font in document_font_ids(doc)? {
         let bytes = crate::text::project_font_bytes(&font).ok_or_else(|| {
             format!("Cannot save without the artwork's project font: {}. Load its typography kit first.", font)
         })?;

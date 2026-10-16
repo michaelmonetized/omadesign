@@ -630,6 +630,72 @@ mod tests {
         }
     }
 
+    fn http_motion(doc: &mut Document) {
+        use crate::motion::{Ease, Prop, compositions::Composition};
+        let mut child = crate::collaboration::native_tests::fixture();
+        child.motion.set_key(7, Prop::X, 0., 0., Ease::Hold);
+        child.motion.set_key(
+            7,
+            Prop::X,
+            1.,
+            4.,
+            Ease::CubicBezier {
+                x1: 0.1,
+                y1: -2.,
+                x2: 0.9,
+                y2: 3.,
+            },
+        );
+        child
+            .motion
+            .set_expression(7, Prop::Y, Some("time * 2".into()))
+            .unwrap();
+        child
+            .motion
+            .set_color_key(7, 0., crate::color::Rgba::new(12, 34, 56, 78), Ease::Hold);
+        child.motion.scene3d = Some(crate::scene3d::Scene::default());
+        doc.motion
+            .compositions
+            .push(Composition::new(child.clone()));
+        doc.motion.compositions.push(Composition::new(child));
+    }
+
+    fn edit_http_motion(doc: &mut Document, role: &str) {
+        let index = if role == "Alice" { 0 } else { 1 };
+        crate::collaboration::native_tests::edit(
+            &mut doc.motion.compositions[index].document,
+            "Alice",
+        );
+    }
+
+    #[test]
+    fn live_collaboration_oversized_nested_native_edit_preserves_pending_artwork() {
+        let mut doc = crate::collaboration::native_tests::fixture();
+        http_motion(&mut doc);
+        let mut replica = Replica::new(
+            "oversized".into(),
+            "a".repeat(64),
+            collaboration::snapshot(&doc).unwrap(),
+        );
+        crate::collaboration::native_tests::edit(&mut doc, "Bob");
+        crate::collaboration::native_tests::edit(&mut doc.motion.compositions[1].document, "Bob");
+        replica.record(&doc).unwrap();
+        let artwork = serde_json::to_vec(&doc).unwrap();
+        let pending = serde_json::to_vec(&replica).unwrap();
+        let client = Client::new(crate::cloud::Identity {
+            cloud_url: "http://127.0.0.1:1".into(),
+            ..Default::default()
+        });
+        let error = client
+            .exchange_live(&replica, None, vec![], false)
+            .err()
+            .expect("oversized native operation must refuse before HTTP");
+        assert!(error.contains("190 KB"), "{error}");
+        assert_eq!(serde_json::to_vec(&doc).unwrap(), artwork);
+        assert_eq!(serde_json::to_vec(&replica).unwrap(), pending);
+        assert!(!replica.pending.is_empty());
+    }
+
     #[test]
     #[ignore = "launched as two independent clients by live_collaboration_http_acceptance"]
     fn live_collaboration_client() {
@@ -667,6 +733,7 @@ mod tests {
             )
             .unwrap();
         crate::collaboration::native_tests::edit(&mut studio.doc, &role);
+        edit_http_motion(&mut studio.doc, &role);
         studio.mark();
         add(&mut studio, &format!("{role} offline"));
         studio.record_live().unwrap();
@@ -719,6 +786,22 @@ mod tests {
         crate::collaboration::native_tests::edit(&mut expected, "Alice");
         crate::collaboration::native_tests::edit(&mut expected, "Bob");
         crate::collaboration::native_tests::assert_native_equal(&expected, &reopened);
+        http_motion(&mut expected);
+        edit_http_motion(&mut expected, "Alice");
+        edit_http_motion(&mut expected, "Bob");
+        assert_eq!(reopened.motion.compositions.len(), 2);
+        for (actual, expected) in reopened
+            .motion
+            .compositions
+            .iter()
+            .zip(&expected.motion.compositions)
+        {
+            assert_eq!(actual.document.motion, expected.document.motion);
+            crate::collaboration::native_tests::assert_native_equal(
+                &actual.document,
+                &expected.document,
+            );
+        }
         assert_eq!(
             collaboration::snapshot(&reopened).unwrap(),
             collaboration::snapshot(&studio.doc).unwrap()
@@ -751,6 +834,8 @@ mod tests {
         let mut doc = crate::collaboration::native_tests::fixture();
         doc.width = 1920.;
         doc.height = 1080.;
+        http_motion(&mut doc);
+        assert_eq!(collaboration::supported_protocol(), 3);
         let seed = serde_json::to_string(&collaboration::snapshot(&doc).unwrap()).unwrap();
         assert!(
             client
@@ -759,12 +844,12 @@ mod tests {
                     json!({"projectId":data["project"],"seed":seed})
                 )
                 .unwrap_err()
-                .contains("native-preservation")
+                .contains("protocol 3")
         );
         data["session"] = client
             .call(
                 "live:create",
-                json!({"projectId":data["project"],"seed":seed,"protocol":collaboration::PROTOCOL}),
+                json!({"projectId":data["project"],"seed":seed,"protocol":collaboration::supported_protocol()}),
             )
             .unwrap();
         let legacy_actor = "c".repeat(64);
@@ -775,9 +860,21 @@ mod tests {
                     json!({"session":data["session"],"actor":legacy_actor})
                 )
                 .unwrap_err()
-                .contains("native-preservation")
+                .contains("protocol 3")
         );
-        assert!(client.call("live:exchange",json!({"session":data["session"],"actor":legacy_actor,"changes":[],"cursor":null,"selection":[],"after":0})).unwrap_err().contains("native-preservation"));
+        assert!(client.call("live:exchange",json!({"session":data["session"],"actor":legacy_actor,"changes":[],"cursor":null,"selection":[],"after":0})).unwrap_err().contains("protocol 3"));
+        for protocol in [1, 2] {
+            assert!(
+                client
+                    .call(
+                        "live:join",
+                        json!({"session":data["session"],"actor":legacy_actor,"protocol":protocol})
+                    )
+                    .unwrap_err()
+                    .contains("protocol 3")
+            );
+            assert!(client.call("live:exchange",json!({"session":data["session"],"actor":legacy_actor,"protocol":protocol,"changes":[],"cursor":null,"selection":[],"after":0})).unwrap_err().contains("protocol 3"));
+        }
         let root = fixture
             .parent()
             .unwrap()

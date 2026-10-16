@@ -68,6 +68,60 @@ fn neutral() -> Document {
     doc
 }
 
+fn motion_rich(rich: &Document) -> Document {
+    let mut child = rich.clone();
+    child.motion.scene3d = Some(crate::scene3d::Scene::default());
+    let id = child.layers.last().unwrap().kind.shapes().unwrap()[0].id;
+    child.motion.set_key(
+        id,
+        crate::motion::Prop::X,
+        0.,
+        0.,
+        crate::motion::Ease::Hold,
+    );
+    child.motion.set_key(
+        id,
+        crate::motion::Prop::X,
+        1.,
+        4.,
+        crate::motion::Ease::CubicBezier {
+            x1: 0.1,
+            y1: -2.,
+            x2: 0.9,
+            y2: 3.,
+        },
+    );
+    child.motion.set_color_key(
+        id,
+        0.,
+        crate::color::Rgba::new(12, 34, 56, 78),
+        crate::motion::Ease::Hold,
+    );
+    child
+        .motion
+        .set_expression(id, crate::motion::Prop::Y, Some("time * 2".into()))
+        .unwrap();
+    let mut history = Replica::new(
+        "child-history".into(),
+        "c".repeat(64),
+        snapshot(&neutral()).unwrap(),
+    );
+    history.record(rich).unwrap();
+    assert!(history.undo());
+    let mut withdrawn_child = neutral();
+    withdrawn_child.collaboration = Some(history);
+    let mut doc = neutral();
+    doc.motion
+        .compositions
+        .push(crate::motion::compositions::Composition::new(child));
+    doc.motion
+        .compositions
+        .push(crate::motion::compositions::Composition::new(
+            withdrawn_child,
+        ));
+    doc
+}
+
 fn pixel_cells(replica: &Replica) -> Vec<(String, Cell)> {
     replica
         .retained_cells()
@@ -116,24 +170,35 @@ fn retained_archives_cold_reopen_undo_remote_restore_and_recovery_pruning() {
     fs::write(originals.join("paint.svg"), XML).unwrap();
     let rich = rich(&fonts);
     fs::write(originals.join("original.bin"), rich.sources[0].bytes()).unwrap();
-    let expected = snapshot(&rich).unwrap();
     let empty = neutral();
     let mut cases = Vec::new();
-    for mode in ["base-deleted", "write-withdrawn"] {
+    for mode in [
+        "base-deleted",
+        "write-withdrawn",
+        "motion-base-deleted",
+        "motion-write-withdrawn",
+    ] {
+        let motion = mode.starts_with("motion-");
+        let artwork = if motion {
+            motion_rich(&rich)
+        } else {
+            rich.clone()
+        };
+        let expected = snapshot(&artwork).unwrap();
         let directory = root.join(mode);
         fs::create_dir(&directory).unwrap();
         let mut replica = Replica::new(
             "archive".into(),
             "a".repeat(64),
-            snapshot(if mode == "base-deleted" {
-                &rich
+            snapshot(if mode.ends_with("base-deleted") {
+                &artwork
             } else {
                 &empty
             })
             .unwrap(),
         );
-        if mode == "write-withdrawn" {
-            replica.record(&rich).unwrap();
+        if mode.ends_with("write-withdrawn") {
+            replica.record(&artwork).unwrap();
             assert!(replica.undo());
         } else {
             replica.record(&neutral()).unwrap();
@@ -141,8 +206,9 @@ fn retained_archives_cold_reopen_undo_remote_restore_and_recovery_pruning() {
         let mut doc = replica.document(&neutral()).unwrap();
         assert!(doc.layers.is_empty() && doc.sources.is_empty());
         assert_eq!(doc.color, Default::default());
-        assert_eq!(replica.required_protocol(), 2);
+        assert_eq!(replica.required_protocol(), 3);
         assert!(replica.document_for_protocol(&doc, 1).is_err());
+        assert!(replica.document_for_protocol(&doc, 2).is_err());
         let pixels = pixel_cells(&replica);
         doc.collaboration = Some(replica);
         let before = serde_json::to_value(&doc).unwrap();
@@ -150,7 +216,7 @@ fn retained_archives_cold_reopen_undo_remote_restore_and_recovery_pruning() {
         crate::project::save_to(&doc, &saved).unwrap();
         assert_eq!(serde_json::to_value(&doc).unwrap(), before);
         let json: Value = serde_json::from_slice(&fs::read(&saved).unwrap()).unwrap();
-        assert_eq!(json["version"], 24);
+        assert_eq!(json["version"], if motion { 27 } else { 24 });
         assert_eq!(json["svg_sources"].as_object().unwrap().len(), 1);
         assert_eq!(
             json["svg_sources"]
@@ -173,7 +239,7 @@ fn retained_archives_cold_reopen_undo_remote_restore_and_recovery_pruning() {
             "history-only faces were pruned"
         );
         let recovery_json: Value = serde_json::from_slice(&fs::read(&recovery).unwrap()).unwrap();
-        assert_eq!(recovery_json["version"], 24);
+        assert_eq!(recovery_json["version"], if motion { 27 } else { 24 });
         assert_eq!(recovery_json["svg_sources"].as_object().unwrap().len(), 1);
         fs::write(
             directory.join("expected.json"),
@@ -272,14 +338,14 @@ fn cold_archive_child() {
         assert!(crate::text::project_font_loaded(font.as_str().unwrap()));
     }
     let mut replica = doc.collaboration.clone().unwrap();
-    assert_eq!(replica.required_protocol(), 2);
+    assert_eq!(replica.required_protocol(), 3);
     let mut remote = Replica::new(
         replica.session.clone(),
         "b".repeat(64),
         replica.base.clone(),
     );
     remote.receive(replica.changes.clone()).unwrap();
-    if case["mode"] == "base-deleted" {
+    if case["mode"].as_str().unwrap().ends_with("base-deleted") {
         assert!(replica.undo());
     } else {
         assert!(replica.redo());
@@ -290,11 +356,49 @@ fn cold_archive_child() {
     let restored = replica.document(&doc).unwrap();
     assert_eq!(snapshot(&restored).unwrap(), expected);
     assert_eq!(snapshot(&remote.document(&doc).unwrap()).unwrap(), expected);
+    let content = if case["mode"].as_str().unwrap().starts_with("motion-") {
+        assert_eq!(restored.motion.compositions.len(), 2);
+        let child = &restored.motion.compositions[0].document;
+        assert!(child.motion.scene3d.is_some());
+        assert_eq!(child.motion.expressions.len(), 1);
+        assert!(
+            child
+                .motion
+                .tracks
+                .iter()
+                .any(|track| track.keys.iter().any(|key| matches!(
+                    key.ease,
+                    crate::motion::Ease::CubicBezier {
+                        y1: -2.,
+                        y2: 3.,
+                        ..
+                    }
+                )))
+        );
+        let sibling = &restored.motion.compositions[1].document;
+        assert!(sibling.layers.is_empty());
+        let mut retained = sibling.collaboration.clone().unwrap();
+        assert!(retained.redo());
+        native_tests::assert_native_equal(
+            &retained.document(sibling).unwrap(),
+            &rich(
+                &case["fonts"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|value| value.as_str().unwrap().to_owned())
+                    .collect::<Vec<_>>(),
+            ),
+        );
+        child.as_ref()
+    } else {
+        &restored
+    };
     assert_eq!(
-        restored.sources[0].bytes(),
+        content.sources[0].bytes(),
         b"\0\xff<definitions>opaque original, not XML</definitions>"
     );
-    let Geom::Text(run) = &restored.layers.last().unwrap().kind.shapes().unwrap()[0].geom else {
+    let Geom::Text(run) = &content.layers.last().unwrap().kind.shapes().unwrap()[0].geom else {
         panic!("live text")
     };
     assert!(!crate::text::shape(run).is_empty());
@@ -321,12 +425,12 @@ fn retained_resource_subtrees_share_content_and_preserve_inline_and_opaque_data(
         "svg_filter":{"definitions":XML,"original_definitions":XML}
     })));
     assert_eq!(
-        resources::fonts(&replica),
+        resources::fonts(&replica).unwrap(),
         BTreeSet::from(["omatype:run".into(), "omatype:span".into()])
     );
     doc.collaboration = Some(replica);
     let before = serde_json::to_value(&doc).unwrap();
-    let pool = crate::svg_source::pack_sources(&mut doc);
+    let pool = crate::svg_source::pack_sources(&mut doc).unwrap();
     assert_eq!(pool.len(), 1);
     assert!(
         serde_json::to_string(&doc)
@@ -361,7 +465,7 @@ fn retained_source_integrity_and_future_project_versions_refuse_before_loss() {
     }
     value["version"] = 24.into();
     assert!(crate::project::decode(&value.to_string()).is_ok());
-    value["version"] = 25.into();
+    value["version"] = 28.into();
     value["doc"]["collaboration"] = json!({"future_model_that_must_not_be_typed":true});
     assert!(
         crate::project::decode(&value.to_string())
@@ -442,7 +546,7 @@ fn withdrawn_pixels_remain_encoded_and_legacy_inline_recovery_still_opens() {
             .is_none()
     );
     let mut future = serde_json::to_value(&meta).unwrap();
-    future["version"] = json!(25);
+    future["version"] = json!(28);
     future["doc"]["collaboration"] = json!({"future_model_that_must_not_be_typed":true});
     let future_bytes = serde_json::to_vec(&future).unwrap();
     fs::write(&path, &future_bytes).unwrap();
