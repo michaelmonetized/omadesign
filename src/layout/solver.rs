@@ -141,6 +141,7 @@ impl Tree {
                         min_height: s.layout.min_height,
                         max_height: s.layout.max_height,
                         absolute: s.layout.absolute,
+                        grid: s.layout.grid,
                         clip: s.layout.clip,
                         text_size: s.layout.text_size,
                         aspect_ratio: s.layout.aspect_ratio,
@@ -286,17 +287,37 @@ impl Tree {
             let pad = Self::padding(stack);
             let mut content = Pt::new(0.0, 0.0);
             if stack.flow == StackFlow::Grid {
-                let columns = (stack.columns as usize).clamp(1, 1024);
-                let mut widths = vec![0.0f32; columns];
-                let mut heights = vec![0.0f32; kids.len().div_ceil(columns)];
-                for (n, &child) in kids.iter().enumerate() {
-                    widths[n % columns] = widths[n % columns].max(self.nodes[child].measured.x);
-                    heights[n / columns] = heights[n / columns].max(self.nodes[child].measured.y);
+                if self.advanced_grid(&kids, stack) {
+                    let grid = self.resolve_grid(&kids, stack, size, id);
+                    content.x = grid.columns.iter().sum::<f32>()
+                        + gap(stack.gap) * grid.columns.len().saturating_sub(1) as f32;
+                    content.y = grid.rows.iter().sum::<f32>()
+                        + gap(stack.cross_gap) * grid.rows.len().saturating_sub(1) as f32;
+                } else {
+                    let columns = (stack.columns as usize).clamp(1, 1024);
+                    let mut widths = vec![0.0f32; columns];
+                    let mut heights = vec![0.0f32; kids.len().div_ceil(columns)];
+                    for (n, &child) in kids.iter().enumerate() {
+                        widths[n % columns] = widths[n % columns].max(self.nodes[child].measured.x);
+                        heights[n / columns] =
+                            heights[n / columns].max(self.nodes[child].measured.y);
+                    }
+                    content.x = widths.iter().copied().fold(0.0f32, f32::max) * columns as f32
+                        + gap(stack.gap) * columns.saturating_sub(1) as f32;
+                    content.y = heights.iter().sum::<f32>()
+                        + gap(stack.cross_gap) * heights.len().saturating_sub(1) as f32;
+                    if stack.align == StackAlign::Baseline {
+                        content.y = kids
+                            .chunks(columns)
+                            .map(|line| {
+                                let sizes: Vec<_> =
+                                    line.iter().map(|&i| self.nodes[i].measured).collect();
+                                self.baseline_height(line, &sizes)
+                            })
+                            .sum::<f32>()
+                            + gap(stack.cross_gap) * heights.len().saturating_sub(1) as f32;
+                    }
                 }
-                content.x = widths.iter().copied().fold(0.0f32, f32::max) * columns as f32
-                    + gap(stack.gap) * columns.saturating_sub(1) as f32;
-                content.y = heights.iter().sum::<f32>()
-                    + gap(stack.cross_gap) * heights.len().saturating_sub(1) as f32;
             } else {
                 let horizontal = stack.direction == StackAxis::Horizontal;
                 let inset = if horizontal {
@@ -318,10 +339,14 @@ impl Tree {
                         .map(|&i| main(self.nodes[i].measured, horizontal))
                         .sum::<f32>()
                         + gap(stack.gap) * line.len().saturating_sub(1) as f32;
-                    let lc = line
+                    let mut lc = line
                         .iter()
                         .map(|&i| cross(self.nodes[i].measured, horizontal))
                         .fold(0.0f32, f32::max);
+                    if horizontal && stack.align == StackAlign::Baseline {
+                        let sizes: Vec<_> = line.iter().map(|&i| self.nodes[i].measured).collect();
+                        lc = self.baseline_height(line, &sizes);
+                    }
                     m = m.max(lm);
                     c += lc;
                 }
@@ -509,6 +534,8 @@ impl Tree {
             }
             let line_cross = if stack.flow == StackFlow::Stack {
                 cross(inner, horizontal)
+            } else if horizontal && stack.align == StackAlign::Baseline {
+                self.baseline_height(line, &sizes)
             } else {
                 sizes
                     .iter()
@@ -522,6 +549,11 @@ impl Tree {
                 line.len(),
                 gap(stack.gap),
             );
+            let baseline = if horizontal && stack.align == StackAlign::Baseline {
+                self.line_baseline(line, &sizes)
+            } else {
+                0.0
+            };
             for (n, &child) in line.iter().enumerate() {
                 let node = &self.nodes[child];
                 let mut size = sizes[n];
@@ -537,6 +569,10 @@ impl Tree {
                     StackAlign::Start | StackAlign::Stretch => 0.0,
                     StackAlign::Center => (line_cross - cross(size, horizontal)) * 0.5,
                     StackAlign::End => line_cross - cross(size, horizontal),
+                    StackAlign::Baseline if horizontal => self
+                        .baseline(child, size.x)
+                        .map_or(0.0, |offset| baseline - offset),
+                    StackAlign::Baseline => 0.0,
                 };
                 placed.push((
                     child,
@@ -551,6 +587,134 @@ impl Tree {
         }
         placed
     }
+
+    fn baseline(&self, id: usize, width: f32) -> Option<f32> {
+        let node = &self.nodes[id];
+        let mut run = node.text.clone()?;
+        crate::text::font_metrics_for(&run)?;
+        let old_px = run.px;
+        if let Some(size) = node.layout.text_size {
+            size_text(&mut run, size);
+        }
+        run.wrap_width = if node.layout.width == Sizing::Hug {
+            None
+        } else if run.wrap_width.is_some() || (width - node.original.width()).abs() > 0.01 {
+            Some(positive(width))
+        } else {
+            None
+        };
+        let box_top = if run.wrap_width.is_some() {
+            Geom::Text(run.clone()).bbox().min.y
+        } else if (run.px - old_px).abs() > 0.001 {
+            run.contours = crate::text::shape(&run);
+            Geom::Text(run.clone()).bbox().min.y
+        } else {
+            node.original.min.y
+        };
+        let baseline = crate::text::caret_pt(&run, 0).y - box_top;
+        baseline.is_finite().then_some(baseline)
+    }
+
+    fn baseline_extents(&self, id: usize) -> Option<(f32, f32)> {
+        let node = &self.nodes[id];
+        let mut run = node.text.clone()?;
+        if let Some(size) = node.layout.text_size {
+            size_text(&mut run, size);
+        }
+        let (ascent, descent, line_gap) = crate::text::font_metrics_for(&run)?;
+        Some((ascent.max(0.0), descent.max(0.0) + line_gap.max(0.0)))
+    }
+
+    fn line_baseline(&self, kids: &[usize], sizes: &[Pt]) -> f32 {
+        kids.iter()
+            .zip(sizes)
+            .filter_map(|(&id, size)| {
+                self.baseline(id, size.x)
+                    .map(|offset| offset.max(self.baseline_extents(id).map_or(0.0, |m| m.0)))
+            })
+            .fold(0.0, f32::max)
+    }
+
+    fn baseline_height(&self, kids: &[usize], sizes: &[Pt]) -> f32 {
+        let baseline = self.line_baseline(kids, sizes);
+        kids.iter()
+            .zip(sizes)
+            .map(|(&id, size)| {
+                self.baseline(id, size.x).map_or(size.y, |offset| {
+                    baseline + (size.y - offset).max(self.baseline_extents(id).map_or(0.0, |m| m.1))
+                })
+            })
+            .fold(1.0, f32::max)
+    }
+
+    fn advanced_grid(&self, kids: &[usize], stack: &AutoStack) -> bool {
+        !stack.column_tracks.is_empty()
+            || !stack.row_tracks.is_empty()
+            || kids.iter().any(|&id| !self.nodes[id].layout.grid.is_auto())
+    }
+
+    fn resolve_grid(
+        &self,
+        kids: &[usize],
+        stack: &AutoStack,
+        size: Pt,
+        id: usize,
+    ) -> super::grid::Grid {
+        let pad = Self::padding(stack);
+        let available = [
+            (self.nodes[id].layout.width != Sizing::Hug)
+                .then_some((size.x - pad[1] - pad[3]).max(1.0)),
+            (self.nodes[id].layout.height != Sizing::Hug)
+                .then_some((size.y - pad[0] - pad[2]).max(1.0)),
+        ];
+        let mut items: Vec<_> = kids
+            .iter()
+            .map(|&child| super::grid::Item {
+                size: self.nodes[child].measured,
+                placement: self.nodes[child].layout.grid,
+                fill_height: self.nodes[child].layout.height == Sizing::Fill,
+            })
+            .collect();
+        let grid = super::grid::resolve_grid(stack, &items, available);
+        if stack.align != StackAlign::Baseline {
+            return grid;
+        }
+        let mut baselines = vec![0.0f32; grid.rows.len()];
+        let widths: Vec<_> = kids
+            .iter()
+            .zip(&grid.cells)
+            .zip(&items)
+            .map(|((&child, cell), item)| {
+                if self.nodes[child].layout.width == Sizing::Fill
+                    || stack.align == StackAlign::Stretch
+                {
+                    grid.columns[cell.column..cell.column + cell.columns]
+                        .iter()
+                        .sum::<f32>()
+                        + gap(stack.gap) * cell.columns.saturating_sub(1) as f32
+                } else {
+                    item.size.x
+                }
+            })
+            .collect();
+        for ((&child, cell), &width) in kids.iter().zip(&grid.cells).zip(&widths) {
+            if let Some(baseline) = self.baseline(child, width) {
+                baselines[cell.row] = baselines[cell.row]
+                    .max(baseline.max(self.baseline_extents(child).map_or(0.0, |m| m.0)));
+            }
+        }
+        for (((&child, cell), item), &width) in
+            kids.iter().zip(&grid.cells).zip(&mut items).zip(&widths)
+        {
+            if let Some(baseline) = self.baseline(child, width) {
+                item.size.y = baselines[cell.row]
+                    + (item.size.y - baseline)
+                        .max(self.baseline_extents(child).map_or(0.0, |m| m.1));
+            }
+        }
+        super::grid::resolve_grid(stack, &items, available)
+    }
+
     fn grid(
         &self,
         kids: &[usize],
@@ -559,6 +723,70 @@ impl Tree {
         inner: Pt,
         id: usize,
     ) -> Vec<(usize, Bounds)> {
+        if self.advanced_grid(kids, stack) {
+            let pad = Self::padding(stack);
+            let grid = self.resolve_grid(
+                kids,
+                stack,
+                inner + Pt::new(pad[1] + pad[3], pad[0] + pad[2]),
+                id,
+            );
+            let mut xs = vec![origin.x];
+            let mut ys = vec![origin.y];
+            for width in &grid.columns {
+                xs.push(xs.last().unwrap() + width + gap(stack.gap));
+            }
+            for height in &grid.rows {
+                ys.push(ys.last().unwrap() + height + gap(stack.cross_gap));
+            }
+            let mut baselines = vec![0.0f32; grid.rows.len()];
+            if stack.align == StackAlign::Baseline {
+                for (&child, cell) in kids.iter().zip(&grid.cells) {
+                    let width = xs[cell.column + cell.columns] - xs[cell.column] - gap(stack.gap);
+                    if let Some(baseline) = self.baseline(child, width) {
+                        baselines[cell.row] = baselines[cell.row]
+                            .max(baseline.max(self.baseline_extents(child).map_or(0.0, |m| m.0)));
+                    }
+                }
+            }
+            return kids
+                .iter()
+                .zip(&grid.cells)
+                .map(|(&child, cell)| {
+                    let node = &self.nodes[child];
+                    let cell_size = Pt::new(
+                        xs[cell.column + cell.columns] - xs[cell.column] - gap(stack.gap),
+                        ys[cell.row + cell.rows] - ys[cell.row] - gap(stack.cross_gap),
+                    );
+                    let mut size = node.measured;
+                    if node.layout.width == Sizing::Fill || stack.align == StackAlign::Stretch {
+                        size.x = cell_size.x;
+                    }
+                    if node.layout.height == Sizing::Fill || stack.align == StackAlign::Stretch {
+                        size.y = cell_size.y;
+                    }
+                    size = node.clamp_size(size);
+                    let align = match stack.align {
+                        StackAlign::Center => 0.5,
+                        StackAlign::End => 1.0,
+                        _ => 0.0,
+                    };
+                    let mut offset = (cell_size - size) * align;
+                    if stack.align == StackAlign::Baseline {
+                        offset.y = self
+                            .baseline(child, size.x)
+                            .map_or(0.0, |baseline| baselines[cell.row] - baseline);
+                    }
+                    (
+                        child,
+                        Bounds::from_min_size(
+                            Pt::new(xs[cell.column], ys[cell.row]) + offset,
+                            size,
+                        ),
+                    )
+                })
+                .collect();
+        }
         let columns = (stack.columns as usize).clamp(1, 1024);
         let rows = kids.len().div_ceil(columns);
         let col_width = ((inner.x - gap(stack.gap) * columns.saturating_sub(1) as f32)
@@ -567,6 +795,24 @@ impl Tree {
         let mut row_heights = vec![1.0f32; rows];
         for (n, &child) in kids.iter().enumerate() {
             row_heights[n / columns] = row_heights[n / columns].max(self.nodes[child].measured.y);
+        }
+        let mut baselines = vec![0.0f32; rows];
+        if stack.align == StackAlign::Baseline {
+            for (row, line) in kids.chunks(columns).enumerate() {
+                let sizes: Vec<_> = line
+                    .iter()
+                    .map(|&i| {
+                        let node = &self.nodes[i];
+                        let mut size = node.measured;
+                        if node.layout.width == Sizing::Fill {
+                            size.x = node.clamp_axis(col_width, true);
+                        }
+                        size
+                    })
+                    .collect();
+                baselines[row] = self.line_baseline(line, &sizes);
+                row_heights[row] = self.baseline_height(line, &sizes);
+            }
         }
         let mut y = origin.y;
         let mut out = Vec::with_capacity(kids.len());
@@ -611,11 +857,17 @@ impl Tree {
                     StackAlign::End => 1.0,
                     _ => 0.0,
                 };
+                let baseline_offset = if stack.align == StackAlign::Baseline {
+                    self.baseline(child, size.x)
+                        .map_or(0.0, |baseline| baselines[row] - baseline)
+                } else {
+                    (height - size.y) * align
+                };
                 let p = Pt::new(
                     origin.x
                         + col as f32 * (col_width + gap(stack.gap))
                         + (col_width - size.x) * align,
-                    y + (height - size.y) * align,
+                    y + baseline_offset,
                 );
                 out.push((child, Bounds::from_min_size(p, size)));
             }
@@ -841,6 +1093,7 @@ pub fn validate_hierarchy(doc: &Document) -> Result<(), String> {
             continue;
         };
         for shape in shapes {
+            super::grid::validate(shape.layout.stack.as_ref(), shape.layout.grid)?;
             if shape
                 .layout
                 .text_size
@@ -1495,14 +1748,283 @@ mod tests {
         assert!(!layout.clip);
         assert!(FrameLayout::frame().clip);
     }
+
+    #[test]
+    fn advanced_grid_numeric_oracle_survives_native_reopen_resize_and_svg() {
+        let mut doc = document();
+        let root = add(&mut doc, None, Pt::ZERO, Pt::new(600.0, 250.0), true);
+        let track = |size| GridTrack {
+            size,
+            min: None,
+            max: None,
+        };
+        shape(&mut doc, root).layout.stack = Some(AutoStack {
+            flow: StackFlow::Grid,
+            gap: 10.0,
+            cross_gap: 10.0,
+            padding: [0.0; 4],
+            column_tracks: vec![
+                track(GridTrackSize::Fixed(80.0)),
+                track(GridTrackSize::Fraction(1.0)),
+                track(GridTrackSize::Fraction(2.0)),
+            ],
+            row_tracks: vec![
+                track(GridTrackSize::Fixed(40.0)),
+                track(GridTrackSize::Fraction(1.0)),
+            ],
+            ..Default::default()
+        });
+        let first = add(&mut doc, Some(root), Pt::ZERO, Pt::splat(20.0), false);
+        let spanning = add(&mut doc, Some(root), Pt::ZERO, Pt::splat(20.0), false);
+        let automatic = add(&mut doc, Some(root), Pt::ZERO, Pt::splat(20.0), false);
+        let outside = add(
+            &mut doc,
+            None,
+            Pt::new(800.0, 700.0),
+            Pt::splat(30.0),
+            false,
+        );
+        let untouched = doc.find_shape(1, outside).unwrap().clone();
+        for id in [first, spanning, automatic] {
+            shape(&mut doc, id).layout.width = Sizing::Fill;
+            shape(&mut doc, id).layout.height = Sizing::Fill;
+        }
+        shape(&mut doc, first).layout.grid = GridPlacement {
+            column: Some(0),
+            row: Some(0),
+            ..Default::default()
+        };
+        shape(&mut doc, spanning).layout.grid = GridPlacement {
+            column: Some(1),
+            row: Some(0),
+            column_span: 2,
+            row_span: 2,
+        };
+        reflow(&mut doc, 1, root);
+        close(bounds(&doc, first).width(), 80.0);
+        close(bounds(&doc, first).height(), 40.0);
+        close(bounds(&doc, spanning).min.x, 90.0);
+        close(bounds(&doc, spanning).width(), 510.0);
+        close(bounds(&doc, spanning).height(), 250.0);
+        close(bounds(&doc, automatic).min.x, 0.0);
+        close(bounds(&doc, automatic).min.y, 50.0);
+        close(bounds(&doc, automatic).height(), 200.0);
+        let saved = crate::project::encode(&doc).unwrap();
+        let mut reopened = crate::project::decode(&saved).unwrap();
+        assert_eq!(
+            reopened.find_shape(1, spanning).unwrap().layout.grid,
+            doc.find_shape(1, spanning).unwrap().layout.grid
+        );
+        for (width, span_width) in [(900.0, 810.0), (600.0, 510.0)] {
+            set_bounds(
+                &mut shape(&mut reopened, root).geom,
+                Bounds::from_min_size(Pt::ZERO, Pt::new(width, 250.0)),
+            );
+            reflow(&mut reopened, 1, root);
+            close(bounds(&reopened, spanning).width(), span_width);
+            assert_eq!(reopened.find_shape(1, outside).unwrap(), &untouched);
+            let svg = crate::svg::export_frame(&reopened, 1, root).unwrap();
+            usvg::Tree::from_str(&svg, &usvg::Options::default()).unwrap();
+            let parsed = roxmltree::Document::parse(&svg).unwrap();
+            let id = format!("oma-{spanning}");
+            let node = parsed
+                .descendants()
+                .find(|node| node.attribute("id") == Some(id.as_str()))
+                .unwrap();
+            assert_eq!(node.tag_name().name(), "rect");
+            for (name, expected) in [
+                ("x", 90.0),
+                ("y", 0.0),
+                ("width", span_width),
+                ("height", 250.0),
+            ] {
+                close(
+                    node.attribute(name).unwrap().parse::<f32>().unwrap(),
+                    expected,
+                );
+            }
+        }
+        let again = crate::project::decode(&crate::project::encode(&reopened).unwrap()).unwrap();
+        assert_eq!(again.find_shape(1, outside).unwrap(), &untouched);
+        assert_eq!(
+            again.find_shape(1, spanning).unwrap().layout.grid.row_span,
+            2
+        );
+    }
+
+    #[test]
+    fn baseline_aligns_real_font_origins_through_reopen_for_stack_wrap_and_grid() {
+        let font = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/assets/fonts/EBGaramond.ttf"
+        );
+        for (flow, advanced) in [
+            (StackFlow::Stack, false),
+            (StackFlow::Wrap, false),
+            (StackFlow::Grid, false),
+            (StackFlow::Grid, true),
+        ] {
+            let mut doc = document();
+            let root = add(&mut doc, None, Pt::ZERO, Pt::new(600.0, 100.0), true);
+            shape(&mut doc, root).layout.height = Sizing::Hug;
+            shape(&mut doc, root).layout.stack = Some(AutoStack {
+                flow,
+                direction: StackAxis::Horizontal,
+                align: StackAlign::Baseline,
+                columns: 2,
+                column_tracks: if advanced {
+                    vec![GridTrack::default(), GridTrack::default()]
+                } else {
+                    Vec::new()
+                },
+                ..stack()
+            });
+            let mut ids = Vec::new();
+            let mut expected_baseline = 0.0f32;
+            for (px, y) in [(20.0, 73.0), (40.0, 112.0)] {
+                let mut run = crate::geom::TypeRun {
+                    origin: Pt::new(31.0, y),
+                    px,
+                    font: font.into(),
+                    content: "Hgj".into(),
+                    ..Default::default()
+                };
+                let (ascent, descent, _) = crate::text::font_metrics_for(&run).unwrap();
+                close(ascent, px * 1.007);
+                close(descent, px * 0.298);
+                assert!(ascent > 0.0 && descent > 0.0);
+                run.contours = crate::text::shape(&run);
+                let offset = run.origin.y - Geom::Text(run.clone()).bbox().min.y;
+                expected_baseline = expected_baseline.max(ascent.max(offset));
+                let mut text = Shape::new(Geom::Text(run), Style::default());
+                text.layout.parent = Some(root);
+                text.layout.width = Sizing::Hug;
+                text.layout.height = Sizing::Hug;
+                ids.push(text.id);
+                apply(
+                    &mut doc,
+                    &Cmd::AddShape {
+                        layer: 1,
+                        shape: text,
+                    },
+                );
+            }
+            reflow(&mut doc, 1, root);
+            let mut reopened =
+                crate::project::decode(&crate::project::encode(&doc).unwrap()).unwrap();
+            for document in [&mut doc, &mut reopened] {
+                reflow(document, 1, root);
+                for &id in &ids {
+                    let shape = document.find_shape(1, id).unwrap();
+                    let Geom::Text(run) = &shape.geom else {
+                        panic!("text changed kind");
+                    };
+                    close(crate::text::caret_pt(run, 0).y, 10.0 + expected_baseline);
+                    assert!(shape.geom.bbox().max.y <= bounds(document, root).max.y - 9.9);
+                }
+                let svg = crate::svg::export_frame(document, 1, root).unwrap();
+                let tree = usvg::Tree::from_str(&svg, &usvg::Options::default()).unwrap();
+                for &id in &ids {
+                    let node_id = format!("oma-{id}");
+                    let parsed = tree.node_by_id(&node_id).unwrap().abs_bounding_box();
+                    let native = document.find_shape(1, id).unwrap().geom.bbox();
+                    for (actual, expected) in [
+                        (parsed.x(), native.min.x),
+                        (parsed.y(), native.min.y),
+                        (parsed.width(), native.width()),
+                        (parsed.height(), native.height()),
+                    ] {
+                        close(actual, expected);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn baseline_uses_the_renderer_offset_when_fill_turns_unwrapped_text_into_wrapped_text() {
+        let font = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/assets/fonts/EBGaramond.ttf"
+        );
+        let mut doc = document();
+        let root = add(&mut doc, None, Pt::ZERO, Pt::new(600.0, 180.0), true);
+        shape(&mut doc, root).layout.stack = Some(AutoStack {
+            direction: StackAxis::Horizontal,
+            align: StackAlign::Baseline,
+            ..stack()
+        });
+        let mut ids = Vec::new();
+        let mut expected = 0.0f32;
+        for px in [20.0, 40.0] {
+            let mut run = crate::geom::TypeRun {
+                px,
+                font: font.into(),
+                content: "Hgj".into(),
+                ..Default::default()
+            };
+            expected = expected.max(crate::text::font_metrics_for(&run).unwrap().0);
+            run.contours = crate::text::shape(&run);
+            let mut text = Shape::new(Geom::Text(run), Style::default());
+            text.layout.parent = Some(root);
+            text.layout.width = Sizing::Fill;
+            text.layout.height = Sizing::Hug;
+            ids.push(text.id);
+            apply(
+                &mut doc,
+                &Cmd::AddShape {
+                    layer: 1,
+                    shape: text,
+                },
+            );
+        }
+        for width in [600.0, 400.0, 600.0] {
+            set_bounds(
+                &mut shape(&mut doc, root).geom,
+                Bounds::from_min_size(Pt::ZERO, Pt::new(width, 180.0)),
+            );
+            reflow(&mut doc, 1, root);
+            for &id in &ids {
+                let Geom::Text(run) = &doc.find_shape(1, id).unwrap().geom else {
+                    panic!("text changed kind");
+                };
+                assert!(run.wrap_width.is_some());
+                close(
+                    run.origin.y + crate::text::compose(run)[0].baseline,
+                    10.0 + expected,
+                );
+            }
+        }
+    }
 }
 
-#[cfg(test)] mod character_scaling_tests {
+#[cfg(test)]
+mod character_scaling_tests {
     use super::*;
-    #[test] fn responsive_font_size_scales_absolute_metrics_only() {
-        let mut run=crate::geom::TypeRun{content:"Scale".into(),px:20.,tracking:1.,leading:28.,..Default::default()};
-        run.set_character_style(0,5,|s|{s.tracking=Some(75.);s.leading=Some(crate::geom::Leading::Fixed(30.));s.baseline_shift=Some(3.);s.hscale=Some(120.);});run.manual_kern.insert(1,20.);
-        assert!(size_text(&mut run,40.));let style=run.character_style(2);
-        assert_eq!(style.leading,Some(crate::geom::Leading::Fixed(60.)));assert_eq!(style.baseline_shift,Some(6.));assert_eq!(style.tracking,Some(75.));assert_eq!(style.hscale,Some(120.));assert_eq!(run.manual_kern.get(&1),Some(&20.));assert_eq!(run.tracking,2.);assert_eq!(run.leading,56.);
+    #[test]
+    fn responsive_font_size_scales_absolute_metrics_only() {
+        let mut run = crate::geom::TypeRun {
+            content: "Scale".into(),
+            px: 20.,
+            tracking: 1.,
+            leading: 28.,
+            ..Default::default()
+        };
+        run.set_character_style(0, 5, |s| {
+            s.tracking = Some(75.);
+            s.leading = Some(crate::geom::Leading::Fixed(30.));
+            s.baseline_shift = Some(3.);
+            s.hscale = Some(120.);
+        });
+        run.manual_kern.insert(1, 20.);
+        assert!(size_text(&mut run, 40.));
+        let style = run.character_style(2);
+        assert_eq!(style.leading, Some(crate::geom::Leading::Fixed(60.)));
+        assert_eq!(style.baseline_shift, Some(6.));
+        assert_eq!(style.tracking, Some(75.));
+        assert_eq!(style.hscale, Some(120.));
+        assert_eq!(run.manual_kern.get(&1), Some(&20.));
+        assert_eq!(run.tracking, 2.);
+        assert_eq!(run.leading, 56.);
     }
 }

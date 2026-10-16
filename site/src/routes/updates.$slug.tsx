@@ -1,4 +1,5 @@
 import brushesFollow from "../../../docs/blog/nightly-brushes-follow-your-hand.md?raw";
+import nativePrecision from "../../../docs/releases/0.6.7-nightly.20261016.0001.md?raw";
 import workspace from "../../../docs/blog/0.6.3-a-workspace-that-moves.md?raw";
 import brushes from "../../../docs/blog/nightly-brush-packs.md?raw";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -17,6 +18,7 @@ import { Markdown } from "../md";
 import { updateBySlug } from "../updates";
 
 const bodies: Record<string, { markdown: string; path: string }> = {
+  "0.6.7-nightly.20261016.0001": { markdown: nativePrecision, path: "docs/releases/0.6.7-nightly.20261016.0001.md" },
   "0.6.3-nightly.20261013.0001": { markdown: brushesFollow, path: "docs/blog/nightly-brushes-follow-your-hand.md" },
   "0.6.3-nightly.20261011.0001": { markdown: brushes, path: "docs/blog/nightly-brush-packs.md" },
   "0.6.3": { markdown: workspace, path: "docs/blog/0.6.3-a-workspace-that-moves.md" },

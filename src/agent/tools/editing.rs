@@ -361,6 +361,7 @@ pub fn execute(studio: &mut Studio, name: &str, args: &Value) -> Result<Value, S
                 "placeholder",
                 "width",
                 "height",
+                "grid",
                 "min_width",
                 "max_width",
                 "min_height",
@@ -489,7 +490,8 @@ pub fn execute(studio: &mut Studio, name: &str, args: &Value) -> Result<Value, S
                 "effects":crate::filter::Fx::catalog().iter().map(|(name,f)|json!({"name":name,"native":f()})).collect::<Vec<_>>(),
                 "motion_properties":crate::motion::Prop::all().iter().map(|p|json!({"property":p,"label":p.name()})).collect::<Vec<_>>(),
                 "motion_presets":crate::motion_presets::Preset::ALL.iter().map(|p|p.name()).collect::<Vec<_>>(),
-                "layout_example":{"frame":true,"parent":null,"clip":true,"stack":crate::layout::AutoStack::default(),"width":"Fixed","height":"Fixed","constraint_x":"Start","constraint_y":"Start","min_width":null,"max_width":null,"min_height":null,"max_height":null,"text_size":null,"aspect_ratio":null,"absolute":false,"breakpoints":[]},
+                "layout_example":{"frame":true,"parent":null,"clip":true,"stack":crate::layout::AutoStack::default(),"width":"Fixed","height":"Fixed","constraint_x":"Start","constraint_y":"Start","min_width":null,"max_width":null,"min_height":null,"max_height":null,"text_size":null,"aspect_ratio":null,"absolute":false,"grid":crate::layout::GridPlacement::default(),"breakpoints":[]},
+                "grid_track_example":{"size":{"Fraction":2.0},"min":80.0,"max":320.0},"grid_track_sizes":[{"Fixed":80.0},"Hug",{"Fraction":1.0}],"layout_alignments":["Start","Center","End","Stretch","Baseline"],
                 "photo_adjustments":crate::photo::DevelopParams::default(),
                 "photo_ranges":{"exposure":[-16,16],"temperature_tint":[-100,100],"contrast":[0,4],"saturation_vibrance":[0,2],"grain":[0,1],"hue":[-180,180],"tone_clarity_vignette_dehaze_split":[-1,1],"curve":[0,1],"crop":"normalized [left,top,right,bottom] or null","rotate":[0,90,180,270]}
             }));

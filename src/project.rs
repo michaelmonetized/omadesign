@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 mod features;
 
-pub(crate) const VERSION: u32 = features::PUBLISHING;
+pub(crate) const VERSION: u32 = features::ADVANCED_LAYOUT;
 
 /// Check whether this build implements a project version.
 /// Args: envelope version. Returns false for unimplemented reserved formats.
@@ -16,7 +16,7 @@ pub(crate) fn supports_version(version: u32) -> bool {
 }
 
 #[derive(Serialize, Deserialize)]
-struct File {
+pub(crate) struct File {
     version: u32,
     doc: Document,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
@@ -24,23 +24,98 @@ struct File {
 }
 
 pub fn encode(doc: &Document) -> Result<String, String> {
-    doc.validate_sources()?;
-    if features::required_version(doc) > VERSION {
+    let output = encode_admitted(doc)?;
+    let allocation =
+        std::sync::Arc::try_unwrap(output).map_err(|_| "Shared project encoded storage")?;
+    let (bytes, _memory) = allocation.into_parts();
+    String::from_utf8(bytes).map_err(|e| e.to_string())
+}
+
+/// Encode a native project while retaining its admitted output storage.
+/// Args: editable document. Returns the encoded allocation and its live resource owner.
+pub fn encode_admitted(
+    doc: &Document,
+) -> Result<std::sync::Arc<crate::resources::Allocation<u8>>, String> {
+    encode_envelope_admitted(doc, |project| project)
+}
+
+/// Encode one owned project inside a typed portable envelope.
+/// Args: artwork and envelope constructor. Returns one admitted serialized allocation.
+pub(crate) fn encode_envelope_admitted<T: Serialize>(
+    doc: &Document,
+    envelope: impl FnOnce(File) -> T,
+) -> Result<std::sync::Arc<crate::resources::Allocation<u8>>, String> {
+    crate::motion::compositions::validate(doc)?;
+    for document in crate::motion::compositions::documents(doc)? {
+        document.validate_sources()?;
+        if let Some(replica) = &document.collaboration {
+            crate::collaboration::resources::validate(replica)?;
+        }
+    }
+    let version = features::required_version(doc);
+    if version > VERSION {
         return Err("Unsupported omadesign project version".into());
     }
     let mut packed = doc.clone();
     pack_rasters(&mut packed)?;
-    let svg_sources = crate::svg_source::pack_sources(&mut packed);
-    let mut output = crate::deep_color::storage::Builder::new()?;
-    serde_json::to_writer(&mut output, &File {
-        version: features::required_version(doc),
+    let svg_sources = crate::svg_source::pack_sources(&mut packed)?;
+    let prepared = envelope(File {
+        version,
         doc: packed,
         svg_sources,
-    })
-    .map_err(|e| e.to_string())?;
-    let allocation = std::sync::Arc::try_unwrap(output.finish()?).map_err(|_| "Shared project encoded storage")?;
-    let (bytes, _memory) = allocation.into_parts();
-    String::from_utf8(bytes).map_err(|e| e.to_string())
+    });
+    encode_prepared(&prepared)
+}
+
+/// Admit a prepared portable value without retaining old and replacement output buffers.
+/// Args: immutable envelope. Returns its one exact-sized encoded owner or a serialization error.
+fn encode_prepared<T: Serialize>(
+    value: &T,
+) -> Result<std::sync::Arc<crate::resources::Allocation<u8>>, String> {
+    use std::io::{self, Write};
+    struct Size(usize);
+    impl Write for Size {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.0 = self
+                .0
+                .checked_add(bytes.len())
+                .ok_or_else(|| io::Error::other("Project size overflows"))?;
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    struct Output<'a> {
+        writer: &'a mut crate::deep_color::storage::Builder<u8>,
+        remaining: usize,
+    }
+    impl Write for Output<'_> {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            if bytes.len() > self.remaining {
+                return Err(io::Error::other("Project changed during encoding"));
+            }
+            self.writer.write_all(bytes)?;
+            self.remaining -= bytes.len();
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut size = Size(0);
+    serde_json::to_writer(&mut size, value).map_err(|e| e.to_string())?;
+    let mut writer = crate::deep_color::storage::Builder::with_capacity(size.0)?;
+    let mut output = Output {
+        writer: &mut writer,
+        remaining: size.0,
+    };
+    serde_json::to_writer(&mut output, value).map_err(|e| e.to_string())?;
+    if output.remaining != 0 {
+        return Err("Project changed during encoding".into());
+    }
+    writer.finish()
+
 }
 
 pub fn decode(s: &str) -> Result<Document, String> {
@@ -50,27 +125,174 @@ pub fn decode(s: &str) -> Result<Document, String> {
 }
 
 fn decode_admitted(s: &str) -> Result<Document, String> {
-    let _parser = crate::resources::global().reserve_now(s.len() as u64, &crate::deep_color::storage::check)?;
-    validate_retained_json(s)?;
+    let _parser = admit_parser(s)?;
     let file: File = serde_json::from_str(s).map_err(|e| e.to_string())?;
     let mut doc = file.doc;
     restore_sources(&mut doc, file.version, &file.svg_sources)?;
-    for layer in &mut doc.layers {
-        if let Some(px) = layer.kind.pixels_mut() {
-            *px = decompress_pixels(px)?;
-        }
-        if let Some(mask) = layer.mask.as_mut() {
-            *mask = decompress_pixels(mask)?;
-        }
-        if let Some(shapes) = layer.kind.shapes_mut() {
-            for shape in shapes {
-                if let Some(mask) = shape.mask.as_mut() {
-                    *mask = decompress_pixels(mask)?;
+    unpack_rasters(&mut doc)?;
+    normalize_decoded_document(doc, file.version)
+}
+
+/// Keep parser scratch charged while excluding only direct borrowed native sample text.
+/// Args: complete original file. Returns pending parser admission after the unchanged retained preflight.
+fn admit_parser(text: &str) -> Result<std::sync::Arc<crate::resources::Lease>, String> {
+    let parser = crate::resources::global()
+        .reserve_now(text.len() as u64, &crate::deep_color::storage::check)?;
+    validate_retained_json(text)?;
+    parser.resize_now(
+        text.len()
+            .saturating_sub(borrowed_native_sample_bytes(text)) as u64,
+        &crate::deep_color::storage::check,
+    )?;
+    Ok(parser)
+}
+
+/// Measure borrowed sample strings only at the native raster fields of the root document.
+/// Args: preflighted file JSON. Returns zero on ambiguous structure; other retained data remains fully charged.
+fn borrowed_native_sample_bytes(text: &str) -> usize {
+    use serde::de::{DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor};
+    use std::{borrow::Cow, cell::Cell, fmt};
+
+    struct Text<'a>(Cow<'a, str>);
+    impl<'de> Deserialize<'de> for Text<'de> {
+        fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            struct Borrow;
+            impl<'de> Visitor<'de> for Borrow {
+                type Value = Text<'de>;
+                fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                    f.write_str("sample text")
+                }
+                fn visit_borrowed_str<E: serde::de::Error>(
+                    self,
+                    value: &'de str,
+                ) -> Result<Self::Value, E> {
+                    Ok(Text(Cow::Borrowed(value)))
+                }
+                fn visit_str<E: serde::de::Error>(self, _: &str) -> Result<Self::Value, E> {
+                    Ok(Text(Cow::Owned(String::new())))
                 }
             }
+            deserializer.deserialize_str(Borrow)
         }
     }
-    normalize_decoded_document(doc, file.version)
+    #[derive(Clone, Copy, PartialEq)]
+    enum At {
+        File,
+        Doc,
+        Layers,
+        Layer,
+        Kind,
+        Raster,
+        Pixels,
+        Native,
+    }
+    struct Scan<'a> {
+        at: At,
+        bytes: &'a Cell<usize>,
+        valid: &'a Cell<bool>,
+    }
+    impl<'de> DeserializeSeed<'de> for Scan<'_> {
+        type Value = ();
+        fn deserialize<D: serde::Deserializer<'de>>(self, deserializer: D) -> Result<(), D::Error> {
+            deserializer.deserialize_any(self)
+        }
+    }
+    impl<'de> Visitor<'de> for Scan<'_> {
+        type Value = ();
+        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            f.write_str("root raster structure")
+        }
+        fn visit_unit<E: serde::de::Error>(self) -> Result<(), E> {
+            if self.at == At::Native {
+                Ok(())
+            } else {
+                Err(E::custom("Unexpected root structure"))
+            }
+        }
+        fn visit_seq<A: SeqAccess<'de>>(self, mut sequence: A) -> Result<(), A::Error> {
+            if self.at != At::Layers {
+                return Err(serde::de::Error::custom("Unexpected root sequence"));
+            }
+            while sequence
+                .next_element_seed(Scan {
+                    at: At::Layer,
+                    bytes: self.bytes,
+                    valid: self.valid,
+                })?
+                .is_some()
+            {}
+            Ok(())
+        }
+        fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<(), A::Error> {
+            if self.at == At::Layers {
+                return Err(serde::de::Error::custom("Unexpected layer map"));
+            }
+            let mut seen = false;
+            let mut fields = 0usize;
+            while let Some(Text(key)) = map.next_key::<Text<'de>>()? {
+                fields += 1;
+                let key = match key {
+                    Cow::Borrowed(key) => key,
+                    Cow::Owned(_) => {
+                        self.valid.set(false);
+                        map.next_value::<IgnoredAny>()?;
+                        continue;
+                    }
+                };
+                let next = match (self.at, key) {
+                    (At::File, "doc") => Some(At::Doc),
+                    (At::Doc, "layers") => Some(At::Layers),
+                    (At::Layer, "kind") => Some(At::Kind),
+                    (At::Kind, "Raster") => Some(At::Raster),
+                    (At::Raster, "pixels") => Some(At::Pixels),
+                    (At::Pixels, "native") => Some(At::Native),
+                    _ => None,
+                };
+                if let Some(at) = next {
+                    if seen {
+                        self.valid.set(false);
+                    }
+                    seen = true;
+                    map.next_value_seed(Scan {
+                        at,
+                        bytes: self.bytes,
+                        valid: self.valid,
+                    })?;
+                } else if self.at == At::Native && key == "samples" {
+                    if seen {
+                        self.valid.set(false);
+                    }
+                    seen = true;
+                    if let Text(Cow::Borrowed(value)) = map.next_value::<Text<'de>>()? {
+                        match self.bytes.get().checked_add(value.len()) {
+                            Some(bytes) => self.bytes.set(bytes),
+                            None => self.valid.set(false),
+                        }
+                    }
+                } else {
+                    map.next_value::<IgnoredAny>()?;
+                }
+            }
+            if self.at == At::Kind && fields != 1 {
+                self.valid.set(false);
+            }
+            Ok(())
+        }
+    }
+    let bytes = Cell::new(0);
+    let valid = Cell::new(true);
+    let mut deserializer = serde_json::Deserializer::from_str(text);
+    let result = Scan {
+        at: At::File,
+        bytes: &bytes,
+        valid: &valid,
+    }
+    .deserialize(&mut deserializer);
+    if result.is_ok() && deserializer.end().is_ok() && valid.get() && bytes.get() <= text.len() {
+        bytes.get()
+    } else {
+        0
+    }
 }
 
 /// Inspect retained live/source properties without rebuilding pixels or color state.
@@ -86,8 +308,13 @@ pub(crate) fn validate_retained_json(text: &str) -> Result<(), String> {
     if required > VERSION || declared.is_some_and(|version| !supports_version(version)) {
         return Err("Unsupported omadesign project version".into());
     }
-    if let Some(declared) = declared && required >= 18 && declared < required {
-        return Err(format!("Project declares version {declared}, but its retained data requires version {required}"));
+    if let Some(declared) = declared
+        && required >= 18
+        && declared < required
+    {
+        return Err(format!(
+            "Project declares version {declared}, but its retained data requires version {required}"
+        ));
     }
     Ok(())
 }
@@ -107,39 +334,60 @@ pub(crate) fn restore_sources(
 }
 
 /// Shared normalization after pixels have been decoded under the caller's budgets.
-pub(crate) fn normalize_decoded_document(mut doc: Document, version: u32) -> Result<Document, String> {
+pub(crate) fn normalize_decoded_document(
+    mut doc: Document,
+    version: u32,
+) -> Result<Document, String> {
     if !supports_version(version) {
         return Err("Unsupported omadesign project version".into());
     }
     features::validate_version(&doc, version, false)?;
-    crate::deep_color::cms::validate_profile(&doc.color.icc_profile,doc.color.model)?;
-    if doc.color.intent>3{return Err("Invalid document color rendering intent".into());}
-    doc.validate_sources()?;
-    for layer in &mut doc.layers {
-        if version < 7 {
-            layer.filters.migrate_legacy(layer.blend);
+    crate::motion::compositions::visit_documents_mut(&mut doc, |doc| {
+        crate::deep_color::cms::validate_profile(&doc.color.icc_profile, doc.color.model)?;
+        if doc.color.intent > 3 {
+            return Err("Invalid document color rendering intent".into());
         }
-        if let Some(shapes) = layer.kind.shapes_mut() {
-            for shape in shapes {
-                if version < 7 {
-                    shape.filters.migrate_legacy(shape.blend);
-                }
-                if version < 8 {
-                    if let crate::geom::Geom::Text(t) = &mut shape.geom
-                        && t.wrap_width.is_some()
-                    {
-                        t.update_paragraphs(0, t.content.chars().count(), |p| {
-                            p.overflow_wrap = true
-                        });
+        doc.validate_sources()?;
+        if let Some(replica) = &doc.collaboration {
+            crate::collaboration::resources::validate(replica)?;
+        }
+        crate::layout_components::validate_properties(doc)?;
+        for layer in &mut doc.layers {
+            if version < 7 {
+                layer.filters.migrate_legacy(layer.blend);
+            }
+            if let Some(shapes) = layer.kind.shapes_mut() {
+                for shape in shapes {
+                    if version < 7 {
+                        shape.filters.migrate_legacy(shape.blend);
                     }
+                    if version < 8 {
+                        if let crate::geom::Geom::Text(t) = &mut shape.geom
+                            && t.wrap_width.is_some()
+                        {
+                            t.update_paragraphs(0, t.content.chars().count(), |p| {
+                                p.overflow_wrap = true
+                            });
+                        }
+                    }
+                    crate::text::fill_contours(&mut shape.geom);
                 }
-                crate::text::fill_contours(&mut shape.geom);
             }
         }
-    }
-    crate::text_geometry::reflow(&mut doc);
-    doc.ensure_ids()?;
-    doc.validate_hierarchy()?;
+        crate::text_geometry::reflow(doc);
+        for comp in &doc.motion.compositions {
+            crate::document::bump_id(comp.id);
+        }
+        if let Some(scene) = &doc.motion.scene3d {
+            for object in &scene.objects {
+                crate::document::bump_id(object.id);
+            }
+        }
+        doc.ensure_ids()?;
+        doc.validate_hierarchy()?;
+        Ok(())
+    })?;
+    crate::motion::compositions::validate(&doc)?;
     Ok(doc)
 }
 
@@ -189,7 +437,10 @@ fn compress_pixels(px: &Pixels) -> Result<Pixels, String> {
         &crate::deep_color::storage::check,
     )?;
     let mut b64 = String::new();
-    b64.try_reserve_exact(usize::try_from(encoded_memory.bytes()).map_err(|_| "Project encoded pixels overflow")?).map_err(|_| "Not enough memory to encode project pixels")?;
+    b64.try_reserve_exact(
+        usize::try_from(encoded_memory.bytes()).map_err(|_| "Project encoded pixels overflow")?,
+    )
+    .map_err(|_| "Not enough memory to encode project pixels")?;
     base64::engine::general_purpose::STANDARD.encode_string(png.as_slice(), &mut b64);
     encoded_memory.resize_now(b64.capacity() as u64, &crate::deep_color::storage::check)?;
     Ok(Pixels {
@@ -262,8 +513,20 @@ fn decompress_pixels(px: &Pixels) -> Result<Pixels, String> {
 }
 
 pub fn save_to(doc: &Document, path: &Path) -> Result<(), String> {
+    let output = encode_admitted(doc)?;
+    save_encoded_to(doc, path, &output, &crate::ml::NoProgress)
+}
+
+/// Write an admitted project atomically without releasing its output reservation.
+/// Args: document for font archival, destination, encoded owner and write checks. Returns after sync and rename or rollback.
+pub(crate) fn save_encoded_to(
+    doc: &Document,
+    path: &Path,
+    output: &std::sync::Arc<crate::resources::Allocation<u8>>,
+    progress: &dyn crate::ml::Progress,
+) -> Result<(), String> {
     use std::io::Write;
-    let s = encode(doc)?;
+    progress.check()?;
     let parent = path
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
@@ -288,9 +551,12 @@ pub fn save_to(doc: &Document, path: &Path) -> Result<(), String> {
             file.set_permissions(metadata.permissions())
                 .map_err(|e| e.to_string())?;
         }
-        file.write_all(s.as_bytes())
-            .and_then(|_| file.sync_all())
-            .map_err(|e| e.to_string())?;
+        for chunk in output.as_slice().chunks(256 * 1024) {
+            progress.check()?;
+            file.write_all(chunk).map_err(|e| e.to_string())?;
+        }
+        progress.check()?;
+        file.sync_all().map_err(|e| e.to_string())?;
         drop(file);
         std::fs::rename(&temporary, path).map_err(|e| e.to_string())
     })();
@@ -361,6 +627,12 @@ const PLACE_EXTS: &[&str] = &[
     "ps",
     "psd",
     "psb",
+    "omamotion",
+    "gltf",
+    "glb",
+    "obj",
+    "stl",
+    "fbx",
     "ora",
     "xcf",
     "af",
@@ -550,27 +822,58 @@ pub struct SwapMeta {
     pub doc: crate::document::Document,
 }
 
+#[derive(Serialize, Deserialize)]
+struct SwapArchive {
+    #[serde(flatten)]
+    meta: SwapMeta,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    version: Option<u32>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    svg_sources: std::collections::BTreeMap<String, std::sync::Arc<str>>,
+}
+
 pub fn swap_path(id: &str) -> PathBuf {
     swap_dir().join(format!("{id}.oma.swp"))
 }
 
 fn pack_rasters(doc: &mut Document) -> Result<(), String> {
-    for layer in &mut doc.layers {
-        if let Some(px) = layer.kind.pixels_mut() {
-            *px = compress_pixels(px)?;
-        }
-        if let Some(mask) = layer.mask.as_mut() {
-            *mask = compress_pixels(mask)?;
-        }
-        if let Some(shapes) = layer.kind.shapes_mut() {
-            for shape in shapes {
-                if let Some(mask) = shape.mask.as_mut() {
-                    *mask = compress_pixels(mask)?;
+    crate::motion::compositions::visit_documents_mut(doc, |doc| {
+        for layer in &mut doc.layers {
+            if let Some(px) = layer.kind.pixels_mut() {
+                *px = compress_pixels(px)?;
+            }
+            if let Some(mask) = layer.mask.as_mut() {
+                *mask = compress_pixels(mask)?;
+            }
+            if let Some(shapes) = layer.kind.shapes_mut() {
+                for shape in shapes {
+                    if let Some(mask) = shape.mask.as_mut() {
+                        *mask = compress_pixels(mask)?;
+                    }
                 }
             }
         }
-    }
-    Ok(())
+        Ok(())
+    })
+}
+
+fn unpack_rasters(doc: &mut Document) -> Result<(), String> {
+    crate::motion::compositions::visit_documents_mut(doc, |doc| {
+        for layer in &mut doc.layers {
+            if let Some(px) = layer.kind.pixels_mut() {
+                *px = decompress_pixels(px)?;
+            }
+            if let Some(mask) = layer.mask.as_mut() {
+                *mask = decompress_pixels(mask)?;
+            }
+            for shape in layer.kind.shapes_mut().into_iter().flatten() {
+                if let Some(mask) = shape.mask.as_mut() {
+                    *mask = decompress_pixels(mask)?;
+                }
+            }
+        }
+        Ok(())
+    })
 }
 
 /// A worker writes a temporary file; only the UI may publish it after checking
@@ -627,6 +930,16 @@ pub(crate) fn prepare_swap(
 ) -> Result<PreparedSwap, String> {
     use std::io::Write;
 
+    crate::motion::compositions::validate(&meta.doc)?;
+    for doc in crate::motion::compositions::documents(&meta.doc)? {
+        doc.validate_sources()?;
+        if let Some(replica) = &doc.collaboration {
+            crate::collaboration::resources::validate(replica)?;
+        }
+    }
+    if features::required_version(&meta.doc) > VERSION {
+        return Err("Unsupported omadesign project version".into());
+    }
     pack_rasters(&mut meta.doc)?;
     if let Some(dir) = destination.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
@@ -648,19 +961,42 @@ pub(crate) fn prepare_swap(
         &meta.doc,
         &swap_font_archive(&prepared.destination),
     )?;
+    let version = Some(features::required_version(&meta.doc));
+    let svg_sources = crate::svg_source::pack_sources(&mut meta.doc)?;
     let mut writer = std::io::BufWriter::new(file);
-    serde_json::to_writer(&mut writer, &meta).map_err(|e| e.to_string())?;
+    serde_json::to_writer(
+        &mut writer,
+        &SwapArchive {
+            meta,
+            version,
+            svg_sources,
+        },
+    )
+    .map_err(|e| e.to_string())?;
     writer.flush().map_err(|e| e.to_string())?;
     writer.get_ref().sync_all().map_err(|e| e.to_string())?;
     Ok(prepared)
 }
 
+/// Restore recovery resource references before recovery or previews use the document.
+/// Args: original recovery JSON. Returns metadata with every current and retained SVG reference restored.
+pub(crate) fn decode_swap_archive(s: &str) -> Result<SwapMeta, String> {
+    validate_retained_json(s)?;
+    let archive: SwapArchive = serde_json::from_str(s).map_err(|e| e.to_string())?;
+    let mut meta = archive.meta;
+    let version = archive
+        .version
+        .unwrap_or_else(|| features::required_version(&meta.doc));
+    restore_sources(&mut meta.doc, version, &archive.svg_sources)?;
+    Ok(meta)
+}
+
 pub fn load_swap(path: &Path) -> Result<SwapMeta, String> {
     let bytes = read_admitted(path)?;
     let s = std::str::from_utf8(&bytes).map_err(|e| e.to_string())?;
-    let _parser = crate::resources::global().reserve_now(bytes.len() as u64, &crate::deep_color::storage::check)?;
-    validate_retained_json(s)?;
-    let mut meta: SwapMeta = serde_json::from_str(s).map_err(|e| e.to_string())?;
+    let _parser = crate::resources::global()
+        .reserve_now(bytes.len() as u64, &crate::deep_color::storage::check)?;
+    let mut meta = decode_swap_archive(s)?;
     let archive = swap_font_archive(path);
     if archive.is_dir() {
         crate::typography::register_archive(&archive)?;
@@ -668,23 +1004,8 @@ pub fn load_swap(path: &Path) -> Result<SwapMeta, String> {
         crate::typography::load_for_document(original)?;
     }
     crate::typography::validate_document_fonts(&meta.doc)?;
-    for layer in &mut meta.doc.layers {
-        if let Some(px) = layer.kind.pixels_mut() {
-            *px = decompress_pixels(px)?;
-        }
-        if let Some(mask) = layer.mask.as_mut() {
-            *mask = decompress_pixels(mask)?;
-        }
-        if let Some(shapes) = layer.kind.shapes_mut() {
-            for sh in shapes {
-                crate::text::fill_contours(&mut sh.geom);
-                if let Some(mask) = sh.mask.as_mut() {
-                    *mask = decompress_pixels(mask)?;
-                }
-            }
-        }
-    }
-    meta.doc.ensure_ids()?;
+    unpack_rasters(&mut meta.doc)?;
+    meta.doc = normalize_decoded_document(meta.doc, VERSION)?;
     Ok(meta)
 }
 
@@ -737,7 +1058,7 @@ pub fn list_swaps() -> Vec<(PathBuf, SwapMeta)> {
         // restoring one needs a missing font; Recover reports that error.
         if let Some(meta) = std::fs::read_to_string(&p)
             .ok()
-            .and_then(|json| serde_json::from_str::<SwapMeta>(&json).ok())
+            .and_then(|json| decode_swap_archive(&json).ok())
         {
             out.push((p, meta));
         }
@@ -784,6 +1105,223 @@ mod tests {
     use super::*;
     use crate::document::{Cmd, Shape, Style, apply};
     use crate::geom::{Geom, Pt};
+
+    #[test]
+    fn native_parser_deducts_only_borrowed_root_raster_samples() {
+        let raster =
+            serde_json::json!({"kind":{"Raster":{"pixels":{"native":{"samples":"AAAA"}}}}});
+        let text =
+            serde_json::json!({"version":VERSION,"doc":{"layers":[raster.clone(),raster.clone()],
+            "history":{"layers":[raster.clone()]},"opaque":{"native":{"samples":"opaque"}}},
+            "other":{"doc":{"layers":[raster.clone()]}}})
+            .to_string();
+        assert_eq!(borrowed_native_sample_bytes(&text), 8);
+        let pool = crate::resources::global();
+        let before = (pool.usage().0, pool.pending_bytes());
+        let parser = admit_parser(&text).unwrap();
+        assert_eq!(parser.bytes(), text.len() as u64 - 8);
+        assert_eq!(pool.pending_bytes() - before.1, parser.bytes());
+        drop(parser);
+        assert_eq!((pool.usage().0, pool.pending_bytes()), before);
+        let escaped = text.replace("AAAA", "\\u0041AAA");
+        assert_eq!(borrowed_native_sample_bytes(&escaped), 0);
+        let parser = admit_parser(&escaped).unwrap();
+        assert_eq!(parser.bytes(), escaped.len() as u64);
+        drop(parser);
+        assert_eq!((pool.usage().0, pool.pending_bytes()), before);
+        let mut mixed: serde_json::Value = serde_json::from_str(&text).unwrap();
+        mixed["doc"]["layers"][0]["kind"]["Raster"]["pixels"]["native"]["samples"] = "BBBB".into();
+        let mixed = mixed.to_string().replacen("BBBB", "\\u0042BBB", 1);
+        assert_eq!(borrowed_native_sample_bytes(&mixed), 4);
+        let parser = admit_parser(&mixed).unwrap();
+        assert_eq!(parser.bytes(), mixed.len() as u64 - 4);
+        drop(parser);
+        assert_eq!((pool.usage().0, pool.pending_bytes()), before);
+    }
+
+    #[test]
+    fn native_parser_keeps_ambiguous_escaped_and_opaque_paths_fully_charged() {
+        let original = r#"{"version":23,"doc":{"layers":[{"kind":{"Raster":{"pixels":{"native":{"samples":"AAAA"}}}}}]}}"#;
+        let doc = serde_json::from_str::<serde_json::Value>(original).unwrap()["doc"].to_string();
+        let cases = [
+            original.replace("\"doc\"", "\"d\\u006fc\""),
+            original.replace(
+                "\"samples\":\"AAAA\"",
+                "\"samples\":\"AAAA\",\"samples\":\"AAAA\"",
+            ),
+            original.replace("\"pixels\":", "\"wrong_pixels\":"),
+            original.replace("\"samples\":\"AAAA\"", "\"samples\":42"),
+            original.replace("\"Raster\":", "\"Vector\":{},\"Raster\":"),
+            original.replace("\"layers\":[", "\"history\":["),
+            format!(r#"{{"version":23,"doc":{doc},"doc":{doc}}}"#),
+            format!(r#"{{"project":{original}}}"#),
+        ];
+        let pool = crate::resources::global();
+        let before = (pool.usage().0, pool.pending_bytes());
+        for text in cases {
+            assert_eq!(borrowed_native_sample_bytes(&text), 0, "{text}");
+            let parser = admit_parser(&text).unwrap();
+            assert_eq!(parser.bytes(), text.len() as u64);
+            drop(parser);
+            assert_eq!((pool.usage().0, pool.pending_bytes()), before);
+        }
+        let future = original.replace("23", "4294967295");
+        assert!(admit_parser(&future).unwrap_err().contains("Unsupported"));
+        let understated = original.replace("23", "1");
+        assert!(
+            admit_parser(&understated)
+                .unwrap_err()
+                .contains("requires version")
+        );
+        assert_eq!((pool.usage().0, pool.pending_bytes()), before);
+    }
+
+    #[test]
+    fn admitted_project_output_refuses_size_drift_and_releases_its_owner() {
+        struct Changing {
+            grow: bool,
+            calls: std::cell::Cell<u8>,
+        }
+        impl Serialize for Changing {
+            fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                let first = self.calls.replace(self.calls.get() + 1) == 0;
+                serializer.serialize_str(if first == self.grow { "a" } else { "different" })
+            }
+        }
+        let pool = crate::resources::global();
+        let before = (pool.usage().0, pool.pending_bytes());
+        for grow in [false, true] {
+            let changing = Changing {
+                grow,
+                calls: std::cell::Cell::new(0),
+            };
+            let error = encode_prepared(&changing).unwrap_err();
+            assert!(error.contains("Project changed during encoding"));
+            assert_eq!(changing.calls.get(), 2);
+            assert_eq!((pool.usage().0, pool.pending_bytes()), before);
+        }
+    }
+
+    #[test]
+    fn admitted_project_output_survives_roundtrip_write_failure_and_last_alias() {
+        use crate::{deep_color::Depth, document::Layer};
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        struct FailWrite<'a> {
+            owner: &'a Arc<crate::resources::Allocation<u8>>,
+            checks: AtomicUsize,
+        }
+        impl crate::ml::Progress for FailWrite<'_> {
+            fn report(&self, _: &str, _: usize, _: usize) {}
+            fn cancelled(&self) -> bool {
+                false
+            }
+            fn check(&self) -> Result<(), String> {
+                assert!(crate::resources::global().usage().0 >= self.owner.bytes());
+                if self.checks.fetch_add(1, Ordering::Relaxed) == 2 {
+                    Err("injected project write failure".into())
+                } else {
+                    Ok(())
+                }
+            }
+        }
+        let before = crate::resources::global().usage().0;
+        let parent = Path::new(env!("CARGO_MANIFEST_DIR")).join(".qa-runs");
+        std::fs::create_dir_all(&parent).unwrap();
+        let directory = parent.join(format!(
+            "admitted-project-{}-{}",
+            std::process::id(),
+            crate::document::next_id()
+        ));
+        std::fs::create_dir(&directory).unwrap();
+        let path = directory.join("image.oma");
+        let samples: Vec<_> = (0..17 * 11)
+            .flat_map(|n| [n as f32 / 193., 0.12345679, 0.8765432, 1.])
+            .collect();
+        let pixels = Pixels::from_samples(17, 11, Depth::F32, samples.clone()).unwrap();
+        let mut doc = Document::new("admitted project", 17., 11., 72.);
+        doc.transparent = true;
+        doc.color.depth = Depth::F32;
+        doc.color.intent = 1;
+        doc.layers = vec![Layer::placed_raster(
+            "RAW",
+            pixels,
+            Pt::ZERO,
+            Pt::new(17., 11.),
+        )];
+        let owner = encode_admitted(&doc).unwrap();
+        let weak = Arc::downgrade(owner.lease());
+        let alias = owner.clone();
+        let decoded = decode(std::str::from_utf8(owner.as_slice()).unwrap()).unwrap();
+        assert_eq!(
+            decoded.layers[0]
+                .kind
+                .pixels()
+                .unwrap()
+                .samples()
+                .unwrap()
+                .as_slice(),
+            samples
+        );
+        drop(decoded);
+        std::fs::write(&path, b"previous project").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640)).unwrap();
+        }
+        let failure = FailWrite {
+            owner: &owner,
+            checks: AtomicUsize::new(0),
+        };
+        assert!(
+            save_encoded_to(&doc, &path, &owner, &failure)
+                .unwrap_err()
+                .contains("injected project write")
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), b"previous project");
+        assert_eq!(
+            std::fs::read_dir(&directory).unwrap().count(),
+            1,
+            "failed temporary write leaked"
+        );
+        save_to(&doc, &path).unwrap();
+        let reopened = load_from(&path).unwrap();
+        assert_eq!(reopened.color, doc.color);
+        assert_eq!(
+            reopened.layers[0]
+                .kind
+                .pixels()
+                .unwrap()
+                .samples()
+                .unwrap()
+                .as_slice(),
+            samples
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o640
+            );
+        }
+        let blocked = directory.join("blocked.oma");
+        std::fs::create_dir(&blocked).unwrap();
+        std::fs::write(blocked.join("keep"), b"preserved").unwrap();
+        assert!(save_encoded_to(&doc, &blocked, &owner, &crate::ml::NoProgress).is_err());
+        assert_eq!(std::fs::read(blocked.join("keep")).unwrap(), b"preserved");
+        drop(owner);
+        assert!(weak.upgrade().is_some());
+        drop(alias);
+        assert!(weak.upgrade().is_none());
+        drop(reopened);
+        drop(doc);
+        assert_eq!(crate::resources::global().usage().0, before);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
 
     #[test]
     fn stacked_typography_versions_preserve_combined_appearance_and_ranges() {
@@ -1209,7 +1747,8 @@ mod tests {
         // Packed rasters are base64 PNGs. A buffer is raw only when its length
         // is exactly w*h*4. Dimensions whose product does not fit in usize must
         // take that same fallback, not abort the multiply.
-        let doc = Document::new("overflow", 1.0, 1.0, 72.0);
+        let mut doc = Document::new("overflow", 1.0, 1.0, 72.0);
+        doc.layers[0] = crate::document::Layer::raster("Overflow raster", 1, 1).unwrap();
         let encoded = encode(&doc).unwrap();
         let restored = decode(&encoded).unwrap();
         assert_eq!(
@@ -1268,3 +1807,6 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 }
+
+#[cfg(test)]
+mod motion_archive_tests;

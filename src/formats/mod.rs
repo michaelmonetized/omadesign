@@ -2,8 +2,10 @@
 pub mod affinity;
 pub mod cli;
 pub mod idml;
+pub mod illustrator;
 pub mod openraster;
 pub mod pdf;
+pub(crate) mod photo_placement;
 pub mod psd;
 pub mod raw;
 pub mod svg;

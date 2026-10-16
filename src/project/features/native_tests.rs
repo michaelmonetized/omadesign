@@ -142,12 +142,12 @@ fn integrated_retained_cells_scan_base_changes_atomic_color_and_disabled_history
     let mut envelope: Value =
         serde_json::from_str(&crate::project::encode(&plain).unwrap()).unwrap();
     envelope["doc"]["collaboration"] = replica;
-    for declared in [5, 18, 19, 20, 23, 24] {
+    for declared in [5, 18, 19, 20, 23] {
         envelope["version"] = declared.into();
         assert!(
             crate::project::decode(&envelope.to_string())
                 .unwrap_err()
-                .contains("Unsupported")
+                .contains("requires version 24")
         );
     }
     envelope["version"] = 23.into();
@@ -164,7 +164,7 @@ fn integrated_retained_cells_scan_base_changes_atomic_color_and_disabled_history
     assert!(
         crate::brand::load_preview_document(&path, false)
             .unwrap_err()
-            .contains("Unsupported")
+            .contains("requires version 24")
     );
     std::fs::remove_dir_all(directory).unwrap();
 }

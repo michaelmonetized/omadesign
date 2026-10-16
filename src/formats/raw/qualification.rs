@@ -9,10 +9,17 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 
+#[path = "qualification/consumer.rs"]
+mod consumer;
+#[path = "qualification/reference.rs"]
+mod reference;
+#[path = "qualification/storage.rs"]
+mod storage;
 #[path = "qualification/tests.rs"]
 mod tests;
 #[path = "qualification/workflow.rs"]
 mod workflow;
+pub(super) use storage::root::{Scratch as ScheduledScratch, scratch as scheduled_scratch};
 
 const MANIFEST: &str = include_str!("../../../docs/qa/raw-camera-manifest.json");
 const SOURCE_BUDGET: u64 = 512 * 1024 * 1024;
@@ -392,6 +399,43 @@ fn verify_hash(path: &Path, expected: Option<&str>) -> Result<String, String> {
         ));
     }
     Ok(actual)
+}
+
+/// Observe process memory and the single shared admission pool.
+/// Args: stage and monotonic start. Returns sampled counters without private host or file paths.
+pub(super) fn resource_observation(stage: &str, started: std::time::Instant) -> Value {
+    workflow::resource_sample(stage, started)
+}
+
+/// Copy the scheduled high-resolution cancellation fixture inside its full case allowance.
+/// Args: original, new owned output, case directory and verified source SHA. Returns optional storage evidence; ordinary fixtures keep their existing path.
+pub(super) fn copy_scheduled_fixture(
+    source: &Path,
+    output: &Path,
+    directory: &Path,
+    source_sha256: &str,
+) -> Result<Option<Value>, String> {
+    if std::env::var_os("OMA_RAW_SCHEDULED_CASE_STORAGE").is_none() {
+        return Ok(None);
+    }
+    let manifest = parse_manifest(MANIFEST)?;
+    let case = manifest
+        .cases
+        .iter()
+        .find(|case| {
+            case.id == "coverage-6565" && case.source.sha256.as_deref() == Some(source_sha256)
+        })
+        .ok_or("Scheduled copy needs the exact approved X2D source")?;
+    let guard = storage::CaseStorage::new(case, source, &[], directory)?;
+    let mut file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(output)
+        .map_err(|e| e.to_string())?;
+    guard.copy(source, &mut file)?;
+    drop(file);
+    guard.check_next(0)?;
+    Ok(Some(guard.report()))
 }
 
 /// Restrict disposable files to a newly owned project directory.

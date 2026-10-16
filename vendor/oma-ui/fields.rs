@@ -1,5 +1,9 @@
 //! Small property controls. Applications own themes, values and commands.
 use eframe::egui::{self, Response, Ui};
+use std::cell::RefCell;
+#[path = "native_scope.rs"]
+mod scope;
+pub use scope::native_scope;
 
 #[derive(Clone, Copy, Default)]
 pub struct FieldState<'a> {
@@ -13,6 +17,28 @@ pub struct FieldResponse {
     pub changed: bool,
     pub committed: bool,
     pub cancelled: bool,
+}
+
+/// Check whether a numeric field's current native draft and domain state are valid.
+/// Args: the response returned by number in this frame.
+/// Returns false for rejected input or an associated application error; changed still owns edits.
+pub fn number_is_valid(field: &FieldResponse) -> bool {
+    field.response.ctx.data(|data| {
+        data.get_temp::<bool>(field.response.id.with("oma-number-valid"))
+            .unwrap_or(true)
+    })
+}
+
+/// Parse the native egui number grammar without accepting nonfinite input.
+/// Args: native draft. Returns the parsed finite value for egui's existing range handling.
+fn parse_number(text: &str) -> Option<f64> {
+    text.chars()
+        .filter(|character| !character.is_whitespace())
+        .map(|character| if character == '−' { '-' } else { character })
+        .collect::<String>()
+        .parse::<f64>()
+        .ok()
+        .filter(|value| value.is_finite())
 }
 
 /// Draw a property field.
@@ -32,7 +58,13 @@ pub fn number<N: egui::emath::Numeric>(
     let enabled = ui.is_enabled() && !state.locked;
     let mut reset_clicked = false;
     let key = ui.make_persistent_id(id);
-    ui.push_id(key, |ui| {
+    let draft_key = key.with("invalid-native-number");
+    let attempted = RefCell::new(None);
+    #[cfg(not(feature = "oma-ui-egui032"))]
+    let arrow_step = ui.input(|input| input.events.iter().any(|event| matches!(event,
+        egui::Event::Key { key: egui::Key::ArrowUp | egui::Key::ArrowDown, pressed: true, modifiers, .. }
+            if !modifiers.any())));
+    native_scope(ui, key, |ui| {
         ui.vertical(|ui| {
             ui.set_min_width(0.0);
             let label_response = ui.add(egui::Label::new(label).wrap());
@@ -47,7 +79,11 @@ pub fn number<N: egui::emath::Numeric>(
                             .clamp_existing_to_range(false)
                             .speed(0.5)
                             .max_decimals(2)
-                            .suffix(unit);
+                            .suffix(unit)
+                            .custom_parser(|text| {
+                                attempted.replace(Some(text.to_owned()));
+                                parse_number(text)
+                            });
                         if state.mixed {
                             drag = drag.custom_formatter(|_, _| "Mixed".into());
                         }
@@ -88,15 +124,96 @@ pub fn number<N: egui::emath::Numeric>(
             if cancelled || !enabled {
                 *value = before;
             }
-            let invalid = !value.to_f64().is_finite();
+            let invalid_action = enabled
+                && ui.input(|input| {
+                    input
+                        .accesskit_action_requests(response.id, egui::accesskit::Action::SetValue)
+                        .any(|request| {
+                            matches!(request.data,
+                    Some(egui::accesskit::ActionData::NumericValue(value)) if !value.is_finite())
+                        })
+                });
+            let invalid_value = !value.to_f64().is_finite() || invalid_action;
+            let mut invalid_draft = ui.data(|data| data.get_temp::<String>(draft_key));
+            if cancelled || reset_clicked {
+                invalid_draft = None;
+            } else if enabled {
+                if let Some(text) = attempted.into_inner() {
+                    let untouched_mixed = state.mixed
+                        && text == "Mixed"
+                        && !response.changed()
+                        && invalid_draft.is_none();
+                    invalid_draft =
+                        (parse_number(&text).is_none() && !untouched_mixed).then_some(text);
+                } else if response.changed() && !invalid_value {
+                    invalid_draft = None;
+                }
+            }
+            ui.data_mut(|data| {
+                if let Some(text) = &invalid_draft {
+                    data.insert_temp(draft_key, text.clone());
+                } else {
+                    data.remove::<String>(draft_key);
+                }
+            });
+            let invalid = invalid_value || invalid_draft.is_some();
             if invalid {
                 *value = before;
-                response.mark_changed();
-            }
-            if let Some(error) = state.error.or(invalid.then_some("Enter a finite number")) {
-                ui.colored_label(ui.visuals().error_fg_color, error);
             }
             let changed = response.changed() && !cancelled && !invalid && enabled;
+            ui.data_mut(|data| {
+                data.insert_temp(
+                    response.id.with("oma-number-valid"),
+                    !invalid && state.error.is_none(),
+                );
+            });
+            ui.ctx().accesskit_node_builder(response.id, |node| {
+                node.set_label(label);
+                if state.mixed {
+                    node.set_state_description("Mixed");
+                    node.clear_numeric_value();
+                    if !changed && !invalid {
+                        node.set_value("Mixed");
+                    }
+                }
+            });
+            if let Some(error) = state.error.or(invalid.then_some("Enter a finite number")) {
+                let error = ui.colored_label(ui.visuals().error_fg_color, error);
+                ui.ctx().accesskit_node_builder(error.id, |node| {
+                    node.set_live(egui::accesskit::Live::Polite);
+                    node.set_live_atomic();
+                });
+                ui.ctx().accesskit_node_builder(response.id, |node| {
+                    node.set_invalid(egui::accesskit::Invalid::True);
+                    node.clear_numeric_value();
+                    node.set_error_message(egui::accesskit::NodeId(error.id.value()));
+                    node.push_described_by(egui::accesskit::NodeId(error.id.value()));
+                });
+            }
+            if response.has_focus() {
+                ui.memory_mut(|memory| {
+                    memory.set_focus_lock_filter(
+                        response.id,
+                        egui::EventFilter {
+                            horizontal_arrows: true,
+                            vertical_arrows: true,
+                            tab: false,
+                            escape: false,
+                        },
+                    );
+                    #[cfg(not(feature = "oma-ui-egui032"))]
+                    if arrow_step {
+                        memory.move_focus(egui::FocusDirection::None);
+                    }
+                });
+                response.scroll_to_me(Some(egui::Align::Center));
+                ui.painter().rect_stroke(
+                    response.rect.expand(2.),
+                    3.,
+                    egui::Stroke::new(2., ui.visuals().selection.stroke.color),
+                    egui::StrokeKind::Outside,
+                );
+            }
             let committed = !cancelled
                 && !invalid
                 && enabled

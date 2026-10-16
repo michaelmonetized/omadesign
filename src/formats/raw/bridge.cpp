@@ -86,6 +86,29 @@ template <size_t N, size_t M> void copy_text(char (&to)[N], const char (&from)[M
     std::memcpy(to, from, count);
     to[count] = 0;
 }
+
+// Bound the simultaneously live buffers in the fixed unpacked Bayer/AHD path.
+// Args: opened decoder and full output geometry. Returns zero for other layouts.
+uint64_t unpacked_bayer_demand(LibRaw &raw, uint64_t width, uint64_t height) {
+    libraw_decoder_info_t decoder{};
+    if (raw.get_decoder_info(&decoder) || !decoder.decoder_name ||
+        std::strcmp(decoder.decoder_name, "unpacked_load_raw()")) return 0;
+    const auto &id = raw.imgdata.idata;
+    const auto &sizes = raw.imgdata.sizes;
+    const auto *internal = raw.get_internal_data_pointer();
+    if (id.filters <= 1000 || id.colors != 3 || id.is_foveon || id.raw_count != 1 ||
+        sizes.pixel_aspect != 1.0 || internal->internal_output_params.fuji_width ||
+        internal->unpacker_data.fuji_layout ||
+        uint64_t(internal->unpacker_data.meta_length) > 32ull * 1024 * 1024 ||
+        (sizes.raw_pitch && sizes.raw_pitch != uint64_t(sizes.raw_width) * 2) ||
+        width > sizes.raw_width || height > sizes.raw_height) return 0;
+    const uint64_t sensor = uint64_t(sizes.raw_width) * (uint64_t(sizes.raw_height) + 8) * 2;
+    const uint64_t image = (width + 2) * (height + 2) * 8;
+    const uint64_t output = width * height * 6;
+    const uint64_t native = sensor + image + output;
+    const uint64_t copying = output * 2;
+    return (native > copying ? native : copying) + 64ull * 1024 * 1024;
+}
 }
 
 extern "C" int oma_raw_decode(const unsigned char *bytes, size_t length,
@@ -137,8 +160,9 @@ extern "C" int oma_raw_decode(const unsigned char *bytes, size_t length,
             return fail(output, "RAW pixel-aspect correction exceeds the decoder dimension range");
         const uint64_t sensor_pixels = uint64_t(raw.imgdata.sizes.raw_width) * raw.imgdata.sizes.raw_height;
         const uint64_t output_pixels = uint64_t(expanded_width) * uint64_t(expanded_height);
+        const uint64_t unpacked = sensor_only ? 0 : unpacked_bayer_demand(raw, uint64_t(expanded_width), uint64_t(expanded_height));
         const uint64_t demand = sensor_only ? sensor_pixels * 4 + 64ull * 1024 * 1024 :
-            sensor_pixels * 8 + output_pixels * 32 + 64ull * 1024 * 1024;
+            unpacked ? unpacked : sensor_pixels * 8 + output_pixels * 32 + 64ull * 1024 * 1024;
         if (!reserve || reserve(memory_context, demand))
             return fail(output, "Not enough shared memory for this RAW sensor and output geometry");
         if (!raw.imgdata.idata.raw_count)

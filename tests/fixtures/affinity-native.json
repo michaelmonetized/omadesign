@@ -1,0 +1,122 @@
+[
+  {
+    "name": "patchy-artboards.af",
+    "url": "https://raw.githubusercontent.com/SethRobinson/Patchy/de84eab550758b30fa062e479f5778cce7693b73/test-fixtures/af/tiny-artboards.af",
+    "sha256": "0361284661e1376b91675cb5f7705b1d560711c9f86aa53e255ee5365e023680",
+    "bytes": 15219,
+    "license": "MIT",
+    "containerVersion": 12
+  },
+  {
+    "name": "patchy-embedded-jpeg.af",
+    "url": "https://raw.githubusercontent.com/SethRobinson/Patchy/de84eab550758b30fa062e479f5778cce7693b73/test-fixtures/af/tiny-embedded-jpeg.af",
+    "sha256": "bd15ca80e322eb38460176e1b9b187247c3b9e455e55624f71ae5db1122a1eed",
+    "bytes": 567374,
+    "license": "MIT",
+    "containerVersion": 12
+  },
+  {
+    "name": "patchy-fx-blur.af",
+    "url": "https://raw.githubusercontent.com/SethRobinson/Patchy/de84eab550758b30fa062e479f5778cce7693b73/test-fixtures/af/tiny-fx-blur.af",
+    "sha256": "62c9a5c4cff475a1a47ad6582d24b4fcb56ac84e94641b7ca44c9f8b05053bf1",
+    "bytes": 17945,
+    "license": "MIT",
+    "containerVersion": 12
+  },
+  {
+    "name": "patchy-fx-gradient.af",
+    "url": "https://raw.githubusercontent.com/SethRobinson/Patchy/de84eab550758b30fa062e479f5778cce7693b73/test-fixtures/af/tiny-fx-gradient.af",
+    "sha256": "d515c84a702aee19359740e61f4ff16b02e363533f24287be5e1ba4b3539ef54",
+    "bytes": 19788,
+    "license": "MIT",
+    "containerVersion": 12
+  },
+  {
+    "name": "patchy-fx.af",
+    "url": "https://raw.githubusercontent.com/SethRobinson/Patchy/de84eab550758b30fa062e479f5778cce7693b73/test-fixtures/af/tiny-fx.af",
+    "sha256": "eeb8f0988a7effe2088ead4015916bed13875d9aaa88a3bf477127214831e820",
+    "bytes": 21160,
+    "license": "MIT",
+    "containerVersion": 12
+  },
+  {
+    "name": "patchy-group.af",
+    "url": "https://raw.githubusercontent.com/SethRobinson/Patchy/de84eab550758b30fa062e479f5778cce7693b73/test-fixtures/af/tiny-group.af",
+    "sha256": "3da524362f70f316c3be4beab2022e2ae7275bbd153cc7204bc328a7dc8a538a",
+    "bytes": 16639,
+    "license": "MIT",
+    "containerVersion": 12
+  },
+  {
+    "name": "patchy-lazy-placed.af",
+    "url": "https://raw.githubusercontent.com/SethRobinson/Patchy/de84eab550758b30fa062e479f5778cce7693b73/test-fixtures/af/tiny-lazy-placed.af",
+    "sha256": "da724875124ca2dea2ab69671198c9e0af87f8e325d634c8f6d4256210b00dcc",
+    "bytes": 1170511,
+    "license": "MIT",
+    "containerVersion": 12
+  },
+  {
+    "name": "patchy-text-frame.af",
+    "url": "https://raw.githubusercontent.com/SethRobinson/Patchy/de84eab550758b30fa062e479f5778cce7693b73/test-fixtures/af/tiny-text-frame.af",
+    "sha256": "0cf93a1105878ad237e7f3d724be8e85619efd91d2c7fc6ae63b121e0930fc72",
+    "bytes": 22625,
+    "license": "MIT",
+    "containerVersion": 12
+  },
+  {
+    "name": "patchy-text-rotated.af",
+    "url": "https://raw.githubusercontent.com/SethRobinson/Patchy/de84eab550758b30fa062e479f5778cce7693b73/test-fixtures/af/tiny-text-rotated.af",
+    "sha256": "a5ccb62ee8d7e36d1a19a037aba989a5ba0232767e9f3305f7d9f7d4603291dd",
+    "bytes": 23177,
+    "license": "MIT",
+    "containerVersion": 12
+  },
+  {
+    "name": "patchy-text-runs.af",
+    "url": "https://raw.githubusercontent.com/SethRobinson/Patchy/de84eab550758b30fa062e479f5778cce7693b73/test-fixtures/af/tiny-text-runs.af",
+    "sha256": "07c54ed90e49c4d791964228bee638fbff95a7b06dc3eccbedb3016f9fcef05e",
+    "bytes": 20175,
+    "license": "MIT",
+    "containerVersion": 12
+  },
+  {
+    "name": "patchy-transform.af",
+    "url": "https://raw.githubusercontent.com/SethRobinson/Patchy/de84eab550758b30fa062e479f5778cce7693b73/test-fixtures/af/tiny-transform.af",
+    "sha256": "87e1dee23769932b7e414116233063a8d68726cbffdebb975b3cd0ef447c602a",
+    "bytes": 36603,
+    "license": "MIT",
+    "containerVersion": 12
+  },
+  {
+    "name": "patchy-vector-mask.af",
+    "url": "https://raw.githubusercontent.com/SethRobinson/Patchy/de84eab550758b30fa062e479f5778cce7693b73/test-fixtures/af/tiny-vector-mask.af",
+    "sha256": "fa5dd80f44ae0712a9888c62953fd442a28119034d343db93b7892d5d2a61328",
+    "bytes": 19489,
+    "license": "MIT",
+    "containerVersion": 12
+  },
+  {
+    "name": "patchy-vector.af",
+    "url": "https://raw.githubusercontent.com/SethRobinson/Patchy/de84eab550758b30fa062e479f5778cce7693b73/test-fixtures/af/tiny-vector.af",
+    "sha256": "8ab1995ecbd9306ebcb7a4d2cd81701f34401e67f08b242f14dc3e3d04c94803",
+    "bytes": 21786,
+    "license": "MIT",
+    "containerVersion": 12
+  },
+  {
+    "name": "designer-beer.afdesign",
+    "url": "https://raw.githubusercontent.com/samuel-etver/vector-art/255f8add3c8f0740196e22bd59502b811b532f0b/simple/beer.afdesign",
+    "sha256": "87a7bd93de16c404f6c6dd9cdebff96ec47832a3b342d2ce0af73d9a87e209e0",
+    "bytes": 76858,
+    "license": "CC0-1.0",
+    "containerVersion": 11
+  },
+  {
+    "name": "afdesignload-shape_test.afdesign",
+    "url": "https://raw.githubusercontent.com/NickBeeuwsaert/AFDesignLoad/a18dd50a7079fb861a28835eeefa0d015f03f4a1/testDesigns/shape_test.afdesign",
+    "sha256": "08946c60c0da1c8aeea92d65acfb244721eeb3b480ed358609f4a48bbecfc5b9",
+    "bytes": 49163,
+    "license": "MIT",
+    "containerVersion": 9
+  }
+]

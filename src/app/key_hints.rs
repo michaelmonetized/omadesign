@@ -59,6 +59,13 @@ impl Shortcut {
             ToggleSnapping => ("Ctrl+Shift+;", "Toggle snapping"),
             FreeTransform => ("Ctrl+T", "Free transform"),
             ToggleKeyHud => ("Ctrl+/", "Show / hide key hints"),
+            CreateArtwork => ("Ctrl+Shift+K", "Create artwork"),
+            FocusCanvas => ("F8", "Focus canvas"),
+            NextDocument => ("Ctrl+Tab", "Next document"),
+            PreviousDocument => ("Ctrl+Shift+Tab", "Previous document"),
+            CloseDocument => ("Ctrl+W", "Close document"),
+            ToolPoints => ("F9", "Use tool with keyboard coordinates"),
+            NewPixelLayer => ("Ctrl+Shift+N", "New pixel layer"),
         }
     }
 

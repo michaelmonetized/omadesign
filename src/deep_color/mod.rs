@@ -6,7 +6,7 @@ pub mod retouch;
 pub mod storage;
 pub mod surface;
 pub mod tiff;
-pub use composite::{blend_pixel, composite};
+pub use composite::{blend_pixel, composite, composite_with_cancel};
 #[cfg(test)]
 mod common_tests;
 
@@ -73,7 +73,11 @@ impl Pixels {
         memory: Arc<Lease>,
         cancel: &C,
     ) -> Result<Self, String> {
-        cancel.check()?;
+        if let Err(error) = cancel.check() {
+            drop(samples);
+            drop(memory);
+            return Err(error);
+        }
         let samples = resources::global().adopt(samples, memory)?;
         Self::from_sample_allocation_checked(w, h, depth, samples, cancel)
     }
@@ -227,40 +231,270 @@ pub(crate) fn byte(v: f32) -> u8 {
 
 mod sample_bytes {
     use super::*;
-    use base64::Engine;
     use serde::{Deserializer, Serializer};
-    use std::io::{Read, Write};
+    use std::{
+        cell::Cell,
+        fmt,
+        io::{self, Read, Write},
+    };
+
+    struct TextWriter<'a, 'b> {
+        formatter: &'a mut fmt::Formatter<'b>,
+        failed: &'a Cell<bool>,
+    }
+    impl Write for TextWriter<'_, '_> {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            if self.failed.get() {
+                return Err(io::Error::other("Native sample output failed"));
+            }
+            let text = std::str::from_utf8(bytes).map_err(io::Error::other)?;
+            if self.formatter.write_str(text).is_err() {
+                self.failed.set(true);
+                return Err(io::Error::other("Native sample output failed"));
+            }
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    struct SampleText<'a> {
+        samples: &'a [f32],
+        error: Cell<Option<String>>,
+    }
+    impl fmt::Display for SampleText<'_> {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            let failed = Cell::new(false);
+            let result = (|| -> io::Result<()> {
+                let text = TextWriter {
+                    formatter,
+                    failed: &failed,
+                };
+                let base64 = base64::write::EncoderWriter::new(
+                    text,
+                    &base64::engine::general_purpose::STANDARD,
+                );
+                let mut encoder = zstd::stream::write::Encoder::new(base64, 3)?;
+                for chunk in self.samples.chunks(1024) {
+                    let mut bytes = [0u8; 4096];
+                    for (value, dst) in chunk.iter().zip(bytes.chunks_exact_mut(4)) {
+                        dst.copy_from_slice(&value.to_le_bytes());
+                    }
+                    encoder.write_all(&bytes[..chunk.len() * 4])?;
+                }
+                encoder.finish()?.finish()?;
+                Ok(())
+            })();
+            if let Err(error) = result {
+                self.error.set(Some(error.to_string()));
+                if failed.get() {
+                    return Err(fmt::Error);
+                }
+            }
+            Ok(())
+        }
+    }
+
     pub fn serialize<S: Serializer>(
         samples: &Arc<Allocation<f32>>,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        let writer = storage::Builder::<u8>::new().map_err(serde::ser::Error::custom)?;
-        let mut encoder =
-            zstd::stream::write::Encoder::new(writer, 3).map_err(serde::ser::Error::custom)?;
-        for chunk in samples.chunks(1024) {
-            let mut bytes = [0u8; 4096];
-            for (value, dst) in chunk.iter().zip(bytes.chunks_exact_mut(4)) {
-                dst.copy_from_slice(&value.to_le_bytes());
-            }
-            encoder
-                .write_all(&bytes[..chunk.len() * 4])
-                .map_err(serde::ser::Error::custom)?;
+        let text = SampleText {
+            samples,
+            error: Cell::new(None),
+        };
+        let output = serializer.collect_str(&text)?;
+        if let Some(error) = text.error.take() {
+            return Err(serde::ser::Error::custom(error));
         }
-        let packed = encoder
-            .finish()
-            .map_err(serde::ser::Error::custom)?
-            .finish()
-            .map_err(serde::ser::Error::custom)?;
-        let length = packed
-            .len()
-            .checked_add(2)
-            .and_then(|n| (n / 3).checked_mul(4))
-            .ok_or_else(|| serde::ser::Error::custom("Encoded samples overflow"))?;
-        let _memory = resources::global()
-            .reserve_now(length as u64, &storage::check)
-            .map_err(serde::ser::Error::custom)?;
-        serializer
-            .serialize_str(&base64::engine::general_purpose::STANDARD.encode(packed.as_slice()))
+        Ok(output)
+    }
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use base64::Engine;
+
+        fn packed(bytes: &[u8]) -> Vec<u8> {
+            let mut encoder = zstd::stream::write::Encoder::new(Vec::new(), 3).unwrap();
+            encoder.write_all(bytes).unwrap();
+            encoder.finish().unwrap()
+        }
+
+        #[test]
+        fn counted_samples_keep_exact_capacity_float_bits_and_final_alias_admission() {
+            let values: Vec<_> = (0..8193).map(|i| f32::from_bits(0x3e800001 + i)).collect();
+            let bytes: Vec<_> = values
+                .iter()
+                .flat_map(|value| value.to_le_bytes())
+                .collect();
+            let text = base64::engine::general_purpose::STANDARD.encode(packed(&bytes));
+            let pool = resources::global();
+            let before = (pool.usage().0, pool.pending_bytes());
+            let result = decode::<serde::de::value::Error>(&text).unwrap();
+            assert_eq!(result.bytes(), bytes.len() as u64);
+            assert!(
+                result
+                    .iter()
+                    .zip(values)
+                    .all(|(actual, expected)| actual.to_bits() == expected.to_bits())
+            );
+            assert_eq!(
+                (pool.usage().0 - before.0, pool.pending_bytes() - before.1),
+                (bytes.len() as u64, 0)
+            );
+            let memory = Arc::downgrade(result.lease());
+            let alias = result.clone();
+            drop(result);
+            assert!(memory.upgrade().is_some());
+            drop(alias);
+            assert!(memory.upgrade().is_none());
+            assert_eq!((pool.usage().0, pool.pending_bytes()), before);
+        }
+
+        #[test]
+        fn counted_samples_refuse_partial_nonfinite_invalid_and_oversized_windows() {
+            let pool = resources::global();
+            let before = (pool.usage().0, pool.pending_bytes());
+            for bytes in [vec![1], vec![1, 2], vec![1, 2, 3], vec![0; 5], vec![0; 7]] {
+                let text = base64::engine::general_purpose::STANDARD.encode(packed(&bytes));
+                assert!(
+                    decode::<serde::de::value::Error>(&text)
+                        .unwrap_err()
+                        .to_string()
+                        .contains("Truncated")
+                );
+                assert_eq!((pool.usage().0, pool.pending_bytes()), before);
+            }
+            for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+                let text =
+                    base64::engine::general_purpose::STANDARD.encode(packed(&value.to_le_bytes()));
+                assert!(
+                    decode::<serde::de::value::Error>(&text)
+                        .unwrap_err()
+                        .to_string()
+                        .contains("Nonfinite")
+                );
+                assert_eq!((pool.usage().0, pool.pending_bytes()), before);
+            }
+            let mut window = packed(&[0; 8]);
+            assert_eq!(&window[..4], &[0x28, 0xb5, 0x2f, 0xfd]);
+            assert_eq!(window[4] & 0x20, 0);
+            window[5] = (28 - 10) << 3;
+            for text in [
+                "%%%".into(),
+                base64::engine::general_purpose::STANDARD.encode([0; 8]),
+                base64::engine::general_purpose::STANDARD.encode(window),
+            ] {
+                assert!(decode::<serde::de::value::Error>(&text).is_err());
+                assert_eq!((pool.usage().0, pool.pending_bytes()), before);
+            }
+        }
+
+        #[test]
+        fn counted_samples_stop_at_the_byte_limit_and_refuse_both_size_drifts() {
+            let pool = resources::global();
+            let before = (pool.usage().0, pool.pending_bytes());
+            let text = base64::engine::general_purpose::STANDARD.encode(packed(&[0; 8]));
+            let window = pool
+                .reserve_now(128 * 1024 * 1024, &storage::check)
+                .unwrap();
+            let accepted = Cell::new(0usize);
+            let error = read_samples::<serde::de::value::Error>(&text, 4, |part| {
+                accepted.set(accepted.get() + part.len());
+                Ok(())
+            })
+            .unwrap_err();
+            assert!(error.to_string().contains("shared pixel budget"));
+            assert_eq!(accepted.get(), 0);
+            for count in [1, 3] {
+                assert!(
+                    decode_sized::<serde::de::value::Error>(&text, count, pool.usage().1)
+                        .unwrap_err()
+                        .to_string()
+                        .contains("changed during decoding")
+                );
+                assert_eq!(
+                    (pool.usage().0 - before.0, pool.pending_bytes() - before.1),
+                    (window.bytes(), window.bytes())
+                );
+            }
+            drop(window);
+            assert_eq!((pool.usage().0, pool.pending_bytes()), before);
+        }
+
+        #[test]
+        fn streaming_samples_preserve_exact_standard_zstd_le_float_wire() {
+            #[derive(serde::Serialize, serde::Deserialize)]
+            struct Samples(
+                #[serde(serialize_with = "serialize", deserialize_with = "deserialize")]
+                Arc<Allocation<f32>>,
+            );
+            let values: Vec<_> = (0..8193)
+                .map(|i| match i % 4 {
+                    0 => f32::from_bits(0x3e800001 + i),
+                    1 => -0.25,
+                    2 => 2.5,
+                    _ => 0.,
+                })
+                .collect();
+            let mut reference = zstd::stream::write::Encoder::new(Vec::new(), 3).unwrap();
+            for chunk in values.chunks(1024) {
+                let mut bytes = [0u8; 4096];
+                for (value, target) in chunk.iter().zip(bytes.chunks_exact_mut(4)) {
+                    target.copy_from_slice(&value.to_le_bytes());
+                }
+                reference.write_all(&bytes[..chunk.len() * 4]).unwrap();
+            }
+            let expected = serde_json::to_vec(
+                &base64::engine::general_purpose::STANDARD.encode(reference.finish().unwrap()),
+            )
+            .unwrap();
+            let source = Samples(storage::adopt(values.clone()).unwrap());
+            let mut writer = storage::Builder::new().unwrap();
+            serde_json::to_writer(&mut writer, &source).unwrap();
+            let encoded = writer.finish().unwrap();
+            assert_eq!(encoded.as_slice(), expected);
+            let reopened: Samples = serde_json::from_slice(&encoded).unwrap();
+            assert!(
+                reopened
+                    .0
+                    .iter()
+                    .zip(values)
+                    .all(|(a, b)| a.to_bits() == b.to_bits())
+            );
+        }
+
+        #[test]
+        fn streaming_samples_propagate_output_failure_without_partial_success() {
+            struct Refuse {
+                remaining: usize,
+            }
+            impl Write for Refuse {
+                fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                    if self.remaining == 0 {
+                        return Err(io::Error::other("fixture output refused"));
+                    }
+                    let count = bytes.len().min(self.remaining);
+                    self.remaining -= count;
+                    Ok(count)
+                }
+                fn flush(&mut self) -> io::Result<()> {
+                    Ok(())
+                }
+            }
+            #[derive(serde::Serialize)]
+            struct Samples(#[serde(serialize_with = "serialize")] Arc<Allocation<f32>>);
+            let source = Samples(
+                storage::adopt((0..8193).map(|i| f32::from_bits(0x3e800001 + i)).collect())
+                    .unwrap(),
+            );
+            let encoded = serde_json::to_vec(&source).unwrap();
+            for remaining in [0, 1, 17, 257, encoded.len() - 2, encoded.len() - 1] {
+                let error = serde_json::to_writer(Refuse { remaining }, &source).unwrap_err();
+                assert!(error.to_string().contains("fixture output refused"));
+            }
+        }
     }
     pub fn deserialize<'de, D: Deserializer<'de>>(
         deserializer: D,
@@ -278,21 +512,56 @@ mod sample_bytes {
         deserializer.deserialize_str(Samples)
     }
     fn decode<E: serde::de::Error>(text: &str) -> Result<Arc<Allocation<f32>>, E> {
+        let _window = resources::global()
+            .reserve_now(128 * 1024 * 1024, &storage::check)
+            .map_err(serde::de::Error::custom)?;
+        let limit = resources::global().usage().1.min(isize::MAX as u64);
+        let count = read_samples::<E>(text, limit, |_| Ok(()))?;
+        decode_sized(text, count, limit)
+    }
+
+    fn decode_sized<E: serde::de::Error>(
+        text: &str,
+        count: usize,
+        limit: u64,
+    ) -> Result<Arc<Allocation<f32>>, E> {
+        let mut samples =
+            storage::Builder::with_capacity(count).map_err(serde::de::Error::custom)?;
+        let actual = read_samples::<E>(text, limit, |part| {
+            if samples
+                .len()
+                .checked_add(part.len())
+                .is_none_or(|end| end > count)
+            {
+                return Err("Native samples changed during decoding".into());
+            }
+            samples.extend(part)
+        })?;
+        if actual != count || samples.len() != count {
+            return Err(serde::de::Error::custom(
+                "Native samples changed during decoding",
+            ));
+        }
+        samples.finish().map_err(serde::de::Error::custom)
+    }
+
+    fn read_samples<E: serde::de::Error>(
+        text: &str,
+        limit: u64,
+        mut accept: impl FnMut(&[f32]) -> Result<(), String>,
+    ) -> Result<usize, E> {
         let base64 = base64::read::DecoderReader::new(
             text.as_bytes(),
             &base64::engine::general_purpose::STANDARD,
         );
         let mut decoder =
             zstd::stream::read::Decoder::new(base64).map_err(serde::de::Error::custom)?;
-        let _window = resources::global()
-            .reserve_now(128 * 1024 * 1024, &storage::check)
-            .map_err(serde::de::Error::custom)?;
         decoder
             .window_log_max(27)
             .map_err(serde::de::Error::custom)?;
-        let mut samples = storage::Builder::new().map_err(serde::de::Error::custom)?;
         let mut bytes = [0u8; 16384];
         let mut carried = 0;
+        let mut count = 0usize;
         loop {
             let read = decoder
                 .read(&mut bytes[carried..])
@@ -305,6 +574,15 @@ mod sample_bytes {
             }
             let length = carried + read;
             let complete = length / 4 * 4;
+            count = count
+                .checked_add(complete / 4)
+                .ok_or_else(|| E::custom("Native sample count overflows"))?;
+            if count
+                .checked_mul(4)
+                .is_none_or(|bytes| bytes as u64 > limit)
+            {
+                return Err(E::custom("Native samples exceed the shared pixel budget"));
+            }
             let mut values = [0f32; 4096];
             for (dst, src) in values.iter_mut().zip(bytes[..complete].chunks_exact(4)) {
                 *dst = f32::from_le_bytes(src.try_into().unwrap());
@@ -312,13 +590,12 @@ mod sample_bytes {
                     return Err(serde::de::Error::custom("Nonfinite native sample"));
                 }
             }
-            samples
-                .extend(&values[..complete / 4])
-                .map_err(serde::de::Error::custom)?;
+            accept(&values[..complete / 4]).map_err(serde::de::Error::custom)?;
             carried = length - complete;
             bytes.copy_within(complete..length, 0);
         }
-        samples.finish().map_err(serde::de::Error::custom)
+        drop(decoder);
+        Ok(count)
     }
 }
 

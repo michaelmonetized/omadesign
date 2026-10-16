@@ -326,6 +326,7 @@ impl Studio {
         if self.file_dialog_pending() {
             return;
         }
+        self.poll_live(ctx);
         let result = self.cloud_job.as_ref().map(|rx| rx.try_recv());
         match result {
             Some(Ok(Ok(Event::DeviceCode(code, url)))) => {
@@ -338,6 +339,18 @@ impl Studio {
                     self.cloud_job = None;
                 }
                 match result {
+                    Ok(Event::LiveStarted(replica, tab)) => {
+                        self.attach_live_tab(&tab, replica);
+                        self.cloud_modal = CloudModal::Live;
+                        self.status = "Live session started. Share its ID with a project editor.".into();
+                    }
+                    Ok(Event::LiveJoined(doc)) => {
+                        self.open_document(doc, None);
+                        self.history.clear();
+                        self.dirty = true;
+                        self.cloud_modal = CloudModal::Live;
+                        self.status = "Live session opened".into();
+                    }
                     Err(error) => self.status = error,
                     Ok(Event::Preview(color, id)) => {
                         self.cloud_panel.preview = Some(ctx.load_texture(

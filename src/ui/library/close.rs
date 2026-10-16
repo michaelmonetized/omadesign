@@ -109,6 +109,7 @@ fn show_photo_quit(ctx: &egui::Context, studio: &mut Studio) -> bool {
     let mut cancel = false;
     let mut discard = false;
     let mut save = false;
+    let owner=egui::Id::new(("photo-settings-quit-native",&studio.swap_id));
     let dialog = egui::Modal::new(egui::Id::new("unsaved-photo-settings")).show(ctx, |ui| {
         ui.set_width((ctx.viewport_rect().width() - 64.0).clamp(240.0, 420.0));
         ui.heading("Save your photo settings?");
@@ -132,17 +133,16 @@ fn show_photo_quit(ctx: &egui::Context, studio: &mut Studio) -> bool {
         }
         ui.add_space(12.0);
         ui.horizontal(|ui| {
-            cancel = ui.button("Cancel").clicked();
-            discard = ui
-                .add_enabled(!busy, egui::Button::new("Discard"))
+            cancel = native(ui,owner.with("cancel"),"Cancel closing photo settings",|ui|ui.button("Cancel")).clicked();
+            discard = native(ui,owner.with("discard"),"Discard unsaved photo settings",|ui|ui.add_enabled(!busy,egui::Button::new("Discard")))
                 .clicked();
-            save = ui
-                .add_enabled(!busy && !names.is_empty(), egui::Button::new("Save all"))
+            save = native(ui,owner.with("save"),"Save all photo settings before closing",|ui|ui.add_enabled(!busy&&!names.is_empty(),egui::Button::new("Save all")))
                 .clicked();
         });
     });
     if cancel || dialog.should_close() {
         studio.libraries.close_requested = false;
+        super::super::panel_workspace::return_focus(ctx,studio);
         studio.libraries.close_error.clear();
         studio.photo.clear_save_error();
     } else if discard {
@@ -209,6 +209,7 @@ pub(super) fn show(ctx: &egui::Context, studio: &mut Studio) {
     let mut cancel = false;
     let mut discard = false;
     let mut save = false;
+    let owner = egui::Id::new(("palette-collections-quit-native", &studio.swap_id));
     let dialog = egui::Modal::new(egui::Id::new("unsaved-palette-collections")).show(ctx, |ui| {
         ui.set_width((ctx.viewport_rect().width() - 64.0).clamp(240.0, 420.0));
         ui.heading("Save your palette collections?");
@@ -232,17 +233,14 @@ pub(super) fn show(ctx: &egui::Context, studio: &mut Studio) {
         }
         ui.add_space(12.0);
         ui.horizontal(|ui| {
-            cancel = ui.button("Cancel").clicked();
-            discard = ui
-                .add_enabled(!busy, egui::Button::new("Discard"))
-                .clicked();
-            save = ui
-                .add_enabled(!busy && can_save, egui::Button::new("Save all"))
-                .clicked();
+            cancel = native(ui, owner.with("cancel"), "Cancel closing palette collections", |ui| ui.button("Cancel")).clicked();
+            discard = native(ui, owner.with("discard"), "Discard unsaved palette collections", |ui| ui.add_enabled(!busy, egui::Button::new("Discard"))).clicked();
+            save = native(ui, owner.with("save"), "Save all palette collections before closing", |ui| ui.add_enabled(!busy && can_save, egui::Button::new("Save all"))).clicked();
         });
     });
     if cancel || dialog.should_close() {
         studio.libraries.close_requested = false;
+        super::super::panel_workspace::return_focus(ctx, studio);
         studio.libraries.close_error.clear();
     } else if discard {
         discard_drafts(&mut studio.libraries);

@@ -43,6 +43,35 @@ impl Studio {
         if !at.x.is_finite() || !at.y.is_finite() {
             return Err("The placement point is invalid".into());
         }
+        if let Imported::Document(doc) = &imported
+            && (!doc.motion.compositions.is_empty()
+                || !doc.motion.expressions.is_empty()
+                || doc.motion.scene3d.is_some())
+        {
+            crate::motion::compositions::validate(doc)?;
+            let mut comp = crate::motion::compositions::Composition::new(doc.clone());
+            if let Some((source, dest)) = placement {
+                comp.scale = Pt::new(
+                    dest.width() / source.width(),
+                    dest.height() / source.height(),
+                );
+                comp.anchor = source.min;
+                comp.position = dest.min;
+            } else {
+                comp.position = at - doc.size() * 0.5;
+            }
+            let mut after = self.doc.motion.clone();
+            after.duration = after.duration.max(comp.end);
+            after.compositions.push(comp);
+            let mut candidate = self.doc.clone();
+            candidate.motion = after.clone();
+            crate::motion::compositions::validate(&candidate)?;
+            self.commit(Cmd::Batch(vec![Cmd::SetMotion {
+                before: self.doc.motion.clone(),
+                after,
+            }]));
+            return Ok(());
+        }
         let (name, mut layers, motion, notes, imported_tokens, imported_sources) = match imported {
             Imported::Photo(_) => {
                 return Err(
@@ -77,13 +106,20 @@ impl Studio {
                     return Err("Choose an SVG smaller than 16 MB".into());
                 }
                 let (doc, notes) = crate::formats::svg::read(&svg, &name)?;
-                (name, doc.layers, doc.motion, notes, doc.layout_tokens, doc.sources)
+                (
+                    name,
+                    doc.layers,
+                    doc.motion,
+                    notes,
+                    doc.layout_tokens,
+                    doc.sources,
+                )
             }
         };
         if layers.len() > 1024 {
             return Err("The brand asset contains too many layers".into());
         }
-        let mut total_pixels = 0usize;
+        let mut legacy_pixels = 0usize;
         let mut total_shapes = 0usize;
         let mut largest_id = 0;
         let mut vector_masks = 0usize;
@@ -93,7 +129,20 @@ impl Studio {
                 .into_iter()
                 .flatten()
             {
-                total_pixels += checked_pixels(pixels.w, pixels.h, pixels.data.len())?;
+                pixels.validate_native()?;
+                if pixels.native.is_some() {
+                    let count = (pixels.w as usize)
+                        .checked_mul(pixels.h as usize)
+                        .filter(|&count| count > 0)
+                        .and_then(|count| count.checked_mul(4));
+                    if count != Some(pixels.data.len()) {
+                        return Err("The asset contains invalid native display pixels".into());
+                    }
+                } else {
+                    legacy_pixels = legacy_pixels
+                        .checked_add(checked_pixels(pixels.w, pixels.h, pixels.data.len())?)
+                        .ok_or("The asset image dimensions overflow")?;
+                }
             }
             total_shapes += layer.kind.shapes().map_or(0, <[Shape]>::len);
             if let Some(shapes) = layer.kind.shapes() {
@@ -108,7 +157,7 @@ impl Studio {
                 }
             }
         }
-        if total_pixels > MAX_PIXELS || total_shapes > 100_000 {
+        if legacy_pixels > MAX_PIXELS || total_shapes > 100_000 {
             return Err("The brand asset is too large to place safely".into());
         }
         if vector_masks as f64
@@ -205,18 +254,25 @@ impl Studio {
         let mut sources = self.doc.sources.clone();
         for source in imported_sources {
             source.validate()?;
-            if !sources.iter().any(|s| s.id == source.id) { sources.push(source); }
+            if !sources.iter().any(|s| s.id == source.id) {
+                sources.push(source);
+            }
         }
-        if sources.iter().map(|s|s.bytes().len()).sum::<usize>() > 512 * 1024 * 1024 {
+        if sources.iter().map(|s| s.bytes().len()).sum::<usize>() > 512 * 1024 * 1024 {
             return Err("Retained sources exceed 512 MiB".into());
         }
         for layer in &layers {
-            if let Some(id) = &layer.source_attachment && !sources.iter().any(|s| &s.id == id) {
+            if let Some(id) = &layer.source_attachment
+                && !sources.iter().any(|s| &s.id == id)
+            {
                 return Err("Placed artwork references a missing original source".into());
             }
         }
         if sources != self.doc.sources {
-            commands.push(Cmd::SetSources { before: self.doc.sources.clone(), after: sources });
+            commands.push(Cmd::SetSources {
+                before: self.doc.sources.clone(),
+                after: sources,
+            });
         }
         let layer_ids: HashMap<_, _> = layers.iter().map(|layer| (layer.id, next_id())).collect();
         for (position, mut layer) in layers.into_iter().enumerate() {
@@ -320,7 +376,10 @@ impl Studio {
         }
         let mut after = self.doc.motion.clone();
         for mut track in motion.tracks {
-            let Some(id) = ids.get(&track.shape).or_else(|| layer_ids.get(&track.shape)) else {
+            let Some(id) = ids
+                .get(&track.shape)
+                .or_else(|| layer_ids.get(&track.shape))
+            else {
                 continue;
             };
             track.shape = *id;

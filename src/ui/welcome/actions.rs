@@ -125,6 +125,9 @@ fn execute(action: Action) -> Result<Done, String> {
         }
         Action::New { project, mode } => {
             let mut document = Document::new("Untitled", 1280., 800., 72.);
+            if mode == Persona::Pixel {
+                document.layers[1] = crate::document::Layer::raster("Layer 1", 1280, 800)?;
+            }
             document.workspace = Some(mode);
             document.grid.visible = false;
             let target = save_unique(&document, &project, "Untitled")?;

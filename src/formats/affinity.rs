@@ -1,5 +1,6 @@
-//! Affinity import through the separately installed GPL Inkscape converter.
-//! No converter code is linked into Omadesign, and imports never install software.
+//! Native Affinity import with an optional separately installed converter fallback.
+
+pub mod native;
 
 use std::fs::{self, File};
 use std::io::Read;
@@ -29,7 +30,28 @@ pub fn converter_path() -> Option<PathBuf> {
 }
 
 pub fn available() -> bool {
-    converter_path().is_some_and(|path| path.is_file())
+    true
+}
+
+/// Open editable Affinity objects with the bounded native reader.
+/// Args: source path. Returns native artwork and actionable import diagnostics.
+pub fn read_document(path: &Path) -> Result<(crate::document::Document, Vec<String>), String> {
+    let bytes = bounded_read(path, MAX_INPUT)
+        .map_err(|error| format!("Could not read Affinity file: {error}"))?;
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("Affinity document");
+    match native::read(&bytes, name) {
+        Ok(imported) => Ok(imported),
+        Err(native_error) if converter_path().is_some_and(|p| p.is_file()) => {
+            let (svg, mut notes) = read(path)?;
+            let (mut doc, svg_notes) = crate::formats::svg::read(&svg, name)?;
+            let id = doc.retain_source(crate::source_attachment::SourceAttachment::new(name, "affinity", bytes)?);
+            for layer in &mut doc.layers { layer.source_attachment = Some(id.clone()); }
+            notes.insert(0, format!("{native_error} Used the optional converter instead; native fidelity is unproven for this source."));
+            notes.extend(svg_notes);
+            Ok((doc, notes))
+        }
+        Err(error) => Err(error),
+    }
 }
 
 /// Read the container header as well as its magic: Affinity brushes, macros and

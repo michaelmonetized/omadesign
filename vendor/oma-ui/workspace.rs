@@ -2,6 +2,8 @@
 use eframe::egui::{self, Rect, Ui, pos2, vec2};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+#[path = "native_scope.rs"]
+mod scope;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Place {
@@ -48,7 +50,106 @@ pub struct Book {
     pub tasks: BTreeMap<String, Workspace>,
 }
 
+#[derive(Clone)]
+struct RequestedSize {
+    group: Group,
+    size: egui::Vec2,
+    order: u64,
+}
+
+#[derive(Clone, Default)]
+struct Requests {
+    focus: Option<String>,
+    sizes: BTreeMap<String, RequestedSize>,
+    next: u64,
+}
+
+/// Identify transient requests for one application workspace.
+/// Args: stable workspace ID. Returns a context key outside saved layout and artwork state.
+fn requests_id(workspace: &str) -> egui::Id {
+    egui::Id::new(workspace).with("native-panel-requests")
+}
+
+/// Convert a saved outer footprint for the app's pinned egui window contract.
+/// Args: UI and desired outer dimensions. Returns the public Window size argument.
+fn native_window_size(ui: &Ui, outer: egui::Vec2) -> egui::Vec2 {
+    #[cfg(feature = "oma-ui-egui032")]
+    {
+        let frame = egui::Frame::window(ui.style());
+        let title_height = ui
+            .text_style_height(&egui::TextStyle::Heading)
+            .max(ui.spacing().interact_size.y)
+            + frame.inner_margin.sum().y;
+        (outer - frame.total_margin().sum() - vec2(0., title_height + frame.stroke.width))
+            .max(egui::Vec2::ZERO)
+    }
+    #[cfg(not(feature = "oma-ui-egui032"))]
+    {
+        let _ = ui;
+        outer
+    }
+}
+
 impl Workspace {
+    /// Focus a visible normalized panel, including an already focused panel.
+    /// Args: context, stable workspace ID and panel ID. Returns false for hidden or stale membership.
+    pub fn request_focus(&mut self, ctx: &egui::Context, workspace: &str, panel: &str) -> bool {
+        let Some(group) = self
+            .groups
+            .iter_mut()
+            .find(|group| group.panels.iter().any(|id| id == panel))
+        else {
+            return false;
+        };
+        group.active = group.panels.iter().position(|id| id == panel).unwrap();
+        self.focus = Some(panel.into());
+        let key = requests_id(workspace);
+        ctx.data_mut(|data| {
+            let mut requests = data.get_temp::<Requests>(key).unwrap_or_default();
+            requests.focus = Some(panel.into());
+            data.insert_temp(key, requests);
+        });
+        true
+    }
+
+    /// Request one rendered floating size without disabling later user resizing.
+    /// Args: context, stable workspace ID, panel ID and finite positive dimensions.
+    /// Returns false for hidden, docked or stale targets; the caller normalizes its registry first.
+    pub fn request_floating_size(
+        &mut self,
+        ctx: &egui::Context,
+        workspace: &str,
+        panel: &str,
+        size: egui::Vec2,
+    ) -> bool {
+        if !size.is_finite() || size.x <= 0. || size.y <= 0. {
+            return false;
+        }
+        let Some(group) = self.groups.iter_mut().find(|group| {
+            group.place == Place::Floating && group.panels.iter().any(|id| id == panel)
+        }) else {
+            return false;
+        };
+        group.rect[2] = size.x;
+        group.rect[3] = size.y;
+        let key = requests_id(workspace);
+        ctx.data_mut(|data| {
+            let mut requests = data.get_temp::<Requests>(key).unwrap_or_default();
+            let order = requests.next;
+            requests.next += 1;
+            requests.sizes.insert(
+                panel.into(),
+                RequestedSize {
+                    group: group.clone(),
+                    size,
+                    order,
+                },
+            );
+            data.insert_temp(key, requests);
+        });
+        true
+    }
+
     /// Create an application preset.
     /// Args: panel IDs and their starting docks. Returns a movable layout with shared dock tabs.
     pub fn preset(panels: &[(&str, Place)]) -> Self {
@@ -229,6 +330,11 @@ impl Workspace {
         registry: &[(&str, &str)],
         mut body: impl FnMut(&mut Ui, &str),
     ) -> Rect {
+        self.normalize(&registry.iter().map(|entry| entry.0).collect::<Vec<_>>());
+        let requests = ui
+            .ctx()
+            .data_mut(|data| data.remove_temp::<Requests>(requests_id(id)))
+            .unwrap_or_default();
         let mut center = ui.available_rect_before_wrap();
         let viewport = ui
             .ctx()
@@ -259,7 +365,12 @@ impl Workspace {
         }
         let focus_key = egui::Id::new(id).with("focused-panel");
         let previous_focus: Option<String> = ui.ctx().data_mut(|d| d.get_temp(focus_key));
-        let focus_next = if previous_focus != self.focus {
+        let explicitly_requested = requests.focus.as_ref().filter(|panel| {
+            self.focus.as_ref() == Some(*panel)
+                && panels.contains(panel)
+                && registry.iter().any(|entry| entry.0 == panel.as_str())
+        });
+        let focus_next = if previous_focus != self.focus || explicitly_requested.is_some() {
             self.focus.clone()
         } else {
             None
@@ -267,6 +378,7 @@ impl Workspace {
         ui.ctx()
             .data_mut(|d| d.insert_temp(focus_key, self.focus.clone().unwrap_or_default()));
         let before = self.groups.clone();
+        let mut focus_delivered = false;
         let mut command = None;
         for (index, saved) in before.iter().enumerate() {
             let mut group = saved.clone();
@@ -281,9 +393,37 @@ impl Workspace {
                 ui.set_clip_rect(ui.max_rect().intersect(ui.clip_rect()));
                 ui.horizontal_wrapped(|ui| {
                     for (tab, panel) in saved.panels.iter().enumerate() {
-                        let response = ui.selectable_label(tab == group.active, panel_label(panel));
-                        if focus_next.as_ref() == Some(panel) {
+                        let response = scope::native_scope(
+                            ui,
+                            egui::Id::new(id).with(("panel-tab", panel)),
+                            |ui| ui.selectable_label(tab == group.active, panel_label(panel)),
+                        )
+                        .inner;
+                        if response.has_focus() {
+                            ui.painter().rect_stroke(
+                                response.rect.expand(2.),
+                                3.,
+                                egui::Stroke::new(2., ui.visuals().selection.stroke.color),
+                                egui::StrokeKind::Outside,
+                            );
+                        }
+                        if focus_next.as_ref() == Some(panel)
+                            && response.enabled()
+                            && ui.memory(|memory| memory.allows_interaction(response.layer_id))
+                        {
+                            let already_focused = response.has_focus();
                             response.request_focus();
+                            if !already_focused && response.gained_focus() {
+                                response.widget_info(|| {
+                                    egui::WidgetInfo::selected(
+                                        egui::WidgetType::Button,
+                                        response.enabled(),
+                                        tab == group.active,
+                                        panel_label(panel),
+                                    )
+                                });
+                            }
+                            focus_delivered = true;
                         }
                         if response.clicked() {
                             group.active = tab;
@@ -328,19 +468,48 @@ impl Workspace {
             };
             if saved.place == Place::Floating {
                 let rect = safe_rect(saved.rect, viewport);
+                let size = native_window_size(ui, rect.size());
                 let mut open = true;
-                if let Some(shown) = egui::Window::new(panel_label(&saved.panels[saved.active]))
+                let requested = saved
+                    .panels
+                    .iter()
+                    .filter_map(|panel| requests.sizes.get(panel))
+                    .filter(|request| {
+                        request.group.panels == saved.panels
+                            && request.group.place == saved.place
+                            && request.group.rect == saved.rect
+                            && request.group.extent == saved.extent
+                            && request.size.is_finite()
+                    })
+                    .max_by_key(|request| request.order);
+                if requested.is_some()
+                    || focus_next
+                        .as_ref()
+                        .is_some_and(|panel| saved.panels.contains(panel))
+                {
+                    let mut collapsing =
+                        egui::collapsing_header::CollapsingState::load_with_default_open(
+                            ui.ctx(),
+                            window_id.with("collapsing"),
+                            true,
+                        );
+                    collapsing.set_open(true);
+                    collapsing.store(ui.ctx());
+                }
+                let mut window = egui::Window::new(panel_label(&saved.panels[saved.active]))
                     .id(window_id)
                     .open(&mut open)
                     .constrain_to(viewport)
                     .current_pos(rect.min)
-                    .default_size(rect.size())
+                    .default_size(size)
                     .min_width(0.0)
                     .min_height(0.0)
                     .max_size(viewport.size())
-                    .vscroll(true)
-                    .show(ui.ctx(), |ui| content(ui))
-                {
+                    .vscroll(true);
+                if requested.is_some() {
+                    window = window.fixed_size(size);
+                }
+                if let Some(shown) = window.show(ui.ctx(), |ui| content(ui)) {
                     group.rect = [
                         shown.response.rect.min.x,
                         shown.response.rect.min.y,
@@ -421,6 +590,17 @@ impl Workspace {
                 *actual = group;
             }
         }
+        if requests.focus.is_some() && explicitly_requested.is_some() && !focus_delivered {
+            ui.ctx().data_mut(|data| {
+                data.insert_temp(
+                    requests_id(id),
+                    Requests {
+                        focus: requests.focus.clone(),
+                        ..Default::default()
+                    },
+                )
+            });
+        }
         if let Some((panel, place, target)) = command {
             if let Some(place) = place {
                 self.move_panel(&panel, place);
@@ -462,6 +642,30 @@ impl Book {
         presets: &[(&str, Workspace)],
         registry: &[(&str, &str)],
     ) {
+        self.toolbar_impl(ui, None, presets, registry);
+    }
+
+    /// Draw task and panel menus with explicit native focus requests.
+    /// Args: UI, stable workspace ID, presets and labeled registry. Returns no value.
+    pub fn toolbar_for(
+        &mut self,
+        ui: &mut Ui,
+        workspace: &str,
+        presets: &[(&str, Workspace)],
+        registry: &[(&str, &str)],
+    ) {
+        self.toolbar_impl(ui, Some(workspace), presets, registry);
+    }
+
+    /// Share the existing toolbar behavior with optional native focus delivery.
+    /// Args: UI, request namespace, presets and registry. Returns no value.
+    fn toolbar_impl(
+        &mut self,
+        ui: &mut Ui,
+        workspace: Option<&str>,
+        presets: &[(&str, Workspace)],
+        registry: &[(&str, &str)],
+    ) {
         if !presets.iter().any(|(name, _)| *name == self.active) {
             self.active = presets.first().map_or("", |p| p.0).into();
         }
@@ -494,6 +698,12 @@ impl Book {
                                 }
                             }
                             layout.focus = Some(id.into());
+                            if let Some(workspace) = workspace {
+                                layout.normalize(
+                                    &registry.iter().map(|entry| entry.0).collect::<Vec<_>>(),
+                                );
+                                layout.request_focus(ui.ctx(), workspace, id);
+                            }
                         }
                     }
                     if ui.button("Restore all panels").clicked() {

@@ -13,6 +13,10 @@ const ROW: f32 = 22.0;
 const LABEL: f32 = 108.0;
 const PAD: f32 = 8.0;
 
+#[cfg(test)]
+#[path = "timeline_field_tests.rs"]
+mod keyboard_field_tests;
+
 pub fn show(ui: &mut Ui, studio: &mut Studio) {
     if studio.persona != Persona::Motion {
         return;
@@ -28,7 +32,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
 /// Args: panel UI and studio. Returns no value; motion commands remain unchanged.
 pub(super) fn content(ui: &mut Ui, studio: &mut Studio) {
     if studio.persona != Persona::Motion {ui.label("Switch to Motion for keyframes");return;}
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 transport(ui, studio);
             });
             ui.add_space(2.0);
@@ -37,6 +41,16 @@ pub(super) fn content(ui: &mut Ui, studio: &mut Studio) {
 }
 
 fn transport(ui: &mut Ui, studio: &mut Studio) {
+    let owner = eframe::egui::Id::new(("motion-transport", &studio.swap_id, &studio.selection));
+    let available = !studio.file_dialog_pending() && !studio.updates.freezing;
+    super::fields::native_scope(ui, owner, |ui| {
+        studio.with_field_history(ui, "motion-transport", |ui, studio| {
+            ui.add_enabled_ui(available, |ui| transport_controls(ui, studio));
+        });
+    });
+}
+
+fn transport_controls(ui: &mut Ui, studio: &mut Studio) {
     if icons::tiny_icon(ui, ph::SKIP_BACK, "To start  Home", false) {
         studio.playhead = 0.0;
         studio.playing = false;
@@ -81,41 +95,44 @@ fn transport(ui: &mut Ui, studio: &mut Studio) {
             .color(fg_weak()),
     );
     ui.separator();
-    ui.label(
-        eframe::egui::RichText::new("Duration")
-            .small()
-            .color(fg_weak()),
-    );
     let mut dur = studio.doc.motion.duration;
-    if ui
-        .add(
-            eframe::egui::DragValue::new(&mut dur)
-                .speed(0.05)
-                .range(0.2..=60.0)
-                .suffix("s"),
-        )
-        .changed()
-    {
+    let (field, _) = super::keyboard_controls::motion_number(
+        ui,
+        ui.id().with("duration"),
+        ("Duration", "Motion duration (s)"),
+        &mut dur,
+        0.01..=3600.0,
+        0.05,
+        "s",
+        None,
+    );
+    if crate::app::input_history::record(field.response, field.changed) {
         let mut after = studio.doc.motion.clone();
         after.duration = dur;
         studio.playhead = studio.playhead.min(dur);
         studio.commit_motion(after);
     }
-    ui.label(eframe::egui::RichText::new("fps").small().color(fg_weak()));
     let mut fps = studio.doc.motion.fps;
-    if ui
-        .add(
-            eframe::egui::DragValue::new(&mut fps)
-                .speed(1.0)
-                .range(8.0..=60.0),
-        )
-        .changed()
-    {
+    let (field, _) = super::keyboard_controls::motion_number(
+        ui,
+        ui.id().with("fps"),
+        ("fps", "Motion frame rate (fps)"),
+        &mut fps,
+        1.0..=240.0,
+        1.0,
+        "",
+        None,
+    );
+    if crate::app::input_history::record(field.response, field.changed) {
         let mut after = studio.doc.motion.clone();
         after.fps = fps;
         studio.commit_motion(after);
     }
     ui.separator();
+    expression_editor(ui, studio);
+    super::motion_compositions::show(ui, studio);
+    super::scene3d::show(ui, studio);
+    super::timeline_keyboard::show(ui, studio);
     if ui
         .add_enabled(
             !studio.selection.is_empty(),
@@ -141,6 +158,109 @@ fn transport(ui: &mut Ui, studio: &mut Studio) {
             studio.status = format!("ease {}", k.ease.name());
         }
         studio.commit_motion(after);
+    }
+    if let Some((id, prop, index)) = studio.selected_key {
+        ui.menu_button("Curve", |ui| {
+            let mut after = studio.doc.motion.clone();
+            let Some(key) = after
+                .tracks
+                .iter_mut()
+                .find(|t| t.shape == id && t.prop == prop)
+                .and_then(|t| t.keys.get_mut(index))
+            else {
+                return;
+            };
+            let mut changed = false;
+            for ease in [
+                Ease::Linear,
+                Ease::EaseIn,
+                Ease::EaseOut,
+                Ease::EaseInOut,
+                Ease::Hold,
+            ] {
+                if ui.selectable_label(key.ease == ease, ease.name()).clicked() {
+                    key.ease = ease;
+                    changed = true;
+                }
+            }
+            let (mut x1, mut y1, mut x2, mut y2) = match key.ease {
+                Ease::CubicBezier { x1, y1, x2, y2 } => (x1, y1, x2, y2),
+                _ => (0.25, 0.1, 0.25, 1.),
+            };
+            let mut controls_changed = false;
+            for (name, value) in [
+                ("X1", &mut x1),
+                ("Y1", &mut y1),
+                ("X2", &mut x2),
+                ("Y2", &mut y2),
+            ] {
+                ui.horizontal(|ui| {
+                    ui.label(name);
+                    controls_changed |= ui
+                        .add(eframe::egui::DragValue::new(value).speed(0.01))
+                        .changed();
+                });
+            }
+            if controls_changed {
+                changed = true;
+                key.ease = Ease::CubicBezier {
+                    x1: x1.clamp(0., 1.),
+                    y1,
+                    x2: x2.clamp(0., 1.),
+                    y2,
+                };
+            }
+            if ui.button("Use Bezier").clicked() {
+                key.ease = Ease::CubicBezier { x1, y1, x2, y2 };
+                changed = true;
+            }
+            if changed && key.ease.valid() {
+                studio.commit_motion_step(after);
+            }
+        });
+    }
+}
+
+fn expression_editor(ui: &mut Ui, studio: &mut Studio) {
+    ui.menu_button("Expression", |ui| {
+        let Some(&(layer, id)) = studio.selection.first() else { ui.label("Select an object or image."); return; };
+        let Some(target) = crate::motion::target(&studio.doc, layer, id) else { return; };
+        let key = ui.id().with(("expression", target.id));
+        let mut prop = ui.data(|d| d.get_temp::<Prop>(key)).unwrap_or(Prop::X);
+        eframe::egui::ComboBox::from_id_salt(key).selected_text(prop.name()).show_ui(ui, |ui| {
+            for p in Prop::all().into_iter().filter(|p| *p != Prop::Fill) { ui.selectable_value(&mut prop, p, p.name()); }
+        });
+        ui.data_mut(|d| d.insert_temp(key, prop));
+        let source_key = key.with(format!("{prop:?}"));
+        let mut source = ui.data(|d| d.get_temp::<String>(source_key)).unwrap_or_else(|| studio.doc.motion.expressions.iter().find(|e| e.shape == target.id && e.prop == prop).map(|e| e.source.clone()).unwrap_or_default());
+        ui.add(eframe::egui::TextEdit::multiline(&mut source).code_editor().desired_rows(3).hint_text("value + sin(time * tau) * 40"));
+        ui.data_mut(|d| d.insert_temp(source_key, source.clone()));
+        ui.label("time in seconds · rotation in radians · keys remain editable");
+        ui.horizontal(|ui| {
+            if ui.button("Apply").clicked() {
+                let mut after = studio.doc.motion.clone();
+                match after.set_expression(target.id, prop, Some(source)) {
+                    Ok(()) => studio.commit_motion_step(after),
+                    Err(error) => studio.status = error,
+                }
+            }
+            if ui.button("Remove").clicked() {
+                let mut after = studio.doc.motion.clone();
+                let _ = after.set_expression(target.id, prop, None);
+                studio.commit_motion_step(after);
+                ui.data_mut(|d| d.remove::<String>(source_key));
+            }
+        });
+        if let Err(error) = studio.doc.motion.evaluate_frame(studio.playhead, &mut || true) { ui.colored_label(Color32::LIGHT_RED, error.to_string()); }
+        ui.collapsing("Functions", |ui| { ui.label("sin cos tan abs sqrt floor ceil round min max clamp lerp smoothstep\nrandom(seed) · noise(time, seed) · property(id, X)\nNo loops, files or clock access. Named errors stop export."); });
+    });
+    if let Err(error) = studio
+        .doc
+        .motion
+        .evaluate_frame(studio.playhead, &mut || true)
+    {
+        ui.colored_label(Color32::LIGHT_RED, format!("{:?}", error.code))
+            .on_hover_text(error.to_string());
     }
 }
 
@@ -456,32 +576,44 @@ mod tests {
         studio.persona = Persona::Motion;
         studio.doc.motion.duration = 2.0;
         for id in 101..=112 {
-            let mut shape = Shape::new(Geom::Rect {
-                origin: Pt::ZERO,
-                size: Pt::new(10.0, 10.0),
-                radius: 0.0,
-            }, Style::default());
+            let mut shape = Shape::new(
+                Geom::Rect {
+                    origin: Pt::ZERO,
+                    size: Pt::new(10.0, 10.0),
+                    radius: 0.0,
+                },
+                Style::default(),
+            );
             shape.id = id;
             shape.name = format!("Object {id}");
             studio.doc.layers[1].kind.shapes_mut().unwrap().push(shape);
-            studio.doc.motion.set_key(id, Prop::X, 1.0, 10.0, Ease::Linear);
+            studio
+                .doc
+                .motion
+                .set_key(id, Prop::X, 1.0, 10.0, Ease::Linear);
         }
         studio
     }
 
-    fn frame(ctx: &egui::Context, studio: &mut Studio, events: Vec<Event>)
-        -> (Rect, Vec<egui::epaint::ClippedShape>)
-    {
+    fn frame(
+        ctx: &egui::Context,
+        studio: &mut Studio,
+        events: Vec<Event>,
+    ) -> (Rect, Vec<egui::epaint::ClippedShape>) {
         let mut rect = Rect::NOTHING;
-        let mut output = ctx.run_ui(egui::RawInput {
-            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(600.0, 240.0))),
-            events,
-            ..Default::default()
-        }, |ui| {
-            let (allocated, response) = ui.allocate_exact_size(vec2(500.0, 128.0), Sense::click_and_drag());
-            rect = allocated;
-            paint_timeline(ui, studio, rect, &response);
-        });
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(600.0, 240.0))),
+                events,
+                ..Default::default()
+            },
+            |ui| {
+                let (allocated, response) =
+                    ui.allocate_exact_size(vec2(500.0, 128.0), Sense::click_and_drag());
+                rect = allocated;
+                paint_timeline(ui, studio, rect, &response);
+            },
+        );
         output.textures_delta.clear();
         (rect, output.shapes)
     }
@@ -489,9 +621,16 @@ mod tests {
     fn click(ctx: &egui::Context, studio: &mut Studio, pos: Pos2) {
         frame(ctx, studio, vec![Event::PointerMoved(pos)]);
         for pressed in [true, false] {
-            frame(ctx, studio, vec![Event::PointerButton {
-                pos, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE,
-            }]);
+            frame(
+                ctx,
+                studio,
+                vec![Event::PointerButton {
+                    pos,
+                    button: PointerButton::Primary,
+                    pressed,
+                    modifiers: Modifiers::NONE,
+                }],
+            );
         }
     }
 
@@ -509,9 +648,10 @@ mod tests {
         ];
         s.playhead = 1.;
         s.key_selection(Ease::Linear);
-        let ids = [s.doc.layers[0].id, s.doc.layers[1].id];
+        let mut ids = [s.doc.layers[0].id, s.doc.layers[1].id];
+        ids.sort_unstable();
         assert_eq!(row_ids(&s), ids);
-        assert_eq!(shape_name(&s, ids[1]), "Second image");
+        assert_eq!(shape_name(&s, s.doc.layers[1].id), "Second image");
         let ctx = egui::Context::default();
         crate::ui::theme::apply(&ctx);
         let (rect, _) = frame(&ctx, &mut s, vec![]);
@@ -520,11 +660,13 @@ mod tests {
             &mut s,
             pos2(rect.left() + 20., rect.top() + 18. + ROW * 1.5),
         );
-        assert_eq!(s.selection, vec![(1, crate::document::RASTER_ID)]);
+        let second = s.doc.layers.iter().position(|layer| layer.id == ids[1]).unwrap();
+        assert_eq!(s.selection, vec![(second, crate::document::RASTER_ID)]);
         let x = rect.left() + LABEL + (rect.width() - LABEL - PAD) * 0.5;
         click(&ctx, &mut s, pos2(x, rect.top() + 18. + ROW * 0.5));
-        assert_eq!(s.selection, vec![(0, crate::document::RASTER_ID)]);
-        assert_eq!(s.active_layer, Some(0));
+        let first = s.doc.layers.iter().position(|layer| layer.id == ids[0]).unwrap();
+        assert_eq!(s.selection, vec![(first, crate::document::RASTER_ID)]);
+        assert_eq!(s.active_layer, Some(first));
         assert_eq!(s.selected_key.unwrap().0, ids[0]);
         s.forget_stale_key();
         assert!(s.selected_key.is_some());
@@ -541,7 +683,11 @@ mod tests {
         let mut expected: Vec<_> = (101..=112).collect();
         expected.extend([300, 200]);
         assert_eq!(row_ids(&studio), expected);
-        assert_eq!(shape_name(&studio, 300), "#300", "missing objects retain their row label");
+        assert_eq!(
+            shape_name(&studio, 300),
+            "#300",
+            "missing objects retain their row label"
+        );
     }
 
     #[test]
@@ -551,28 +697,46 @@ mod tests {
         studio.timeline_scroll = usize::MAX;
         let (rect, shapes) = frame(&ctx, &mut studio, vec![]);
         assert_eq!(studio.timeline_scroll, 8);
-        let labels: Vec<_> = shapes.iter().filter_map(|shape| match &shape.shape {
-            egui::Shape::Text(text) if text.galley.text().starts_with("Object ") => {
-                Some(text.galley.text().to_owned())
-            }
-            _ => None,
-        }).collect();
-        assert_eq!(labels, ["Object 109", "Object 110", "Object 111", "Object 112"]);
+        let labels: Vec<_> = shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) if text.galley.text().starts_with("Object ") => {
+                    Some(text.galley.text().to_owned())
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            labels,
+            ["Object 109", "Object 110", "Object 111", "Object 112"]
+        );
 
-        click(&ctx, &mut studio, pos2(rect.left() + 30.0, rect.top() + 18.0 + ROW * 0.5));
+        click(
+            &ctx,
+            &mut studio,
+            pos2(rect.left() + 30.0, rect.top() + 18.0 + ROW * 0.5),
+        );
         assert_eq!(studio.selection, [(1, 109)]);
         assert_eq!(studio.active_layer, Some(1));
         assert_eq!(studio.status, "Object 109");
 
         let lane_left = rect.left() + LABEL;
         let lane_width = rect.width() - LABEL - PAD;
-        click(&ctx, &mut studio, pos2(lane_left + lane_width * 0.5, rect.top() + 18.0 + ROW * 1.5));
+        click(
+            &ctx,
+            &mut studio,
+            pos2(lane_left + lane_width * 0.5, rect.top() + 18.0 + ROW * 1.5),
+        );
         assert_eq!(studio.selected_key, Some((110, Prop::X, 1)));
         assert_eq!(studio.selection, [(1, 110)]);
         assert_eq!(studio.playhead, 1.0);
 
         studio.playing = true;
-        click(&ctx, &mut studio, pos2(lane_left + lane_width * 0.25, rect.top() + 9.0));
+        click(
+            &ctx,
+            &mut studio,
+            pos2(lane_left + lane_width * 0.25, rect.top() + 9.0),
+        );
         assert!(!studio.playing, "ruler scrubbing pauses playback");
         assert!((studio.playhead - 0.5).abs() < 0.001);
     }

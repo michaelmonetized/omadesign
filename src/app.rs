@@ -8,6 +8,7 @@ mod type_clipboard;
 pub(crate) mod type_ime;
 mod clipboard_insert;
 mod cloud;
+mod live;
 pub mod deform;
 mod file_dialogs;
 mod file_io;
@@ -15,9 +16,12 @@ mod guides;
 mod hierarchy_edit;
 pub use hierarchy_edit::TreePlacement;
 mod key_hints;
+pub(crate) mod keyboard_authoring;
 mod layer_groups;
 mod layout;
+pub(crate) use layout::LayoutStackField;
 mod layout_components;
+pub(crate) use layout_components::{ComponentPropertyTarget, ComponentPropertyEdit};
 mod layout_edit;
 pub mod libraries;
 pub(crate) mod masking;
@@ -31,6 +35,7 @@ mod restart;
 pub(crate) mod selection;
 mod alignment;
 mod shortcuts;
+pub(crate) mod input_history;
 mod snapping;
 pub mod startup;
 mod tabs;
@@ -337,6 +342,8 @@ pub struct Studio {
     pub individual_object: Option<(usize, u64)>,
     pub active_layer: Option<usize>,
     pub history: History,
+    field_history_context: Option<egui::Context>,
+    field_history_generation: Option<u64>,
     pub style: Style,
     pub gradient: (Rgba, Rgba),
     pub brush: Brush,
@@ -477,6 +484,8 @@ pub struct Studio {
     pub cloud_identity: crate::cloud::Identity,
     pub cloud_modal: CloudModal,
     pub cloud_panel: crate::cloud::client::Panel,
+    live_runtime: live::LiveRuntime,
+    pub live_join_id: String,
     cloud_job: Option<std::sync::mpsc::Receiver<Result<crate::cloud::client::Event, String>>>,
     pub pinning_comment: bool,
     pub comment_draft: String,
@@ -489,6 +498,7 @@ pub struct Studio {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum CloudModal {
+    Live,
     None,
     SignIn,
     Invite,
@@ -590,6 +600,8 @@ impl Studio {
             individual_object: None,
             active_layer: Some(1),
             history: History::default(),
+            field_history_context: None,
+            field_history_generation: None,
             style: Style::default(),
             gradient: (Rgba::from_hex(0xFFD166), Rgba::from_hex(0xE5484D)),
             brush: Brush::default(),
@@ -728,6 +740,8 @@ impl Studio {
             cloud_identity: crate::cloud::load_identity(),
             cloud_modal: CloudModal::None,
             cloud_panel: Default::default(),
+            live_runtime: Default::default(),
+            live_join_id: String::new(),
             cloud_job: None,
             pinning_comment: false,
             comment_draft: String::new(),
@@ -1531,6 +1545,7 @@ impl Studio {
     }
 
     pub fn commit(&mut self, cmd: Cmd) {
+        let field = self.take_field_history_key();
         crate::telemetry::count("feature.edit");
         self.end_pixel_stroke(false);
         self.end_deform(false);
@@ -1543,13 +1558,19 @@ impl Studio {
             crate::document::apply(&mut self.doc, &change);
             changes.push(change);
         }
-        self.history.push(if changes.len() == 1 {
+        let command = if changes.len() == 1 {
             changes.remove(0)
         } else {
             Cmd::Batch(changes)
-        });
+        };
+        if let Some(field) = field {
+            self.history.push_field(command, field, &self.doc);
+        } else {
+            self.history.push(command);
+        }
         self.dirty = true;
         self.mark();
+        self.field_history_generation = field.map(|_| self.canvas_gen);
         self.sanitize();
     }
 
@@ -1572,6 +1593,7 @@ impl Studio {
         if dragging {
             return;
         }
+        if self.live_undo(false) { return; }
         if let Some(inv) = self.history.undo() {
             self.apply_with_layer_selection(&inv);
             self.dirty = true;
@@ -1593,6 +1615,7 @@ impl Studio {
         }
         self.end_deform(true);
         self.reset_snap_gesture();
+        if self.live_undo(true) { return; }
         if let Some(cmd) = self.history.redo() {
             self.apply_with_layer_selection(&cmd);
             self.dirty = true;
@@ -4742,8 +4765,9 @@ mod tests {
             .layers
             .iter()
             .filter_map(|l| l.kind.shapes())
-            .map(|ss| ss.len())
-            .sum();
+            .flatten()
+            .filter(|shape| matches!(&shape.geom, Geom::Path { .. }))
+            .count();
         assert_eq!(n, 1);
         let Geom::Path { closed, .. } = &s.doc.layers[1].kind.shapes().unwrap()[0].geom else {
             panic!("path");
@@ -4795,8 +4819,9 @@ mod tests {
             .layers
             .iter()
             .filter_map(|l| l.kind.shapes())
-            .map(|ss| ss.len())
-            .sum();
+            .flatten()
+            .filter(|shape| matches!(&shape.geom, Geom::Path { .. }))
+            .count();
         assert_eq!(n, 1);
         let Geom::Path { closed, .. } = &s.doc.layers[1].kind.shapes().unwrap()[0].geom else {
             panic!("path");
@@ -4959,8 +4984,9 @@ mod tests {
             .layers
             .iter()
             .filter_map(|l| l.kind.shapes())
-            .map(|ss| ss.len())
-            .sum();
+            .flatten()
+            .filter(|shape| matches!(&shape.geom, Geom::Text(_)))
+            .count();
         assert_eq!(n, 2);
     }
 

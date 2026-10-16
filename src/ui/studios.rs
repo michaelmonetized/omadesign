@@ -6,6 +6,11 @@ mod object_appearance;
 mod layer_rows;
 
 use super::layer_drag;
+use crate::app::input_history;
+
+#[cfg(test)]
+#[path = "field_input_tests.rs"]
+mod field_input_tests;
 
 use crate::app::Studio;
 use crate::color::Blend;
@@ -354,7 +359,18 @@ fn number_field<N: eframe::egui::emath::Numeric>(
     range: std::ops::RangeInclusive<N>,
     suffix: &str,
 ) -> bool {
-    super::fields::number(ui, label, label, value, range, suffix, matches!(label, "X" | "Y" | "Rotate").then(|| N::from_f64(0.0)), Default::default()).changed
+    let field = number_field_response(ui, label, value, range, suffix);
+    input_history::record(field.response, field.changed)
+}
+
+fn number_field_response<N: eframe::egui::emath::Numeric>(
+    ui: &mut Ui,
+    label: &str,
+    value: &mut N,
+    range: std::ops::RangeInclusive<N>,
+    suffix: &str,
+) -> super::fields::FieldResponse {
+    super::fields::number(ui, label, label, value, range, suffix, matches!(label, "X" | "Y" | "Rotate").then(|| N::from_f64(0.0)), Default::default())
 }
 
 fn bounds_fields(
@@ -378,6 +394,12 @@ fn bounds_fields(
 }
 
 fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
+    studio.with_field_history(ui, ("color-row", fill), |ui, studio| {
+        color_row_contents(ui, studio, fill)
+    });
+}
+
+fn color_row_contents(ui: &mut Ui, studio: &mut Studio, fill: bool) {
     let style = inspected_style(studio);
     let source_fill = style.fill.clone();
     let source_stroke = style.stroke.clone();
@@ -494,7 +516,7 @@ fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
                         studio.fill_active = fill;
                     }
                     let mut opacity = f32::from(color.a) / 255.0 * 100.0;
-                    if ui
+                    if input_history::changed(ui
                         .add(
                             eframe::egui::DragValue::new(&mut opacity)
                                 .range(0.0..=100.0)
@@ -502,8 +524,7 @@ fn color_row(ui: &mut Ui, studio: &mut Studio, fill: bool) {
                                 .max_decimals(0)
                                 .suffix("%"),
                         )
-                        .on_hover_text(format!("{label} opacity"))
-                        .changed()
+                        .on_hover_text(format!("{label} opacity")))
                     {
                         color.a = (opacity / 100.0 * 255.0).round() as u8;
                         changed = true;
@@ -601,7 +622,7 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
         style.stroke.as_ref().and_then(|s| s.gradient.clone())
     };
     ui.horizontal(|ui| {
-        ui.label(
+        let label = ui.label(
             RichText::new(if studio.fill_active {
                 "Fill type"
             } else {
@@ -614,15 +635,25 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
         let pattern = matches!(style.fill, Fill::Pattern(_));
         let mut replace_pattern = false;
         let mut chosen = current;
-        ComboBox::from_id_salt("paint-type")
+        let mut choice_clicked = false;
+        let owner = eframe::egui::Id::new(("paint-type", &studio.swap_id, &studio.selection, studio.fill_active));
+        let picker = super::fields::native_scope(ui, owner, |ui| ComboBox::from_id_salt("value")
             .selected_text(if pattern { "Pattern" } else { current.map(|k| k.name()).unwrap_or("Solid") })
             .width(108.)
             .show_ui(ui, |ui| {
-                replace_pattern = ui.selectable_value(&mut chosen, None, "Solid").clicked() && pattern;
-                for kind in crate::gradient::GradientKind::ALL {
-                    ui.selectable_value(&mut chosen, Some(kind), kind.name());
+                if ui.selectable_value(&mut chosen, None, "Solid").clicked() {
+                    replace_pattern = pattern;
+                    choice_clicked = true;
+                    ui.close();
                 }
-            });
+                for kind in crate::gradient::GradientKind::ALL {
+                    if ui.selectable_value(&mut chosen, Some(kind), kind.name()).clicked() {
+                        choice_clicked = true;
+                        ui.close();
+                    }
+                }
+            })).inner;
+        super::welcome::name_control(ui, &picker.response, label.id, if studio.fill_active { "Fill type" } else { "Stroke type" });
         if chosen != current || replace_pattern {
             gradient = chosen.map(|kind| {
                 let mut g = gradient.clone().unwrap_or_else(|| {
@@ -653,6 +684,9 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
             });
             apply_gradient(studio, gradient.clone());
         }
+        if choice_clicked {
+            picker.response.request_focus();
+        }
     });
     super::svg_paint::show(ui, studio);
     if let Some(mut gradient) = gradient {
@@ -666,42 +700,36 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
                     crate::geom::Pt::new(100., 100.),
                 )
             });
-        let rest = gradient.clone();
+        let mut shown_angle = gradient.angle(bounds);
         if studio.is_motion()
             && let Some((_, id)) = studio.primary()
         {
             let offset = studio.live_pose(id).gradient_angle.unwrap_or(0.0);
-            if offset.abs() > 1e-3 {
-                gradient.set_angle(rest.angle(bounds) + offset, bounds);
-            }
+            shown_angle += offset;
         }
-        ui.push_id(
-            if studio.fill_active {
-                "fill-gradient"
-            } else {
-                "stroke-gradient"
-            },
-            |ui| {
-                if gradient_editor::editor(ui, &mut gradient, bounds) {
+        let fill_active = studio.fill_active;
+        studio.with_field_history(
+            ui,
+            ("gradient", fill_active),
+            |ui, studio| {
+                let edits = gradient_editor::editor(ui, &mut gradient, shown_angle);
+                if edits.design {
                     for stop in &gradient.stops {
                         studio.push_recent(stop.color);
                     }
-                    let angle_only = gradient.kind == rest.kind && gradient.stops == rest.stops;
+                    apply_gradient(studio, Some(gradient.clone()));
+                }
+                if let Some(angle) = edits.angle {
                     if studio.is_motion()
-                        && angle_only
                         && let Some((_, id)) = studio.primary()
                     {
                         studio.key_prop(
                             id,
                             crate::motion::Prop::GradientAngle,
-                            gradient.angle(bounds) - rest.angle(bounds),
+                            angle - gradient.angle(bounds),
                         );
-                    } else if studio.is_motion() {
-                        let mut next = rest.clone();
-                        next.stops = gradient.stops.clone();
-                        next.kind = gradient.kind;
-                        apply_gradient(studio, Some(next));
                     } else {
+                        gradient.set_angle(angle, bounds);
                         apply_gradient(studio, Some(gradient.clone()));
                     }
                 }
@@ -815,6 +843,12 @@ fn color_grid(ui: &mut Ui, studio: &mut Studio, recent: bool) {
 }
 
 fn stroke_studio(ui: &mut Ui, studio: &mut Studio) {
+    studio.with_field_history(ui, "stroke", |ui, studio| {
+        stroke_studio_contents(ui, studio)
+    });
+}
+
+fn stroke_studio_contents(ui: &mut Ui, studio: &mut Studio) {
     let mut stroke = inspected_style(studio).stroke.clone().unwrap_or_default();
     let mut enabled = inspected_style(studio).stroke.is_some();
     if ui.checkbox(&mut enabled, "Enable stroke").changed() {
@@ -951,6 +985,12 @@ fn apply_stroke(studio: &mut Studio, stroke: Option<DocStroke>) {
 }
 
 pub(super) fn character_studio(ui: &mut Ui, studio: &mut Studio) {
+    studio.with_field_history(ui, "character", |ui, studio| {
+        character_studio_contents(ui, studio)
+    });
+}
+
+fn character_studio_contents(ui: &mut Ui, studio: &mut Studio) {
     heading(ui, "Typography");
     super::text_geometry::frame_inspector(ui, studio);
     super::text_geometry::path_inspector(ui, studio);
@@ -962,20 +1002,23 @@ pub(super) fn character_studio(ui: &mut Ui, studio: &mut Studio) {
         .unwrap_or_else(|| studio.text_font.clone());
     let label = crate::text::label_for(&font);
     let mut chosen = font.clone();
-    let font_button = ui.add_sized(
+    let owner = ui.make_persistent_id("font-picker");
+    let font_button = super::svg_paint::control(ui, owner, "Font family", |ui| ui.add_sized(
         vec2(ui.available_width(), 28.0),
         eframe::egui::Button::new(RichText::new(&label).size(12.0)).truncate(),
-    );
+    ));
     // The search field and scrollbar need clicks without dismissing the picker.
     let font_popup = eframe::egui::Popup::menu(&font_button)
         .close_behavior(eframe::egui::PopupCloseBehavior::CloseOnClickOutside);
     font_popup.show(|ui| {
         ui.set_width(260.0);
-        ui.add(
+        let label = ui.label("Font search");
+        super::svg_paint::control(ui, owner.with("local-search"), "Search local fonts", |ui| ui.add(
             eframe::egui::TextEdit::singleline(&mut studio.font_query)
+                .id(owner.with("local-search"))
                 .hint_text("Search fonts")
                 .desired_width(220.0),
-        );
+        ).labelled_by(label.id));
         let q = studio.font_query.to_ascii_lowercase();
         let recents = studio.font_recents.clone();
         let used = studio.used_fonts();
@@ -989,7 +1032,7 @@ pub(super) fn character_studio(ui: &mut Ui, studio: &mut Studio) {
                     for face in &kit.fonts {
                         let name = format!("{} · {}", face.role, face.family);
                         if (q.is_empty() || name.to_lowercase().contains(&q))
-                            && ui.selectable_label(face.id == font, name).clicked()
+                            && super::svg_paint::control(ui, owner.with(("project", &face.id, &face.role)), &format!("Project font {name}"), |ui| ui.selectable_label(face.id == font, name)).clicked()
                         {
                             chosen = face.id.clone();
                             ui.close();
@@ -1000,7 +1043,7 @@ pub(super) fn character_studio(ui: &mut Ui, studio: &mut Studio) {
                     ui.label(RichText::new("Recents").small().color(fg_weak()));
                     for p in recents.iter().take(5) {
                         let name = crate::text::label_for(p);
-                        if ui.selectable_label(*p == font, &name).clicked() {
+                        if super::svg_paint::control(ui, owner.with(("recent", p)), &format!("Recent font {name}"), |ui| ui.selectable_label(*p == font, &name)).clicked() {
                             chosen = p.clone();
                             ui.close();
                         }
@@ -1010,7 +1053,7 @@ pub(super) fn character_studio(ui: &mut Ui, studio: &mut Studio) {
                     ui.label(RichText::new("Used in document").small().color(fg_weak()));
                     for p in &used {
                         let name = crate::text::label_for(p);
-                        if ui.selectable_label(*p == font, &name).clicked() {
+                        if super::svg_paint::control(ui, owner.with(("used", p)), &format!("Used font {name}"), |ui| ui.selectable_label(*p == font, &name)).clicked() {
                             chosen = p.clone();
                             ui.close();
                         }
@@ -1022,7 +1065,7 @@ pub(super) fn character_studio(ui: &mut Ui, studio: &mut Studio) {
                         continue;
                     }
                     let path = f.path.to_string_lossy().to_string();
-                    let resp = ui.selectable_label(path == font, &f.name);
+                    let resp = super::svg_paint::control(ui, owner.with(("installed", &path)), &format!("Installed font {}", f.name), |ui| ui.selectable_label(path == font, &f.name));
                     if path == font && studio.font_scroll_once {
                         resp.scroll_to_me(Some(eframe::egui::Align::Center));
                         studio.font_scroll_once = false;
@@ -1111,23 +1154,29 @@ fn google_fonts_ui(ui: &mut Ui, studio: &mut Studio) {
     }
     let loading = jobs::is_running::<Vec<crate::google_fonts::GoogleFont>>(ui.ctx(), CATALOG);
     let downloading = jobs::is_running::<DownloadedFont>(ui.ctx(), DOWNLOAD);
+    let owner = ui.make_persistent_id("google-fonts");
+    let mut affected = Vec::new();
     ui.horizontal(|ui| {
-        ui.add(
+        let label = ui.label("Google font search");
+        let response = super::svg_paint::control(ui, owner.with("search"), "Search Google fonts", |ui| ui.add(
             eframe::egui::TextEdit::singleline(&mut studio.google_query)
+                .id(owner.with("search"))
                 .hint_text("Search fonts")
                 .desired_width(140.0),
-        );
-        if ui
+        ).labelled_by(label.id));
+        affected.push(response);
+        let refresh = super::svg_paint::control(ui, owner.with("refresh"), "Refresh Google fonts", |ui| ui
             .add_enabled(!loading, eframe::egui::Button::new("Refresh"))
-            .clicked()
-        {
+        );
+        if refresh.clicked() {
             studio.google_status = "Refreshing font families…".into();
             jobs::start(ui.ctx(), CATALOG, crate::google_fonts::fetch_catalog);
         }
+        affected.push(refresh);
     });
     ui.horizontal(|ui| {
-        ui.label(RichText::new("Variant").small().color(fg_weak()));
-        ComboBox::from_id_salt("google-variant")
+        let label = ui.label(RichText::new("Variant").small().color(fg_weak()));
+        let mut response = super::fields::native_scope(ui, owner.with("variant"), |ui| ComboBox::from_id_salt("google-variant")
             .selected_text(&studio.google_variant)
             .width(100.0)
             .show_ui(ui, |ui| {
@@ -1137,9 +1186,12 @@ fn google_fonts_ui(ui: &mut Ui, studio: &mut Studio) {
                     ("700", "Bold"),
                     ("700italic", "Bold italic"),
                 ] {
-                    ui.selectable_value(&mut studio.google_variant, variant.to_owned(), label);
+                    let response = super::svg_paint::control(ui, owner.with(("variant-option", variant)), label, |ui| ui.selectable_value(&mut studio.google_variant, variant.to_owned(), label));
+                    if response.clicked() { ui.close(); }
                 }
-            });
+            }).response).inner.labelled_by(label.id);
+        super::keyboard_controls::selection_keys(ui, &mut response, "Google font variant", &mut studio.google_variant,
+            &[("regular".into(),"Regular".into()),("italic".into(),"Italic".into()),("700".into(),"Bold".into()),("700italic".into(),"Bold italic".into())]);
     });
     let mut use_font = None;
     let mut download = None;
@@ -1159,14 +1211,17 @@ fn google_fonts_ui(ui: &mut Ui, studio: &mut Studio) {
                     let installed = installed_fonts.iter().any(|face| face.path == path);
                     ui.with_layout(Layout::right_to_left(eframe::egui::Align::Center), |ui| {
                         if installed {
-                            if ui.small_button("Use").clicked() {
+                            if super::svg_paint::control(ui, owner.with(("use", &font.family, &studio.google_variant)), &format!("Use Google font {} {}", font.family, studio.google_variant), |ui| ui.small_button("Use")).clicked() {
                                 use_font = Some((font.family.clone(), path));
                             }
-                        } else if ui
+                        } else {
+                          let response = super::svg_paint::control(ui, owner.with(("download", &font.family, &studio.google_variant)), &format!("Download Google font {} {}", font.family, studio.google_variant), |ui| ui
                             .add_enabled(!downloading, eframe::egui::Button::new("Download"))
-                            .clicked()
-                        {
+                          );
+                          if response.clicked() {
                             download = Some(font.clone());
+                          }
+                          affected.push(response);
                         }
                     });
                 });
@@ -1195,11 +1250,13 @@ fn google_fonts_ui(ui: &mut Ui, studio: &mut Studio) {
         });
     }
     if !studio.google_status.is_empty() {
-        ui.label(
+        let status = ui.label(
             RichText::new(&studio.google_status)
                 .small()
                 .color(fg_weak()),
         );
+        ui.ctx().accesskit_node_builder(status.id, |node| { node.set_live(eframe::egui::accesskit::Live::Polite); node.set_live_atomic(); });
+        for response in &affected { ui.ctx().accesskit_node_builder(response.id, |node| node.push_described_by(status.id.accesskit_id())); }
     }
 }
 
@@ -1216,47 +1273,62 @@ fn inspector_slider<N: eframe::egui::emath::Numeric>(
     range: std::ops::RangeInclusive<N>,
     suffix: &str,
 ) -> bool {
-    let speed = (range.end().to_f64() - range.start().to_f64()) / 500.0;
-    let (mut changed, label_id) = ui
-        .horizontal(|ui| {
-            ui.with_layout(Layout::right_to_left(eframe::egui::Align::Center), |ui| {
-                ui.spacing_mut().button_padding.x = 4.0;
-                let number = ui.add_sized(
-                    [80.0, 24.0],
-                    eframe::egui::DragValue::new(value)
-                        .range(range.clone())
-                        .speed(speed)
-                        .max_decimals(3)
-                        .suffix(suffix),
-                );
-                let label_id = ui
-                    .with_layout(Layout::left_to_right(eframe::egui::Align::Center), |ui| {
-                        ui.add(
-                            eframe::egui::Label::new(RichText::new(label).small().color(fg_weak()))
+    ui.push_id(label, |ui| {
+        let speed = (range.end().to_f64() - range.start().to_f64()) / 500.0;
+        let (mut changed, label_id) = ui
+            .horizontal(|ui| {
+                ui.with_layout(Layout::right_to_left(eframe::egui::Align::Center), |ui| {
+                    ui.spacing_mut().button_padding.x = 4.0;
+                    let number = ui.add_sized(
+                        [80.0, 24.0],
+                        eframe::egui::DragValue::new(value)
+                            .range(range.clone())
+                            .speed(speed)
+                            .max_decimals(3)
+                            .suffix(suffix),
+                    );
+                    let label_id = ui
+                        .with_layout(Layout::left_to_right(eframe::egui::Align::Center), |ui| {
+                            ui.add(
+                                eframe::egui::Label::new(
+                                    RichText::new(label).small().color(fg_weak()),
+                                )
                                 .truncate(),
-                        )
-                        .id
-                    })
-                    .inner;
-                (number.labelled_by(label_id).changed(), label_id)
+                            )
+                            .id
+                        })
+                        .inner;
+                    (
+                        input_history::changed(number.labelled_by(label_id)),
+                        label_id,
+                    )
+                })
+                .inner
             })
-            .inner
-        })
-        .inner;
-    changed |= ui
-        .scope(|ui| {
-            // Keep the track inside the panel; the label and editable value
-            // live above it so their widths never push the panel outward.
-            ui.spacing_mut().slider_width = ui.available_width();
-            ui.add(Slider::new(value, range).show_value(false))
-                .labelled_by(label_id)
-                .changed()
-        })
-        .inner;
-    changed
+            .inner;
+        changed |= ui
+            .scope(|ui| {
+                // Keep the track inside the panel; the label and editable value
+                // live above it so their widths never push the panel outward.
+                ui.spacing_mut().slider_width = ui.available_width();
+                input_history::changed(
+                    ui.add(Slider::new(value, range).show_value(false))
+                        .labelled_by(label_id),
+                )
+            })
+            .inner;
+        changed
+    })
+    .inner
 }
 
 fn motion_keys(ui: &mut Ui, studio: &mut Studio) {
+    studio.with_field_history(ui, "motion-keys", |ui, studio| {
+        motion_keys_contents(ui, studio)
+    });
+}
+
+fn motion_keys_contents(ui: &mut Ui, studio: &mut Studio) {
     ui.label(
         RichText::new("Rest pose is Design. Keys are offsets.")
             .small()
@@ -1539,6 +1611,12 @@ fn edit_shape_geometry(studio: &mut Studio, layer: usize, id: u64, edit: impl Fn
 }
 
 fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
+    studio.with_field_history(ui, "transform", |ui, studio| {
+        transform_studio_contents(ui, studio, title)
+    });
+}
+
+fn transform_studio_contents(ui: &mut Ui, studio: &mut Studio, title: bool) {
     if title {
         heading(ui, "Layout");
     }
@@ -1782,8 +1860,34 @@ fn transform_studio(ui: &mut Ui, studio: &mut Studio, title: bool) {
     }
 }
 
+#[derive(Clone)]
+struct EffectBlendOwners {
+    expected: crate::filter::FilterStack,
+    instance: eframe::egui::Id,
+    widgets: Vec<eframe::egui::Id>,
+}
+
+impl EffectBlendOwners {
+    /// Retire only the native blend selectors of a replaced effect list.
+    /// Args: UI context. Returns nothing; unrelated numeric controls retain their owners.
+    fn retire(&mut self, ctx: &eframe::egui::Context) {
+        if let Some(focused) = ctx.memory(|memory| memory.focused()) && self.widgets.contains(&focused) {
+            ctx.memory_mut(|memory| memory.surrender_focus(focused));
+        }
+        self.instance = super::keyboard_controls::draft_id(ctx, "effect-blend");
+        self.widgets.clear();
+    }
+}
+
 fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &str) {
     let original = stack.clone();
+    let key = ui.make_persistent_id(("effect-blend-owners", salt));
+    let mut owners = ui.data(|data| data.get_temp::<EffectBlendOwners>(key)).unwrap_or_else(|| EffectBlendOwners {
+        expected: original.clone(), instance: super::keyboard_controls::draft_id(ui.ctx(), "effect-blend"), widgets: Vec::new(),
+    });
+    if owners.expected != original { owners.retire(ui.ctx()); }
+    owners.widgets.clear();
+    let mut structural = false;
     ui.horizontal(|ui| {
         ui.checkbox(&mut stack.enabled, "Enabled");
         ComboBox::from_id_salt(format!("fx-add-{salt}"))
@@ -1793,6 +1897,7 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
                 for (name, make) in crate::filter::Fx::catalog() {
                     if ui.selectable_label(false, *name).clicked() {
                         stack.items.push(make());
+                        structural = true;
                     }
                 }
             });
@@ -1800,6 +1905,7 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
     let mut remove = None;
     let mut bump = None;
     for (i, fx) in stack.items.iter_mut().enumerate() {
+        let effect_name = fx.name();
         ui.add_space(4.0);
         ui.group(|ui| {
             ui.horizontal(|ui| {
@@ -1818,14 +1924,17 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
             });
             if let Some((blend, opacity)) = fx.appearance_mut() {
                 ui.horizontal(|ui| {
-                    ui.label("Blend");
-                    ComboBox::from_id_salt(("effect-blend", salt, i))
+                    let label = ui.label("Blend");
+                    let mut response = super::fields::native_scope(ui, owners.instance.with(i), |ui| ComboBox::from_id_salt(("effect-blend", salt, i))
                         .selected_text(blend.name())
                         .show_ui(ui, |ui| {
                             for mode in Blend::ALL {
                                 ui.selectable_value(blend, mode, mode.name());
                             }
-                        });
+                        }).response).inner.labelled_by(label.id);
+                    super::keyboard_controls::selection_keys(ui, &mut response, &format!("{effect_name} effect {} blend", i + 1), blend,
+                        &Blend::ALL.into_iter().map(|mode| (mode, mode.name().into())).collect::<Vec<_>>());
+                    owners.widgets.push(response.id);
                 });
                 let mut percent = *opacity * 100.;
                 if inspector_slider(ui, "Opacity", &mut percent, 0.0..=100.0, "%") {
@@ -1960,19 +2069,28 @@ fn fx_stack_editor(ui: &mut Ui, stack: &mut crate::filter::FilterStack, salt: &s
     }
     if let Some(i) = remove {
         stack.items.remove(i);
+        structural = true;
     }
     if let Some((i, dir)) = bump {
         let j = i as i32 + dir;
         if j >= 0 && (j as usize) < stack.items.len() {
             stack.items.swap(i, j as usize);
+            structural = true;
         }
     }
     if *stack != original {
         stack.legacy_composite = false;
     }
+    if structural { owners.retire(ui.ctx()); }
+    owners.expected = stack.clone();
+    ui.data_mut(|data| data.insert_temp(key, owners));
 }
 
 fn fx_studio(ui: &mut Ui, studio: &mut Studio) {
+    studio.with_field_history(ui, "effects", |ui, studio| fx_studio_contents(ui, studio));
+}
+
+fn fx_studio_contents(ui: &mut Ui, studio: &mut Studio) {
     super::svg_effect::show(ui, studio);
     let group_active = studio
         .active_layer
@@ -2229,6 +2347,12 @@ fn object_icon(ui: &mut Ui, icon: &str, color: Color32) {
 }
 
 pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
+    studio.with_field_history(ui, "layers", |ui, studio| {
+        layers_studio_contents(ui, studio)
+    });
+}
+
+fn layers_studio_contents(ui: &mut Ui, studio: &mut Studio) {
     // Reveal a newly selected object once; a manual collapse stays collapsed.
     let primary = studio.primary();
     let reveal_id = ui.make_persistent_id("reveal-selection");
@@ -2321,6 +2445,7 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
     let mut flip_shape: Option<(usize, u64, bool)> = None;
     let n = studio.doc.layers.len();
     if let Some(i) = studio.active_layer.filter(|&i| i < n) {
+        let layer_blend_owner = ui.make_persistent_id(("layer-blend", studio.doc.layers[i].id));
         if studio.doc.layers[i].is_group {
             let before = studio.doc.layers[i].pass_through;
             let mut after = before;
@@ -2347,8 +2472,8 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
             let pass_through = studio.doc.layers[i].is_group && studio.doc.layers[i].pass_through;
             ui.add_enabled_ui(!pass_through, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label("Layer blend");
-                    ComboBox::from_id_salt("active-layer-blend")
+                    let label = ui.label("Layer blend");
+                    let mut response = super::fields::native_scope(ui, layer_blend_owner, |ui| ComboBox::from_id_salt("active-layer-blend")
                         .selected_text(if pass_through {
                             "Pass through"
                         } else {
@@ -2359,20 +2484,27 @@ pub(super) fn layers_studio(ui: &mut Ui, studio: &mut Studio) {
                             for value in Blend::ALL {
                                 ui.selectable_value(&mut blend, value, value.name());
                             }
-                        });
+                        }).response).inner.labelled_by(label.id);
+                    super::keyboard_controls::selection_keys(ui, &mut response, "Layer blend", &mut blend,
+                        &Blend::ALL.into_iter().map(|mode| (mode, mode.name().into())).collect::<Vec<_>>());
                 });
             });
             let mut opacity = studio.doc.layers[i].opacity * 100.0;
             ui.horizontal(|ui| {
-                ui.label("Layer opacity");
-                ui.add(
+                let label = ui.label("Layer opacity");
+                let response = ui.add(
                     eframe::egui::DragValue::new(&mut opacity)
                         .range(0.0..=100.0)
                         .suffix("%")
                         .speed(0.5)
                         .max_decimals(0),
-                )
-                .on_hover_text("Layer opacity");
+                ).labelled_by(label.id).on_hover_text("Layer opacity");
+                response.widget_info(|| {
+                    let mut info = eframe::egui::WidgetInfo::drag_value(response.enabled(), f64::from(opacity));
+                    info.label = Some("Layer opacity".into());
+                    info
+                });
+                input_history::changed(response);
             });
             let layer = &studio.doc.layers[i];
             if blend != layer.blend || (opacity / 100.0 - layer.opacity).abs() > 0.0001 {
@@ -3053,11 +3185,13 @@ fn inspector_keeps_its_width_across_frames_and_personas() {
 
 #[test]
 fn expanded_keyframes_and_effects_respect_the_resized_panel() {
-    use eframe::egui::{self, Event, Id, Modifiers, PointerButton, Pos2, Rect};
+    use crate::ui::workspace::{Place, Workspace};
+    use eframe::egui::{self, Event, Modifiers, PointerButton, Pos2, Rect};
 
     fn frame(
         ctx: &egui::Context,
         studio: &mut Studio,
+        layout: &mut Workspace,
         time: &mut f64,
         events: Vec<Event>,
     ) -> (f32, Vec<(String, Rect)>) {
@@ -3071,8 +3205,14 @@ fn expanded_keyframes_and_effects_respect_the_resized_panel() {
                 ..Default::default()
             },
             |ui| {
-                right_panel(ui, studio);
-                width = 1600.0 - ui.available_width();
+                let outer = ui.available_rect_before_wrap();
+                let center = layout.show(
+                    ui,
+                    "resized-inspector-fixture",
+                    &[("properties", "Properties")],
+                    |ui, _| inspector_content(ui, studio),
+                );
+                width = outer.right() - center.right();
             },
         );
         fn texts(shape: &egui::Shape, out: &mut Vec<(String, Rect)>) {
@@ -3093,8 +3233,14 @@ fn expanded_keyframes_and_effects_respect_the_resized_panel() {
         (width, labels)
     }
 
-    fn open_section(ctx: &egui::Context, studio: &mut Studio, time: &mut f64, title: &str) {
-        let mut labels = frame(ctx, studio, time, vec![]).1;
+    fn open_section(
+        ctx: &egui::Context,
+        studio: &mut Studio,
+        layout: &mut Workspace,
+        time: &mut f64,
+        title: &str,
+    ) {
+        let mut labels = frame(ctx, studio, layout, time, vec![]).1;
         for _ in 0..8 {
             if labels.iter().any(|(text, _)| text == title) {
                 break;
@@ -3102,6 +3248,7 @@ fn expanded_keyframes_and_effects_respect_the_resized_panel() {
             labels = frame(
                 ctx,
                 studio,
+                layout,
                 time,
                 vec![
                     Event::PointerMoved(egui::pos2(1490., 800.)),
@@ -3115,7 +3262,7 @@ fn expanded_keyframes_and_effects_respect_the_resized_panel() {
             )
             .1;
             for _ in 0..4 {
-                labels = frame(ctx, studio, time, vec![]).1;
+                labels = frame(ctx, studio, layout, time, vec![]).1;
             }
         }
         let pos = labels
@@ -3124,11 +3271,12 @@ fn expanded_keyframes_and_effects_respect_the_resized_panel() {
             .unwrap_or_else(|| panic!("Missing {title}"))
             .1
             .center();
-        frame(ctx, studio, time, vec![Event::PointerMoved(pos)]);
+        frame(ctx, studio, layout, time, vec![Event::PointerMoved(pos)]);
         for pressed in [true, false] {
             frame(
                 ctx,
                 studio,
+                layout,
                 time,
                 vec![Event::PointerButton {
                     pos,
@@ -3138,24 +3286,15 @@ fn expanded_keyframes_and_effects_respect_the_resized_panel() {
                 }],
             );
         }
-        frame(ctx, studio, time, vec![]);
-        frame(ctx, studio, time, vec![]);
+        frame(ctx, studio, layout, time, vec![]);
+        frame(ctx, studio, layout, time, vec![]);
     }
 
     for target_width in [256.0, 288.0, 420.0] {
         let ctx = egui::Context::default();
         crate::ui::theme::apply(&ctx);
-        ctx.data_mut(|data| {
-            data.insert_persisted(
-                Id::new("studios"),
-                egui::containers::panel::PanelState {
-                    outer_rect: Rect::from_min_size(
-                        egui::pos2(1600.0 - target_width, 0.0),
-                        vec2(target_width, 1400.0),
-                    ),
-                },
-            );
-        });
+        let mut layout = Workspace::preset(&[("properties", Place::Right)]);
+        layout.groups[0].extent = target_width;
         let mut studio = Studio::new();
         studio.doc = crate::document::Document::new("Panel sizing", 1.0, 1.0, 72.0);
         let shape = crate::document::Shape::new(
@@ -3174,8 +3313,14 @@ fn expanded_keyframes_and_effects_respect_the_resized_panel() {
         studio.active_layer = Some(0);
         studio.persona = Persona::Motion;
         let mut time = 0.0;
-        frame(&ctx, &mut studio, &mut time, vec![]);
-        open_section(&ctx, &mut studio, &mut time, "Keyframe controls");
+        frame(&ctx, &mut studio, &mut layout, &mut time, vec![]);
+        open_section(
+            &ctx,
+            &mut studio,
+            &mut layout,
+            &mut time,
+            "Keyframe controls",
+        );
         for reveal in [0.0, 0.000123, 0.5000123, 0.99021, 1.0] {
             studio.pose_drag.insert(
                 id,
@@ -3186,7 +3331,7 @@ fn expanded_keyframes_and_effects_respect_the_resized_panel() {
                     ..crate::motion::Pose::identity()
                 },
             );
-            let (width, labels) = frame(&ctx, &mut studio, &mut time, vec![]);
+            let (width, labels) = frame(&ctx, &mut studio, &mut layout, &mut time, vec![]);
             assert!(
                 (width - target_width).abs() <= 1.0,
                 "Keyframes grew {target_width}px panel to {width}px at {reveal}"
@@ -3198,11 +3343,11 @@ fn expanded_keyframes_and_effects_respect_the_resized_panel() {
         }
         studio.pose_drag.clear();
         studio.persona = Persona::Design;
-        open_section(&ctx, &mut studio, &mut time, "Effects");
+        open_section(&ctx, &mut studio, &mut layout, &mut time, "Effects");
         for (name, make) in crate::filter::Fx::catalog() {
             studio.doc.find_shape_mut(0, id).unwrap().filters.items = vec![make()];
             for _ in 0..3 {
-                let (width, _) = frame(&ctx, &mut studio, &mut time, vec![]);
+                let (width, _) = frame(&ctx, &mut studio, &mut layout, &mut time, vec![]);
                 assert!(
                     (width - target_width).abs() <= 1.0,
                     "{name} grew {target_width}px panel to {width}px"
@@ -3212,7 +3357,7 @@ fn expanded_keyframes_and_effects_respect_the_resized_panel() {
         studio.tool = Tool::Trace;
         studio.trace_opts.colors = 1;
         for _ in 0..3 {
-            let (width, _) = frame(&ctx, &mut studio, &mut time, vec![]);
+            let (width, _) = frame(&ctx, &mut studio, &mut layout, &mut time, vec![]);
             assert!(
                 (width - target_width).abs() <= 1.0,
                 "Trace grew {target_width}px panel to {width}px"

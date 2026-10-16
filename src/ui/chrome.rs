@@ -199,6 +199,27 @@ fn file_menu(ui: &mut Ui, studio: &mut Studio) {
             studio.save_as();
             ui.close();
         }
+        if !studio.doc.sources.is_empty() {
+            ui.menu_button("Save original source…", |ui| {
+                for source in studio.doc.sources.clone() {
+                    if ui.button(&source.name).clicked() {
+                        studio.request_file_dialog(
+                            move || {
+                                let path = rfd::FileDialog::new().set_file_name(&source.name).save_file()?;
+                                Some(source.write_original(&path).map(|()| path))
+                            },
+                            |_, studio, result| {
+                                studio.status = match result {
+                                    Ok(path) => format!("Saved original source {}", path.display()),
+                                    Err(error) => format!("Source recovery failed: {error}"),
+                                };
+                            },
+                        );
+                        ui.close();
+                    }
+                }
+            });
+        }
         ui.separator();
         if ui
             .add(Button::new("Place…").shortcut_text("Ctrl+Shift+P"))
@@ -239,7 +260,7 @@ fn file_menu(ui: &mut Ui, studio: &mut Studio) {
             ("Export WebM…", crate::anim_export::AnimKind::Webm),
         ] {
             if ui.button(label).clicked() {
-                super::anim_export::open(studio, kind);
+                super::anim_export::open(ui.ctx(), studio, kind);
                 ui.close();
             }
         }
@@ -298,6 +319,10 @@ fn file_menu(ui: &mut Ui, studio: &mut Studio) {
             studio.show_cloud_projects();
             ui.close();
         }
+        if ui.button("Live collaboration…").clicked() {
+            studio.cloud_modal = crate::app::CloudModal::Live;
+            ui.close();
+        }
         if ui.button("Review cloud annotations…").clicked() {
             studio.refresh_cloud_review();
             ui.close();
@@ -334,7 +359,7 @@ fn edit_menu(ui: &mut Ui, studio: &mut Studio) {
                 if studio.persona == Persona::Photo {
                     studio.photo.can_undo()
                 } else {
-                    studio.history.can_undo()
+                    studio.can_undo()
                 },
                 Button::new("Undo").shortcut_text("Ctrl+Z"),
             )
@@ -348,7 +373,7 @@ fn edit_menu(ui: &mut Ui, studio: &mut Studio) {
                 if studio.persona == Persona::Photo {
                     studio.photo.can_redo()
                 } else {
-                    studio.history.can_redo()
+                    studio.can_redo()
                 },
                 Button::new("Redo").shortcut_text("Ctrl+Shift+Z"),
             )
@@ -439,6 +464,11 @@ fn edit_menu(ui: &mut Ui, studio: &mut Studio) {
 
 fn object_menu(ui: &mut Ui, studio: &mut Studio) {
     ui.menu_button("Object", |ui| {
+        if ui.add_enabled(matches!(studio.persona, Persona::Design | Persona::Layout | Persona::Motion),
+            Button::new("Create artwork…").shortcut_text("Ctrl+Shift+K")).clicked() {
+            super::keyboard_authoring::open(ui.ctx(), studio);
+            ui.close();
+        }
         ui.menu_button("Type", |ui| super::text_geometry::menu(ui, studio));
         if ui
             .add_enabled(
@@ -698,7 +728,8 @@ fn view_menu(ui: &mut Ui, studio: &mut Studio) {
             studio.toggle_guides();
             ui.close();
         }
-        ui.menu_button("Guides", |ui| {
+        let guides = ui.menu_button("Guides", |ui| {
+            super::guide_keyboard::menu(ui, studio);
             if ui.add_enabled(!studio.doc.ruler.guides_locked, Button::new("Lock all guides")).clicked() {
                 studio.set_guides_locked(true);
                 ui.close();
@@ -711,6 +742,7 @@ fn view_menu(ui: &mut Ui, studio: &mut Studio) {
                 studio.toggle_guides(); ui.close();
             }
         });
+        ui.ctx().accesskit_node_builder(guides.response.id, |node| node.set_label("Guides"));
         ui.menu_button("Ruler units", |ui| {
             for unit in crate::document::RulerUnit::ALL {
                 if ui
@@ -833,7 +865,8 @@ pub fn doc_tabs(ui: &mut Ui, studio: &mut Studio) {
                         }
                         let (title, dirty) = studio.tab_title(i);
                         let active = i == studio.active_tab;
-                        ui.push_id(i, |ui| {
+                        let identity = studio.tab_preview_source(i).unwrap().1.to_owned();
+                        ui.push_id(("document-tab", identity), |ui| {
                             let (rect, response) = ui.allocate_exact_size(
                                 vec2(64.0, 64.0),
                                 eframe::egui::Sense::click(),
@@ -843,7 +876,7 @@ pub fn doc_tabs(ui: &mut Ui, studio: &mut Studio) {
                                     eframe::egui::WidgetType::Button,
                                     ui.is_enabled(),
                                     active,
-                                    title,
+                                    format!("{title} · document {} of {count}{}", i + 1, if dirty { " · Unsaved changes" } else { "" }),
                                 )
                             });
                             let mut close_hovered = false;
@@ -888,7 +921,7 @@ pub fn doc_tabs(ui: &mut Ui, studio: &mut Studio) {
                                         accent(),
                                     );
                                 }
-                                if ui.rect_contains_pointer(rect) || response.has_focus() {
+                                {
                                     let close_rect = eframe::egui::Rect::from_min_size(
                                         rect.right_top() + vec2(-22.0, 2.0),
                                         vec2(20.0, 20.0),
@@ -898,6 +931,11 @@ pub fn doc_tabs(ui: &mut Ui, studio: &mut Studio) {
                                         response.id.with("close"),
                                         eframe::egui::Sense::click(),
                                     );
+                                    close_response.widget_info(|| eframe::egui::WidgetInfo::labeled(
+                                        eframe::egui::WidgetType::Button,
+                                        close_response.enabled(),
+                                        format!("Close {title} · document {} of {count}{}", i + 1, if dirty { " · Unsaved changes" } else { "" }),
+                                    ));
                                     close_hovered = close_response.hovered();
                                     ui.painter().rect_filled(close_rect, 4.0, bg_panel());
                                     ui.painter().text(
@@ -907,6 +945,9 @@ pub fn doc_tabs(ui: &mut Ui, studio: &mut Studio) {
                                         icons::font(14.0),
                                         fg(),
                                     );
+                                    if close_response.has_focus() {
+                                        ui.painter().rect_stroke(close_rect, 4., ui.visuals().selection.stroke, eframe::egui::StrokeKind::Inside);
+                                    }
                                     if close_response.clicked() {
                                         close = Some(i);
                                     }
@@ -1125,6 +1166,85 @@ pub fn status_bar(ui: &mut Ui, studio: &mut Studio) {
                 });
             });
         });
+}
+
+#[cfg(test)]
+mod keyboard_tests {
+    use super::*;
+    use eframe::egui::{self, Event, Id, Key, Modifiers};
+
+    fn key(key: Key, modifiers: Modifiers) -> Event {
+        Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers }
+    }
+
+    fn frame(ctx: &egui::Context, studio: &mut Studio, events: Vec<Event>) -> egui::FullOutput {
+        let events = events.into_iter().flat_map(|event| {
+            if let Event::Key { key, physical_key, pressed: true, modifiers, .. } = &event {
+                let release = Event::Key { key: *key, physical_key: *physical_key, pressed: false, repeat: false, modifiers: *modifiers };
+                vec![event, release]
+            } else {
+                vec![event]
+            }
+        }).collect();
+        let mut output = ctx.run_ui(egui::RawInput {
+            events, screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(640., 480.))),
+            ..Default::default()
+        }, |ui| {
+            studio.handle_shortcuts(ui.ctx());
+            doc_tabs(ui, studio);
+            ui.interact(ui.available_rect_before_wrap(), Id::new("studio-canvas"), egui::Sense::click());
+        });
+        output.textures_delta.clear();
+        output
+    }
+
+    #[test]
+    fn keyboard_document_close_is_named_reachable_and_keeps_the_unsaved_guard() {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        super::super::theme::apply(&ctx);
+        let mut studio = Studio::new();
+        studio.doc = crate::document::Document::new("Same name", 8., 8., 72.);
+        studio.show_welcome = false;
+        studio.dirty = true;
+        studio.new_tab();
+        studio.doc.name = "Same name".into();
+        let output = frame(&ctx, &mut studio, vec![]);
+        let tree = output.platform_output.accesskit_update.unwrap();
+        let mut close: Vec<_> = tree.nodes.iter().filter(|(_, node)| node.label().is_some_and(|s| s.starts_with("Close Same name"))).collect();
+        close.sort_by_key(|(_, node)| node.label());
+        assert_eq!(close.len(), 2);
+        assert_ne!(close[0].0, close[1].0);
+        assert_ne!(close[0].1.label(), close[1].1.label());
+        frame(&ctx, &mut studio, vec![key(Key::Tab, Modifiers::NONE)]);
+        frame(&ctx, &mut studio, vec![key(Key::Tab, Modifiers::NONE)]);
+        assert_eq!(ctx.memory(|m| m.focused()).unwrap().accesskit_id(), close[0].0);
+        frame(&ctx, &mut studio, vec![]);
+        assert_eq!(ctx.memory(|m| m.focused()).unwrap().accesskit_id(), close[0].0);
+        frame(&ctx, &mut studio, vec![key(Key::Enter, Modifiers::NONE)]);
+        assert!(matches!(studio.pending_nav, Some(crate::app::PendingNav::CloseTab(0))));
+        assert_eq!(studio.tab_count(), 2);
+    }
+
+    #[test]
+    fn keyboard_document_switch_close_and_canvas_focus_need_no_pointer() {
+        let ctx = egui::Context::default();
+        super::super::theme::apply(&ctx);
+        let mut studio = Studio::new();
+        studio.show_welcome = false;
+        studio.new_tab();
+        let identity = studio.tab_preview_source(0).unwrap().1.to_owned();
+        frame(&ctx, &mut studio, vec![key(Key::Tab, Modifiers::CTRL | Modifiers::COMMAND)]);
+        assert_eq!(studio.active_tab, 0);
+        assert_eq!(studio.swap_id, identity);
+        frame(&ctx, &mut studio, vec![key(Key::Tab, Modifiers::CTRL | Modifiers::COMMAND | Modifiers::SHIFT)]);
+        assert_eq!(studio.active_tab, 1);
+        frame(&ctx, &mut studio, vec![key(Key::W, Modifiers::CTRL | Modifiers::COMMAND)]);
+        assert_eq!(studio.tab_count(), 1);
+        assert_eq!(studio.swap_id, identity);
+        frame(&ctx, &mut studio, vec![key(Key::F8, Modifiers::NONE)]);
+        assert_eq!(ctx.memory(|m| m.focused()), Some(Id::new("studio-canvas")));
+    }
 }
 
 #[cfg(test)]

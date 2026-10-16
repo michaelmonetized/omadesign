@@ -1,6 +1,6 @@
-# Affinity import
+# Optional Affinity converter
 
-Omadesign opens supported Affinity artwork as editable SVG objects through an optional, separate converter. Set it up once from the source checkout:
+Omadesign first reads supported native Affinity objects directly in Rust; see [native Affinity import](affinity-native.md). This page covers the optional separate converter used when native reading fails. Set it up from the source checkout:
 
 ```sh
 ./scripts/setup-affinity-import.sh

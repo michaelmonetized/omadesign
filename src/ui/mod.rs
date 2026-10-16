@@ -20,14 +20,22 @@ mod document_color;
 mod deform;
 pub(crate) mod export_dialog;
 mod guides;
+mod guide_keyboard;
 mod icons;
 mod jobs;
 mod key_hud;
+pub(crate) mod keyboard_authoring;
+pub(crate) mod keyboard_tools;
+mod panel_keyboard;
+mod keyboard_controls;
 #[cfg(test)]
 mod key_hud_tests;
 mod layer_drag;
 mod layout;
 mod layout_preview;
+#[cfg(test)]
+pub(crate) use layout_preview::presentation as layout_presentation;
+mod layout_properties;
 mod library;
 mod masking;
 mod motion_presets;
@@ -50,10 +58,15 @@ mod panel_workspace;
 mod shared_transform;
 mod svg_paint;
 mod svg_effect;
+#[cfg(test)]
+mod svg_field_tests;
 mod text_geometry;
 mod templates;
 pub mod theme;
 mod timeline;
+mod timeline_keyboard;
+mod motion_compositions;
+mod scene3d;
 mod welcome;
 
 use crate::app::Studio;
@@ -134,7 +147,9 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     brushes::window(&ctx, studio);
     studio.poll_pixel_edit(&ctx);
     agent::tick(&ctx, studio);
-    if !studio.file_dialog_pending()
+    let browser_closed = browsers::before_shortcuts(&ctx, studio);
+    if !browser_closed
+        && !studio.file_dialog_pending()
         && !studio.show_preferences
         && !studio.updates.freezing
         && !pixel_selection::is_open(&ctx)
@@ -144,11 +159,16 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         && !plugins::is_open(&ctx)
         && !welcome::modal_open(&ctx)
         && !artboard_dialog::is_open(&ctx)
+        && !keyboard_authoring::is_open(&ctx)
+        && !keyboard_tools::is_open(&ctx)
+        && !guide_keyboard::is_open(&ctx)
+        && !panel_keyboard::is_open(&ctx)
         && !studio.show_templates
     {
         guides::handle_shortcuts(&ctx, studio);
     }
-    if !studio.file_dialog_pending()
+    if !browser_closed
+        && !studio.file_dialog_pending()
         && !studio.show_preferences
         && !studio.updates.freezing
         && !layout_preview::is_open(&ctx)
@@ -159,6 +179,10 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         && !plugins::is_open(&ctx)
         && !welcome::modal_open(&ctx)
         && !artboard_dialog::is_open(&ctx)
+        && !keyboard_authoring::is_open(&ctx)
+        && !keyboard_tools::is_open(&ctx)
+        && !guide_keyboard::is_open(&ctx)
+        && !panel_keyboard::is_open(&ctx)
         && !studio.show_templates
     {
         studio.handle_shortcuts(&ctx);
@@ -167,7 +191,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     layout::poll_image(&ctx, studio);
 
     // Keep the canvas visible for previews while preventing edits behind the dialog.
-    if pixel_selection::is_open(&ctx) || background_removal::is_open(&ctx) || export_dialog::is_open(&ctx) || artboard_dialog::is_open(&ctx) {
+    if pixel_selection::is_open(&ctx) || background_removal::is_open(&ctx) || export_dialog::is_open(&ctx) || artboard_dialog::is_open(&ctx) || keyboard_authoring::is_open(&ctx) || keyboard_tools::is_open(&ctx) || guide_keyboard::is_open(&ctx) {
         ui.disable();
     }
 
@@ -211,6 +235,9 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         background_removal::show(&ctx, studio);
         export_dialog::show(&ctx, studio);
         artboard_dialog::show(&ctx, studio);
+        keyboard_authoring::show(&ctx, studio);
+        keyboard_tools::show(&ctx, studio);
+        guide_keyboard::show(&ctx, studio);
         anim_export::show(ui, studio);
         pixel_selection::show(&ctx, studio);
 
@@ -381,3 +408,5 @@ fn egui_shortcuts(ui: &mut Ui, studio: &mut Studio) {
 
 #[cfg(test)]
 mod shared_fields_tests;
+#[cfg(test)]
+mod shared_keyboard_tests;

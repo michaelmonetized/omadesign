@@ -75,6 +75,7 @@ pub(super) fn run(
             ready.push((reference, path));
         }
     }
+    let mut storage_guard = None;
     let mut checked = false;
     if source_valid {
         let result = (|| -> Result<(), String> {
@@ -96,6 +97,10 @@ pub(super) fn run(
             {
                 return Err("source size does not match the manifest".into());
             }
+            storage_guard = Some(super::storage::CaseStorage::new(
+                case, &source, &ready, directory,
+            )?);
+            let storage = storage_guard.as_ref().unwrap();
             let copy = directory.join(&case.source.filename);
             let mut destination = OpenOptions::new()
                 .write(true)
@@ -103,13 +108,10 @@ pub(super) fn run(
                 .open(&copy)
                 .map_err(|e| e.to_string())?;
             owned.0.push(copy.clone());
-            std::io::copy(
-                &mut File::open(&source).map_err(|e| e.to_string())?,
-                &mut destination,
-            )
-            .map_err(|e| e.to_string())?;
+            storage.copy(&source, &mut destination)?;
             drop(destination);
             verify_hash(&copy, case.source.sha256.as_deref())?;
+            resources.push(resource_sample("camera_open_begin", started));
             let mut photo = PhotoImage::load(&copy)?;
             resources.push(resource_sample("camera_opened", started));
             if !photo.develop.is_default() {
@@ -154,20 +156,7 @@ pub(super) fn run(
             if raw.pixels.len() != raw.width as usize * raw.height as usize * 3 {
                 return Err("invalid RGB16 layout".into());
             }
-            let temporary = size
-                .checked_add(u64::from(raw.width) * u64::from(raw.height) * 10)
-                .and_then(|n| n.checked_add(4 * 1024 * 1024))
-                .ok_or("temporary budget overflow")?;
-            if temporary > TEMP_BUDGET {
-                problem(
-                    &mut errors,
-                    "scheduling_required",
-                    format!(
-                        "conservative serial source/export estimate {temporary} exceeds {TEMP_BUDGET} temporary-byte budget; parent scheduling required"
-                    ),
-                );
-                return Ok(());
-            }
+            storage.export(photo.dimensions())?;
             for (reference, path) in &ready {
                 if reference.representation == "oriented-linear-srgb-rgb16le" {
                     record_reference(
@@ -186,6 +175,7 @@ pub(super) fn run(
                 .iter()
                 .any(|(reference, _)| reference.representation == "sensor-u16le-masked")
             {
+                resources.push(resource_sample("sensor_reference_begin", started));
                 let cancel = super::super::Cancellation::default();
                 let mut encoded =
                     crate::resources::global().allocate::<u8, _>(size as usize, &cancel)?;
@@ -209,16 +199,31 @@ pub(super) fn run(
                     }
                 }
             }
+            resources.push(resource_sample("baseline_preview_full_begin", started));
             check_render(&photo, &mut checks, case.preview_tolerance)?;
             resources.push(resource_sample("baseline_preview_full_checked", started));
             let mut baseline_export_hash = None;
             for extension in ["png", "tif"] {
+                resources.push(resource_sample(
+                    &format!("baseline_{extension}_encode_begin"),
+                    started,
+                ));
                 let output = directory.join(format!("baseline.{extension}"));
                 owned.0.push(output.clone());
-                photo.export_to(&output)?;
-                if fs::metadata(&output).map_err(|e| e.to_string())?.len() + size > TEMP_BUDGET {
-                    return Err("export exceeded temporary budget".into());
-                }
+                save_photo(
+                    &photo,
+                    &output,
+                    if extension == "png" {
+                        crate::export::Format::Png
+                    } else {
+                        crate::export::Format::Tiff
+                    },
+                    storage,
+                )?;
+                resources.push(resource_sample(
+                    &format!("baseline_{extension}_decode_begin"),
+                    started,
+                ));
                 let decoded = decode_export(&output, photo.dimensions())?;
                 let pixels = decoded.as_raw().as_slice();
                 let digest = hash_samples(pixels);
@@ -253,10 +258,12 @@ pub(super) fn run(
             photo.develop.exposure = 0.75;
             photo.develop.rotate = 90;
             photo.develop.crop = Some([0.0, 0.0, 1.0, 0.5]);
+            resources.push(resource_sample("edited_preview_full_begin", started));
             check_render(&photo, &mut checks, case.preview_tolerance)?;
+            resources.push(resource_sample("edited_tiff_encode_begin", started));
             let output = directory.join("edited.tif");
             owned.0.push(output.clone());
-            photo.export_to(&output)?;
+            save_photo(&photo, &output, crate::export::Format::Tiff, storage)?;
             let dimensions = photo
                 .develop
                 .output_dim(photo.dimensions().0, photo.dimensions().1);
@@ -277,14 +284,16 @@ pub(super) fn run(
                 .ok_or("missing Photo source identity")?;
             let sidecar = edits::sidecar_path(&copy);
             owned.0.push(sidecar.clone());
+            storage.check_next(1024 * 1024)?;
             edits::save(&copy, identity, &develop)?;
             drop(photo);
+            resources.push(resource_sample("settings_reopen_begin", started));
             let reopened = PhotoImage::load(&sidecar)?;
             resources.push(resource_sample("settings_reopened", started));
             if reopened.develop != develop {
                 return Err("settings reopen changed the development parameters".into());
             }
-            reopened.export_to(&output)?;
+            save_photo(&reopened, &output, crate::export::Format::Tiff, storage)?;
             let decoded = decode_export(&output, dimensions)?;
             if hash_samples(decoded.as_raw().as_slice()) != edited_digest {
                 return Err("settings reopen changed the developed TIFF pixels".into());
@@ -295,7 +304,12 @@ pub(super) fn run(
             Ok(())
         })();
         if let Err(error) = result {
-            problem(&mut errors, "workflow", error);
+            let kind = if error.contains("storage") || error.contains("Storage") {
+                "scheduling_required"
+            } else {
+                "workflow"
+            };
+            problem(&mut errors, kind, error);
         }
     }
     resources.push(resource_sample("released", started));
@@ -347,12 +361,35 @@ pub(super) fn run(
     json!({"schema_version":1,"case":case.id,"required":case.required,"status":status,"checked":checked,
         "source_before_sha256":before,"source_after_sha256":after,"required_reference_kinds":case.required_reference_kinds,
         "observed":observed,"reference_tools":tools,"comparisons":comparisons,"checks":checks,"errors":errors,
-        "resources":{"measurement":"Linux procfs process RSS/high-water bytes and shared pool admission; process lifetime high-water includes test/reference work, not an isolated decoder peak","samples":resources}})
+        "resources":{"measurement":"Linux procfs process RSS/high-water bytes and shared pool admission; process lifetime high-water includes test/reference work, not an isolated decoder peak","samples":resources},"storage":storage_guard.as_ref().map(|guard| guard.report())})
+}
+
+/// Exercise the shared admitted export writer under the scheduled case guard.
+/// Args: immutable photo, owned output, explicit codec and storage owner. Returns after an atomic guarded write.
+fn save_photo(
+    photo: &PhotoImage,
+    output: &Path,
+    format: crate::export::Format,
+    storage: &super::storage::CaseStorage,
+) -> Result<(), String> {
+    let (w, h) = photo.dimensions();
+    storage.export(photo.develop.output_dim(w, h))?;
+    crate::export::save(
+        &crate::export::Source::Photo(photo.clone()),
+        crate::export::Settings {
+            format,
+            scale: 1,
+            ai: None,
+        },
+        output,
+        storage,
+    )?;
+    storage.check_next(0)
 }
 
 /// Record actual process memory alongside admitted buffer ownership.
 /// Args: workflow stage and monotonic start. Returns no host names or local paths; unavailable OS counters remain null.
-fn resource_sample(stage: &str, started: Instant) -> Value {
+pub(super) fn resource_sample(stage: &str, started: Instant) -> Value {
     let status = fs::read_to_string("/proc/self/status").unwrap_or_default();
     let bytes = |counter: &str| {
         status.lines().find_map(|line| {
@@ -363,9 +400,11 @@ fn resource_sample(stage: &str, started: Instant) -> Value {
         })
     };
     let (admitted, limit) = crate::resources::global().usage();
-    json!({"stage":stage,"elapsed_ms":started.elapsed().as_secs_f64()*1000.,
+    let sample = json!({"stage":stage,"elapsed_ms":started.elapsed().as_secs_f64()*1000.,
         "rss_bytes":bytes("VmRSS:"),"process_high_water_bytes":bytes("VmHWM:"),
-        "host_available_bytes":crate::resources::available_memory(),"admitted_bytes":admitted,"pool_limit_bytes":limit})
+        "host_available_bytes":crate::resources::available_memory(),"admitted_bytes":admitted,"pending_bytes":crate::resources::global().pending_bytes(),"pool_limit_bytes":limit});
+    eprintln!("RAW_WORKFLOW_STAGE {sample}");
+    sample
 }
 
 /// Keep unknown camera/mode identity visible as missing evidence.
@@ -507,6 +546,11 @@ fn record_reference(
     kinds: &mut BTreeSet<String>,
     errors: &mut Vec<Problem>,
 ) {
+    eprintln!(
+        "RAW_REFERENCE_BEGIN {} samples={}",
+        reference.id,
+        pixels.len()
+    );
     let result = (|| -> Result<Stats, String> {
         if reference.dimensions != Some(dimensions)
             || pixels.len() != dimensions[0] as usize * dimensions[1] as usize * channels
@@ -553,6 +597,7 @@ fn record_reference(
         }
         Err(error) => problem(errors, "invalid", format!("{}: {error}", reference.id)),
     }
+    eprintln!("RAW_REFERENCE_END {}", reference.id);
 }
 
 /// Keep codec validation samples admitted until their final owner drops.
@@ -606,10 +651,28 @@ fn decode_export(path: &Path, dimensions: (u32, u32)) -> Result<DecodedExport, S
 /// Args: sample slice. Returns its SHA-256.
 fn hash_samples(samples: &[u16]) -> String {
     let mut hash = Sha256::new();
-    for sample in samples {
-        hash.update(sample.to_le_bytes());
+    for chunk in samples.chunks(4096) {
+        let mut bytes = [0u8; 8192];
+        for (sample, target) in chunk.iter().zip(bytes.chunks_exact_mut(2)) {
+            target.copy_from_slice(&sample.to_le_bytes());
+        }
+        hash.update(&bytes[..chunk.len() * 2]);
     }
     format!("{:x}", hash.finalize())
+}
+
+#[cfg(test)]
+#[test]
+fn canonical_u16_hash_keeps_little_endian_bytes_across_chunk_boundaries() {
+    let samples: Vec<_> = (0..8201u32).map(|i| (i * 137) as u16).collect();
+    let mut reference = Sha256::new();
+    for sample in &samples {
+        reference.update(sample.to_le_bytes());
+    }
+    assert_eq!(
+        hash_samples(&samples),
+        format!("{:x}", reference.finalize())
+    );
 }
 
 /// Evaluate the simple qualification exposure/framing recipe independently.

@@ -339,6 +339,7 @@ mod tests {
     #[test]
     fn raster_snapshot_bounds_memory_and_preserves_placement_and_masks() {
         let mut doc = Document::new("Large photo", 2048.0, 1024.0, 72.0);
+        doc.layers[0] = crate::document::Layer::raster("Large photo", 2048, 1024).unwrap();
         doc.layers[0].mask = Some(Pixels::new(2048, 1024).unwrap());
         let LayerKind::Raster {
             origin,

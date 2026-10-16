@@ -36,20 +36,16 @@ pub fn collect<T: Copy>(values: impl IntoIterator<Item = T>) -> Result<Arc<Alloc
 }
 
 pub struct Builder<T: Copy> {
-    values: Vec<T>,
-    lease: Arc<Lease>,
+    values: Allocation<T>,
 }
 impl<T: Copy> Builder<T> {
     pub fn new() -> Result<Self, String> {
         Self::with_capacity(0)
     }
     pub fn with_capacity(capacity: usize) -> Result<Self, String> {
-        let bytes = capacity.checked_mul(std::mem::size_of::<T>()).ok_or("Pixel capacity overflows")?;
-        let lease = resources::global().reserve_now(bytes as u64, &check)?;
-        let mut values = Vec::new();
-        values.try_reserve_exact(capacity).map_err(|_| "Not enough memory to read pixels")?;
-        lease.resize_now((values.capacity() * std::mem::size_of::<T>()) as u64, &check)?;
-        Ok(Self {values, lease})
+        let mut values = resources::global().copy_now(&[], &check)?;
+        values.reserve_now(capacity, &check)?;
+        Ok(Self {values})
     }
     pub fn extend(&mut self, values: &[T]) -> Result<(), String> {
         let len = self
@@ -57,26 +53,45 @@ impl<T: Copy> Builder<T> {
             .len()
             .checked_add(values.len())
             .ok_or("Pixel length overflows")?;
-        if len > self.values.capacity() {
-            let capacity = len.max(self.values.capacity().saturating_mul(2)).max(1024);
-            let bytes = capacity
-                .checked_mul(std::mem::size_of::<T>())
-                .ok_or("Pixel capacity overflows")?;
-            self.lease.resize_now(bytes as u64, &check)?;
-            self.values
-                .try_reserve_exact(capacity - self.values.len())
-                .map_err(|_| "Not enough memory to read pixels")?;
-            self.lease.resize_now(
-                (self.values.capacity() * std::mem::size_of::<T>()) as u64,
-                &check,
-            )?;
+        let bytes = len.checked_mul(std::mem::size_of::<T>()).ok_or("Pixel length overflows")?;
+        if bytes as u64 > self.values.bytes() {
+            let capacity = usize::try_from(self.values.bytes() / std::mem::size_of::<T>() as u64)
+                .map_err(|_| "Pixel capacity overflows")?;
+            let growth = capacity.checked_add(capacity / 4).ok_or("Pixel capacity overflows")?;
+            self.values.reserve_now(len.max(growth).max(1024), &check)?;
         }
-        self.values.extend_from_slice(values);
-        Ok(())
+        self.values.extend_from_slice_now(values, &check)
     }
     pub fn len(&self) -> usize {self.values.len()}
     pub fn finish(self) -> Result<Arc<Allocation<T>>, String> {
-        resources::global().adopt(self.values, self.lease)
+        Ok(Arc::new(self.values))
+    }
+}
+
+#[cfg(test)]
+mod builder_tests {
+    use super::*;
+
+    #[test]
+    fn initialized_builder_retains_spare_and_last_alias_without_default_samples() {
+        #[derive(Clone, Copy, Debug, PartialEq)]
+        struct Sample(u32);
+        let pool = resources::global();
+        let before = (pool.usage().0, pool.pending_bytes());
+        let mut builder = Builder::with_capacity(32).unwrap();
+        builder.extend(&[Sample(3); 8]).unwrap();
+        assert_eq!(builder.len(), 8);
+        assert_eq!((pool.usage().0 - before.0, pool.pending_bytes() - before.1), (128, 96));
+        let output = builder.finish().unwrap();
+        let memory = Arc::downgrade(output.lease());
+        let alias = output.clone();
+        assert_eq!(output.as_slice(), &[Sample(3); 8]);
+        drop(output);
+        assert!(memory.upgrade().is_some());
+        assert_eq!((pool.usage().0 - before.0, pool.pending_bytes() - before.1), (128, 96));
+        drop(alias);
+        assert!(memory.upgrade().is_none());
+        assert_eq!((pool.usage().0, pool.pending_bytes()), before);
     }
 }
 

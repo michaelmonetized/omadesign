@@ -152,11 +152,13 @@ pub fn mode_color(persona: Persona) -> eframe::egui::Color32 {
 }
 
 pub fn colored_button(ui: &mut Ui, icon: &str, tip: &str, selected: bool, color: eframe::egui::Color32) -> Response {
-    let (rect, allocated) = ui.allocate_exact_size(vec2(36., 30.), Sense::hover());
+    let size = vec2(36., 30.);
+    let (allocated, space) = ui.allocate_space(size);
+    let rect = ui.layout().align_size_within_rect(size, space);
     let id = match tip {
         "Agent" => eframe::egui::Id::new("studio-agent-toggle"),
         "Welcome" => eframe::egui::Id::new("studio-welcome-toggle"),
-        _ => allocated.id,
+        _ => allocated,
     };
     let response = ui.interact(rect, id, Sense::click());
     response.widget_info(|| WidgetInfo::selected(WidgetType::Button, ui.is_enabled(), selected, tip));

@@ -8,10 +8,10 @@ mod optics;
 #[path = "photo_workflow.rs"]
 mod workflow;
 use crate::photo::{self, DevelopParams, HSL_NAMES, Histogram};
-use crate::ui::theme::{accent, bg_canvas, bg_extreme, bg_panel, fg_weak};
+use crate::ui::theme::{accent, bg_canvas, bg_extreme, fg_weak};
 use eframe::egui::{
-    Align, Button, Color32, ColorImage, DragValue, Frame, Layout, Margin, PointerButton, Pos2,
-    Rect, RichText, ScrollArea, Sense, Slider, Stroke, TextureOptions, Ui, pos2, vec2,
+    Align, Button, Color32, ColorImage, DragValue, Layout, PointerButton, Pos2, Rect, RichText,
+    ScrollArea, Sense, Slider, Stroke, TextureOptions, Ui, pos2, vec2,
 };
 
 pub(crate) fn is_exporting(ctx: &eframe::egui::Context) -> bool {
@@ -44,27 +44,8 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     }
     upload_textures(ui, studio);
 
-    eframe::egui::Panel::left("filmstrip")
-        .resizable(true)
-        .default_size(200.0)
-        .size_range(176.0..=300.0)
-        .frame(Frame::new().fill(bg_panel()).inner_margin(Margin::same(10)))
-        .show(ui, |ui| {
-            filmstrip(ui, studio);
-        });
     super::chrome::left_toolbar(ui, studio);
-    eframe::egui::Panel::right("develop")
-        .resizable(true)
-        .default_size(288.0)
-        .size_range(256.0..=420.0)
-        .frame(Frame::new().fill(bg_panel()).inner_margin(Margin::same(14)))
-        .show(ui, |ui| {
-            if studio.libraries.sidebar == crate::app::libraries::Sidebar::Inspector {
-                ui.add_enabled_ui(!studio.photo.is_batching(), |ui| develop_panel(ui, studio));
-            } else {
-                super::library::show(ui, studio);
-            }
-        });
+    let center = super::panel_workspace::panels(ui, studio);
     if let Some((index, params, revision)) = before
         && index == studio.photo.selected
         && revision == studio.photo.edit_revision
@@ -73,7 +54,9 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
             .photo
             .record_edit(params, ui.input(|i| i.pointer.primary_down()));
     }
-    ui.add_enabled_ui(!studio.photo.is_batching(), |ui| viewer(ui, studio));
+    ui.scope_builder(eframe::egui::UiBuilder::new().max_rect(center), |ui| {
+        ui.add_enabled_ui(!studio.photo.is_batching(), |ui| viewer(ui, studio));
+    });
     if !ui.input(|i| i.pointer.primary_down()) {
         studio.photo.finish_edit();
     }
@@ -125,7 +108,7 @@ fn upload_textures(ui: &mut Ui, studio: &mut Studio) {
     }
 }
 
-fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
+pub(super) fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
     ui.horizontal(|ui| {
         ui.label(RichText::new("Library").strong());
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -221,6 +204,16 @@ fn filmstrip(ui: &mut Ui, studio: &mut Studio) {
     });
     ui.add_space(4.0);
     library_cards(ui, studio);
+}
+
+/// Retain the current inspector or library inside the registered Photo panel.
+/// Args: panel UI and studio. Returns no value.
+pub(super) fn develop_content(ui: &mut Ui, studio: &mut Studio) {
+    if studio.libraries.sidebar == crate::app::libraries::Sidebar::Inspector {
+        ui.add_enabled_ui(!studio.photo.is_batching(), |ui| develop_panel(ui, studio));
+    } else {
+        super::library::show(ui, studio);
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -344,10 +337,37 @@ fn library_cards(ui: &mut Ui, studio: &mut Studio) {
                             .and_then(|preview| preview.error.clone()),
                     ),
                 };
-                let (rect, response) =
-                    ui.allocate_exact_size(vec2(ui.available_width(), row_height), Sense::click());
+                let owner = if let Some(index) = opened {
+                    let image = &studio.photo.images[index];
+                    eframe::egui::Id::new((
+                        "photo-card",
+                        &studio.swap_id,
+                        index,
+                        image.source.as_ref(),
+                        std::sync::Arc::as_ptr(&image.full) as usize,
+                    ))
+                } else if let LibraryCard::Folder(index, _) = card {
+                    eframe::egui::Id::new((
+                        "photo-file-card",
+                        &studio.swap_id,
+                        &studio.photo.folder_files[index].1,
+                    ))
+                } else {
+                    unreachable!()
+                };
+                let (_, rect) = ui.allocate_space(vec2(ui.available_width(), row_height));
+                let response = ui.interact(rect, owner, Sense::click());
                 let active = opened.is_some_and(|index| studio.photo.selected == Some(index));
                 let selected = opened.is_some_and(|index| studio.photo.selection.contains(&index));
+                response.widget_info(|| {
+                    eframe::egui::WidgetInfo::selected(
+                        eframe::egui::WidgetType::SelectableLabel,
+                        response.enabled(),
+                        selected,
+                        format!("Photo {name}"),
+                    )
+                });
+                super::welcome::focus_control(ui, &response);
                 ui.painter().rect_filled(rect, 4.0, bg_extreme());
                 if let Some((texture, size)) = texture {
                     // Fill the sidebar's full width; crop only this small card,
@@ -382,7 +402,7 @@ fn library_cards(ui: &mut Ui, studio: &mut Studio) {
                     Some(error) => format!("{name}\n{error}\nClick to try opening the photo"),
                     None => format!("{name}\nCtrl-click to toggle · Shift-click for a range"),
                 });
-                let press_id = ui.id().with(("photo-selection-press", row_index));
+                let press_id = owner.with("selection-press");
                 if let Some(modifiers) = ui.input(|input| {
                     input.events.iter().find_map(|event| match event {
                         eframe::egui::Event::PointerButton {
@@ -427,6 +447,30 @@ fn library_cards(ui: &mut Ui, studio: &mut Studio) {
 }
 
 fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
+    let source = studio.photo.selected().map(|image| {
+        (
+            image.source.clone(),
+            std::sync::Arc::as_ptr(&image.full) as usize,
+            image
+                .raw
+                .as_ref()
+                .map(|raw| std::sync::Arc::as_ptr(raw) as usize),
+        )
+    });
+    let owner = eframe::egui::Id::new((
+        "photo-develop",
+        &studio.swap_id,
+        studio.photo.selected,
+        source,
+    ));
+    let available =
+        !studio.photo.is_batching() && !studio.file_dialog_pending() && !studio.updates.freezing;
+    super::fields::native_scope(ui, owner, |ui| {
+        ui.add_enabled_ui(available, |ui| develop_controls(ui, studio))
+    });
+}
+
+fn develop_controls(ui: &mut Ui, studio: &mut Studio) {
     ui.horizontal(|ui| {
         ui.label(RichText::new("Develop").size(16.0).strong());
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -510,13 +554,12 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
     let mut tab = ui.data_mut(|data| data.get_temp::<usize>(tab_id).unwrap_or(0));
     ui.columns(4, |columns| {
         for (i, label) in ["Light", "Color", "Detail", "Local"].iter().enumerate() {
-            if columns[i]
-                .add_sized(
-                    [columns[i].available_width(), 28.0],
-                    Button::selectable(tab == i, *label),
-                )
-                .clicked()
-            {
+            let response = columns[i].add_sized(
+                [columns[i].available_width(), 28.0],
+                Button::selectable(tab == i, *label),
+            );
+            super::welcome::focus_control(&columns[i], &response);
+            if response.clicked() {
                 tab = i;
             }
         }
@@ -559,27 +602,41 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
                 ui.collapsing("Color mixer", |ui| {
                     let id = ui.id().with("hsl-channel");
                     let mut channel = ui.data_mut(|data| data.get_temp::<usize>(id).unwrap_or(0));
-                    eframe::egui::ComboBox::from_id_salt("hsl-channel")
-                        .selected_text(HSL_NAMES[channel])
-                        .width(ui.available_width() - 12.0)
-                        .show_ui(ui, |ui| {
-                            for (i, name) in HSL_NAMES.iter().enumerate() {
-                                ui.selectable_value(&mut channel, i, *name);
-                            }
-                        });
+                    let channels = HSL_NAMES
+                        .iter()
+                        .enumerate()
+                        .map(|(index, name)| (index, name.to_string()))
+                        .collect::<Vec<_>>();
+                    super::keyboard_controls::choice(
+                        ui,
+                        "hsl-channel",
+                        "Color mixer channel",
+                        &mut channel,
+                        &channels,
+                    );
                     ui.data_mut(|data| data.insert_temp(id, channel));
                     ui.add_space(8.0);
-                    changed |= slider(ui, "Hue", &mut p.hsl[channel].hue, -40.0, 40.0);
-                    changed |= slider(ui, "Saturation", &mut p.hsl[channel].sat, -1.0, 1.0);
-                    changed |= slider(ui, "Luminance", &mut p.hsl[channel].luma, -1.0, 1.0);
+                    ui.push_id(("hsl", channel), |ui| {
+                        changed |= slider(ui, "Mixer hue", &mut p.hsl[channel].hue, -40.0, 40.0);
+                        changed |=
+                            slider(ui, "Mixer saturation", &mut p.hsl[channel].sat, -1.0, 1.0);
+                        changed |=
+                            slider(ui, "Mixer luminance", &mut p.hsl[channel].luma, -1.0, 1.0);
+                    });
                 });
                 ui.collapsing("Color grading", |ui| {
                     ui.label(RichText::new("Shadows").small().color(fg_weak()));
-                    for (i, label) in ["Red", "Green", "Blue"].iter().enumerate() {
+                    for (i, label) in ["Shadow red", "Shadow green", "Shadow blue"]
+                        .iter()
+                        .enumerate()
+                    {
                         changed |= slider(ui, label, &mut p.split_shadow[i], -0.4, 0.4);
                     }
                     ui.label(RichText::new("Highlights").small().color(fg_weak()));
-                    for (i, label) in ["Red", "Green", "Blue"].iter().enumerate() {
+                    for (i, label) in ["Highlight red", "Highlight green", "Highlight blue"]
+                        .iter()
+                        .enumerate()
+                    {
                         changed |= slider(ui, label, &mut p.split_highlight[i], -0.4, 0.4);
                     }
                     changed |= slider(ui, "Balance", &mut p.split_balance, -1.0, 1.0);
@@ -655,18 +712,17 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
             let id = ui.id().with("photo-export-format");
             let mut extension =
                 ui.data_mut(|data| data.get_temp::<String>(id).unwrap_or_else(|| "jpg".into()));
-            eframe::egui::ComboBox::from_id_salt("photo-export-format")
-                .selected_text(match extension.as_str() {
-                    "png" => "PNG",
-                    "tif" => "TIFF",
-                    _ => "JPEG",
-                })
-                .width(78.)
-                .show_ui(ui, |ui| {
-                    for (ext, label) in [("jpg", "JPEG"), ("png", "PNG"), ("tif", "TIFF")] {
-                        ui.selectable_value(&mut extension, ext.into(), label);
-                    }
-                });
+            let formats = [("jpg", "JPEG"), ("png", "PNG"), ("tif", "TIFF")]
+                .into_iter()
+                .map(|(ext, label)| (ext.to_string(), label.to_string()))
+                .collect::<Vec<_>>();
+            super::keyboard_controls::choice(
+                ui,
+                "photo-export-format",
+                "Photo export format",
+                &mut extension,
+                &formats,
+            );
             ui.data_mut(|data| data.insert_temp(id, extension.clone()));
             if ui
                 .button(if exporting {
@@ -697,24 +753,62 @@ fn develop_panel(ui: &mut Ui, studio: &mut Studio) {
 
 fn slider(ui: &mut Ui, label: &str, v: &mut f32, lo: f32, hi: f32) -> bool {
     let mut changed = false;
-    ui.push_id(label, |ui| {
+    let owner = ui.make_persistent_id(("photo-adjustment", label));
+    super::fields::native_scope(ui, owner, |ui| {
         ui.spacing_mut().item_spacing.y = 2.0;
         ui.spacing_mut().interact_size.y = 18.0;
+        let before = *v;
+        let attempt = std::cell::RefCell::new(None);
+        let mut numeric = None;
         ui.horizontal(|ui| {
-            ui.label(label);
+            let name = ui.label(label);
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                changed |= ui
-                    .add(
+                let response = super::fields::native_scope(ui, owner.with("number"), |ui| {
+                    ui.add(
                         DragValue::new(v)
                             .range(lo..=hi)
                             .speed((hi - lo) / 200.0)
-                            .max_decimals(2),
+                            .max_decimals(2)
+                            .custom_parser(|text| super::welcome::parse_number(&attempt, text)),
                     )
-                    .changed();
+                })
+                .inner;
+                super::welcome::name_control(ui, &response, name.id, label);
+                super::keyboard_controls::number_focus(ui, &response);
+                let valid = super::welcome::native_number_valid(
+                    ui,
+                    &response,
+                    owner,
+                    attempt.borrow_mut().take(),
+                    f64::from(*v),
+                    f64::from(lo)..=f64::from(hi),
+                );
+                let cancelled = (response.has_focus() || response.lost_focus())
+                    && ui.input(|input| input.key_pressed(eframe::egui::Key::Escape));
+                if !valid || cancelled {
+                    *v = before;
+                }
+                changed |= valid && !cancelled && response.enabled() && response.changed();
+                numeric = Some((response, name.id, valid));
             });
         });
         ui.spacing_mut().slider_width = ui.available_width();
-        changed |= ui.add(Slider::new(v, lo..=hi).show_value(false)).changed();
+        let response = super::fields::native_scope(ui, owner.with("slider"), |ui| {
+            ui.add(Slider::new(v, lo..=hi).show_value(false))
+        })
+        .inner;
+        let (number, label_id, valid) = numeric.unwrap();
+        super::welcome::name_control(ui, &response, label_id, &format!("{label} slider"));
+        if response.changed() && response.enabled() && v.is_finite() && (lo..=hi).contains(v) {
+            changed = true;
+            ui.data_mut(|data| data.remove::<String>(owner.with("number-validation")));
+        } else if !valid {
+            super::welcome::control_error(
+                ui,
+                &[&number],
+                "Enter a finite number within this adjustment's range.",
+            );
+        }
         ui.add_space(8.0);
     });
     changed
@@ -1441,5 +1535,257 @@ mod tests {
             .expect("photo texture drawn");
         assert!((bounds.width() - 800.0).abs() < 0.01);
         assert!((bounds.height() - 600.0).abs() < 0.01);
+    }
+}
+
+#[cfg(test)]
+mod keyboard_field_tests {
+    use super::*;
+    use crate::ui::welcome::keyboard_tests as keys;
+    use eframe::egui::{self, Event, Key, Modifiers};
+
+    fn frame(ctx: &egui::Context, studio: &mut Studio, events: Vec<Event>) -> egui::FullOutput {
+        keys::render(ctx, events, |ui| {
+            studio.handle_shortcuts(ui.ctx());
+            show(ui, studio);
+        })
+    }
+
+    fn press(ctx: &egui::Context, studio: &mut Studio, label: &str) {
+        keys::tab_to(ctx, label, |events| frame(ctx, studio, events));
+        frame(ctx, studio, keys::key(Key::Enter, Modifiers::NONE));
+        frame(ctx, studio, vec![]);
+    }
+
+    #[test]
+    fn keyboard_photo_native_card_selection_develop_invalid_owner_and_save_reopen() {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        crate::ui::theme::apply(&ctx);
+        let mut studio = Studio::new();
+        studio.show_welcome = false;
+        studio.persona = crate::tools::Persona::Photo;
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(".artifacts")
+            .join(format!(
+                "keyboard-photo-fields-{}-{}",
+                std::process::id(),
+                crate::document::next_id()
+            ));
+        std::fs::create_dir_all(&root).unwrap();
+        let pixels = crate::photo::RgbaImage::new(16, 16, vec![128; 16 * 16 * 4]).unwrap();
+        let source_bytes = pixels.encode_png().unwrap();
+        for name in ["First photo", "Second photo"] {
+            let source = root.join(format!("{name}.png"));
+            std::fs::write(&source, &source_bytes).unwrap();
+            let mut image = crate::photo::PhotoImage::from_full(name.into(), pixels.clone());
+            image.source_identity =
+                Some(crate::photo::edits::SourceIdentity::read(&source).unwrap());
+            image.source = Some(source);
+            studio.photo.images.push(image);
+        }
+        assert!(studio.photo.selected.is_none());
+        frame(&ctx, &mut studio, vec![]);
+        press(&ctx, &mut studio, "Photo First photo");
+        assert_eq!(studio.photo.selected, Some(0));
+        let output = keys::tab_to(&ctx, "Exposure", |events| frame(&ctx, &mut studio, events));
+        keys::focused(&ctx, &output, "Exposure");
+        let exposure = keys::named(&output, "Exposure").0;
+        let output = keys::replace("letters", |events| frame(&ctx, &mut studio, events));
+        keys::associated_error(&output, "Exposure");
+        assert_eq!(studio.photo.images[0].develop.exposure, 0.);
+        keys::replace("1.25", |events| frame(&ctx, &mut studio, events));
+        frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        assert_eq!(studio.photo.images[0].develop.exposure, 1.25);
+        let output = keys::tab_to(&ctx, "Exposure", |events| frame(&ctx, &mut studio, events));
+        assert_eq!(keys::named(&output, "Exposure").0, exposure);
+        frame(&ctx, &mut studio, keys::key(Key::ArrowUp, Modifiers::NONE));
+        let output = frame(&ctx, &mut studio, vec![]);
+        keys::focused(&ctx, &output, "Exposure");
+        let accepted = studio.photo.images[0].develop.clone();
+        studio.updates.freezing = true;
+        let output = frame(&ctx, &mut studio, vec![]);
+        assert!(keys::named(&output, "Exposure").1.is_disabled());
+        frame(
+            &ctx,
+            &mut studio,
+            keys::action(
+                exposure,
+                egui::accesskit::Action::SetValue,
+                Some(egui::accesskit::ActionData::NumericValue(3.)),
+            ),
+        );
+        assert_eq!(studio.photo.images[0].develop, accepted);
+        studio.updates.freezing = false;
+        frame(&ctx, &mut studio, keys::key(Key::F8, Modifiers::NONE));
+        frame(
+            &ctx,
+            &mut studio,
+            keys::key(Key::S, Modifiers::CTRL | Modifiers::COMMAND),
+        );
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        while studio.photo.is_saving() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "native settings save did not finish"
+            );
+            frame(&ctx, &mut studio, vec![]);
+            std::thread::yield_now();
+        }
+        let image = &studio.photo.images[0];
+        let source = image.source.as_ref().unwrap();
+        let reopened = crate::photo::edits::load(source, image.source_identity.as_ref().unwrap())
+            .unwrap()
+            .unwrap();
+        assert_eq!(reopened, accepted);
+        assert_eq!(std::fs::read(source).unwrap(), source_bytes);
+        press(&ctx, &mut studio, "Photo Second photo");
+        let output = keys::tab_to(&ctx, "Exposure", |events| frame(&ctx, &mut studio, events));
+        assert_ne!(keys::named(&output, "Exposure").0, exposure);
+        assert_eq!(studio.photo.images[1].develop.exposure, 0.);
+        press(&ctx, &mut studio, "Photo First photo");
+        let output = keys::tab_to(&ctx, "Exposure", |events| frame(&ctx, &mut studio, events));
+        assert_eq!(keys::named(&output, "Exposure").0, exposure);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    fn panel_action(ctx: &egui::Context, studio: &mut Studio, action: usize) {
+        frame(
+            ctx,
+            studio,
+            keys::key(Key::F6, Modifiers::CTRL | Modifiers::COMMAND),
+        );
+        frame(ctx, studio, vec![]);
+        keys::tab_to(ctx, "Panel", |events| frame(ctx, studio, events));
+        frame(ctx, studio, keys::key(Key::End, Modifiers::NONE));
+        keys::tab_to(ctx, "Panel action", |events| frame(ctx, studio, events));
+        frame(ctx, studio, keys::key(Key::Home, Modifiers::NONE));
+        for _ in 0..action {
+            frame(ctx, studio, keys::key(Key::ArrowDown, Modifiers::NONE));
+        }
+    }
+
+    fn apply_panel(ctx: &egui::Context, studio: &mut Studio) -> egui::FullOutput {
+        press(ctx, studio, "Apply panel");
+        assert!(!super::super::panel_keyboard::is_open(ctx));
+        let mut output = frame(ctx, studio, vec![]);
+        for _ in 0..2 {
+            output = frame(ctx, studio, vec![]);
+        }
+        output
+    }
+
+    #[test]
+    fn keyboard_photo_workspace_native_float_close_restore_edit_and_book_reopen() {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        crate::ui::theme::apply(&ctx);
+        let mut studio = Studio::new();
+        studio.show_welcome = false;
+        studio.persona = crate::tools::Persona::Photo;
+        studio
+            .photo
+            .images
+            .push(crate::photo::PhotoImage::from_full(
+                "Panel source".into(),
+                crate::photo::RgbaImage::new(16, 16, vec![128; 16 * 16 * 4]).unwrap(),
+            ));
+        let artwork = crate::project::encode(&studio.doc).unwrap();
+        frame(&ctx, &mut studio, vec![]);
+        assert_eq!(studio.panel_workspaces.active, "Photo");
+        assert!(studio.photo.selected.is_none());
+        press(&ctx, &mut studio, "Photo Panel source");
+        let output = keys::tab_to(&ctx, "Exposure", |events| frame(&ctx, &mut studio, events));
+        let exposure = keys::named(&output, "Exposure").0;
+        panel_action(&ctx, &mut studio, 5);
+        for (label, text) in [("Window width", "480"), ("Window height", "700")] {
+            keys::tab_to(&ctx, label, |events| frame(&ctx, &mut studio, events));
+            keys::replace(text, |events| frame(&ctx, &mut studio, events));
+        }
+        let output = apply_panel(&ctx, &mut studio);
+        keys::focused(&ctx, &output, "Photo develop");
+        assert_eq!(keys::named(&output, "Exposure").0, exposure);
+        let group = studio.panel_workspaces.tasks["Photo"]
+            .groups
+            .iter()
+            .find(|group| group.panels.iter().any(|id| id == "photo-develop"))
+            .unwrap();
+        assert_eq!(group.place, crate::ui::workspace::Place::Floating);
+        assert!((group.rect[2] - 480.).abs() <= 1.);
+        assert!((group.rect[3] - 700.).abs() <= 1.);
+        keys::tab_to(&ctx, "Exposure", |events| frame(&ctx, &mut studio, events));
+        keys::replace("1.25", |events| frame(&ctx, &mut studio, events));
+        frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        frame(&ctx, &mut studio, keys::key(Key::F8, Modifiers::NONE));
+        assert_eq!(studio.photo.images[0].develop.exposure, 1.25);
+        frame(
+            &ctx,
+            &mut studio,
+            keys::key(Key::Z, Modifiers::CTRL | Modifiers::COMMAND),
+        );
+        assert_eq!(studio.photo.images[0].develop.exposure, 0.);
+        frame(
+            &ctx,
+            &mut studio,
+            keys::key(
+                Key::Z,
+                Modifiers::CTRL | Modifiers::COMMAND | Modifiers::SHIFT,
+            ),
+        );
+        assert_eq!(studio.photo.images[0].develop.exposure, 1.25);
+        for action in [7, 8, 0, 0] {
+            panel_action(&ctx, &mut studio, action);
+            let output = apply_panel(&ctx, &mut studio);
+            if action == 7 {
+                assert!(
+                    studio.panel_workspaces.tasks["Photo"]
+                        .hidden
+                        .contains_key("photo-develop")
+                );
+            } else {
+                keys::focused(&ctx, &output, "Photo develop");
+            }
+        }
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(".artifacts")
+            .join(format!(
+                "keyboard-photo-workspace-{}-{}",
+                std::process::id(),
+                crate::document::next_id()
+            ));
+        let path = root.join("workspaces.json");
+        studio.panel_workspaces.write(&path).unwrap();
+        let saved = crate::ui::workspace::Book::read(&path).unwrap();
+        for scale in [1., 1.5, 2.] {
+            let reopened = egui::Context::default();
+            reopened.enable_accesskit();
+            reopened.set_pixels_per_point(scale);
+            crate::ui::theme::apply(&reopened);
+            studio.panel_workspaces = saved.clone();
+            let mut output = frame(&reopened, &mut studio, vec![]);
+            for _ in 0..3 {
+                output = frame(&reopened, &mut studio, vec![]);
+            }
+            let tree = output.platform_output.accesskit_update.as_ref().unwrap();
+            let window = tree
+                .nodes
+                .iter()
+                .find(|(_, node)| {
+                    node.role() == egui::accesskit::Role::Window
+                        && node.label() == Some("Photo develop")
+                })
+                .unwrap()
+                .1
+                .bounds()
+                .unwrap();
+            assert!((window.x1 - window.x0 - 480.).abs() <= 1.);
+            assert!((window.y1 - window.y0 - 700.).abs() <= 1.);
+            let field = keys::named(&output, "Exposure").1.bounds().unwrap();
+            assert!(field.x0 >= window.x0 && field.x1 <= window.x1);
+            assert!(field.y0 >= window.y0 && field.y1 <= window.y1);
+            assert_eq!(studio.photo.images[0].develop.exposure, 1.25);
+        }
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), artwork);
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

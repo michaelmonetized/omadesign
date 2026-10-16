@@ -168,6 +168,8 @@ pub struct Workspace {
     last_save: Instant,
     writer: Option<mpsc::Sender<Thread>>,
     writer_thread: Option<std::thread::JoinHandle<()>>,
+    #[cfg(test)]
+    test_persistence_root: Option<PathBuf>,
     save_error: Arc<Mutex<Option<String>>>,
     pending_prompt: Option<(String, Vec<Attachment>)>,
     restoring: bool,
@@ -213,6 +215,8 @@ impl Default for Workspace {
             last_save: Instant::now(),
             writer: None,
             writer_thread: None,
+            #[cfg(test)]
+            test_persistence_root: None,
             save_error: Arc::new(Mutex::new(None)),
             pending_prompt: None,
             restoring: false,
@@ -222,15 +226,57 @@ impl Default for Workspace {
     }
 }
 impl Workspace {
+    /// Create a disconnected workspace with real, isolated test persistence.
+    /// Args: an explicit fixture root under /home. Returns a fresh workspace with its writer running.
+    #[cfg(test)]
+    pub(crate) fn isolated_for_test(root: PathBuf) -> Self {
+        assert!(
+            root.is_absolute()
+                && root.starts_with("/home")
+                && root != std::path::Path::new("/home")
+                && !root
+                    .components()
+                    .any(|c| matches!(c, std::path::Component::ParentDir)),
+            "Agent persistence fixtures must remain under /home"
+        );
+        let mut workspace = Self::default();
+        workspace.test_persistence_root = Some(root.clone());
+        workspace.loaded = true;
+        workspace.settings.directory = root.join("project");
+        workspace.sync_fields();
+        workspace.start_writer();
+        workspace
+    }
+
+    /// Locate this workspace's saved settings and conversations.
+    /// Args: none. Returns the explicit test destination or normal agent configuration root.
+    fn persistence_root(&self) -> PathBuf {
+        #[cfg(test)]
+        if let Some(root) = &self.test_persistence_root {
+            return root.clone();
+        }
+        config::root()
+    }
+
     pub fn load(&mut self) {
         if self.loaded {
             return;
         }
         self.loaded = true;
-        self.settings = Settings::load();
+        self.settings = std::fs::read(self.persistence_root().join("settings.json"))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .unwrap_or_default();
         self.discovery.filter = Some(self.settings.profile.name.clone());
         self.sync_fields();
         self.refresh_history();
+        self.start_writer();
+    }
+
+    /// Start the existing settings and conversation persistence worker.
+    /// Args: none. Returns immediately; Drop flushes and joins the worker.
+    fn start_writer(&mut self) {
+        let root = self.persistence_root();
         let (tx, rx) = mpsc::channel::<Thread>();
         self.writer = Some(tx);
         let errors = self.save_error.clone();
@@ -267,13 +313,11 @@ impl Workspace {
                         .storage_bytes()
                         .and_then(|bytes| {
                             config::write_bytes(
-                                &config::root()
-                                    .join("threads")
-                                    .join(format!("{}.json", thread.id)),
+                                &root.join("threads").join(format!("{}.json", thread.id)),
                                 &bytes,
                             )
                         })
-                        .and_then(|_| thread.settings.save());
+                        .and_then(|_| config::write(&root.join("settings.json"), &thread.settings));
                     if let Err(e) = result {
                         *errors.lock().unwrap() = Some(e);
                     }
@@ -286,7 +330,7 @@ impl Workspace {
         self.config_directory = self.settings.directory.display().to_string();
     }
     pub fn refresh_history(&mut self) {
-        self.refresh_history_from(&config::root().join("threads"));
+        self.refresh_history_from(&self.persistence_root().join("threads"));
     }
     fn refresh_history_from(&mut self, directory: &std::path::Path) {
         let mut files: Vec<_> = std::fs::read_dir(directory)
@@ -721,7 +765,10 @@ impl Workspace {
         self.dirty = true;
         if self.thread.is_some() && self.writer.is_some() {
             self.persist(true);
-        } else if let Err(e) = self.settings.save() {
+        } else if let Err(e) = config::write(
+            &self.persistence_root().join("settings.json"),
+            &self.settings,
+        ) {
             self.error = e;
         }
     }
@@ -1213,6 +1260,175 @@ impl Drop for Workspace {
         if let Some(writer) = self.writer_thread.take() {
             let _ = writer.join();
         }
+    }
+}
+
+#[cfg(test)]
+mod isolated_persistence_tests {
+    use super::*;
+    use crate::agent::discovery::{Choice, OptionSet};
+    use std::{os::unix::fs::PermissionsExt, path::Path};
+
+    struct Fixture(PathBuf);
+    impl Fixture {
+        fn new() -> Self {
+            let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join(".artifacts/agent-persistence-tests")
+                .join(crate::project::new_swap_id());
+            std::fs::create_dir_all(&root).unwrap();
+            Self(root)
+        }
+        fn root(&self, name: &str) -> PathBuf {
+            self.0.join(name)
+        }
+    }
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    fn option() -> OptionSet {
+        OptionSet {
+            id: "model".into(),
+            name: "Model".into(),
+            category: "model".into(),
+            current: "one".into(),
+            choices: ["one", "two"]
+                .into_iter()
+                .map(|id| Choice {
+                    id: id.into(),
+                    label: id.into(),
+                    group: String::new(),
+                })
+                .collect(),
+            legacy: false,
+        }
+    }
+    fn settings(root: &Path) -> Settings {
+        serde_json::from_slice(&std::fs::read(root.join("settings.json")).unwrap()).unwrap()
+    }
+    fn private_file(path: &Path) {
+        assert_eq!(
+            std::fs::metadata(path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(
+            std::fs::metadata(path.parent().unwrap())
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+    }
+
+    #[test]
+    fn isolated_preferences_save_real_choices_and_favorites_to_separate_roots() {
+        let fixture = Fixture::new();
+        let first_root = fixture.root("first");
+        let second_root = fixture.root("second");
+        let mut first = Workspace::isolated_for_test(first_root.clone());
+        let mut second = Workspace::isolated_for_test(second_root.clone());
+        for (workspace, name, choice) in
+            [(&mut first, "First", "one"), (&mut second, "Second", "two")]
+        {
+            assert!(workspace.loaded && workspace.thread.is_none() && workspace.writer.is_some());
+            assert!(workspace.connection.is_none() && !workspace.ready && !workspace.connecting);
+            workspace.settings.profile.name = name.into();
+            workspace.load();
+            assert_eq!(workspace.settings.profile.name, name);
+            workspace.choose_option(&option(), choice);
+            workspace.settings.favorites.push(name.into());
+            workspace.save_preferences();
+            assert!(workspace.error.is_empty());
+        }
+        let a = settings(&first_root);
+        let b = settings(&second_root);
+        assert_eq!(
+            a.selections.get("First/model").map(String::as_str),
+            Some("one")
+        );
+        assert_eq!(
+            b.selections.get("Second/model").map(String::as_str),
+            Some("two")
+        );
+        assert!(
+            !a.selections.contains_key("Second/model") && !b.selections.contains_key("First/model")
+        );
+        assert_eq!(a.favorites, vec!["First"]);
+        assert_eq!(b.favorites, vec!["Second"]);
+        assert_eq!(a.directory, first_root.join("project"));
+        assert_eq!(b.directory, second_root.join("project"));
+        for root in [&first_root, &second_root] {
+            private_file(&root.join("settings.json"));
+            assert!(!root.join("threads").exists());
+        }
+    }
+
+    #[test]
+    fn isolated_thread_writers_drop_flush_unsaved_notes_and_reopen_only_their_history() {
+        let fixture = Fixture::new();
+        let first_root = fixture.root("first");
+        let second_root = fixture.root("second");
+        let mut first = Workspace::isolated_for_test(first_root.clone());
+        let mut second = Workspace::isolated_for_test(second_root.clone());
+        let first_errors = first.save_error.clone();
+        let second_errors = second.save_error.clone();
+        let id = "0123456789abcdef0123456789abcdef";
+        for (workspace, name, choice) in
+            [(&mut first, "First", "one"), (&mut second, "Second", "two")]
+        {
+            workspace.settings.profile.name = name.into();
+            let mut thread = Thread::new(workspace.settings.clone(), Purpose::Create, None);
+            thread.id = id.into();
+            thread.title = name.into();
+            workspace.thread = Some(thread);
+            workspace.choose_option(&option(), choice);
+            workspace.settings.favorites.push(name.into());
+            workspace.save_preferences();
+            workspace.note("user", format!("{name} unsaved tail"));
+        }
+        drop(first);
+        drop(second);
+        assert!(first_errors.lock().unwrap().is_none());
+        assert!(second_errors.lock().unwrap().is_none());
+        for (root, name, choice) in [
+            (&first_root, "First", "one"),
+            (&second_root, "Second", "two"),
+        ] {
+            let saved = settings(root);
+            assert_eq!(saved.profile.name, name);
+            assert_eq!(saved.favorites, vec![name]);
+            assert_eq!(
+                saved
+                    .selections
+                    .get(&format!("{name}/model"))
+                    .map(String::as_str),
+                Some(choice)
+            );
+            let path = root.join("threads").join(format!("{id}.json"));
+            let thread: Thread = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+            assert_eq!(thread.id, id);
+            assert_eq!(thread.title, name);
+            assert_eq!(
+                thread.messages.last().unwrap().text,
+                format!("{name} unsaved tail")
+            );
+            assert_eq!(thread.settings.profile.name, name);
+            assert_eq!(thread.settings.favorites, saved.favorites);
+            private_file(&root.join("settings.json"));
+            private_file(&path);
+        }
+        let mut reloaded = Workspace::default();
+        reloaded.test_persistence_root = Some(first_root.clone());
+        reloaded.load();
+        assert_eq!(reloaded.settings.profile.name, "First");
+        assert_eq!(reloaded.history.len(), 1);
+        assert_eq!(reloaded.history[0].title, "First");
+        let mut other_history = Workspace::isolated_for_test(second_root);
+        other_history.refresh_history();
+        assert_eq!(other_history.history.len(), 1);
+        assert_eq!(other_history.history[0].title, "Second");
     }
 }
 

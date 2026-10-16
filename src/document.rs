@@ -7,19 +7,38 @@ use crate::layout::FrameLayout;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::cell::RefCell;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 /// Selection id for a raster layer treated as an object (placed image).
 pub const RASTER_ID: u64 = 0;
 
-static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+static IDS: OnceLock<Mutex<(u64, std::collections::HashSet<u64>)>> = OnceLock::new();
 
+/// Allocate an object ID independently of other editing processes.
+/// Args: none. Returns a nonzero, JSON-safe ID not loaded or issued here before.
 pub fn next_id() -> u64 {
-    NEXT_ID.fetch_add(1, Ordering::Relaxed)
+    let mut ids = IDS.get_or_init(|| {
+        use std::io::Read;
+        let mut bytes = [0; 8];
+        let seed = if std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut bytes)).is_ok() {
+            u64::from_le_bytes(bytes)
+        } else {
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos() as u64 ^ u64::from(std::process::id())
+        };
+        Mutex::new((seed, std::collections::HashSet::new()))
+    }).lock().unwrap_or_else(|e| e.into_inner());
+    loop {
+        ids.0 = ids.0.wrapping_add(0x0013_79b9_7f4a_7c15) & ((1 << 53) - 1);
+        let id = ids.0;
+        if id != 0 && ids.1.insert(id) { return id; }
+    }
 }
 
+/// Reserve an ID read from a native file without sharing a process counter.
+/// Args: existing ID. Returns nothing; subsequent allocations exclude this ID.
 pub fn bump_id(seen: u64) {
-    NEXT_ID.fetch_max(seen.saturating_add(1), Ordering::Relaxed);
+    if IDS.get().is_none() { next_id(); }
+    IDS.get().unwrap().lock().unwrap_or_else(|e| e.into_inner()).1.insert(seen);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -448,32 +467,11 @@ impl Shape {
         if let Geom::Text(run) = &geometry
             && let Some(path) = crate::text::outline_path(run)
         {
-            let center = self.geom.bbox().center();
-            let rotation = tiny_skia::Transform::from_rotate_at(self.rotation.to_degrees(), center.x, center.y);
-            pb.push_path(&path.transform(rotation)?);
-        } else if matches!(geometry, Geom::Path { .. } | Geom::Paths { .. }) {
-            // Path bounds sample every contour. Compute the unchanged rotation
-            // center once, not once for every cubic control point (quadratic on
-            // detailed imported paths). Keep world_point's exact arithmetic.
-            let center = self.geom.bbox().center();
-            let world_point = |point: Pt| point.rotate_about(center, self.rotation);
-            for (anchors, closed) in geometry.path_contours() {
-                let segments = crate::geom::path_cubics(anchors, closed);
-                if let Some(first) = segments.first() {
-                    let p = world_point(first[0]);
-                    pb.move_to(p.x, p.y);
-                    for [a, c1, c2, b] in segments {
-                        let [a, c1, c2, b] = [a, c1, c2, b].map(world_point);
-                        if (c1 - a).length_sq() < 1e-10 && (c2 - b).length_sq() < 1e-10 {
-                            pb.line_to(b.x, b.y);
-                        } else {
-                            pb.cubic_to(c1.x, c1.y, c2.x, c2.y, b.x, b.y);
-                        }
-                    }
-                    if closed {
-                        pb.close();
-                    }
-                }
+            geometry = crate::geom::path_geom(&path, false)?;
+        }
+        if matches!(geometry, Geom::Path { .. } | Geom::Paths { .. }) {
+            if let Some(path) = crate::geom::curve_path(&geometry, self.geom.bbox().center(), self.rotation) {
+                pb.push_path(&path);
             }
         } else {
             for contour in self.world_contours(segs) {
@@ -1273,6 +1271,8 @@ pub struct Document {
     pub motion: crate::motion::Motion,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cloud: Option<CloudLink>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub collaboration: Option<crate::collaboration::Replica>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub comments: Vec<CommentPin>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1309,6 +1309,9 @@ impl Document {
             if let Some(id) = &layer.source_attachment && self.source(id).is_none() {
                 return Err(format!("Layer {} references a missing original source", layer.name));
             }
+        }
+        if let Some(replica) = &self.collaboration {
+            crate::collaboration::resources::validate(replica)?;
         }
         Ok(())
     }
@@ -1483,6 +1486,7 @@ impl Document {
             bleed: 36.0, // 0.125" at 300dpi or 0.5" at 72dpi ~ 36px
             motion: crate::motion::Motion::default(),
             cloud: None,
+            collaboration: None,
             comments: vec![],
             layout_tokens: vec![],
         };
@@ -1711,20 +1715,25 @@ impl Document {
     pub fn ensure_ids(&mut self) -> Result<(), String> {
         let mut max = 0u64;
         for l in &self.layers {
+            bump_id(l.id);
             max = max.max(l.id);
             if let Some(ss) = l.kind.shapes() {
                 for s in ss {
+                    bump_id(s.id);
                     max = max.max(s.id);
                 }
             }
         }
         for a in &self.artboards {
+            bump_id(a.id);
             max = max.max(a.id);
         }
         for pin in &self.comments {
+            bump_id(pin.id);
             max = max.max(pin.id);
         }
         for token in &self.layout_tokens {
+            bump_id(token.id);
             max = max.max(token.id);
         }
         // Brand asset import rejects the same range: ids at the top of u64
@@ -2057,11 +2066,18 @@ const MAX_HISTORY: usize = 200;
 pub struct History {
     undo: Vec<Cmd>,
     redo: Vec<Cmd>,
+    field: Option<u64>,
+    sealed: bool,
 }
+
+#[path = "document/input_history.rs"]
+mod input_history;
 
 impl History {
     pub fn push(&mut self, cmd: Cmd) {
-        if let Some(prev) = self.undo.last_mut()
+        self.field = None;
+        if !std::mem::take(&mut self.sealed)
+            && let Some(prev) = self.undo.last_mut()
             && coalesce(prev, &cmd)
         {
             self.redo.clear();
@@ -2082,6 +2098,8 @@ impl History {
     }
 
     pub fn undo(&mut self) -> Option<Cmd> {
+        self.field = None;
+        self.sealed = true;
         let cmd = self.undo.pop()?;
         let inv = invert_cmd(cmd.clone());
         self.redo.push(cmd);
@@ -2089,6 +2107,8 @@ impl History {
     }
 
     pub fn redo(&mut self) -> Option<Cmd> {
+        self.field = None;
+        self.sealed = true;
         let cmd = self.redo.pop()?;
         self.undo.push(cmd.clone());
         Some(cmd)
@@ -2097,6 +2117,8 @@ impl History {
     pub fn clear(&mut self) {
         self.undo.clear();
         self.redo.clear();
+        self.field = None;
+        self.sealed = false;
     }
 
     pub fn len(&self) -> usize {
@@ -3124,6 +3146,7 @@ mod tests {
     #[test]
     fn hit_test_finds_rect() {
         let mut doc = Document::new("t", 200.0, 100.0, 72.0);
+        doc.layers[0].visible = false;
         let s = Shape::new(
             Geom::Rect {
                 origin: Pt::new(10.0, 10.0),
@@ -3387,6 +3410,7 @@ mod tests {
     #[test]
     fn placed_raster_hit_test() {
         let mut doc = Document::new("t", 200.0, 100.0, 72.0);
+        doc.layers[0].visible = false;
         let mut data = vec![0u8; 8 * 8 * 4];
         for px in data.chunks_mut(4) {
             px[0] = 255;

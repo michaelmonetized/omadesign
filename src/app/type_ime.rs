@@ -346,20 +346,53 @@ mod tests {
             )),
             ..Default::default()
         };
-        let mut output = ctx.run_ui(input(), |ui| crate::ui::run(ui, &mut studio));
-        output.textures_delta.clear();
-        let mut output = ctx.run_ui(input(), |ui| crate::ui::run(ui, &mut studio));
-        output.textures_delta.clear();
+        let canvas_id = egui::Id::new("studio-canvas");
+        let focus_key = egui::Id::new("oma-workspace").with("focused-panel");
+        let render = |studio: &mut Studio, phase: &str| {
+            let previous = ctx.data_mut(|data| data.get_temp::<String>(focus_key));
+            let mut output = ctx.run_ui(input(), |ui| crate::ui::run(ui, studio));
+            output.textures_delta.clear();
+            let focused = ctx.memory(|memory| memory.focused());
+            let response = focused.and_then(|id| ctx.read_response(id));
+            let trace = serde_json::json!({
+                "phase": phase,
+                "focused_id": format!("{focused:?}"),
+                "focused_response": response.map(|r| format!("{r:?}")),
+                "focus_role_label_events": format!("{:?}", output.platform_output.events),
+                "workspace": studio.panel_workspaces.active,
+                "workspace_focus": studio.panel_workspaces.tasks
+                    .get(&studio.panel_workspaces.active).map(|workspace| &workspace.focus),
+                "previous_focus_before": previous,
+                "previous_focus_after": ctx.data_mut(|data| data.get_temp::<String>(focus_key)),
+                "canvas_has_focus": ctx.read_response(canvas_id).map(|r| r.has_focus()),
+                "type_edit": studio.type_edit.is_some(),
+                "shortcut_owner": format!("{:?}", studio.shortcut_focus(&ctx)),
+                "ime": format!("{:?}", output.platform_output.ime),
+            });
+            (output, trace)
+        };
+        let (_, first) = render(&mut studio, "cold first frame");
+        let (_, second) = render(&mut studio, "cold second frame");
+        ctx.read_response(canvas_id)
+            .expect("the real canvas widget must exist")
+            .request_focus();
+        let (output, focused) = render(&mut studio, "existing canvas response focused");
+        let mut traces = vec![first, second, focused];
         let ime = output
             .platform_output
             .ime
-            .expect("canvas must enable native IME");
+            .unwrap_or_else(|| panic!("canvas must enable native IME: {traces:#?}"));
+        assert!(ctx.read_response(canvas_id).unwrap().has_focus());
+        assert_eq!(studio.shortcut_focus(&ctx), shortcuts::ShortcutFocus::Text);
         assert!(ime.rect.width() < 10.);
         assert!(ime.rect.height() > 20.);
         assert!(studio.canvas_rect.unwrap().contains(ime.rect.center()));
         studio.commit_type_edit();
-        let mut output = ctx.run_ui(input(), |ui| crate::ui::run(ui, &mut studio));
-        output.textures_delta.clear();
+        let (output, committed) = render(&mut studio, "text edit committed");
+        traces.push(committed);
         assert!(output.platform_output.ime.is_none());
+        if let Some(path) = std::env::var_os("OMADESIGN_INPUT_FOCUS_TRACE") {
+            std::fs::write(path, serde_json::to_vec_pretty(&traces).unwrap()).unwrap();
+        }
     }
 }

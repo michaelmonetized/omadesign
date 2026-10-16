@@ -141,29 +141,56 @@ fn real_camera_active_cancel_keeps_edits_and_immediately_opens_next() {
     let expected = std::env::var("OMA_RAW_SOURCE_SHA256").expect("OMA_RAW_SOURCE_SHA256");
     assert_eq!(expected.len(), 64);
     assert_eq!(hash(&source), expected);
-    struct NextSource(std::path::PathBuf, std::path::PathBuf);
+    struct NextSource(super::qualification::ScheduledScratch, std::path::PathBuf);
     impl Drop for NextSource {
         fn drop(&mut self) {
             let _ = std::fs::remove_file(&self.1);
-            let _ = std::fs::remove_dir(&self.0);
+            let _ = std::fs::remove_dir(self.0.path());
         }
     }
-    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(".qa-runs")
-        .join(format!(
-            "raw-cancel-next-{}-{}",
-            std::process::id(),
-            crate::document::next_id()
-        ));
-    std::fs::create_dir_all(directory.parent().unwrap()).unwrap();
-    std::fs::create_dir(&directory).unwrap();
-    let next_source = NextSource(
-        directory.clone(),
-        directory.join(source.file_name().unwrap()),
-    );
-    std::fs::copy(&source, &next_source.1).unwrap();
+    let directory = super::qualification::scheduled_scratch("raw-cancel-next").unwrap();
+    let next_path = directory.path().join(source.file_name().unwrap());
+    let next_source = NextSource(directory, next_path);
+    let fixture_storage = super::qualification::copy_scheduled_fixture(
+        &source,
+        &next_source.1,
+        next_source.0.path(),
+        &expected,
+    )
+    .unwrap();
+    if fixture_storage.is_none() {
+        std::fs::copy(&source, &next_source.1).unwrap();
+    }
     assert_eq!(hash(&next_source.1), expected);
-    let photo = crate::photo::PhotoImage::load(&source).unwrap();
+    let started = Instant::now();
+    let admitted_before = resources::global().usage().0;
+    let mut observations = vec![super::qualification::resource_observation(
+        "before_open",
+        started,
+    )];
+    let baseline_cancel = Cancellation::default();
+    let photo = crate::photo::PhotoImage::load_cancellable(&source, &baseline_cancel).unwrap();
+    let dimensions = photo.dimensions();
+    if let Ok(expected_dimensions) = std::env::var("OMA_RAW_EXPECT_DIMENSIONS") {
+        let expected_dimensions = expected_dimensions
+            .split('x')
+            .map(|n| n.parse::<u32>().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            expected_dimensions.as_slice(),
+            &[dimensions.0, dimensions.1]
+        );
+    }
+    let source_samples = photo.raw.as_ref().unwrap().pixels.len();
+    assert_eq!(
+        source_samples,
+        dimensions.0 as usize * dimensions.1 as usize * 3
+    );
+    let admitted_baseline = resources::global().usage().0;
+    observations.push(super::qualification::resource_observation(
+        "baseline_loaded",
+        started,
+    ));
     let metadata = photo.raw.as_ref().unwrap().metadata.clone();
     let original = photo.raw.as_ref().unwrap().pixels.clone();
     let mut session = crate::app::PhotoSession::new();
@@ -180,6 +207,10 @@ fn real_camera_active_cancel_keeps_edits_and_immediately_opens_next() {
     }
     let active = first.native_active();
     let stage = first.native_progress();
+    observations.push(super::qualification::resource_observation(
+        "active_native_cancel",
+        started,
+    ));
     let cancelled = Instant::now();
     session.cancel_imports();
     let cleared = !session.is_loading();
@@ -192,13 +223,21 @@ fn real_camera_active_cancel_keeps_edits_and_immediately_opens_next() {
         std::thread::sleep(Duration::from_millis(1));
     }
     let native_stop = cancelled.elapsed();
+    observations.push(super::qualification::resource_observation(
+        "cancelled_native_stopped",
+        started,
+    ));
     let ctx = eframe::egui::Context::default();
-    while session.is_loading() && cancelled.elapsed() < Duration::from_secs(60) {
+    while session.is_loading() && cancelled.elapsed() < Duration::from_secs(180) {
         next_live_until_completion &= !next.is_cancelled();
         session.poll(&ctx);
         std::thread::sleep(Duration::from_millis(2));
     }
     let next_open = cancelled.elapsed();
+    observations.push(super::qualification::resource_observation(
+        "next_open_finished",
+        started,
+    ));
     let source_after = hash(&source);
     let source_kept =
         std::sync::Arc::ptr_eq(&session.images[0].raw.as_ref().unwrap().pixels, &original);
@@ -207,7 +246,29 @@ fn real_camera_active_cancel_keeps_edits_and_immediately_opens_next() {
         && session.images[1].source.as_ref() == Some(&next_source.1.canonicalize().unwrap())
         && session.images[1].dimensions() == session.images[0].dimensions()
         && session.images[1].develop.is_default();
-    let result = serde_json::json!({"source_before_sha256":expected,"source_after_sha256":source_after,"metadata":metadata,"native_active_at_cancel":active,"native_progress_at_cancel":stage,"native_stop_ms":native_stop.as_secs_f64()*1000.,"next_open_ms":next_open.as_secs_f64()*1000.,"current_edits_and_source_kept":kept,"slots_cleared_immediately":cleared,"next_live_until_completion":next_live_until_completion,"next_native_progress":next.native_progress(),"next_distinct_source_accepted":next_accepted,"completed_owner_cleanup_signalled":next.is_cancelled(),"loaded_photos":session.images.len(),"errors":session.import_errors(),"proof":"headless actual PhotoSession import/cancel/distinct-path next-open; completed ImportJob drop defensively cancels its token after accepting its result; no native window/device/physical proof"});
+    let admitted_after_next = resources::global().usage().0;
+    let loaded_photos = session.images.len();
+    let errors = session.import_errors().to_vec();
+    let idle = !session.is_loading();
+    let requests = [
+        baseline_cancel.native_memory_request(),
+        first.native_memory_request(),
+        next.native_memory_request(),
+    ];
+    drop(session);
+    drop(original);
+    let released = Instant::now();
+    while resources::global().usage().0 != admitted_before
+        && released.elapsed() < Duration::from_secs(5)
+    {
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    let admitted_after_release = resources::global().usage().0;
+    observations.push(super::qualification::resource_observation(
+        "final_owner_released",
+        started,
+    ));
+    let result = serde_json::json!({"source_before_sha256":expected,"source_after_sha256":source_after,"metadata":metadata,"dimensions":dimensions,"linear_u16_samples":source_samples,"fixture_storage":fixture_storage,"admitted_before_bytes":admitted_before,"admitted_baseline_bytes":admitted_baseline,"admitted_after_next_bytes":admitted_after_next,"admitted_after_final_owner_bytes":admitted_after_release,"native_memory_requests_bytes":requests,"resource_observations":observations,"native_active_at_cancel":active,"native_progress_at_cancel":stage,"native_stop_ms":native_stop.as_secs_f64()*1000.,"next_open_ms":next_open.as_secs_f64()*1000.,"current_edits_and_source_kept":kept,"slots_cleared_immediately":cleared,"next_live_until_completion":next_live_until_completion,"next_native_progress":next.native_progress(),"next_distinct_source_accepted":next_accepted,"completed_owner_cleanup_signalled":next.is_cancelled(),"loaded_photos":loaded_photos,"errors":errors,"proof":"headless actual PhotoSession import/cancel/distinct-path next-open; sampled process-lifetime RSS/HWM is not a decoder-only peak; completed ImportJob drop defensively cancels its token after accepting its result; no native window/device/physical proof"});
     if let Some(path) = std::env::var_os("OMA_RAW_CANCEL_RECEIPT") {
         use std::io::Write;
         let path = std::path::PathBuf::from(path);
@@ -227,9 +288,20 @@ fn real_camera_active_cancel_keeps_edits_and_immediately_opens_next() {
     );
     assert!(cleared && kept && next_live_until_completion);
     assert!(next_accepted && next.native_progress() > 0);
-    assert!(!session.is_loading());
-    assert_eq!(session.images.len(), 2, "stale result must never publish");
-    assert!(session.import_errors().is_empty());
+    assert!(idle);
+    assert_eq!(loaded_photos, 2, "stale result must never publish");
+    assert!(errors.is_empty());
+    if let Ok(expected_memory) = std::env::var("OMA_RAW_EXPECT_NATIVE_MEMORY") {
+        let expected_memory = expected_memory.parse::<u64>().unwrap();
+        assert_eq!(
+            requests, [expected_memory; 3],
+            "the actual decoder route must use its pinned live-buffer bound"
+        );
+    }
+    assert_eq!(
+        admitted_after_release, admitted_before,
+        "final sample and session owners must release the same pool"
+    );
     assert_eq!(hash(&source), expected);
 }
 

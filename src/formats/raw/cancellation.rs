@@ -1,6 +1,6 @@
 use std::sync::{
     Arc,
-    atomic::{AtomicBool, AtomicU32, Ordering},
+    atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
 };
 
 /// Share a cancellation request with active photo loading.
@@ -10,6 +10,7 @@ pub struct Cancellation {
     flag: Arc<AtomicBool>,
     progress: Arc<AtomicU32>,
     active: Arc<AtomicBool>,
+    memory: Arc<AtomicU64>,
 }
 
 impl Cancellation {
@@ -50,6 +51,7 @@ impl Cancellation {
             flag,
             progress: Arc::default(),
             active: Arc::default(),
+            memory: Arc::default(),
         }
     }
     /// Stop this job at its next decoder or buffer checkpoint.
@@ -73,6 +75,16 @@ impl Cancellation {
     /// Inspect actual native call ownership. Args: none. Returns true only until the synchronous native call returns.
     pub fn native_active(&self) -> bool {
         self.active.load(Ordering::Acquire)
+    }
+
+    /// Inspect the last native memory request, including refused admission.
+    /// Args: none. Returns bytes requested from the single shared pool, or zero before a request.
+    pub fn native_memory_request(&self) -> u64 {
+        self.memory.load(Ordering::Acquire)
+    }
+
+    pub(super) fn record_native_memory_request(&self, bytes: u64) {
+        self.memory.store(bytes, Ordering::Release);
     }
 
     pub(super) fn native_activity(&self) -> NativeActivity {

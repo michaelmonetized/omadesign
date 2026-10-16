@@ -9,7 +9,7 @@ case "$arch" in
   *) echo "Unsupported ONNX Runtime architecture: $arch" >&2; exit 1 ;;
 esac
 name="onnxruntime-linux-$arch-1.28.0"
-cache="target/ml-downloads"
+cache="${CARGO_TARGET_DIR:-target}/ml-downloads"
 mkdir -p "$cache"
 archive="$cache/$name.tgz"
 if ! printf '%s  %s\n' "$sha" "$archive" | sha256sum -c --status 2>/dev/null; then

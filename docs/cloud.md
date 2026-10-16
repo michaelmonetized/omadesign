@@ -10,7 +10,7 @@ Use a verified email address to sign in with Clerk. The native app's **File → 
 
 Choose **File → Push project + review export** to upload a versioned `.oma` source and a PNG of the current document. Project font assets are included, and raster pixels remain embedded in the design file. **Upload project asset…** adds another file. **Cloud projects… → Pull & open** opens the latest source in a separate document and downloads shared assets into a new folder under the app's cloud-downloads directory.
 
-Transfers are explicit. Local edits do not silently upload or overwrite another designer's version. Every push adds files; cloud comments remain attached to the snapshot on which they were written. Save the local `.oma` after its first push to keep the cloud link with the document.
+Snapshot transfers are explicit. Local edits upload automatically only after starting or joining an opt-in live session. Every push adds files; cloud comments remain attached to the snapshot on which they were written. Save the local `.oma` after its first push to keep the cloud link with the document.
 
 The web project accepts source, asset and snapshot uploads. Source and asset files are limited to 100 MB each; flat PNG/JPEG/WebP exports to 20 MB; each project supports 200 files. The initial service limit is 100 projects per account and 100 members per project. Archive a project from the web workspace to hide it from collaborators and unpublish its public work; its owner can restore it.
 
@@ -78,5 +78,6 @@ The removal function is internal and cannot be invoked through the public API.
 Cloud collaboration means project file and asset sharing with member access
 control; client review, comments and annotations on flat snapshots; publishing
 finished public work to the Omadesign showcase; and entering that work into open
-competitions. The browser is for sharing and review. Live multi-user canvas
-editing, presence and browser authoring are outside this scope.
+competitions. The browser is for sharing and review. Native live editing, presence,
+offline merge and author-owned undo are described in [Live native editing](live-collaboration.md).
+Browser authoring remains outside this scope.

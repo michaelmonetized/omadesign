@@ -107,6 +107,88 @@ fn choose(ctx: &egui::Context, plugin: Plugin, action: Action, studio: &mut Stud
     store(ctx, s);
     studio.status = "Choose plugin parameters, then Run or Activate tool".into();
 }
+
+/// Describe the active plugin tool without starting it.
+/// Args: context. Returns the plugin and action identities, or none for the normal canvas tools.
+pub(super) fn keyboard_tool(ctx: &egui::Context) -> Option<(String, String, String)> {
+    state(ctx).tool.map(|(plugin, action, params)| (plugin.id, action.id, params.to_string()))
+}
+
+/// Run the active plugin tool with explicit canvas coordinates.
+/// Args: context, editor, captured tool identity, finite points and native modifier choices.
+/// Returns a rejection for a changed tool, disabled target or running operation.
+pub(super) fn keyboard_gesture(ctx: &egui::Context, studio: &Studio, expected: &(String, String, String), points: &[crate::geom::Pt], shift: bool, alt: bool) -> Result<(), String> {
+    let mut s = state(ctx);
+    let (plugin, action, params) = s.tool.clone().ok_or("The plugin tool is no longer active.")?;
+    if (&plugin.id, &action.id) != (&expected.0, &expected.1) || params.to_string() != expected.2 { return Err("The plugin tool or parameters changed. Open Tool points again.".into()); }
+    if !plugin.enabled || studio.show_welcome || studio.file_dialog_pending() || studio.updates.freezing || studio.op.is_some() || studio.type_edit.is_some() || studio.pixel_edit.is_some() || studio.free_transform.is_some() || studio.deformation.is_some() || s.gesture.is_some() || super::jobs::is_running::<Finished>(ctx, RUN) {
+        return Err("Finish the current edit or plugin run first.".into());
+    }
+    if points.is_empty() || points.len() > 4096 || points.iter().any(|p| !p.x.is_finite() || !p.y.is_finite() || p.x.abs() > 1_000_000. || p.y.abs() > 1_000_000.) { return Err("Use 1–4096 finite canvas points within 1000000 px.".into()); }
+    let gesture = Gesture { points: points.iter().map(|p| [p.x, p.y]).collect(), shift, alt, ctrl: false };
+    start(ctx, studio, &mut s, plugin, action, params, Some(gesture));
+    store(ctx, s);
+    Ok(())
+}
+
+/// Decorate an existing plugin control with its purpose and native focus.
+/// Args: UI, actual widget response and purpose. Returns no value and preserves its value semantics.
+fn name(ui: &Ui, response: &Response, purpose: &str) {
+    ui.ctx().accesskit_node_builder(response.id, |node| node.set_label(purpose));
+    if response.has_focus() {
+        response.scroll_to_me(Some(egui::Align::Center));
+        ui.painter().rect_stroke(response.rect.expand(2.), 3., ui.visuals().selection.stroke, egui::StrokeKind::Outside);
+    }
+}
+
+/// Draw one native plugin parameter inside its persisted action and owner scope.
+/// Args: UI, parameter definition and owned JSON draft. Returns whether the draft can be run.
+fn parameter_control(ui: &mut Ui, parameter: &plugins::Parameter, value: &mut serde_json::Value) -> bool {
+    let label = &parameter.label;
+    match parameter.kind.as_str() {
+        "number" => {
+            let mut number = value.as_f64().unwrap_or(0.);
+            let min = parameter.min.unwrap_or(-100000.);
+            let max = parameter.max.unwrap_or(100000.);
+            let invalid_range = !min.is_finite() || !max.is_finite() || min > max;
+            let error = if invalid_range { Some("This plugin parameter has an invalid range") }
+                else if !number.is_finite() || number < min || number > max { Some("Choose a value within this parameter's range") }
+                else { None };
+            let range = if invalid_range { 0. ..=0. } else { min..=max };
+            let result = super::fields::number(ui, &parameter.id, label, &mut number, range, "", None, super::fields::FieldState { locked: invalid_range, error, ..Default::default() });
+            if result.changed { *value = number.into(); }
+            !invalid_range && number.is_finite() && number >= min && number <= max
+        }
+        "boolean" => {
+            ui.horizontal(|ui| {
+                let label_response = ui.label(label);
+                let mut flag = value.as_bool().unwrap_or(false);
+                let response = ui.checkbox(&mut flag, "").labelled_by(label_response.id);
+                name(ui, &response, label);
+                if response.changed() { *value = flag.into(); }
+            });
+            true
+        }
+        _ => {
+            let label_response = ui.label(label);
+            let mut text = value.as_str().unwrap_or("").to_owned();
+            let response = ui.add(egui::TextEdit::singleline(&mut text).id(ui.make_persistent_id("value"))).labelled_by(label_response.id);
+            name(ui, &response, label);
+            if response.changed() { *value = text.clone().into(); }
+            let error = (parameter.kind == "color" && crate::color::Rgba::parse_hex(&text).is_none()).then_some("Enter a color such as #336699 or #33669980");
+            if let Some(error) = error {
+                let message = ui.colored_label(ui.visuals().error_fg_color, error);
+                ui.ctx().accesskit_node_builder(response.id, |node| {
+                    node.set_invalid(egui::accesskit::Invalid::True);
+                    node.set_error_message(message.id.accesskit_id());
+                    node.push_described_by(message.id.accesskit_id());
+                });
+                ui.ctx().accesskit_node_builder(message.id, |node| node.set_live(egui::accesskit::Live::Polite));
+            }
+            error.is_none()
+        }
+    }
+}
 fn start(
     ctx: &egui::Context,
     studio: &Studio,
@@ -270,16 +352,13 @@ pub fn show(ctx: &egui::Context, studio: &mut Studio) {
         ui.separator();
         if let Some((plugin,action))=s.chosen.clone(){
             ui.heading(&action.name);ui.label(&action.description);
-            for parameter in &action.parameters{ui.horizontal(|ui|{
-                ui.label(&parameter.label);let value=s.params.entry(parameter.id.clone()).or_insert(parameter.default.clone());
-                match parameter.kind.as_str(){
-                    "boolean"=>{let mut b=value.as_bool().unwrap_or(false);if ui.checkbox(&mut b,"").changed(){*value=b.into();}},
-                    "number"=>{let mut n=value.as_f64().unwrap_or(0.);if ui.add(egui::DragValue::new(&mut n).range(parameter.min.unwrap_or(-100000.)..=parameter.max.unwrap_or(100000.))).changed(){*value=n.into();}},
-                    _=>{let mut text=value.as_str().unwrap_or("").to_string();if ui.text_edit_singleline(&mut text).changed(){*value=text.into();}},
-                }
-            });}
+            let mut valid = true;
+            for parameter in &action.parameters {
+                let value=s.params.entry(parameter.id.clone()).or_insert(parameter.default.clone());
+                valid &= ui.push_id(("plugin-parameter",&studio.swap_id,&studio.selection,&plugin.id,&action.id,&parameter.id), |ui| parameter_control(ui,parameter,value)).inner;
+            }
             ui.horizontal(|ui|{
-                if ui.add_enabled(!super::jobs::is_running::<Finished>(ctx,RUN),egui::Button::new(if action.tool{"Activate tool"}else{"Run"})).clicked(){
+                if ui.add_enabled(valid && !studio.file_dialog_pending() && !studio.updates.freezing && !super::jobs::is_running::<Finished>(ctx,RUN),egui::Button::new(if action.tool{"Activate tool"}else{"Run"})).clicked(){
                     let params=serde_json::Value::Object(s.params.clone());
                     if action.tool{studio.show_welcome=false;studio.set_tool(Tool::Select);s.tool=Some((plugin.clone(),action.clone(),params));s.gesture=None;s.open=false;studio.status=format!("{} · drag on canvas · Esc to exit",action.name);}
                     else{start(ctx,studio,&mut s,plugin.clone(),action.clone(),params,None);}
@@ -287,8 +366,8 @@ pub fn show(ctx: &egui::Context, studio: &mut Studio) {
                 if ui.button("Back to plugins").clicked(){s.chosen=None;}
             });
         }else{
-            ui.horizontal(|ui|{ui.add(egui::TextEdit::singleline(&mut s.query).hint_text("Find a plugin or action…"));
-                egui::ComboBox::from_id_salt("plugin-category").selected_text(if s.category.is_empty(){"All categories"}else{&s.category}).show_ui(ui,|ui|{ui.selectable_value(&mut s.category,String::new(),"All categories");for category in ["Filters","Effects","Icons","Brushes","Tools","Behaviors","Batch","Patterns","Gradients","Swatches"]{ui.selectable_value(&mut s.category,category.into(),category);}});
+            ui.horizontal(|ui|{let response=ui.add(egui::TextEdit::singleline(&mut s.query).id(ui.make_persistent_id("plugin-search")).hint_text("Find a plugin or action…"));name(ui,&response,"Find a plugin or action");
+                let response=egui::ComboBox::from_id_salt("plugin-category").selected_text(if s.category.is_empty(){"All categories"}else{&s.category}).show_ui(ui,|ui|{ui.selectable_value(&mut s.category,String::new(),"All categories");for category in ["Filters","Effects","Icons","Brushes","Tools","Behaviors","Batch","Patterns","Gradients","Swatches"]{ui.selectable_value(&mut s.category,category.into(),category);}}).response;name(ui,&response,"Plugin category");
             });
             egui::ScrollArea::vertical().max_height(390.).show(ui,|ui|{
                 let mut chosen=None;
@@ -383,12 +462,100 @@ pub fn paint(ui: &Ui, studio: &Studio, rect: Rect) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tap(key: egui::Key, modifiers: egui::Modifiers) -> Vec<egui::Event> {
+        [true, false].into_iter().map(|pressed| egui::Event::Key { key, physical_key: Some(key), pressed, repeat: false, modifiers }).collect()
+    }
+
+    fn keyboard_frame(ctx: &egui::Context, studio: &mut Studio, events: Vec<egui::Event>) -> egui::FullOutput {
+        let mut output = ctx.run_ui(egui::RawInput { events, screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1000., 900.))), ..Default::default() }, |ui| {
+            studio.handle_shortcuts(ui.ctx());
+            ui.interact(ui.max_rect(), Id::new("studio-canvas"), egui::Sense::click());
+            show(ui.ctx(), studio);
+            super::super::keyboard_tools::show(ui.ctx(), studio);
+        });
+        output.textures_delta.clear();
+        output
+    }
+
+    fn named<'a>(output: &'a egui::FullOutput, label: &str) -> (egui::accesskit::NodeId, &'a egui::accesskit::Node) {
+        output.platform_output.accesskit_update.as_ref().unwrap().nodes.iter().find_map(|(id, node)| (node.label() == Some(label)).then_some((*id, node))).unwrap_or_else(|| panic!("missing {label}"))
+    }
+
+    fn tab_to(ctx: &egui::Context, studio: &mut Studio, label: &str) -> egui::FullOutput {
+        for _ in 0..96 {
+            let output = keyboard_frame(ctx, studio, vec![]);
+            if ctx.memory(|memory| memory.focused()).is_some_and(|id| id.accesskit_id() == named(&output, label).0) { return output; }
+            keyboard_frame(ctx, studio, tap(egui::Key::Tab, egui::Modifiers::NONE));
+        }
+        panic!("Tab did not reach {label}");
+    }
+
+    #[test]
+    fn keyboard_plugin_parameters_and_tool_create_native_artwork_without_pointer_setup() {
+        use egui::{Key, Modifiers};
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let mut studio = Studio::new();
+        studio.doc = crate::document::Document::new("Keyboard plugin", 32., 32., 72.);
+        studio.show_welcome = false;
+        assert!(studio.selection.is_empty());
+        let mut plugin = plugins::inspect(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("plugins/studio-starter/main.lua")).unwrap();
+        plugin.enabled = true;
+        store(&ctx, State { open: true, loaded: true, catalog: Catalog { plugins: vec![plugin], errors: vec![] }, ..Default::default() });
+        tab_to(&ctx, &mut studio, "Find a plugin or action");
+        keyboard_frame(&ctx, &mut studio, vec![egui::Event::Text("ribbon".into())]);
+        tab_to(&ctx, &mut studio, "Tools · Ribbon path");
+        keyboard_frame(&ctx, &mut studio, tap(Key::Enter, Modifiers::NONE));
+        tab_to(&ctx, &mut studio, "Color");
+        let chord = Modifiers::CTRL | Modifiers::COMMAND;
+        keyboard_frame(&ctx, &mut studio, tap(Key::A, chord));
+        let output = keyboard_frame(&ctx, &mut studio, vec![egui::Event::Text("invalid".into())]);
+        let color = named(&output, "Color").1;
+        assert_eq!(color.invalid(), Some(egui::accesskit::Invalid::True));
+        let message = color.error_message().unwrap();
+        assert!(color.described_by().contains(&message));
+        assert!(output.platform_output.accesskit_update.as_ref().unwrap().nodes.iter().any(|(id, node)| *id == message && node.live() == Some(egui::accesskit::Live::Polite)));
+        assert!(named(&output, "Activate tool").1.is_disabled());
+        assert!(keyboard_tool(&ctx).is_none());
+        keyboard_frame(&ctx, &mut studio, tap(Key::A, chord));
+        keyboard_frame(&ctx, &mut studio, vec![egui::Event::Text("#336699".into())]);
+        tab_to(&ctx, &mut studio, "Activate tool");
+        keyboard_frame(&ctx, &mut studio, tap(Key::Enter, Modifiers::NONE));
+        keyboard_frame(&ctx, &mut studio, vec![]);
+        assert!(keyboard_tool(&ctx).is_some());
+        keyboard_frame(&ctx, &mut studio, tap(Key::F8, Modifiers::NONE));
+        keyboard_frame(&ctx, &mut studio, tap(Key::F9, Modifiers::NONE));
+        keyboard_frame(&ctx, &mut studio, vec![]);
+        assert!(super::super::keyboard_tools::is_open(&ctx));
+        keyboard_frame(&ctx, &mut studio, tap(Key::A, chord));
+        keyboard_frame(&ctx, &mut studio, vec![egui::Event::Text("4,4; 16,20; 28,4".into())]);
+        keyboard_frame(&ctx, &mut studio, tap(Key::Enter, chord));
+        assert!(!super::super::keyboard_tools::is_open(&ctx));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while super::super::jobs::is_running::<Finished>(&ctx, RUN) {
+            assert!(std::time::Instant::now() < deadline);
+            tick(&ctx, &mut studio);
+            std::thread::yield_now();
+        }
+        assert!(state(&ctx).error.is_empty(), "{}", state(&ctx).error);
+        let (layer, id) = studio.primary().unwrap();
+        let shape = studio.doc.find_shape(layer, id).unwrap();
+        assert_eq!(shape.name, "Ribbon");
+        assert!(matches!(&shape.geom, crate::geom::Geom::Path { anchors, .. } if anchors.len() == 3));
+        keyboard_frame(&ctx, &mut studio, vec![]);
+        keyboard_frame(&ctx, &mut studio, tap(Key::Z, chord));
+        assert!(studio.doc.find_shape(layer, id).is_none());
+    }
+
     #[test]
     fn background_results_commit_once_and_discard_when_document_changes() {
         for stale in [false, true] {
             let ctx = egui::Context::default();
             let mut studio = Studio::new();
             studio.history.clear();
+            let original_shapes = studio.doc.layers.iter()
+                .filter_map(|layer| layer.kind.shapes()).flatten().cloned().collect::<Vec<_>>();
             let plugin = plugins::inspect(
                 &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                     .join("plugins/studio-starter/main.lua"),
@@ -436,12 +603,10 @@ mod tests {
                         .any(|l| l.kind.shapes().is_some_and(|s| s.len() == 48))
                 );
                 studio.undo();
-                assert!(
-                    studio
-                        .doc
-                        .layers
-                        .iter()
-                        .all(|l| l.kind.shapes().is_none_or(|s| s.is_empty()))
+                assert_eq!(
+                    studio.doc.layers.iter().filter_map(|layer| layer.kind.shapes())
+                        .flatten().cloned().collect::<Vec<_>>(),
+                    original_shapes
                 );
             }
         }

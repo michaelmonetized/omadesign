@@ -385,6 +385,33 @@ fn close(ctx: &Context) {
     ctx.data_mut(|d| d.remove::<Session>(id()));
 }
 
+/// Name the existing resolution choice within its immutable layer owner.
+/// Args: UI, target identity and factor. Returns the native combo response.
+fn resolution_choice(ui: &mut egui::Ui, owner: Id, value: &mut u32) -> egui::Response {
+    let options = [
+        (1, "Original resolution".into()),
+        (2, "Upscale ×2 before removal".into()),
+        (4, "Upscale ×4 before removal".into()),
+    ];
+    super::fields::native_scope(ui, owner.with("before"), |ui| {
+        super::keyboard_controls::choice(ui, "value", "Resolution before removal", value, &options)
+    })
+    .inner
+}
+
+/// Name the existing local background model choice without starting its worker.
+/// Args: UI, target identity and model. Returns the native combo response.
+fn model_choice(ui: &mut egui::Ui, owner: Id, value: &mut Model) -> egui::Response {
+    let models = Model::ALL
+        .into_iter()
+        .map(|model| (model, model.label().into()))
+        .collect::<Vec<_>>();
+    super::fields::native_scope(ui, owner.with("model"), |ui| {
+        super::keyboard_controls::choice(ui, "value", "Background removal model", value, &models)
+    })
+    .inner
+}
+
 pub(super) fn show(ctx: &Context, studio: &mut Studio) {
     let Some(mut s) = ctx.data(|d| d.get_temp::<Session>(id())) else {
         return;
@@ -444,6 +471,8 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
     let mut cancel = false;
     let mut apply = false;
     let before = (s.model, s.settings, s.workflow);
+    let owner=Id::new(("background-removal-native",&s.owner.document,s.owner.layer));
+    let mut removal_control=None;
     let response = egui::Modal::new(Id::new("remove-background-modal")).show(ctx, |ui| {
         let width = (ctx.content_rect().width() - 70.).clamp(560., 960.);
         ui.set_width(width);
@@ -488,16 +517,14 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
                             });
                             ui.small("RGB and mask resize together. Placement on the canvas stays the same.");
                         } else {
-                            egui::ComboBox::from_id_salt("upscale-before")
-                                .selected_text(match s.workflow.before { 2 => "Upscale ×2 before removal", 4 => "Upscale ×4 before removal", _ => "Original resolution" })
-                                .show_ui(ui, |ui| { for (factor, label) in [(1, "Original resolution"), (2, "Upscale ×2 before removal"), (4, "Upscale ×4 before removal")] { ui.selectable_value(&mut s.workflow.before, factor, label); } });
+                            resolution_choice(ui,owner,&mut s.workflow.before);
                             if s.source.region().is_ok_and(|r| r.w.min(r.h) < 512) {
                                 ui.small("Small subject: try upscaling before removal for finer edges.");
                             }
                             if s.workflow.before > 1 { ui.checkbox(&mut s.workflow.keep_original, "Keep original pixel dimensions"); }
                         }
                         if s.workflow.uses_ai() {
-                            super::export_dialog::model_choice(ui, &mut s.workflow.model);
+                            super::fields::native_scope(ui,owner.with("upscale-model"),|ui|super::export_dialog::model_choice(ui, &mut s.workflow.model));
                             if !s.workflow.model.present() && ui.add_enabled(!s.busy, egui::Button::new("Download upscaling model")).clicked() {
                                 let model = s.workflow.model;
                                 s.busy = true;
@@ -512,13 +539,7 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
                         }
                         ui.separator();
                         ui.add_enabled_ui(!s.workflow.cutout_only, |ui| {
-                        egui::ComboBox::from_id_salt("removal-model")
-                            .selected_text(s.model.label())
-                            .show_ui(ui, |ui| {
-                                for model in Model::ALL {
-                                    ui.selectable_value(&mut s.model, model, model.label());
-                                }
-                            });
+                        removal_control=Some(model_choice(ui,owner,&mut s.model));
                         ui.small("Runs locally on your machine.");
                         if !s.model.present() {
                             ui.label(format!(
@@ -594,7 +615,9 @@ pub(super) fn show(ctx: &Context, studio: &mut Studio) {
             );
         }
         if let Some(error) = &s.error {
-            ui.colored_label(Color32::LIGHT_RED, error);
+            let message=ui.colored_label(Color32::LIGHT_RED, error);
+            ctx.accesskit_node_builder(message.id,|node|{node.set_live(egui::accesskit::Live::Polite);node.set_live_atomic();});
+            if let Some(response)=&removal_control{ctx.accesskit_node_builder(response.id,|node|{node.set_error_message(message.id.accesskit_id());node.push_described_by(message.id.accesskit_id());});}
             if ui.button("Try again").clicked() {
                 s.error = None;
             }
@@ -722,6 +745,80 @@ fn preview(ui: &mut egui::Ui, s: &Session) {
 mod tests {
     use super::*;
     use crate::document::{Document, Layer};
+    #[test]
+    fn keyboard_pixel_fields_background_choices_retain_layer_identity_and_values() {
+        use crate::ui::welcome::keyboard_tests as keys;
+        use egui::{Event, Key, Modifiers};
+        fn frame(
+            ctx: &Context,
+            owner: Id,
+            before: &mut u32,
+            model: &mut Model,
+            preceding: bool,
+            events: Vec<Event>,
+        ) -> egui::FullOutput {
+            keys::render(ctx, events, |ui| {
+                if preceding {
+                    let _ = ui.button("Conditional background status");
+                }
+                resolution_choice(ui, owner, before);
+                model_choice(ui, owner, model);
+            })
+        }
+        let ctx = Context::default();
+        ctx.enable_accesskit();
+        crate::ui::theme::apply(&ctx);
+        let owner = Id::new(("background-native-fixture", "document", 42u64));
+        let mut before = 1;
+        let mut model = Model::U2NetP;
+        let output = keys::tab_to(&ctx, "Resolution before removal", |events| {
+            frame(&ctx, owner, &mut before, &mut model, false, events)
+        });
+        let target = keys::named(&output, "Resolution before removal").0;
+        frame(
+            &ctx,
+            owner,
+            &mut before,
+            &mut model,
+            false,
+            keys::key(Key::End, Modifiers::NONE),
+        );
+        assert_eq!(before, 4);
+        let output = frame(&ctx, owner, &mut before, &mut model, true, vec![]);
+        assert_eq!(keys::named(&output, "Resolution before removal").0, target);
+        keys::focused(&ctx, &output, "Resolution before removal");
+        frame(
+            &ctx,
+            owner,
+            &mut before,
+            &mut model,
+            true,
+            keys::key(Key::ArrowUp, Modifiers::NONE),
+        );
+        assert_eq!(before, 2);
+        keys::tab_to(&ctx, "Background removal model", |events| {
+            frame(&ctx, owner, &mut before, &mut model, true, events)
+        });
+        frame(
+            &ctx,
+            owner,
+            &mut before,
+            &mut model,
+            true,
+            keys::key(Key::End, Modifiers::NONE),
+        );
+        assert_eq!(model, *Model::ALL.last().unwrap());
+        let output = frame(
+            &ctx,
+            Id::new(("background-native-fixture", "document", 43u64)),
+            &mut before,
+            &mut model,
+            true,
+            vec![],
+        );
+        assert_ne!(keys::named(&output, "Resolution before removal").0, target);
+        assert!(!jobs::is_running::<Output>(&ctx, JOB));
+    }
     fn studio() -> Studio {
         let mut s = Studio::new();
         s.doc = Document::new("Removal QA", 4., 1., 96.);

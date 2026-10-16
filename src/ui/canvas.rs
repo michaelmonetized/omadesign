@@ -18,6 +18,21 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         eframe::egui::Id::new("studio-canvas"),
         Sense::click_and_drag(),
     );
+    if resp.enabled()
+        && resp.is_pointer_button_down_on()
+        && ui.input(|input| input.pointer.any_pressed())
+        && ui.ctx().memory(|memory| memory.allows_interaction(resp.layer_id))
+    {
+        resp.request_focus();
+    }
+    resp.widget_info(|| eframe::egui::WidgetInfo::labeled(
+        eframe::egui::WidgetType::Other, resp.enabled(), "Artwork canvas"
+    ));
+    ui.ctx().accesskit_node_builder(resp.id, |node| {
+        node.set_role(eframe::egui::accesskit::Role::Canvas);
+        node.set_description("F8 focuses the canvas. Ctrl+Shift+K creates artwork. Page Up and Page Down select artwork; Shift extends selection. Arrow keys move selected artwork.");
+        node.set_state_description(format!("{} tool; {} objects selected", studio.tool.label(), studio.selection.len()));
+    });
     studio.canvas_rect = Some(rect);
     let text_geometry_input = super::text_geometry::brackets(ui, rect, studio) | super::text_geometry::frame_ports(ui,rect,studio);
     let text_geometry_input = text_geometry_input || super::text_geometry::area_input(studio,&resp,rect);
@@ -303,6 +318,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     draw_artboard_frames(&painter, rect, studio);
     draw_layout_frames(&painter, rect, studio);
     draw_comment_pins(&painter, rect, studio);
+    super::cloud::paint_presence(&painter, rect, studio);
     draw_bleed_safe(&painter, rect, studio);
     draw_overlays(&painter, rect, studio, pen_preview);
     if let Some(edit)=studio.type_edit.as_ref() && edit.caret!=edit.anchor && let Some(run)=studio.selected_type() {
@@ -325,6 +341,9 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
             studio.ingest_dropped(f.path(), at);
         }
     }
+    if resp.has_focus() {
+        ui.painter().rect_stroke(rect.shrink(2.), 2., ui.visuals().selection.stroke, eframe::egui::StrokeKind::Inside);
+    }
 }
 
 fn interaction_objects(studio: &Studio) -> Option<Vec<(usize, u64)>> {
@@ -339,6 +358,100 @@ fn interaction_objects(studio: &Studio) -> Option<Vec<(usize, u64)>> {
         Some(Op::Brush { layer, .. } | Op::NativeStroke { layer, .. } | Op::NativeRetouch { layer, .. } | Op::Smudge { layer, .. } | Op::Clone { layer, .. } | Op::Retouch { layer, .. }) => Some(vec![(*layer, RASTER_ID)]),
         _ => None,
     }
+}
+
+/// Apply explicit keyboard coordinates through the canvas tools.
+/// Args: editor, finite world points, selection modifiers and clone-source mode.
+/// Returns a target error or completes the same tool command used by a canvas gesture.
+/// Locate the existing free-transform grips in document coordinates.
+/// Args: editor with an active transform. Returns scale/skew grips followed by rotation.
+pub(super) fn keyboard_transform_handles(studio: &Studio) -> Vec<Pt> {
+    if studio.free_transform.is_none() { return vec![]; }
+    let Some(bounds) = posed_bounds(studio) else { return vec![]; };
+    let angle = selection_angle(studio);
+    (0..8).map(|index| bounds.handle(index).rotate(angle))
+        .chain(std::iter::once(bounds.rotate_handle().rotate(angle))).collect()
+}
+
+pub(super) fn keyboard_gesture(studio: &mut Studio, points: &[Pt], shift: bool, alt: bool, source: bool) -> Result<(), String> {
+    let Some(&first) = points.first() else { return Err("Enter at least one point.".into()); };
+    if points.len() > 4096 || points.iter().any(|p| !p.x.is_finite() || !p.y.is_finite() || p.x.abs() > 1_000_000. || p.y.abs() > 1_000_000.) {
+        return Err("Use at most 4096 finite points within 1000000 px.".into());
+    }
+    if studio.op.is_some() || studio.type_edit.is_some() || studio.file_dialog_pending() || studio.updates.freezing {
+        return Err("Finish the current edit first.".into());
+    }
+    if studio.persona == Persona::Photo {
+        if studio.tool != Tool::Crop || studio.photo.is_batching() || studio.photo.show_original || studio.photo.selected().is_none() {
+            return Err("Choose an editable photo and the Crop tool.".into());
+        }
+        let Some(&last) = points.get(1) else { return Err("Crop needs two opposite corners.".into()); };
+        let before = studio.photo.selected().unwrap().develop.clone();
+        studio.commit_photo_crop(first, last);
+        if studio.photo.selected().unwrap().develop == before { return Err("Choose a crop with a larger width and height.".into()); }
+        return Ok(());
+    }
+    if matches!(studio.tool, Tool::Brush | Tool::Eraser | Tool::Clone | Tool::Heal | Tool::Smudge | Tool::Fill | Tool::Wand | Tool::Marquee | Tool::EllipseMarquee | Tool::Lasso | Tool::BezierLasso)
+        && studio.raster_target().is_none()
+    { return Err("Choose a visible, unlocked pixel layer.".into()); }
+    if studio.tool == Tool::Node && !studio.primary().is_some_and(|(layer, id)| {
+        studio.doc.layer_editable(layer) && studio.doc.find_shape(layer, id).is_some_and(|shape| shape.visible && !shape.locked)
+    }) { return Err("Select a visible, unlocked vector object.".into()); }
+    if source && matches!(studio.tool, Tool::Clone | Tool::Heal) {
+        studio.clone_source = Some(first);
+        studio.status = "Source set".into();
+        return Ok(());
+    }
+    if matches!(studio.tool, Tool::Brush | Tool::Eraser | Tool::Clone | Tool::Heal | Tool::Smudge) {
+        let distance: f32 = points.windows(2).map(|pair| (pair[1] - pair[0]).length()).sum();
+        if distance / studio.brush.spacing_distance().max(0.01) > 65_536. {
+            return Err("Use a shorter stroke or fewer points.".into());
+        }
+    }
+    studio.reset_snap_gesture();
+    match studio.tool {
+        Tool::Eyedropper => studio.eyedrop(first),
+        Tool::Fill => super::retouch::fill(studio, first),
+        Tool::Wand => super::retouch::apply_wand(studio, first, super::retouch::pixel_op(shift, alt)),
+        Tool::Trace => studio.trace_active_raster(),
+        Tool::Text => {
+            if let Some(hit) = hit_shape(studio, first, 6. / studio.view.scale.max(0.01)) && is_text_hit(studio, hit) {
+                studio.begin_type_edit(hit, first);
+            } else { studio.place_text(first); }
+        }
+        Tool::Pen => {
+            if points.len() < 2 { return Err("A path needs at least two points.".into()); }
+            for &point in points { studio.pen_click(point); }
+            if let Some(Op::Pen { anchors, source, .. }) = studio.op.take() {
+                studio.finish_pen(anchors, shift, source);
+            }
+        }
+        Tool::Lasso | Tool::BezierLasso => {
+            if points.len() < 3 { return Err("A selection path needs at least three points.".into()); }
+            super::retouch::commit_lasso(studio, points, super::retouch::pixel_op(shift, alt));
+        }
+        Tool::Hand => {
+            let Some(&last) = points.get(1) else { return Err("Pan needs a start and end point.".into()); };
+            let delta = (last - first) * studio.view.scale;
+            studio.view.offset = studio.view.offset + delta;
+        }
+        Tool::Node | Tool::Artboard => {
+            if studio.tool == Tool::Node { node_press(studio, first, first, shift, alt); }
+            else { artboard_press(studio, first, first, shift, alt, false); }
+            for &point in &points[1..] { continue_drag(studio, point, shift, alt); }
+            end_drag(studio, *points.last().unwrap(), alt, false, shift);
+        }
+        _ => {
+            start_drag(studio, first, first, shift, alt);
+            if studio.op.is_none() { return Err(studio.status.clone()); }
+            for &point in &points[1..] { continue_drag(studio, point, shift, alt); }
+            if points.len() == 1 && let Some(Op::Move { selection_on_click, .. }) = &studio.op {
+                studio.selection = selection_on_click.clone();
+            }
+            end_drag(studio, *points.last().unwrap(), alt, false, shift);
+        }
+    }
+    Ok(())
 }
 
 fn win(rect: Rect, view: crate::compositor::View, world: Pt) -> Pos2 {
@@ -5409,6 +5522,7 @@ mod tests {
     fn artboard_resize_clone_gesture_commits_once_and_escape_restores_everything() {
         for cancel in [false,true] {
             let mut studio=Studio::new();
+            studio.doc.layers[0]=crate::document::Layer::raster("Background",1280,800).unwrap();
             studio.snap.enabled=false;
             studio.doc.artboards=vec![crate::document::Artboard::new(0,Pt::ZERO,Pt::new(200.,160.))];
             studio.finish_create(CreateKind::Rect,Pt::new(40.,40.),Pt::new(80.,80.));
@@ -5428,6 +5542,7 @@ mod tests {
     fn artboard_double_click_wraps_exact_bounds_or_opens_size_dialog() {
         let ctx=eframe::egui::Context::default();
         let mut studio=Studio::new();studio.doc.artboards.clear();studio.doc.artboardless=true;
+        studio.doc.layers[0]=crate::document::Layer::raster("Background",1280,800).unwrap();
         studio.finish_create(CreateKind::Rect,Pt::new(200.,300.),Pt::new(340.,390.));
         studio.tool=Tool::Artboard;
         assert!(artboard_double_click(&mut studio,&ctx,Pt::new(270.,345.)));

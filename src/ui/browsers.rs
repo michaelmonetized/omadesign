@@ -12,6 +12,137 @@ type FrameTarget = Option<(usize, u64)>;
 type ShapeResult = (String, String, Geom, FrameTarget);
 type PhotoResult = (String, Layer, FrameTarget);
 
+#[cfg(test)]
+#[path = "browser_keyboard_tests.rs"]
+mod keyboard_tests;
+
+/// Focus the actual visible authoring surface after accepting an asset.
+/// Args: context and studio. Returns no value; hidden surfaces never receive a focus request.
+fn focus_document(ctx: &egui::Context, studio: &mut Studio) {
+    let id = egui::Id::new(if studio.persona == crate::tools::Persona::Photo {
+        "studio-photo-canvas"
+    } else { "studio-canvas" });
+    if let Some(response) = ctx.read_response(id).filter(|response| response.enabled()
+        && ctx.memory(|memory| memory.allows_interaction(response.layer_id)))
+    {
+        response.request_focus();
+    } else {
+        super::panel_workspace::return_focus(ctx, studio);
+    }
+}
+
+#[derive(Clone)]
+struct BrowserOwner {
+    id: egui::Id,
+    document: String,
+    focus: bool,
+    focused: Option<(egui::Id, egui::LayerId)>,
+}
+
+/// Capture a native browser draft without changing its floating window identity.
+/// Args: context, browser and document owner. Returns a stable open-instance scope.
+fn owner(ctx: &egui::Context, browser: &str, document: &str) -> BrowserOwner {
+    ctx.data(|data| data.get_temp::<BrowserOwner>(owner_key(browser)))
+        .filter(|owner| owner.document == document)
+        .unwrap_or_else(|| BrowserOwner {
+            id: super::keyboard_controls::draft_id(ctx, browser),
+            document: document.into(),
+            focus: true,
+            focused: None,
+        })
+}
+
+/// Namespace app browser draft state separately from its existing worker keys.
+/// Args: browser identity. Returns its transient UI-state key.
+fn owner_key(browser: &str) -> egui::Id { egui::Id::new(("keyboard-browser-owner", browser)) }
+
+/// Name an existing native search field and focus it when its window becomes interactive.
+/// Args: UI, open owner, purpose and query. Returns its actual response.
+fn query(ui: &mut egui::Ui, owner: &mut BrowserOwner, purpose: &str, value: &mut String) -> egui::Response {
+    let label = ui.label(purpose);
+    let response = ui.add(egui::TextEdit::singleline(value).id(owner.id.with("query"))
+        .desired_width(190.)).labelled_by(label.id);
+    super::welcome::name_control(ui, &response, label.id, purpose);
+    if owner.focus && !ui.is_sizing_pass() && response.enabled()
+        && ui.memory(|memory| memory.allows_interaction(response.layer_id))
+    {
+        response.request_focus();
+        owner.focus = false;
+    }
+    response
+}
+
+/// Associate ordinary browser feedback with its real search control.
+/// Args: UI, optional native search response and status. Returns no value.
+fn status(ui: &mut egui::Ui, query: Option<&egui::Response>, text: &str) {
+    let status = ui.label(RichText::new(text).small().color(theme::fg_weak()));
+    ui.ctx().accesskit_node_builder(status.id, |node| {
+        node.set_live(egui::accesskit::Live::Polite);
+        node.set_live_atomic();
+    });
+    if let Some(query) = query {
+        ui.ctx().accesskit_node_builder(query.id, |node| node.push_described_by(status.id.accesskit_id()));
+    }
+}
+
+/// Retain the browser's actual native keyboard owner for the next frame.
+/// Args: context, open draft and rendered window response. Returns no value.
+fn observe_focus(ctx: &egui::Context, owner: &mut BrowserOwner, shown: Option<&egui::Response>) {
+    owner.focused = ctx.memory(|memory| memory.focused())
+        .and_then(|id| ctx.read_response(id))
+        .filter(|response| response.enabled()
+            && shown.is_some_and(|shown| shown.layer_id == response.layer_id)
+            && ctx.memory(|memory| memory.allows_interaction(response.layer_id)))
+        .map(|response| (response.id, response.layer_id));
+}
+
+/// Check the real previous-frame owner after native Escape has surrendered focus.
+/// Args: context, browser and document identity. Returns whether that browser owns the key.
+fn owns_escape(ctx: &egui::Context, browser: &str, document: &str) -> bool {
+    let focused = ctx.data(|data| data.get_temp::<BrowserOwner>(owner_key(browser)))
+        .filter(|owner| owner.document == document).and_then(|owner| owner.focused);
+    focused.is_some_and(|(id, layer)| ctx.read_response(id).is_some_and(|response|
+        response.enabled() && response.layer_id == layer)
+        && ctx.memory(|memory| memory.had_focus_last_frame(id) && memory.allows_interaction(layer)))
+}
+
+/// Cancel only a browser-owned Escape before either canvas shortcut handler runs.
+/// Args: context and studio. Returns whether both canvas handlers must skip this close frame.
+pub(super) fn before_shortcuts(ctx: &egui::Context, studio: &mut Studio) -> bool {
+    if studio.file_dialog_pending() || studio.updates.freezing || egui::Popup::is_any_open(ctx)
+        || !ctx.input(|input| input.key_pressed(egui::Key::Escape))
+    { return false; }
+    let shapes = studio.show_shape_browser && owns_escape(ctx, SHAPE, &studio.swap_id);
+    let photos = studio.show_asset_browser && owns_escape(ctx, PHOTO, &studio.swap_id);
+    if !(shapes || photos)
+        || !ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+    { return false; }
+    if shapes { close_shapes(ctx, studio); }
+    if photos { close_photos(ctx, studio); }
+    true
+}
+
+/// Close the shape browser through its existing worker cancellation path.
+/// Args: context and studio. Returns no value; artwork and history stay unchanged.
+fn close_shapes(ctx: &egui::Context, studio: &mut Studio) {
+    studio.show_shape_browser = false;
+    jobs::cancel::<ShapeResult>(ctx, SHAPE);
+    studio.shape_status.clear();
+    ctx.data_mut(|data| data.remove::<BrowserOwner>(owner_key(SHAPE)));
+    super::panel_workspace::return_focus(ctx, studio);
+}
+
+/// Close the photo browser through its existing worker cancellation paths.
+/// Args: context and studio. Returns no value; artwork and history stay unchanged.
+fn close_photos(ctx: &egui::Context, studio: &mut Studio) {
+    studio.show_asset_browser = false;
+    jobs::cancel::<Vec<crate::asset_browser::AssetHit>>(ctx, SEARCH);
+    jobs::cancel::<PhotoResult>(ctx, PHOTO);
+    studio.asset_status.clear();
+    ctx.data_mut(|data| data.remove::<BrowserOwner>(owner_key(PHOTO)));
+    super::panel_workspace::return_focus(ctx, studio);
+}
+
 pub fn show_shape_browser(ui: &mut egui::Ui, studio: &mut Studio) {
     if let Some(result) = jobs::poll::<ShapeResult>(ui.ctx(), SHAPE) {
         match result {
@@ -19,6 +150,7 @@ pub fn show_shape_browser(ui: &mut egui::Ui, studio: &mut Studio) {
                 studio.place_palette_shape(geom, name, target);
                 studio.show_shape_browser = false;
                 studio.shape_status.clear();
+                focus_document(ui.ctx(), studio);
             }
             Ok(_) => {
                 studio.shape_status = "Document changed. Select the shape again to place it.".into()
@@ -27,32 +159,27 @@ pub fn show_shape_browser(ui: &mut egui::Ui, studio: &mut Studio) {
         }
     }
     if !studio.show_shape_browser {
+        ui.ctx().data_mut(|data| data.remove::<BrowserOwner>(owner_key(SHAPE)));
         return;
     }
+    let mut owner = owner(ui.ctx(), SHAPE, &studio.swap_id);
     let downloading = jobs::is_running::<ShapeResult>(ui.ctx(), SHAPE);
+    let available = !studio.file_dialog_pending() && !studio.updates.freezing;
     let mut open = true;
-    egui::Window::new("Shapes")
+    let shown = egui::Window::new("Shapes")
         .open(&mut open)
         .collapsible(false)
         .default_size([560.0, 480.0])
         .show(ui.ctx(), |ui| {
-            ui.horizontal(|ui| {
-                egui::ComboBox::from_id_salt("shape-lib")
-                    .selected_text(&studio.shape_lib)
-                    .width(110.0)
-                    .show_ui(ui, |ui| {
-                        for lib in std::iter::once("All")
-                            .chain(crate::shape_browser::libs().iter().copied())
-                        {
-                            ui.selectable_value(&mut studio.shape_lib, lib.to_string(), lib);
-                        }
-                    });
-                ui.add(
-                    egui::TextEdit::singleline(&mut studio.shape_query)
-                        .hint_text("Search shapes…")
-                        .desired_width(240.0),
-                );
-                if ui.small_button("Clear").clicked() {
+            super::fields::native_scope(ui, owner.id, |ui| ui.add_enabled_ui(available, |ui| {
+            let mut search = None;
+            ui.horizontal_wrapped(|ui| {
+                let libraries = std::iter::once("All").chain(crate::shape_browser::libs().iter().copied())
+                    .map(|library| (library.to_string(), library.to_string())).collect::<Vec<_>>();
+                super::keyboard_controls::choice(ui, "shape-lib", "Shape collection", &mut studio.shape_lib, &libraries);
+                search = Some(query(ui, &mut owner, "Search shapes", &mut studio.shape_query));
+                let clear = super::keyboard_controls::button(ui, "clear", "Clear");
+                if clear.clicked() {
                     studio.shape_query.clear();
                 }
             });
@@ -88,15 +215,16 @@ pub fn show_shape_browser(ui: &mut egui::Ui, studio: &mut Studio) {
                                         egui::StrokeKind::Inside,
                                     );
                                 }
-                                if ui
+                                let response = super::fields::native_scope(ui, owner.id.with(("shape", icon.lib, icon.name)), |ui| ui
                                     .add_enabled(
                                         !downloading,
                                         egui::Button::new(icon.name)
                                             .min_size(egui::vec2(120.0, 28.0)),
-                                    )
-                                    .on_hover_text(format!("{} · {}", icon.lib, icon.name))
-                                    .clicked()
-                                {
+                                    )).inner.on_hover_text(format!("{} · {}", icon.lib, icon.name));
+                                response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button,
+                                    response.enabled(), format!("Add {} shape {}", icon.lib, icon.name)));
+                                super::welcome::focus_control(ui, &response);
+                                if response.clicked() {
                                     studio.shape_status = format!("Loading {}…", icon.name);
                                     let icon = icon.clone();
                                     let document = studio.swap_id.clone();
@@ -120,17 +248,14 @@ pub fn show_shape_browser(ui: &mut egui::Ui, studio: &mut Studio) {
                 if downloading {
                     ui.spinner();
                 }
-                ui.label(
-                    RichText::new(&studio.shape_status)
-                        .small()
-                        .color(theme::fg_weak()),
-                );
+                status(ui, search.as_ref(), &studio.shape_status);
             });
+            }));
         });
+    observe_focus(ui.ctx(), &mut owner, shown.as_ref().map(|shown| &shown.response));
+    ui.ctx().data_mut(|data| data.insert_temp(owner_key(SHAPE), owner));
     if !open {
-        studio.show_shape_browser = false;
-        jobs::cancel::<ShapeResult>(ui.ctx(), SHAPE);
-        studio.shape_status.clear();
+        close_shapes(ui.ctx(), studio);
     }
 }
 
@@ -197,6 +322,7 @@ pub fn show_asset_browser(ui: &mut egui::Ui, studio: &mut Studio) {
                 }
                 studio.asset_status.clear();
                 studio.show_asset_browser = false;
+                focus_document(ui.ctx(), studio);
             }
             Ok(_) => {
                 studio.asset_status = "Document changed. Select the photo again to place it.".into()
@@ -205,35 +331,39 @@ pub fn show_asset_browser(ui: &mut egui::Ui, studio: &mut Studio) {
         }
     }
     if !studio.show_asset_browser {
+        ui.ctx().data_mut(|data| data.remove::<BrowserOwner>(owner_key(PHOTO)));
         return;
     }
+    let mut owner = owner(ui.ctx(), PHOTO, &studio.swap_id);
+    let available = !studio.file_dialog_pending() && !studio.updates.freezing;
     let searching = jobs::is_running::<Vec<crate::asset_browser::AssetHit>>(ui.ctx(), SEARCH);
     let downloading = jobs::is_running::<PhotoResult>(ui.ctx(), PHOTO);
     let mut open = true;
-    egui::Window::new("Photos")
+    let shown = egui::Window::new("Photos")
         .open(&mut open)
         .collapsible(false)
         .default_size([640.0, 480.0])
         .show(ui.ctx(), |ui| {
-            ui.horizontal(|ui| {
-                egui::ComboBox::from_id_salt("asset-provider")
-                    .selected_text(&studio.asset_provider).width(100.0)
-                    .show_ui(ui, |ui| {
-                        for provider in crate::asset_browser::providers() {
-                            ui.selectable_value(&mut studio.asset_provider, provider.to_string(), *provider);
-                        }
-                    });
-                let query = ui.add(egui::TextEdit::singleline(&mut studio.asset_query)
-                    .hint_text("Search photos…").desired_width(220.0));
+            super::fields::native_scope(ui, owner.id, |ui| ui.add_enabled_ui(available, |ui| {
+            let mut search = None;
+            ui.horizontal_wrapped(|ui| {
+                let providers = crate::asset_browser::providers().iter()
+                    .map(|provider| (provider.to_string(), provider.to_string())).collect::<Vec<_>>();
+                super::keyboard_controls::choice(ui, "asset-provider", "Photo provider", &mut studio.asset_provider, &providers);
+                let query = query(ui, &mut owner, "Search photos", &mut studio.asset_query);
                 let submit = query.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                if ui.add_enabled(!searching, egui::Button::new("Search")).clicked() || submit && !searching {
+                search = Some(query);
+                let find = ui.add_enabled(!searching, egui::Button::new("Search"));
+                find.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, find.enabled(), "Find photos"));
+                super::welcome::focus_control(ui, &find);
+                if find.clicked() || submit && !searching {
                     studio.asset_results.clear();
                     studio.asset_status = "Searching…".into();
                     let query = studio.asset_query.clone();
                     let provider = studio.asset_provider.clone();
                     jobs::start(ui.ctx(), SEARCH, move || crate::asset_browser::search(&query, &provider, 12));
                 }
-                if ui.small_button("Clear").clicked() {
+                if super::keyboard_controls::button(ui, "clear", "Clear").clicked() {
                     jobs::cancel::<Vec<crate::asset_browser::AssetHit>>(ui.ctx(), SEARCH);
                     studio.asset_query.clear();
                     studio.asset_results.clear();
@@ -248,7 +378,7 @@ pub fn show_asset_browser(ui: &mut egui::Ui, studio: &mut Studio) {
             });
             ui.horizontal(|ui| {
                 if searching || downloading { ui.spinner(); }
-                ui.label(RichText::new(&studio.asset_status).small().color(theme::fg_weak()));
+                status(ui, search.as_ref(), &studio.asset_status);
             });
             ui.add_space(8.0);
             let thumbs = photo_thumbs(ui, &studio.asset_results);
@@ -273,7 +403,12 @@ pub fn show_asset_browser(ui: &mut egui::Ui, studio: &mut Studio) {
                             ui.label(RichText::new(&hit.tags).size(13.0));
                             ui.label(RichText::new(format!("{} · {} × {}", hit.provider, hit.w, hit.h))
                                 .small().color(theme::fg_weak()));
-                            if ui.add_enabled(!downloading, egui::Button::new("Add to document")).clicked() {
+                            let response = super::fields::native_scope(ui, owner.id.with(("photo", &hit.provider, &hit.id, &hit.full_url)),
+                                |ui| ui.add_enabled(!downloading, egui::Button::new("Add to document"))).inner;
+                            response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, response.enabled(),
+                                format!("Add {} photo {}", hit.provider, hit.tags)));
+                            super::welcome::focus_control(ui, &response);
+                            if response.clicked() {
                                 chosen = Some(hit.clone());
                             }
                         });
@@ -294,12 +429,12 @@ pub fn show_asset_browser(ui: &mut egui::Ui, studio: &mut Studio) {
                     Ok((document, layer, target))
                 });
             }
+            }));
         });
+    observe_focus(ui.ctx(), &mut owner, shown.as_ref().map(|shown| &shown.response));
+    ui.ctx().data_mut(|data| data.insert_temp(owner_key(PHOTO), owner));
     if !open {
-        studio.show_asset_browser = false;
-        jobs::cancel::<Vec<crate::asset_browser::AssetHit>>(ui.ctx(), SEARCH);
-        jobs::cancel::<PhotoResult>(ui.ctx(), PHOTO);
-        studio.asset_status.clear();
+        close_photos(ui.ctx(), studio);
     }
 }
 

@@ -52,6 +52,8 @@ pub struct Panel {
     pub preview_file: String,
 }
 pub enum Event {
+    LiveStarted(crate::collaboration::Replica, String),
+    LiveJoined(Document),
     Disconnected,
     Preview(eframe::egui::ColorImage, String),
     DeviceCode(String, String),

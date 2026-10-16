@@ -4,7 +4,8 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     os::unix::{
         fs::PermissionsExt,
-        net::{UnixListener, UnixStream},
+        io::AsRawFd,
+        net::{SocketAddr, UnixListener, UnixStream},
     },
     path::PathBuf,
     sync::{
@@ -62,12 +63,18 @@ pub fn failure(message: impl Into<String>) -> Value {
 
 impl Bridge {
     pub fn start(ctx: eframe::egui::Context) -> Result<Self, String> {
+        Self::start_in(ctx, &std::env::temp_dir())
+    }
+
+    /// Create the authenticated bridge beneath a chosen scratch folder.
+    /// Args: repaint context and scratch root. Returns the bridge or its setup error.
+    fn start_in(ctx: eframe::egui::Context, temporary: &std::path::Path) -> Result<Self, String> {
         let mut random = [0u8; 24];
         std::fs::File::open("/dev/urandom")
             .and_then(|mut f| f.read_exact(&mut random))
             .map_err(|e| e.to_string())?;
         let token: String = random.iter().map(|b| format!("{b:02x}")).collect();
-        let directory = std::env::temp_dir().join(format!(
+        let directory = temporary.join(format!(
             "omadesign-acp-{}-{}",
             std::process::id(),
             &token[..12]
@@ -75,7 +82,19 @@ impl Bridge {
         std::fs::create_dir(&directory).map_err(|e| e.to_string())?;
         std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700))
             .map_err(|e| e.to_string())?;
-        let socket = directory.join("tools.sock");
+        let mut socket = directory.join("tools.sock");
+        let directory_handle =
+            if cfg!(target_os = "linux") && SocketAddr::from_pathname(&socket).is_err() {
+                let handle = std::fs::File::open(&directory).map_err(|e| e.to_string())?;
+                socket = PathBuf::from(format!(
+                    "/proc/{}/fd/{}/tools.sock",
+                    std::process::id(),
+                    handle.as_raw_fd()
+                ));
+                Some(handle)
+            } else {
+                None
+            };
         let listener = UnixListener::bind(&socket).map_err(|e| e.to_string())?;
         listener.set_nonblocking(true).map_err(|e| e.to_string())?;
         let (send, calls) = mpsc::sync_channel(16);
@@ -112,6 +131,7 @@ impl Bridge {
             }
             drop(listener);
             let _ = std::fs::remove_dir_all(directory);
+            drop(directory_handle);
         });
         Ok(Self {
             socket,
@@ -128,6 +148,73 @@ impl Bridge {
             {"name":"OMADESIGN_AGENT_SOCKET","value":self.socket},
             {"name":"OMADESIGN_AGENT_TOKEN","value":self.token}
         ]})
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod socket_tests {
+    use super::*;
+
+    #[test]
+    fn long_project_scratch_keeps_authenticated_socket_calls_and_cleanup() {
+        struct Owned(PathBuf);
+        impl Drop for Owned {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let owned = Owned(std::env::temp_dir().join(format!(
+            "long-agent-parent-{}-{}",
+            std::process::id(),
+            crate::document::next_id()
+        )));
+        let temporary = owned.0.join("x".repeat(100));
+        std::fs::create_dir_all(&temporary).unwrap();
+        let bridge = Bridge::start_in(eframe::egui::Context::default(), &temporary).unwrap();
+        let socket = bridge.socket.clone();
+        assert!(
+            socket
+                .to_string_lossy()
+                .starts_with(&format!("/proc/{}/fd/", std::process::id()))
+        );
+        let directory = std::fs::read_dir(&temporary)
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        assert_eq!(
+            std::fs::metadata(directory).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        bridge.accepting.store(true, Ordering::Release);
+        let token = bridge.token.clone();
+        let address = socket.clone();
+        let worker = std::thread::spawn(move || {
+            let mut stream = UnixStream::connect(address).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            write_message(
+                &mut stream,
+                &json!({"token":token,"name":"get_document","arguments":{}}),
+            )
+            .unwrap();
+            read_message(&mut BufReader::new(stream)).unwrap().unwrap()
+        });
+        let call = bridge.calls.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert_eq!(call.name, "get_document");
+        call.reply.send(json!({"accepted":true})).unwrap();
+        assert_eq!(worker.join().unwrap(), json!({"accepted":true}));
+        drop(bridge);
+        for _ in 0..100 {
+            if !socket.exists() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(!socket.exists());
+        assert_eq!(std::fs::read_dir(&temporary).unwrap().count(), 0);
     }
 }
 impl Drop for Bridge {

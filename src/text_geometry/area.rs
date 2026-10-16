@@ -1465,9 +1465,10 @@ mod tests {
         assert_eq!(text(&studio, ids[0]).thread.unwrap().next, Some(ids[1].1));
         let encoded = crate::project::encode(&studio.doc).unwrap();
         let restored = crate::project::decode(&encoded).unwrap();
-        // These populated placeholder targets now retain explicit inherited
-        // character metrics, which are correctly gated by existing version 12.
-        assert!(encoded.contains("\"version\":12"));
+        assert!(ids.iter().any(|id| text(&studio, *id).spans.iter().any(|span| {
+            span.font.is_some() || span.px.is_some() || span.fill.is_some()
+        })));
+        assert!(encoded.contains("\"version\":14"));
         assert!(
             matches!(&restored.find_shape(ids[0].0,ids[0].1).unwrap().geom,Geom::Text(t) if t.content==source)
         );

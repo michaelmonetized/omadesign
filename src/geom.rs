@@ -919,7 +919,23 @@ impl Geom {
         }
     }
 
+    /// Bound stored geometry in its local coordinate space.
+    /// Args: none. Returns its frame, including authored curve handles.
     pub fn bbox(&self) -> Bounds {
+        if matches!(self, Geom::Path { .. } | Geom::Paths { .. })
+            && self.anchors().all(|anchor| anchor.radius == 0.0)
+        {
+            let mut bounds = None::<Bounds>;
+            for anchor in self.anchors() {
+                for point in [anchor.pt, anchor.pt + anchor.h_in, anchor.pt + anchor.h_out] {
+                    match &mut bounds {
+                        Some(bounds) => bounds.union_pt(point),
+                        None => bounds = Some(Bounds::from_pt(point)),
+                    }
+                }
+            }
+            return bounds.unwrap_or(Bounds::from_pt(Pt::ZERO));
+        }
         match self {
             Geom::Text(run) if run.svg_text.is_some()=>if let Some(layout)=crate::text::svg_type::layout(run){return layout.bounds;},
             Geom::Text(run) if run.frame.is_some() => return crate::text_geometry::frame_bounds(run).unwrap(),
@@ -1623,6 +1639,93 @@ pub fn simplify_geom(geom: &mut Geom, epsilon: f32) {
     crate::simplify::apply(geom, epsilon.max(0.0));
 }
 
+
+
+/// Build editable curves using the same control points and object rotation.
+/// Args: path geometry, local rotation center and radians. Returns its native curve path.
+pub(crate) fn curve_path(geometry: &Geom, center: Pt, rotation: f32) -> Option<tiny_skia::Path> {
+    let mut path = tiny_skia::PathBuilder::new();
+    let world_point = |point: Pt| point.rotate_about(center, rotation);
+    for (anchors, closed) in geometry.path_contours() {
+        let segments = path_cubics(anchors, closed);
+        if let Some(first) = segments.first() {
+            let p = world_point(first[0]);
+            path.move_to(p.x, p.y);
+            for [a, c1, c2, b] in segments {
+                let [a, c1, c2, b] = [a, c1, c2, b].map(world_point);
+                if (c1 - a).length_sq() < 1e-10 && (c2 - b).length_sq() < 1e-10 {
+                    path.line_to(b.x, b.y);
+                } else {
+                    path.cubic_to(c1.x, c1.y, c2.x, c2.y, b.x, b.y);
+                }
+            }
+            if closed { path.close(); }
+        }
+    }
+    path.finish()
+}
+
+/// Preserve native curves as editable anchors.
+/// Args: native path and winding rule. Returns geometry for a nonempty path.
+pub(crate) fn path_geom(path: &tiny_skia::Path, winding: bool) -> Option<Geom> {
+    use tiny_skia::PathSegment;
+    let mut paths = Vec::<(Vec<Anchor>, bool)>::new();
+    let mut anchors = Vec::<Anchor>::new();
+    let mut closed = false;
+    for segment in path.segments() {
+        match segment {
+            PathSegment::MoveTo(p) => {
+                if !anchors.is_empty() {
+                    paths.push((std::mem::take(&mut anchors), closed));
+                }
+                closed = false;
+                anchors.push(Anchor::corner(Pt::new(p.x, p.y)));
+            }
+            PathSegment::LineTo(p) => anchors.push(Anchor::corner(Pt::new(p.x, p.y))),
+            PathSegment::QuadTo(c, p) => {
+                let previous = anchors.last_mut()?;
+                let end = Pt::new(p.x, p.y);
+                let control = Pt::new(c.x, c.y);
+                previous.h_out = (control - previous.pt) * (2. / 3.);
+                let mut a = Anchor::corner(end);
+                a.h_in = (control - end) * (2. / 3.);
+                anchors.push(a);
+            }
+            PathSegment::CubicTo(c1, c2, p) => {
+                let previous = anchors.last_mut()?;
+                previous.h_out = Pt::new(c1.x, c1.y) - previous.pt;
+                let mut a = Anchor::corner(Pt::new(p.x, p.y));
+                a.h_in = Pt::new(c2.x, c2.y) - a.pt;
+                anchors.push(a);
+            }
+            PathSegment::Close => {
+                closed = true;
+                if anchors.len() > 1 && (anchors[0].pt - anchors.last()?.pt).length() < 0.0001 {
+                    let last = anchors.pop()?;
+                    anchors[0].h_in = last.h_in;
+                }
+            }
+        }
+    }
+    if !anchors.is_empty() {
+        paths.push((anchors, closed));
+    }
+    if paths.is_empty() {
+        None
+    } else if paths.len() == 1 && !winding {
+        let (anchors, closed) = paths.pop()?;
+        Some(Geom::Path { anchors, closed })
+    } else {
+        Some(Geom::Paths {
+            paths: paths
+                .into_iter()
+                .map(|(anchors, closed)| PathContour { anchors, closed })
+                .collect(),
+            winding,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1654,6 +1757,30 @@ mod tests {
         };
         assert!(g.contains(Pt::new(5.0, 5.0)));
         assert!(!g.contains(Pt::new(20.0, 5.0)));
+    }
+
+    #[test]
+    fn path_bounds_keep_constant_axes_exact_and_preserve_rounded_extensions() {
+        let mut start = Anchor::corner(Pt::new(46.45, 0.0));
+        start.h_out = Pt::new(0.0, 30.0);
+        let mut end = Anchor::corner(Pt::new(46.45, 100.0));
+        end.h_in = Pt::new(0.0, -30.0);
+        let anchors = vec![start, end];
+        let expected = Bounds { min: start.pt, max: end.pt };
+        assert_eq!(Geom::Path { anchors: anchors.clone(), closed: false }.bbox(), expected);
+        assert_eq!(Geom::Paths {
+            paths: vec![PathContour { anchors, closed: false }], winding: false,
+        }.bbox(), expected);
+
+        let mut rounded = Anchor::corner(Pt::new(10.0, 0.0));
+        rounded.h_in = Pt::new(1.0, 0.0);
+        rounded.h_out = Pt::new(0.0, 1.0);
+        rounded.radius = 10.0;
+        let geometry = Geom::Path {
+            anchors: vec![Anchor::corner(Pt::ZERO), rounded, Anchor::corner(Pt::splat(10.0))],
+            closed: false,
+        };
+        assert!(geometry.bbox().max.x > 11.0);
     }
 
     #[test]

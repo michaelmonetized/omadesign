@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import brushesFollow from "../../../docs/blog/nightly-brushes-follow-your-hand.md?raw";
+import nativePrecision from "../../../docs/releases/0.6.7-nightly.20261016.0001.md?raw";
 import workspace from "../../../docs/blog/0.6.3-a-workspace-that-moves.md?raw";
 import reviewCompose from "../../../docs/blog/0.6.2-review-compose-keep-moving.md?raw";
 import moreControl from "../../../docs/blog/0.6.1-more-control-less-waiting.md?raw";
@@ -17,6 +18,7 @@ import { CURL } from "../site";
 import { latestUpdate, updates } from "../updates";
 
 const bodies: Record<string, { markdown: string; path: string }> = {
+  "0.6.7-nightly.20261016.0001": { markdown: nativePrecision, path: "docs/releases/0.6.7-nightly.20261016.0001.md" },
   "0.6.3-nightly.20261013.0001": { markdown: brushesFollow, path: "docs/blog/nightly-brushes-follow-your-hand.md" },
   "0.6.3": { markdown: workspace, path: "docs/blog/0.6.3-a-workspace-that-moves.md" },
   "0.6.2": {
@@ -42,7 +44,7 @@ export const Route = createFileRoute("/updates/")({
       {
         name: "description",
         content:
-          "Studio notes from omadesign. 0.6.3-nightly.20261013.0001 adds brush dynamics and pen pressure, fixes canvas input, and refreshes the product media.",
+          latestUpdate.dek,
       },
     ],
   }),
@@ -62,7 +64,7 @@ function UpdatesIndex() {
         </div>
         <p>
           What shipped, in the order you can use it. {featured.version} is on
-          top. The curl line still installs the latest.
+          top. Use the nightly installer for this build. The curl line follows the current release.
         </p>
       </div>
       <article className="update-feature prose docs-content">

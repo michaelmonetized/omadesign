@@ -45,15 +45,17 @@ impl Studio {
                 self.status = "This text has no outlines to convert".into();
                 return;
             }
-            // Keep every glyph and counter, plus the existing bounds/rotation pivot.
+            let after = crate::text::outline_path(run)
+                .and_then(|path| crate::formats::svg::path_geom(&path, false))
+                .unwrap_or_else(|| Geom::Poly {
+                    contours: run.contours.clone(),
+                    winding: false,
+                });
             self.commit(Cmd::SetGeom {
                 layer,
                 id,
                 before: shape.geom.clone(),
-                after: Geom::Poly {
-                    contours: run.contours.clone(),
-                    winding: false,
-                },
+                after,
                 rot_before: shape.rotation,
                 rot_after: shape.rotation,
             });
@@ -65,7 +67,7 @@ impl Studio {
         self.reset_snap_gesture();
     }
 
-    fn selectable_objects(&self) -> Vec<(usize, u64)> {
+    pub(crate) fn selectable_objects(&self) -> Vec<(usize, u64)> {
         self.doc
             .layers
             .iter()
@@ -628,8 +630,8 @@ mod text_outline_tests {
             assert_eq!(studio.history.len(), 1);
             assert!(studio.can_flip_selection());
             let outlined = studio.doc.find_shape(1, id).unwrap().clone();
-            let Geom::Poly { contours, winding } = &outlined.geom else {
-                panic!("all-contour outline")
+            let Geom::Paths { paths, winding } = &outlined.geom else {
+                panic!("all-curve outline")
             };
             let Geom::Text(run) = &original.geom else {
                 unreachable!()
@@ -638,7 +640,11 @@ mod text_outline_tests {
                 !*winding,
                 "preserve live text's even-odd overlapping-glyph appearance"
             );
-            assert_eq!(contours, &run.contours);
+            assert_eq!(paths.len(), run.contours.len());
+            assert!(paths.iter().all(|path| path.closed));
+            assert!(paths.iter().flat_map(|path| &path.anchors).any(|anchor| {
+                anchor.h_in.length_sq() > 0. || anchor.h_out.length_sq() > 0.
+            }));
             assert_eq!(outlined.style, original.style);
             assert_eq!(outlined.rotation, original.rotation);
             assert_eq!(outlined.geom.bbox(), original.geom.bbox());

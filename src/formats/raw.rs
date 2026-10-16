@@ -392,6 +392,7 @@ struct Admission<'a> {
 unsafe extern "C" fn reserve_native(context: *const c_void, bytes: u64) -> i32 {
     // SAFETY: the synchronous native call borrows Admission until all callbacks return.
     let admission = unsafe { &*context.cast::<Admission>() };
+    admission.cancel.record_native_memory_request(bytes);
     match admission.lease.resize(bytes, admission.cancel) {
         Ok(()) => 0,
         Err(error) => {

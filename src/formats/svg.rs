@@ -4,7 +4,7 @@ use crate::color::{Blend, Rgba};
 use crate::document::{Cap, Document, Fill, Join, Layer, Pixels, Shape, Stroke, Style};
 use crate::geom::{Anchor, Geom, PathContour, Pt, TypeRun};
 use std::collections::HashMap;
-use tiny_skia::{PathSegment, Transform};
+use tiny_skia::Transform;
 
 const MAX_PIXELS: u64 = 64 * 1024 * 1024;
 const MAX_ELEMENTS: usize = 100_000;
@@ -1358,63 +1358,7 @@ fn closed_fill(mut geom: Geom) -> Geom {
     geom
 }
 
-pub(crate) fn path_geom(path: &tiny_skia::Path, winding: bool) -> Option<Geom> {
-    let mut paths = Vec::<(Vec<Anchor>, bool)>::new();
-    let mut anchors = Vec::<Anchor>::new();
-    let mut closed = false;
-    for segment in path.segments() {
-        match segment {
-            PathSegment::MoveTo(p) => {
-                if !anchors.is_empty() {
-                    paths.push((std::mem::take(&mut anchors), closed));
-                }
-                closed = false;
-                anchors.push(Anchor::corner(Pt::new(p.x, p.y)));
-            }
-            PathSegment::LineTo(p) => anchors.push(Anchor::corner(Pt::new(p.x, p.y))),
-            PathSegment::QuadTo(c, p) => {
-                let previous = anchors.last_mut()?;
-                let end = Pt::new(p.x, p.y);
-                let control = Pt::new(c.x, c.y);
-                previous.h_out = (control - previous.pt) * (2. / 3.);
-                let mut a = Anchor::corner(end);
-                a.h_in = (control - end) * (2. / 3.);
-                anchors.push(a);
-            }
-            PathSegment::CubicTo(c1, c2, p) => {
-                let previous = anchors.last_mut()?;
-                previous.h_out = Pt::new(c1.x, c1.y) - previous.pt;
-                let mut a = Anchor::corner(Pt::new(p.x, p.y));
-                a.h_in = Pt::new(c2.x, c2.y) - a.pt;
-                anchors.push(a);
-            }
-            PathSegment::Close => {
-                closed = true;
-                if anchors.len() > 1 && (anchors[0].pt - anchors.last()?.pt).length() < 0.0001 {
-                    let last = anchors.pop()?;
-                    anchors[0].h_in = last.h_in;
-                }
-            }
-        }
-    }
-    if !anchors.is_empty() {
-        paths.push((anchors, closed));
-    }
-    if paths.is_empty() {
-        None
-    } else if paths.len() == 1 && !winding {
-        let (anchors, closed) = paths.pop()?;
-        Some(Geom::Path { anchors, closed })
-    } else {
-        Some(Geom::Paths {
-            paths: paths
-                .into_iter()
-                .map(|(anchors, closed)| PathContour { anchors, closed })
-                .collect(),
-            winding,
-        })
-    }
-}
+pub(crate) use crate::geom::path_geom;
 
 #[cfg(test)]
 mod tests {

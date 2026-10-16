@@ -2,11 +2,13 @@
 set -eu
 cd "$(dirname "$0")/.."
 VERSION="${1:-$(node scripts/version.mjs get)}"
+ARCHITECTURES="${2:-x86_64 aarch64}"
 case "$VERSION" in
   ''|*[!A-Za-z0-9.+-]*) echo 'invalid installer version' >&2; exit 1 ;;
 esac
 mkdir -p dist
-for ARCH in x86_64 aarch64; do
+for ARCH in $ARCHITECTURES; do
+  case "$ARCH" in x86_64|aarch64) ;; *) echo 'unsupported installer architecture' >&2; exit 1 ;; esac
   NAME="omadesign-installer-${VERSION}-${ARCH}-linux"
   STAGE="dist/$NAME"
   rm -rf "$STAGE"

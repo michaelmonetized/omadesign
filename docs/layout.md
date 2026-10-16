@@ -1,4 +1,4 @@
-# Layout · 0.5.4
+# Layout
 
 Layout is the native workspace for responsive screens, reusable components and interactive prototypes. Documents remain editable `.oma` files. See the [release notes](blog/0.5.4-more-control-on-the-canvas.md) for what changed in 0.5.4.
 
@@ -26,7 +26,9 @@ Draw frames with **F**, add rectangles with **R** and live text with **T**. Pen,
 
 ## Responsive layout
 
-Select a frame and enable **Arrange children automatically**, or select objects and press **Shift+A**. Choose Stack, Wrap or Grid. Stack and Wrap support horizontal and vertical flow; Grid uses equal-width columns. Set alignment, distribution, gaps and padding. Base padding has independent top, right, bottom and left values.
+Select a frame and enable **Arrange children automatically**, or select objects and press **Shift+A**. Choose Stack, Wrap or Grid. Stack and Wrap support horizontal and vertical flow. Grid starts with equal-width columns; **Column tracks** and **Row tracks** add Fixed pixel lengths, Hug content tracks or weighted Fraction tracks, with optional pixel minimums and maximums. Select a grid child to set its zero-based row/column and spans. Clear custom tracks and placement to return to the uniform grid. Set alignment, distribution, gaps and padding. Base padding has independent top, right, bottom and left values.
+
+**Baseline** aligns the first rendered text baselines in horizontal stacks, wrapped rows and grid rows using the selected fonts' real metrics. Non-text objects and vertical stacks use Start alignment. Hug frames include the ascent and descent needed by each row.
 
 Each object has independent width and height sizing:
 
@@ -48,6 +50,8 @@ Edit the main component to update its instances. Instance edits such as changed 
 
 On a main component, enter a name and choose **Add variant**, then edit the new definition. On an instance, use the variant picker to switch within its family. **Reset overrides** returns the instance to its definition. **Detach** retains editable objects while removing the component link.
 
+Select an object inside a main component and open **Named properties**. Name and expose its text, visibility, fill, opacity or nested instance variant. The same named fields appear on linked instances. Text and color entries apply on Enter or when leaving the field; variant and visibility controls edit the bound objects. **Edit paint on object** opens a non-solid paint through the ordinary object inspector. Direct object edits and named fields share the existing override rules, so local text and paint survive variant swaps. Renaming or removing a field changes the component's controls while retaining its artwork.
+
 ## Images and design variables
 
 Shapes, icons, photos and brand assets use the selected frame, or the nearest frame containing the selected object. The destination is retained while an asset loads. File → Place keeps Layout active; click or drag to position the file in the selected frame. With no frame selected, the frame under the placement pointer becomes the destination. Multi-part SVGs remain one asset in auto layout, with editable objects inside.
@@ -65,6 +69,8 @@ Select an object and add an **Interaction**. Triggers are Click, Hover and Press
 Transitions are Instant, Dissolve, Slide left and Slide right, with configurable duration. Choose **Present** to interact with the design, switch between viewport presets or enter a custom width. Use its Back control and scroll the preview as needed; Esc closes it.
 
 Select a frame and use **Export frame → PNG, SVG or HTML**. PNG and SVG export that frame's subtree. HTML produces a standalone responsive document with embedded assets and a runtime for the supported prototype actions, including referenced screens and variants. Open the file in a browser and check the behavior at multiple widths. Export does not publish or host a website.
+
+HTML follows reachable links across vector layers and excludes unrelated private siblings. Nested overlays retain their stack: Back or Close returns to the previous overlay. Committed variant choices survive navigation and Back; hover choices restore on leave, and self-navigation leaves history unchanged. Only the active screen or variant's responsive rules apply. Keyboard Enter/Space activate focused controls; Tab/Shift+Tab stay inside the top browser overlay, and Escape closes it and restores focus. Background, clipped and transparent controls remain blocked. The presentation canvas clips oversized overlays as native Present does. Missing reachable destinations fail export with a readable error.
 
 ## Human QA checklist
 
@@ -87,7 +93,7 @@ Use a saved copy of Fieldwork and a small design of your own. Record the build i
 This implementation provides a substantial local design and prototype workflow, with these boundaries:
 
 - Components and variables belong to one document; there are no remote shared libraries, variable aliases/modes or a full reusable typography/effects-style system.
-- Grid uses uniform columns without spanning or custom track sizing. Layout lacks baseline alignment, negative gaps and the full set of advanced auto-layout controls. Text is edited as a single styled run rather than a rich mixture of inline styles.
+- Negative gaps and arbitrary responsive property overrides remain outside the layout controls described above.
 - Breakpoints provide width-based layout and type-size overrides, not arbitrary property overrides or a complete responsive editing model for every visual property.
 - Prototypes have the actions and transitions listed above. They do not provide Smart Animate, spring physics, drag/scroll-driven animation, conditional logic, forms or application data.
 - HTML export is a responsive design/prototype artifact, not a Framer-style CMS, production application framework, deployment service or SEO management workflow. Native and browser output still require fidelity testing.

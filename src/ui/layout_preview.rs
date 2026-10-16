@@ -15,11 +15,14 @@ struct Animation {
 }
 
 struct Preview {
+    owner: egui::Id,
+    previous_focus: Option<egui::Id>,
     state: PrototypeState,
     width: f32,
     texture: Option<egui::TextureHandle>,
     rendered: Option<Document>,
     interactive: Option<Document>,
+    actions: Vec<CanvasAction>,
     animation: Option<Animation>,
     pending_animation: bool,
     dirty: bool,
@@ -63,15 +66,20 @@ pub fn start(ctx: &egui::Context, studio: &mut Studio) {
         .flatten()
         .find(|s| s.id == frame)
         .map_or(390.0, |s| s.world_bbox().width());
+    let owner = super::keyboard_controls::draft_id(ctx, "layout-preview");
+    let previous_focus = ctx.memory(|memory| memory.focused());
     ctx.data_mut(|d| {
         d.insert_temp(
             key(),
             Arc::new(Mutex::new(Preview {
+                owner,
+                previous_focus,
                 state,
                 width,
                 texture: None,
                 rendered: None,
                 interactive: None,
+                actions: Vec::new(),
                 animation: None,
                 pending_animation: false,
                 dirty: true,
@@ -85,6 +93,20 @@ pub fn start(ctx: &egui::Context, studio: &mut Studio) {
 }
 
 pub fn component_editor(ui: &mut Ui, studio: &mut Studio) {
+    let owner = ui.make_persistent_id(("layout-components", &studio.swap_id, &studio.selection));
+    let eligible = studio.selectable_objects();
+    let available = !studio.file_dialog_pending()
+        && !studio.updates.freezing
+        && studio
+            .selection
+            .iter()
+            .all(|target| eligible.contains(target));
+    super::fields::native_scope(ui, owner, |ui| {
+        ui.add_enabled_ui(available, |ui| component_controls(ui, studio))
+    });
+}
+
+fn component_controls(ui: &mut Ui, studio: &mut Studio) {
     egui::CollapsingHeader::new("Components")
         .default_open(true)
         .show(ui, |ui| {
@@ -100,7 +122,8 @@ pub fn component_editor(ui: &mut Ui, studio: &mut Studio) {
             match binding {
                 Some(ComponentBinding::Main { variant, .. }) => {
                     ui.label(RichText::new(format!("Main component · {variant}")).small());
-                    if ui.button("Insert instance").clicked()
+                    if super::keyboard_controls::button(ui, "insert-instance", "Insert instance")
+                        .clicked()
                         && let Some((_, id)) = root
                     {
                         studio.insert_layout_instance(id);
@@ -111,13 +134,20 @@ pub fn component_editor(ui: &mut Ui, studio: &mut Studio) {
                             .unwrap_or_else(|| "Hover".into())
                     });
                     ui.horizontal(|ui| {
-                        ui.add(
-                            egui::TextEdit::singleline(&mut name)
-                                .hint_text("Variant name")
-                                .desired_width(100.0),
+                        let error = name.trim().is_empty().then_some("Enter a variant name.");
+                        super::keyboard_authoring::input(
+                            ui,
+                            "variant-name",
+                            "Variant name",
+                            &mut name,
+                            error,
+                            false,
                         );
                         if ui
-                            .add_enabled(!name.trim().is_empty(), egui::Button::new("Add variant"))
+                            .add_enabled_ui(!name.trim().is_empty(), |ui| {
+                                super::keyboard_controls::button(ui, "add-variant", "Add variant")
+                            })
+                            .inner
                             .clicked()
                         {
                             studio.add_layout_variant(&name);
@@ -128,10 +158,16 @@ pub fn component_editor(ui: &mut Ui, studio: &mut Studio) {
                 Some(ComponentBinding::Instance { main, .. }) => {
                     ui.label(RichText::new("Instance · overrides stay yours").small());
                     ui.horizontal(|ui| {
-                        if ui.small_button("Reset overrides").clicked() {
+                        if super::keyboard_controls::button(
+                            ui,
+                            "reset-overrides",
+                            "Reset overrides",
+                        )
+                        .clicked()
+                        {
                             studio.reset_layout_instance();
                         }
-                        if ui.small_button("Detach").clicked() {
+                        if super::keyboard_controls::button(ui, "detach", "Detach").clicked() {
                             studio.detach_layout_instance();
                         }
                     });
@@ -142,43 +178,70 @@ pub fn component_editor(ui: &mut Ui, studio: &mut Studio) {
                             layout_components::family_of(&studio.doc, *id) == family
                         })
                         .collect();
-                    egui::ComboBox::from_id_salt("component-swap")
-                        .selected_text(
-                            variants
-                                .iter()
-                                .find(|(_, id, _, _)| *id == main)
-                                .map_or("Missing component", |(_, _, _, v)| v.as_str()),
-                        )
-                        .show_ui(ui, |ui| {
-                            for (_, id, _, variant) in variants {
-                                if ui.selectable_label(id == main, variant).clicked() {
-                                    studio.swap_layout_variant(id);
-                                }
-                            }
-                        });
+                    let choices = variants
+                        .into_iter()
+                        .map(|(_, id, _, variant)| (id, variant))
+                        .collect::<Vec<_>>();
+                    let mut target = main;
+                    if super::keyboard_controls::choice(
+                        ui,
+                        "component-swap",
+                        "Component variant",
+                        &mut target,
+                        &choices,
+                    )
+                    .changed()
+                    {
+                        studio.swap_layout_variant(target);
+                    }
                 }
                 None => {
-                    if ui.button("Create component").clicked() {
+                    if super::keyboard_controls::button(ui, "create-component", "Create component")
+                        .clicked()
+                    {
                         studio.create_layout_component();
                     }
                 }
             }
             let mains = layout_components::definitions(&studio.doc);
             if !mains.is_empty() {
-                egui::ComboBox::from_id_salt("insert-component")
-                    .selected_text("Insert from this document…")
-                    .show_ui(ui, |ui| {
-                        for (_, id, name, variant) in mains {
-                            if ui.button(format!("{name} · {variant}")).clicked() {
-                                studio.insert_layout_instance(id);
-                            }
-                        }
-                    });
+                let choices = mains
+                    .into_iter()
+                    .map(|(_, id, name, variant)| (id, format!("{name} · {variant}")))
+                    .collect::<Vec<_>>();
+                let mut target = 0;
+                if super::keyboard_controls::choice(
+                    ui,
+                    "insert-component",
+                    "Insert document component",
+                    &mut target,
+                    &choices,
+                )
+                .changed()
+                {
+                    studio.insert_layout_instance(target);
+                }
             }
         });
 }
 
 pub fn interaction_editor(ui: &mut Ui, studio: &mut Studio) {
+    let owner = ui.make_persistent_id(("layout-interactions", &studio.swap_id, &studio.selection));
+    let eligible = studio.selectable_objects();
+    let available = !studio.file_dialog_pending()
+        && !studio.updates.freezing
+        && studio
+            .selection
+            .iter()
+            .all(|target| eligible.contains(target));
+    super::fields::native_scope(ui, owner, |ui| {
+        studio.with_field_history(ui, "prototype-interactions", |ui, studio| {
+            ui.add_enabled_ui(available, |ui| interaction_controls(ui, studio))
+        })
+    });
+}
+
+fn interaction_controls(ui: &mut Ui, studio: &mut Studio) {
     let Some((layer, id)) = studio.primary() else {
         return;
     };
@@ -187,6 +250,17 @@ pub fn interaction_editor(ui: &mut Ui, studio: &mut Studio) {
     };
     let mut interactions = shape.layout.interactions.clone();
     let before = interactions.clone();
+    let rows_key = ui.make_persistent_id("interaction-rows");
+    let mut rows = ui
+        .data(|data| data.get_temp::<(Vec<Interaction>, Vec<egui::Id>)>(rows_key))
+        .filter(|(expected, _)| expected == &interactions)
+        .map(|(_, rows)| rows)
+        .unwrap_or_else(|| {
+            interactions
+                .iter()
+                .map(|_| super::keyboard_controls::draft_id(ui.ctx(), "prototype-interaction"))
+                .collect()
+        });
     let frames: Vec<_> = studio
         .doc
         .layers
@@ -216,16 +290,22 @@ pub fn interaction_editor(ui: &mut Ui, studio: &mut Studio) {
         .show(ui, |ui| {
             let mut remove = None;
             for (index, interaction) in interactions.iter_mut().enumerate() {
-                ui.push_id(index, |ui| {
-                    ui.horizontal(|ui| {
-                        egui::ComboBox::from_id_salt("trigger")
-                            .selected_text(interaction.trigger.name())
-                            .show_ui(ui, |ui| {
-                                for v in [Trigger::Click, Trigger::Hover, Trigger::Press] {
-                                    ui.selectable_value(&mut interaction.trigger, v, v.name());
-                                }
-                            });
-                        if ui.small_button("Remove").clicked() {
+                ui.push_id(rows[index], |ui| {
+                    ui.vertical(|ui| {
+                        let choices = [Trigger::Click, Trigger::Hover, Trigger::Press]
+                            .into_iter()
+                            .map(|value| (value, value.name().to_string()))
+                            .collect::<Vec<_>>();
+                        super::keyboard_controls::choice(
+                            ui,
+                            "trigger",
+                            "Interaction trigger",
+                            &mut interaction.trigger,
+                            &choices,
+                        );
+                        if super::keyboard_controls::button(ui, "remove", "Remove interaction")
+                            .clicked()
+                        {
                             remove = Some(index);
                         }
                     });
@@ -244,15 +324,19 @@ pub fn interaction_editor(ui: &mut Ui, studio: &mut Studio) {
                         "Close overlay",
                         "Change variant",
                     ];
-                    egui::ComboBox::from_id_salt("action")
-                        .selected_text(names[kind])
-                        .show_ui(ui, |ui| {
-                            for (i, name) in names.iter().enumerate() {
-                                if i != 4 || !variants.is_empty() {
-                                    ui.selectable_value(&mut kind, i, *name);
-                                }
-                            }
-                        });
+                    let choices = names
+                        .iter()
+                        .enumerate()
+                        .filter(|(index, _)| *index != 4 || !variants.is_empty())
+                        .map(|(index, name)| (index, name.to_string()))
+                        .collect::<Vec<_>>();
+                    let action = super::keyboard_controls::choice(
+                        ui,
+                        "action",
+                        "Interaction action",
+                        &mut kind,
+                        &choices,
+                    );
                     if previous != kind {
                         let target = frames
                             .iter()
@@ -277,38 +361,46 @@ pub fn interaction_editor(ui: &mut Ui, studio: &mut Studio) {
                         _ => None,
                     };
                     if let Some(target) = target {
-                        egui::ComboBox::from_id_salt("target")
-                            .selected_text(
-                                choices
-                                    .iter()
-                                    .find(|f| f.0 == *target)
-                                    .map_or("Missing target", |f| f.1.as_str()),
-                            )
-                            .show_ui(ui, |ui| {
-                                for (f, name) in choices {
-                                    ui.selectable_value(target, *f, name);
-                                }
-                            });
+                        super::keyboard_controls::choice(
+                            ui,
+                            "target",
+                            "Interaction target",
+                            target,
+                            choices,
+                        );
                     }
-                    ui.horizontal(|ui| {
-                        egui::ComboBox::from_id_salt("transition")
-                            .selected_text(interaction.transition.name())
-                            .show_ui(ui, |ui| {
-                                for v in [
-                                    Transition::Instant,
-                                    Transition::Dissolve,
-                                    Transition::SlideLeft,
-                                    Transition::SlideRight,
-                                ] {
-                                    ui.selectable_value(&mut interaction.transition, v, v.name());
-                                }
-                            });
+                    ui.vertical(|ui| {
+                        let choices = [
+                            Transition::Instant,
+                            Transition::Dissolve,
+                            Transition::SlideLeft,
+                            Transition::SlideRight,
+                        ]
+                        .into_iter()
+                        .map(|value| (value, value.name().to_string()))
+                        .collect::<Vec<_>>();
+                        super::keyboard_controls::choice(
+                            ui,
+                            "transition",
+                            "Interaction transition",
+                            &mut interaction.transition,
+                            &choices,
+                        );
                         if interaction.transition != Transition::Instant {
-                            ui.add(
-                                egui::DragValue::new(&mut interaction.duration_ms)
-                                    .range(50..=5000)
-                                    .suffix(" ms"),
+                            let mut duration = interaction.duration_ms;
+                            let field = super::fields::number(
+                                ui,
+                                "duration",
+                                "Transition duration (ms)",
+                                &mut duration,
+                                50..=5000,
+                                " ms",
+                                None,
+                                Default::default(),
                             );
+                            if crate::app::input_history::record(field.response, field.changed) {
+                                interaction.duration_ms = duration;
+                            }
                         }
                     });
                     if let Err(error) = crate::layout_prototype::validate_interaction(
@@ -317,18 +409,26 @@ pub fn interaction_editor(ui: &mut Ui, studio: &mut Studio) {
                         id,
                         interaction,
                     ) {
-                        ui.colored_label(egui::Color32::LIGHT_RED, error);
+                        super::welcome::control_error(ui, &[&action], &error);
                     }
                     ui.separator();
                 });
             }
             if let Some(index) = remove {
                 interactions.remove(index);
+                rows.remove(index);
             }
             if ui
-                .add_enabled(!frames.is_empty(), egui::Button::new("+ Interaction"))
+                .add_enabled_ui(!frames.is_empty(), |ui| {
+                    super::keyboard_controls::button(ui, "add-interaction", "+ Interaction")
+                })
+                .inner
                 .clicked()
             {
+                rows.push(super::keyboard_controls::draft_id(
+                    ui.ctx(),
+                    "prototype-interaction",
+                ));
                 interactions.push(Interaction {
                     trigger: Trigger::Click,
                     action: PrototypeAction::Navigate {
@@ -352,11 +452,18 @@ pub fn interaction_editor(ui: &mut Ui, studio: &mut Studio) {
             studio.edit_layout(|l| l.interactions = interactions.clone());
         }
     }
+    if studio
+        .doc
+        .find_shape(layer, id)
+        .is_some_and(|shape| shape.layout.interactions == interactions)
+    {
+        ui.data_mut(|data| data.insert_temp(rows_key, (interactions, rows)));
+    }
 }
 
 /// Materialize a viewport and overlays without changing the working document.
 /// Keep the full document for interaction target and variant validation.
-fn presentation(
+pub(crate) fn presentation(
     doc: &Document,
     state: &PrototypeState,
     width: f32,
@@ -528,6 +635,165 @@ fn activate(p: &mut Preview, id: u64, trigger: Trigger) {
     }
 }
 
+#[derive(Clone)]
+struct CanvasAction {
+    source: u64,
+    name: String,
+    trigger: Trigger,
+}
+
+/// Resolve native actions from the same clipped frame tree as pointer targets.
+/// Args: materialized canvas and top frame or overlay. Returns visible trigger owners in hit order.
+fn keyboard_actions(doc: &Document, root: u64) -> Vec<CanvasAction> {
+    use crate::boolean::{BoolOp, apply};
+    let Some((layer, shapes)) = doc
+        .layers
+        .iter()
+        .enumerate()
+        .filter_map(|(layer, value)| Some((layer, value.kind.shapes()?)))
+        .find(|(_, shapes)| shapes.iter().any(|shape| shape.id == root))
+    else {
+        return Vec::new();
+    };
+    if !doc.layer_visible(layer) || doc.layers[layer].opacity <= 0.0 {
+        return Vec::new();
+    }
+    let map = shapes
+        .iter()
+        .map(|shape| (shape.id, shape))
+        .collect::<HashMap<_, _>>();
+    let mut children = HashMap::<u64, Vec<u64>>::new();
+    for shape in shapes {
+        if let Some(parent) = shape.layout.parent {
+            children.entry(parent).or_default().push(shape.id);
+        }
+    }
+    fn visit(
+        id: u64,
+        map: &HashMap<u64, &Shape>,
+        children: &HashMap<u64, Vec<u64>>,
+        ancestors: &mut Vec<(Pt, f32)>,
+        clip: &Geom,
+        seen: &mut HashSet<u64>,
+        output: &mut Vec<(CanvasAction, Geom)>,
+    ) {
+        if !seen.insert(id) {
+            return;
+        }
+        let Some(shape) = map.get(&id) else {
+            return;
+        };
+        if !shape.visible || shape.guide || shape.opacity <= 0.0 {
+            return;
+        }
+        let mut contours = if matches!(shape.geom, Geom::Text(_)) {
+            let bounds = shape.geom.bbox().inflate(4.0);
+            Geom::Rect {
+                origin: bounds.min,
+                size: bounds.size(),
+                radius: 0.0,
+            }
+            .contours(64)
+            .into_iter()
+            .map(|contour| {
+                contour
+                    .into_iter()
+                    .map(|point| point.rotate_about(shape.geom.bbox().center(), shape.rotation))
+                    .collect()
+            })
+            .collect::<Vec<Vec<Pt>>>()
+        } else if shape.geom.is_closed() {
+            shape.world_contours(64)
+        } else {
+            Vec::new()
+        };
+        for point in contours.iter_mut().flatten() {
+            for (center, angle) in ancestors.iter().rev() {
+                *point = point.rotate_about(*center, *angle);
+            }
+        }
+        let geometry = Geom::Poly {
+            contours,
+            winding: false,
+        };
+        let visible = apply(BoolOp::Intersect, &geometry, clip);
+        let child_clip = if shape.layout.frame && shape.layout.clip {
+            let Some(visible) = visible.as_ref() else {
+                return;
+            };
+            visible
+        } else {
+            clip
+        };
+        ancestors.push((shape.geom.bbox().center(), shape.rotation));
+        for child in children.get(&id).into_iter().flatten().rev() {
+            visit(*child, map, children, ancestors, child_clip, seen, output);
+        }
+        ancestors.pop();
+        if let Some(visible) = visible {
+            for trigger in [Trigger::Click, Trigger::Hover, Trigger::Press] {
+                if shape
+                    .layout
+                    .interactions
+                    .iter()
+                    .any(|interaction| interaction.trigger == trigger)
+                {
+                    output.push((
+                        CanvasAction {
+                            source: id,
+                            name: if shape.name.is_empty() {
+                                format!("Object {id}")
+                            } else {
+                                shape.name.clone()
+                            },
+                            trigger,
+                        },
+                        visible.clone(),
+                    ));
+                }
+            }
+        }
+    }
+    let clip = Geom::Rect {
+        origin: Pt::ZERO,
+        size: Pt::new(doc.width, doc.height),
+        radius: 0.0,
+    };
+    let mut candidates = Vec::new();
+    visit(
+        root,
+        &map,
+        &children,
+        &mut Vec::new(),
+        &clip,
+        &mut HashSet::new(),
+        &mut candidates,
+    );
+    let mut covered: [Option<Geom>; 3] = [None, None, None];
+    let mut actions = Vec::new();
+    for (action, geometry) in candidates {
+        let index = match action.trigger {
+            Trigger::Click => 0,
+            Trigger::Hover => 1,
+            Trigger::Press => 2,
+        };
+        let exposed = covered[index].as_ref().map_or_else(
+            || Some(geometry.clone()),
+            |cover| apply(BoolOp::Subtract, &geometry, cover),
+        );
+        covered[index] = Some(
+            covered[index]
+                .as_ref()
+                .and_then(|cover| apply(BoolOp::Union, cover, &geometry))
+                .unwrap_or(geometry),
+        );
+        if exposed.is_some() {
+            actions.push(action);
+        }
+    }
+    actions
+}
+
 pub fn show(ui: &mut Ui, studio: &mut Studio) {
     let ctx = ui.ctx().clone();
     let Some(shared) = ctx.data(|d| d.get_temp::<Arc<Mutex<Preview>>>(key())) else {
@@ -543,13 +809,12 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         ui.set_height((viewport.height() - 100.0).max(240.0));
         ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new("Preview").strong().size(18.0));
-            if ui
-                .add_enabled(
-                    !p.state.history.is_empty() || !p.state.overlays.is_empty(),
-                    egui::Button::new("← Back"),
-                )
-                .clicked()
-            {
+            let back = ui.add_enabled(
+                !p.state.history.is_empty() || !p.state.overlays.is_empty(),
+                egui::Button::new("← Back"),
+            );
+            super::welcome::focus_control(ui, &back);
+            if back.clicked() {
                 p.state.back();
                 p.state.last_transition = Transition::SlideRight;
                 p.state.duration_ms = 240;
@@ -557,25 +822,29 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
                 p.dirty = true;
             }
             for (name, w) in [("Phone", 390.0), ("Tablet", 768.0), ("Desktop", 1440.0)] {
-                if ui
-                    .selectable_label((p.width - w).abs() < 1.0, name)
-                    .clicked()
-                {
+                let response = ui.selectable_label((p.width - w).abs() < 1.0, name);
+                super::welcome::focus_control(ui, &response);
+                if response.clicked() {
                     p.width = w;
                     p.dirty = true;
                 }
             }
-            if ui
-                .add(
-                    egui::DragValue::new(&mut p.width)
-                        .range(240.0..=2560.0)
-                        .suffix(" px"),
-                )
-                .changed()
-            {
+            let mut width = p.width;
+            let field = super::fields::number(
+                ui,
+                p.owner.with("width"),
+                "Preview width (px)",
+                &mut width,
+                240.0..=2560.0,
+                " px",
+                None,
+                Default::default(),
+            );
+            if field.changed {
+                p.width = width;
                 p.dirty = true;
             }
-            if ui.button("Close · Esc").clicked() {
+            if super::keyboard_controls::button(ui, "close-preview", "Close · Esc").clicked() {
                 close = true;
             }
         });
@@ -634,6 +903,14 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
                             image,
                             egui::TextureOptions::LINEAR,
                         ));
+                        p.actions = p
+                            .state
+                            .overlays
+                            .last()
+                            .copied()
+                            .or(p.state.current_frame)
+                            .map(|root| keyboard_actions(&canvas, root))
+                            .unwrap_or_default();
                         p.rendered = Some(canvas);
                         p.interactive = Some(full);
                     } else {
@@ -645,6 +922,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
                     p.texture = None;
                     p.rendered = None;
                     p.interactive = None;
+                    p.actions.clear();
                 }
             }
             p.pending_animation = false;
@@ -653,12 +931,59 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         if let Some(error) = &p.error {
             ui.colored_label(egui::Color32::LIGHT_RED, error);
         }
+        let mut keyboard_hover = None;
+        if !p.actions.is_empty() {
+            let ready = p.error.is_none()
+                && p.animation.as_ref().is_none_or(|animation| {
+                    ctx.input(|input| input.time)
+                        >= animation.started + animation.duration.max(0.001)
+                });
+            egui::ScrollArea::vertical()
+                .id_salt(("prototype-actions", p.owner))
+                .max_height(100.0)
+                .show(ui, |ui| {
+                    ui.label("Prototype actions");
+                    ui.add_enabled_ui(ready, |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            for action in p.actions.clone() {
+                                let label = format!("{} · {}", action.name, action.trigger.name());
+                                let response = super::fields::native_scope(
+                                    ui,
+                                    p.owner.with((
+                                        "canvas-action",
+                                        action.source,
+                                        action.trigger.name(),
+                                    )),
+                                    |ui| ui.button(label),
+                                )
+                                .inner;
+                                super::welcome::focus_control(ui, &response);
+                                if action.trigger == Trigger::Hover {
+                                    if response.has_focus() {
+                                        keyboard_hover = Some(action.source);
+                                    }
+                                } else if response.clicked() {
+                                    activate(&mut p, action.source, action.trigger);
+                                }
+                            }
+                        })
+                    });
+                });
+        }
         if let Some(texture) = p.texture.clone() {
             egui::ScrollArea::both()
                 .max_height((ui.available_height() - 8.0).max(100.0))
                 .show(ui, |ui| {
                     let (rect, response) =
                         ui.allocate_exact_size(texture.size_vec2(), egui::Sense::click());
+                    response.widget_info(|| {
+                        egui::WidgetInfo::labeled(
+                            egui::WidgetType::Other,
+                            response.enabled(),
+                            "Prototype canvas",
+                        )
+                    });
+                    super::welcome::focus_control(ui, &response);
                     let painter = ui.painter().with_clip_rect(rect.intersect(ui.clip_rect()));
                     let uv = egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0));
                     let now = ctx.input(|i| i.time);
@@ -734,7 +1059,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
                             .clone()
                             .on_hover_cursor(egui::CursorIcon::PointingHand);
                     }
-                    let hover = hits[1];
+                    let hover = hits[1].or(keyboard_hover);
                     if progress >= 1.0 && hover != p.hovered {
                         let before = p.state.active_variants.clone();
                         p.state.clear_hover();
@@ -766,7 +1091,12 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         }
     });
     if close {
+        let previous_focus = p.previous_focus;
+        drop(p);
         ctx.data_mut(|d| d.remove::<Arc<Mutex<Preview>>>(key()));
+        if let Some(id) = previous_focus {
+            ctx.memory_mut(|memory| memory.request_focus(id));
+        }
     }
 }
 
@@ -810,6 +1140,9 @@ mod tests {
             interaction_at(&canvas, overlay_id, Pt::new(10.0, 10.0)),
             None
         );
+        let actions = keyboard_actions(&canvas, overlay_id);
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].source, overlay_id);
         assert!(canvas.layers.len() > 1);
         let pixels = crate::compositor::render_export(&canvas, 1).unwrap();
         assert!(pixels.pixel(150, 100).unwrap().red() > pixels.pixel(10, 10).unwrap().red() + 50);
@@ -874,5 +1207,443 @@ mod tests {
             interaction_targets(&doc, parent_id, Pt::new(40.0, 30.0)),
             Some([Some(child_id), Some(parent_id), None])
         );
+    }
+}
+
+#[cfg(test)]
+mod keyboard_tests {
+    use super::*;
+    use crate::ui::welcome::keyboard_tests as keys;
+    use egui::{Event, Key, Modifiers};
+
+    fn presentation_frame(
+        ctx: &egui::Context,
+        studio: &mut Studio,
+        events: Vec<Event>,
+    ) -> egui::FullOutput {
+        keys::render(ctx, events, |ui| {
+            studio.handle_shortcuts(ui.ctx());
+            super::super::panel_workspace::show(ui, studio);
+            super::super::keyboard_authoring::show(ctx, studio);
+            show(ui, studio);
+        })
+    }
+
+    fn presentation_press(ctx: &egui::Context, studio: &mut Studio, name: &str) {
+        keys::tab_to(ctx, name, |events| presentation_frame(ctx, studio, events));
+        presentation_frame(ctx, studio, keys::key(Key::Enter, Modifiers::NONE));
+        presentation_frame(ctx, studio, vec![]);
+    }
+
+    #[test]
+    fn keyboard_prototype_authors_frames_and_activates_native_click_press_and_back() {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        super::super::theme::apply(&ctx);
+        let mut studio = Studio::new();
+        studio.doc = Document::new("Native prototype", 800., 500., 72.);
+        studio.persona = crate::tools::Persona::Layout;
+        studio.show_welcome = false;
+        assert!(studio.selection.is_empty());
+        presentation_frame(&ctx, &mut studio, vec![]);
+        let mut frames = Vec::new();
+        for x in ["100", "400"] {
+            for key in [Key::F8, Key::F, Key::Enter] {
+                presentation_frame(&ctx, &mut studio, keys::key(key, Modifiers::NONE));
+            }
+            presentation_frame(&ctx, &mut studio, vec![]);
+            for (name, text) in [("Position X (px)", x), ("Position Y (px)", "100")] {
+                keys::tab_to(&ctx, name, |events| {
+                    presentation_frame(&ctx, &mut studio, events)
+                });
+                keys::replace(text, |events| presentation_frame(&ctx, &mut studio, events));
+            }
+            presentation_frame(
+                &ctx,
+                &mut studio,
+                keys::key(Key::Enter, Modifiers::CTRL | Modifiers::COMMAND),
+            );
+            presentation_frame(&ctx, &mut studio, vec![]);
+            frames.push(studio.selected_frame().unwrap());
+        }
+        assert_ne!(frames[0], frames[1]);
+        presentation_press(&ctx, &mut studio, "Interactions");
+        presentation_press(&ctx, &mut studio, "+ Interaction");
+        keys::tab_to(&ctx, "Interaction transition", |events| {
+            presentation_frame(&ctx, &mut studio, events)
+        });
+        presentation_frame(&ctx, &mut studio, keys::key(Key::Home, Modifiers::NONE));
+        let (layer, source) = frames[1];
+        assert_eq!(
+            studio
+                .doc
+                .find_shape(layer, source)
+                .unwrap()
+                .layout
+                .interactions[0]
+                .action,
+            PrototypeAction::Navigate {
+                target: frames[0].1
+            }
+        );
+        let name = studio.doc.find_shape(layer, source).unwrap().name.clone();
+        let before = crate::project::encode(&studio.doc).unwrap();
+        let history = studio.history.len();
+        presentation_press(&ctx, &mut studio, "Present");
+        assert!(is_open(&ctx));
+        presentation_press(&ctx, &mut studio, &format!("{name} · Click"));
+        let state = ctx
+            .data(|data| data.get_temp::<Arc<Mutex<Preview>>>(key()))
+            .unwrap();
+        assert_eq!(state.lock().unwrap().state.current_frame, Some(frames[0].1));
+        presentation_press(&ctx, &mut studio, "← Back");
+        assert_eq!(state.lock().unwrap().state.current_frame, Some(source));
+        let during = presentation_frame(&ctx, &mut studio, vec![]);
+        assert!(
+            keys::named(&during, &format!("{name} · Click"))
+                .1
+                .is_disabled()
+        );
+        for _ in 0..20 {
+            presentation_frame(&ctx, &mut studio, vec![]);
+        }
+        presentation_frame(&ctx, &mut studio, keys::key(Key::Escape, Modifiers::NONE));
+        assert!(!is_open(&ctx));
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+        assert_eq!(studio.history.len(), history);
+        keys::tab_to(&ctx, "Interaction trigger", |events| {
+            presentation_frame(&ctx, &mut studio, events)
+        });
+        presentation_frame(&ctx, &mut studio, keys::key(Key::End, Modifiers::NONE));
+        let before = crate::project::encode(&studio.doc).unwrap();
+        let history = studio.history.len();
+        presentation_press(&ctx, &mut studio, "Present");
+        presentation_press(&ctx, &mut studio, &format!("{name} · Press"));
+        let state = ctx
+            .data(|data| data.get_temp::<Arc<Mutex<Preview>>>(key()))
+            .unwrap();
+        assert_eq!(state.lock().unwrap().state.current_frame, Some(frames[0].1));
+        presentation_frame(&ctx, &mut studio, keys::key(Key::Escape, Modifiers::NONE));
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+        assert_eq!(studio.history.len(), history);
+        assert_eq!(studio.selected_frame(), Some(frames[1]));
+    }
+
+    #[test]
+    fn keyboard_prototype_native_hover_focus_restores_variant_on_blur() {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        super::super::theme::apply(&ctx);
+        let mut studio = Studio::new();
+        studio.doc = Document::new("Hover fixture", 400., 300., 72.);
+        studio.doc.layers = vec![Layer::vector("Components")];
+        let main = crate::layout::make_frame(Pt::ZERO, Pt::new(100., 100.));
+        let main_id = main.id;
+        studio.doc.layers[0].kind.shapes_mut().unwrap().push(main);
+        layout_components::make_component(&mut studio.doc, 0, main_id).unwrap();
+        let variant =
+            layout_components::add_variant(&mut studio.doc, main_id, "Hover", Pt::new(150., 0.))
+                .unwrap();
+        let instance = layout_components::insert_instance(
+            &mut studio.doc,
+            main_id,
+            0,
+            Pt::new(0., 150.),
+            None,
+        )
+        .unwrap();
+        let source = studio.doc.find_shape_mut(0, instance).unwrap();
+        source.name = "Hover source".into();
+        source.layout.interactions.push(Interaction {
+            trigger: Trigger::Hover,
+            action: PrototypeAction::SetVariant { component: variant },
+            transition: Transition::Instant,
+            duration_ms: 0,
+        });
+        studio.selection = vec![(0, instance)];
+        studio.persona = crate::tools::Persona::Layout;
+        start(&ctx, &mut studio);
+        let before = crate::project::encode(&studio.doc).unwrap();
+        let output = keys::render(&ctx, vec![], |ui| show(ui, &mut studio));
+        let target = keys::named(&output, "Hover source · Hover").0;
+        let shared = ctx
+            .data(|data| data.get_temp::<Arc<Mutex<Preview>>>(key()))
+            .unwrap();
+        let mut reached = false;
+        for _ in 0..16 {
+            keys::render(&ctx, keys::key(Key::Tab, Modifiers::NONE), |ui| {
+                show(ui, &mut studio)
+            });
+            if ctx
+                .memory(|memory| memory.focused())
+                .map(|id| id.accesskit_id())
+                == Some(target)
+            {
+                reached = true;
+                break;
+            }
+        }
+        assert!(reached, "native Tab must focus the actual Hover action");
+        assert_eq!(
+            shared.lock().unwrap().state.active_variants.get(&instance),
+            Some(&variant)
+        );
+        keys::tab(true, |events| keys::render(&ctx, events, |ui| show(ui, &mut studio)));
+        assert_ne!(ctx.memory(|memory|memory.focused()).map(|id|id.accesskit_id()),Some(target),"Native Shift+Tab must leave the Hover action");
+        keys::render(&ctx,vec![],|ui|show(ui,&mut studio));
+        assert!(shared.lock().unwrap().state.active_variants.is_empty());
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+    }
+
+    #[test]
+    fn keyboard_prototype_targets_keep_clipped_slivers_and_exclude_covered_or_hidden_sources() {
+        let mut doc = Document::new("Eligibility", 100., 100., 72.);
+        let mut root = crate::layout::make_frame(Pt::ZERO, Pt::new(100., 100.));
+        let root_id = root.id;
+        root.layout.interactions.push(Interaction {
+            trigger: Trigger::Hover,
+            action: PrototypeAction::Back,
+            transition: Transition::Instant,
+            duration_ms: 0,
+        });
+        let make = |name: &str, x: f32, y: f32, width: f32| {
+            let mut shape = crate::layout::make_frame(Pt::new(x, y), Pt::new(width, 20.));
+            shape.name = name.into();
+            shape.layout.parent = Some(root_id);
+            shape.layout.interactions.push(Interaction {
+                trigger: Trigger::Click,
+                action: PrototypeAction::Back,
+                transition: Transition::Instant,
+                duration_ms: 0,
+            });
+            shape
+        };
+        let covered = make("Covered", 20., 20., 20.);
+        let top = make("Top", 20., 20., 20.);
+        let partial = make("Clipped sliver", 99.99, 60., 30.);
+        let outside = make("Outside clip", 101., 40., 30.);
+        let mut hidden = make("Hidden", 60., 20., 20.);
+        hidden.visible = false;
+        doc.layers = vec![Layer::vector("Targets")];
+        doc.layers[0]
+            .kind
+            .shapes_mut()
+            .unwrap()
+            .extend([root, covered, top, partial, outside, hidden]);
+        let actions = keyboard_actions(&doc, root_id);
+        assert_eq!(
+            actions
+                .iter()
+                .filter(|action| action.trigger == Trigger::Click)
+                .map(|action| action.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Clipped sliver", "Top"]
+        );
+        assert!(
+            actions
+                .iter()
+                .any(|action| action.source == root_id && action.trigger == Trigger::Hover)
+        );
+        doc.layers[0].visible = false;
+        assert!(keyboard_actions(&doc, root_id).is_empty());
+    }
+
+    fn frame(ctx: &egui::Context, studio: &mut Studio, events: Vec<Event>) -> egui::FullOutput {
+        keys::render(ctx, events, |ui| {
+            studio.handle_shortcuts(ui.ctx());
+            ui.set_max_width(500.);
+            component_editor(ui, studio);
+            interaction_editor(ui, studio);
+            ui.interact(
+                ui.available_rect_before_wrap(),
+                egui::Id::new("studio-canvas"),
+                egui::Sense::click(),
+            );
+            super::super::keyboard_authoring::show(ctx, studio);
+        })
+    }
+
+    fn press(ctx: &egui::Context, studio: &mut Studio, name: &str) {
+        keys::tab_to(ctx, name, |events| frame(ctx, studio, events));
+        frame(ctx, studio, keys::key(Key::Enter, Modifiers::NONE));
+        frame(ctx, studio, vec![]);
+    }
+
+    #[test]
+    fn keyboard_layout_creates_component_variant_instance_and_interaction_without_pointer_setup() {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        super::super::theme::apply(&ctx);
+        let mut studio = Studio::new();
+        studio.doc = Document::new("Keyboard prototype authoring", 800., 600., 72.);
+        studio.show_welcome = false;
+        studio.persona = crate::tools::Persona::Layout;
+        assert!(studio.selection.is_empty());
+        frame(&ctx, &mut studio, vec![]);
+        frame(&ctx, &mut studio, keys::key(Key::F8, Modifiers::NONE));
+        frame(&ctx, &mut studio, keys::key(Key::F, Modifiers::NONE));
+        frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        frame(&ctx, &mut studio, vec![]);
+        frame(
+            &ctx,
+            &mut studio,
+            keys::key(Key::Enter, Modifiers::CTRL | Modifiers::COMMAND),
+        );
+        frame(&ctx, &mut studio, vec![]);
+        let (layer, main) = studio.selected_frame().unwrap();
+        press(&ctx, &mut studio, "Create component");
+        assert!(matches!(
+            studio.doc.find_shape(layer, main).unwrap().layout.component,
+            Some(ComponentBinding::Main { .. })
+        ));
+        keys::tab_to(&ctx, "Variant name", |events| {
+            frame(&ctx, &mut studio, events)
+        });
+        frame(
+            &ctx,
+            &mut studio,
+            keys::key(Key::A, Modifiers::CTRL | Modifiers::COMMAND),
+        );
+        frame(
+            &ctx,
+            &mut studio,
+            keys::key(Key::Backspace, Modifiers::NONE),
+        );
+        let output = frame(&ctx, &mut studio, vec![]);
+        keys::associated_error(&output, "Variant name");
+        assert!(keys::named(&output, "Add variant").1.is_disabled());
+        keys::replace("Hover state", |events| frame(&ctx, &mut studio, events));
+        press(&ctx, &mut studio, "Add variant");
+        assert_eq!(layout_components::definitions(&studio.doc).len(), 2);
+        press(&ctx, &mut studio, "Insert instance");
+        let (layer, instance) = studio.primary().unwrap();
+        let output = keys::tab_to(&ctx, "Component variant", |events| {
+            frame(&ctx, &mut studio, events)
+        });
+        keys::focused(&ctx, &output, "Component variant");
+        frame(&ctx, &mut studio, keys::key(Key::Home, Modifiers::NONE));
+        assert!(
+            matches!(studio.doc.find_shape(layer, instance).unwrap().layout.component, Some(ComponentBinding::Instance { main: target, .. }) if target == main)
+        );
+        press(&ctx, &mut studio, "Interactions");
+        press(&ctx, &mut studio, "+ Interaction");
+        assert_eq!(
+            studio
+                .doc
+                .find_shape(layer, instance)
+                .unwrap()
+                .layout
+                .interactions
+                .len(),
+            1
+        );
+        let output = keys::tab_to(&ctx, "Transition duration (ms)", |events| {
+            frame(&ctx, &mut studio, events)
+        });
+        keys::focused(&ctx, &output, "Transition duration (ms)");
+        let duration_id = keys::named(&output, "Transition duration (ms)").0;
+        let output = keys::replace("-", |events| frame(&ctx, &mut studio, events));
+        keys::associated_error(&output, "Transition duration (ms)");
+        assert_eq!(
+            studio
+                .doc
+                .find_shape(layer, instance)
+                .unwrap()
+                .layout
+                .interactions[0]
+                .duration_ms,
+            200
+        );
+        keys::replace("350", |events| frame(&ctx, &mut studio, events));
+        frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        assert_eq!(
+            studio
+                .doc
+                .find_shape(layer, instance)
+                .unwrap()
+                .layout
+                .interactions[0]
+                .duration_ms,
+            350
+        );
+        keys::tab_to(&ctx, "Interaction trigger", |events| {
+            frame(&ctx, &mut studio, events)
+        });
+        frame(&ctx, &mut studio, keys::key(Key::End, Modifiers::NONE));
+        assert_eq!(
+            studio
+                .doc
+                .find_shape(layer, instance)
+                .unwrap()
+                .layout
+                .interactions[0]
+                .trigger,
+            Trigger::Press
+        );
+        let output = frame(&ctx, &mut studio, vec![]);
+        assert_eq!(
+            keys::named(&output, "Transition duration (ms)").0,
+            duration_id
+        );
+        studio.doc.layers[layer].locked = true;
+        let before = studio
+            .doc
+            .find_shape(layer, instance)
+            .unwrap()
+            .layout
+            .interactions
+            .clone();
+        let output = frame(&ctx, &mut studio, vec![]);
+        assert!(
+            keys::named(&output, "Transition duration (ms)")
+                .1
+                .is_disabled()
+        );
+        frame(
+            &ctx,
+            &mut studio,
+            keys::action(
+                duration_id,
+                egui::accesskit::Action::SetValue,
+                Some(egui::accesskit::ActionData::NumericValue(900.)),
+            ),
+        );
+        assert_eq!(
+            studio
+                .doc
+                .find_shape(layer, instance)
+                .unwrap()
+                .layout
+                .interactions,
+            before
+        );
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(".artifacts")
+            .join(format!(
+                "keyboard-prototype-{}-{}",
+                std::process::id(),
+                crate::document::next_id()
+            ));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("prototype.oma");
+        crate::project::save_to(&studio.doc, &path).unwrap();
+        let reopened = crate::project::load_from(&path).unwrap();
+        assert_eq!(
+            reopened
+                .find_shape(layer, instance)
+                .unwrap()
+                .layout
+                .interactions,
+            before
+        );
+        assert!(matches!(
+            reopened
+                .find_shape(layer, instance)
+                .unwrap()
+                .layout
+                .component,
+            Some(ComponentBinding::Instance { .. })
+        ));
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

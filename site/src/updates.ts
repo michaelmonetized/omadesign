@@ -8,6 +8,13 @@ export type UpdatePost = {
 
 export const updates: UpdatePost[] = [
   {
+    slug: "0.6.7-nightly.20261016.0001",
+    version: "0.6.7-nightly.20261016.0001",
+    date: "2026-10-16",
+    title: "Keep the original precision",
+    dek: "Native pixels and profiles, editable PSD type, keyboard fields, grid and component controls, retained Live history, compositions and 3D scenes. Supported exchanges preserve precision; unsupported paths refuse it.",
+  },
+  {
     slug: "0.6.3-nightly.20261013.0001",
     version: "0.6.3-nightly.20261013.0001",
     date: "2026-10-13",

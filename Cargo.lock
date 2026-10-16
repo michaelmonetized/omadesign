@@ -2937,7 +2937,7 @@ dependencies = [
 
 [[package]]
 name = "omadesign"
-version = "0.6.7"
+version = "0.6.7-nightly.20261016.1"
 dependencies = [
  "ab_glyph",
  "arboard",
@@ -2952,7 +2952,9 @@ dependencies = [
  "lopdf",
  "mlua",
  "mozjpeg-sys",
+ "omadesign-affinity",
  "ort",
+ "png",
  "rayon",
  "resvg",
  "rfd",
@@ -2977,6 +2979,16 @@ dependencies = [
  "x11-clipboard",
  "x11rb",
  "zip",
+ "zstd",
+]
+
+[[package]]
+name = "omadesign-affinity"
+version = "0.1.0"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "image",
  "zstd",
 ]
 

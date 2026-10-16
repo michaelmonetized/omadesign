@@ -18,6 +18,7 @@ pub fn write(document: &Document) -> Result<(Vec<u8>, Vec<String>), String> {
     if crate::deep_color::has_native(document) {
         return Err("PDF cannot preserve native pixel or mask samples yet. Export PSD, TIFF or an explicit 8-bit document copy.".into());
     }
+    crate::motion::require_flat_artwork(document, "PDF")?;
     crate::compositor::admit_precise_export(document)?;
     document.validate_hierarchy()?;
     let (prepared, warnings) = fallback::prepare(document)?;

@@ -6,44 +6,77 @@ set -eu
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
 VERSION="$(node scripts/version.mjs get)"
+BUILD=1
+ARCHITECTURES='aarch64 x86_64'
+TARGET_ROOT="${CARGO_TARGET_DIR:-$ROOT/target}"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --package-only) BUILD=0; shift ;;
+    --arch)
+      case "${2:-}" in
+        aarch64|x86_64) ARCHITECTURES="$2" ;;
+        all) ARCHITECTURES='aarch64 x86_64' ;;
+        *) echo 'use --arch aarch64|x86_64|all' >&2; exit 1 ;;
+      esac
+      shift 2
+      ;;
+    --target-dir)
+      case "${2:-}" in /*) TARGET_ROOT="$2" ;; *) echo '--target-dir requires an absolute path' >&2; exit 1 ;; esac
+      shift 2
+      ;;
+    *) echo 'usage: scripts/release.sh [--package-only] [--arch aarch64|x86_64|all] [--target-dir DIRECTORY]' >&2; exit 1 ;;
+  esac
+done
+export CARGO_TARGET_DIR="$TARGET_ROOT"
 case "$VERSION" in
   ''|*[!A-Za-z0-9.+-]*) echo "invalid package version: $VERSION" >&2; exit 1 ;;
 esac
 DIST="dist"
 mkdir -p "$DIST"
-for tool in node cargo readelf tar sha256sum; do
+for tool in node readelf tar sha256sum; do
   command -v "$tool" >/dev/null || { echo "missing release tool: $tool" >&2; exit 1; }
 done
+if [ "$BUILD" = 1 ]; then
+  command -v cargo >/dev/null || { echo 'missing release tool: cargo' >&2; exit 1; }
+fi
 
 # Bundle a pinned runtime per architecture; do not depend on a system ORT.
-sh scripts/prepare-ml-runtime.sh aarch64
-sh scripts/prepare-ml-runtime.sh x86_64
+for arch in $ARCHITECTURES; do
+  sh scripts/prepare-ml-runtime.sh "$arch"
+done
 printf '%s  %s\n' 309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8 assets/models/u2netp.onnx | sha256sum -c
 printf '%s  %s\n' 74b0bf4bdad2868e256ef722980586b7ff1a8b2c9ba0b8e526498cd28acf5b80 assets/models/realesr-general-x4v3.onnx | sha256sum -c
-
-chmod +x scripts/zig-cc scripts/zig-cc-aarch64 scripts/zig-cc-x86_64 \
-  scripts/zig-cxx-aarch64 scripts/zig-cxx-x86_64
 
 # LLVM LTO + zig cc's lld plugin is a fight we don't need.
 export CARGO_PROFILE_RELEASE_LTO=false
 export OMA_RAW_CXX_STDLIB=c++
 
-echo "building aarch64-unknown-linux-gnu (glibc 2.35)..."
-CC_aarch64_unknown_linux_gnu="$ROOT/scripts/zig-cc-aarch64" \
-CXX_aarch64_unknown_linux_gnu="$ROOT/scripts/zig-cxx-aarch64" \
-CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="$ROOT/scripts/zig-cc-aarch64" \
-  cargo build --locked --release --bin omadesign --target aarch64-unknown-linux-gnu
-
-echo "building x86_64-unknown-linux-gnu (glibc 2.35)..."
-CC_x86_64_unknown_linux_gnu="$ROOT/scripts/zig-cc-x86_64" \
-CXX_x86_64_unknown_linux_gnu="$ROOT/scripts/zig-cxx-x86_64" \
-CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER="$ROOT/scripts/zig-cc-x86_64" \
-  cargo build --locked --release --bin omadesign --target x86_64-unknown-linux-gnu
+if [ "$BUILD" = 1 ]; then
+  chmod +x scripts/zig-cc scripts/zig-cc-aarch64 scripts/zig-cc-x86_64 \
+    scripts/zig-cxx-aarch64 scripts/zig-cxx-x86_64
+  for arch in $ARCHITECTURES; do
+    echo "building $arch-unknown-linux-gnu (glibc 2.35)..."
+    case "$arch" in
+      aarch64)
+        CC_aarch64_unknown_linux_gnu="$ROOT/scripts/zig-cc-aarch64" \
+        CXX_aarch64_unknown_linux_gnu="$ROOT/scripts/zig-cxx-aarch64" \
+        CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="$ROOT/scripts/zig-cc-aarch64" \
+          cargo build --locked --release --bin omadesign --target aarch64-unknown-linux-gnu
+        ;;
+      x86_64)
+        CC_x86_64_unknown_linux_gnu="$ROOT/scripts/zig-cc-x86_64" \
+        CXX_x86_64_unknown_linux_gnu="$ROOT/scripts/zig-cxx-x86_64" \
+        CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER="$ROOT/scripts/zig-cc-x86_64" \
+          cargo build --locked --release --bin omadesign --target x86_64-unknown-linux-gnu
+        ;;
+    esac
+  done
+fi
 
 package() {
   target_dir="$1"
   triple="$2"
-  bin="target/${target_dir}release/omadesign"
+  bin="$TARGET_ROOT/${target_dir}release/omadesign"
   if [ ! -x "$bin" ]; then
     echo "missing $bin" >&2
     exit 1
@@ -106,7 +139,7 @@ package() {
     aarch64-*) ml_arch=aarch64 ;;
     *) ml_arch=x64 ;;
   esac
-  runtime="target/ml-downloads/onnxruntime-linux-$ml_arch-1.28.0"
+  runtime="$TARGET_ROOT/ml-downloads/onnxruntime-linux-$ml_arch-1.28.0"
   mkdir -p "$stage/lib" "$stage/licenses/ml" "$stage/licenses/rust"
   cp -P "$runtime/lib/"*.so* "$stage/lib/"
   cp vendor/ml-notices/* "$stage/licenses/ml/"
@@ -129,6 +162,7 @@ package() {
   mkdir -p "$stage/licenses/libraw" "$stage/licenses/native-notices"
   cp vendor/libraw/* "$stage/licenses/libraw/"
   cp vendor/native-notices/* "$stage/licenses/native-notices/"
+  cp docs/licenses/effectcraft-model-MIT.txt "$stage/licenses/native-notices/EffectCraft-MIT.txt"
   mkdir -p "$stage/licenses/lua" "$stage/plugins"
   cp vendor/lua-notices/* "$stage/licenses/lua/"
   cp -R plugins/studio-starter "$stage/plugins/"
@@ -138,9 +172,10 @@ package() {
   echo "wrote ${DIST}/${name}.tar.gz"
 }
 
-package "aarch64-unknown-linux-gnu/" "aarch64-unknown-linux-gnu"
-package "x86_64-unknown-linux-gnu/" "x86_64-unknown-linux-gnu"
-sh scripts/package-installer.sh "$VERSION"
+for arch in $ARCHITECTURES; do
+  package "$arch-unknown-linux-gnu/" "$arch-unknown-linux-gnu"
+done
+sh scripts/package-installer.sh "$VERSION" "$ARCHITECTURES"
 
 echo
 ls -lh "$DIST"/*.tar.gz

@@ -9,7 +9,7 @@ use crate::templates;
 use crate::tools::Persona;
 use crate::ui::theme::{accent, accent_soft, bg_panel, border, fg, fg_weak};
 use eframe::egui::{self, Align2, Color32, FontId, Id, Rect, RichText, Sense, Stroke, Ui, vec2};
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap};
 use std::sync::Arc;
 
 const JOB: &str = "template-preview-batch";
@@ -245,6 +245,14 @@ fn reset_scope(ctx: &egui::Context) {
 }
 
 pub fn library(ui: &mut Ui, studio: &mut Studio) {
+    let id = ui.make_persistent_id(("template-library", &studio.swap_id));
+    ui.scope_builder(egui::UiBuilder::new().id(id), |ui| {
+        if studio.file_dialog_pending() || studio.updates.freezing { ui.disable(); }
+        library_controls(ui, studio);
+    });
+}
+
+fn library_controls(ui: &mut Ui, studio: &mut Studio) {
     personal::show(ui, studio);
     let state_id = Id::new("template-browser-state");
     let mut state = ui
@@ -272,30 +280,36 @@ pub fn library(ui: &mut Ui, studio: &mut Studio) {
             .size(12.0),
     );
     ui.add_space(10.0);
+    let mut layout_choice = None;
     if state.mode.is_none() {
         ui.label(RichText::new("Layout starters").strong().size(12.0));
         ui.horizontal_wrapped(|ui| {
             for template in crate::layout_templates::CATALOG {
-                if ui
-                    .button(template.name)
-                    .on_hover_text(template.description)
-                    .clicked()
-                {
-                    studio.use_layout_template(template.id, state.width, state.height, state.dpi);
-                }
+                let id = ui.make_persistent_id(("layout-starter", template.id));
+                let response = ui.scope_builder(egui::UiBuilder::new().id(id), |ui| {
+                    ui.button(template.name).on_hover_text(template.description)
+                }).inner;
+                super::welcome::focus_control(ui, &response);
+                if response.clicked() { layout_choice = Some(template.id); }
             }
         });
     }
     ui.add_space(14.0);
-    size_controls(ui, studio, &mut state);
+    let size_valid = size_controls(ui, studio, &mut state);
+    let available = size_valid && ui.is_enabled() && !studio.file_dialog_pending() && !studio.updates.freezing;
     ui.add_space(10.0);
     ui.horizontal_wrapped(|ui| {
-        ui.add(
+        let label = ui.label("Search templates").id;
+        let response = ui.add(
             egui::TextEdit::singleline(&mut state.query)
+                .id(ui.make_persistent_id("template-search"))
                 .hint_text("Find your next idea…")
                 .desired_width(190.0),
         );
-        egui::ComboBox::from_id_salt("template-category")
+        super::welcome::name_control(ui, &response, label, "Search templates");
+        let label = ui.label("Template category").id;
+        let mut chosen = false;
+        let response = egui::ComboBox::from_id_salt("template-category")
             .selected_text(if state.category == "All" {
                 "All categories"
             } else {
@@ -303,11 +317,13 @@ pub fn library(ui: &mut Ui, studio: &mut Studio) {
             })
             .width(150.0)
             .show_ui(ui, |ui| {
-                ui.selectable_value(&mut state.category, "All", "All categories");
+                if ui.selectable_value(&mut state.category, "All", "All categories").clicked() { chosen = true; ui.close(); }
                 for category in templates::categories() {
-                    ui.selectable_value(&mut state.category, *category, *category);
+                    if ui.selectable_value(&mut state.category, *category, *category).clicked() { chosen = true; ui.close(); }
                 }
             });
+        if chosen { response.response.request_focus(); }
+        super::welcome::name_control(ui, &response.response, label, "Template category");
     });
     ui.add_space(12.0);
     let size = state.size();
@@ -335,15 +351,16 @@ pub fn library(ui: &mut Ui, studio: &mut Studio) {
     let mut use_selected = false;
     if let Some(selected) = selected {
         ui.horizontal_wrapped(|ui| {
-            if ui
+            let id = ui.make_persistent_id(("use-template", selected.id));
+            let response = ui.scope_builder(egui::UiBuilder::new().id(id), |ui| ui
                 .add_enabled(
-                    !visible.is_empty(),
+                    available && !visible.is_empty(),
                     egui::Button::new("Use this template")
                         .fill(accent_soft())
                         .min_size(vec2(160.0, 32.0)),
-                )
-                .clicked()
-            {
+                )).inner;
+            super::welcome::focus_control(ui, &response);
+            if available && response.clicked() {
                 use_selected = true;
             }
             ui.label(RichText::new(selected.name).strong());
@@ -393,6 +410,7 @@ pub fn library(ui: &mut Ui, studio: &mut Studio) {
                                 .flatten();
                             let response = card(
                                 ui,
+                                Id::new(("template-card", &studio.swap_id, template.id)),
                                 width,
                                 state.selected == template.id,
                                 texture,
@@ -404,7 +422,7 @@ pub fn library(ui: &mut Ui, studio: &mut Studio) {
                             if response.clicked() || response.double_clicked() {
                                 state.selected = template.id;
                             }
-                            if response.double_clicked() {
+                            if available && response.double_clicked() {
                                 use_selected = true;
                             }
                         }
@@ -414,7 +432,9 @@ pub fn library(ui: &mut Ui, studio: &mut Studio) {
     });
     ui.ctx()
         .data_mut(|data| data.insert_temp(state_id, state.clone()));
-    if use_selected {
+    if let Some(id) = layout_choice.filter(|_| available) {
+        studio.use_layout_template(id, state.width, state.height, state.dpi);
+    } else if available && use_selected {
         studio.use_template(
             state.selected,
             size.width as f32,
@@ -431,9 +451,10 @@ fn layout_library(ui: &mut Ui, studio: &mut Studio, state: &mut Browser) {
             .color(fg_weak()),
     );
     ui.add_space(14.0);
-    ui.add_enabled_ui(state.selected != "layout-fieldwork", |ui| {
+    let size_valid = ui.add_enabled_ui(state.selected != "layout-fieldwork", |ui| {
         size_controls(ui, studio, state)
-    });
+    }).inner;
+    let available = size_valid && ui.is_enabled() && !studio.file_dialog_pending() && !studio.updates.freezing;
     if state.selected == "layout-fieldwork" {
         ui.label(
             RichText::new("Fieldwork includes its own responsive pages and sizes.")
@@ -442,11 +463,16 @@ fn layout_library(ui: &mut Ui, studio: &mut Studio, state: &mut Browser) {
         );
     }
     ui.add_space(10.0);
-    ui.add(
-        egui::TextEdit::singleline(&mut state.query)
-            .hint_text("Find a Layout starter…")
-            .desired_width(240.0),
-    );
+    ui.horizontal_wrapped(|ui| {
+        let label = ui.label("Search Layout templates").id;
+        let response = ui.add(
+            egui::TextEdit::singleline(&mut state.query)
+                .id(ui.make_persistent_id("layout-template-search"))
+                .hint_text("Find a Layout starter…")
+                .desired_width(240.0),
+        );
+        super::welcome::name_control(ui, &response, label, "Search Layout templates");
+    });
     let query = state.query.trim().to_lowercase();
     let visible: Vec<_> = crate::layout_templates::CATALOG
         .iter()
@@ -468,14 +494,16 @@ fn layout_library(ui: &mut Ui, studio: &mut Studio, state: &mut Browser) {
     ui.add_space(12.0);
     if let Some(template) = crate::layout_templates::find(state.selected) {
         ui.horizontal_wrapped(|ui| {
-            use_selected = ui
+            let id = ui.make_persistent_id(("use-layout-template", template.id));
+            let response = ui.scope_builder(egui::UiBuilder::new().id(id), |ui| ui
                 .add_enabled(
-                    !visible.is_empty(),
+                    available && !visible.is_empty(),
                     egui::Button::new("Use this template")
                         .fill(accent_soft())
                         .min_size(vec2(160.0, 32.0)),
-                )
-                .clicked();
+                )).inner;
+            super::welcome::focus_control(ui, &response);
+            use_selected = available && response.clicked();
             ui.label(RichText::new(template.name).strong());
         });
         ui.label(RichText::new(template.description).small().color(fg_weak()));
@@ -514,6 +542,7 @@ fn layout_library(ui: &mut Ui, studio: &mut Studio, state: &mut Browser) {
                                 .flatten();
                             let response = card(
                                 ui,
+                                Id::new(("layout-template-card", &studio.swap_id, template.id)),
                                 width,
                                 state.selected == template.id,
                                 texture,
@@ -525,7 +554,7 @@ fn layout_library(ui: &mut Ui, studio: &mut Studio, state: &mut Browser) {
                             if response.clicked() {
                                 state.selected = template.id;
                             }
-                            if response.double_clicked() {
+                            if available && response.double_clicked() {
                                 state.selected = template.id;
                                 use_selected = true;
                             }
@@ -534,7 +563,7 @@ fn layout_library(ui: &mut Ui, studio: &mut Studio, state: &mut Browser) {
                 }
             });
     });
-    if use_selected {
+    if available && use_selected {
         studio.use_layout_template(
             state.selected,
             size.width as f32,
@@ -544,9 +573,16 @@ fn layout_library(ui: &mut Ui, studio: &mut Studio, state: &mut Browser) {
     }
 }
 
-fn size_controls(ui: &mut Ui, studio: &Studio, state: &mut Browser) {
+fn size_controls(ui: &mut Ui, studio: &Studio, state: &mut Browser) -> bool {
+    let id = ui.make_persistent_id(("template-size-controls", &studio.swap_id, state.mode.map(Persona::name)));
+    ui.scope_builder(egui::UiBuilder::new().id(id), |ui| size_fields(ui, studio, state)).inner
+}
+
+fn size_fields(ui: &mut Ui, studio: &Studio, state: &mut Browser) -> bool {
+    let mut invalid = Vec::new();
+    let mut fields = Vec::new();
     ui.horizontal_wrapped(|ui| {
-        ui.label(RichText::new("Make it fit").strong().size(12.0));
+        let label = ui.label(RichText::new("Make it fit").strong().size(12.0)).id;
         let size = state.size();
         let preset_name = crate::presets::all()
             .iter()
@@ -556,7 +592,8 @@ fn size_controls(ui: &mut Ui, studio: &Studio, state: &mut Browser) {
                     && preset.dpi.round() as u32 == size.dpi
             })
             .map_or("Custom size", |preset| preset.name);
-        egui::ComboBox::from_id_salt("template-size")
+        let mut chosen = false;
+        let preset = egui::ComboBox::from_id_salt("template-size")
             .selected_text(preset_name)
             .width(190.0)
             .show_ui(ui, |ui| {
@@ -571,37 +608,102 @@ fn size_controls(ui: &mut Ui, studio: &Studio, state: &mut Browser) {
                         state.width = preset.w;
                         state.height = preset.h;
                         state.dpi = preset.dpi;
+                        chosen = true;
+                        ui.close();
                     }
                 }
             });
-        if ui.small_button("Current canvas").clicked() {
+        if chosen { preset.response.request_focus(); }
+        super::welcome::name_control(ui, &preset.response, label, "Template size preset");
+        let id = ui.make_persistent_id("current-canvas-size");
+        let response = ui.scope_builder(egui::UiBuilder::new().id(id), |ui| ui.small_button("Current canvas")).inner;
+        super::welcome::focus_control(ui, &response);
+        let current_canvas = response.enabled() && response.clicked();
+        if current_canvas {
             state.width = studio.doc.width;
             state.height = studio.doc.height;
             state.dpi = studio.doc.dpi;
         }
-        ui.add(
+        let before = state.width;
+        let id = ui.make_persistent_id("width");
+        let attempt = RefCell::new(None);
+        let (response, label) = ui.scope_builder(egui::UiBuilder::new().id(id).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
+            let label = ui.label("Width (px)").id;
+            (ui.add(
             egui::DragValue::new(&mut state.width)
                 .prefix("W ")
                 .range(32.0..=16000.0)
+                .custom_parser(|text| super::welcome::parse_number(&attempt, text))
                 .speed(5.0),
-        );
-        ui.add(
+            ), label)
+        }).inner;
+        super::welcome::name_control(ui, &response, label, "Template width (px)");
+        if !super::welcome::native_number_valid(ui, &response, id, attempt.into_inner(), f64::from(state.width), 32.0..=16000.) {
+            state.width = before;
+            if response.enabled() { invalid.push(response.id); }
+        }
+        fields.push(response);
+        let before = state.height;
+        let id = ui.make_persistent_id("height");
+        let attempt = RefCell::new(None);
+        let (response, label) = ui.scope_builder(egui::UiBuilder::new().id(id).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
+            let label = ui.label("Height (px)").id;
+            (ui.add(
             egui::DragValue::new(&mut state.height)
                 .prefix("H ")
                 .range(32.0..=16000.0)
+                .custom_parser(|text| super::welcome::parse_number(&attempt, text))
                 .speed(5.0),
-        );
-        ui.add(
+            ), label)
+        }).inner;
+        super::welcome::name_control(ui, &response, label, "Template height (px)");
+        if !super::welcome::native_number_valid(ui, &response, id, attempt.into_inner(), f64::from(state.height), 32.0..=16000.) {
+            state.height = before;
+            if response.enabled() { invalid.push(response.id); }
+        }
+        fields.push(response);
+        let before = state.dpi;
+        let id = ui.make_persistent_id("dpi");
+        let attempt = RefCell::new(None);
+        let (response, label) = ui.scope_builder(egui::UiBuilder::new().id(id).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
+            let label = ui.label("Resolution (dpi)").id;
+            (ui.add(
             egui::DragValue::new(&mut state.dpi)
                 .suffix(" dpi")
                 .range(36.0..=600.0)
+                .custom_parser(|text| super::welcome::parse_number(&attempt, text))
                 .speed(1.0),
-        );
+            ), label)
+        }).inner;
+        super::welcome::name_control(ui, &response, label, "Template resolution (dpi)");
+        if !super::welcome::native_number_valid(ui, &response, id, attempt.into_inner(), f64::from(state.dpi), 36.0..=600.) {
+            state.dpi = before;
+            if response.enabled() { invalid.push(response.id); }
+        }
+        fields.push(response);
+        if chosen || current_canvas {
+            invalid.clear();
+            for property in ["width", "height", "dpi"] {
+                let key = ui.make_persistent_id(property).with("number-validation");
+                ui.data_mut(|data| data.remove::<String>(key));
+            }
+        }
     });
+    let valid = invalid.is_empty() && (!ui.is_enabled() || (
+        state.width.is_finite() && (32.0..=16000.).contains(&state.width)
+        && state.height.is_finite() && (32.0..=16000.).contains(&state.height)
+        && state.dpi.is_finite() && (36.0..=600.).contains(&state.dpi)
+    ));
+    if !valid {
+        let fields: Vec<_> = fields.iter().filter(|response| invalid.is_empty() || invalid.contains(&response.id)).collect();
+        super::welcome::control_error(ui, &fields, "Enter finite template dimensions from 32 to 16000 px and a resolution from 36 to 600 dpi.");
+    }
+    valid
 }
 
 fn card(
     ui: &mut Ui,
+    id: Id,
     width: f32,
     selected: bool,
     texture: Option<&egui::TextureHandle>,
@@ -610,7 +712,10 @@ fn card(
     description: &str,
     palette: [u32; 4],
 ) -> egui::Response {
-    let (rect, response) = ui.allocate_exact_size(vec2(width, 225.0), Sense::click());
+    let (_, rect) = ui.allocate_space(vec2(width, 225.0));
+    let response = ui.interact(rect, id, Sense::click());
+    response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, response.enabled(), selected, format!("Select {title} template")));
+    super::welcome::focus_control(ui, &response);
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 8.0, bg_panel());
     painter.rect_stroke(
@@ -689,6 +794,133 @@ mod tests {
     }
 
     use super::*;
+    use crate::ui::welcome::keyboard_tests as keys;
+    use egui::{Event, Key, Modifiers, accesskit};
+
+    fn keyboard_frame(ctx: &egui::Context, studio: &mut Studio, events: Vec<Event>) -> egui::FullOutput {
+        let state = ctx.data(|data| data.get_temp::<Browser>(Id::new("template-browser-state"))).unwrap_or_default();
+        ctx.data_mut(|data| data.insert_temp(Id::new(if state.mode == Some(Persona::Layout) {
+            "layout-template-preview-cache"
+        } else { "template-preview-cache" }), PreviewCache { size: Some(state.size()), ..Default::default() }));
+        keys::render(ctx, events, |ui| window(ui, studio))
+    }
+
+    fn size_frame(ctx: &egui::Context, studio: &Studio, state: &mut Browser, enabled: bool, events: Vec<Event>) -> egui::FullOutput {
+        keys::render(ctx, events, |ui| {
+            ui.add_enabled_ui(enabled, |ui| size_controls(ui, studio, state));
+        })
+    }
+
+    #[test]
+    fn template_keyboard_selects_filters_and_creates_both_scoped_modes() {
+        for mode in [Persona::Design, Persona::Layout] {
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            let mut studio = Studio::new();
+            open(&ctx, &mut studio, mode);
+            let (title, template_id, search) = if mode == Persona::Design {
+                (templates::CATALOG[1].name, templates::CATALOG[1].id, "Search templates")
+            } else {
+                (crate::layout_templates::CATALOG[1].name, crate::layout_templates::CATALOG[1].id, "Search Layout templates")
+            };
+            let card_name = format!("Select {title} template");
+            keyboard_frame(&ctx, &mut studio, vec![]);
+            let output = keys::tab_to(&ctx, &card_name, |events| keyboard_frame(&ctx, &mut studio, events));
+            keys::focused(&ctx, &output, &card_name);
+            let card_id = keys::named(&output, &card_name).0;
+            let owner = studio.swap_id.clone();
+            keyboard_frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+            assert_eq!(studio.swap_id, owner, "card selection does not create a document");
+            assert_eq!(ctx.data(|data| data.get_temp::<Browser>(Id::new("template-browser-state"))).unwrap().selected, template_id);
+            keys::tab_to(&ctx, search, |events| keyboard_frame(&ctx, &mut studio, events));
+            let output = keys::replace(title, |events| keyboard_frame(&ctx, &mut studio, events));
+            assert_eq!(keys::named(&output, &card_name).0, card_id, "catalog identity survives filtering and row changes");
+            if mode == Persona::Design {
+                keys::tab_to(&ctx, "Template category", |events| keyboard_frame(&ctx, &mut studio, events));
+                keyboard_frame(&ctx, &mut studio, keys::key(Key::Space, Modifiers::NONE));
+                keys::tab_to(&ctx, templates::CATALOG[1].category, |events| keyboard_frame(&ctx, &mut studio, events));
+                keyboard_frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+                let output = keyboard_frame(&ctx, &mut studio, vec![]);
+                keys::focused(&ctx, &output, "Template category");
+            }
+            let output = keys::tab_to(&ctx, "Use this template", |events| keyboard_frame(&ctx, &mut studio, events));
+            keys::focused(&ctx, &output, "Use this template");
+            let output = keys::tab(true, |events| keyboard_frame(&ctx, &mut studio, events));
+            keys::focused(&ctx, &output, if mode == Persona::Design { "Template category" } else { search });
+            keys::tab_to(&ctx, "Use this template", |events| keyboard_frame(&ctx, &mut studio, events));
+            keyboard_frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+            assert_eq!(studio.persona, mode);
+            assert!(!studio.show_templates);
+            assert!(studio.dirty);
+            assert!(!studio.doc.layers.is_empty());
+        }
+    }
+
+    #[test]
+    fn template_keyboard_native_sizes_preserve_ranges_names_and_identity() {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let mut studio = Studio::new();
+        let mut state = Browser::default();
+        let initial = size_frame(&ctx, &studio, &mut state, true, vec![]);
+        let width_id = keys::named(&initial, "Template width (px)").0;
+        for (name, text) in [("Template width (px)", "20 000"), ("Template height (px)", "4 80"), ("Template resolution (dpi)", "−12")] {
+            let output = keys::tab_to(&ctx, name, |events| size_frame(&ctx, &studio, &mut state, true, events));
+            keys::focused(&ctx, &output, name);
+            assert!(!keys::named(&output, name).1.labelled_by().is_empty());
+            keys::replace(text, |events| size_frame(&ctx, &studio, &mut state, true, events));
+            size_frame(&ctx, &studio, &mut state, true, keys::key(Key::Enter, Modifiers::NONE));
+        }
+        assert_eq!((state.width, state.height, state.dpi), (16000., 480., 36.));
+        let output = keys::tab_to(&ctx, "Template height (px)", |events| size_frame(&ctx, &studio, &mut state, true, events));
+        keys::focused(&ctx, &output, "Template height (px)");
+        let output = keys::tab(true, |events| size_frame(&ctx, &studio, &mut state, true, events));
+        keys::focused(&ctx, &output, "Template width (px)");
+        assert_eq!(keys::named(&output, "Template width (px)").0, width_id);
+        studio.swap_id.push_str("-other-document");
+        let output = size_frame(&ctx, &studio, &mut state, true, vec![]);
+        assert_ne!(keys::named(&output, "Template width (px)").0, width_id);
+    }
+
+    #[test]
+    fn template_keyboard_invalid_and_disabled_native_values_cannot_apply() {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let mut studio = Studio::new();
+        open(&ctx, &mut studio, Persona::Design);
+        let owner = studio.swap_id.clone();
+        keys::tab_to(&ctx, "Template width (px)", |events| keyboard_frame(&ctx, &mut studio, events));
+        let before = ctx.data(|data| data.get_temp::<Browser>(Id::new("template-browser-state"))).unwrap().width;
+        let output = keys::replace("letters", |events| keyboard_frame(&ctx, &mut studio, events));
+        keys::associated_error(&output, "Template width (px)");
+        let output = keys::tab(false, |events| keyboard_frame(&ctx, &mut studio, events));
+        keys::associated_error(&output, "Template width (px)");
+        keys::focused(&ctx, &output, "Template height (px)");
+        keys::tab(true, |events| keyboard_frame(&ctx, &mut studio, events));
+        let use_template = keys::named(&output, "Use this template");
+        assert!(use_template.1.is_disabled());
+        keyboard_frame(&ctx, &mut studio, keys::action(use_template.0, accesskit::Action::Click, None));
+        assert_eq!(studio.swap_id, owner);
+        assert_eq!(ctx.data(|data| data.get_temp::<Browser>(Id::new("template-browser-state"))).unwrap().width, before);
+        keys::replace("640", |events| keyboard_frame(&ctx, &mut studio, events));
+        keyboard_frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        studio.updates.freezing = true;
+        let output = keyboard_frame(&ctx, &mut studio, vec![]);
+        let width = keys::named(&output, "Template width (px)").0;
+        keyboard_frame(&ctx, &mut studio, keys::action(width, accesskit::Action::SetValue, Some(accesskit::ActionData::NumericValue(512.))));
+        assert_eq!(ctx.data(|data| data.get_temp::<Browser>(Id::new("template-browser-state"))).unwrap().width, 640.);
+        keyboard_frame(&ctx, &mut studio, keys::action(use_template.0, accesskit::Action::Click, None));
+        assert_eq!(studio.swap_id, owner);
+        studio.updates.freezing = false;
+        open(&ctx, &mut studio, Persona::Layout);
+        let output = keyboard_frame(&ctx, &mut studio, vec![]);
+        assert!(keys::named(&output, "Template width (px)").1.is_disabled());
+        let state = ctx.data(|data| data.get_temp::<Browser>(Id::new("template-browser-state"))).unwrap();
+        let width = keys::named(&output, "Template width (px)").0;
+        keyboard_frame(&ctx, &mut studio, keys::action(width, accesskit::Action::SetValue, Some(accesskit::ActionData::NumericValue(200.))));
+        assert_eq!(ctx.data(|data| data.get_temp::<Browser>(Id::new("template-browser-state"))).unwrap().width, state.width);
+        assert_eq!(studio.swap_id, owner);
+    }
 
     #[test]
     fn template_cards_keep_a_full_visible_row_in_all_modes_and_compact_windows() {
