@@ -6,7 +6,7 @@ pub mod retouch;
 pub mod storage;
 pub mod surface;
 pub mod tiff;
-pub use composite::{blend_pixel, composite};
+pub use composite::{blend_pixel, composite, composite_with_cancel};
 #[cfg(test)]
 mod common_tests;
 
@@ -73,7 +73,11 @@ impl Pixels {
         memory: Arc<Lease>,
         cancel: &C,
     ) -> Result<Self, String> {
-        cancel.check()?;
+        if let Err(error) = cancel.check() {
+            drop(samples);
+            drop(memory);
+            return Err(error);
+        }
         let samples = resources::global().adopt(samples, memory)?;
         Self::from_sample_allocation_checked(w, h, depth, samples, cancel)
     }

@@ -1,3 +1,9 @@
+mod coverage;
+mod paint;
+#[cfg(test)]
+mod tests;
+mod vector;
+
 use super::Depth;
 use crate::{
     color::Blend,
@@ -117,6 +123,17 @@ fn set_sat(c: [f32; 3], s: f32) -> [f32; 3] {
 /// Render document pixels without an integer color intermediate.
 /// Args: document and integer export scale. Returns an authoritative float RGBA buffer.
 pub fn composite(doc: &Document, scale: u32) -> Result<Pixels, String> {
+    composite_with_cancel(doc, scale, &super::storage::check)
+}
+
+/// Render native samples with cancellation before publication.
+/// Args: document, export scale and job cancellation. Returns admitted authoritative pixels or an atomic error.
+pub fn composite_with_cancel(
+    doc: &Document,
+    scale: u32,
+    cancel: &dyn crate::resources::CancellationCheck,
+) -> Result<Pixels, String> {
+    cancel.check()?;
     doc.validate_hierarchy()?;
     if doc
         .layers
@@ -128,14 +145,13 @@ pub fn composite(doc: &Document, scale: u32) -> Result<Pixels, String> {
         return Err("Native vector-shape masks need a precise coverage renderer; save .oma to preserve their original samples.".into());
     }
     if doc.color.model == super::cms::Model::Cmyk {
-        return composite_cmyk(doc, scale);
+        return composite_cmyk(doc, scale, cancel);
     }
     let scale = scale.clamp(1, 8);
     let w = (doc.width * scale as f32).round() as u32;
     let h = (doc.height * scale as f32).round() as u32;
     let count = super::storage::count(w, h, 4)?;
-    let mut out =
-        crate::resources::global().allocate_now::<f32, _>(count, &super::storage::check)?;
+    let mut out = crate::resources::global().allocate_now::<f32, _>(count, cancel)?;
     if !doc.transparent {
         out.as_mut_slice().fill(1.);
     }
@@ -147,11 +163,14 @@ pub fn composite(doc: &Document, scale: u32) -> Result<Pixels, String> {
         h,
         scale,
         0,
+        cancel,
     )?;
-    let mut pixels = Pixels::from_sample_allocation(w, h, Depth::F32, std::sync::Arc::new(out))?;
+    let mut pixels =
+        Pixels::from_sample_allocation_checked(w, h, Depth::F32, std::sync::Arc::new(out), cancel)?;
     if !doc.color.icc_profile.is_empty() {
         pixels.assign_rgb_profile(doc.color.icc_profile.clone(), doc.color.intent)?;
     }
+    cancel.check()?;
     Ok(pixels)
 }
 fn render(
@@ -162,7 +181,9 @@ fn render(
     h: u32,
     scale: u32,
     depth: usize,
+    cancel: &dyn crate::resources::CancellationCheck,
 ) -> Result<(), String> {
+    cancel.check()?;
     if depth >= 64 {
         return Err("Native composite group depth exceeds limit".into());
     }
@@ -171,7 +192,12 @@ fn render(
         .iter()
         .filter(|l| l.parent == parent && l.visible)
     {
-        if layer.svg_filter.as_ref().is_some_and(|graph| !graph.filters.is_empty()) {
+        cancel.check()?;
+        if layer
+            .svg_filter
+            .as_ref()
+            .is_some_and(|graph| !graph.filters.is_empty())
+        {
             return Err("Native SVG filter graphs require a float effect renderer; save .oma to retain the authored document.".into());
         }
         if layer.opacity <= 0. {
@@ -188,10 +214,9 @@ fn render(
             }
             let pass = layer.pass_through;
             let mut temp = if pass {
-                crate::resources::global().copy_now(out, &super::storage::check)?
+                crate::resources::global().copy_now(out, cancel)?
             } else {
-                crate::resources::global()
-                    .allocate_now::<[f32; 4], _>(out.len(), &super::storage::check)?
+                crate::resources::global().allocate_now::<[f32; 4], _>(out.len(), cancel)?
             };
             render(
                 doc,
@@ -201,8 +226,12 @@ fn render(
                 h,
                 scale,
                 depth + 1,
+                cancel,
             )?;
             for (i, (dst, src)) in out.iter_mut().zip(temp.iter().copied()).enumerate() {
+                if i % 4096 == 0 {
+                    cancel.check()?;
+                }
                 let p = Pt::new(
                     (i % w as usize) as f32 / scale as f32,
                     (i / w as usize) as f32 / scale as f32,
@@ -231,6 +260,9 @@ fn render(
                 continue;
             };
             for (i, dst) in out.iter_mut().enumerate() {
+                if i % 4096 == 0 {
+                    cancel.check()?;
+                }
                 let p = Pt::new(
                     (i % w as usize) as f32 / scale as f32 + 0.5 / scale as f32,
                     (i / w as usize) as f32 / scale as f32 + 0.5 / scale as f32,
@@ -246,40 +278,7 @@ fn render(
                 );
             }
         } else {
-            if layer.filters.active() || layer.kind.shapes().is_some_and(|shapes| shapes.iter().any(|shape| {
-                shape.filters.active()
-                    || !matches!(&shape.style.fill, crate::document::Fill::None | crate::document::Fill::Solid(_))
-                    || shape.style.stroke.as_ref().is_some_and(|stroke| stroke.gradient.is_some())
-                    || matches!(&shape.geom, crate::geom::Geom::Text(run) if run.spans.iter().any(|span| span.fill.as_ref().is_some_and(|fill| !matches!(fill, crate::document::Fill::None | crate::document::Fill::Solid(_)))))
-            })) {
-                return Err("Native vector gradients, patterns and effects require a float paint renderer. Save .oma to retain the authored document; use an explicit 8-bit copy for this export.".into());
-            }
-            let mut single = Document::new("Native vector coverage", 1., 1., doc.dpi);
-            single.width = doc.width;
-            single.height = doc.height;
-            single.artboards = doc.artboards.clone();
-            single.transparent = true;
-            let mut vector = layer.clone();
-            vector.parent = None;
-            vector.opacity = 1.;
-            vector.fill_opacity = 1.;
-            vector.mask = None;
-            vector.blend = Blend::Normal;
-            single.layers = vec![vector];
-            let pm = crate::compositor::render_export(&single, scale)?;
-            let pixels = Pixels::try_from_pixmap(&pm)?.in_document_color(&doc.color)?;
-            for (i, dst) in out.iter_mut().enumerate() {
-                let p = Pt::new(
-                    ((i % w as usize) as f32 + 0.5) / scale as f32,
-                    ((i / w as usize) as f32 + 0.5) / scale as f32,
-                );
-                *dst = blend_pixel(
-                    *dst,
-                    pixels.sample(i),
-                    layer.blend,
-                    layer.opacity * layer.fill_opacity * mask(layer, p, None),
-                );
-            }
+            vector::render(doc, layer, out, w, h, scale, cancel)?;
         }
     }
     Ok(())
@@ -336,7 +335,12 @@ fn mask(layer: &Layer, p: Pt, local: Option<(f32, f32)>) -> f32 {
     ((m[0] * 0.2126 + m[1] * 0.7152 + m[2] * 0.0722) * m[3]).clamp(0., 1.)
 }
 
-fn composite_cmyk(doc: &Document, scale: u32) -> Result<Pixels, String> {
+fn composite_cmyk(
+    doc: &Document,
+    scale: u32,
+    cancel: &dyn crate::resources::CancellationCheck,
+) -> Result<Pixels, String> {
+    cancel.check()?;
     if doc.layers.iter().any(|l| {
         matches!(
             l.blend,
@@ -353,11 +357,12 @@ fn composite_cmyk(doc: &Document, scale: u32) -> Result<Pixels, String> {
                 *p = p.in_document_color(&rgb.color)?;
             }
         }
-        return composite(&rgb, scale)?.in_document_color(&doc.color);
+        return composite_with_cancel(&rgb, scale, cancel)?.in_document_color(&doc.color);
     }
     let mut inks = None;
     let mut dimensions = (0, 0);
     for component in 0..4 {
+        cancel.check()?;
         let mut plane = doc.clone();
         plane.color = Default::default();
         for layer in &mut plane.layers {
@@ -375,7 +380,7 @@ fn composite_cmyk(doc: &Document, scale: u32) -> Result<Pixels, String> {
                 single.opacity = 1.;
                 one.layers = vec![single];
                 one.transparent = true;
-                let p = composite(&one, 1)?;
+                let p = composite_with_cancel(&one, 1, cancel)?;
                 layer.kind = crate::document::LayerKind::Raster {
                     pixels: p.clone(),
                     origin: Pt::ZERO,
@@ -397,13 +402,14 @@ fn composite_cmyk(doc: &Document, scale: u32) -> Result<Pixels, String> {
             *layer.kind.pixels_mut().unwrap() =
                 Pixels::from_sample_allocation(source.w, source.h, Depth::F32, values)?;
         }
-        let result = composite(&plane, scale)?;
+        let result = composite_with_cancel(&plane, scale, cancel)?;
         dimensions = (result.w, result.h);
         if inks.is_none() {
-            inks = Some(crate::resources::global().allocate_now::<f32, _>(
-                super::storage::count(result.w, result.h, 5)?,
-                &super::storage::check,
-            )?);
+            inks =
+                Some(crate::resources::global().allocate_now::<f32, _>(
+                    super::storage::count(result.w, result.h, 5)?,
+                    cancel,
+                )?);
         }
         for (i, p) in inks
             .as_mut()
