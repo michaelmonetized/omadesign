@@ -570,6 +570,8 @@ mod tests {
         let ids: std::collections::HashSet<_> =
             CONTROLS.iter().map(|name| named(&initial, name).0).collect();
         assert_eq!(ids.len(), CONTROLS.len());
+        let color = tab(&ctx, &mut studio, false);
+        assert_focused(&ctx, &color, "Selected text color");
         for (name, text) in CONTROLS.into_iter().zip([
             None,
             Some("135"),
@@ -678,6 +680,8 @@ mod tests {
                 }
             };
             frame(&ctx, &mut studio, vec![]);
+            let color = tab(&ctx, &mut studio, false);
+            assert_focused(&ctx, &color, "Selected text color");
             let output = tab(&ctx, &mut studio, false);
             assert_focused(&ctx, &output, "Leading mode");
             frame(&ctx, &mut studio, key(Key::Space, Modifiers::NONE));

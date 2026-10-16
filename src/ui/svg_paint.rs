@@ -41,7 +41,7 @@ pub(super) fn control(
     name: &str,
     widget: impl FnOnce(&mut Ui) -> egui::Response,
 ) -> egui::Response {
-    let response = super::fields::native_scope(ui, owner, widget).inner;
+    let response = super::fields::native_scope(ui, owner.with("native-scope"), widget).inner;
     ui.ctx()
         .accesskit_node_builder(response.id, |node| node.set_label(name));
     super::welcome::focus_control(ui, &response);
@@ -120,7 +120,7 @@ pub(super) fn editor(ui: &mut Ui, pattern: &mut SvgPattern, instance: egui::Id) 
         let id = ui.make_persistent_id("pattern-source");
         let mut source = ui.data_mut(|d| d.get_temp::<String>(id)).unwrap_or_else(|| pattern.definitions.to_string());
         let label = ui.label("Vector definitions");
-        let source_response = control(ui, id.with("editor"), "Vector definitions", |ui| ui.add(egui::TextEdit::multiline(&mut source).id(id.with("editor")).code_editor().desired_rows(8)).labelled_by(label.id));
+        let source_response = control(ui, id.with("editor"), "Vector definitions", |ui| ui.add(egui::TextEdit::multiline(&mut source).id(id.with("editor")).code_editor().lock_focus(false).desired_rows(8).desired_width(ui.available_width().min((ui.clip_rect().right() - ui.next_widget_position().x).max(24.)))).labelled_by(label.id));
         if source_response.changed() { ui.data_mut(|d| d.insert_temp(id, source.clone())); }
         let apply = control(ui, id.with("apply"), "Apply vector source", |ui| ui.button("Apply vector source"));
         if apply.clicked() {
@@ -129,13 +129,26 @@ pub(super) fn editor(ui: &mut Ui, pattern: &mut SvgPattern, instance: egui::Id) 
                 Ok(tree) if tree.patterns().iter().any(|p| p.id() == pattern.id) => {
                     pattern.definitions = crate::svg_source::canonicalize(&source).unwrap_or_default().into();
                     ui.data_mut(|d| d.remove::<String>(id.with("error")));
+                            ui.data_mut(|d| d.remove::<bool>(id.with("reveal-error")));
                     changed = true;
                 }
-                _ => { ui.data_mut(|d| d.insert_temp(id.with("error"), "Keep a valid pattern with the same ID.".to_string())); },
+                _ => { ui.data_mut(|d| {
+                    d.insert_temp(id.with("error"), "Keep a valid pattern with the same ID.".to_string());
+                    d.insert_temp(id.with("reveal-error"), true);
+                }); },
             }
         }
         if let Some(error) = ui.data(|d| d.get_temp::<String>(id.with("error"))) {
-            super::fields::native_scope(ui, id.with("error"), |ui| super::welcome::control_error(ui, &[&source_response, &apply], &error));
+            super::fields::native_scope(ui, id.with("error"), |ui| {
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                if ui.data(|d| d.get_temp::<bool>(id.with("reveal-error"))).unwrap_or(false) {
+                    if super::welcome::reveal_control_error(ui, &[&source_response, &apply], &error) {
+                        ui.data_mut(|d| d.remove::<bool>(id.with("reveal-error")));
+                    }
+                } else {
+                    super::welcome::control_error(ui, &[&source_response, &apply], &error);
+                }
+            });
         }
       });
     });

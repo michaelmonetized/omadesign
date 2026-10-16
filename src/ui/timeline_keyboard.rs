@@ -471,15 +471,37 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
         return;
     }
     let id = ui.make_persistent_id((ID, &studio.swap_id));
-    super::fields::native_scope(ui, id, |ui| {
-        let menu = ui.menu_button("Keyframes", |ui| {
-            ui.set_min_width(300.);
-            egui::ScrollArea::vertical()
-                .max_height(430.)
-                .show(ui, |ui| editor(ui, studio));
-        });
-        focus(ui, &menu.response);
-    });
+    let key = id.with("menu-open");
+    let mut open = ui.data(|data| data.get_temp::<bool>(key)).unwrap_or(false);
+    let response = super::fields::native_scope(ui, id, |ui| {
+        let response = ui.button("Keyframes");
+        if response.clicked() {
+            open = !open;
+        }
+        egui::Popup::menu(&response)
+            .open_bool(&mut open)
+            .show(|ui| {
+                if !response.enabled() {
+                    ui.disable();
+                }
+                ui.set_min_width(300.);
+                egui::ScrollArea::vertical()
+                    .max_height(430.)
+                    .show(ui, |ui| editor(ui, studio));
+            });
+        response
+    })
+    .inner;
+    let popup = egui::Popup::default_response_id(&response);
+    if open {
+        if !egui::Popup::is_any_open(ui.ctx()) || egui::Popup::is_id_open(ui.ctx(), popup) {
+            egui::Popup::open_id(ui.ctx(), popup);
+        }
+    } else if egui::Popup::is_id_open(ui.ctx(), popup) {
+        egui::Popup::close_id(ui.ctx(), popup);
+    }
+    ui.data_mut(|data| data.insert_temp(key, open));
+    focus(ui, &response);
 }
 
 /// Draw the key picker and one captured edit draft.
@@ -1059,6 +1081,12 @@ mod tests {
         open(&ctx, &mut studio);
         let caption = format!("{} · X · 0s", target_name(&studio, target));
         choose(&ctx, &mut studio, "Keyframe", &caption);
+        assert!(
+            egui::Popup::is_any_open(&ctx),
+            "The actual Keyframes parent survives a native child choice"
+        );
+        let output = frame(&ctx, &mut studio, vec![]);
+        named(&output, "Apply keyframe");
         assert_eq!(studio.selected_key, Some((target, Prop::X, 0)));
         let before = studio.doc.motion.clone();
         replace(&ctx, &mut studio, TIME, "1.25");

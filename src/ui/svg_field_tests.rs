@@ -19,6 +19,22 @@ fn imported(source: &str) -> (egui::Context, Studio) {
     frame(&ctx, &mut studio, keys::key(Key::PageDown, Modifiers::NONE));
     frame(&ctx, &mut studio, vec![]);
     assert!(!studio.selection.is_empty());
+    let mut properties_focused = false;
+    for _ in 0..6 {
+        let output = frame(&ctx, &mut studio, keys::key(Key::F6, Modifiers::NONE));
+        if ctx
+            .memory(|memory| memory.focused())
+            .map(|id| id.accesskit_id())
+            == Some(keys::named(&output, "Properties").0)
+        {
+            properties_focused = true;
+            break;
+        }
+    }
+    assert!(
+        properties_focused,
+        "Native F6 must expose the selected artwork's Properties panel"
+    );
     (ctx, studio)
 }
 fn press(ctx: &egui::Context, studio: &mut Studio, name: &str) -> egui::FullOutput {
@@ -91,6 +107,7 @@ fn keyboard_svg_pattern_native_selection_scalars_draft_apply_errors_undo_and_reo
     );
     let output = press(&ctx, &mut studio, "Apply vector source");
     keys::associated_error(&output, "Vector definitions");
+    keys::focused(&ctx, &output, "Vector definitions");
     assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
     let id = pattern(&studio).id;
     edit(
@@ -125,11 +142,13 @@ fn keyboard_svg_filter_native_source_respects_graph_owner_lock_and_retires_undo_
         .iter()
         .position(|layer| layer.svg_filter.is_some())
         .unwrap();
+    press(&ctx, &mut studio, "Effects");
     press(&ctx, &mut studio, "SVG filter graph");
     let before = crate::project::encode(&studio.doc).unwrap();
     edit(&ctx, &mut studio, "Filter source", "<filter>");
     let output = press(&ctx, &mut studio, "Apply filter source");
     keys::associated_error(&output, "Filter source");
+    keys::focused(&ctx, &output, "Filter source");
     assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
     let id = studio.doc.layers[index]
         .svg_filter

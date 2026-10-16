@@ -1,6 +1,6 @@
 //! Native layout workspace. Controls edit persisted document properties.
 use super::theme::{accent, bg_panel, fg_weak};
-use crate::app::Studio;
+use crate::app::{LayoutStackField, Studio};
 use crate::document::Cmd;
 use crate::geom::Geom;
 use crate::layout::{
@@ -69,6 +69,136 @@ fn layout_number<N: egui::emath::Numeric>(
     crate::app::input_history::record(field.response, field.changed)
 }
 
+fn stack_equal(left: &AutoStack, right: &AutoStack, field: LayoutStackField) -> bool {
+    use LayoutStackField::*;
+    match field {
+        Enabled => true,
+        Direction => left.direction == right.direction,
+        Flow => left.flow == right.flow,
+        Align => left.align == right.align,
+        Justify => left.justify == right.justify,
+        Gap => left.gap == right.gap,
+        CrossGap => left.cross_gap == right.cross_gap,
+        Columns => left.columns == right.columns,
+        Padding(edge) => left.padding.get(edge) == right.padding.get(edge),
+        ColumnTracks => left.column_tracks == right.column_tracks,
+        RowTracks => left.row_tracks == right.row_tracks,
+        ColumnTrackSize(i) => {
+            left.column_tracks.get(i).map(|t| t.size) == right.column_tracks.get(i).map(|t| t.size)
+        }
+        ColumnTrackMin(i) => {
+            left.column_tracks.get(i).map(|t| t.min) == right.column_tracks.get(i).map(|t| t.min)
+        }
+        ColumnTrackMax(i) => {
+            left.column_tracks.get(i).map(|t| t.max) == right.column_tracks.get(i).map(|t| t.max)
+        }
+        RowTrackSize(i) => {
+            left.row_tracks.get(i).map(|t| t.size) == right.row_tracks.get(i).map(|t| t.size)
+        }
+        RowTrackMin(i) => {
+            left.row_tracks.get(i).map(|t| t.min) == right.row_tracks.get(i).map(|t| t.min)
+        }
+        RowTrackMax(i) => {
+            left.row_tracks.get(i).map(|t| t.max) == right.row_tracks.get(i).map(|t| t.max)
+        }
+    }
+}
+
+fn stack_mixed(stacks: &[Option<AutoStack>], field: LayoutStackField) -> bool {
+    let first = stacks.first().and_then(Option::as_ref);
+    stacks.iter().any(|stack| match (first, stack.as_ref()) {
+        (Some(left), Some(right)) => !stack_equal(left, right, field),
+        (None, None) => false,
+        _ => true,
+    })
+}
+
+fn stack_intent(
+    fields: &mut Vec<LayoutStackField>,
+    field: LayoutStackField,
+    accepted: bool,
+) -> bool {
+    if accepted && !fields.contains(&field) {
+        fields.push(field);
+    }
+    accepted
+}
+
+fn stack_choice<T: Clone + PartialEq>(
+    ui: &mut Ui,
+    id: &str,
+    name: &str,
+    value: &mut T,
+    options: &[(T, String)],
+    mixed: bool,
+) -> egui::Response {
+    let owner = ui.make_persistent_id(id);
+    super::fields::native_scope(ui, owner, |ui| {
+        let label = ui.label(name);
+        let mut accepted = false;
+        let mut response = egui::ComboBox::from_id_salt("value")
+            .selected_text(if mixed {
+                "Mixed"
+            } else {
+                options
+                    .iter()
+                    .find(|(key, _)| key == value)
+                    .map_or("Choose…", |(_, name)| name)
+            })
+            .show_ui(ui, |ui| {
+                for (key, name) in options {
+                    let choice = ui.selectable_value(value, key.clone(), name);
+                    if choice.clicked() && choice.enabled() {
+                        accepted = true;
+                        ui.close();
+                    }
+                }
+            })
+            .response
+            .labelled_by(label.id);
+        if accepted {
+            response.request_focus();
+            response.mark_changed();
+        }
+        super::keyboard_controls::selection_keys(ui, &mut response, name, value, options);
+        if mixed {
+            ui.ctx()
+                .accesskit_node_builder(response.id, |node| node.set_state_description("Mixed"));
+        }
+        response
+    })
+    .inner
+}
+
+fn stack_number<N: egui::emath::Numeric>(
+    ui: &mut Ui,
+    selection: (usize, u64),
+    property: impl std::hash::Hash + std::fmt::Debug,
+    name: &str,
+    value: &mut N,
+    range: std::ops::RangeInclusive<N>,
+    unit: &str,
+    stacks: &[Option<AutoStack>],
+    fields: &mut Vec<LayoutStackField>,
+    intent: LayoutStackField,
+) -> bool {
+    let field = super::fields::number(
+        ui,
+        (selection, property),
+        name,
+        value,
+        range,
+        unit,
+        None,
+        super::fields::FieldState {
+            mixed: stack_mixed(stacks, intent),
+            ..Default::default()
+        },
+    );
+    let accepted = crate::app::input_history::record(field.response, field.changed);
+    stack_intent(fields, intent, accepted)
+}
+
 fn native_number<N: egui::emath::Numeric + std::fmt::Display>(
     ui: &mut Ui,
     property: impl std::hash::Hash + std::fmt::Debug,
@@ -89,7 +219,37 @@ fn grid_tracks(
     axis: &str,
     tracks: &mut Vec<GridTrack>,
     revision: u64,
+    stacks: &[Option<AutoStack>],
+    fields: &mut Vec<LayoutStackField>,
 ) -> bool {
+    use LayoutStackField::*;
+    let axis_field = if axis == "Column" {
+        ColumnTracks
+    } else {
+        RowTracks
+    };
+    let size_field = |index| {
+        if axis == "Column" {
+            ColumnTrackSize(index)
+        } else {
+            RowTrackSize(index)
+        }
+    };
+    let min_field = |index| {
+        if axis == "Column" {
+            ColumnTrackMin(index)
+        } else {
+            RowTrackMin(index)
+        }
+    };
+    let max_field = |index| {
+        if axis == "Column" {
+            ColumnTrackMax(index)
+        } else {
+            RowTrackMax(index)
+        }
+    };
+    let structural_allowed = !stack_mixed(stacks, axis_field);
     let mut changed = false;
     let mut rows = keyboard::Rows::begin(ui, axis, tracks, revision);
     let mut structural = false;
@@ -98,7 +258,19 @@ fn grid_tracks(
         .show(ui, |ui| {
             let mut remove = None;
             for (index, track) in tracks.iter_mut().enumerate() {
+                let available = stacks.iter().all(|stack| {
+                    stack.as_ref().is_some_and(|stack| {
+                        if axis == "Column" {
+                            stack.column_tracks.len() > index
+                        } else {
+                            stack.row_tracks.len() > index
+                        }
+                    })
+                });
                 super::fields::native_scope(ui, rows.id(index), |ui| {
+                    if !available {
+                        ui.disable();
+                    }
                     ui.horizontal(|ui| {
                         let label = ui.label(format!("{axis} {index}"));
                         let mut kind = match track.size {
@@ -106,8 +278,8 @@ fn grid_tracks(
                             GridTrackSize::Hug => 1,
                             GridTrackSize::Fraction(_) => 2,
                         };
-                        let old = kind;
-                        let response = super::keyboard_controls::choice(
+                        let original_kind = kind;
+                        let response = stack_choice(
                             ui,
                             "sizing",
                             &format!("{axis} {index} sizing"),
@@ -117,16 +289,20 @@ fn grid_tracks(
                                 (1, "Hug".into()),
                                 (2, "Fraction".into()),
                             ],
+                            stack_mixed(stacks, size_field(index)),
                         )
                         .labelled_by(label.id);
+                        let accepted = response.changed();
                         rows.watch(response);
-                        if kind != old {
-                            track.size = match kind {
-                                0 => GridTrackSize::Fixed(100.0),
-                                1 => GridTrackSize::Hug,
-                                _ => GridTrackSize::Fraction(1.0),
-                            };
-                            changed = true;
+                        if accepted {
+                            if kind != original_kind {
+                                track.size = match kind {
+                                    0 => GridTrackSize::Fixed(100.0),
+                                    1 => GridTrackSize::Hug,
+                                    _ => GridTrackSize::Fraction(1.0),
+                                };
+                            }
+                            changed |= stack_intent(fields, size_field(index), true);
                         }
                         let remove_id = ui.make_persistent_id("remove");
                         if rows
@@ -134,7 +310,12 @@ fn grid_tracks(
                                 ui,
                                 remove_id,
                                 &format!("Remove {axis} track {index}"),
-                                |ui| ui.small_button("Remove"),
+                                |ui| {
+                                    ui.add_enabled(
+                                        structural_allowed,
+                                        egui::Button::new("Remove").small(),
+                                    )
+                                },
                             ))
                             .clicked()
                         {
@@ -143,29 +324,41 @@ fn grid_tracks(
                     });
                     match &mut track.size {
                         GridTrackSize::Fixed(value) => {
-                            changed |= rows.shared_number(
-                                ui,
-                                (selection, (axis, index, "size")),
-                                &format!("{axis} {index} size"),
-                                value,
-                                0.0..=1_000_000.0,
-                                " px",
+                            changed |= stack_intent(
+                                fields,
+                                size_field(index),
+                                rows.shared_number(
+                                    ui,
+                                    (selection, (axis, index, "size")),
+                                    &format!("{axis} {index} size"),
+                                    value,
+                                    0.0..=1_000_000.0,
+                                    " px",
+                                    stack_mixed(stacks, size_field(index)),
+                                ),
                             )
                         }
                         GridTrackSize::Fraction(value) => {
-                            changed |= rows.shared_number(
-                                ui,
-                                (selection, (axis, index, "fraction")),
-                                &format!("{axis} {index} share"),
-                                value,
-                                0.001..=1_000_000.0,
-                                " fr",
+                            changed |= stack_intent(
+                                fields,
+                                size_field(index),
+                                rows.shared_number(
+                                    ui,
+                                    (selection, (axis, index, "fraction")),
+                                    &format!("{axis} {index} share"),
+                                    value,
+                                    0.001..=1_000_000.0,
+                                    " fr",
+                                    stack_mixed(stacks, size_field(index)),
+                                ),
                             )
                         }
                         GridTrackSize::Hug => {}
                     }
-                    for (name, value) in [("Minimum", &mut track.min), ("Maximum", &mut track.max)]
-                    {
+                    for (name, value, intent) in [
+                        ("Minimum", &mut track.min, min_field(index)),
+                        ("Maximum", &mut track.max, max_field(index)),
+                    ] {
                         ui.push_id(name, |ui| {
                             let mut enabled = value.is_some();
                             let enabled_id = ui.make_persistent_id((name, "enabled"));
@@ -175,7 +368,13 @@ fn grid_tracks(
                                     enabled_id,
                                     &format!("{name} {axis} {index}"),
                                     |ui| {
-                                        ui.checkbox(&mut enabled, format!("{name} {axis} {index}"))
+                                        ui.add(
+                                            egui::Checkbox::new(
+                                                &mut enabled,
+                                                format!("{name} {axis} {index}"),
+                                            )
+                                            .indeterminate(stack_mixed(stacks, intent)),
+                                        )
                                     },
                                 ))
                                 .changed()
@@ -185,16 +384,21 @@ fn grid_tracks(
                                 } else {
                                     1_000_000.0
                                 });
-                                changed = true;
+                                changed |= stack_intent(fields, intent, true);
                             }
                             if let Some(value) = value {
-                                changed |= rows.shared_number(
-                                    ui,
-                                    (selection, (axis, index, name)),
-                                    &format!("{axis} {index} {name}"),
-                                    value,
-                                    0.0..=1_000_000.0,
-                                    " px",
+                                changed |= stack_intent(
+                                    fields,
+                                    intent,
+                                    rows.shared_number(
+                                        ui,
+                                        (selection, (axis, index, name)),
+                                        &format!("{axis} {index} {name}"),
+                                        value,
+                                        0.0..=1_000_000.0,
+                                        " px",
+                                        stack_mixed(stacks, intent),
+                                    ),
                                 );
                             }
                         });
@@ -212,7 +416,12 @@ fn grid_tracks(
                     ui,
                     ("add-track", axis),
                     &format!("Add {axis} track"),
-                    |ui| ui.button(format!("Add {axis} track")),
+                    |ui| {
+                        ui.add_enabled(
+                            structural_allowed,
+                            egui::Button::new(format!("Add {axis} track")),
+                        )
+                    },
                 )
                 .clicked()
             {
@@ -228,6 +437,9 @@ fn grid_tracks(
                 changed = true;
             }
         });
+    if structural {
+        stack_intent(fields, axis_field, true);
+    }
     rows.finish(ui, tracks, structural);
     changed
 }
@@ -472,6 +684,17 @@ pub fn inspector(ui: &mut Ui, studio: &mut Studio) {
             return;
         };
         let mut changed = false;
+        let mut fields = Vec::new();
+        let stacks: Vec<_> = studio
+            .selection
+            .iter()
+            .filter_map(|&(layer, id)| {
+                studio
+                    .doc
+                    .find_shape(layer, id)
+                    .map(|shape| shape.layout.stack.clone())
+            })
+            .collect();
         egui::CollapsingHeader::new("Image fill")
             .default_open(shape.layout.image.is_some())
             .show(ui, |ui| {
@@ -621,146 +844,217 @@ pub fn inspector(ui: &mut Ui, studio: &mut Studio) {
                 ui,
                 "auto-layout-enabled",
                 "Arrange children automatically",
-                |ui| ui.checkbox(&mut enabled, "Arrange children automatically"),
+                |ui| {
+                    ui.add(
+                        egui::Checkbox::new(&mut enabled, "Arrange children automatically")
+                            .indeterminate(stack_mixed(&stacks, LayoutStackField::Enabled)),
+                    )
+                },
             )
             .changed()
             {
                 props.stack = enabled.then(AutoStack::default);
-                changed = true;
+                changed |= stack_intent(&mut fields, LayoutStackField::Enabled, true);
             }
             if let Some(stack) = &mut props.stack {
-                ui.horizontal(|ui| {
-                    for (name, v) in [
-                        ("Stack", StackFlow::Stack),
-                        ("Wrap", StackFlow::Wrap),
-                        ("Grid", StackFlow::Grid),
-                    ] {
-                        changed |= control(ui, ("stack-flow", name), name, |ui| {
-                            ui.selectable_value(&mut stack.flow, v, name)
-                        })
-                        .changed();
-                    }
-                });
-                if stack.flow == StackFlow::Grid {
-                    if stack.column_tracks.is_empty() {
-                        changed |= layout_number(
-                            ui,
-                            (layer, id),
-                            "uniform-columns",
-                            "Uniform columns",
-                            &mut stack.columns,
-                            1..=1024,
-                            " columns",
-                        );
-                    }
-                    changed |= grid_tracks(
-                        ui,
-                        (layer, id),
-                        "Column",
-                        &mut stack.column_tracks,
-                        studio.canvas_gen,
-                    );
-                    changed |= grid_tracks(
-                        ui,
-                        (layer, id),
-                        "Row",
-                        &mut stack.row_tracks,
-                        studio.canvas_gen,
-                    );
-                } else {
-                    ui.horizontal(|ui| {
-                        changed |= control(ui, "stack-horizontal", "Horizontal", |ui| {
-                            ui.selectable_value(
-                                &mut stack.direction,
-                                StackAxis::Horizontal,
-                                "Horizontal",
-                            )
-                        })
-                        .changed();
-                        changed |= control(ui, "stack-vertical", "Vertical", |ui| {
-                            ui.selectable_value(
-                                &mut stack.direction,
-                                StackAxis::Vertical,
-                                "Vertical",
-                            )
-                        })
-                        .changed();
-                    });
-                }
-                let old = stack.align;
-                super::keyboard_controls::choice(
-                    ui,
-                    "layout-align",
-                    "Align",
-                    &mut stack.align,
-                    &[
-                        StackAlign::Start,
-                        StackAlign::Center,
-                        StackAlign::End,
-                        StackAlign::Stretch,
-                        StackAlign::Baseline,
-                    ]
-                    .map(|v| (v, format!("{v:?}"))),
-                );
-                changed |= old != stack.align;
-                let old = stack.justify;
-                super::keyboard_controls::choice(
-                    ui,
-                    "layout-justify",
-                    "Distribute",
-                    &mut stack.justify,
-                    &[
-                        (StackJustify::Start, "Start".into()),
-                        (StackJustify::Center, "Center".into()),
-                        (StackJustify::End, "End".into()),
-                        (StackJustify::SpaceBetween, "Space between".into()),
-                        (StackJustify::SpaceAround, "Space around".into()),
-                        (StackJustify::SpaceEvenly, "Space evenly".into()),
-                    ],
-                );
-                changed |= old != stack.justify;
-                ui.horizontal(|ui| {
-                    changed |= layout_number(
-                        ui,
-                        (layer, id),
-                        "layout-gap",
-                        "Gap",
-                        &mut stack.gap,
-                        0.0..=1000.0,
-                        " px",
-                    );
-                    if stack.flow != StackFlow::Stack {
-                        changed |= layout_number(
-                            ui,
-                            (layer, id),
-                            "layout-cross-gap",
-                            "Row gap",
-                            &mut stack.cross_gap,
-                            0.0..=1000.0,
-                            " px",
-                        );
-                    }
-                });
-                ui.label(
-                    RichText::new("Padding · top / right / bottom / left")
-                        .small()
-                        .color(fg_weak()),
-                );
-                ui.horizontal(|ui| {
-                    for (name, p) in ["Top", "Right", "Bottom", "Left"]
-                        .into_iter()
-                        .zip(&mut stack.padding)
+                ui.scope(|ui| {
+                    if stacks.iter().any(Option::is_none)
+                        && !fields.contains(&LayoutStackField::Enabled)
                     {
-                        changed |= layout_number(
+                        ui.disable();
+                    }
+                    ui.horizontal(|ui| {
+                        for (name, v) in [
+                            ("Stack", StackFlow::Stack),
+                            ("Wrap", StackFlow::Wrap),
+                            ("Grid", StackFlow::Grid),
+                        ] {
+                            let response = control(ui, ("stack-flow", name), name, |ui| {
+                                ui.selectable_label(
+                                    !stack_mixed(&stacks, LayoutStackField::Flow)
+                                        && stack.flow == v,
+                                    name,
+                                )
+                            });
+                            if response.enabled() && response.clicked() {
+                                stack.flow = v;
+                            }
+                            if stack_mixed(&stacks, LayoutStackField::Flow) {
+                                ui.ctx().accesskit_node_builder(response.id, |node| {
+                                    node.set_state_description("Mixed")
+                                });
+                            }
+                            changed |= stack_intent(
+                                &mut fields,
+                                LayoutStackField::Flow,
+                                response.enabled() && response.clicked(),
+                            );
+                        }
+                    });
+                    if stack.flow == StackFlow::Grid {
+                        if stack.column_tracks.is_empty() {
+                            changed |= stack_number(
+                                ui,
+                                (layer, id),
+                                "uniform-columns",
+                                "Uniform columns",
+                                &mut stack.columns,
+                                1..=1024,
+                                " columns",
+                                &stacks,
+                                &mut fields,
+                                LayoutStackField::Columns,
+                            );
+                        }
+                        changed |= grid_tracks(
                             ui,
                             (layer, id),
-                            ("padding", name),
-                            name,
-                            p,
+                            "Column",
+                            &mut stack.column_tracks,
+                            studio.canvas_gen,
+                            &stacks,
+                            &mut fields,
+                        );
+                        changed |= grid_tracks(
+                            ui,
+                            (layer, id),
+                            "Row",
+                            &mut stack.row_tracks,
+                            studio.canvas_gen,
+                            &stacks,
+                            &mut fields,
+                        );
+                    } else {
+                        ui.horizontal(|ui| {
+                            let response = control(ui, "stack-horizontal", "Horizontal", |ui| {
+                                ui.selectable_label(
+                                    !stack_mixed(&stacks, LayoutStackField::Direction)
+                                        && stack.direction == StackAxis::Horizontal,
+                                    "Horizontal",
+                                )
+                            });
+                            if response.enabled() && response.clicked() {
+                                stack.direction = StackAxis::Horizontal;
+                            }
+                            if stack_mixed(&stacks, LayoutStackField::Direction) {
+                                ui.ctx().accesskit_node_builder(response.id, |node| {
+                                    node.set_state_description("Mixed")
+                                });
+                            }
+                            changed |= stack_intent(
+                                &mut fields,
+                                LayoutStackField::Direction,
+                                response.enabled() && response.clicked(),
+                            );
+                            let response = control(ui, "stack-vertical", "Vertical", |ui| {
+                                ui.selectable_label(
+                                    !stack_mixed(&stacks, LayoutStackField::Direction)
+                                        && stack.direction == StackAxis::Vertical,
+                                    "Vertical",
+                                )
+                            });
+                            if response.enabled() && response.clicked() {
+                                stack.direction = StackAxis::Vertical;
+                            }
+                            if stack_mixed(&stacks, LayoutStackField::Direction) {
+                                ui.ctx().accesskit_node_builder(response.id, |node| {
+                                    node.set_state_description("Mixed")
+                                });
+                            }
+                            changed |= stack_intent(
+                                &mut fields,
+                                LayoutStackField::Direction,
+                                response.enabled() && response.clicked(),
+                            );
+                        });
+                    }
+                    let response = stack_choice(
+                        ui,
+                        "layout-align",
+                        "Align",
+                        &mut stack.align,
+                        &[
+                            StackAlign::Start,
+                            StackAlign::Center,
+                            StackAlign::End,
+                            StackAlign::Stretch,
+                            StackAlign::Baseline,
+                        ]
+                        .map(|v| (v, format!("{v:?}"))),
+                        stack_mixed(&stacks, LayoutStackField::Align),
+                    );
+                    changed |=
+                        stack_intent(&mut fields, LayoutStackField::Align, response.changed());
+                    let response = stack_choice(
+                        ui,
+                        "layout-justify",
+                        "Distribute",
+                        &mut stack.justify,
+                        &[
+                            (StackJustify::Start, "Start".into()),
+                            (StackJustify::Center, "Center".into()),
+                            (StackJustify::End, "End".into()),
+                            (StackJustify::SpaceBetween, "Space between".into()),
+                            (StackJustify::SpaceAround, "Space around".into()),
+                            (StackJustify::SpaceEvenly, "Space evenly".into()),
+                        ],
+                        stack_mixed(&stacks, LayoutStackField::Justify),
+                    );
+                    changed |=
+                        stack_intent(&mut fields, LayoutStackField::Justify, response.changed());
+                    ui.horizontal(|ui| {
+                        changed |= stack_number(
+                            ui,
+                            (layer, id),
+                            "layout-gap",
+                            "Gap",
+                            &mut stack.gap,
                             0.0..=1000.0,
                             " px",
+                            &stacks,
+                            &mut fields,
+                            LayoutStackField::Gap,
                         );
-                    }
+                        if stack.flow != StackFlow::Stack {
+                            changed |= stack_number(
+                                ui,
+                                (layer, id),
+                                "layout-cross-gap",
+                                "Row gap",
+                                &mut stack.cross_gap,
+                                0.0..=1000.0,
+                                " px",
+                                &stacks,
+                                &mut fields,
+                                LayoutStackField::CrossGap,
+                            );
+                        }
+                    });
+                    ui.label(
+                        RichText::new("Padding · top / right / bottom / left")
+                            .small()
+                            .color(fg_weak()),
+                    );
+                    ui.horizontal(|ui| {
+                        for (edge, (name, p)) in ["Top", "Right", "Bottom", "Left"]
+                            .into_iter()
+                            .zip(&mut stack.padding)
+                            .enumerate()
+                        {
+                            changed |= stack_number(
+                                ui,
+                                (layer, id),
+                                ("padding", name),
+                                name,
+                                p,
+                                0.0..=1000.0,
+                                " px",
+                                &stacks,
+                                &mut fields,
+                                LayoutStackField::Padding(edge),
+                            );
+                        }
+                    });
                 });
             }
         }
@@ -879,7 +1173,7 @@ pub fn inspector(ui: &mut Ui, studio: &mut Studio) {
         if props.frame || matches!(shape.geom, Geom::Text(_)) {
             changed |= breakpoints(ui, &shape, &mut props, studio.canvas_gen);
         }
-        if changed && studio.apply_layout_inspector(&layout_target, &props) {
+        if changed && studio.apply_layout_inspector_with_fields(&layout_target, &props, &fields) {
             keyboard::Rows::<GridTrack>::accepted(ui, "Column", studio.canvas_gen);
             keyboard::Rows::<GridTrack>::accepted(ui, "Row", studio.canvas_gen);
             keyboard::Rows::<crate::layout::LayoutBreakpoint>::accepted(
@@ -945,10 +1239,35 @@ pub fn poll_image(ctx: &egui::Context, studio: &mut Studio) {
     }
 }
 
+/// Reveal the existing native value field created by an accepted numeric variable action.
+/// Args: UI, real field, document request, token identity and revision. Returns without editing values.
+fn focus_new_variable(ui: &Ui, response: &egui::Response, key: egui::Id, token: u64, revision: u64) {
+    let pending = ui.data(|data| data.get_temp::<(u64, u64)>(key));
+    if pending.is_some_and(|(_, expected)| expected != revision) {
+        ui.data_mut(|data| data.remove::<(u64, u64)>(key));
+        return;
+    }
+    if pending == Some((token, revision))
+        && response.enabled()
+        && ui.memory(|memory| memory.allows_interaction(response.layer_id))
+    {
+        response.request_focus();
+        super::welcome::focus_control(ui, response);
+        response.scroll_to_me_animation(None, egui::style::ScrollAnimation::none());
+        if ui.clip_rect().contains_rect(response.rect) {
+            ui.data_mut(|data| data.remove::<(u64, u64)>(key));
+        }
+        if ui.ctx().current_pass_index() == 0 {
+            ui.ctx().request_discard("Reveal the newly created variable");
+        }
+    }
+}
+
 fn variables(ui: &mut Ui, studio: &mut Studio) {
     use crate::layout_tokens::{DesignToken, TokenProperty, TokenValue};
     egui::CollapsingHeader::new("Design variables").show(ui, |ui| {
         let blocked = keyboard::blocked(studio);
+        let focus = egui::Id::new(("new-layout-variable", &studio.swap_id, &studio.selection, studio.active_layer));
         studio.with_field_history(ui, "layout-design-variables", |ui, studio| {
             if blocked {
                 ui.disable();
@@ -967,7 +1286,7 @@ fn variables(ui: &mut Ui, studio: &mut Studio) {
                                 changed |= super::color_picker::color_edit(ui, owner, color);
                             }
                             TokenValue::Number(value) => {
-                                changed |= native_number(
+                                let field = keyboard::number(
                                     ui,
                                     "value",
                                     &format!("Variable {}", token.name),
@@ -977,6 +1296,8 @@ fn variables(ui: &mut Ui, studio: &mut Studio) {
                                     "",
                                     "",
                                 );
+                                focus_new_variable(ui, &field.response, focus, token.id, studio.canvas_gen);
+                                changed |= crate::app::input_history::record(field.response, field.changed);
                             }
                         }
                         let owner = ui.make_persistent_id("remove");
@@ -1036,8 +1357,14 @@ fn variables(ui: &mut Ui, studio: &mut Studio) {
                 .clicked()
                 {
                     let mut tokens = studio.doc.layout_tokens.clone();
-                    tokens.push(DesignToken::number(name.trim(), 16.0));
+                    let token = DesignToken::number(name.trim(), 16.0);
+                    let id = token.id;
+                    tokens.push(token);
                     studio.set_layout_tokens(tokens);
+                    if studio.doc.layout_tokens.iter().any(|token| token.id == id) {
+                        ui.data_mut(|data| data.insert_temp(focus, (id, studio.canvas_gen)));
+                        ui.ctx().request_repaint();
+                    }
                 }
             });
             if let Some((layer, id)) = studio.primary()

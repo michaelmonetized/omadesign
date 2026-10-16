@@ -252,6 +252,7 @@ mod tests {
         events: Vec<Event>,
         layer_controls: bool,
     ) -> Vec<(String, Rect)> {
+        ctx.enable_accesskit();
         let mut output = ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(300., 650.))),
@@ -283,6 +284,21 @@ mod tests {
         }
         output.textures_delta.clear();
         let mut found = vec![];
+        if let Some(tree) = &output.platform_output.accesskit_update {
+            for (_, node) in &tree.nodes {
+                if let (Some(label), Some(bounds)) = (node.label(), node.bounds()) {
+                    if node.supports_action(egui::accesskit::Action::SetValue) {
+                        found.push((
+                            format!("native:{label}"),
+                            Rect::from_min_max(
+                                egui::pos2(bounds.x0 as f32, bounds.y0 as f32),
+                                egui::pos2(bounds.x1 as f32, bounds.y1 as f32),
+                            ),
+                        ));
+                    }
+                }
+            }
+        }
         for s in output.shapes {
             visit(&s.shape, &mut found);
         }
@@ -316,8 +332,14 @@ mod tests {
         s
     }
     fn value_at(labels: &[(String, Rect)], name: &str) -> Pos2 {
-        let label = labels.iter().find(|(text, _)| text == name).unwrap().1;
-        labels.iter().find(|(_, rect)| rect.min.x > label.max.x && (rect.center().y - label.center().y).abs() < 3.).unwrap().1.center()
+        labels
+            .iter()
+            .find(|(text, _)| {
+                text == &format!("native:{name}") || text == &format!("native:{name} (%)")
+            })
+            .unwrap_or_else(|| panic!("missing actual numeric {name}: {labels:?}"))
+            .1
+            .center()
     }
 
     fn pointer(pos: Pos2, pressed: bool) -> Vec<Event> {

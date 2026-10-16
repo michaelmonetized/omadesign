@@ -79,7 +79,9 @@ pub(super) fn number<N: egui::emath::Numeric + std::fmt::Display>(
         response
     })
     .inner;
-    let cancelled = (response.has_focus() || response.lost_focus() || response.dragged())
+    let focused = response.has_focus();
+    let lost_focus = response.lost_focus();
+    let cancelled = (focused || lost_focus || response.dragged())
         && ui.input(|input| input.key_pressed(egui::Key::Escape));
     let edited = response.dragged()
         || ui.input(|input| {
@@ -87,12 +89,11 @@ pub(super) fn number<N: egui::emath::Numeric + std::fmt::Display>(
                 egui::Event::Text(_)
                 | egui::Event::Paste(_)
                 | egui::Event::Cut
-                | egui::Event::Ime(_) => response.has_focus() || response.lost_focus(),
+                | egui::Event::Ime(_) => focused || lost_focus,
                 egui::Event::Key {
                     key, pressed: true, ..
                 } => {
-                    response.has_focus()
-                        && !matches!(key, egui::Key::Tab | egui::Key::Enter | egui::Key::Escape)
+                    focused && !matches!(key, egui::Key::Tab | egui::Key::Enter | egui::Key::Escape)
                 }
                 egui::Event::AccessKitActionRequest(request) => {
                     request.target_node == response.id.accesskit_id()
@@ -233,6 +234,7 @@ impl<T: Clone + PartialEq + Send + Sync + 'static> Rows<T> {
         value: &mut N,
         range: RangeInclusive<N>,
         unit: &str,
+        mixed: bool,
     ) -> bool {
         let field = crate::ui::fields::number(
             ui,
@@ -242,7 +244,10 @@ impl<T: Clone + PartialEq + Send + Sync + 'static> Rows<T> {
             range,
             unit,
             None,
-            Default::default(),
+            crate::ui::fields::FieldState {
+                mixed,
+                ..Default::default()
+            },
         );
         self.widgets.push(field.response.id);
         crate::app::input_history::record(field.response, field.changed)

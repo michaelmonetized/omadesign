@@ -702,7 +702,7 @@ fn view_menu(ui: &mut Ui, studio: &mut Studio) {
             studio.toggle_guides();
             ui.close();
         }
-        ui.menu_button("Guides", |ui| {
+        let guides = ui.menu_button("Guides", |ui| {
             super::guide_keyboard::menu(ui, studio);
             if ui.add_enabled(!studio.doc.ruler.guides_locked, Button::new("Lock all guides")).clicked() {
                 studio.set_guides_locked(true);
@@ -716,6 +716,7 @@ fn view_menu(ui: &mut Ui, studio: &mut Studio) {
                 studio.toggle_guides(); ui.close();
             }
         });
+        ui.ctx().accesskit_node_builder(guides.response.id, |node| node.set_label("Guides"));
         ui.menu_button("Ruler units", |ui| {
             for unit in crate::document::RulerUnit::ALL {
                 if ui

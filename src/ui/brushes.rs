@@ -97,12 +97,13 @@ pub(super) fn inspector(ui: &mut egui::Ui, studio: &mut Studio) {
         .selected_text(name)
         .width(ui.available_width())
         .show_ui(ui, |ui| {
-            if super::fields::native_scope(ui,owner.with("round"),|ui|ui.selectable_label(studio.brushes.selected.is_none(), "Round brush")).inner
-                .clicked()
+            let round_response = super::fields::native_scope(ui,owner.with("round"),|ui|ui.selectable_label(studio.brushes.selected.is_none(), "Round brush")).inner;
+            if super::agent::named(ui,round_response,"Round brush").clicked()
             {
                 studio.end_pixel_stroke(false);
                 studio.brushes.selected = None;
                 round=true;
+                ui.close();
             }
             for (p, pack) in studio.brushes.packs.iter().enumerate() {
                 ui.label(egui::RichText::new(&pack.name).strong());
@@ -113,6 +114,7 @@ pub(super) fn inspector(ui: &mut egui::Ui, studio: &mut Studio) {
                         .clicked()
                     {
                         select = Some((p, b));
+                        ui.close();
                     }
                 }
             }

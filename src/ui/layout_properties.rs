@@ -24,6 +24,7 @@ fn text(
     name: &str,
     value: &str,
     validate: fn(&str) -> Option<&'static str>,
+    focus: Option<(egui::Id, u64, u64)>,
 ) -> Option<String> {
     let key = ui.make_persistent_id(id);
     let mut draft = ui
@@ -35,10 +36,17 @@ fn text(
     let stale = ui
         .data(|data| data.get_temp::<bool>(key.with("stale")))
         .unwrap_or(false);
-    let label = ui.label(name);
+    let label = ui.add(egui::Label::new(name).wrap());
     let response = ui
-        .add(egui::TextEdit::singleline(&mut draft.value).id(key))
+        .add(
+            egui::TextEdit::singleline(&mut draft.value)
+                .id(key)
+                .desired_width(ui.available_width()),
+        )
         .labelled_by(label.id);
+    if let Some((key, property, revision)) = focus {
+        focus_property(ui, &response, key, property, revision);
+    }
     super::welcome::name_control(ui, &response, label.id, name);
     let invalid = validate(&draft.value);
     if let Some(message) = invalid {
@@ -81,6 +89,31 @@ fn text(
     }
 }
 
+/// Reveal the native value control created by an accepted Expose action.
+/// Args: UI, actual response and document/property request. Returns without editing artwork.
+fn focus_property(ui: &Ui, response: &egui::Response, key: egui::Id, property: u64, revision: u64) {
+    let pending = ui.data(|data| data.get_temp::<(u64, u64)>(key));
+    if pending.is_some_and(|(_, expected)| expected != revision) {
+        ui.data_mut(|data| data.remove::<(u64, u64)>(key));
+        return;
+    }
+    if pending == Some((property, revision))
+        && response.enabled()
+        && ui.memory(|memory| memory.allows_interaction(response.layer_id))
+    {
+        response.request_focus();
+        response.scroll_to_me_animation(
+            Some(egui::Align::Center),
+            egui::style::ScrollAnimation::none(),
+        );
+        ui.data_mut(|data| data.remove::<(u64, u64)>(key));
+        if ui.ctx().current_pass_index() == 0 {
+            ui.ctx()
+                .request_discard("Reveal the newly exposed property");
+        }
+    }
+}
+
 pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
     let Some(target) = studio.component_property_target() else {
         return;
@@ -94,7 +127,19 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
     };
     let main = matches!(shape.layout.component, Some(ComponentBinding::Main { .. }));
     let properties = components::properties(&studio.doc, root);
+    let existing = properties
+        .iter()
+        .map(|property| property.id)
+        .collect::<Vec<_>>();
     let document = studio.swap_id.clone();
+    let focus = egui::Id::new((
+        "new-component-property",
+        &document,
+        &studio.selection,
+        layer,
+        root,
+        selected,
+    ));
     let blocked = super::layout::keyboard::blocked(studio);
     let mut edit = None;
     let mut select = None;
@@ -115,6 +160,11 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                         for property in properties {
                             let row = ui.make_persistent_id(("named-property", property.id));
                             super::fields::native_scope(ui, row, |ui| {
+                                let width = ui.available_width().min(
+                                    (ui.clip_rect().right() - ui.next_widget_position().x).max(24.),
+                                );
+                                ui.set_width(width);
+                                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
                                 match components::property_value(
                                     &studio.doc,
                                     layer,
@@ -122,9 +172,14 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                                     property.id,
                                 ) {
                                     Ok(Value::Text(value)) => {
-                                        if let Some(value) =
-                                            text(ui, "value", &property.name, &value, |_| None)
-                                        {
+                                        if let Some(value) = text(
+                                            ui,
+                                            "value",
+                                            &property.name,
+                                            &value,
+                                            |_| None,
+                                            Some((focus, property.id, studio.canvas_gen)),
+                                        ) {
                                             edit = Some(Edit::Set {
                                                 id: property.id,
                                                 value: Value::Text(value),
@@ -133,14 +188,20 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                                     }
                                     Ok(Value::Visibility(mut value)) => {
                                         let field = ui.make_persistent_id("visibility");
-                                        if super::svg_paint::control(
+                                        let response = super::svg_paint::control(
                                             ui,
                                             field,
                                             &property.name,
                                             |ui| ui.checkbox(&mut value, &property.name),
-                                        )
-                                        .changed()
-                                        {
+                                        );
+                                        focus_property(
+                                            ui,
+                                            &response,
+                                            focus,
+                                            property.id,
+                                            studio.canvas_gen,
+                                        );
+                                        if response.changed() {
                                             edit = Some(Edit::Set {
                                                 id: property.id,
                                                 value: Value::Visibility(value),
@@ -162,6 +223,17 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                                                     " %",
                                                     None,
                                                     Default::default(),
+                                                );
+                                                focus_property(
+                                                    ui,
+                                                    &response.response,
+                                                    focus,
+                                                    property.id,
+                                                    studio.canvas_gen,
+                                                );
+                                                super::welcome::focus_control(
+                                                    ui,
+                                                    &response.response,
                                                 );
                                                 if crate::app::input_history::record(
                                                     response.response,
@@ -189,6 +261,7 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                                                     .is_none()
                                                     .then_some("Enter a hex color, such as #336699")
                                             },
+                                            Some((focus, property.id, studio.canvas_gen)),
                                         ) {
                                             if let Some(color) =
                                                 crate::color::Rgba::parse_hex(value.trim())
@@ -205,13 +278,19 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                                     }
                                     Ok(Value::Fill(_)) => {
                                         ui.label(&property.name);
-                                        if super::keyboard_controls::button(
+                                        let response = super::keyboard_controls::button(
                                             ui,
                                             "edit-paint",
                                             "Edit paint on object",
-                                        )
-                                        .clicked()
-                                        {
+                                        );
+                                        focus_property(
+                                            ui,
+                                            &response,
+                                            focus,
+                                            property.id,
+                                            studio.canvas_gen,
+                                        );
+                                        if response.clicked() {
                                             select = components::property_object(
                                                 &studio.doc,
                                                 layer,
@@ -231,12 +310,19 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                                             })
                                             .map(|(_, id, _, variant)| (id, variant))
                                             .collect::<Vec<_>>();
-                                        super::keyboard_controls::choice(
+                                        let response = super::keyboard_controls::choice(
                                             ui,
                                             "value",
                                             &property.name,
                                             &mut current,
                                             &choices,
+                                        );
+                                        focus_property(
+                                            ui,
+                                            &response,
+                                            focus,
+                                            property.id,
+                                            studio.canvas_gen,
                                         );
                                         if current != old {
                                             edit = Some(Edit::Set {
@@ -257,6 +343,7 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                                         "Property name",
                                         &property.name,
                                         property_name_error,
+                                        None,
                                     ) {
                                         edit = Some(Edit::Rename {
                                             id: property.id,
@@ -283,7 +370,11 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                                 ui.data(|d| d.get_temp::<String>(key)).unwrap_or_default();
                             let label = ui.label("New property name");
                             let response = ui
-                                .add(egui::TextEdit::singleline(&mut name).id(key))
+                                .add(
+                                    egui::TextEdit::singleline(&mut name)
+                                        .id(key)
+                                        .desired_width(ui.available_width()),
+                                )
                                 .labelled_by(label.id);
                             super::welcome::name_control(
                                 ui,
@@ -337,7 +428,16 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
             });
         });
     if let Some(edit) = edit {
-        studio.apply_component_property(target, edit);
+        let exposed = matches!(&edit, Edit::Expose { .. });
+        if studio.apply_component_property(target, edit) && exposed {
+            if let Some(property) = components::properties(&studio.doc, root)
+                .iter()
+                .find(|property| !existing.contains(&property.id))
+            {
+                ui.data_mut(|data| data.insert_temp(focus, (property.id, studio.canvas_gen)));
+                ui.ctx().request_repaint();
+            }
+        }
     }
     if let Some(id) = select {
         studio.selection = vec![(layer, id)];

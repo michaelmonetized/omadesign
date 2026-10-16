@@ -533,8 +533,23 @@ mod keyboard_tests {
             ),
         );
         assert_eq!(gradient, saved);
-        let output = frame(&ctx, &mut gradient, "document-B", true, vec![]);
+        frame(&ctx, &mut gradient, "document-B", true, vec![]);
+        keys::tab_to(&ctx, "Radial geometry", |events| {
+            frame(&ctx, &mut gradient, "document-B", true, events)
+        });
+        frame(
+            &ctx,
+            &mut gradient,
+            "document-B",
+            true,
+            keys::key(Key::Enter, Modifiers::NONE),
+        );
+        let output = keys::tab_to(&ctx, purpose, |events| {
+            frame(&ctx, &mut gradient, "document-B", true, events)
+        });
         assert_ne!(keys::named(&output, purpose).0, id);
+        keys::focused(&ctx, &output, purpose);
+        assert_eq!(gradient, saved);
     }
 
     #[test]
@@ -573,6 +588,10 @@ mod keyboard_tests {
         let target = studio.primary().unwrap();
         studio_action(&ctx, &mut studio, "Fill type");
         studio_action(&ctx, &mut studio, "Radial");
+        assert!(
+            !egui::Popup::is_any_open(&ctx),
+            "A native fill choice closes its picker before artwork shortcuts"
+        );
         let rest = studio
             .doc
             .find_shape(target.0, target.1)

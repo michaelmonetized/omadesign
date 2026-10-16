@@ -635,14 +635,22 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
         let pattern = matches!(style.fill, Fill::Pattern(_));
         let mut replace_pattern = false;
         let mut chosen = current;
+        let mut choice_clicked = false;
         let owner = eframe::egui::Id::new(("paint-type", &studio.swap_id, &studio.selection, studio.fill_active));
         let picker = super::fields::native_scope(ui, owner, |ui| ComboBox::from_id_salt("value")
             .selected_text(if pattern { "Pattern" } else { current.map(|k| k.name()).unwrap_or("Solid") })
             .width(108.)
             .show_ui(ui, |ui| {
-                replace_pattern = ui.selectable_value(&mut chosen, None, "Solid").clicked() && pattern;
+                if ui.selectable_value(&mut chosen, None, "Solid").clicked() {
+                    replace_pattern = pattern;
+                    choice_clicked = true;
+                    ui.close();
+                }
                 for kind in crate::gradient::GradientKind::ALL {
-                    ui.selectable_value(&mut chosen, Some(kind), kind.name());
+                    if ui.selectable_value(&mut chosen, Some(kind), kind.name()).clicked() {
+                        choice_clicked = true;
+                        ui.close();
+                    }
                 }
             })).inner;
         super::welcome::name_control(ui, &picker.response, label.id, if studio.fill_active { "Fill type" } else { "Stroke type" });
@@ -675,6 +683,8 @@ fn color_studio(ui: &mut Ui, studio: &mut Studio) {
                 g
             });
             apply_gradient(studio, gradient.clone());
+        }
+        if choice_clicked {
             picker.response.request_focus();
         }
     });

@@ -411,10 +411,43 @@ fn keyboard_layout_inspector_empty_document_grid_named_property_and_variable_aut
     );
     native_frame(&ctx, &mut studio, vec![]);
     let (layer, root) = studio.selected_frame().unwrap();
+    let mut properties_focused = false;
+    for _ in 0..6 {
+        let output = native_frame(&ctx, &mut studio, keys::key(Key::F6, Modifiers::NONE));
+        if ctx
+            .memory(|memory| memory.focused())
+            .map(|id| id.accesskit_id())
+            == Some(keys::named(&output, "Properties").0)
+        {
+            properties_focused = true;
+            break;
+        }
+    }
+    assert!(
+        properties_focused,
+        "Native F6 must reach the Properties panel before authoring its fields"
+    );
     native_press(&ctx, &mut studio, "Arrange children automatically");
     native_press(&ctx, &mut studio, "Grid");
     native_press(&ctx, &mut studio, "Column tracks");
     native_press(&ctx, &mut studio, "Add Column track");
+    assert_eq!(
+        studio
+            .doc
+            .find_shape(layer, root)
+            .unwrap()
+            .layout
+            .stack
+            .as_ref()
+            .unwrap()
+            .column_tracks,
+        vec![GridTrack::default()]
+    );
+    let mut output = native_frame(&ctx, &mut studio, vec![]);
+    for _ in 0..3 {
+        output = keys::tab(true, |events| native_frame(&ctx, &mut studio, events));
+    }
+    keys::focused(&ctx, &output, "Column 0 share");
     native_edit(&ctx, &mut studio, "Column 0 share", "2.25");
     native_frame(&ctx, &mut studio, keys::key(Key::Tab, Modifiers::NONE));
     assert_eq!(
@@ -434,7 +467,20 @@ fn keyboard_layout_inspector_empty_document_grid_named_property_and_variable_aut
     native_press(&ctx, &mut studio, "Named properties");
     native_edit(&ctx, &mut studio, "New property name", "Card opacity");
     native_press(&ctx, &mut studio, "Expose Opacity");
-    native_edit(&ctx, &mut studio, "Card opacity", "70.25");
+    let output = native_edit(&ctx, &mut studio, "Card opacity", "70.25");
+    keys::focused(&ctx, &output, "Card opacity");
+    let bounds = keys::named(&output, "Card opacity").1.bounds().unwrap();
+    let extent = studio.panel_workspaces.tasks["Layout"]
+        .groups
+        .iter()
+        .find(|group| group.panels.iter().any(|panel| panel == "properties"))
+        .unwrap()
+        .extent;
+    assert!(
+        bounds.x0 >= f64::from(ctx.content_rect().right() - extent)
+            && bounds.x1 <= f64::from(ctx.content_rect().right()),
+        "Named property escaped its real dock: {bounds:?}"
+    );
     native_frame(&ctx, &mut studio, keys::key(Key::Tab, Modifiers::NONE));
     assert!((studio.doc.find_shape(layer, root).unwrap().opacity - 0.7025).abs() < 0.00001);
     native_press(&ctx, &mut studio, "Design variables");
@@ -647,5 +693,125 @@ fn keyboard_layout_inspector_native_breakpoint_precision_conditional_ids_and_ret
             .1
             .invalid()
             .is_none()
+    );
+}
+
+#[test]
+fn keyboard_layout_mixed_primary_equal_native_intent_keeps_other_members_and_one_undo() {
+    use crate::ui::welcome::keyboard_tests as keys;
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    crate::ui::theme::apply(&ctx);
+    let (mut studio, first) = fixture();
+    studio
+        .doc
+        .find_shape_mut(0, first)
+        .unwrap()
+        .layout
+        .stack
+        .as_mut()
+        .unwrap()
+        .gap = 12.;
+    let mut second = crate::layout::make_frame(Pt::new(700., 0.), Pt::new(200., 160.));
+    let second_id = second.id;
+    let mut stack = studio
+        .doc
+        .find_shape(0, first)
+        .unwrap()
+        .layout
+        .stack
+        .clone()
+        .unwrap();
+    stack.gap = 24.;
+    stack.padding = [7., 11., 13., 17.];
+    stack.column_tracks[0].size = GridTrackSize::Fixed(160.);
+    stack.column_tracks[0].min = Some(30.);
+    stack.column_tracks[0].max = Some(200.);
+    second.layout.stack = Some(stack.clone());
+    studio.doc.layers[0].kind.shapes_mut().unwrap().push(second);
+    studio.selection = vec![(0, first), (0, second_id)];
+    let render =
+        |studio: &mut Studio, events| keys::render(&ctx, events, |ui| inspector(ui, studio));
+    let before = crate::project::encode(&studio.doc).unwrap();
+    let output = keys::tab_to(&ctx, "Gap", |events| render(&mut studio, events));
+    assert_eq!(
+        keys::named(&output, "Gap").1.state_description(),
+        Some("Mixed")
+    );
+    assert_eq!(keys::named(&output, "Gap").1.numeric_value(), None);
+    assert_eq!(studio.history.len(), 0);
+    keys::replace("12", |events| render(&mut studio, events));
+    render(&mut studio, keys::key(Key::Tab, Modifiers::NONE));
+    let first_after = studio
+        .doc
+        .find_shape(0, first)
+        .unwrap()
+        .layout
+        .stack
+        .as_ref()
+        .unwrap();
+    let second_after = studio
+        .doc
+        .find_shape(0, second_id)
+        .unwrap()
+        .layout
+        .stack
+        .as_ref()
+        .unwrap();
+    assert_eq!(first_after.gap, 12.);
+    assert_eq!(second_after.gap, 12.);
+    let mut expected = stack.clone();
+    expected.gap = 12.;
+    assert_eq!(*second_after, expected);
+    assert_eq!(studio.history.len(), 1);
+    let after = crate::project::encode(&studio.doc).unwrap();
+    studio.undo();
+    assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+    studio.redo();
+    assert_eq!(crate::project::encode(&studio.doc).unwrap(), after);
+    keys::tab_to(&ctx, "Column tracks", |events| render(&mut studio, events));
+    render(&mut studio, keys::key(Key::Enter, Modifiers::NONE));
+    let output = keys::tab_to(&ctx, "Column 0 size", |events| render(&mut studio, events));
+    assert_eq!(
+        keys::named(&output, "Column 0 size").1.state_description(),
+        Some("Mixed")
+    );
+    assert!(keys::named(&output, "Add Column track").1.is_disabled());
+    assert!(
+        keys::named(&output, "Remove Column track 0")
+            .1
+            .is_disabled()
+    );
+    keys::replace("80", |events| render(&mut studio, events));
+    render(&mut studio, keys::key(Key::Tab, Modifiers::NONE));
+    let second_after = studio
+        .doc
+        .find_shape(0, second_id)
+        .unwrap()
+        .layout
+        .stack
+        .as_ref()
+        .unwrap();
+    expected.column_tracks[0].size = GridTrackSize::Fixed(80.);
+    assert_eq!(*second_after, expected);
+    let current = crate::project::encode(&studio.doc).unwrap();
+    studio.doc.layers[0].locked = true;
+    let output = render(&mut studio, vec![]);
+    assert!(keys::named(&output, "Gap").1.is_disabled());
+    let history = studio.history.len();
+    render(
+        &mut studio,
+        keys::action(
+            keys::named(&output, "Gap").0,
+            egui::accesskit::Action::SetValue,
+            Some(egui::accesskit::ActionData::NumericValue(90.)),
+        ),
+    );
+    assert_eq!(studio.history.len(), history);
+    studio.doc.layers[0].locked = false;
+    assert_eq!(crate::project::encode(&studio.doc).unwrap(), current);
+    assert_eq!(
+        crate::project::encode(&crate::project::decode(&current).unwrap()).unwrap(),
+        current
     );
 }

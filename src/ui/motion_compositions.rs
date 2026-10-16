@@ -4,17 +4,53 @@ use eframe::egui::{self, Ui};
 
 pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
     let owner = egui::Id::new(("motion-compositions", &studio.swap_id));
+    let key = owner.with("menu-open");
+    let mut open = ui.data(|data| data.get_temp::<bool>(key)).unwrap_or(false);
     let menu = super::fields::native_scope(ui, owner, |ui| {
-        ui.menu_button("Compositions", |ui| {
-            ui.set_min_width(300.);
-            ui.set_max_width(420.);
-            egui::ScrollArea::vertical()
-                .max_height(600.)
-                .show(ui, |ui| controls(ui, studio));
-        })
+        let response = ui.button("Compositions");
+        if response.clicked() {
+            open = !open;
+        }
+        egui::Popup::menu(&response)
+            .open_bool(&mut open)
+            .show(|ui| {
+                if studio.file_dialog_pending() || studio.updates.freezing {
+                    ui.disable();
+                }
+                ui.set_min_width(300.);
+                ui.set_max_width(420.);
+                let clip = ui.clip_rect();
+                let available = ui.available_rect_before_wrap().intersect(clip);
+                let height = (available.bottom() - ui.next_widget_position().y).clamp(0., 600.);
+                let scrolled = egui::ScrollArea::vertical()
+                    .id_salt(owner.with("controls-scroll"))
+                    .animated(false)
+                    .min_scrolled_height(0.)
+                    .max_height(height)
+                    .show(ui, |ui| controls(ui, studio));
+                #[cfg(test)]
+                for composition in &studio.doc.motion.compositions {
+                    let key = action_error_key(studio, composition.id);
+                    if ui.data(|data| data.get_temp::<ActionError>(key)).is_some() {
+                        eprintln!("Composition popup: available={available:?}, clip={clip:?}, max_height={height}, inner={:?}, content={:?}, offset={:?}", scrolled.inner_rect, scrolled.content_size, scrolled.state.offset);
+                    }
+                }
+                #[cfg(not(test))]
+                let _ = scrolled;
+            });
+        response
     })
     .inner;
-    super::welcome::focus_control(ui, &menu.response);
+    let popup = egui::Popup::default_response_id(&menu);
+    if open {
+        if !egui::Popup::is_any_open(ui.ctx()) || egui::Popup::is_id_open(ui.ctx(), popup) {
+            egui::Popup::open_id(ui.ctx(), popup);
+        }
+    } else if egui::Popup::is_id_open(ui.ctx(), popup) {
+        egui::Popup::close_id(ui.ctx(), popup);
+    }
+    ui.data_mut(|data| data.insert_temp(key, open));
+    super::welcome::focus_control(ui, &menu);
 }
 
 /// Import the project returned by the existing native chooser.
@@ -168,7 +204,15 @@ fn controls(ui: &mut Ui, studio: &mut Studio) {
             Edit::Key { id, .. } | Edit::Expression { id, .. } | Edit::Remap { id, .. } => *id,
         };
         let key = action_error_key(studio, id);
-        match apply_edit(studio, action) {
+        let accepted = match &action {
+            Edit::Expression {
+                id,
+                property,
+                source: Some(source),
+            } => validate_expression(studio, *id, *property, source),
+            _ => Ok(()),
+        };
+        match accepted.and_then(|()| apply_edit(studio, action)) {
             Ok(()) => {
                 ui.data_mut(|data| data.remove::<ActionError>(key));
                 let draft_key = animation_draft_key(studio, id);
@@ -193,6 +237,7 @@ fn controls(ui: &mut Ui, studio: &mut Studio) {
                             message: error,
                             fields,
                             revision: studio.canvas_gen,
+                            reveal: true,
                         },
                     )
                 });
@@ -202,11 +247,30 @@ fn controls(ui: &mut Ui, studio: &mut Studio) {
     }
 }
 
+/// Validate an explicit source draft with the existing bounded expression evaluator.
+/// Args: current studio, concrete composition/property and proposed source.
+/// Returns the existing parser/evaluation error without committing or changing the document.
+fn validate_expression(
+    studio: &Studio,
+    id: u64,
+    property: crate::motion::Prop,
+    source: &str,
+) -> Result<(), String> {
+    let mut candidate = studio.doc.motion.clone();
+    candidate.set_expression(id, property, Some(source.to_owned()))?;
+    let mut keep = || true;
+    crate::motion::expressions::Evaluation::new(&candidate, studio.playhead, &mut keep)
+        .value(id, property)
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
 #[derive(Clone)]
 struct ActionError {
     message: String,
     fields: Vec<egui::Id>,
     revision: u64,
+    reveal: bool,
 }
 
 /// Identify a rejected explicit edit by its actual document and composition.
@@ -379,7 +443,7 @@ fn easing(ui: &mut Ui, ease: &mut crate::motion::Ease, purpose: &str) -> (bool, 
 /// Args: UI, studio and persistent composition. Returns no value and never changes document history.
 fn action_error(ui: &mut Ui, studio: &Studio, id: u64, group: &[egui::Id]) {
     let key = action_error_key(studio, id);
-    if let Some(error) = ui.data(|data| data.get_temp::<ActionError>(key)) {
+    if let Some(mut error) = ui.data(|data| data.get_temp::<ActionError>(key)) {
         if error.revision != studio.canvas_gen {
             ui.data_mut(|data| data.remove::<ActionError>(key));
             return;
@@ -393,14 +457,23 @@ fn action_error(ui: &mut Ui, studio: &Studio, id: u64, group: &[egui::Id]) {
             .filter_map(|id| ui.ctx().read_response(*id))
             .collect::<Vec<_>>();
         if !responses.is_empty() {
-            ui.scope(|ui| {
+            let shown = ui.scope(|ui| {
                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
-                super::welcome::control_error(
-                    ui,
-                    &responses.iter().collect::<Vec<_>>(),
-                    &error.message,
-                );
+                let fields = responses.iter().collect::<Vec<_>>();
+                if error.reveal {
+                    super::welcome::reveal_control_error(ui, &fields, &error.message)
+                } else {
+                    super::welcome::control_error(ui, &fields, &error.message);
+                    false
+                }
             });
+            if error.reveal && shown.inner
+                && ui.clip_rect().contains_rect(shown.response.rect)
+                && responses.iter().all(|field| ui.clip_rect().contains_rect(field.rect))
+            {
+                error.reveal = false;
+                ui.data_mut(|data| data.insert_temp(key, error));
+            }
         }
     }
 }
@@ -544,6 +617,7 @@ fn animation_controls(
             egui::TextEdit::multiline(&mut draft.source)
                 .id(expression_owner)
                 .code_editor()
+                .lock_focus(false)
                 .desired_rows(3)
                 .hint_text("value + sin(time * tau) * 40"),
         );
@@ -552,8 +626,9 @@ fn animation_controls(
             let error = action_error_key(studio, comp.id);
             ui.data_mut(|data| data.remove::<ActionError>(error));
         }
+        action_error(ui, studio, comp.id, &[source.id]);
         ui.label("time in seconds · expression rotation in radians");
-        let mut expression_controls = vec![source.id];
+        let mut expression_controls = Vec::new();
         ui.horizontal(|ui| {
             if super::keyboard_controls::button(ui, "apply-expression", "Apply expression")
                 .clicked()
@@ -1110,8 +1185,9 @@ mod keyboard_tests {
         let before = f.studio.doc.motion.clone();
         f.press("Apply expression");
         let output = f.frame(false, vec![]);
-        keys::associated_error(&output, "Composition expression");
         assert_eq!(f.studio.doc.motion, before);
+        keys::associated_error(&output, "Composition expression");
+        keys::focused(&f.ctx, &output, "Composition expression");
         f.text("Composition expression", "value + time * 2");
         f.press("Apply expression");
         assert_eq!(
@@ -1175,6 +1251,10 @@ mod keyboard_tests {
         assert_eq!(f.studio.doc.motion, before);
         f.text("Composition start", "0");
         f.press("Animate");
+        assert_eq!(
+            f.studio.doc.motion, before,
+            "Opening native Animate must not set a key"
+        );
         let output = f.text("Composition key value", "-");
         keys::associated_error(&output, "Composition key value");
         assert!(keys::named(&output, "Set key").1.is_disabled());

@@ -46,7 +46,7 @@ impl RowOwners {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 struct Rejection {
     fields: Vec<Id>,
     message: String,
@@ -58,6 +58,7 @@ struct Feedback {
     light_widgets: Vec<Id>,
     edited: Vec<(Domain, Response)>,
     domain: Domain,
+    rejection: Option<Rejection>,
 }
 
 #[derive(Clone, Copy, Default, PartialEq)]
@@ -79,6 +80,34 @@ impl Feedback {
             self.edited.push((self.domain, response.clone()));
         }
         changed
+    }
+
+    /// Place a known candidate error beside the native group that owns its real responses.
+    /// Args: the group's UI. Returns nothing; one real error label is linked and painted once.
+    fn show_rejection(&mut self, ui: &mut Ui) {
+        let Some(rejection) = &self.rejection else {
+            return;
+        };
+        let fields = self
+            .widgets
+            .iter()
+            .filter(|response| rejection.fields.contains(&response.id))
+            .collect::<Vec<_>>();
+        if fields.is_empty() {
+            return;
+        }
+        let error =
+            super::fields::native_scope(ui, rejection.fields[0].with("candidate-error"), |ui| {
+                super::welcome::control_error(ui, &fields, &rejection.message);
+            });
+        if fields.iter().any(|response| response.has_focus())
+            && !ui.clip_rect().contains_rect(error.response.rect)
+        {
+            error
+                .response
+                .scroll_to_me_animation(None, egui::style::ScrollAnimation::none());
+        }
+        self.rejection = None;
     }
 }
 
@@ -334,6 +363,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
             })
         });
         if replacing
+            && ui.ctx().current_pass_index() == 0
             && ui
                 .memory(|memory| memory.focused())
                 .is_some_and(|id| rejection.fields.contains(&id))
@@ -341,11 +371,21 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
             ui.data_mut(|data| data.remove::<Rejection>(error_key));
         }
     }
-    let mut feedback = Feedback::default();
+    let mut feedback = Feedback {
+        rejection: ui.data(|data| data.get_temp::<Rejection>(error_key)),
+        ..Default::default()
+    };
     let mut structural = false;
     let available = !studio.file_dialog_pending() && !studio.updates.freezing;
+    let menu_key = document.with("menu-open");
+    let mut menu_open = ui
+        .data(|data| data.get_temp::<bool>(menu_key))
+        .unwrap_or(false);
     let menu = super::fields::native_scope(ui, document.with("menu"), |ui| {
-        ui.add_enabled_ui(available, |ui| ui.menu_button("3D Scene", |ui| {
+        ui.add_enabled_ui(available, |ui| {
+            let response = ui.button("3D Scene");
+            if response.clicked() { menu_open = !menu_open; }
+            egui::Popup::menu(&response).open_bool(&mut menu_open).show(|ui| {
             super::fields::native_scope(ui, owner, |ui| {
                 if !available { ui.disable(); }
                 egui::ScrollArea::vertical().max_height(480.).show(ui, |ui| {
@@ -469,6 +509,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                             feedback.observe(&reset, false);
                             if reset.clicked() { scene.camera = Camera::default(); changed = true; }
                         }
+                        feedback.show_rejection(ui);
                     });
                     let lighting_owner = owner.with("lighting");
                     section(ui, lighting_owner, "Lighting", "Scene lighting controls", &mut feedback, |ui, feedback| {
@@ -476,6 +517,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                         changed |= triple(ui, lighting_owner.with("ambient"), "Ambient", "Scene ambient", ["R", "G", "B"], &mut scene.ambient, feedback);
                         let response = control(ui, lighting_owner.with("imported"), "Use model lights", |ui| ui.checkbox(&mut scene.imported_lights, "Use model lights"));
                         changed |= feedback.observe(&response, response.changed());
+                        feedback.show_rejection(ui);
                         let add = control(ui, lighting_owner.with("add"), "Add scene light", |ui| ui.button("Add light"));
                         feedback.observe(&add, false);
                         if add.clicked() {
@@ -525,6 +567,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                                 let response = control(ui, light_owner.with("remove"), &format!("Remove {name}"), |ui| ui.button("Remove light"));
                                 feedback.observe(&response, false);
                                 if response.clicked() { remove = Some(index); }
+                                feedback.show_rejection(ui);
                             });
                             feedback.light_widgets.extend(feedback.widgets[first_widget..].iter().map(|response| response.id));
                         }
@@ -580,6 +623,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                                     }
                                 });
                             }
+                            feedback.show_rejection(ui);
                             section(ui, object_owner.with("node"), "Node", &format!("{name} node controls"), feedback, |ui, feedback| {
                                 feedback.domain = Domain::Resource;
                                 if object.model.nodes.is_empty() { return; }
@@ -691,22 +735,36 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                                     else if e.starts_with("SceneTransform:") { Some(Domain::Object) }
                                     else { None };
                                 let fields = feedback.edited.iter().filter(|(group, _)| Some(*group) == domain).map(|(_, response)| response.id).collect::<Vec<_>>();
-                                if !fields.is_empty() { ui.data_mut(|data| data.insert_temp(error_key, Rejection { fields, message: e.clone() })); }
+                                if !fields.is_empty() {
+                                    let rejection = Rejection { fields, message: e.clone() };
+                                    let new_error = ui.data(|data| data.get_temp::<Rejection>(error_key).as_ref() != Some(&rejection));
+                                    if new_error {
+                                        ui.data_mut(|data| data.insert_temp(error_key, rejection));
+                                        ui.ctx().request_discard("Place the Scene field error in its native group");
+                                    }
+                                }
                                 studio.status = e;
                             }
                         }
-                    }
-                    if let Some(rejection) = ui.data(|data| data.get_temp::<Rejection>(error_key)) {
-                        let fields = feedback.widgets.iter().filter(|response| rejection.fields.contains(&response.id)).collect::<Vec<_>>();
-                        if !fields.is_empty() { super::welcome::control_error(ui, &fields, &rejection.message); }
                     }
                     if let Some(error) = crate::compositor::motion_error() {
                         ui.colored_label(egui::Color32::LIGHT_RED, error);
                     }
                 });
             });
-        })).inner
-    }).inner.response;
+            });
+            response
+        }).inner
+    }).inner;
+    let popup = egui::Popup::default_response_id(&menu);
+    if menu_open {
+        if !egui::Popup::is_any_open(ui.ctx()) || egui::Popup::is_id_open(ui.ctx(), popup) {
+            egui::Popup::open_id(ui.ctx(), popup);
+        }
+    } else if egui::Popup::is_id_open(ui.ctx(), popup) {
+        egui::Popup::close_id(ui.ctx(), popup);
+    }
+    ui.data_mut(|data| data.insert_temp(menu_key, menu_open));
     super::welcome::focus_control(ui, &menu);
     if let Some(focused) = ui.memory(|memory| memory.focused())
         && rows.widgets.contains(&focused)
@@ -1082,11 +1140,42 @@ mod keyboard_tests {
         press(&ctx, &mut studio, "Cube material controls");
         let output = frame(&ctx, &mut studio, vec![]);
         let remove = keys::named(&output, "Remove Cube model").0;
+        let alpha = keys::named(&output, "Cube material 0 alpha mode").0;
         press(&ctx, &mut studio, "Cube material 0 alpha mode");
+        let opened_child = frame(&ctx, &mut studio, vec![]);
+        assert!(
+            has(&opened_child, "Cube controls"),
+            "The real Scene parent remains visible while its ComboBox is open"
+        );
+        assert!(has(&opened_child, "Cube material 0 Mask"));
+        assert_eq!(
+            keys::named(&opened_child, "Cube material 0 alpha mode").0,
+            alpha
+        );
         press(&ctx, &mut studio, "Cube material 0 Mask");
         let output = frame(&ctx, &mut studio, vec![]);
+        keys::focused(&ctx, &output, "Cube material 0 alpha mode");
+        assert!(
+            !has(&output, "Cube material 0 Mask"),
+            "Choosing a real native option closes only the child popup"
+        );
+        assert!(has(&output, "Cube controls"));
         assert!(has(&output, "Cube material 0 alpha cutoff"));
         assert_eq!(keys::named(&output, "Remove Cube model").0, remove);
+        assert_eq!(keys::named(&output, "Cube material 0 alpha mode").0, alpha);
+        close(&ctx, &mut studio);
+        let closed_parent = frame(&ctx, &mut studio, vec![]);
+        assert!(!has(&closed_parent, "Cube controls"));
+        assert!(!egui::Popup::is_any_open(&ctx));
+        open(&ctx, &mut studio);
+        let reopened_parent = frame(&ctx, &mut studio, vec![]);
+        assert!(has(&reopened_parent, "Cube material 0 alpha cutoff"));
+        assert_eq!(keys::named(&reopened_parent, "Cube position X").0, position);
+        assert_eq!(
+            keys::named(&reopened_parent, "Cube material 0 alpha mode").0,
+            alpha
+        );
+        assert_eq!(keys::named(&reopened_parent, "Remove Cube model").0, remove);
         edit(&ctx, &mut studio, "Cube model name", "Renamed");
         let output = frame(&ctx, &mut studio, vec![]);
         assert_eq!(keys::named(&output, "Renamed position X").0, position);

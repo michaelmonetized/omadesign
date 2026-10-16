@@ -68,6 +68,31 @@ pub(super) fn native_number_valid(ui: &Ui, response: &Response, property: Id, at
 /// Associate one visible validation message with its native controls.
 /// Args: UI, affected responses and plain error. Returns no value; native reader announcements are unproven.
 pub(super) fn control_error(ui: &mut Ui, fields: &[&Response], message: &str) {
+    error_response(ui, fields, message);
+}
+
+/// Reveal an existing rejected field and its associated message inside its scroll area.
+/// Args: UI, actual controls and their validation error. Returns whether native focus was restored.
+pub(super) fn reveal_control_error(ui: &mut Ui, fields: &[&Response], message: &str) -> bool {
+    let error = error_response(ui, fields, message);
+    let bounds = fields.iter().fold(error.rect, |rect, field| rect.union(field.rect));
+    ui.scroll_to_rect_animation(bounds, Some(egui::Align::Center), egui::style::ScrollAnimation::none());
+    let activating = ui.input(|input| input.pointer.any_click()
+        || input.key_pressed(egui::Key::Enter) || input.key_pressed(egui::Key::Space));
+    let restored = if !activating && ui.is_enabled() {
+        fields.iter().find(|field| field.enabled()
+            && ui.memory(|memory| memory.allows_interaction(field.layer_id)))
+            .is_some_and(|field| { field.request_focus(); true })
+    } else { false };
+    if ui.ctx().current_pass_index() == 0 {
+        ui.ctx().request_discard("Reveal the rejected control and its error");
+    }
+    restored
+}
+
+/// Draw one associated error and return its actual label response.
+/// Args: UI, affected native controls and error text. Returns the existing visible label.
+fn error_response(ui: &mut Ui, fields: &[&Response], message: &str) -> Response {
     let error = ui.colored_label(ui.visuals().error_fg_color, message);
     ui.ctx().accesskit_node_builder(error.id, |node| {
         node.set_live(egui::accesskit::Live::Polite);
@@ -81,6 +106,7 @@ pub(super) fn control_error(ui: &mut Ui, fields: &[&Response], message: &str) {
             node.push_described_by(error.id.accesskit_id());
         });
     }
+    error
 }
 
 const GROUPS: &[(&str, Option<&str>)] = &[
@@ -480,13 +506,20 @@ pub(super) mod keyboard_tests {
 
     pub fn tab_to(ctx: &egui::Context, name: &str, mut frame: impl FnMut(Vec<Event>) -> egui::FullOutput) -> egui::FullOutput {
         let mut output = frame(vec![]);
+        for _ in 0..16 {
+            if output.platform_output.accesskit_update.as_ref().unwrap().nodes.iter().any(|(_,node)| node.label() == Some(name)) { break; }
+            output = frame(vec![]);
+        }
+        let mut trace = Vec::new();
         for _ in 0..128 {
-            if ctx.memory(|memory| memory.focused()).map(|id| id.accesskit_id()) == Some(named(&output, name).0) {
+            let focused = ctx.memory(|memory| memory.focused()).map(|id| id.accesskit_id());
+            if focused == Some(named(&output, name).0) {
                 return frame(vec![]);
             }
+            trace.push(output.platform_output.accesskit_update.as_ref().unwrap().nodes.iter().find(|(id,_)|Some(*id)==focused).map(|(id,node)|(*id,node.role(),node.label().map(str::to_owned))));
             output = tab(false, &mut frame);
         }
-        panic!("native Tab did not reach {name}");
+        panic!("native Tab did not reach {name}; actual focus traversal: {trace:?}; target {:?}", named(&output,name));
     }
 
     pub fn replace(text: &str, mut frame: impl FnMut(Vec<Event>) -> egui::FullOutput) -> egui::FullOutput {

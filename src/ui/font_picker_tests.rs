@@ -108,7 +108,13 @@ fn click_label(ctx: &egui::Context, studio: &mut Studio, label: &str) {
 }
 
 fn open(ctx: &egui::Context, studio: &mut Studio) {
-    let label = crate::text::label_for(&studio.selected_type().unwrap().font);
+    let metrics = studio.selected_character_metrics();
+    let run = studio.selected_type().unwrap();
+    let font = metrics
+        .first()
+        .and_then(|style| style.font.as_deref())
+        .unwrap_or(&run.font);
+    let label = crate::text::label_for(&font);
     click_label(ctx, studio, &label);
     assert!(
         egui::Popup::is_any_open(ctx),
@@ -147,7 +153,17 @@ fn font_search_click_keeps_focus_filters_and_selects_with_undo() {
         !egui::Popup::is_any_open(&ctx),
         "choosing a font must close the picker"
     );
-    assert_eq!(studio.selected_type().unwrap().font, target);
+    let metrics = studio.selected_character_metrics();
+    assert!(!metrics.is_empty());
+    assert!(
+        metrics
+            .iter()
+            .all(|style| style.font.as_deref() == Some(target.as_str()))
+    );
+    assert!(
+        studio.selected_type().unwrap().font.is_empty(),
+        "A character choice preserves the base run font"
+    );
     assert_eq!(studio.text_font, target);
     assert_eq!(studio.history.len(), history + 1);
     let applied = crate::project::encode(&studio.doc).unwrap();
@@ -227,7 +243,17 @@ fn keyboard_font_native_local_search_choice_escape_and_typed_history_keep_owner(
     });
     native_frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
     assert!(!egui::Popup::is_any_open(&ctx));
-    assert_eq!(studio.selected_type().unwrap().font, target);
+    let metrics = studio.selected_character_metrics();
+    assert!(!metrics.is_empty());
+    assert!(
+        metrics
+            .iter()
+            .all(|style| style.font.as_deref() == Some(target.as_str()))
+    );
+    assert!(
+        studio.selected_type().unwrap().font.is_empty(),
+        "A character choice preserves the base run font"
+    );
     let after = crate::project::encode(&studio.doc).unwrap();
     studio.undo();
     assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);

@@ -9,6 +9,183 @@ pub(crate) struct LayoutInspectorTarget {
     layouts: Vec<FrameLayout>,
 }
 
+/// Identify an accepted AutoStack field without storing input state in the document.
+/// Args: padding edge or zero-based track index where applicable.
+/// Values select the edited property independently of its current numeric value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LayoutStackField {
+    Enabled,
+    Direction,
+    Flow,
+    Align,
+    Justify,
+    Gap,
+    CrossGap,
+    Columns,
+    Padding(usize),
+    ColumnTracks,
+    RowTracks,
+    ColumnTrackSize(usize),
+    ColumnTrackMin(usize),
+    ColumnTrackMax(usize),
+    RowTrackSize(usize),
+    RowTrackMin(usize),
+    RowTrackMax(usize),
+}
+
+/// Recover changed stack fields for callers using the original inspector API.
+/// Args: captured primary stack and edited stack. Returns a transient field list.
+fn changed_stack_fields(
+    primary: Option<&AutoStack>,
+    edited: Option<&AutoStack>,
+) -> Vec<LayoutStackField> {
+    use LayoutStackField::*;
+    let (Some(primary), Some(edited)) = (primary, edited) else {
+        return if primary.is_some() != edited.is_some() {
+            vec![Enabled]
+        } else {
+            Vec::new()
+        };
+    };
+    let mut fields = Vec::new();
+    macro_rules! changed { ($($member:ident => $field:ident),*) => { $(
+        if primary.$member != edited.$member { fields.push($field); }
+    )* }; }
+    changed!(direction => Direction, flow => Flow, align => Align, justify => Justify,
+        gap => Gap, cross_gap => CrossGap, columns => Columns);
+    for edge in 0..4 {
+        if primary.padding[edge] != edited.padding[edge] {
+            fields.push(Padding(edge));
+        }
+    }
+    macro_rules! tracks {
+        ($axis:ident, $all:ident, $size:ident, $min:ident, $max:ident) => {
+            if primary.$axis.len() != edited.$axis.len() {
+                fields.push($all);
+            } else {
+                for (index, (before, after)) in primary.$axis.iter().zip(&edited.$axis).enumerate()
+                {
+                    if before.size != after.size {
+                        fields.push($size(index));
+                    }
+                    if before.min != after.min {
+                        fields.push($min(index));
+                    }
+                    if before.max != after.max {
+                        fields.push($max(index));
+                    }
+                }
+            }
+        };
+    }
+    tracks!(
+        column_tracks,
+        ColumnTracks,
+        ColumnTrackSize,
+        ColumnTrackMin,
+        ColumnTrackMax
+    );
+    tracks!(
+        row_tracks,
+        RowTracks,
+        RowTrackSize,
+        RowTrackMin,
+        RowTrackMax
+    );
+    fields
+}
+
+/// Apply only accepted stack fields to one selected object's existing settings.
+/// Args: destination, captured primary, edited values and explicit field intents.
+/// Returns a readable error before committing if the selected structures cannot match.
+fn apply_stack_fields(
+    current: &mut Option<AutoStack>,
+    primary: Option<&AutoStack>,
+    edited: Option<&AutoStack>,
+    fields: &[LayoutStackField],
+) -> Result<(), String> {
+    use LayoutStackField::*;
+    if fields.is_empty() {
+        return Ok(());
+    }
+    let was_disabled = current.is_none();
+    if fields.contains(&Enabled) {
+        match edited {
+            None => *current = None,
+            Some(edited) if was_disabled => *current = Some(edited.clone()),
+            Some(_) => {}
+        }
+    }
+    if fields.iter().all(|field| *field == Enabled) {
+        return Ok(());
+    }
+    let edited = edited.ok_or("Enable Auto layout before editing its fields")?;
+    let current = current
+        .as_mut()
+        .ok_or("Enable Auto layout on every selected frame before editing its fields")?;
+    macro_rules! axis {
+        ($member:ident, $field:ident, $name:literal) => {
+            if fields.contains(&$field) && !(was_disabled && fields.contains(&Enabled)) {
+                if primary.map(|stack| stack.$member.as_slice()) != Some(current.$member.as_slice())
+                {
+                    return Err(concat!(
+                        "Select frames with matching ",
+                        $name,
+                        " tracks before replacing their configuration"
+                    )
+                    .into());
+                }
+                current.$member = edited.$member.clone();
+            }
+        };
+    }
+    axis!(column_tracks, ColumnTracks, "column");
+    axis!(row_tracks, RowTracks, "row");
+    macro_rules! track {
+        ($member:ident, $index:expr, $property:ident) => {{
+            let value = edited
+                .$member
+                .get($index)
+                .ok_or("The edited grid track no longer exists")?;
+            let target = current
+                .$member
+                .get_mut($index)
+                .ok_or("The grid track does not exist on every selected frame")?;
+            target.$property = value.$property;
+        }};
+    }
+    for field in fields {
+        match *field {
+            Direction => current.direction = edited.direction,
+            Flow => current.flow = edited.flow,
+            Align => current.align = edited.align,
+            Justify => current.justify = edited.justify,
+            Gap => current.gap = edited.gap,
+            CrossGap => current.cross_gap = edited.cross_gap,
+            Columns => current.columns = edited.columns,
+            Padding(edge) => {
+                let value = edited.padding.get(edge).ok_or("Invalid padding edge")?;
+                *current
+                    .padding
+                    .get_mut(edge)
+                    .ok_or("Invalid padding edge")? = *value;
+            }
+            ColumnTrackSize(index) => track!(column_tracks, index, size),
+            ColumnTrackMin(index) => track!(column_tracks, index, min),
+            ColumnTrackMax(index) => track!(column_tracks, index, max),
+            RowTrackSize(index) => track!(row_tracks, index, size),
+            RowTrackMin(index) => track!(row_tracks, index, min),
+            RowTrackMax(index) => track!(row_tracks, index, max),
+            Enabled | ColumnTracks | RowTracks => {}
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "layout_mixed_tests.rs"]
+mod mixed_command_tests;
+
 #[cfg(test)]
 mod grid_command_tests {
     use super::*;
@@ -232,6 +409,25 @@ impl Studio {
         target: &LayoutInspectorTarget,
         properties: &FrameLayout,
     ) -> bool {
+        let fields = changed_stack_fields(
+            target
+                .layouts
+                .first()
+                .and_then(|layout| layout.stack.as_ref()),
+            properties.stack.as_ref(),
+        );
+        self.apply_layout_inspector_with_fields(target, properties, &fields)
+    }
+
+    /// Apply accepted stack fields even when their values equal the primary selection.
+    /// Args: captured target, edited properties and intents from accepted native responses.
+    /// Returns false for stale, locked, busy or incompatible targets without a partial edit.
+    pub(crate) fn apply_layout_inspector_with_fields(
+        &mut self,
+        target: &LayoutInspectorTarget,
+        properties: &FrameLayout,
+        fields: &[LayoutStackField],
+    ) -> bool {
         let prepare = || -> Result<Vec<Cmd>, String> {
             self.validate_layout_inspector_target(target)?;
             let primary = target
@@ -256,13 +452,18 @@ impl Studio {
                     absolute,
                     constraint_x,
                     constraint_y,
-                    stack,
                     grid,
                     breakpoints,
                     text_size,
                     aspect_ratio,
                     image
                 );
+                apply_stack_fields(
+                    &mut after.stack,
+                    primary.stack.as_ref(),
+                    properties.stack.as_ref(),
+                    fields,
+                )?;
                 if before == &after {
                     continue;
                 }

@@ -201,13 +201,17 @@ pub(super) fn show(ctx: &egui::Context, studio: &mut Studio) {
             }
             let valid = dialog.draft.validate().is_ok();
             ui.horizontal(|ui| {
-                create = ui
-                    .add_enabled(
-                        available && valid,
-                        egui::Button::new("Create").shortcut_text("Ctrl+Enter"),
-                    )
-                    .clicked();
-                cancel = ui.button("Cancel").clicked();
+                let create_button = ui.add_enabled(
+                    available && valid,
+                    egui::Button::new("Create").shortcut_text("Ctrl+Enter"),
+                );
+                ui.ctx()
+                    .accesskit_node_builder(create_button.id, |node| node.set_label("Create"));
+                super::welcome::focus_control(ui, &create_button);
+                create = create_button.clicked();
+                let cancel_button = ui.button("Cancel");
+                super::welcome::focus_control(ui, &cancel_button);
+                cancel = cancel_button.clicked();
             });
             if available
                 && valid
