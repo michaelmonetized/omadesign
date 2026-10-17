@@ -13,6 +13,7 @@ pub(super) struct TabState {
     individual_object: Option<(usize, u64)>,
     active_layer: Option<usize>,
     channel_target: Option<u64>,
+    quick_mask_palette: Option<super::quick_mask::Palette>,
     history: History,
     pub(super) live_runtime: super::live::LiveRuntime,
     clone_source: Option<Pt>,
@@ -63,6 +64,7 @@ impl TabState {
             individual_object: None,
             active_layer,
             channel_target: None,
+            quick_mask_palette: None,
             history: History::default(),
             live_runtime: Default::default(),
             clone_source: None,
@@ -105,6 +107,7 @@ impl Studio {
         if self.pending_svg_export.take().is_some() {
             self.status = "Animated SVG export cancelled.".into();
         }
+        if let Some(palette)=self.quick_mask_palette.as_mut() {palette.mask=self.brush.color;self.brush.color=palette.normal;}
         let t = &mut self.tabs[i];
         swap(&mut self.doc, &mut t.doc);
         swap(&mut self.path, &mut t.path);
@@ -115,6 +118,8 @@ impl Studio {
         swap(&mut self.individual_object, &mut t.individual_object);
         swap(&mut self.active_layer, &mut t.active_layer);
         swap(&mut self.channel_target, &mut t.channel_target);
+        swap(&mut self.quick_mask_palette, &mut t.quick_mask_palette);
+        if let Some(palette)=self.quick_mask_palette {self.brush.color=palette.mask;}
         swap(&mut self.history, &mut t.history);
         swap(&mut self.live_runtime, &mut t.live_runtime);
         swap(&mut self.clone_source, &mut t.clone_source);
@@ -143,6 +148,7 @@ impl Studio {
         swap(&mut self.last_swap, &mut t.last_swap);
         swap(&mut self.shape_rename, &mut t.shape_rename);
         swap(&mut self.artboard_rename, &mut t.artboard_rename);
+        self.sync_quick_mask_palette();
     }
 
     fn activate_tab(&mut self) {

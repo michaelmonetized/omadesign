@@ -1,0 +1,17 @@
+# Quick Mask
+
+Quick Mask carries a real scalar mask in the document. Q toggles it in Pixel mode; L and Shift+L select the two lasso tools. The existing tool well and Select menu expose the same mode command. White selects and black masks. Brush, eraser and connected Fill use the original float coverage and shared brush engine. Erasing restores white. Curves and Invert use the same captured scalar target. Layer-only tools are disabled while Quick Mask owns painting.
+
+The canvas overlay is separate from artwork. Display options choose color, opacity and whether color marks masked or selected areas. The native options dialog commits only on Apply; Cancel leaves the document untouched. Accepted options also become session defaults. A no-selection mask starts colorless for either display meaning and returns to no selection if left empty.
+
+Entering, painting and leaving use ordinary Undo commands. Entering captures the original selection's admitted byte allocation and placement; Undo restores those exact owners rather than reconstructing an approximation. Exiting returns coverage to the existing pixel-selection grid. The mask and normal foreground palettes stay with their document when changing tabs or editing modes.
+
+Active masks save with native project feature 33. Older readers must refuse before discarding the mask, including embedded documents and retained/deleted history addresses. Files without Quick Mask keep their previous minimum reader. The existing scalar decoder and resource pool own all mask storage. No app-version or dependency change is involved.
+
+The bounded workflow is qualified at production source `ab133d591ba4f7aa7508860e6574216b65c36c3c`. The original model/app/options cohort passed 48 tests at `101640b1`; the final RGB-underlay and saved-alpha canvas controls passed 2 tests at `ab133d59`. These are distinct exact-source receipts, not one combined 50-test result. Native testing exposed and corrected two actual canvas defects: Quick Mask suppressed RGB rendering, then the old solo-alpha backing rectangle covered that RGB texture. Both failed runs remain in the handoff.
+
+The genuine desktop build passed a private Wayland workflow: Q enter, brush, eraser, connected Fill, precise color/opacity/indication settings, scalar Curves, one-command Undo, Q exit, saving the returned selection as an alpha channel, Undo/Redo and fresh-process reopen. An independent JSON/zstd float reader checked all 480,000 samples, paint/erase/fill bounds and directions, Curves against an analytic oracle (maximum error `3.6931505409398824e-8`), and exact Undo/Redo/cold-save files. Original artwork, profiles and saved alpha stayed unchanged. This is native software evidence, not Michael's human acceptance.
+
+Native mask samples stay float; the current general pixel-selection API is still byte coverage. Full-depth selection storage, affine mask editing, mask-target filter families, clipboard transfer, Actions coverage and Photoshop/Live Quick Mask interoperability remain open parts of complete parity. Unsupported layer-only tools or interchange cannot silently replace/drop the mask or edit underlying pixels. The full parity goal remains active.
+
+Exact receipts, binary identity, historical failures, independent readers and the isolated QA launcher are recorded in `implementation/craft-quick-mask.json` under the shared Craft handoff directory. The existing human QA window remains open and untouched.

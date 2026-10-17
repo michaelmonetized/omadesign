@@ -25,6 +25,7 @@ pub(super) const SCREEN_EXPORT: u32 = 29;
 pub(super) const EXPORT_RESOLUTION: u32 = 30;
 pub(super) const EXPORT_FOLDERS: u32 = 31;
 pub(super) const CHANNELS: u32 = 32;
+pub(super) const QUICK_MASK: u32 = 33;
 
 /// Identify implemented project readers.
 /// Args: envelope version. Returns false for reserved formats whose models are absent.
@@ -47,6 +48,7 @@ pub(super) fn supports_version(version: u32) -> bool {
             | EXPORT_RESOLUTION
             | EXPORT_FOLDERS
             | CHANNELS
+            | QUICK_MASK
     )
 }
 
@@ -60,15 +62,16 @@ pub(super) fn required_version(doc: &Document) -> u32 {
                 .max()
                 .unwrap_or(5)
         })
-        .unwrap_or(CHANNELS + 1)
+        .unwrap_or(QUICK_MASK + 1)
 }
 
 fn local_required_version(doc: &Document) -> u32 {
     let mut version = if doc.mask_sources().is_empty() { 5 } else { 13 };
     if let Some(replica) = &doc.collaboration {
-        version = version.max(retained::replica_version(replica).unwrap_or(CHANNELS + 1));
+        version = version.max(retained::replica_version(replica).unwrap_or(QUICK_MASK + 1));
     }
     if !doc.channels.is_empty() { version=version.max(CHANNELS); }
+    if doc.quick_mask.is_some() { version=version.max(QUICK_MASK); }
     if !doc.screen_export.is_empty() {
         version = version.max(SCREEN_EXPORT);
     }
@@ -486,10 +489,10 @@ mod tests {
         let encoded = super::super::encode(&doc).unwrap();
         let mut envelope: serde_json::Value = serde_json::from_str(&encoded).unwrap();
         assert_eq!(envelope["version"], 5);
-        for version in 0..=33 {
+        for version in 0..=34 {
             let supported = matches!(
                 version,
-                1..=17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32
+                1..=17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33
             );
             assert_eq!(supports_version(version), supported, "reader {version}");
             envelope["version"] = version.into();
@@ -819,7 +822,7 @@ mod tests {
             neutral["version"] = implemented.into();
             super::super::decode(&neutral.to_string()).unwrap();
         }
-        for reserved in [CHANNELS + 1, u32::MAX] {
+        for reserved in [QUICK_MASK + 1, u32::MAX] {
             neutral["version"] = reserved.into();
             assert!(
                 super::super::decode(&neutral.to_string())

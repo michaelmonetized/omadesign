@@ -56,12 +56,9 @@ impl Captured {
     /// Args: current editor. Returns true only for the same document, generation, selection and scalar allocation.
     pub(crate) fn current(&self, studio: &Studio) -> bool {
         studio.channels_current(&self.target)
-            && studio.channel_target == Some(self.id)
-            && studio
-                .doc
-                .channels
-                .iter()
-                .any(|c| c.id == self.id && Arc::ptr_eq(&c.plane.samples, &self.source.samples))
+            && studio.channel_paint_target().is_some_and(|c| {
+                c.id == self.id && Arc::ptr_eq(&c.plane.samples, &self.source.samples)
+            })
     }
     /// Render a bounded proxy or full native adjustment without changing the document.
     /// Args: validated curve, optional preview edge and cancellation. Returns a plane retaining its same document placement.
@@ -181,13 +178,7 @@ impl Captured {
         {
             return Err("Channel curve output placement changed".into());
         }
-        let mut after = studio.doc.channels.clone();
-        after
-            .iter_mut()
-            .find(|c| c.id == self.id)
-            .ok_or("That channel no longer exists")?
-            .plane = plane;
-        studio.set_channels(&self.target, after, "Channel curves applied")
+        studio.replace_scalar_plane(self.id, plane, "Channel curves applied")
     }
 }
 

@@ -132,6 +132,7 @@ fn start(ctx: &egui::Context, studio: &Studio, work: Work) -> Result<(), String>
                     .channels
                     .iter()
                     .find(|c| c.id == id)
+                    .or_else(|| document.quick_mask.as_ref().map(|mask| &mask.channel).filter(|c|c.id==id))
                     .ok_or("That channel no longer exists")?;
                 Change::Invert(id, channel.plane.inverted(&check)?)
             }
@@ -197,15 +198,8 @@ pub(super) fn poll(ctx: &egui::Context, studio: &mut Studio) {
                 Ok(())
             }),
         Change::Invert(id, plane) => {
-            let mut after = studio.doc.channels.clone();
-            let channel = after
-                .iter_mut()
-                .find(|c| c.id == id)
-                .ok_or("That channel no longer exists")?;
-            channel.plane = plane;
-            studio
-                .set_channels(&finished.target, after, "Channel inverted")
-                .map(|_| ())
+            if !studio.channels_current(&finished.target) {return Err("The mask source changed".into());}
+            studio.replace_scalar_plane(id,plane,"Channel inverted").map(|_| ())
         }
         Change::Selection(values, space) => {
             studio.load_channel_selection(&finished.target, values, space)
@@ -253,6 +247,9 @@ fn thumbnail(
     texture
 }
 fn plane_texture(ctx: &egui::Context, plane: &Plane, edge: u32, name: &str) -> egui::TextureHandle {
+    scalar_texture(ctx,plane,edge,name,None)
+}
+fn scalar_texture(ctx:&egui::Context,plane:&Plane,edge:u32,name:&str,overlay:Option<crate::channels::quick_mask::Options>)->egui::TextureHandle {
     let scale = f64::from(edge.max(1)) / f64::from(plane.width.max(plane.height).max(1));
     let scale = scale.min(1.);
     let w = (f64::from(plane.width) * scale).round().max(1.) as usize;
@@ -262,14 +259,9 @@ fn plane_texture(ctx: &egui::Context, plane: &Plane, edge: u32, name: &str) -> e
         for x in 0..w {
             let sx = x * plane.width as usize / w;
             let sy = y * plane.height as usize / h;
-            let v = (plane
-                .samples
-                .get(sy * plane.width as usize + sx)
-                .copied()
-                .unwrap_or(0.)
-                * 255.)
-                .round() as u8;
-            pixels[(y * w + x) * 4..(y * w + x) * 4 + 4].copy_from_slice(&[v, v, v, 255]);
+            let sample=plane.samples.get(sy*plane.width as usize+sx).copied().unwrap_or(0.);
+            let rgba=if let Some(options)=overlay {[options.color.r,options.color.g,options.color.b,(options.coverage(sample)*255.).round() as u8]} else {let v=(sample*255.).round() as u8;[v,v,v,255]};
+            pixels[(y*w+x)*4..(y*w+x)*4+4].copy_from_slice(&rgba);
         }
     }
     ctx.load_texture(
@@ -285,11 +277,12 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
     let key = owner(studio);
     let mut state = ui.data(|d| d.get_temp::<State>(key)).unwrap_or_default();
     if let Some(channel) = studio.channel_paint_target() {
-        state.selected = Target::Saved(channel.id);
+        state.selected = if studio.quick_mask_painting() {Target::QuickMask} else {Target::Saved(channel.id)};
     } else if matches!(state.selected, Target::Saved(_)) {
         state.selected = Target::Composite;
     }
     let mut select_target = None;
+    let mut quick_target=false;
     if let Target::Saved(id) = state.selected
         && !studio.doc.channels.iter().any(|c| c.id == id)
     {
@@ -299,7 +292,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
     }
     state
         .textures
-        .retain(|id, _| studio.doc.channels.iter().any(|c| c.id == *id));
+        .retain(|id, _| studio.doc.channels.iter().any(|c| c.id == *id) || studio.doc.quick_mask.as_ref().is_some_and(|mask|mask.channel.id==*id));
     let composite = super::pane_previews::image(ui, studio, None, None);
     let cmyk = studio.doc.color.model == crate::deep_color::cms::Model::Cmyk;
     if let Target::Color(index) = state.selected
@@ -360,6 +353,16 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
             }
         });
     }
+    if let Some(mask)=&studio.doc.quick_mask {
+        let texture=thumbnail(ui,&mut state,&mask.channel);
+        ui.horizontal(|ui| {
+            ui.add(egui::Image::new(&texture).fit_to_exact_size(egui::vec2(40.,32.)));
+            let response=fields::native_scope(ui,key.with(Target::QuickMask),|ui| ui.add(egui::Button::new("Quick Mask").selected(state.selected==Target::QuickMask).min_size(egui::vec2(ui.available_width(),32.)))).inner;
+            welcome::name_control(ui,&response,key.with("quick-name"),"Channel Quick Mask");
+            if response.clicked() {quick_target=true;state.selected=Target::QuickMask;state.error.clear();}
+        });
+    } else if state.selected==Target::QuickMask {state.selected=Target::Composite;}
+    if quick_target {if let Err(error)=studio.select_quick_mask_target(){state.error=error;}}
     if let Some(target) = select_target {
         if let Err(error) = studio.select_channel_target(target) {
             state.error = error;
@@ -428,6 +431,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
         key.with("combine-label"),
         "Channel selection operation",
     );
+    let scalar=studio.channel_paint_target().map(|channel|channel.id);
     let mut work = None;
     ui.horizontal_wrapped(|ui| {
         if icon(
@@ -473,10 +477,10 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
             ui,
             key.with("invert"),
             ph::ARROW_CLOCKWISE,
-            "Invert saved channel",
-            editable && saved.is_some(),
+            if studio.quick_mask_painting() {"Invert Quick Mask"} else {"Invert saved channel"},
+            editable && scalar.is_some(),
         ) {
-            work = Some(Work::Invert(saved.unwrap()));
+            work = Some(Work::Invert(scalar.unwrap()));
         }
         if icon(
             ui,
@@ -496,7 +500,12 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                 Err(e) => state.error = e,
             }
         }
-        if icon(ui,key.with("curves"),ph::BEZIER_CURVE,"Adjust channel curves",editable&&saved.is_some()) {super::channel_adjustment::open(ui.ctx(),studio);}
+        if icon(ui,key.with("curves"),ph::BEZIER_CURVE,"Adjust channel curves",editable&&scalar.is_some()) {super::channel_adjustment::open(ui.ctx(),studio);}
+        if studio.doc.quick_mask.is_some() {
+            let response=fields::native_scope(ui,key.with("quick-options"),|ui|ui.add_enabled(editable,egui::Button::new("⋯").frame(false))).inner;
+            welcome::name_control(ui,&response,key.with("quick-options-name"),"Quick Mask options");
+            if response.on_hover_text("Quick Mask options").clicked(){super::quick_mask::options(ui.ctx(),studio);}
+        }
         if running
             && icon(
                 ui,
@@ -570,6 +579,7 @@ struct CanvasChannel {
     generation: u64,
     edge: u32,
     preview: Option<Id>,
+    overlay: Option<crate::channels::quick_mask::Options>,
     texture: egui::TextureHandle,
 }
 /// Show the actual targeted scalar plane at its stored document placement.
@@ -583,6 +593,7 @@ pub(super) fn paint_target(ui: &Ui, studio: &Studio, rect: egui::Rect) {
     let adjusted=super::channel_adjustment::preview(ui.ctx(),studio);
     let plane=adjusted.as_ref().map_or(&channel.plane,|(plane,_)|plane);
     let preview=adjusted.as_ref().map(|(_,key)|*key);
+    let overlay=studio.quick_mask_painting().then(||studio.doc.quick_mask.as_ref().unwrap().options);
     let edge = (rect.width().max(rect.height()) * ui.ctx().pixels_per_point())
         .ceil()
         .clamp(1., 4096.) as u32;
@@ -592,7 +603,7 @@ pub(super) fn paint_target(ui: &Ui, studio: &Studio, rect: egui::Rect) {
             c.document == studio.swap_id
                 && c.id == channel.id
                 && c.generation == studio.canvas_gen
-                && c.edge == edge && c.preview == preview
+                && c.edge == edge && c.preview == preview && c.overlay == overlay
         })
         .unwrap_or_else(|| CanvasChannel {
             document: studio.swap_id.clone(),
@@ -600,18 +611,21 @@ pub(super) fn paint_target(ui: &Ui, studio: &Studio, rect: egui::Rect) {
             generation: studio.canvas_gen,
             edge,
             preview,
-            texture: plane_texture(ui.ctx(), plane, edge, "canvas-saved-channel"),
+            overlay,
+            texture: scalar_texture(ui.ctx(), plane, edge, "canvas-saved-channel",overlay),
         });
     let painter = ui.painter_at(rect);
     let screen = |p: crate::geom::Pt| {
         let p = studio.view.to_screen(p);
         rect.min + egui::vec2(p.x, p.y)
     };
+    if overlay.is_none() {
     painter.rect_filled(
         egui::Rect::from_two_pos(screen(crate::geom::Pt::ZERO), screen(studio.doc.size())),
         0.,
         egui::Color32::BLACK,
     );
+    }
     let mut mesh = egui::Mesh::with_texture(cached.texture.id());
     for (x, y, u, v) in [
         (0., 0., 0., 0.),

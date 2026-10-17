@@ -63,6 +63,7 @@ impl Studio {
             return Err("Saved channel editing is unavailable in Live".into());
         }
         channels::validate(&after)?;
+        if let Some(mask)=&self.doc.quick_mask {mask.validate_metadata(&after)?;}
         if self.doc.channels == after {
             return Ok(false);
         }

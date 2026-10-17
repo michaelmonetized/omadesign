@@ -63,6 +63,9 @@ pub fn encode(doc: &Document, large: bool) -> Result<PsdExport, String> {
 /// Args: editable document and PSB flag. Returns admitted encoded bytes and appearance notes.
 pub fn encode_admitted(doc: &Document, large: bool) -> Result<super::AdmittedPsdExport, String> {
     doc.validate_sources()?;
+    if crate::motion::compositions::documents(doc)?.iter().any(|document| document.quick_mask.is_some()) {
+        return Err("QuickMaskUnsupported: Photoshop Quick Mask export is not implemented yet; save .oma to retain it".into());
+    }
     if crate::motion::compositions::documents(doc)?.iter().any(|document| !document.channels.is_empty()) {
         return Err("SavedChannelsUnsupported: Photoshop alpha channel export is not implemented yet. Save .oma to retain saved channels.".into());
     }

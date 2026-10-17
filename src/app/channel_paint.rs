@@ -19,6 +19,7 @@ pub struct Stroke {
     generation: u64,
     selection_generation: u64,
     before: Channel,
+    quick: bool,
     working: Arc<Allocation<f32>>,
     coverage: Surface,
     selection: Option<Arc<Allocation<u8>>>,
@@ -124,11 +125,77 @@ fn bounded_segment(
 }
 
 impl Studio {
+    /// Fill the concrete scalar target without falling through to layer pixels.
+    /// Args: actual document point. Returns true for a targeted alpha or Quick Mask, including refused edits.
+    pub(crate) fn fill_channel(&mut self, world: Pt) -> bool {
+        if self.channel_target.is_none() && !self.quick_mask_painting() {
+            return false;
+        }
+        let result = (|| {
+            self.end_pixel_stroke(false);
+            self.capture_channels()?;
+            let channel = self
+                .channel_paint_target()
+                .ok_or("That channel no longer exists")?
+                .clone();
+            let mut point = tiny_skia::Point::from_xy(world.x, world.y);
+            channel
+                .plane
+                .placement()
+                .invert()
+                .ok_or("Channel placement is singular")?
+                .map_point(&mut point);
+            if !point.x.is_finite()
+                || !point.y.is_finite()
+                || point.x < 0.
+                || point.y < 0.
+                || point.x >= channel.plane.width as f32
+                || point.y >= channel.plane.height as f32
+            {
+                return Err("Channel fill seed is outside its grid".into());
+            }
+            let selected = self.channel_selection(&channel.plane)?;
+            let value = f32::from(self.mask_brush(false).color.r) / 255.;
+            let plane = crate::channels::fill::apply(
+                &channel.plane,
+                (point.x.floor() as u32, point.y.floor() as u32),
+                self.fill_tolerance,
+                value,
+                self.brush.opacity,
+                selected.as_ref().map(|mask| mask.as_slice()),
+                &storage::check,
+            )?;
+            self.replace_scalar_plane(channel.id, plane, "Channel filled")
+        })();
+        if let Err(error) = result {
+            self.status = error;
+        }
+        true
+    }
+    fn scalar_channel_mut(&mut self, id: u64, quick: bool) -> Option<&mut Channel> {
+        if quick {
+            self.doc
+                .quick_mask
+                .as_mut()
+                .map(|mask| &mut mask.channel)
+                .filter(|channel| channel.id == id)
+        } else {
+            self.doc
+                .channels
+                .iter_mut()
+                .find(|channel| channel.id == id)
+        }
+    }
     /// Read the current saved channel without falling back to layer pixels.
     /// Args: none. Returns the concrete channel while its persistent ID still exists.
     pub(crate) fn channel_paint_target(&self) -> Option<&Channel> {
-        self.channel_target
-            .and_then(|id| self.doc.channels.iter().find(|c| c.id == id))
+        match self.channel_target {
+            Some(id) => self.doc.channels.iter().find(|c| c.id == id),
+            None if self.quick_mask_painting() => {
+                self.doc.quick_mask.as_ref().map(|mask| &mask.channel)
+            }
+            None => None,
+        }
     }
 
     /// Select a concrete saved alpha plane or return to the normal composite.
@@ -161,6 +228,7 @@ impl Studio {
             self.artboard_sel.clear();
         }
         self.channel_target = id;
+        self.paint_mask = false;
         self.mark_interaction();
         Ok(())
     }
@@ -186,7 +254,7 @@ impl Studio {
     /// Start a saved-channel stroke using the existing round or library tip coverage.
     /// Args: actual document point and eraser flag. Returns true whenever a channel owns the input, including refused edits.
     pub(crate) fn start_channel_stroke(&mut self, world: Pt, erase: bool) -> bool {
-        if self.channel_target.is_none() {
+        if self.channel_target.is_none() && !self.quick_mask_painting() {
             return false;
         }
         let result = (|| {
@@ -210,7 +278,12 @@ impl Studio {
             let working = Arc::new(
                 crate::resources::global().copy_now(&before.plane.samples, &storage::check)?,
             );
-            let value = f32::from(self.mask_brush(erase).color.r) / 255.;
+            let quick = self.quick_mask_painting();
+            let value = if quick && erase {
+                1.
+            } else {
+                f32::from(self.mask_brush(erase).color.r) / 255.
+            };
             self.brush_distance = self.brush.spacing_distance();
             self.brush_heading = 0.;
             self.brush.seed = crate::document::next_id();
@@ -219,6 +292,7 @@ impl Studio {
                 generation: self.canvas_gen,
                 selection_generation: self.pixel_sel_gen,
                 before,
+                quick,
                 working,
                 coverage,
                 selection,
@@ -247,8 +321,8 @@ impl Studio {
         let current = stroke.document == self.swap_id
             && stroke.generation == self.canvas_gen
             && stroke.selection_generation == self.pixel_sel_gen
-            && self.channel_target == Some(stroke.before.id)
-            && self.doc.channels.iter().any(|c| {
+            && self.quick_mask_painting() == stroke.quick
+            && self.channel_paint_target().is_some_and(|c| {
                 c.id == stroke.before.id
                     && (Arc::ptr_eq(&c.plane.samples, &stroke.working)
                         || (stroke.last.is_none() && c == &stroke.before))
@@ -338,13 +412,10 @@ impl Studio {
         } else {
             None
         };
-        let channel = self
-            .doc
-            .channels
-            .iter_mut()
-            .find(|c| c.id == stroke.before.id)
-            .unwrap();
-        channel.plane.samples = stroke.before.plane.samples.clone();
+        self.scalar_channel_mut(stroke.before.id, stroke.quick)
+            .unwrap()
+            .plane
+            .samples = stroke.before.plane.samples.clone();
         match storage::make_mut(&mut stroke.working, &storage::check) {
             Ok(values) => {
                 for row in region
@@ -368,7 +439,10 @@ impl Studio {
             }
             Err(error) => self.status = error,
         }
-        channel.plane.samples = stroke.working.clone();
+        self.scalar_channel_mut(stroke.before.id, stroke.quick)
+            .unwrap()
+            .plane
+            .samples = stroke.working.clone();
         self.mark_interaction();
         stroke.generation = self.canvas_gen;
         self.op = Some(Op::ChannelStroke(stroke));
@@ -389,12 +463,7 @@ impl Studio {
         if !current {
             return true;
         }
-        let Some(channel) = self
-            .doc
-            .channels
-            .iter_mut()
-            .find(|c| c.id == stroke.before.id)
-        else {
+        let Some(channel) = self.scalar_channel_mut(stroke.before.id, stroke.quick) else {
             return true;
         };
         if !Arc::ptr_eq(&channel.plane.samples, &stroke.working) {
@@ -402,16 +471,15 @@ impl Studio {
         }
         channel.plane = stroke.before.plane.clone();
         if !cancel && stroke.before.plane.samples.as_slice() != stroke.working.as_slice() {
-            let before = self.doc.channels.clone();
-            let mut after = before.clone();
-            after
-                .iter_mut()
-                .find(|c| c.id == stroke.before.id)
-                .unwrap()
-                .plane
-                .samples = stroke.working.clone();
-            self.commit(Cmd::SetChannels { before, after });
-            self.status = "Saved channel painted".into();
+            let plane = Plane {
+                samples: stroke.working.clone(),
+                ..stroke.before.plane.clone()
+            };
+            if let Err(error) =
+                self.replace_scalar_plane(stroke.before.id, plane, "Channel painted")
+            {
+                self.status = error;
+            }
         } else {
             self.mark_interaction();
         }
@@ -437,9 +505,8 @@ impl Studio {
                 }
             }))?;
             let id = channel.id;
-            let mut after = self.doc.channels.clone();
-            after.iter_mut().find(|c| c.id == id).unwrap().plane = plane;
-            self.set_channels(&target, after, "Saved channel cleared")
+            let _ = target;
+            self.replace_scalar_plane(id, plane, "Channel cleared")
         })();
         if let Err(error) = result {
             self.status = error;

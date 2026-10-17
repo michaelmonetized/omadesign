@@ -1,5 +1,7 @@
 //! Authoritative scalar channels use the existing admitted native sample storage.
 pub(crate) mod curve;
+pub(crate) mod fill;
+pub mod quick_mask;
 use crate::{
     deep_color::storage,
     document::Document,
@@ -135,6 +137,7 @@ pub enum Target {
     Color(usize),
     Transparency,
     Saved(u64),
+    QuickMask,
 }
 impl Target {
     /// Name a concrete color, transparency or saved channel in its document.
@@ -152,6 +155,7 @@ impl Target {
             .unwrap_or("Missing channel")
             .into(),
             Self::Transparency => "Transparency".into(),
+            Self::QuickMask => "Quick Mask".into(),
             Self::Saved(id) => doc
                 .channels
                 .iter()
@@ -225,6 +229,11 @@ fn render_scaled(
     cancel: &dyn CancellationCheck,
 ) -> Result<Plane, String> {
     cancel.check()?;
+    if target == Target::QuickMask {
+        let mask=doc.quick_mask.as_ref().ok_or("Quick Mask is no longer open")?;
+        mask.validate(&doc.channels)?;
+        return Ok(mask.channel.plane.clone());
+    }
     if let Target::Saved(id) = target {
         let plane = doc
             .channels

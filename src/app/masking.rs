@@ -686,7 +686,7 @@ impl Studio {
     }
 
     pub fn clear_selected_pixels(&mut self) -> bool {
-        if self.channel_target.is_some() {
+        if self.channel_target.is_some() || self.quick_mask_painting() {
             self.clear_channel_selection();
             return true;
         }

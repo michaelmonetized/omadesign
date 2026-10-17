@@ -2460,7 +2460,7 @@ fn brush_studio(ui: &mut Ui, studio: &mut Studio) {
 fn paint_color_studio(ui: &mut Ui, studio: &mut Studio) {
     heading(ui, "Color");
     let mut color = match studio.style.fill {
-        Fill::Solid(color) if studio.tool == Tool::Fill => color,
+        Fill::Solid(color) if studio.tool == Tool::Fill && studio.channel_paint_target().is_none() => color,
         _ => studio.brush.color,
     };
     ui.horizontal(|ui| {
@@ -2476,7 +2476,7 @@ fn foreground_color_studio(ui: &mut Ui, studio: &mut Studio) {
     let owner = studio.swap_id.clone();
     ui.push_id((owner, "paint-foreground"), |ui| {
         let mut color = match studio.style.fill {
-            Fill::Solid(color) if studio.tool == Tool::Fill => color,
+            Fill::Solid(color) if studio.tool == Tool::Fill && studio.channel_paint_target().is_none() => color,
             _ => studio.brush.color,
         };
         let before = color;

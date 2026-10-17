@@ -205,6 +205,7 @@ impl Studio {
             self.need_fit = true;
         }
         self.persona = persona;
+        self.sync_quick_mask_palette();
         self.op = None;
         self.playing = false;
         self.tool = match persona {

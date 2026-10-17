@@ -239,11 +239,12 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
             .screen_tex
             .as_ref()
             .is_some_and(|t| t.size() == [w as usize, h as usize]);
+    let solo_channel=studio.channel_paint_target().is_some() && !studio.quick_mask_painting();
     let changing = interaction_objects(studio);
     if changing.is_none() {
         studio.interaction_render.clear();
     }
-    if !reuse && studio.channel_paint_target().is_none() {
+    if !reuse && !solo_channel {
         let draft = match &studio.op {
             Some(Op::Brush { layer, buf, preview, .. }) => Draft {
                 preview: None,
@@ -300,7 +301,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
             studio.canvas_key = Some(key);
         }
     }
-    if studio.channel_paint_target().is_some() {
+    if solo_channel {
         studio.screen_tex = None;
         studio.canvas_key = None;
         ui.painter().rect_filled(rect, 0., super::theme::bg_canvas());
@@ -521,7 +522,7 @@ fn pen_snap_point(studio: &mut Studio, point: Pt, modifiers: eframe::egui::Modif
 }
 
 fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: bool) {
-    if super::channel_adjustment::is_open(&resp.ctx) { return; }
+    if super::channel_adjustment::is_open(&resp.ctx) || super::quick_mask::is_open(&resp.ctx) { return; }
     if space {
         return;
     }
@@ -1051,7 +1052,7 @@ fn is_text_hit(studio: &Studio, hit: (usize, u64)) -> bool {
 }
 
 fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
-    if studio.channel_target.is_some() && matches!(studio.tool, Tool::Brush | Tool::Eraser) {
+    if (studio.channel_target.is_some() || studio.quick_mask_painting()) && matches!(studio.tool, Tool::Brush | Tool::Eraser) {
         studio.start_channel_stroke(pick, studio.tool == Tool::Eraser);
         return;
     }
@@ -5074,6 +5075,42 @@ mod tests {
         assert_eq!(crate::project::encode(&crate::project::decode(&after).unwrap()).unwrap(),after);
     }
 
+    #[test]
+    fn craft_quick_mask_actual_canvas_q_pointer_escape_undo_and_selection_return() {
+        use eframe::egui::{Event,Key,Modifiers};
+        let (ctx,mut s)=pen_input_studio();s.persona=crate::tools::Persona::Pixel;s.tool=Tool::Brush;s.view.offset=Pt::ZERO;s.brushes.selected=None;s.brush.size=12.;s.brush.opacity=0.8;
+        s.doc.layers[0].kind.shapes_mut().unwrap().push(crate::document::Shape::new(Geom::Rect {origin:Pt::new(40.,40.),size:Pt::new(160.,80.),radius:0.},crate::document::Style::default()));
+        let frame=|s:&mut Studio,events| {
+            let mut output=ctx.run_ui(eframe::egui::RawInput {screen_rect:Some(Rect::from_min_size(Pos2::ZERO,vec2(400.,300.))),events,..Default::default()},|ui|{s.handle_shortcuts(ui.ctx());show(ui,s);});
+            fn drawn(shape:&eframe::egui::Shape,id:eframe::egui::TextureId)->bool {match shape {eframe::egui::Shape::Mesh(mesh)=>mesh.texture_id==id,eframe::egui::Shape::Vec(shapes)=>shapes.iter().any(|s|drawn(s,id)),_=>false}}
+            let texture=s.screen_tex.as_ref().map(|t|t.id());
+            fn overdraw(shape:&eframe::egui::Shape,id:eframe::egui::TextureId,point:Pos2,seen:&mut bool)->bool {
+                match shape {
+                    eframe::egui::Shape::Mesh(mesh) => {if mesh.texture_id==id {*seen=true;}false},
+                    eframe::egui::Shape::Rect(rect) => *seen && rect.rect.contains(point) && rect.fill.a()==255,
+                    eframe::egui::Shape::Vec(shapes) => shapes.iter().any(|shape|overdraw(shape,id,point,seen)),
+                    _=>false,
+                }
+            }
+            let local=s.view.to_screen(Pt::new(90.,70.));let probe=s.canvas_rect.unwrap().min+vec2(local.x,local.y);
+            let visible=texture.is_some_and(|id| {let mut seen=false;let covered=output.shapes.iter().filter(|shape|shape.clip_rect.contains(probe)).any(|shape|overdraw(&shape.shape,id,probe,&mut seen));seen && !covered && output.shapes.iter().any(|shape|drawn(&shape.shape,id))});
+            let pixels=texture.and_then(|id|output.textures_delta.set.get(&id).and_then(|updates|updates.last())).map(|delta| {let eframe::egui::ImageData::Color(image)=&delta.image;image.pixels.clone()});
+            output.textures_delta.clear();
+            (pixels,visible)
+        };
+        let original_image=frame(&mut s,vec![]).0.unwrap();frame(&mut s,crate::ui::welcome::keyboard_tests::key(Key::F8,Modifiers::NONE));frame(&mut s,vec![]);
+        assert!(ctx.read_response(eframe::egui::Id::new("studio-canvas")).unwrap().has_focus());
+        let before=crate::project::encode(&s.doc).unwrap();let history=s.history.len();
+        let (image,visible)=frame(&mut s,crate::ui::welcome::keyboard_tests::key(Key::Q,Modifiers::NONE));assert!(s.doc.quick_mask.is_some());
+        assert!(visible,"Quick Mask must actually draw the original artwork texture");assert_eq!(image.unwrap(),original_image,"An empty mask must keep the rendered artwork unchanged");
+        let entered=crate::project::encode(&s.doc).unwrap();let pos=Pos2::new(80.,80.);let end=Pos2::new(140.,100.);
+        frame(&mut s,vec![Event::PointerMoved(pos),pen_pointer_button(pos,true,Modifiers::NONE)]);assert!(matches!(s.op,Some(Op::ChannelStroke(_))));
+        frame(&mut s,vec![Event::PointerMoved(end),pen_pointer_button(end,false,Modifiers::NONE)]);assert!(s.op.is_none());assert_eq!(s.history.len(),history+2);
+        let painted=crate::project::encode(&s.doc).unwrap();assert_ne!(entered,painted);assert_eq!(s.doc.layers[0].kind.shapes().unwrap().len(),1);assert!(s.doc.quick_mask.as_ref().unwrap().channel.plane.samples.iter().any(|v|*v<1.));
+        s.undo();assert_eq!(crate::project::encode(&s.doc).unwrap(),entered);s.redo();assert_eq!(crate::project::encode(&s.doc).unwrap(),painted);
+        frame(&mut s,vec![Event::PointerMoved(pos),pen_pointer_button(pos,true,Modifiers::NONE)]);frame(&mut s,crate::ui::welcome::keyboard_tests::key(Key::Escape,Modifiers::NONE));assert!(s.op.is_none());assert_eq!(crate::project::encode(&s.doc).unwrap(),painted);
+        frame(&mut s,crate::ui::welcome::keyboard_tests::key(Key::Q,Modifiers::NONE));assert!(s.doc.quick_mask.is_none());assert!(s.pixel_sel.is_some());assert_eq!(crate::project::encode(&s.doc).unwrap(),before);
+    }
     #[test]
     fn unrelated_touch_does_not_cancel_or_change_a_mouse_brush_stroke() {
         use eframe::egui::{Event, Modifiers, TouchDeviceId, TouchId, TouchPhase};

@@ -46,10 +46,12 @@ pub(super) enum Shortcut {
     CloseDocument,
     ToolPoints,
     NewPixelLayer,
+    ToggleQuickMask,
 }
 
 impl Shortcut {
     pub(super) fn available(self, persona: Persona) -> bool {
+        if self == Self::ToggleQuickMask {return persona == Persona::Pixel;}
         if self == Self::ToolPoints { return true; }
         if self == Self::NewPixelLayer { return persona == Persona::Pixel; }
         if self == Self::CreateArtwork {
@@ -116,6 +118,7 @@ pub(super) fn key_shortcut(key: Key, mods: Modifiers) -> Option<Shortcut> {
     if key == Key::F9 && mods.is_none() { return Some(ToolPoints); }
     if !(mods.command || mods.ctrl || mods.mac_cmd) {
         return match (key, mods.shift, mods.alt) {
+            (Key::Q, false, false) => Some(ToggleQuickMask),
             (Key::H, true, false) => Some(FlipHorizontal),
             (Key::V, true, false) => Some(FlipVertical),
             _ => None,
@@ -393,6 +396,7 @@ impl Studio {
             Shortcut::CreateArtwork => crate::ui::keyboard_authoring::open(ctx, self),
             Shortcut::ToolPoints => crate::ui::keyboard_tools::open(ctx, self),
             Shortcut::NewPixelLayer => self.add_layer(true),
+            Shortcut::ToggleQuickMask => {if let Err(error)=self.set_quick_mask(self.doc.quick_mask.is_none()){self.status=error;}},
             Shortcut::NextDocument | Shortcut::PreviousDocument => {
                 self.ensure_tabs();
                 let count = self.tab_count();
@@ -827,6 +831,8 @@ impl Studio {
                     (Key::O, false, _) => Tool::Ellipse,
                     (Key::Y, false, _) => Tool::Polygon,
                     (Key::S, false, Persona::Design | Persona::Layout) => Tool::Star,
+                    (Key::L, false, Persona::Pixel) => Tool::Lasso,
+                    (Key::L, true, Persona::Pixel) => Tool::BezierLasso,
                     (Key::L, false, _) => Tool::Line,
                     (Key::T, false, _) => Tool::Text,
                     (Key::G, false, _) => Tool::Gradient,

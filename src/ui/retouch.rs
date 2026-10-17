@@ -680,6 +680,7 @@ pub(super) fn finish(
 }
 
 pub(super) fn fill(studio: &mut Studio, world: Pt) {
+    if studio.fill_channel(world) {return;}
     if !studio.paint_mask
         && studio
             .active_layer

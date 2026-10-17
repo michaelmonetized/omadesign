@@ -575,7 +575,7 @@ impl Studio {
     const OBJECT_CLIP_PREFIX: &'static str = "omadesign-objects:";
 
     pub fn copy_selection(&mut self, ctx: &egui::Context) {
-        if self.channel_target.is_some() {
+        if self.channel_target.is_some() || self.quick_mask_painting() {
             self.status = "Saved-channel clipboard transfer is not available yet; choose RGB for artwork".into();
             return;
         }
@@ -733,7 +733,7 @@ impl Studio {
     }
 
     pub fn request_clipboard_paste(&mut self, ctx: &egui::Context, payload: Option<&str>) {
-        if self.channel_target.is_some() {
+        if self.channel_target.is_some() || self.quick_mask_painting() {
             self.status = "Saved-channel clipboard transfer is not available yet; choose RGB for artwork".into();
             return;
         }

@@ -1093,12 +1093,13 @@ pub fn left_toolbar(ui: &mut Ui, studio: &mut Studio) {
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 2.0;
                             for &tool in row {
-                                if icons::tool_button(ui, tool, studio.tool == tool) {
-                                    studio.set_tool(tool);
-                                }
+                                ui.add_enabled_ui(!studio.quick_mask_tools_limited() || Studio::quick_mask_tool_allowed(tool),|ui| {
+                                    if icons::tool_button(ui, tool, studio.tool == tool) {studio.set_tool(tool);}
+                                }).response.on_disabled_hover_text("Exit Quick Mask before using this layer tool");
                             }
                         });
                     }
+                    if studio.persona==Persona::Pixel {icons::well_separator(ui);super::quick_mask::button(ui,studio);}
                 });
             if libraries {
                 ui.add_space(4.0);

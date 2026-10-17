@@ -23,6 +23,7 @@ pub(crate) mod export_dialog;
 mod screen_export;
 mod channels;
 mod channel_adjustment;
+mod quick_mask;
 mod guides;
 mod guide_keyboard;
 mod icons;
@@ -149,6 +150,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     canvas::poll_screen_pick(&ctx, studio);
     theme::poll(&ctx);
     channel_adjustment::tick(&ctx, studio);
+    studio.sync_quick_mask_palette();
     ui.painter().rect_filled(ui.max_rect(), 0.0, theme::bg_window());
     ctx.data_mut(|data| {
         data.insert_temp(
@@ -177,6 +179,8 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         && !guide_keyboard::is_open(&ctx)
         && !panel_keyboard::is_open(&ctx)
         && !studio.show_templates
+        && !channel_adjustment::is_open(&ctx)
+        && !quick_mask::is_open(&ctx)
     {
         guides::handle_shortcuts(&ctx, studio);
     }
@@ -186,6 +190,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         && !studio.updates.freezing
         && !layout_preview::is_open(&ctx)
         && !channel_adjustment::is_open(&ctx)
+        && !quick_mask::is_open(&ctx)
         && !raster::is_open(&ctx)
         && !background_removal::is_open(&ctx)
         && !export_dialog::is_open(&ctx)
@@ -249,6 +254,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         layout_preview::show(ui, studio);
         raster::show(ui, studio);
         channel_adjustment::show(&ctx, studio);
+        quick_mask::show(&ctx, studio);
         background_removal::show(&ctx, studio);
         export_dialog::show(&ctx, studio);
         artboard_dialog::show(&ctx, studio);

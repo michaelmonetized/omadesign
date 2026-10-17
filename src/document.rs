@@ -1230,6 +1230,8 @@ fn deserialize_artboards<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<Artboard
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Document {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quick_mask: Option<crate::channels::quick_mask::QuickMask>,
     #[serde(default, rename = "saved_channels", skip_serializing_if = "Vec::is_empty")]
     pub channels: Vec<crate::channels::Channel>,
     #[serde(default, skip_serializing_if = "crate::screen_export::Catalog::is_empty")]
@@ -1431,6 +1433,7 @@ impl Document {
         crate::layout::validate_hierarchy(self)?;
         crate::layout_tokens::validate_tokens(self)?;
         crate::channels::validate_metadata(&self.channels)?;
+        if let Some(mask) = &self.quick_mask { mask.validate_metadata(&self.channels)?; }
         self.screen_export.validate()
     }
 
@@ -1472,6 +1475,7 @@ impl Document {
             ));
         }
         let mut doc = Self {
+            quick_mask: None,
             channels: vec![],
             publishing: Default::default(),
             color: Default::default(),
@@ -1817,6 +1821,11 @@ impl RasterState {
 
 #[derive(Clone, Debug)]
 pub enum Cmd {
+    SetQuickMask {
+        before: Option<crate::channels::quick_mask::QuickMask>,
+        after: Option<crate::channels::quick_mask::QuickMask>,
+        selection: Option<Box<crate::channels::quick_mask::SelectionChange>>,
+    },
     SetChannels { before: Vec<crate::channels::Channel>, after: Vec<crate::channels::Channel> },
     SetSvgFilter { index: usize, before: Option<crate::svg_source::SvgFilterGraph>, after: Option<crate::svg_source::SvgFilterGraph> },
     SetSmartLayer {index:usize,before:Box<Layer>,after:Box<Layer>},
@@ -2336,6 +2345,7 @@ fn coalesce(prev: &mut Cmd, next: &Cmd) -> bool {
 
 pub(crate) fn invert_cmd(cmd: Cmd) -> Cmd {
     match cmd {
+        Cmd::SetQuickMask {before,after,selection} => Cmd::SetQuickMask {before:after,after:before,selection:selection.map(|s| Box::new(crate::channels::quick_mask::SelectionChange {before:s.after,after:s.before}))},
         Cmd::SetChannels {before,after} => Cmd::SetChannels {before:after,after:before},
         Cmd::SetSmartLayer{index,before,after}=>Cmd::SetSmartLayer{index,before:after,after:before},
         Cmd::SetDocumentColor { before, after } => Cmd::SetDocumentColor {
@@ -3106,6 +3116,7 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
         }
         Cmd::SetLayoutTokens { after, .. } => doc.layout_tokens.clone_from(after),
         Cmd::SetScreenExport { after, .. } => doc.screen_export.clone_from(after),
+        Cmd::SetQuickMask {after,..} => doc.quick_mask.clone_from(after),
         Cmd::SetChannels {after,..} => doc.channels.clone_from(after),
         Cmd::SetVectorShapes { layer, after, .. } => {
             if let Some(shapes) = doc.layers.get_mut(*layer).and_then(|l| l.kind.shapes_mut()) {

@@ -143,6 +143,9 @@ pub struct Replica {
 /// Args: document to share. Returns its cells, excluding device and session metadata.
 pub fn snapshot(doc: &Document) -> Result<Snapshot, String> {
     crate::motion::compositions::validate(doc)?;
+    if crate::motion::compositions::documents(doc)?.iter().any(|document| document.quick_mask.is_some()) {
+        return Err("QuickMaskUnsupported: live protocol 3 cannot preserve Quick Mask".into());
+    }
     if crate::motion::compositions::documents(doc)?.iter().any(|document| !document.channels.is_empty()) {
         return Err("SavedChannelsUnsupported: live protocol 3 cannot preserve saved channels".into());
     }

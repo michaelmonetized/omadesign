@@ -109,6 +109,7 @@ pub(super) fn flip_icons(ui: &mut Ui, studio: &mut Studio) {
 }
 
 pub fn menu(ui: &mut Ui, studio: &mut Studio) {
+    super::quick_mask::menu(ui,studio);
     if studio.persona == crate::tools::Persona::Pixel {
         super::pixel_selection::menu(ui, studio);
         return;

@@ -210,6 +210,7 @@ impl Studio {
         }
         if !changes_layer_indices(cmd) {
             apply_cmd(&mut self.doc, cmd);
+            self.apply_quick_mask_selection(cmd);
             return;
         }
         let id_at = |index: usize| self.doc.layers.get(index).map(|l| l.id);
@@ -223,6 +224,7 @@ impl Studio {
         let rename = self.layer_rename.as_ref().and_then(|(i, _)| id_at(*i));
         let shape_rename = self.shape_rename.as_ref().and_then(|(i, _, _)| id_at(*i));
         apply_cmd(&mut self.doc, cmd);
+        self.apply_quick_mask_selection(cmd);
         let indices: HashMap<_, _> = self
             .doc
             .layers

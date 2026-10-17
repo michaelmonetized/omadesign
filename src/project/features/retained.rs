@@ -1,5 +1,5 @@
 use super::{
-    ADVANCED_LAYOUT, CHANNELS, COLOR, COMPOSITIONS, EXPORT_FOLDERS, EXPORT_RESOLUTION, EXPRESSIONS, NATIVE,
+    ADVANCED_LAYOUT, QUICK_MASK, CHANNELS, COLOR, COMPOSITIONS, EXPORT_FOLDERS, EXPORT_RESOLUTION, EXPRESSIONS, NATIVE,
     PSD_TYPE, SCENE3D, SCREEN_EXPORT, SMART, SOURCE,
 };
 use serde::Deserialize;
@@ -62,6 +62,7 @@ fn composition_bounds<E: serde::de::Error>(value: &Seen) -> Result<(usize, usize
 }
 
 fn field_version(key: &str, value: &Seen) -> u32 {
+    if key.split('/').any(|field| field == "quick_mask") { return QUICK_MASK; }
     if key.split('/').any(|field| field == "saved_channels") { return CHANNELS; }
     if key
         .split('/')
@@ -162,7 +163,9 @@ impl<'de> Deserialize<'de> for Seen {
                     "Baseline" => Some("Baseline"),
                     "List" => Some("List"),
                     _ if s.starts_with('/') => {
-                        if s.split('/').any(|field| field == "saved_channels") {
+                        if s.split('/').any(|field| field == "quick_mask") {
+                            Some("quick_mask")
+                        } else if s.split('/').any(|field| field == "saved_channels") {
                             Some("saved_channels")
                         } else if s.split('/').any(|field| field == "export_folder") {
                             Some("export_folder")

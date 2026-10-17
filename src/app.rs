@@ -38,6 +38,7 @@ pub(crate) mod screen_export;
 pub(crate) mod channels;
 pub(crate) mod channel_paint;
 pub(crate) mod channel_adjustment;
+pub(crate) mod quick_mask;
 mod restart;
 pub(crate) mod selection;
 mod alignment;
@@ -374,6 +375,8 @@ pub struct Studio {
     pixel_sel_cache: masking::SelectionCache,
     pub paint_mask: bool,
     pub(crate) channel_target: Option<u64>,
+    quick_mask_palette: Option<quick_mask::Palette>,
+    pub(crate) quick_mask_defaults: crate::channels::quick_mask::Options,
     pub pending_item_mask: Option<crate::artwork_mask::MaskSource>,
     pub snap: SnapSettings,
     pub snap_scene: Option<snap::Scene>,
@@ -633,6 +636,8 @@ impl Studio {
             pixel_sel_cache: Default::default(),
             paint_mask: false,
             channel_target: None,
+            quick_mask_palette: None,
+            quick_mask_defaults: Default::default(),
             pending_item_mask: None,
             snap: SnapSettings::default(),
             snap_scene: None,
@@ -1647,6 +1652,8 @@ impl Studio {
     }
 
     fn sanitize(&mut self) {
+        self.sync_quick_mask_palette();
+        if self.quick_mask_painting() && !Self::quick_mask_tool_allowed(self.tool) {self.set_tool(Tool::Brush);}
         self.channel_target = self.channel_target.filter(|id| self.doc.channels.iter().any(|c| c.id == *id));
         self.selected_layer = self
             .selected_layer
@@ -2625,7 +2632,8 @@ impl Studio {
     }
 
     pub fn set_tool(&mut self, t: Tool) {
-        if !matches!(t, Tool::Brush | Tool::Eraser | Tool::Hand | Tool::Zoom) {
+        if self.quick_mask_tools_limited() && !Self::quick_mask_tool_allowed(t) {self.status="Exit Quick Mask before using this layer tool".into();return;}
+        if !matches!(t, Tool::Brush | Tool::Eraser | Tool::Fill | Tool::Hand | Tool::Zoom) {
             self.end_pixel_stroke(true);
             self.channel_target = None;
         }
