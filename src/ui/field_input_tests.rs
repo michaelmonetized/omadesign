@@ -707,3 +707,34 @@ fn field_input_integrated_mixed_frames_keep_children_locks_and_gesture_endpoints
         assert_eq!(crate::project::encode(&studio.doc).unwrap(), snapshots[2]);
     }
 }
+
+#[test]
+fn craft_pixel_foreground_native_color_matches_brush_and_never_recolors_locked_artwork() {
+    use crate::ui::welcome::keyboard_tests as keys;
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    crate::ui::theme::apply(&ctx);
+    let mut studio = fixture();
+    studio.persona = Persona::Pixel;
+    studio.tool = Tool::Brush;
+    studio.doc.layers[0].locked = true;
+    studio.brush.color = crate::color::Rgba::from_hex(0xE5484D);
+    let original = crate::project::encode(&studio.doc).unwrap();
+    let history = studio.history.len();
+    let frame = |studio: &mut Studio, events| keys::render(&ctx, events, |ui| {
+        ui.set_max_width(288.);
+        assert!(pane(ui, studio, "color"));
+    });
+    frame(&mut studio, vec![]);
+    let output = frame(&mut studio, vec![]);
+    let (_, node) = keys::named(&output, "Hex color");
+    assert_eq!(node.value(), Some("#E5484D"));
+    keys::tab_to(&ctx, "Hex color", |events| frame(&mut studio, events));
+    keys::replace("#36A8CC80", |events| frame(&mut studio, events));
+    frame(&mut studio, keys::key(Key::Enter, Modifiers::NONE));
+    frame(&mut studio, vec![]);
+    assert_eq!(studio.brush.color, crate::color::Rgba::parse_hex("#36A8CC80").unwrap());
+    assert!(matches!(studio.style.fill, Fill::Solid(c) if c == studio.brush.color));
+    assert_eq!(crate::project::encode(&studio.doc).unwrap(), original);
+    assert_eq!(studio.history.len(), history);
+}

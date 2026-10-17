@@ -1,4 +1,5 @@
 //! Authoritative scalar channels use the existing admitted native sample storage.
+pub(crate) mod curve;
 use crate::{
     deep_color::storage,
     document::Document,

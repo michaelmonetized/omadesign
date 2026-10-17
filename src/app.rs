@@ -37,6 +37,7 @@ pub(crate) mod actions;
 pub(crate) mod screen_export;
 pub(crate) mod channels;
 pub(crate) mod channel_paint;
+pub(crate) mod channel_adjustment;
 mod restart;
 pub(crate) mod selection;
 mod alignment;

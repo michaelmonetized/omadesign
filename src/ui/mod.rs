@@ -22,6 +22,7 @@ mod deform;
 pub(crate) mod export_dialog;
 mod screen_export;
 mod channels;
+mod channel_adjustment;
 mod guides;
 mod guide_keyboard;
 mod icons;
@@ -147,6 +148,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     plugins::tick(&ctx, studio);
     canvas::poll_screen_pick(&ctx, studio);
     theme::poll(&ctx);
+    channel_adjustment::tick(&ctx, studio);
     ui.painter().rect_filled(ui.max_rect(), 0.0, theme::bg_window());
     ctx.data_mut(|data| {
         data.insert_temp(
@@ -183,6 +185,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         && !studio.show_preferences
         && !studio.updates.freezing
         && !layout_preview::is_open(&ctx)
+        && !channel_adjustment::is_open(&ctx)
         && !raster::is_open(&ctx)
         && !background_removal::is_open(&ctx)
         && !export_dialog::is_open(&ctx)
@@ -245,6 +248,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         cloud::modal(ui, studio);
         layout_preview::show(ui, studio);
         raster::show(ui, studio);
+        channel_adjustment::show(&ctx, studio);
         background_removal::show(&ctx, studio);
         export_dialog::show(&ctx, studio);
         artboard_dialog::show(&ctx, studio);

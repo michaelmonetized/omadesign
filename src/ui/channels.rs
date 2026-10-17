@@ -496,6 +496,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                 Err(e) => state.error = e,
             }
         }
+        if icon(ui,key.with("curves"),ph::BEZIER_CURVE,"Adjust channel curves",editable&&saved.is_some()) {super::channel_adjustment::open(ui.ctx(),studio);}
         if running
             && icon(
                 ui,
@@ -568,6 +569,7 @@ struct CanvasChannel {
     id: u64,
     generation: u64,
     edge: u32,
+    preview: Option<Id>,
     texture: egui::TextureHandle,
 }
 /// Show the actual targeted scalar plane at its stored document placement.
@@ -578,6 +580,9 @@ pub(super) fn paint_target(ui: &Ui, studio: &Studio, rect: egui::Rect) {
         ui.ctx().data_mut(|d| d.remove::<CanvasChannel>(key));
         return;
     };
+    let adjusted=super::channel_adjustment::preview(ui.ctx(),studio);
+    let plane=adjusted.as_ref().map_or(&channel.plane,|(plane,_)|plane);
+    let preview=adjusted.as_ref().map(|(_,key)|*key);
     let edge = (rect.width().max(rect.height()) * ui.ctx().pixels_per_point())
         .ceil()
         .clamp(1., 4096.) as u32;
@@ -587,14 +592,15 @@ pub(super) fn paint_target(ui: &Ui, studio: &Studio, rect: egui::Rect) {
             c.document == studio.swap_id
                 && c.id == channel.id
                 && c.generation == studio.canvas_gen
-                && c.edge == edge
+                && c.edge == edge && c.preview == preview
         })
         .unwrap_or_else(|| CanvasChannel {
             document: studio.swap_id.clone(),
             id: channel.id,
             generation: studio.canvas_gen,
             edge,
-            texture: plane_texture(ui.ctx(), &channel.plane, edge, "canvas-saved-channel"),
+            preview,
+            texture: plane_texture(ui.ctx(), plane, edge, "canvas-saved-channel"),
         });
     let painter = ui.painter_at(rect);
     let screen = |p: crate::geom::Pt| {
@@ -609,17 +615,17 @@ pub(super) fn paint_target(ui: &Ui, studio: &Studio, rect: egui::Rect) {
     let mut mesh = egui::Mesh::with_texture(cached.texture.id());
     for (x, y, u, v) in [
         (0., 0., 0., 0.),
-        (channel.plane.width as f32, 0., 1., 0.),
+        (plane.width as f32, 0., 1., 0.),
         (
-            channel.plane.width as f32,
-            channel.plane.height as f32,
+            plane.width as f32,
+            plane.height as f32,
             1.,
             1.,
         ),
-        (0., channel.plane.height as f32, 0., 1.),
+        (0., plane.height as f32, 0., 1.),
     ] {
         let mut point = tiny_skia::Point::from_xy(x, y);
-        channel.plane.placement().map_point(&mut point);
+        plane.placement().map_point(&mut point);
         mesh.vertices.push(egui::epaint::Vertex {
             pos: screen(crate::geom::Pt::new(point.x, point.y)),
             uv: egui::pos2(u, v),

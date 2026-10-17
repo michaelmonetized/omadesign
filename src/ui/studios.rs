@@ -290,6 +290,10 @@ fn section_gap(ui: &mut Ui) {
 /// Args: pane UI, current editor and pane identity. Returns whether this pane owns the requested controls.
 pub(super) fn pane(ui: &mut Ui, studio: &mut Studio, panel: &str) -> bool {
     if !matches!(panel,"transform"|"appearance"|"gradients"|"stroke"|"character"|"keyframes"|"effects"|"trace"|"brushes"|"transparency"|"color"){return false;}
+    if panel == "color" && pixel_context(studio) && studio.tool != Tool::Text && studio.type_edit.is_none() {
+        foreground_color_studio(ui, studio);
+        return true;
+    }
     let locked=studio.selection.iter().any(|&(layer,id)|!studio.layer_unlocked(layer)||studio.doc.find_shape(layer,id).is_some_and(|s|s.locked));
     ui.add_enabled_ui(!locked,|ui| match panel {
         "transform" => transform_studio(ui,studio,false),
@@ -2465,6 +2469,27 @@ fn paint_color_studio(ui: &mut Ui, studio: &mut Studio) {
             studio.style.fill = Fill::Solid(studio.brush.color);
         }
         ui.label(RichText::new(color.hex()).small().color(fg_weak()));
+    });
+}
+
+fn foreground_color_studio(ui: &mut Ui, studio: &mut Studio) {
+    let owner = studio.swap_id.clone();
+    ui.push_id((owner, "paint-foreground"), |ui| {
+        let mut color = match studio.style.fill {
+            Fill::Solid(color) if studio.tool == Tool::Fill => color,
+            _ => studio.brush.color,
+        };
+        let before = color;
+        ui.horizontal(|ui| {
+            super::color_picker::color_edit_named(ui, "foreground", &mut color, "Foreground color");
+            ui.label("Foreground");
+        });
+        super::color_picker::inline(ui, &mut color);
+        if color != before {
+            studio.brush.color = color;
+            studio.style.fill = Fill::Solid(color);
+            studio.push_recent(color);
+        }
     });
 }
 

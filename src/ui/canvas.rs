@@ -521,6 +521,7 @@ fn pen_snap_point(studio: &mut Studio, point: Pt, modifiers: eframe::egui::Modif
 }
 
 fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: bool) {
+    if super::channel_adjustment::is_open(&resp.ctx) { return; }
     if space {
         return;
     }
