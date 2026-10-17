@@ -191,7 +191,11 @@ pub(super) fn poll(ctx: &egui::Context, studio: &mut Studio) {
     let result = result.and_then(|finished| match finished.change {
         Change::Save(plane) => studio
             .save_channel(&finished.target, plane, "")
-            .map(|id| state.selected = Target::Saved(id)),
+            .and_then(|id| {
+                studio.select_channel_target(Some(id))?;
+                state.selected = Target::Saved(id);
+                Ok(())
+            }),
         Change::Invert(id, plane) => {
             let mut after = studio.doc.channels.clone();
             let channel = after
@@ -249,9 +253,10 @@ fn thumbnail(
     texture
 }
 fn plane_texture(ctx: &egui::Context, plane: &Plane, edge: u32, name: &str) -> egui::TextureHandle {
-    let w = edge.max(1).min(plane.width.max(1)) as usize;
-    let h = ((plane.height as f64 / plane.width.max(1) as f64 * w as f64).round() as usize)
-        .clamp(1, edge.max(1) as usize);
+    let scale = f64::from(edge.max(1)) / f64::from(plane.width.max(plane.height).max(1));
+    let scale = scale.min(1.);
+    let w = (f64::from(plane.width) * scale).round().max(1.) as usize;
+    let h = (f64::from(plane.height) * scale).round().max(1.) as usize;
     let mut pixels = vec![0; w * h * 4];
     for y in 0..h {
         for x in 0..w {
@@ -279,6 +284,12 @@ fn plane_texture(ctx: &egui::Context, plane: &Plane, edge: u32, name: &str) -> e
 pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
     let key = owner(studio);
     let mut state = ui.data(|d| d.get_temp::<State>(key)).unwrap_or_default();
+    if let Some(channel) = studio.channel_paint_target() {
+        state.selected = Target::Saved(channel.id);
+    } else if matches!(state.selected, Target::Saved(_)) {
+        state.selected = Target::Composite;
+    }
+    let mut select_target = None;
     if let Target::Saved(id) = state.selected
         && !studio.doc.channels.iter().any(|c| c.id == id)
     {
@@ -317,6 +328,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
         );
         if response.clicked() {
             state.selected = target;
+            select_target = Some(None);
             state.error.clear();
         }
     }
@@ -341,11 +353,17 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
             );
             if response.clicked() {
                 state.selected = target;
+                select_target = Some(Some(channel.id));
                 state.original = channel.name.clone();
                 state.name = channel.name.clone();
                 state.error.clear();
             }
         });
+    }
+    if let Some(target) = select_target {
+        if let Err(error) = studio.select_channel_target(target) {
+            state.error = error;
+        }
     }
     let running = ui.data(|d| d.get_temp::<Run>(run_id())).is_some();
     let editable =
@@ -442,6 +460,9 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                 .and_then(|target| studio.duplicate_channel(&target, saved.unwrap()));
             match result {
                 Ok(id) => {
+                    if let Err(error) = studio.select_channel_target(Some(id)) {
+                        state.error = error;
+                    }
                     state.selected = Target::Saved(id);
                     state.error.clear();
                 }
@@ -539,6 +560,136 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
         ui.add(egui::Image::new(&texture).fit_to_exact_size(size * factor));
     }
     ui.data_mut(|d| d.insert_temp(key, state));
+}
+
+#[derive(Clone)]
+struct CanvasChannel {
+    document: String,
+    id: u64,
+    generation: u64,
+    edge: u32,
+    texture: egui::TextureHandle,
+}
+/// Show the actual targeted scalar plane at its stored document placement.
+/// Args: canvas UI, current editor and real canvas clip. Returns nothing; display bytes never feed edits.
+pub(super) fn paint_target(ui: &Ui, studio: &Studio, rect: egui::Rect) {
+    let key = Id::new("canvas-saved-channel");
+    let Some(channel) = studio.channel_paint_target() else {
+        ui.ctx().data_mut(|d| d.remove::<CanvasChannel>(key));
+        return;
+    };
+    let edge = (rect.width().max(rect.height()) * ui.ctx().pixels_per_point())
+        .ceil()
+        .clamp(1., 4096.) as u32;
+    let cached = ui.ctx().data(|d| d.get_temp::<CanvasChannel>(key));
+    let cached = cached
+        .filter(|c| {
+            c.document == studio.swap_id
+                && c.id == channel.id
+                && c.generation == studio.canvas_gen
+                && c.edge == edge
+        })
+        .unwrap_or_else(|| CanvasChannel {
+            document: studio.swap_id.clone(),
+            id: channel.id,
+            generation: studio.canvas_gen,
+            edge,
+            texture: plane_texture(ui.ctx(), &channel.plane, edge, "canvas-saved-channel"),
+        });
+    let painter = ui.painter_at(rect);
+    let screen = |p: crate::geom::Pt| {
+        let p = studio.view.to_screen(p);
+        rect.min + egui::vec2(p.x, p.y)
+    };
+    painter.rect_filled(
+        egui::Rect::from_two_pos(screen(crate::geom::Pt::ZERO), screen(studio.doc.size())),
+        0.,
+        egui::Color32::BLACK,
+    );
+    let mut mesh = egui::Mesh::with_texture(cached.texture.id());
+    for (x, y, u, v) in [
+        (0., 0., 0., 0.),
+        (channel.plane.width as f32, 0., 1., 0.),
+        (
+            channel.plane.width as f32,
+            channel.plane.height as f32,
+            1.,
+            1.,
+        ),
+        (0., channel.plane.height as f32, 0., 1.),
+    ] {
+        let mut point = tiny_skia::Point::from_xy(x, y);
+        channel.plane.placement().map_point(&mut point);
+        mesh.vertices.push(egui::epaint::Vertex {
+            pos: screen(crate::geom::Pt::new(point.x, point.y)),
+            uv: egui::pos2(u, v),
+            color: egui::Color32::WHITE,
+        });
+    }
+    if mesh.vertices.iter().all(|v| v.pos.is_finite()) {
+        mesh.indices.extend([0, 1, 2, 0, 2, 3]);
+        painter.add(mesh);
+    }
+    ui.ctx().data_mut(|d| d.insert_temp(key, cached));
+}
+
+/// Keep the brush outline in the targeted alpha plane's actual pixel coordinates.
+/// Args: canvas painter, clip, current editor and document cursor. Returns whether a saved channel owns the outline.
+pub(super) fn paint_brush_outline(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    studio: &Studio,
+    world: crate::geom::Pt,
+) -> bool {
+    use crate::geom::Pt;
+    let Some(channel) = studio.channel_paint_target() else {
+        return false;
+    };
+    let placement = channel.plane.placement();
+    let Some(inverse) = placement.invert() else {
+        return true;
+    };
+    let mut center = tiny_skia::Point::from_xy(world.x, world.y);
+    inverse.map_point(&mut center);
+    let size = studio.brush.size
+        * if studio.brush.pressure_size {
+            studio.brush.pressure.clamp(0.01, 1.)
+        } else {
+            1.
+        };
+    let angle = studio.brush.angle
+        + if studio.brush.follow_direction {
+            studio.brush_heading
+        } else {
+            0.
+        };
+    let map = |offset: Pt| {
+        let mut point = tiny_skia::Point::from_xy(center.x + offset.x, center.y + offset.y);
+        placement.map_point(&mut point);
+        let p = studio.view.to_screen(Pt::new(point.x, point.y));
+        rect.min + egui::vec2(p.x, p.y)
+    };
+    let edge = |a: Pt, b: Pt| {
+        let points = [map(a), map(b)];
+        if points.iter().all(|p| p.is_finite()) {
+            painter.line_segment(points, egui::Stroke::new(3., egui::Color32::BLACK));
+            painter.line_segment(points, egui::Stroke::new(1., egui::Color32::WHITE));
+        }
+    };
+    if let Some(outline) = studio.brushes.tip_outline() {
+        for &(a, b) in outline.iter() {
+            edge(a.rotate(angle) * size, b.rotate(angle) * size);
+        }
+    } else {
+        for i in 0..64 {
+            let point = |i| {
+                let angle = i as f32 / 64. * std::f32::consts::TAU;
+                Pt::new(angle.cos(), angle.sin()) * (size * 0.5)
+            };
+            edge(point(i), point(i + 1));
+        }
+    }
+    true
 }
 
 #[cfg(test)]

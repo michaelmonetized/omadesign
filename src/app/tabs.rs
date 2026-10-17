@@ -12,6 +12,7 @@ pub(super) struct TabState {
     selected_layer: Option<u64>,
     individual_object: Option<(usize, u64)>,
     active_layer: Option<usize>,
+    channel_target: Option<u64>,
     history: History,
     pub(super) live_runtime: super::live::LiveRuntime,
     clone_source: Option<Pt>,
@@ -61,6 +62,7 @@ impl TabState {
             selected_layer: None,
             individual_object: None,
             active_layer,
+            channel_target: None,
             history: History::default(),
             live_runtime: Default::default(),
             clone_source: None,
@@ -112,6 +114,7 @@ impl Studio {
         swap(&mut self.selected_layer, &mut t.selected_layer);
         swap(&mut self.individual_object, &mut t.individual_object);
         swap(&mut self.active_layer, &mut t.active_layer);
+        swap(&mut self.channel_target, &mut t.channel_target);
         swap(&mut self.history, &mut t.history);
         swap(&mut self.live_runtime, &mut t.live_runtime);
         swap(&mut self.clone_source, &mut t.clone_source);

@@ -149,6 +149,10 @@ pub(super) fn open(ctx: &Context, studio: &mut Studio, kind: Kind) {
 
 pub(super) fn open_with_settings(ctx: &Context, studio: &mut Studio, settings: Settings) {
     studio.end_pixel_stroke(false);
+    if studio.channel_target.is_some() {
+        studio.status = "Choose RGB for layer filters; saved-channel adjustments are not available yet".into();
+        return;
+    }
     let Some(index) = studio.active_layer else {
         return;
     };

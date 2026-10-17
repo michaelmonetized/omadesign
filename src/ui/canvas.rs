@@ -243,7 +243,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     if changing.is_none() {
         studio.interaction_render.clear();
     }
-    if !reuse {
+    if !reuse && studio.channel_paint_target().is_none() {
         let draft = match &studio.op {
             Some(Op::Brush { layer, buf, preview, .. }) => Draft {
                 preview: None,
@@ -300,7 +300,11 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
             studio.canvas_key = Some(key);
         }
     }
-    if let Some(tex) = &studio.screen_tex {
+    if studio.channel_paint_target().is_some() {
+        studio.screen_tex = None;
+        studio.canvas_key = None;
+        ui.painter().rect_filled(rect, 0., super::theme::bg_canvas());
+    } else if let Some(tex) = &studio.screen_tex {
         ui.painter().image(
             tex.id(),
             rect,
@@ -309,6 +313,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
         );
     }
 
+    super::channels::paint_target(ui, studio, rect);
     let painter = ui.painter_at(rect);
     if studio.show_grid || studio.doc.grid.visible {
         draw_grid(&painter, rect, studio);
@@ -925,7 +930,7 @@ fn handle_pointer(studio: &mut Studio, resp: &eframe::egui::Response, space: boo
 }
 
 fn pixel_stroke_active(studio: &Studio) -> bool {
-    matches!(studio.op, Some(Op::Brush { .. } | Op::NativeStroke { .. } | Op::NativeRetouch { .. } | Op::Retouch { .. } | Op::Smudge { .. } | Op::Clone { .. }))
+    matches!(studio.op, Some(Op::ChannelStroke(_) | Op::Brush { .. } | Op::NativeStroke { .. } | Op::NativeRetouch { .. } | Op::Retouch { .. } | Op::Smudge { .. } | Op::Clone { .. }))
 }
 
 // Egui can receive several pointer positions between paints. Processing only
@@ -1045,6 +1050,10 @@ fn is_text_hit(studio: &Studio, hit: (usize, u64)) -> bool {
 }
 
 fn start_drag(studio: &mut Studio, pick: Pt, snap: Pt, shift: bool, alt: bool) {
+    if studio.channel_target.is_some() && matches!(studio.tool, Tool::Brush | Tool::Eraser) {
+        studio.start_channel_stroke(pick, studio.tool == Tool::Eraser);
+        return;
+    }
     let _ = alt;
     if studio.is_motion() {
         studio.playing = false;
@@ -2405,6 +2414,7 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
         Some(Op::Brush { .. }) => super::retouch::brush_drag(studio, world),
         Some(Op::NativeRetouch { .. }) => super::retouch::native_retouch_drag(studio, world),
         Some(Op::NativeStroke { .. }) => super::retouch::native_drag(studio, world),
+        Some(Op::ChannelStroke(_)) => studio.drag_channel_stroke(world),
         Some(Op::Retouch { .. }) => super::retouch::drag(studio, world),
         Some(Op::Smudge { .. }) => super::retouch::smudge_drag(studio, world),
         Some(Op::Clone { .. }) => super::retouch::clone_drag(studio, world),
@@ -2615,7 +2625,7 @@ fn continue_drag(studio: &mut Studio, world: Pt, shift: bool, alt: bool) {
 fn end_drag(studio: &mut Studio, world: Pt, alt: bool, ctrl: bool, shift: bool) {
     studio.reset_snap_gesture();
     match studio.op.take() {
-        Some(op @ (Op::Brush { .. } | Op::NativeStroke { .. } | Op::NativeRetouch { .. } | Op::Retouch { .. } | Op::Smudge { .. } | Op::Clone { .. })) => {
+        Some(op @ (Op::ChannelStroke(_) | Op::Brush { .. } | Op::NativeStroke { .. } | Op::NativeRetouch { .. } | Op::Retouch { .. } | Op::Smudge { .. } | Op::Clone { .. })) => {
             studio.op = Some(op);
             studio.end_pixel_stroke(false);
         }
@@ -3218,6 +3228,7 @@ fn paint_brush_ring(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
     let Some(world) = studio.cursor else {
         return;
     };
+    if super::channels::paint_brush_outline(p, rect, studio, world) { return; }
     let center = win(rect, studio.view, world);
     if !rect.contains(center) {
         return;
@@ -3258,6 +3269,10 @@ fn draw_overlays(
     pen_preview: Option<Pt>,
 ) {
     paint_brush_ring(p, rect, studio);
+    if studio.channel_paint_target().is_some() {
+        draw_pixel_sel(p, rect, studio);
+        return;
+    }
     let v = studio.view;
     if let Some(Op::Create {
         kind,
@@ -5030,6 +5045,32 @@ mod tests {
         assert!((shape.geom.bbox().center() - bounds.map_pt(original.bbox().center(), dst)).length() < 0.01);
         s.undo();
         assert_eq!(s.doc.find_shape(first.0, first.1).unwrap().geom, original);
+    }
+
+    #[test]
+    fn craft_channel_paint_real_canvas_pointer_release_escape_and_grayscale_target() {
+        use eframe::egui::{Event, Modifiers};
+        let (ctx, mut s)=pen_input_studio();
+        s.doc.width=400.;s.doc.height=300.;s.view.offset=Pt::ZERO;
+        s.doc.channels.push(crate::channels::Channel{id:crate::document::next_id(),name:"Pointer alpha".into(),plane:crate::channels::Plane{width:400,height:300,transform:[1.,0.,0.,1.,0.,0.],samples:crate::deep_color::storage::collect(std::iter::repeat_n(0.25,400*300)).unwrap()}});
+        s.brushes.selected=None;s.brush.size=12.;s.brush.color=crate::color::Rgba::WHITE;s.brush.opacity=0.8;
+        s.select_channel_target(Some(s.doc.channels[0].id)).unwrap();
+        canvas_frame(&ctx,&mut s,vec![]);
+        let before=crate::project::encode(&s.doc).unwrap();let n=s.history.len();
+        let pos=Pos2::new(80.,80.);let end=Pos2::new(140.,100.);
+        let world=s.view.pointer_to_world(from_egui(s.canvas_rect.unwrap().min),from_egui(pos));
+        let sample=world.y.floor() as usize*400+world.x.floor() as usize;
+        canvas_frame(&ctx,&mut s,vec![Event::PointerMoved(pos),pen_pointer_button(pos,true,Modifiers::NONE)]);
+        assert!(matches!(s.op,Some(Op::ChannelStroke(_))));
+        canvas_frame(&ctx,&mut s,vec![Event::PointerMoved(end),pen_pointer_button(end,false,Modifiers::NONE)]);
+        assert!(s.op.is_none());assert_eq!(s.history.len(),n+1);
+        let after=crate::project::encode(&s.doc).unwrap();assert_ne!(before,after);
+        assert!(s.doc.layers[0].kind.shapes().unwrap().is_empty());
+        assert!(s.doc.channels[0].plane.samples[sample]>0.25);
+        s.undo();assert_eq!(crate::project::encode(&s.doc).unwrap(),before);s.redo();assert_eq!(crate::project::encode(&s.doc).unwrap(),after);
+        canvas_frame(&ctx,&mut s,vec![Event::PointerMoved(pos),pen_pointer_button(pos,true,Modifiers::NONE)]);s.end_pixel_stroke(true);assert_eq!(crate::project::encode(&s.doc).unwrap(),after);
+        s.set_tool(Tool::Select);canvas_frame(&ctx,&mut s,vec![]);assert!(s.channel_paint_target().is_none());
+        assert_eq!(crate::project::encode(&crate::project::decode(&after).unwrap()).unwrap(),after);
     }
 
     #[test]

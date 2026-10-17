@@ -76,6 +76,9 @@ impl Studio {
     /// Finish or restore an in-flight pixel edit before changing document context.
     /// Returning true lets Undo cancel the current gesture before touching history.
     pub(crate) fn end_pixel_stroke(&mut self, cancel: bool) -> bool {
+        if matches!(self.op, Some(Op::ChannelStroke(_))) {
+            return self.end_channel_stroke(cancel);
+        }
         if matches!(
             self.op,
             Some(Op::NativeStroke { .. } | Op::NativeRetouch { .. })
@@ -683,6 +686,10 @@ impl Studio {
     }
 
     pub fn clear_selected_pixels(&mut self) -> bool {
+        if self.channel_target.is_some() {
+            self.clear_channel_selection();
+            return true;
+        }
         let Some(layer) = self.raster_target() else {
             return false;
         };
@@ -793,6 +800,7 @@ impl Studio {
 
     pub fn set_mask_edit(&mut self, index: usize, enabled: bool) {
         self.end_pixel_stroke(false);
+        self.channel_target = None;
         self.end_deform(false);
         if !enabled {
             self.paint_mask = false;

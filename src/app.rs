@@ -36,6 +36,7 @@ pub(crate) mod graphic_styles;
 pub(crate) mod actions;
 pub(crate) mod screen_export;
 pub(crate) mod channels;
+pub(crate) mod channel_paint;
 mod restart;
 pub(crate) mod selection;
 mod alignment;
@@ -244,6 +245,7 @@ pub enum Op {
     },
     NativeRetouch {layer:usize,before:crate::document::Pixels,working:crate::document::Pixels,last:Pt,offset:Pt,tool:Tool},
     NativeStroke {layer:usize,mask:bool,erase:bool,before:crate::document::Pixels,coverage:Pixmap,memory:std::sync::Arc<crate::resources::Lease>,last:Pt},
+    ChannelStroke(Box<channel_paint::Stroke>),
     Retouch {
         layer: usize,
         mask: bool,
@@ -370,6 +372,7 @@ pub struct Studio {
     pub pixel_sel_gen: u64,
     pixel_sel_cache: masking::SelectionCache,
     pub paint_mask: bool,
+    pub(crate) channel_target: Option<u64>,
     pub pending_item_mask: Option<crate::artwork_mask::MaskSource>,
     pub snap: SnapSettings,
     pub snap_scene: Option<snap::Scene>,
@@ -628,6 +631,7 @@ impl Studio {
             pixel_sel_gen: 0,
             pixel_sel_cache: Default::default(),
             paint_mask: false,
+            channel_target: None,
             pending_item_mask: None,
             snap: SnapSettings::default(),
             snap_scene: None,
@@ -1642,6 +1646,7 @@ impl Studio {
     }
 
     fn sanitize(&mut self) {
+        self.channel_target = self.channel_target.filter(|id| self.doc.channels.iter().any(|c| c.id == *id));
         self.selected_layer = self
             .selected_layer
             .filter(|id| self.doc.layers.iter().any(|l| l.id == *id));
@@ -2619,6 +2624,10 @@ impl Studio {
     }
 
     pub fn set_tool(&mut self, t: Tool) {
+        if !matches!(t, Tool::Brush | Tool::Eraser | Tool::Hand | Tool::Zoom) {
+            self.end_pixel_stroke(true);
+            self.channel_target = None;
+        }
         if t != self.tool { self.pixel_edit = None; }
         if t == Tool::Eyedropper {
             crate::screen_pick::rearm();

@@ -186,6 +186,7 @@ impl Studio {
         }
         self.end_deform(true);
         self.end_pixel_stroke(true);
+        self.channel_target = None;
         self.commit_type_edit();
         self.reset_snap_gesture();
         // A welcome placeholder is not a user-created document. Photo and

@@ -370,7 +370,9 @@ fn inspector_title(ui: &mut Ui, studio: &Studio) {
         .and_then(|(li, id)| studio.doc.find_shape(li, id));
     let selection_name =
         (studio.selection.len() > 1).then(|| format!("{} objects", studio.selection.len()));
-    let (icon, name, description) = if studio.paint_mask {
+    let (icon, name, description) = if let Some(channel) = studio.channel_paint_target() {
+        (ph::SELECTION, "Alpha channel", channel.name.clone())
+    } else if studio.paint_mask {
         (
             ph::SELECTION,
             "Layer mask",
