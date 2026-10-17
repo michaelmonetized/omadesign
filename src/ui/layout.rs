@@ -17,6 +17,10 @@ pub(super) mod keyboard;
 #[path = "layout_field_tests.rs"]
 mod field_tests;
 
+#[cfg(test)]
+#[path = "layout_sizing_tests.rs"]
+mod sizing_tests;
+
 fn label(ui: &mut Ui, text: &str) {
     ui.add_space(8.0);
     ui.label(RichText::new(text).strong().size(11.0));
@@ -781,10 +785,9 @@ pub fn inspector(ui: &mut Ui, studio: &mut Studio) {
                     }
                 }
             });
-        label(ui, "Sizing");
-        ui.horizontal(|ui| {
-            changed |= sizing(ui, "layout-width", &mut props.width);
-            changed |= sizing(ui, "layout-height", &mut props.height);
+        ui.columns(2, |columns| {
+            changed |= sizing(&mut columns[0], "layout-width", &mut props.width);
+            changed |= sizing(&mut columns[1], "layout-height", &mut props.height);
         });
         egui::CollapsingHeader::new("Min / max size").show(ui, |ui| {
             for (name, val) in [

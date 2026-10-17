@@ -224,7 +224,7 @@ pub(super) fn choice<T: Clone + PartialEq>(
         let label_response = ui.label(label);
         let before = value.clone();
         let mut selected = false;
-        let mut response = egui::ComboBox::from_id_salt("value")
+        let combo = egui::ComboBox::from_id_salt("value")
             .selected_text(
                 options
                     .iter()
@@ -237,10 +237,12 @@ pub(super) fn choice<T: Clone + PartialEq>(
                     super::welcome::focus_control(ui, &item);
                     selected |= item.clicked();
                 }
-            })
-            .response
-            .labelled_by(label_response.id);
-        if selected {
+            });
+        let closed_with_escape = combo.inner.is_some()
+            && ui.input(|input| input.key_pressed(Key::Escape))
+            && !egui::ComboBox::is_open(ui.ctx(), combo.response.id);
+        let mut response = combo.response.labelled_by(label_response.id);
+        if response.enabled() && (selected || response.clicked() || closed_with_escape) {
             response.request_focus();
         }
         if response.enabled() && response.has_focus() {
