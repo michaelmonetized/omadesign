@@ -931,15 +931,33 @@ fn object_mask(
 
 /// Transform a shape's coordinates through its outer frame rotations.
 pub(crate) fn shape_parent_transform(doc: &Document, layer: usize, id: u64) -> Transform {
+    shape_parent_transform_with(doc, layer, id, |_| Pose::identity())
+}
+
+/// Place a frame's contents in its caller's coordinate system.
+/// Args: frame, inherited transform and current pose. Returns the same placement used by frame painting.
+pub(crate) fn frame_transform(shape: &Shape, inherited: Transform, pose: Pose) -> Transform {
+    let center = shape.geom.bbox().center();
+    inherited.pre_concat(pose.to_skia(shape.world_bbox().center())).pre_concat(
+        Transform::from_rotate_at(shape.rotation.to_degrees(), center.x, center.y),
+    )
+}
+
+/// Place coordinates through the current ancestor frames.
+/// Args: document, layer, shape ID and pose sampler. Returns the inherited frame placement.
+pub(crate) fn shape_parent_transform_with(
+    doc: &Document,
+    layer: usize,
+    id: u64,
+    pose: impl Fn(u64) -> Pose,
+) -> Transform {
     let mut transform = Transform::identity();
     let mut parent = doc.find_shape(layer, id).and_then(|s| s.layout.parent);
     for _ in 0..64 {
         let Some(frame) = parent.and_then(|id| doc.find_shape(layer, id)) else {
             break;
         };
-        let c = frame.geom.bbox().center();
-        transform =
-            Transform::from_rotate_at(frame.rotation.to_degrees(), c.x, c.y).pre_concat(transform);
+        transform = frame_transform(frame, Transform::identity(), pose(frame.id)).pre_concat(transform);
         parent = frame.layout.parent;
     }
     transform

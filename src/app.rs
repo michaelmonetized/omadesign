@@ -2341,12 +2341,15 @@ impl Studio {
     }
 
     fn type_frame_caret(&self, frame: (usize, u64), world: Pt) -> Option<usize> {
-        let point = self.doc.layout_hit_point(frame.0, frame.1, world)?;
+        let point = self.doc.layout_hit_point_with(frame.0, frame.1, world, |id| self.live_pose(id))?;
         let shape = self.doc.find_shape(frame.0, frame.1)?;
         let Geom::Text(run) = &shape.geom else {
             return None;
         };
-        Some(crate::text::hit_char(run, shape.local_point(point)))
+        let inverse = self.live_pose(shape.id).to_skia(shape.world_bbox().center()).invert()?;
+        let mut point = tiny_skia::Point::from_xy(point.x, point.y);
+        inverse.map_point(&mut point);
+        Some(crate::text::hit_char(run, shape.local_point(Pt::new(point.x, point.y))))
     }
 
     /// Hit-test a story frame in its unrotated layout coordinates.

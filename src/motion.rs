@@ -892,7 +892,8 @@ pub fn hit_test(
             }
         }
         if let Some(shapes) = layer.kind.shapes() {
-            for shape in shapes.iter().rev() {
+            for index in doc.layout_paint_order(li).into_iter().rev() {
+                let shape = &shapes[index];
                 if !shape.visible || shape.locked || (shape.guide && !doc.ruler.guides_visible) {
                     continue;
                 }
@@ -900,8 +901,12 @@ pub fn hit_test(
                     .get(&shape.id)
                     .copied()
                     .unwrap_or_else(|| doc.motion.pose(shape.id, t));
-                let c = shape.world_bbox().center();
-                let q = pose.unmap(c, p);
+                let sample = |id| overrides.get(&id).copied().unwrap_or_else(|| doc.motion.pose(id, t));
+                let Some(point) = doc.layout_hit_point_with(li, shape.id, p, sample) else { continue; };
+                let Some(inverse) = pose.to_skia(shape.world_bbox().center()).invert() else { continue; };
+                let mut q = tiny_skia::Point::from_xy(point.x, point.y);
+                inverse.map_point(&mut q);
+                let q = Pt::new(q.x, q.y);
                 let s = slack / (pose.scale * pose.width_scale.max(pose.height_scale)).max(0.05);
                 if (!shape.guide && shape.contains_world(q)) || shape.dist_world(q) <= s {
                     return Some((li, shape.id));
@@ -941,7 +946,16 @@ pub fn hits_in_rect(
                     .get(&shape.id)
                     .copied()
                     .unwrap_or_else(|| doc.motion.pose(shape.id, t));
-                let b = pose.map_bounds(shape.world_bbox());
+                let parent = crate::compositor::shape_parent_transform_with(doc, li, shape.id, |id| overrides.get(&id).copied().unwrap_or_else(|| doc.motion.pose(id, t)));
+                let transform = parent.pre_concat(pose.to_skia(shape.world_bbox().center()));
+                let mut b = None;
+                for point in shape.world_contours(32).into_iter().flatten() {
+                    let mut point = tiny_skia::Point::from_xy(point.x, point.y);
+                    transform.map_point(&mut point);
+                    let point = Pt::new(point.x, point.y);
+                    b.get_or_insert_with(|| crate::geom::Bounds::from_pt(point)).union_pt(point);
+                }
+                let Some(b) = b else { continue; };
                 if b.intersects(r) {
                     out.push((li, shape.id));
                 }

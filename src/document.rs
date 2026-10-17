@@ -1616,7 +1616,13 @@ impl Document {
     }
 
     /// Convert a pointer through the ancestor frames and reject clipped content.
-    pub fn layout_hit_point(&self, layer: usize, id: u64, mut point: Pt) -> Option<Pt> {
+    pub fn layout_hit_point(&self, layer: usize, id: u64, point: Pt) -> Option<Pt> {
+        self.layout_hit_point_with(layer, id, point, |_| crate::motion::Pose::identity())
+    }
+
+    /// Recover a pointer through the currently painted frame hierarchy.
+    /// Args: layer, shape ID, document point and pose sampler. Returns unclipped coordinates in the shape's parent.
+    pub(crate) fn layout_hit_point_with(&self, layer: usize, id: u64, mut point: Pt, pose: impl Fn(u64) -> crate::motion::Pose) -> Option<Pt> {
         let mut ancestors = Vec::new();
         let mut parent = self.find_shape(layer, id)?.layout.parent;
         while let Some(id) = parent {
@@ -1628,6 +1634,10 @@ impl Document {
         }
         for id in ancestors.into_iter().rev() {
             let frame = self.find_shape(layer, id)?;
+            let transform = pose(id).to_skia(frame.world_bbox().center()).invert()?;
+            let mut mapped = tiny_skia::Point::from_xy(point.x, point.y);
+            transform.map_point(&mut mapped);
+            point = Pt::new(mapped.x, mapped.y);
             if !frame.visible || frame.locked || (frame.layout.clip && !frame.contains_world(point))
             {
                 return None;
@@ -1637,7 +1647,7 @@ impl Document {
         Some(point)
     }
 
-    fn layout_paint_order(&self, layer: usize) -> Vec<usize> {
+    pub(crate) fn layout_paint_order(&self, layer: usize) -> Vec<usize> {
         let Some(shapes) = self.layers.get(layer).and_then(|l| l.kind.shapes()) else {
             return Vec::new();
         };
@@ -1711,7 +1721,15 @@ impl Document {
                     {
                         continue;
                     }
-                    if shape.world_bbox().intersects(r) {
+                    let transform = crate::compositor::shape_parent_transform(self, li, shape.id);
+                    let mut bounds = None;
+                    for p in shape.world_contours(32).into_iter().flatten() {
+                        let mut p = tiny_skia::Point::from_xy(p.x, p.y);
+                        transform.map_point(&mut p);
+                        let p = Pt::new(p.x, p.y);
+                        bounds.get_or_insert_with(|| Bounds::from_pt(p)).union_pt(p);
+                    }
+                    if bounds.is_some_and(|bounds| bounds.intersects(r)) {
                         out.push((li, shape.id));
                     }
                 }

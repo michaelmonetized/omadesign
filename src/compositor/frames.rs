@@ -268,12 +268,7 @@ impl Context<'_> {
         pose.opacity = Some(1.0);
         draw_shape_inner(pm, shape, transform, opacity, blend, pose, mask);
         let motion_transform = transform.pre_concat(pose.to_skia(shape.world_bbox().center()));
-        let centre = shape.geom.bbox().center();
-        let child_transform = motion_transform.pre_concat(Transform::from_rotate_at(
-            shape.rotation.to_degrees(),
-            centre.x,
-            centre.y,
-        ));
+        let child_transform = frame_transform(shape, transform, pose);
         let child_mask = if shape.layout.clip {
             let Some(path) = shape.get_cached_path(96) else {
                 return;
