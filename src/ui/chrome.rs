@@ -1,5 +1,8 @@
 #[path = "document_previews.rs"]
 pub(super) mod document_previews;
+#[cfg(test)]
+#[path = "pixel_menu_tests.rs"]
+mod pixel_menu_tests;
 
 use crate::app::Studio;
 use crate::geom::Pt;
@@ -127,7 +130,13 @@ fn main_menus(ui: &mut Ui, studio: &mut Studio) {
         pane_menu(ui,studio,"Develop",&["photo-develop","histogram","presets","history"]);
     } else {
         if studio.persona == Persona::Pixel {
-            pane_menu(ui,studio,"Image",&["transform","adjustments","channels","info"]);
+            ui.menu_button("Image", |ui| {
+                ui.menu_button("Adjustments", |ui| super::raster::command_menu(ui, studio, true));
+                ui.separator();
+                for (panel, label) in [("transform", "Transform panel…"), ("adjustments", "Adjustments panel…"), ("channels", "Channels panel…"), ("info", "Info panel…")] {
+                    if ui.button(label).clicked() {super::panel_workspace::open(ui.ctx(), studio, panel);ui.close();}
+                }
+            });
             ui.menu_button("Layer",|ui| {
                 if ui.button("New pixel layer").clicked(){studio.add_layer(true);ui.close();}
                 if ui.button("New group").clicked(){studio.add_layer_group();ui.close();}
@@ -145,8 +154,10 @@ fn main_menus(ui: &mut Ui, studio: &mut Studio) {
             pane_menu(ui,studio,"Layout",&["layout","hierarchy","components","variables","prototype"]);
         } else if studio.persona==Persona::Motion {
             pane_menu(ui,studio,"Animation",&["timeline","keyframes","compositions","scene3d"]);
+        } else if studio.persona == Persona::Pixel {
+            ui.menu_button("Filter", |ui| super::raster::command_menu(ui, studio, false));
         } else {
-            pane_menu(ui,studio,if studio.persona==Persona::Pixel {"Filter"} else {"Effect"},&["effects","adjustments","appearance","transparency"]);
+            pane_menu(ui,studio,"Effect",&["effects","adjustments","appearance","transparency"]);
         }
     }
     view_menu(ui, studio);

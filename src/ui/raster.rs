@@ -51,76 +51,113 @@ pub(super) fn ready(ctx: &Context) -> bool {
     })
 }
 
-pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
-    let scalar = studio.channel_paint_target().is_some();
-    let editable = scalar
-        || studio.active_layer.is_some_and(|i| {
-            studio.doc.layer_editable(i)
-                && studio.doc.layers.get(i).is_some_and(|l| {
-                    if studio.paint_mask {
-                        l.mask.is_some()
-                    } else {
-                        l.kind.pixels().is_some()
-                    }
-                })
+fn available(studio: &Studio) -> bool {
+    if studio.capture_channels().is_err() {
+        return false;
+    }
+    if studio.channel_target.is_some() || studio.quick_mask_painting() {
+        return studio.doc.collaboration.is_none() && studio.channel_paint_target().is_some();
+    }
+    studio.active_layer.is_some_and(|i| {
+        studio.doc.layer_editable(i)
+            && studio.doc.layers.get(i).is_some_and(|l| {
+                if studio.paint_mask {
+                    l.mask.is_some()
+                } else {
+                    l.kind.pixels().is_some()
+                }
+            })
+    })
+}
+
+fn choose_kind(ui: &mut Ui, accepts: impl Fn(Kind) -> bool) -> Option<Kind> {
+    let mut chosen = None;
+    for category in [
+        "Key & transparency",
+        "Color & tone",
+        "Blur",
+        "Detail",
+        "Stylize",
+        "Distort",
+    ] {
+        if !Kind::ALL
+            .iter()
+            .any(|&kind| accepts(kind) && kind.category() == category)
+        {
+            continue;
+        }
+        ui.menu_button(category, |ui| {
+            for kind in Kind::ALL
+                .into_iter()
+                .filter(|&kind| accepts(kind) && kind.category() == category)
+            {
+                let response = ui.push_id(kind as usize, |ui| ui.button(kind.name())).inner;
+                super::welcome::name_control(ui, &response, response.id.with("name"), kind.name());
+                if response.on_hover_text(kind.description()).clicked() {
+                    chosen = Some(kind);
+                    ui.close();
+                }
+            }
         });
-    ui.label(RichText::new("Raster studio").strong().size(12.0));
+    }
+    chosen
+}
+
+/// Run the implemented Pixel commands from their native top-menu categories.
+/// Args: menu UI, editor and whether to show tonal adjustments. Returns nothing; a choice opens the existing captured dialog.
+pub(super) fn command_menu(ui: &mut Ui, studio: &mut Studio, adjustments: bool) {
+    let editable = available(studio);
+    let mut curves = false;
+    let mut remove_background = false;
+    if adjustments {
+        let response = ui.add_enabled(
+            editable && studio.channel_paint_target().is_some(),
+            egui::Button::new("Curves…"),
+        );
+        super::welcome::name_control(ui, &response, response.id.with("name"), "Curves…");
+        curves = response.clicked();
+    } else {
+        remove_background = ui
+            .add_enabled(
+                super::background_removal::available(studio) && editable,
+                egui::Button::new("Remove Background…"),
+            )
+            .clicked();
+    }
+    ui.separator();
+    let chosen = ui
+        .add_enabled_ui(editable, |ui| {
+            ui.push_id(("pixel-command-menu", &studio.swap_id), |ui| {
+                choose_kind(ui, |kind| {
+                    (kind.category() == "Color & tone") == adjustments
+                })
+            })
+            .inner
+        })
+        .inner;
+    if let Some(kind) = chosen {
+        open(ui.ctx(), studio, kind);
+    } else if curves {
+        super::channel_adjustment::open(ui.ctx(), studio);
+    } else if remove_background {
+        super::background_removal::open(ui.ctx(), studio);
+    } else {
+        return;
+    }
+    ui.close_kind(egui::UiKind::Menu);
+}
+
+pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
+    let editable = available(studio);
     let mut chosen = None;
     let mut remove_background = false;
     ui.add_enabled_ui(editable, |ui| {
         ui.horizontal(|ui| {
             for (label, bank) in [("Filters", Bank::Filters), ("Effects", Bank::Effects)] {
-                if scalar
-                    && !Kind::ALL.iter().any(|kind| {
-                        kind.bank() == bank && channel_filter(&Settings::new(*kind)).is_some()
-                    })
-                {
-                    continue;
-                }
                 ui.menu_button(label, |ui| {
-                    for category in [
-                        "Key & transparency",
-                        "Color & tone",
-                        "Blur",
-                        "Detail",
-                        "Stylize",
-                        "Distort",
-                    ] {
-                        if !Kind::ALL.iter().any(|kind| {
-                            kind.bank() == bank
-                                && kind.category() == category
-                                && (!scalar || channel_filter(&Settings::new(*kind)).is_some())
-                        }) {
-                            continue;
-                        }
-                        ui.menu_button(category, |ui| {
-                            if bank == Bank::Filters
-                                && category == "Key & transparency"
-                                && ui
-                                    .add_enabled(
-                                        super::background_removal::available(studio),
-                                        egui::Button::new("Remove Background…"),
-                                    )
-                                    .clicked()
-                            {
-                                remove_background = true;
-                                ui.close();
-                            }
-                            for kind in Kind::ALL.into_iter().filter(|kind| {
-                                kind.bank() == bank
-                                    && kind.category() == category
-                                    && (!scalar || channel_filter(&Settings::new(*kind)).is_some())
-                            }) {
-                                if ui
-                                    .button(kind.name())
-                                    .on_hover_text(kind.description())
-                                    .clicked()
-                                {
-                                    chosen = Some(kind);
-                                    ui.close();
-                                }
-                            }
-                        });
+                    chosen = choose_kind(ui, |kind| kind.bank() == bank).or(chosen);
+                    if chosen.is_some() {
+                        ui.close();
                     }
                 });
             }
