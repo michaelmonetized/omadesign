@@ -1,6 +1,6 @@
 use super::{
-    ADVANCED_LAYOUT, COLOR, COMPOSITIONS, EXPORT_RESOLUTION, EXPRESSIONS, NATIVE, PSD_TYPE,
-    SCENE3D, SCREEN_EXPORT, SMART, SOURCE,
+    ADVANCED_LAYOUT, COLOR, COMPOSITIONS, EXPORT_FOLDERS, EXPORT_RESOLUTION, EXPRESSIONS, NATIVE,
+    PSD_TYPE, SCENE3D, SCREEN_EXPORT, SMART, SOURCE,
 };
 use serde::Deserialize;
 use serde::de::{MapAccess, SeqAccess, Visitor};
@@ -62,6 +62,12 @@ fn composition_bounds<E: serde::de::Error>(value: &Seen) -> Result<(usize, usize
 }
 
 fn field_version(key: &str, value: &Seen) -> u32 {
+    if key
+        .split('/')
+        .any(|field| matches!(field, "export_folder" | "export_subfolders"))
+    {
+        return EXPORT_FOLDERS;
+    }
     if key.split('/').any(|field| field == "export_resolution") {
         return EXPORT_RESOLUTION;
     }
@@ -155,7 +161,11 @@ impl<'de> Deserialize<'de> for Seen {
                     "Baseline" => Some("Baseline"),
                     "List" => Some("List"),
                     _ if s.starts_with('/') => {
-                        if s.split('/').any(|field| field == "export_resolution") {
+                        if s.split('/').any(|field| field == "export_folder") {
+                            Some("export_folder")
+                        } else if s.split('/').any(|field| field == "export_subfolders") {
+                            Some("export_subfolders")
+                        } else if s.split('/').any(|field| field == "export_resolution") {
                             Some("export_resolution")
                         } else if s.split('/').any(|field| field == "screen_export") {
                             Some("screen_export")
@@ -323,7 +333,7 @@ pub(super) fn replica_version(replica: &crate::collaboration::Replica) -> Result
     for change in &replica.changes {
         if let crate::collaboration::Edit::Write { writes } = &change.edit {
             for write in writes.iter().filter(|write| write.value.is_none()) {
-                version=version.max(field_version(&write.path,&Seen::default()));
+                version = version.max(field_version(&write.path, &Seen::default()));
             }
         }
     }

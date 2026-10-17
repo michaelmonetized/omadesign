@@ -75,6 +75,7 @@ fn text(ui: &mut Ui, id: Id, value: &mut String, name: &str) -> egui::Response {
         "Export filename prefix" => "Prefix",
         "Export row filename suffix" => "Suffix",
         "Export destination folder" => "Destination folder",
+        "Export row subfolder" => "Subfolder",
         _ => "Asset name",
     };
     let response = ui.add(
@@ -387,6 +388,35 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
     }
     ui.separator();
     ui.add_enabled_ui(editing, |ui| {
+        let mut preset = None;
+        let response = fields::native_scope(ui, owner.with("preset"), |ui| {
+            egui::ComboBox::from_id_salt("preset")
+                .selected_text("Presets")
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut preset, Some(0), "Mobile 1x/2x/3x");
+                    ui.selectable_value(&mut preset, Some(1), "Density 0.75x–4x");
+                })
+        })
+        .inner
+        .response;
+        welcome::name_control(ui, &response, owner.with("preset-label"), "Export preset");
+        if let Some(preset) = preset {
+            state.draft = if preset == 0 {
+                crate::screen_export::Preset::Mobile
+            } else {
+                crate::screen_export::Preset::Density
+            }
+            .catalog(&state.draft);
+            state.sizes.clear();
+            state.error.clear();
+        }
+        let response = ui.checkbox(&mut state.draft.subfolders, "Subfolders");
+        welcome::name_control(
+            ui,
+            &response,
+            owner.with("subfolders-label"),
+            "Export into subfolders",
+        );
         text(
             ui,
             owner.with("prefix"),
@@ -477,6 +507,21 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                 "Export row filename suffix",
             )
             .on_hover_text("Filename suffix");
+            if state.draft.subfolders {
+                let response = text(
+                    ui,
+                    owner.with((row.id, "folder")),
+                    &mut row.folder,
+                    "Export row subfolder",
+                );
+                if !row.folder_valid() {
+                    welcome::control_error(
+                        ui,
+                        &[&response],
+                        "Use a single folder name without separators, . or .. (80 bytes maximum)",
+                    );
+                }
+            }
         }
         if state.draft.rows.len() > 1
             && let Some(id) = remove
@@ -506,6 +551,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
                 ph::FLOPPY_DISK,
                 "Save export settings",
                 state.draft != state.base
+                    && state.draft.rows.iter().all(Row::folder_valid)
                     && state
                         .sizes
                         .values()

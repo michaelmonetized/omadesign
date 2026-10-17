@@ -9,6 +9,8 @@ use std::{
     collections::HashSet,
     path::{Path, PathBuf},
 };
+#[cfg(unix)]
+mod publish;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Object {
@@ -29,6 +31,12 @@ pub struct Row {
     pub suffix: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub export_resolution: Option<Resolution>,
+    #[serde(
+        default,
+        rename = "export_folder",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub folder: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -109,6 +117,9 @@ impl std::fmt::Display for Resolution {
     }
 }
 impl Row {
+    pub fn folder_valid(&self) -> bool {
+        filename_part(&self.folder, true)
+    }
     /// Keep ordinary integer sizes on the exact legacy wire.
     /// Args: accepted native size. Returns nothing; only an explicit accepted edit changes these fields.
     pub fn set_resolution(&mut self, resolution: Resolution) {
@@ -134,6 +145,23 @@ impl Row {
             ai: None,
         }
     }
+    fn directory(&self, doc: &Document, subfolders: bool) -> String {
+        if !subfolders {
+            return String::new();
+        }
+        if !self.folder.is_empty() {
+            return self.folder.clone();
+        }
+        if !self.format.raster() {
+            return self.format.extension().to_ascii_uppercase();
+        }
+        match self.resolution() {
+            Resolution::Ppi(n) => {
+                Resolution::Scale((n / doc.dpi as f64 * 1000.).round() / 1000.).to_string()
+            }
+            value => value.to_string(),
+        }
+    }
 }
 impl Default for Row {
     fn default() -> Self {
@@ -143,6 +171,7 @@ impl Default for Row {
             format: Format::Png,
             suffix: String::new(),
             export_resolution: None,
+            folder: String::new(),
         }
     }
 }
@@ -152,6 +181,11 @@ pub struct Catalog {
     pub assets: Vec<Asset>,
     pub rows: Vec<Row>,
     pub prefix: String,
+    #[serde(rename = "export_subfolders", skip_serializing_if = "is_false")]
+    pub subfolders: bool,
+}
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 impl Default for Catalog {
     fn default() -> Self {
@@ -159,6 +193,7 @@ impl Default for Catalog {
             assets: vec![],
             rows: vec![Row::default()],
             prefix: String::new(),
+            subfolders: false,
         }
     }
 }
@@ -227,6 +262,7 @@ impl Catalog {
                 || !ids.insert(row.id)
                 || !(1..=8).contains(&row.scale)
                 || !filename_part(&row.suffix, true)
+                || !filename_part(&row.folder, true)
             {
                 return Err(
                     "Use unique export rows, a scale from 1× to 8× and a portable suffix".into(),
@@ -246,6 +282,45 @@ impl Catalog {
             }
         }
         Ok(())
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum Preset {
+    Mobile,
+    Density,
+}
+impl Preset {
+    /// Produce the reference's actual shared format rows.
+    /// Args: preset choice. Returns fresh stable rows and its subfolder policy.
+    pub fn catalog(self, current: &Catalog) -> Catalog {
+        let mut catalog = current.clone();
+        let definitions: &[(&str, f64, &str)] = match self {
+            Self::Mobile => &[("", 1., ""), ("", 2., "@2x"), ("", 3., "@3x")],
+            Self::Density => &[
+                ("ldpi", 0.75, ""),
+                ("mdpi", 1., ""),
+                ("hdpi", 1.5, ""),
+                ("xhdpi", 2., ""),
+                ("xxhdpi", 3., ""),
+                ("xxxhdpi", 4., ""),
+            ],
+        };
+        catalog.subfolders = matches!(self, Self::Density);
+        catalog.rows = definitions
+            .iter()
+            .map(|(folder, scale, suffix)| {
+                let mut row = Row {
+                    id: crate::document::next_id(),
+                    folder: (*folder).into(),
+                    suffix: (*suffix).into(),
+                    ..Default::default()
+                };
+                row.set_resolution(Resolution::Scale(*scale));
+                row
+            })
+            .collect();
+        catalog
     }
 }
 impl Asset {
@@ -317,6 +392,12 @@ struct File {
     scope: Scope,
     row: Row,
     name: String,
+    directory: String,
+}
+impl File {
+    fn relative(&self) -> PathBuf {
+        Path::new(&self.directory).join(&self.name)
+    }
 }
 pub struct Plan {
     document: Document,
@@ -363,6 +444,10 @@ impl Plan {
                 ));
             }
             for row in &doc.screen_export.rows {
+                let directory = row.directory(doc, doc.screen_export.subfolders);
+                if !filename_part(&directory, true) {
+                    return Err("Choose a portable export subfolder of at most80 bytes".into());
+                }
                 let name = format!(
                     "{}{}{}.{}",
                     doc.screen_export.prefix,
@@ -370,13 +455,14 @@ impl Plan {
                     row.suffix,
                     row.format.extension()
                 );
-                if name.len() > 240 || !names.insert(name.to_lowercase()) {
+                if name.len() > 240 || !names.insert(format!("{directory}/{name}").to_lowercase()) {
                     return Err("Export rows produce duplicate or oversized filenames. Give each format/scale a distinct suffix".into());
                 }
                 files.push(File {
                     scope: scope.clone(),
                     row: row.clone(),
                     name,
+                    directory,
                 });
             }
         }
@@ -416,19 +502,27 @@ impl Plan {
     /// Encode through current admitted writers and publish a collision-safe batch.
     /// Args: existing destination folder and progress/cancellation. Returns final paths after every file succeeds.
     pub fn save(&self, folder: &Path, progress: &dyn Progress) -> Result<Vec<ResultFile>, String> {
-        progress.check()?;
-        if !cfg!(unix) {
-            return Err("Collision-safe batch publication is unavailable on this platform".into());
+        #[cfg(unix)]
+        {
+            self.save_unix(folder, progress)
         }
+        #[cfg(not(unix))]
+        {
+            let _ = (folder, progress);
+            Err("Collision-safe batch publication is unavailable on this platform".into())
+        }
+    }
+    #[cfg(unix)]
+    fn save_unix(&self, folder: &Path, progress: &dyn Progress) -> Result<Vec<ResultFile>, String> {
+        progress.check()?;
         if !folder.is_dir() {
             return Err("Choose an existing export folder".into());
         }
+        let folder = folder.canonicalize().map_err(|e| e.to_string())?;
+        let mut destination =
+            publish::Destinations::new(&folder, self.files.iter().map(|f| f.directory.as_str()))?;
         for file in &self.files {
-            if folder
-                .join(&file.name)
-                .try_exists()
-                .map_err(|e| e.to_string())?
-            {
+            if destination.exists(&file.directory, &file.name)? {
                 return Err(format!(
                     "{} already exists. Choose another folder or prefix",
                     file.name
@@ -441,8 +535,14 @@ impl Plan {
             crate::document::next_id()
         ));
         std::fs::create_dir(&stage).map_err(|e| e.to_string())?;
-        let mut published = vec![];
+        let stage_owner = std::fs::File::open(&stage).map_err(|e| e.to_string())?;
         let result = (|| {
+            let mut folders = HashSet::new();
+            for file in &self.files {
+                if !file.directory.is_empty() && folders.insert(&file.directory) {
+                    std::fs::create_dir(stage.join(&file.directory)).map_err(|e| e.to_string())?;
+                }
+            }
             let mut outputs = vec![];
             for (index, file) in self.files.iter().enumerate() {
                 progress.check()?;
@@ -455,59 +555,44 @@ impl Plan {
                         &source,
                         file.row.settings(),
                         resolution.options(doc)?,
-                        &stage.join(&file.name),
+                        &stage.join(file.relative()),
                         progress,
                     )?
                 } else {
                     export::save(
                         &source,
                         file.row.settings(),
-                        &stage.join(&file.name),
+                        &stage.join(file.relative()),
                         progress,
                     )?
                 };
                 outputs.push(ResultFile {
-                    path: folder.join(&file.name),
+                    path: folder.join(file.relative()),
                     notes,
                 });
             }
             progress.check()?;
-            for (file, output) in self.files.iter().zip(&outputs) {
+            for file in &self.files {
                 progress.check()?;
-                let staged = stage.join(&file.name);
-                std::fs::hard_link(&staged, &output.path).map_err(|e| {
-                    format!(
-                        "Cannot publish {} without replacing existing files: {e}",
-                        file.name
-                    )
-                })?;
-                published.push((staged, output.path.clone()));
+                destination.publish(&stage.join(file.relative()), &file.directory, &file.name)?;
             }
+            progress.check()?;
+            destination.commit();
             Ok(outputs)
         })();
-        if result.is_err() {
-            for (staged, path) in &published {
-                if same_file(staged, path) {
-                    let _ = std::fs::remove_file(path);
-                }
+        use std::os::unix::fs::MetadataExt;
+        if let (Ok(owned), Ok(current)) =
+            (stage_owner.metadata(), std::fs::symlink_metadata(&stage))
+        {
+            if owned.dev() == current.dev() && owned.ino() == current.ino() {
+                let _ = std::fs::remove_dir_all(stage);
             }
         }
-        let _ = std::fs::remove_dir_all(stage);
         result
     }
 }
-#[cfg(unix)]
-fn same_file(a: &Path, b: &Path) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    std::fs::symlink_metadata(a)
-        .ok()
-        .zip(std::fs::symlink_metadata(b).ok())
-        .is_some_and(|(a, b)| a.dev() == b.dev() && a.ino() == b.ino())
-}
-#[cfg(not(unix))]
-fn same_file(_a: &Path, _b: &Path) -> bool {
-    false
-}
 
+#[cfg(test)]
+mod preset_tests;
 #[cfg(test)]
 mod tests;

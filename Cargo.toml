@@ -71,6 +71,8 @@ arboard = "3.6.1"
 wl-clipboard-rs = "0.9.3"
 x11-clipboard = "0.9.3"
 x11rb = "0.13.2"
+
+[target.'cfg(unix)'.dependencies]
 rustix = { version = "1.1", features = ["fs"] }
 
 
