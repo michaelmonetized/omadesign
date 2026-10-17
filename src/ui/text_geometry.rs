@@ -361,9 +361,9 @@ fn frame_controls(ui: &mut Ui, studio: &mut Studio) {
     egui::CollapsingHeader::new("Text frame")
         .default_open(true)
         .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                super::fields::number(
-                    ui,
+            ui.columns(2, |columns| {
+                let field = super::fields::number(
+                    &mut columns[0],
                     "frame-width",
                     "Text frame width (px)",
                     &mut frame.size.x,
@@ -372,8 +372,9 @@ fn frame_controls(ui: &mut Ui, studio: &mut Studio) {
                     None,
                     Default::default(),
                 );
-                super::fields::number(
-                    ui,
+                crate::app::input_history::record(field.response, field.changed);
+                let field = super::fields::number(
+                    &mut columns[1],
                     "frame-height",
                     "Text frame height (px)",
                     &mut frame.size.y,
@@ -382,12 +383,13 @@ fn frame_controls(ui: &mut Ui, studio: &mut Studio) {
                     None,
                     Default::default(),
                 );
+                crate::app::input_history::record(field.response, field.changed);
             });
             for (index, label) in ["Inset top", "Inset right", "Inset bottom", "Inset left"]
                 .into_iter()
                 .enumerate()
             {
-                super::fields::number(
+                let field = super::fields::number(
                     ui,
                     label,
                     &format!("Text frame {label} (px)"),
@@ -397,6 +399,7 @@ fn frame_controls(ui: &mut Ui, studio: &mut Studio) {
                     None,
                     Default::default(),
                 );
+                crate::app::input_history::record(field.response, field.changed);
             }
             ui.horizontal(|ui| {
                 for (value, label, glyph) in [
@@ -522,7 +525,7 @@ fn frame_controls(ui: &mut Ui, studio: &mut Studio) {
                 frame.max_lines = limited.then_some(1);
             }
             if let Some(max) = &mut frame.max_lines {
-                super::fields::number(
+                let field = super::fields::number(
                     ui,
                     "frame-max-lines",
                     "Text frame maximum lines",
@@ -532,6 +535,7 @@ fn frame_controls(ui: &mut Ui, studio: &mut Studio) {
                     None,
                     Default::default(),
                 );
+                crate::app::input_history::record(field.response, field.changed);
             }
             if run.layout.as_ref().is_some_and(|l| l.overflow) {
                 ui.colored_label(
@@ -1299,3 +1303,7 @@ mod keyboard_tests {
         assert_eq!(source.content, "First story.");
     }
 }
+
+#[cfg(test)]
+#[path = "type_inspector_tests.rs"]
+mod responsive_tests;
