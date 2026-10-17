@@ -151,13 +151,14 @@ fn main_menus(ui: &mut Ui, studio: &mut Studio) {
                 }
             });
         } else { object_menu(ui, studio); }
-        ui.menu_button("Type", |ui| {
+        let type_menu = ui.menu_button("Type", |ui| {
             super::text_geometry::menu(ui, studio);
             ui.separator();
             for (panel, label) in [("character", "Character panel…"), ("paragraph", "Paragraph panel…"), ("opentype", "OpenType panel…"), ("glyphs", "Glyphs panel…"), ("typography", "Typography library…")] {
                 if ui.button(label).clicked() {super::panel_workspace::open(ui.ctx(), studio, panel);ui.close();}
             }
         });
+        if type_menu.response.clicked() { type_menu.response.request_focus(); }
         ui.menu_button("Select", |ui| super::selection::menu(ui, studio));
         if studio.persona==Persona::Layout {
             pane_menu(ui,studio,"Layout",&["layout","hierarchy","components","variables","prototype"]);

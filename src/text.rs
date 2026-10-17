@@ -619,6 +619,7 @@ pub(crate) fn paint_paths(run: &TypeRun, inherited: &crate::document::Fill) -> V
 mod composer;
 pub mod svg_type;
 mod edit;
+pub(crate) use edit::CharacterRewrite;
 mod metrics;
 pub use metrics::character_metrics;
 mod opentype;

@@ -28,6 +28,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     resp.widget_info(|| eframe::egui::WidgetInfo::labeled(
         eframe::egui::WidgetType::Other, resp.enabled(), "Artwork canvas"
     ));
+    super::type_commands::restore_canvas_focus(ui, studio, &resp);
     ui.ctx().accesskit_node_builder(resp.id, |node| {
         node.set_role(eframe::egui::accesskit::Role::Canvas);
         node.set_description("F8 focuses the canvas. Ctrl+Shift+K creates artwork. Page Up and Page Down select artwork; Shift extends selection. Arrow keys move selected artwork.");

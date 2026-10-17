@@ -1,6 +1,128 @@
 //! Character-indexed edits preserve paragraph styles and normalized range overrides.
 use crate::geom::{CharSpan, ParagraphStyle, TypeRun};
+
+/// Replace characters without changing paragraph breaks.
+/// Args: original character range and replacement. The first replaced character supplies its style.
+pub(crate) struct CharacterRewrite {
+    pub start: usize,
+    pub end: usize,
+    pub text: String,
+}
+
 impl TypeRun {
+    /// Apply ordered character rewrites in one content/style pass.
+    /// Args: disjoint, nonempty original ranges without paragraph breaks. Returns whether text changed, or an error before mutation.
+    pub(crate) fn rewrite_characters(
+        &mut self,
+        edits: &[CharacterRewrite],
+    ) -> Result<bool, String> {
+        let bytes: Vec<_> = self
+            .content
+            .char_indices()
+            .map(|(at, _)| at)
+            .chain(std::iter::once(self.content.len()))
+            .collect();
+        let count = bytes.len() - 1;
+        let mut previous = 0;
+        let mut size = self.content.len();
+        let mut mapped = Vec::with_capacity(edits.len());
+        let mut written = 0usize;
+        for edit in edits {
+            if edit.start < previous || edit.start >= edit.end || edit.end > count {
+                return Err(
+                    "Text rewrite ranges must be ordered, disjoint and inside the text".into(),
+                );
+            }
+            if self.content[bytes[edit.start]..bytes[edit.end]].contains('\n')
+                || edit.text.contains('\n')
+            {
+                return Err("Character rewrites cannot replace paragraph breaks".into());
+            }
+            size = size
+                .checked_sub(bytes[edit.end] - bytes[edit.start])
+                .and_then(|n| n.checked_add(edit.text.len()))
+                .ok_or("Text rewrite is too large")?;
+            let start = written
+                .checked_add(edit.start - previous)
+                .ok_or("Text rewrite is too large")?;
+            written = start
+                .checked_add(edit.text.chars().count())
+                .ok_or("Text rewrite is too large")?;
+            mapped.push((edit.start, edit.end, start, written));
+            previous = edit.end;
+        }
+        let mut content = String::new();
+        content
+            .try_reserve_exact(size)
+            .map_err(|_| "Not enough memory to rewrite text")?;
+        let mut cursor = 0;
+        for edit in edits {
+            content.push_str(&self.content[cursor..bytes[edit.start]]);
+            content.push_str(&edit.text);
+            cursor = bytes[edit.end];
+        }
+        content.push_str(&self.content[cursor..]);
+        if content == self.content {
+            return Ok(false);
+        }
+        let position = |at: usize| {
+            let next = mapped.partition_point(|&(_, end, _, _)| end <= at);
+            if let Some(&(start, _, a, b)) = mapped.get(next)
+                && at >= start
+            {
+                return if at == start { a } else { b };
+            }
+            if let Some(&(_, old, _, new)) = next.checked_sub(1).and_then(|i| mapped.get(i)) {
+                new + at - old
+            } else {
+                at
+            }
+        };
+        if self.paragraphs.iter().any(|p| p.start > count)
+            || self.manual_kern.keys().any(|&at| at > count)
+        {
+            return Err("Text has paragraph or kerning metadata outside its contents".into());
+        }
+        let spans = self
+            .character_style_runs(0, count)
+            .into_iter()
+            .map(|mut span| {
+                span.start = position(span.start);
+                span.end = position(span.end);
+                span
+            })
+            .collect();
+        let paragraphs = self
+            .paragraphs
+            .iter()
+            .map(|p| ParagraphStyle {
+                start: position(p.start),
+                ..p.clone()
+            })
+            .collect();
+        let kern = self
+            .manual_kern
+            .iter()
+            .filter_map(|(&at, &value)| {
+                let i = mapped.partition_point(|&(_, end, _, _)| end < at);
+                if mapped.get(i).is_some_and(|&(start, _, _, _)| start <= at) {
+                    return None;
+                }
+                Some((position(at), value))
+            })
+            .collect();
+        if let Some(svg) = &mut self.svg_text {
+            for edit in edits.iter().rev() {
+                svg.replace_range(edit.start, edit.end, edit.text.chars().count());
+            }
+        }
+        self.content = content;
+        self.assign_character_spans(spans);
+        self.paragraphs = paragraphs;
+        self.manual_kern = kern;
+        self.layout = None;
+        Ok(true)
+    }
     pub fn character_style(&self, index: usize) -> CharSpan {
         let mut style = self
             .spans

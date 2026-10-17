@@ -51,6 +51,7 @@ mod tabs;
 mod typography;
 mod text_geometry;
 mod text_outlines;
+pub(crate) mod type_commands;
 pub mod updates;
 
 pub use key_hints::{KeyHint, KeyHints};

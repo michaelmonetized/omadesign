@@ -175,6 +175,8 @@ fn path_controls(ui: &mut Ui, studio: &mut Studio) {
     }
 }
 pub fn menu(ui: &mut Ui, studio: &mut Studio) {
+    super::type_commands::menu(ui, studio);
+    ui.separator();
     if ui.add_enabled(edits_allowed(studio) && studio.has_outline_text_targets(), egui::Button::new("Create outlines")).clicked() {
         studio.create_text_outlines();
         ui.close();
