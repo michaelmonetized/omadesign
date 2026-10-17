@@ -16,6 +16,17 @@ impl TypeRun {
         &mut self,
         edits: &[CharacterRewrite],
     ) -> Result<bool, String> {
+        self.rewrite_ranges(edits, false)
+    }
+
+    /// Replace ordered text ranges, retaining character and paragraph ownership.
+    /// Args: disjoint nonempty original ranges and literal replacements. Returns changed status or a pre-mutation error.
+    pub(crate) fn rewrite_text_ranges(&mut self, edits: &[CharacterRewrite]) -> Result<bool, String> {
+        self.rewrite_ranges(edits, true)
+    }
+
+    fn rewrite_ranges(&mut self, edits: &[CharacterRewrite], paragraph_edits: bool) -> Result<bool, String> {
+        if edits.is_empty() { return Ok(false); }
         let bytes: Vec<_> = self
             .content
             .char_indices()
@@ -33,8 +44,8 @@ impl TypeRun {
                     "Text rewrite ranges must be ordered, disjoint and inside the text".into(),
                 );
             }
-            if self.content[bytes[edit.start]..bytes[edit.end]].contains('\n')
-                || edit.text.contains('\n')
+            if !paragraph_edits && (self.content[bytes[edit.start]..bytes[edit.end]].contains('\n')
+                || edit.text.contains('\n'))
             {
                 return Err("Character rewrites cannot replace paragraph breaks".into());
             }
@@ -92,14 +103,28 @@ impl TypeRun {
                 span
             })
             .collect();
-        let paragraphs = self
+        let paragraphs = if paragraph_edits {
+            let old_starts: Vec<_> = std::iter::once(0).chain(self.content.chars().enumerate().filter_map(|(i,c)| (c=='\n').then_some(i+1))).collect();
+            let explicit: std::collections::BTreeMap<_,_> = self.paragraphs.iter().map(|p|(p.start,p)).collect();
+            let mut current = 0;
+            std::iter::once(0).chain(content.chars().enumerate().filter_map(|(i,c)| (c=='\n').then_some(i+1))).filter_map(|at| {
+                while current < mapped.len() && mapped[current].3 <= at { current += 1; }
+                let old = if let Some(&(start,_,a,b)) = mapped.get(current).filter(|&&(_,_,a,b)| a<=at && at<b) { let _=(a,b); start }
+                else if current>0 { let (_,end,_,b)=mapped[current-1]; end+at-b }
+                else { at };
+                let start = old_starts[old_starts.partition_point(|&i| i<=old).saturating_sub(1)];
+                let mut style = explicit.get(&start).map(|p|(*p).clone()).unwrap_or(ParagraphStyle{start,align:self.align,..Default::default()});
+                style.start=at;
+                (style != ParagraphStyle{start:at,align:self.align,..Default::default()}).then_some(style)
+            }).collect()
+        } else { self
             .paragraphs
             .iter()
             .map(|p| ParagraphStyle {
                 start: position(p.start),
                 ..p.clone()
             })
-            .collect();
+            .collect() };
         let kern = self
             .manual_kern
             .iter()

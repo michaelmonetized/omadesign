@@ -40,7 +40,10 @@ pub(super) fn is_open(ctx: &egui::Context) -> bool {
 /// Return a closed punctuation dialog to its actual enabled canvas response.
 /// Args: current canvas UI, editor and native response. Returns no value; other modal/document owners retire the request.
 pub(super) fn restore_canvas_focus(ui: &Ui, studio: &Studio, canvas: &Response) {
-    let key = Id::new((ID, "return-focus"));
+    for dialog in [ID, super::find_replace::ID] { restore_text_dialog_focus(ui, studio, canvas, dialog); }
+}
+fn restore_text_dialog_focus(ui: &Ui, studio: &Studio, canvas: &Response, dialog: &str) {
+    let key = Id::new((dialog, "return-focus"));
     let Some(owner) = ui.ctx().data(|d| d.get_temp::<String>(key)) else {
         return;
     };
@@ -54,9 +57,9 @@ pub(super) fn restore_canvas_focus(ui: &Ui, studio: &Studio, canvas: &Response) 
         return;
     }
     if let Some(modal) = ui.ctx().memory(|m| m.top_modal_layer()) {
-        if modal == egui::Modal::default_area(Id::new(ID)).layer() {
+        if modal == egui::Modal::default_area(Id::new(dialog)).layer() {
             ui.ctx()
-                .request_discard("Finish closing punctuation before restoring canvas focus");
+                .request_discard("Finish closing text dialog before restoring canvas focus");
             ui.ctx().request_repaint();
         } else {
             retire();

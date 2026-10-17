@@ -413,7 +413,7 @@ fn file_menu(ui: &mut Ui, studio: &mut Studio) {
 }
 
 fn edit_menu(ui: &mut Ui, studio: &mut Studio) {
-    ui.menu_button("Edit", |ui| {
+    let menu = ui.menu_button("Edit", |ui| {
         if ui
             .add_enabled(
                 if studio.persona == Persona::Photo {
@@ -472,6 +472,8 @@ fn edit_menu(ui: &mut Ui, studio: &mut Studio) {
             });
             return;
         }
+        super::find_replace::menu(ui, studio);
+        ui.separator();
         pane_menu(ui,studio,"Edit Colors",&["recolor","color-guide","color-themes","swatches"]);
         if ui.add(Button::new("Cut").shortcut_text("Ctrl+X")).clicked() {
             studio.cut_selection(ui.ctx());
@@ -521,6 +523,7 @@ fn edit_menu(ui: &mut Ui, studio: &mut Studio) {
             ui.close();
         }
     });
+    if menu.response.clicked() { menu.response.request_focus(); }
 }
 
 fn object_menu(ui: &mut Ui, studio: &mut Studio) {

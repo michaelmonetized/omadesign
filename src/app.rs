@@ -2381,12 +2381,6 @@ impl Studio {
         let Some(s) = self.doc.find_shape_mut(edit.layer, edit.id) else {
             return;
         };
-        if let Geom::Text(run) = &mut s.geom
-            && run.content.trim().is_empty()
-        {
-            run.content = "Type".into();
-            crate::text::fill_contours(&mut s.geom);
-        }
         let after = s.geom.clone();
         let rot = s.rotation;
         if after != edit.before {

@@ -2,6 +2,8 @@
 use super::*;
 use crate::{geom::CharSpan, text::CharacterRewrite};
 use std::ops::Range;
+#[path = "type_search.rs"]
+pub(crate) mod search;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TextScope {
@@ -39,6 +41,7 @@ pub(crate) enum TypeCommand {
     Case(TextCase),
     Punctuation(SmartPunctuation),
     Insert(String),
+    Replace(search::Replacement),
 }
 pub(crate) const SPECIAL_CHARACTERS: &[(&str, &str)] = &[
     ("Bullet •", "•"),
@@ -131,6 +134,9 @@ fn rewritten_caret(at: usize, edits: &[CharacterRewrite]) -> usize {
 /// Rewrite content while carrying word/sentence/quote context across styled intervals.
 /// Args: source run, original range and command. Returns only actual character replacements.
 fn rewrites(run: &TypeRun, range: Range<usize>, command: &TypeCommand) -> Vec<CharacterRewrite> {
+    if let TypeCommand::Replace(replacement) = command {
+        return search::rewrites(run, range, replacement);
+    }
     let chars: Vec<_> = run.content.chars().collect();
     let mut edges: HashSet<_> = run
         .character_style_runs(range.start, range.end)
@@ -225,7 +231,7 @@ fn rewrites(run: &TypeRun, range: Range<usize>, command: &TypeCommand) -> Vec<Ch
                     c.to_string()
                 }
             }
-            TypeCommand::Insert(_) => unreachable!(),
+            TypeCommand::Insert(_) | TypeCommand::Replace(_) => unreachable!(),
         };
         previous = text.chars().last().or(previous);
         if !chars[index..end].iter().copied().eq(text.chars()) {
@@ -323,6 +329,10 @@ impl Studio {
         &self,
         scope: TextScope,
     ) -> Result<TypeCommandTarget, String> {
+        self.capture_type_target(scope, scope == TextScope::Document, false)
+    }
+
+    fn capture_type_target(&self, scope: TextScope, hidden: bool, skip_locked: bool) -> Result<TypeCommandTarget, String> {
         if !self.type_commands_available() {
             return Err("Finish the current operation before editing text".into());
         }
@@ -358,7 +368,8 @@ impl Studio {
             {
                 continue;
             }
-            if !self.type_command_writable(hit, scope == TextScope::Document) {
+            if !self.type_command_writable(hit, hidden) {
+                if skip_locked { continue; }
                 return Err(
                     "Unlock the text, its parent layers and every frame in its story".into(),
                 );
@@ -405,6 +416,7 @@ impl Studio {
         if !self.type_command_current(target) {
             return Err("The text destination changed. Reopen this Type command".into());
         }
+        if let TypeCommand::Replace(replacement) = &command { replacement.query.validate()?; }
         if let TypeCommand::Punctuation(p) = command
             && p.double.into_iter().chain(p.single).any(char::is_control)
         {
@@ -453,7 +465,8 @@ impl Studio {
                         rewritten_caret(e.anchor, &edits),
                     ));
                 }
-                run.rewrite_characters(&edits)?
+                if matches!(command, TypeCommand::Replace(_)) { run.rewrite_text_ranges(&edits)? }
+                else { run.rewrite_characters(&edits)? }
             };
             if changed {
                 plans.push(((layer, id), placed_text(shape, run)));

@@ -331,6 +331,7 @@ pub fn show(ui: &mut Ui, studio: &mut Studio) {
     super::cloud::paint_presence(&painter, rect, studio);
     draw_bleed_safe(&painter, rect, studio);
     draw_overlays(&painter, rect, studio, pen_preview);
+    super::find_replace::paint(&painter, rect, studio);
     if let Some(edit)=studio.type_edit.as_ref() && edit.caret!=edit.anchor && let Some(run)=studio.selected_type() {
         let p=crate::text::caret_pt(&run,edit.caret.min(edit.anchor));
         let at=win(rect,studio.view,Pt::new(p.x,p.y-run.px))-vec2(0.,78.);
@@ -3502,7 +3503,7 @@ fn draw_overlays(
         ));
     }
     let owns_ime = studio.owns_type_ime(p.ctx());
-    if !owns_ime {
+    if !owns_ime && !super::find_replace::is_open(p.ctx()) {
         studio.cancel_type_ime();
     }
     let edit = studio.type_edit.clone();
