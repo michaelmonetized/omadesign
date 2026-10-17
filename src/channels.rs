@@ -1,5 +1,6 @@
 //! Authoritative scalar channels use the existing admitted native sample storage.
 pub(crate) mod curve;
+pub(crate) mod filter;
 pub(crate) mod fill;
 pub mod quick_mask;
 use crate::{

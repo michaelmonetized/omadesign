@@ -6,7 +6,7 @@ use super::{
 };
 use crate::{
     app::{Studio, channel_adjustment::Captured},
-    channels::{Plane, curve::Curve},
+    channels::{Plane, curve::Curve, filter::Filter},
 };
 use eframe::egui::{self, Id, Key, Ui};
 const JOB: &str = "channel-curves-job";
@@ -18,6 +18,7 @@ struct Session {
     source: Captured,
     scope: Id,
     curve: Curve,
+    filter: Option<Filter>,
     revision: u64,
     rendered: Option<u64>,
     preview: Option<Plane>,
@@ -43,6 +44,18 @@ pub(super) fn is_open(ctx: &egui::Context) -> bool {
 /// Open Curves from the concrete alpha target without modifying its source plane.
 /// Args: context and editor. Returns nothing; unavailable owners report their actual error.
 pub(super) fn open(ctx: &egui::Context, studio: &mut Studio) {
+    open_adjustment(ctx, studio, None);
+}
+/// Open a scalar filter with the existing captured worker, preview and commit path.
+/// Args: context, editor and authored settings. Returns nothing; unavailable targets report their actual error.
+pub(super) fn open_filter(ctx: &egui::Context, studio: &mut Studio, filter: Filter) {
+    if let Err(error) = filter.validate() {
+        studio.status = error;
+        return;
+    }
+    open_adjustment(ctx, studio, Some(filter));
+}
+fn open_adjustment(ctx: &egui::Context, studio: &mut Studio, filter: Option<Filter>) {
     if is_open(ctx) {
         return;
     }
@@ -57,6 +70,7 @@ pub(super) fn open(ctx: &egui::Context, studio: &mut Studio) {
                 source,
                 scope: keyboard_controls::draft_id(ctx, "channel-curves"),
                 curve: Curve::default(),
+                filter,
                 revision: 0,
                 rendered: None,
                 preview: None,
@@ -80,19 +94,24 @@ fn launch(ctx: &egui::Context, session: &mut Session, apply: bool) {
     jobs::cancel::<Rendered>(ctx, JOB);
     let source = session.source.clone();
     let curve = session.curve.clone();
+    let filter = session.filter.clone();
     let revision = session.revision;
     session.applying = apply;
     jobs::start_with_progress(ctx, JOB, 1, move |progress| {
         let cancel = || {
             if progress.cancelled() {
-                Err("Channel curves cancelled".into())
+                Err("Channel adjustment cancelled".into())
             } else {
                 Ok(())
             }
         };
-        source
-            .render(&curve, if apply { None } else { Some(512) }, &cancel)
-            .map(|plane| Rendered { revision, plane })
+        let edge = if apply { None } else { Some(512) };
+        let result = if let Some(filter) = filter {
+            source.render_filter(&filter, edge, &cancel)
+        } else {
+            source.render(&curve, edge, &cancel)
+        };
+        result.map(|plane| Rendered { revision, plane })
     });
 }
 /// Collect the real worker before drawing the canvas and retire stale sources.
@@ -107,14 +126,22 @@ pub(super) fn tick(ctx: &egui::Context, studio: &mut Studio) {
     };
     if !session.source.current(studio) {
         jobs::cancel::<Rendered>(ctx, JOB);
-        studio.status = "Channel curves cancelled because its source changed".into();
+        studio.status = "Channel adjustment cancelled because its source changed".into();
         return;
     }
     if let Some(result) = jobs::poll::<Rendered>(ctx, JOB) {
         match result {
             Ok(rendered) if rendered.revision == session.revision => {
                 if session.applying {
-                    match session.source.commit(studio, rendered.plane) {
+                    match if session.filter.is_some() {
+                        session.source.commit_named(
+                            studio,
+                            rendered.plane,
+                            "Channel filter applied",
+                        )
+                    } else {
+                        session.source.commit(studio, rendered.plane)
+                    } {
                         Ok(_) => return,
                         Err(error) => {
                             session.error = Some(error);
@@ -160,7 +187,11 @@ fn button(ui: &mut Ui, scope: Id, glyph: &str, name: &str, enabled: bool) -> boo
 fn changed(session: &mut Session, ctx: &egui::Context) {
     session.revision = session.revision.wrapping_add(1);
     session.rendered = None;
-    match session.curve.prepare() {
+    match session
+        .filter
+        .as_ref()
+        .map_or_else(|| session.curve.prepare().map(|_| ()), Filter::validate)
+    {
         Ok(_) => {
             session.error = None;
             launch(ctx, session, false);
@@ -434,7 +465,156 @@ fn graph(ui: &mut Ui, session: &mut Session) -> bool {
     welcome::focus_control(ui, &response);
     edited
 }
+fn filter_controls(ui: &mut Ui, session: &mut Session) -> bool {
+    let mut filter = session.filter.clone().unwrap();
+    let label = ui.label("Channel filter");
+    let mut response = fields::native_scope(ui, session.scope.with("filter-choice"), |ui| {
+        egui::ComboBox::from_id_salt("channel-filter")
+            .selected_text(filter.name())
+            .show_ui(ui, |ui| {
+                for choice in [
+                    Filter::GaussianBlur { radius: 4. },
+                    Filter::Levels {
+                        black: 0.,
+                        white: 1.,
+                        gamma: 1.,
+                        output_black: 0.,
+                        output_white: 1.,
+                    },
+                    Filter::Threshold { level: 0.5 },
+                ] {
+                    let selected = filter.name() == choice.name();
+                    let response = ui.selectable_label(selected, choice.name());
+                    welcome::name_control(
+                        ui,
+                        &response,
+                        session.scope.with(choice.name()),
+                        choice.name(),
+                    );
+                    if response.clicked() {
+                        if !selected {
+                            filter = choice;
+                        }
+                        ui.close();
+                    }
+                }
+            })
+            .response
+    })
+    .inner
+    .labelled_by(label.id);
+    welcome::name_control(
+        ui,
+        &response,
+        session.scope.with("filter-label"),
+        "Channel filter",
+    );
+    let choices = [
+        Filter::GaussianBlur { radius: 4. },
+        Filter::Levels {
+            black: 0.,
+            white: 1.,
+            gamma: 1.,
+            output_black: 0.,
+            output_white: 1.,
+        },
+        Filter::Threshold { level: 0.5 },
+    ];
+    let options: Vec<_> = choices
+        .iter()
+        .enumerate()
+        .map(|(i, f)| (i, f.name().to_string()))
+        .collect();
+    let mut selected = choices
+        .iter()
+        .position(|f| f.name() == filter.name())
+        .unwrap();
+    let before = selected;
+    keyboard_controls::selection_keys(ui, &mut response, "Channel filter", &mut selected, &options);
+    if selected != before {
+        filter = choices[selected].clone();
+    }
+    let mut changed = filter != *session.filter.as_ref().unwrap();
+    let mut valid = true;
+    let mut responses = Vec::new();
+    let mut field = |ui: &mut Ui,
+                     key: &str,
+                     name: &str,
+                     value: &mut f32,
+                     range: std::ops::RangeInclusive<f32>,
+                     speed: f64,
+                     suffix: &str| {
+        let (response, accepted) = keyboard_controls::motion_number(
+            ui,
+            session.scope.with(key),
+            (name, name),
+            value,
+            range,
+            speed,
+            suffix,
+            Some(8),
+        );
+        changed |= response.changed;
+        valid &= accepted;
+        responses.push(response.response);
+    };
+    match &mut filter {
+        Filter::GaussianBlur { radius } => {
+            field(ui, "radius", "Blur radius", radius, 0. ..=100., 0.1, " px")
+        }
+        Filter::Levels {
+            black,
+            white,
+            gamma,
+            output_black,
+            output_white,
+        } => {
+            field(ui, "black", "Input black", black, 0. ..=1., 0.01, "");
+            field(ui, "white", "Input white", white, 0. ..=1., 0.01, "");
+            field(ui, "gamma", "Midtone gamma", gamma, 0.01..=10., 0.01, "");
+            field(
+                ui,
+                "output-black",
+                "Output black",
+                output_black,
+                0. ..=1.,
+                0.01,
+                "",
+            );
+            field(
+                ui,
+                "output-white",
+                "Output white",
+                output_white,
+                0. ..=1.,
+                0.01,
+                "",
+            );
+        }
+        Filter::Threshold { level } => field(
+            ui,
+            "threshold",
+            "Threshold level",
+            level,
+            0. ..=1.,
+            0.01,
+            "",
+        ),
+    }
+    let validation = filter.validate();
+    session.valid = valid && validation.is_ok();
+    if let Err(error) = validation {
+        welcome::control_error(ui, &responses.iter().collect::<Vec<_>>(), &error);
+    } else if let Some(error) = session.error.as_ref() {
+        ui.colored_label(ui.visuals().error_fg_color, error);
+    }
+    session.filter = Some(filter);
+    changed
+}
 fn controls(ui: &mut Ui, session: &mut Session) -> bool {
+    if session.filter.is_some() {
+        return filter_controls(ui, session);
+    }
     let mut edited = false;
     ui.horizontal(|ui| {
         let drawn = matches!(session.curve, Curve::Drawn(_));
@@ -599,7 +779,14 @@ pub(super) fn show(ctx: &egui::Context, studio: &mut Studio) {
         .backdrop_color(theme::bg_window().gamma_multiply(0.65))
         .show(ctx, |ui| {
             ui.set_width(380.0_f32.min((ctx.viewport_rect().width() - 40.).max(180.)));
-            ui.label(egui::RichText::new(format!("Curves · {}", session.source.name)).strong());
+            ui.label(
+                egui::RichText::new(format!(
+                    "{} · {}",
+                    session.filter.as_ref().map_or("Curves", Filter::name),
+                    session.source.name
+                ))
+                .strong(),
+            );
             let edited = ui
                 .add_enabled_ui(!session.applying, |ui| controls(ui, &mut session))
                 .inner;
@@ -669,6 +856,91 @@ mod tests {
         ctx.enable_accesskit();
         super::super::theme::apply(&ctx);
         ctx
+    }
+    #[test]
+    fn craft_channel_filters_native_numeric_preview_apply_undo_and_reopen() {
+        let ctx = context();
+        let mut studio = crate::app::channel_adjustment::tests::fixture();
+        let before = crate::project::encode(&studio.doc).unwrap();
+        let history = studio.history.len();
+        frame(&ctx, &mut studio, vec![]);
+        frame(&ctx, &mut studio, vec![]);
+        invoke(&ctx, &mut studio, "Adjust channel filter");
+        wait(&ctx, &mut studio);
+        keys::tab_to(&ctx, "Blur radius", |events| {
+            frame(&ctx, &mut studio, events)
+        });
+        keys::replace("2.125", |events| frame(&ctx, &mut studio, events));
+        frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        wait(&ctx, &mut studio);
+        let session = ctx.data(|d| d.get_temp::<Session>(id())).unwrap();
+        assert_eq!(session.filter, Some(Filter::GaussianBlur { radius: 2.125 }));
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+        assert_eq!(studio.history.len(), history);
+        let expected = preview(&ctx, &studio).unwrap().0;
+        invoke(&ctx, &mut studio, "Original");
+        assert!(preview(&ctx, &studio).is_none());
+        invoke(&ctx, &mut studio, "Original");
+        invoke(&ctx, &mut studio, "Apply");
+        wait(&ctx, &mut studio);
+        assert!(!is_open(&ctx));
+        assert_eq!(studio.history.len(), history + 1);
+        assert_eq!(
+            studio.doc.channels.last().unwrap().plane.samples,
+            expected.samples
+        );
+        let after = crate::project::encode(&studio.doc).unwrap();
+        assert_eq!(
+            crate::project::encode(&crate::project::decode(&after).unwrap()).unwrap(),
+            after
+        );
+        studio.undo();
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+        studio.redo();
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), after);
+    }
+    #[test]
+    fn craft_channel_filters_native_kind_invalid_cancel_and_stale_worker() {
+        let ctx = context();
+        let mut studio = crate::app::channel_adjustment::tests::fixture();
+        let before = crate::project::encode(&studio.doc).unwrap();
+        open_filter(&ctx, &mut studio, Filter::GaussianBlur { radius: 4. });
+        wait(&ctx, &mut studio);
+        keys::tab_to(&ctx, "Channel filter", |events| {
+            frame(&ctx, &mut studio, events)
+        });
+        frame(
+            &ctx,
+            &mut studio,
+            keys::key(Key::ArrowDown, Modifiers::NONE),
+        );
+        wait(&ctx, &mut studio);
+        assert!(matches!(
+            ctx.data(|d| d.get_temp::<Session>(id())).unwrap().filter,
+            Some(Filter::Levels { .. })
+        ));
+        keys::tab_to(&ctx, "Input black", |events| {
+            frame(&ctx, &mut studio, events)
+        });
+        keys::replace("1", |events| frame(&ctx, &mut studio, events));
+        frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        let session = ctx.data(|d| d.get_temp::<Session>(id())).unwrap();
+        assert!(!session.valid);
+        assert!(session.filter.unwrap().validate().is_err());
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+        invoke(&ctx, &mut studio, "Cancel");
+        assert!(!is_open(&ctx));
+        super::super::raster::open(&ctx, &mut studio, crate::raster::Kind::Threshold);
+        wait(&ctx, &mut studio);
+        assert!(matches!(
+            ctx.data(|d| d.get_temp::<Session>(id())).unwrap().filter,
+            Some(Filter::Threshold { .. })
+        ));
+        studio.pixel_sel_gen += 1;
+        frame(&ctx, &mut studio, vec![]);
+        assert!(!is_open(&ctx));
+        assert!(preview(&ctx, &studio).is_none());
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
     }
     #[test]
     fn craft_channel_curves_native_graph_numeric_preview_apply_undo_and_reopen() {

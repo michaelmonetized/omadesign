@@ -68,6 +68,34 @@ impl Captured {
         edge: Option<u32>,
         cancel: &dyn CancellationCheck,
     ) -> Result<Plane, String> {
+        self.render_with(edge, cancel, |source, selection| {
+            curve::apply(source, curve, selection, cancel)
+        })
+    }
+    /// Render a scalar filter through the same captured proxy and selection mapping.
+    /// Args: filter settings, optional preview edge and cancellation. Returns a complete immutable plane.
+    pub(crate) fn render_filter(
+        &self,
+        filter: &crate::channels::filter::Filter,
+        edge: Option<u32>,
+        cancel: &dyn CancellationCheck,
+    ) -> Result<Plane, String> {
+        filter.validate()?;
+        self.render_with(edge, cancel, |source, selection| {
+            crate::channels::filter::apply(
+                source,
+                &filter.scaled(source.width as f32 / self.source.width as f32),
+                selection,
+                cancel,
+            )
+        })
+    }
+    fn render_with(
+        &self,
+        edge: Option<u32>,
+        cancel: &dyn CancellationCheck,
+        render: impl FnOnce(&Plane, Option<&[f32]>) -> Result<Plane, String>,
+    ) -> Result<Plane, String> {
         cancel.check()?;
         let (source, selection) = if let Some(edge) = edge {
             let scale = (f64::from(edge.max(1))
@@ -159,18 +187,23 @@ impl Captured {
             cancel.check()?;
             (self.source.clone(), selection)
         };
-        curve::apply(
-            &source,
-            curve,
-            selection.as_ref().map(|m| m.as_slice()),
-            cancel,
-        )
+        render(&source, selection.as_ref().map(|m| m.as_slice()))
     }
     /// Commit a completed full-resolution result through the sole channel command.
     /// Args: current editor and produced plane. Returns before mutation if its original owner changed.
     pub(crate) fn commit(&self, studio: &mut Studio, plane: Plane) -> Result<bool, String> {
+        self.commit_named(studio, plane, "Channel curves applied")
+    }
+    /// Publish one completed adjustment through the same scalar command and captured guard.
+    /// Args: editor, complete full-resolution result and status label. Returns before mutation for a stale owner.
+    pub(crate) fn commit_named(
+        &self,
+        studio: &mut Studio,
+        plane: Plane,
+        label: &str,
+    ) -> Result<bool, String> {
         if !self.current(studio) {
-            return Err("The channel or selection changed; reopen Curves".into());
+            return Err("The channel or selection changed; reopen the adjustment".into());
         }
         if plane.width != self.source.width
             || plane.height != self.source.height
@@ -178,7 +211,7 @@ impl Captured {
         {
             return Err("Channel curve output placement changed".into());
         }
-        studio.replace_scalar_plane(self.id, plane, "Channel curves applied")
+        studio.replace_scalar_plane(self.id, plane, label)
     }
 }
 
@@ -200,6 +233,95 @@ pub(crate) mod tests {
         let id = s.save_channel(&target, plane, "Curve alpha").unwrap();
         s.select_channel_target(Some(id)).unwrap();
         s
+    }
+    #[test]
+    fn craft_channel_filters_captured_selection_one_undo_quick_mask_and_reopen() {
+        use crate::channels::filter::Filter;
+        let mut studio = fixture();
+        let source = studio.channel_paint_target().unwrap().plane.clone();
+        let space = SelectionSpace {
+            w: source.width,
+            h: source.height,
+            transform: source.placement(),
+        };
+        studio.replace_pixel_selection_float(
+            (0..32)
+                .map(|i| if i % 2 == 0 { 0. } else { 0.33333334 })
+                .collect(),
+            space,
+        );
+        for quick in [false, true] {
+            if quick {
+                studio.select_channel_target(None).unwrap();
+                studio.replace_pixel_selection_admitted(
+                    studio.pixel_sel.clone().unwrap(),
+                    SelectionSpace {
+                        transform: tiny_skia::Transform::identity(),
+                        ..space
+                    },
+                );
+                studio.set_quick_mask(true).unwrap();
+                assert!(
+                    studio
+                        .doc
+                        .quick_mask
+                        .as_ref()
+                        .unwrap()
+                        .channel
+                        .plane
+                        .samples
+                        .iter()
+                        .any(|v| *v > 0.)
+                );
+            }
+            let before = crate::project::encode(&studio.doc).unwrap();
+            let history = studio.history.len();
+            let owner = Captured::new(&mut studio).unwrap();
+            let filter = Filter::Threshold { level: 0.4 };
+            let preview = owner
+                .render_filter(&filter, Some(4), &storage::check)
+                .unwrap();
+            assert!(preview.width <= 4 && preview.height <= 4);
+            assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+            let output = owner.render_filter(&filter, None, &storage::check).unwrap();
+            let expected = output
+                .samples
+                .iter()
+                .map(|v| v.to_bits())
+                .collect::<Vec<_>>();
+            owner
+                .commit_named(&mut studio, output, "Channel filter applied")
+                .unwrap();
+            assert_eq!(studio.history.len(), history + 1);
+            let after = crate::project::encode(&studio.doc).unwrap();
+            let loaded = crate::project::decode(&after).unwrap();
+            let actual = if quick {
+                &loaded.quick_mask.as_ref().unwrap().channel.plane
+            } else {
+                &loaded.channels.last().unwrap().plane
+            };
+            assert_eq!(
+                actual
+                    .samples
+                    .iter()
+                    .map(|v| v.to_bits())
+                    .collect::<Vec<_>>(),
+                expected
+            );
+            studio.undo();
+            assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+            studio.redo();
+            assert_eq!(crate::project::encode(&studio.doc).unwrap(), after);
+            let stale = Captured::new(&mut studio).unwrap();
+            let output = stale.render_filter(&filter, None, &storage::check).unwrap();
+            studio.pixel_sel_gen += 1;
+            assert!(
+                stale
+                    .commit_named(&mut studio, output, "Cannot publish")
+                    .is_err()
+            );
+            assert_eq!(crate::project::encode(&studio.doc).unwrap(), after);
+        }
     }
     #[test]
     fn craft_channel_curves_preview_apply_one_undo_and_full_native_reopen() {

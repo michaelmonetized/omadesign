@@ -500,6 +500,7 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
             }
         }
         if icon(ui,key.with("curves"),ph::BEZIER_CURVE,"Adjust channel curves",editable&&scalar.is_some()) {super::channel_adjustment::open(ui.ctx(),studio);}
+        if icon(ui,key.with("filter"),ph::MAGIC_WAND,"Adjust channel filter",editable&&scalar.is_some()){super::channel_adjustment::open_filter(ui.ctx(),studio,crate::channels::filter::Filter::GaussianBlur{radius:4.});}
         if studio.doc.quick_mask.is_some() {
             let response=fields::native_scope(ui,key.with("quick-options"),|ui|ui.add_enabled(editable,egui::Button::new("⋯").frame(false))).inner;
             welcome::name_control(ui,&response,key.with("quick-options-name"),"Quick Mask options");

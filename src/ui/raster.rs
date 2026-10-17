@@ -52,7 +52,8 @@ pub(super) fn ready(ctx: &Context) -> bool {
 }
 
 pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
-    let editable = studio.active_layer.is_some_and(|i| {
+    let scalar=studio.channel_paint_target().is_some();
+    let editable = scalar || studio.active_layer.is_some_and(|i| {
         studio.doc.layer_editable(i)
             && studio.doc.layers.get(i).is_some_and(|l| {
                 if studio.paint_mask {
@@ -68,6 +69,7 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
     ui.add_enabled_ui(editable, |ui| {
         ui.horizontal(|ui| {
             for (label, bank) in [("Filters", Bank::Filters), ("Effects", Bank::Effects)] {
+                if scalar && !Kind::ALL.iter().any(|kind|kind.bank()==bank&&channel_filter(&Settings::new(*kind)).is_some()){continue;}
                 ui.menu_button(label, |ui| {
                     for category in [
                         "Key & transparency",
@@ -79,7 +81,7 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                     ] {
                         if !Kind::ALL
                             .iter()
-                            .any(|kind| kind.bank() == bank && kind.category() == category)
+                            .any(|kind| kind.bank() == bank && kind.category() == category && (!scalar || channel_filter(&Settings::new(*kind)).is_some()))
                         {
                             continue;
                         }
@@ -98,7 +100,7 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                             }
                             for kind in Kind::ALL
                                 .into_iter()
-                                .filter(|kind| kind.bank() == bank && kind.category() == category)
+                                .filter(|kind| kind.bank() == bank && kind.category() == category && (!scalar || channel_filter(&Settings::new(*kind)).is_some()))
                             {
                                 if ui
                                     .button(kind.name())
@@ -115,7 +117,7 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
             }
         });
         if ui
-            .button("Chroma key…")
+            .add_enabled(!scalar,egui::Button::new("Chroma key…"))
             .on_hover_text("Remove green, blue, or any sampled background color")
             .clicked()
         {
@@ -147,10 +149,14 @@ pub(super) fn open(ctx: &Context, studio: &mut Studio, kind: Kind) {
     open_with_settings(ctx, studio, Settings::new(kind));
 }
 
+fn channel_filter(settings:&Settings)->Option<crate::channels::filter::Filter>{
+    use crate::channels::filter::Filter;
+    match settings.kind{Kind::GaussianBlur=>Some(Filter::GaussianBlur{radius:settings.values[0]}),Kind::Levels=>Some(Filter::Levels{black:settings.values[0],white:settings.values[1],gamma:settings.values[2],output_black:0.,output_white:1.}),Kind::Threshold=>Some(Filter::Threshold{level:settings.values[0]}),_=>None}
+}
 pub(super) fn open_with_settings(ctx: &Context, studio: &mut Studio, settings: Settings) {
     studio.end_pixel_stroke(false);
     if studio.channel_target.is_some() || studio.quick_mask_painting() {
-        studio.status = "Choose RGB for layer filters; saved-channel adjustments are not available yet".into();
+        if let Some(filter)=channel_filter(&settings){super::channel_adjustment::open_filter(ctx,studio,filter);}else{studio.status = "This filter is unavailable for scalar channels".into();}
         return;
     }
     let Some(index) = studio.active_layer else {

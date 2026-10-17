@@ -592,7 +592,7 @@ fn unpremul(mut c: [f32; 4]) -> [f32; 4] {
     }
     c
 }
-fn at(src: &[[f32; 4]], w: u32, h: u32, x: i32, y: i32) -> [f32; 4] {
+fn at<const C: usize>(src: &[[f32; C]], w: u32, h: u32, x: i32, y: i32) -> [f32; C] {
     src[y.clamp(0, h as i32 - 1) as usize * w as usize + x.clamp(0, w as i32 - 1) as usize]
 }
 fn sample(src: &[[f32; 4]], w: u32, h: u32, x: f32, y: f32) -> [f32; 4] {
@@ -616,85 +616,52 @@ fn sample(src: &[[f32; 4]], w: u32, h: u32, x: f32, y: f32) -> [f32; 4] {
 }
 fn blur(src: &[[f32; 4]], w: u32, h: u32, radius: f32) -> Result<Allocation<[f32; 4]>, String> {
     let input = src.par_iter().copied().map(premul).admit()?;
-    let mut out = blur_channels(&input, w, h, radius)?;
+    let mut out = blur_channels(&input, w, h, radius, &crate::deep_color::storage::check)?;
     out.as_mut_slice()
         .par_iter_mut()
         .for_each(|p| *p = unpremul(*p));
     Ok(out)
 }
-fn blur_channels(
-    src: &[[f32; 4]],
-    w: u32,
-    h: u32,
-    radius: f32,
-) -> Result<Allocation<[f32; 4]>, String> {
-    if radius < 0.1 {
-        return crate::resources::global().copy_now(src, &crate::deep_color::storage::check);
-    }
-    let r = (radius * 0.58).round().clamp(1.0, 128.0) as i32;
-    let mut out = crate::resources::global().copy_now(src, &crate::deep_color::storage::check)?;
-    // Three separable box passes approximate a Gaussian in linear time.
+/// Blur a fixed number of float channels using the existing three-box kernel.
+/// Args: matching grid, radius and cancellation. Returns admitted samples; original data remains immutable.
+pub(crate) fn blur_channels<const C: usize>(src: &[[f32; C]], w: u32, h: u32, radius: f32, cancel: &dyn crate::resources::CancellationCheck) -> Result<Allocation<[f32; C]>, String> where [f32; C]: Default {
+    if C == 0 || src.len() != crate::deep_color::storage::count(w,h,1)? || !radius.is_finite() { return Err("Invalid blur dimensions or radius".into()); }
+    cancel.check()?;
+    if radius < 0.1 { return crate::resources::global().copy_now(src,cancel); }
+    let r=(radius*0.58).round().clamp(1.,128.)as i32;
+    let pool=crate::resources::global();
+    let mut out=pool.copy_now(src,cancel)?;
     for _ in 0..3 {
-        let mut tmp = crate::resources::global()
-            .allocate_now::<[f32; 4], _>(out.len(), &crate::deep_color::storage::check)?;
-        tmp.as_mut_slice()
-            .par_chunks_mut(w as usize)
-            .enumerate()
-            .for_each(|(y, row)| {
-                let mut sum = [0.0; 4];
-                for dx in -r..=r {
-                    let p = at(&out, w, h, dx, y as i32);
-                    for ch in 0..4 {
-                        sum[ch] += p[ch];
-                    }
-                }
-                for (x, p) in row.iter_mut().enumerate() {
-                    for ch in 0..4 {
-                        p[ch] = sum[ch] / (2 * r + 1) as f32;
-                    }
-                    let a = at(&out, w, h, x as i32 - r, y as i32);
-                    let b = at(&out, w, h, x as i32 + r + 1, y as i32);
-                    for ch in 0..4 {
-                        sum[ch] += b[ch] - a[ch];
-                    }
+        let mut tmp=pool.allocate_now::<[f32; C],_>(out.len(),cancel)?;
+        for (group,rows) in tmp.as_mut_slice().chunks_mut(w as usize*64).enumerate() {
+            cancel.check()?;
+            rows.par_chunks_mut(w as usize).enumerate().for_each(|(dy,row)| {
+                let y=group*64+dy; let mut sum=[0.;C];
+                for dx in -r..=r {let p=at(&out,w,h,dx,y as i32);for ch in 0..C {sum[ch]+=p[ch];}}
+                for (x,p) in row.iter_mut().enumerate() {
+                    for ch in 0..C {p[ch]=sum[ch]/(2*r+1)as f32;}
+                    let a=at(&out,w,h,x as i32-r,y as i32);let b=at(&out,w,h,x as i32+r+1,y as i32);
+                    for ch in 0..C {sum[ch]+=b[ch]-a[ch];}
                 }
             });
-        // Transpose to keep vertical sliding-window passes parallel and contiguous.
-        let mut transposed = crate::resources::global()
-            .allocate_now::<[f32; 4], _>(out.len(), &crate::deep_color::storage::check)?;
-        transposed
-            .as_mut_slice()
-            .par_chunks_mut(h as usize)
-            .enumerate()
-            .for_each(|(x, col)| {
-                let mut sum = [0.0; 4];
-                for dy in -r..=r {
-                    let p = at(&tmp, w, h, x as i32, dy);
-                    for ch in 0..4 {
-                        sum[ch] += p[ch];
-                    }
-                }
-                for (y, p) in col.iter_mut().enumerate() {
-                    for ch in 0..4 {
-                        p[ch] = sum[ch] / (2 * r + 1) as f32;
-                    }
-                    let a = at(&tmp, w, h, x as i32, y as i32 - r);
-                    let b = at(&tmp, w, h, x as i32, y as i32 + r + 1);
-                    for ch in 0..4 {
-                        sum[ch] += b[ch] - a[ch];
-                    }
+        }
+        let mut transposed=pool.allocate_now::<[f32; C],_>(out.len(),cancel)?;
+        for (group,cols) in transposed.as_mut_slice().chunks_mut(h as usize*64).enumerate() {
+            cancel.check()?;
+            cols.par_chunks_mut(h as usize).enumerate().for_each(|(dx,col)| {
+                let x=group*64+dx; let mut sum=[0.;C];
+                for dy in -r..=r {let p=at(&tmp,w,h,x as i32,dy);for ch in 0..C {sum[ch]+=p[ch];}}
+                for (y,p) in col.iter_mut().enumerate() {
+                    for ch in 0..C {p[ch]=sum[ch]/(2*r+1)as f32;}
+                    let a=at(&tmp,w,h,x as i32,y as i32-r);let b=at(&tmp,w,h,x as i32,y as i32+r+1);
+                    for ch in 0..C {sum[ch]+=b[ch]-a[ch];}
                 }
             });
-        out.as_mut_slice()
-            .par_chunks_mut(w as usize)
-            .enumerate()
-            .for_each(|(y, row)| {
-                for (x, p) in row.iter_mut().enumerate() {
-                    *p = transposed[x * h as usize + y];
-                }
-            });
+        }
+        cancel.check()?;
+        out.as_mut_slice().par_chunks_mut(w as usize).enumerate().for_each(|(y,row)| {for (x,p) in row.iter_mut().enumerate(){*p=transposed[x*h as usize+y];}});
     }
-    Ok(out)
+    cancel.check()?;Ok(out)
 }
 fn morphology(
     src: &[[f32; 4]],
