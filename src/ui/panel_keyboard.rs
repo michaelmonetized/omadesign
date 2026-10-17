@@ -169,6 +169,18 @@ impl Dialog {
                     group.active = active;
                 }
             }
+            if self.action == Action::Resize
+                && let Some(place) = layout
+                    .groups
+                    .iter()
+                    .find(|group| group.panels.contains(&self.panel))
+                    .map(|group| group.place)
+                    .filter(|place| *place != Place::Floating)
+            {
+                for group in layout.groups.iter_mut().filter(|group| group.place == place) {
+                    group.extent = self.geometry.extent;
+                }
+            }
             layout.focus = Some(self.panel.clone());
         } else {
             layout.focus = layout
@@ -727,6 +739,66 @@ mod tests {
         book.write(&path).unwrap();
         assert_eq!(Book::read(&path).unwrap(), book);
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn panel_keyboard_native_resize_changes_the_whole_shared_dock_column() {
+        let (ctx, mut book) = fixture();
+        for (index, group) in book.tasks.get_mut("Design").unwrap().groups.iter_mut().enumerate() {
+            group.place = Place::Left;
+            group.extent = if index == 0 { 320. } else { 420. };
+        }
+        frame(&ctx, &mut book, vec![]);
+        for extent in [256., 420.] {
+            open(&ctx, &mut book);
+            action(&ctx, &mut book, "Resize panel");
+            tab_to(&ctx, &mut book, "Dock size");
+            keys::replace(&format!("{extent}"), |events| frame(&ctx, &mut book, events).0);
+            let output = apply(&ctx, &mut book);
+            focused_panel(&ctx, &output);
+            let (_, actual) = frame(&ctx, &mut book, vec![]);
+            assert!((actual - extent).abs() <= 1., "real shared column stayed {actual} after {extent} request");
+            assert!(book.tasks["Design"].groups.iter().all(|group| group.extent == extent));
+        }
+    }
+
+    #[test]
+    fn panel_keyboard_shared_dock_resize_preserves_other_edges_hidden_and_floating_groups() {
+        let registry = &[("properties", "Properties"), ("layers", "Layers"), ("history", "History"), ("actions", "Actions")];
+        for place in [Place::Left, Place::Right, Place::Top, Place::Bottom] {
+            let (ctx, mut book) = fixture();
+            let layout = book.tasks.get_mut("Design").unwrap();
+            for group in &mut layout.groups { group.place = place; }
+            let mut other = Group::default();
+            other.panels = vec!["history".into()];
+            other.place = if place == Place::Left { Place::Right } else { Place::Left };
+            other.extent = 512.;
+            layout.groups.push(other.clone());
+            let mut hidden = Group::default();
+            hidden.panels = vec!["actions".into()];
+            hidden.place = place;
+            hidden.extent = 700.;
+            layout.hidden.insert("actions".into(), hidden.clone());
+            let mut draft = Dialog::new(&book, registry, &ctx).unwrap();
+            draft.panel = "properties".into();
+            draft.action = Action::Resize;
+            draft.geometry.extent = 256.;
+            assert!(draft.apply(&mut book, registry).unwrap().size.is_none());
+            assert_eq!(group(&book.tasks["Design"], "properties").unwrap().extent, 256.);
+            assert_eq!(group(&book.tasks["Design"], "layers").unwrap().extent, 256.);
+            assert_eq!(group(&book.tasks["Design"], "history").unwrap(), &other);
+            assert_eq!(book.tasks["Design"].hidden["actions"], hidden);
+        }
+        let (ctx, mut book) = fixture();
+        for group in &mut book.tasks.get_mut("Design").unwrap().groups { group.place = Place::Floating; }
+        let other = group(&book.tasks["Design"], "layers").unwrap().clone();
+        let mut draft = Dialog::new(&book, REGISTRY, &ctx).unwrap();
+        draft.panel = "properties".into();
+        draft.action = Action::Resize;
+        draft.geometry.rect[2] = 480.;
+        draft.geometry.rect[3] = 300.;
+        assert_eq!(draft.apply(&mut book, REGISTRY).unwrap().size, Some(("properties".into(), egui::vec2(480., 300.))));
+        assert_eq!(group(&book.tasks["Design"], "layers").unwrap(), &other);
     }
 
     #[test]
