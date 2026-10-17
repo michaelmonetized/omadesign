@@ -229,7 +229,7 @@ pub(crate) fn byte(v: f32) -> u8 {
     (v.clamp(0., 1.) * 255.).round() as u8
 }
 
-mod sample_bytes {
+pub(crate) mod sample_bytes {
     use super::*;
     use serde::{Deserializer, Serializer};
     use std::{

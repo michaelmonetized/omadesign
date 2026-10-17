@@ -36,7 +36,7 @@ pub struct Editor {
     pub space: SelectionSpace,
     pub mode: ModeKind,
     pub geometry: Geometry,
-    pub source: Arc<Vec<u8>>,
+    pub source: Arc<crate::resources::Allocation<u8>>,
     pub had_selection: bool,
     pub source_path: Option<Vec<Anchor>>,
     pub drag: Option<Drag>,
@@ -105,10 +105,13 @@ impl Studio {
             self.status = "Selection is too large to edit".into();
             return;
         }
-        let source = self
-            .pixel_sel
-            .clone()
-            .unwrap_or_else(|| vec![0; space.w as usize * space.h as usize]);
+        let source = match self.pixel_sel.clone() {
+            Some(source) => source,
+            None => match crate::resources::global().allocate_now::<u8,_>(space.w as usize*space.h as usize, &crate::deep_color::storage::check) {
+                Ok(source)=>Arc::new(source),
+                Err(error)=>{self.status=error;return;}
+            }
+        };
         let path = self
             .pixel_path
             .as_ref()
@@ -145,7 +148,7 @@ impl Studio {
             mode,
             rendered: Some(geometry.clone()),
             geometry,
-            source: Arc::new(source),
+            source,
             had_selection: self.pixel_sel.is_some(),
             source_path: path,
             drag: None,
@@ -172,7 +175,7 @@ impl Studio {
                         self.tool = crate::tools::Tool::Marquee;
                     }
                     if edit.had_selection {
-                        self.replace_pixel_selection((*edit.source).clone(), edit.space);
+                        self.replace_pixel_selection_admitted(edit.source.clone(), edit.space);
                     } else {
                         self.set_pixel_sel(None);
                     }
@@ -247,7 +250,7 @@ impl Studio {
                 .is_some_and(|g| matches!(g, Geometry::Path { closed: true, .. }))
         {
             if edit.had_selection {
-                self.replace_pixel_selection((*edit.source).clone(), edit.space);
+                self.replace_pixel_selection_admitted(edit.source.clone(), edit.space);
             } else {
                 self.set_pixel_sel(None);
             }

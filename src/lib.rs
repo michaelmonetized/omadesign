@@ -12,6 +12,7 @@ pub mod clipboard;
 pub mod cloud;
 pub mod collaboration;
 pub mod color;
+pub mod channels;
 pub mod compositor;
 pub mod compound;
 pub mod document;

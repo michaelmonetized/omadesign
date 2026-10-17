@@ -3623,8 +3623,8 @@ fn draw_pixel_sel(p: &eframe::egui::Painter, rect: Rect, studio: &Studio) {
     let preview = super::pixel_selection::canvas_preview(p.ctx(), studio);
     let Some(mask) = preview
         .as_ref()
-        .map(|(v, _, _)| v.as_ref())
-        .or(studio.pixel_sel.as_ref())
+        .map(|(v, _, _)| v.as_slice())
+        .or_else(|| studio.pixel_sel.as_ref().map(|values| values.as_slice()))
     else {
         return;
     };

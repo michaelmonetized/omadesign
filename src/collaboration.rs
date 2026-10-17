@@ -143,6 +143,9 @@ pub struct Replica {
 /// Args: document to share. Returns its cells, excluding device and session metadata.
 pub fn snapshot(doc: &Document) -> Result<Snapshot, String> {
     crate::motion::compositions::validate(doc)?;
+    if crate::motion::compositions::documents(doc)?.iter().any(|document| !document.channels.is_empty()) {
+        return Err("SavedChannelsUnsupported: live protocol 3 cannot preserve saved channels".into());
+    }
     let mut used = color_bytes(doc)?;
     let mut packed = doc.clone();
     packed.collaboration = None;

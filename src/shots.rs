@@ -608,7 +608,7 @@ fn masking(s: &mut Studio) {
     let index = s.doc.layers.len();
     s.commit(Cmd::AddLayer { index, layer });
     s.active_layer = Some(index);
-    s.pixel_sel = Some(selection);
+    s.pixel_sel = Some(crate::deep_color::storage::adopt(selection).unwrap());
     s.mask_from_selection(index);
     s.pixel_sel = None;
     s.selection.clear();

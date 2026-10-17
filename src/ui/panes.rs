@@ -71,7 +71,7 @@ fn contents(ui: &mut Ui, studio: &mut Studio, panel: &str) {
         "symbols" => super::symbols::show(ui,studio),
         "shapes" => shapes(ui, studio),
         "paths" => paths(ui, studio),
-        "channels" => channels(ui, studio),
+        "channels" => super::channels::show(ui, studio),
         "artboards" => artboards(ui, studio),
         "links" => links(ui, studio),
         "info" => info(ui, studio),
@@ -447,62 +447,6 @@ fn paths(ui: &mut Ui, studio: &mut Studio) {
             }
         }
     });
-}
-
-fn channels(ui: &mut Ui, studio: &mut Studio) {
-    let _ = super::pane_previews::image(ui, studio, None, None);
-    let Some(pixels) = super::pane_previews::pixels(ui.ctx(), studio) else {
-        ui.spinner();
-        return;
-    };
-    let key = ui.make_persistent_id("channel-preview");
-    let mut channel = ui
-        .data(|d| d.get_temp::<usize>(key.with("selected")))
-        .unwrap_or(0);
-    ui.horizontal_wrapped(|ui| {
-        for (at, name) in ["RGB", "Red", "Green", "Blue", "Alpha"]
-            .into_iter()
-            .enumerate()
-        {
-            if ui.selectable_label(channel == at, name).clicked() {
-                channel = at;
-            }
-        }
-    });
-    ui.data_mut(|d| d.insert_temp(key.with("selected"), channel));
-    let cached = ui.data(|d| d.get_temp::<(String, u64, usize, egui::TextureHandle)>(key));
-    let texture = if let Some((document, generation, selected, texture)) =
-        cached.filter(|(document, generation, selected, _)| {
-            *document == studio.swap_id && *generation == studio.canvas_gen && *selected == channel
-        }) {
-        let _ = (document, generation, selected);
-        texture
-    } else {
-        let mut image = (*pixels).clone();
-        if channel > 0 {
-            for pixel in &mut image.pixels {
-                let value = pixel.to_array()[channel - 1];
-                *pixel = egui::Color32::from_gray(value);
-            }
-        }
-        let texture = ui
-            .ctx()
-            .load_texture("channel-preview", image, egui::TextureOptions::LINEAR);
-        ui.data_mut(|d| {
-            d.insert_temp(
-                key,
-                (
-                    studio.swap_id.clone(),
-                    studio.canvas_gen,
-                    channel,
-                    texture.clone(),
-                ),
-            )
-        });
-        texture
-    };
-    let edge = ui.available_width().min(256.0);
-    ui.add(egui::Image::new(&texture).fit_to_exact_size(egui::vec2(edge, edge)));
 }
 
 #[derive(Clone, Default)]

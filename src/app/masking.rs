@@ -48,7 +48,7 @@ impl SelectionCache {
 
 #[derive(Clone)]
 pub struct ItemMask {
-    pub values: Vec<u8>,
+    pub values: std::sync::Arc<crate::resources::Allocation<u8>>,
     pub space: SelectionSpace,
 }
 
@@ -60,7 +60,7 @@ pub(super) fn resample(
     resample_admitted(values, source, target).ok().map(|values| values.to_vec())
 }
 
-fn resample_admitted(values: &[u8], source: SelectionSpace, target: SelectionSpace) -> Result<std::sync::Arc<crate::resources::Allocation<u8>>, String> {
+pub(super) fn resample_admitted(values: &[u8], source: SelectionSpace, target: SelectionSpace) -> Result<std::sync::Arc<crate::resources::Allocation<u8>>, String> {
     use crate::{deep_color::{storage, surface::Surface}, resources};
     if values.len() != storage::count(source.w, source.h, 1)? {return Err("Invalid source selection dimensions".into());}
     if source == target {return resources::global().copy_now(values, &storage::check).map(std::sync::Arc::new);}
@@ -277,6 +277,10 @@ impl Studio {
     }
 
     pub fn set_pixel_sel(&mut self, mask: Option<Vec<u8>>) {
+        let mask = match mask.map(crate::deep_color::storage::adopt).transpose() {
+            Ok(mask) => mask,
+            Err(error) => { self.status=error; return; }
+        };
         self.pixel_sel_space = if mask.is_some() {
             self.raster_target()
                 .and_then(|i| self.layer_selection_space(i))
@@ -312,38 +316,41 @@ impl Studio {
     }
 
     pub fn nudge_pixel_sel(&mut self, dx: i32, dy: i32) {
-        self.retouch_pixel_sel(|mask, w, h| paint::shift_mask(mask, w, h, dx, dy));
-        self.status = "Selection moved".into();
+        if self.retouch_pixel_sel(|mask, w, h| paint::shift_mask(mask, w, h, dx, dy)) {
+            self.status = "Selection moved".into();
+        }
     }
 
     pub fn scale_pixel_sel(&mut self, sx: f32, sy: f32) {
-        self.retouch_pixel_sel(|mask, w, h| paint::scale_mask(mask, w, h, sx, sy));
-        self.status = "Selection resized".into();
+        if self.retouch_pixel_sel(|mask, w, h| paint::scale_mask(mask, w, h, sx, sy)) {
+            self.status = "Selection resized".into();
+        }
     }
 
     pub fn feather_pixel_sel(&mut self, radius: u32) {
-        self.retouch_pixel_sel(|mask, w, h| paint::feather_mask(mask, w, h, radius));
-        self.status = format!("Selection feathered {radius} px");
+        if self.retouch_pixel_sel(|mask, w, h| paint::feather_mask(mask, w, h, radius)) {
+            self.status = format!("Selection feathered {radius} px");
+        }
     }
 
     pub fn distort_pixel_sel(&mut self, kx: f32) {
-        self.retouch_pixel_sel(|mask, w, h| paint::shear_mask(mask, w, h, kx));
-        self.status = "Selection distorted".into();
+        if self.retouch_pixel_sel(|mask, w, h| paint::shear_mask(mask, w, h, kx)) {
+            self.status = "Selection distorted".into();
+        }
     }
 
-    fn retouch_pixel_sel(&mut self, edit: impl FnOnce(&[u8], u32, u32) -> Vec<u8>) {
+    fn retouch_pixel_sel(&mut self, edit: impl FnOnce(&[u8], u32, u32) -> Vec<u8>) -> bool {
         let Some(space) = self.pixel_sel_space else {
-            return;
+            return false;
         };
         let Some(mask) = self.pixel_sel.clone() else {
-            return;
+            return false;
         };
         if mask.len() != space.w as usize * space.h as usize {
-            return;
+            return false;
         }
-        self.pixel_sel = Some(edit(&mask, space.w, space.h));
-        self.pixel_sel_gen = self.pixel_sel_gen.wrapping_add(1);
-        self.pixel_sel_cache.clear();
+        let values = edit(&mask, space.w, space.h);
+        self.try_replace_pixel_selection(values, space)
     }
 
     pub fn merge_pixel_sel(&mut self, next: Vec<u8>, op: paint::PixelCombine) {
@@ -387,7 +394,7 @@ impl Studio {
             Transform::from_translate(bounds.min.x, bounds.min.y).pre_scale(1. / scale, 1. / scale);
         let values = compositor::item_alpha(&self.doc, layer, id, transform.invert()?, w, h)?;
         Some(ItemMask {
-            values,
+            values: crate::deep_color::storage::adopt(values).ok()?,
             space: SelectionSpace { w, h, transform },
         })
     }
@@ -418,7 +425,7 @@ impl Studio {
         }
         let target = self.pixel_sel_space.unwrap_or(mask.space);
         let next = if target == mask.space {
-            mask.values
+            mask.values.to_vec()
         } else {
             match resample(&mask.values, mask.space, target) {
                 Some(values) => values,
@@ -429,15 +436,11 @@ impl Studio {
             }
         };
         let existing = self
-            .pixel_sel
-            .as_deref()
+            .pixel_sel.as_ref().map(|values| values.as_slice())
             .filter(|_| self.pixel_sel_space == Some(target));
         let combined = paint::combine_masks(existing, &next, op);
         let count = paint::selected_count(&combined);
-        self.pixel_sel = Some(combined);
-        self.pixel_sel_space = Some(target);
-        self.pixel_sel_gen = self.pixel_sel_gen.wrapping_add(1);
-        self.pixel_sel_cache.clear();
+        if !self.try_replace_pixel_selection(combined, target) {return;}
         self.status = format!("{count} pixels selected");
     }
 
@@ -1196,7 +1199,7 @@ mod tests {
     #[test]
     fn selection_mask_survives_serialization_and_apply_is_one_undo() {
         let mut studio = pixels_studio();
-        studio.pixel_sel = Some(vec![0, 64, 128, 255]);
+        studio.pixel_sel = Some(crate::deep_color::storage::adopt(vec![0, 64, 128, 255]).unwrap());
         studio.mask_from_selection(0);
         assert!(studio.paint_mask);
         let masked = alphas(&studio.doc);
@@ -1243,7 +1246,7 @@ mod tests {
         if let LayerKind::Raster { rotation, .. } = &mut studio.doc.layers[0].kind {
             *rotation = std::f32::consts::FRAC_PI_2;
         }
-        studio.pixel_sel = Some(vec![255, 255, 0, 0, 255, 255, 0, 0]);
+        studio.pixel_sel = Some(crate::deep_color::storage::adopt(vec![255, 255, 0, 0, 255, 255, 0, 0]).unwrap());
         studio.mask_from_selection(0);
         let transform = compositor::layer_pixel_transform(&studio.doc.layers[0]);
         let png = compositor::export_png(&studio.doc, 1).unwrap();

@@ -538,7 +538,7 @@ mod tests {
                     studio.history.clear();
                     studio.paint_mask = true;
                     studio.add_layer(raster);
-                    assert_eq!(studio.pixel_sel.as_deref(), Some(values.as_slice()));
+                    assert_eq!(studio.pixel_sel.as_ref().map(|values| values.as_slice()), Some(values.as_slice()));
 
                     let index = studio.active_layer.unwrap();
                     let added_id = studio.doc.layers[index].id;
@@ -570,7 +570,7 @@ mod tests {
                             studio.undo();
                         }
                         assert_eq!(studio.doc.layers.len(), layers_before + usize::from(redo));
-                        assert_eq!(studio.pixel_sel.as_deref(), Some(values.as_slice()));
+                        assert_eq!(studio.pixel_sel.as_ref().map(|values| values.as_slice()), Some(values.as_slice()));
                         assert_eq!(
                             studio.pixel_sel.as_ref().unwrap().as_ptr(),
                             address,

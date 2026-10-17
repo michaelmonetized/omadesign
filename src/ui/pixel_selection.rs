@@ -15,7 +15,7 @@ struct Session {
     instance: Id,
     document: String,
     generation: u64,
-    source: Arc<Vec<u8>>,
+    source: Arc<crate::resources::Allocation<u8>>,
     space: SelectionSpace,
     settings: Edit,
     initial: Edit,
@@ -71,7 +71,7 @@ fn open(ctx: &Context, studio: &mut Studio, settings: Edit) {
                 instance,
                 document: studio.swap_id.clone(),
                 generation: studio.pixel_sel_gen,
-                source: Arc::new(source.clone()),
+                source: source.clone(),
                 space,
                 settings,
                 initial: settings,
@@ -419,7 +419,7 @@ mod tests {
         let preview = canvas_preview(&ctx, &studio).unwrap();
         click(&ctx, &mut studio, "Apply");
         assert!(!is_open(&ctx));
-        assert_eq!(studio.pixel_sel.as_deref(), Some(preview.0.as_slice()));
+        assert_eq!(studio.pixel_sel.as_ref().map(|values| values.as_slice()), Some(preview.0.as_slice()));
         assert_eq!(
             crate::paint::selection_bounds(studio.pixel_sel.as_ref().unwrap(), 32, 24),
             Some((6, 6, 18, 18))

@@ -2040,11 +2040,9 @@ mod brush_pack_tests {
         s.persona = crate::tools::Persona::Pixel;
         s.select_brush(1, 0);
         s.brush.size = 20.;
-        s.pixel_sel = Some(
-            (0..80 * 60)
+        s.pixel_sel = Some(crate::deep_color::storage::adopt((0..80 * 60)
                 .map(|i| if i % 80 < 40 { 255 } else { 0 })
-                .collect(),
-        );
+                .collect()).unwrap());
         s.pixel_sel_gen += 1;
         let before = s.doc.layers[0].kind.pixels().unwrap().data.to_vec();
         start_brush(&mut s, Pt::new(20., 30.));
@@ -2304,11 +2302,9 @@ mod deep_color {
             studio.brush.flow = 1.;
             studio.brush.hardness = 0.8;
             studio.clone_source = Some(Pt::new(8., 16.));
-            studio.pixel_sel = Some(
-                (0..64 * 32)
+            studio.pixel_sel = Some(crate::deep_color::storage::adopt((0..64 * 32)
                     .map(|i| if i % 64 < 48 { 255 } else { 0 })
-                    .collect(),
-            );
+                    .collect()).unwrap());
             studio.pixel_sel_gen += 1;
             match tool {
                 Tool::Clone => start_clone(&mut studio, Pt::new(40., 16.)),

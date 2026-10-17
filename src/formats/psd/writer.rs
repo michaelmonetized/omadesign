@@ -63,6 +63,9 @@ pub fn encode(doc: &Document, large: bool) -> Result<PsdExport, String> {
 /// Args: editable document and PSB flag. Returns admitted encoded bytes and appearance notes.
 pub fn encode_admitted(doc: &Document, large: bool) -> Result<super::AdmittedPsdExport, String> {
     doc.validate_sources()?;
+    if crate::motion::compositions::documents(doc)?.iter().any(|document| !document.channels.is_empty()) {
+        return Err("SavedChannelsUnsupported: Photoshop alpha channel export is not implemented yet. Save .oma to retain saved channels.".into());
+    }
     if doc.layers.iter().any(|l| {
         l.kind.shapes().is_some_and(|ss| {
             ss.len() > 1

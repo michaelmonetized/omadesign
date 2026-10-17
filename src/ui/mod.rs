@@ -21,6 +21,7 @@ mod document_color;
 mod deform;
 pub(crate) mod export_dialog;
 mod screen_export;
+mod channels;
 mod guides;
 mod guide_keyboard;
 mod icons;
@@ -234,6 +235,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     }
 
     screen_export::poll(&ctx, studio);
+    channels::poll(&ctx, studio);
     if !studio.file_dialog_pending() {
         preferences::show(&ctx, studio);
         plugins::show(&ctx, studio);

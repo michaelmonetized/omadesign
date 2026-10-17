@@ -1230,6 +1230,8 @@ fn deserialize_artboards<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<Artboard
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Document {
+    #[serde(default, rename = "saved_channels", skip_serializing_if = "Vec::is_empty")]
+    pub channels: Vec<crate::channels::Channel>,
     #[serde(default, skip_serializing_if = "crate::screen_export::Catalog::is_empty")]
     pub screen_export: crate::screen_export::Catalog,
     #[serde(default, skip_serializing_if = "crate::publishing::Publishing::is_empty")]
@@ -1338,6 +1340,7 @@ impl Document {
         copy.text_wrap_above_only = self.text_wrap_above_only;
         copy.publishing = self.publishing.clone();
         copy.screen_export = self.screen_export.clone();
+        copy.channels = self.channels.clone();
         copy.layers = self
             .layers
             .iter()
@@ -1427,6 +1430,7 @@ impl Document {
         self.validate_artwork_masks()?;
         crate::layout::validate_hierarchy(self)?;
         crate::layout_tokens::validate_tokens(self)?;
+        crate::channels::validate_metadata(&self.channels)?;
         self.screen_export.validate()
     }
 
@@ -1468,6 +1472,7 @@ impl Document {
             ));
         }
         let mut doc = Self {
+            channels: vec![],
             publishing: Default::default(),
             color: Default::default(),
             text_wrap_above_only: false,
@@ -1741,6 +1746,10 @@ impl Document {
             bump_id(token.id);
             max = max.max(token.id);
         }
+        for channel in &self.channels {
+            bump_id(channel.id);
+            max = max.max(channel.id);
+        }
         for id in self.screen_export.assets.iter().map(|a|a.id).chain(self.screen_export.rows.iter().map(|r|r.id)) {
             bump_id(id);
             max = max.max(id);
@@ -1808,6 +1817,7 @@ impl RasterState {
 
 #[derive(Clone, Debug)]
 pub enum Cmd {
+    SetChannels { before: Vec<crate::channels::Channel>, after: Vec<crate::channels::Channel> },
     SetSvgFilter { index: usize, before: Option<crate::svg_source::SvgFilterGraph>, after: Option<crate::svg_source::SvgFilterGraph> },
     SetSmartLayer {index:usize,before:Box<Layer>,after:Box<Layer>},
     SetDocumentColor {
@@ -2326,6 +2336,7 @@ fn coalesce(prev: &mut Cmd, next: &Cmd) -> bool {
 
 pub(crate) fn invert_cmd(cmd: Cmd) -> Cmd {
     match cmd {
+        Cmd::SetChannels {before,after} => Cmd::SetChannels {before:after,after:before},
         Cmd::SetSmartLayer{index,before,after}=>Cmd::SetSmartLayer{index,before:after,after:before},
         Cmd::SetDocumentColor { before, after } => Cmd::SetDocumentColor {
             before: after,
@@ -3095,6 +3106,7 @@ pub fn apply(doc: &mut Document, cmd: &Cmd) {
         }
         Cmd::SetLayoutTokens { after, .. } => doc.layout_tokens.clone_from(after),
         Cmd::SetScreenExport { after, .. } => doc.screen_export.clone_from(after),
+        Cmd::SetChannels {after,..} => doc.channels.clone_from(after),
         Cmd::SetVectorShapes { layer, after, .. } => {
             if let Some(shapes) = doc.layers.get_mut(*layer).and_then(|l| l.kind.shapes_mut()) {
                 shapes.clone_from(after);
