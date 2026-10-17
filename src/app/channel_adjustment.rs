@@ -78,7 +78,7 @@ impl Captured {
         &self,
         filter: &crate::channels::filter::Filter,
         edge: Option<u32>,
-        cancel: &dyn CancellationCheck,
+        cancel: &(dyn CancellationCheck + Sync),
     ) -> Result<Plane, String> {
         filter.validate()?;
         self.render_with(edge, cancel, |source, selection| {
@@ -233,6 +233,78 @@ pub(crate) mod tests {
         let id = s.save_channel(&target, plane, "Curve alpha").unwrap();
         s.select_channel_target(Some(id)).unwrap();
         s
+    }
+    #[test]
+    fn craft_channel_filter_families_all_choices_use_one_command_and_native_reopen() {
+        use crate::channels::filter::{Filter, family_tests};
+        use crate::raster::Kind;
+        for kind in Kind::ALL {
+            let mut studio = fixture();
+            let before = crate::project::encode(&studio.doc).unwrap();
+            let original_layers = serde_json::to_value(&studio.doc.layers).unwrap();
+            let original_color = studio.doc.color.clone();
+            let history = studio.history.len();
+            let settings = family_tests::settings(kind);
+            let filter = Filter::from_raster(&settings);
+            let source = Captured::new(&mut studio).unwrap();
+            let output = source
+                .render_filter(&filter, None, &storage::check)
+                .unwrap();
+            let same = output == source.source;
+            let expected = output
+                .samples
+                .iter()
+                .map(|v| v.to_bits())
+                .collect::<Vec<_>>();
+            let changed = source
+                .commit_named(&mut studio, output, "Channel filter applied")
+                .unwrap();
+            assert_eq!(changed, !same, "{kind:?}");
+            assert_eq!(
+                studio.history.len(),
+                history + usize::from(changed),
+                "{kind:?}"
+            );
+            let after = crate::project::encode(&studio.doc).unwrap();
+            let reopened = crate::project::decode(&after).unwrap();
+            assert_eq!(
+                crate::project::encode(&reopened).unwrap(),
+                after,
+                "{kind:?}"
+            );
+            assert_eq!(
+                serde_json::to_value(&reopened.layers).unwrap(),
+                original_layers
+            );
+            assert_eq!(reopened.color, original_color);
+            assert_eq!(
+                reopened
+                    .channels
+                    .last()
+                    .unwrap()
+                    .plane
+                    .samples
+                    .iter()
+                    .map(|v| v.to_bits())
+                    .collect::<Vec<_>>(),
+                expected,
+                "{kind:?}"
+            );
+            if changed {
+                studio.undo();
+                assert_eq!(
+                    crate::project::encode(&studio.doc).unwrap(),
+                    before,
+                    "{kind:?}"
+                );
+                studio.redo();
+                assert_eq!(
+                    crate::project::encode(&studio.doc).unwrap(),
+                    after,
+                    "{kind:?}"
+                );
+            }
+        }
     }
     #[test]
     fn craft_channel_filters_captured_selection_one_undo_quick_mask_and_reopen() {

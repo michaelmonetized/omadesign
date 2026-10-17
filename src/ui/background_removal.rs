@@ -78,6 +78,8 @@ enum Output {
 
 pub(super) fn available(studio: &Studio) -> bool {
     studio.persona == Persona::Pixel
+        && studio.channel_target.is_none()
+        && !studio.quick_mask_painting()
         && studio.active_layer.is_some_and(|i| {
             studio.doc.layer_editable(i)
                 && studio
@@ -828,6 +830,20 @@ mod tests {
         s.persona = Persona::Pixel;
         s.show_welcome = false;
         s
+    }
+    #[test]
+    fn craft_channel_filter_families_background_removal_cannot_fall_through_scalar_target() {
+        let ctx=Context::default();let mut studio=studio();assert!(available(&studio));
+        let old=completed(&ctx,&mut studio);
+        let target=studio.capture_channels().unwrap();
+        let plane=crate::channels::Plane::from_mask(&[0,64,128,255],4,1,tiny_skia::Transform::identity(),&crate::deep_color::storage::check).unwrap();
+        let id=studio.save_channel(&target,plane,"Target guard").unwrap();studio.select_channel_target(Some(id)).unwrap();
+        let before=crate::project::encode(&studio.doc).unwrap();let history=studio.history.len();
+        assert!(!available(&studio));assert!(!owner_matches(&studio,&old));assert!(commit(&mut studio,&old).is_err());
+        close(&ctx);open(&ctx,&mut studio);assert!(!is_open(&ctx));assert!(!jobs::is_running::<Output>(&ctx,JOB));
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(),before);assert_eq!(studio.history.len(),history);
+        studio.select_channel_target(None).unwrap();assert!(available(&studio));studio.set_quick_mask(true).unwrap();
+        let before=crate::project::encode(&studio.doc).unwrap();let history=studio.history.len();assert!(!available(&studio));open(&ctx,&mut studio);assert!(!is_open(&ctx));assert_eq!(crate::project::encode(&studio.doc).unwrap(),before);assert_eq!(studio.history.len(),history);
     }
     fn completed(ctx: &Context, studio: &mut Studio) -> Session {
         open(ctx, studio);

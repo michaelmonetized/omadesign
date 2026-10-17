@@ -21,6 +21,14 @@ pub(crate) enum Filter {
     Threshold {
         level: f32,
     },
+    Raster {
+        settings: crate::raster::Settings,
+        scale: f32,
+    },
+    Mix {
+        filter: Box<Filter>,
+        strength: f32,
+    },
 }
 impl Filter {
     pub(crate) fn name(&self) -> &'static str {
@@ -28,14 +36,88 @@ impl Filter {
             Self::GaussianBlur { .. } => "Gaussian blur",
             Self::Levels { .. } => "Levels",
             Self::Threshold { .. } => "Threshold",
+            Self::Raster { settings, .. } => settings.kind.name(),
+            Self::Mix { filter, .. } => filter.name(),
         }
+    }
+    /// Borrow the operation independently of its single final strength blend.
+    /// Args: none. Returns the base filter without cloning sample data.
+    pub(crate) fn base(&self) -> &Self {
+        match self {
+            Self::Mix { filter, .. } => filter.base(),
+            _ => self,
+        }
+    }
+    /// Read the single final blend amount.
+    /// Args: none. Returns unit coverage, validated before evaluation.
+    pub(crate) fn strength(&self) -> f32 {
+        match self {
+            Self::Mix { strength, .. } => *strength,
+            _ => 1.,
+        }
+    }
+    /// Replace strength without nesting multiple blend operations.
+    /// Args: requested unit amount. Returns one base operation and at most one strength wrapper.
+    pub(crate) fn with_strength(self, strength: f32) -> Self {
+        let filter = self.base().clone();
+        if strength == 1. {
+            filter
+        } else {
+            Self::Mix {
+                filter: Box::new(filter),
+                strength,
+            }
+        }
+    }
+    /// Translate an existing raster choice without losing actual filter parameters or strength.
+    /// Args: current settings. Returns the original scalar implementations or the shared scalar raster engine.
+    pub(crate) fn from_raster(settings: &crate::raster::Settings) -> Self {
+        use crate::raster::Kind;
+        let p = settings.values;
+        let base = match settings.kind {
+            Kind::GaussianBlur => Self::GaussianBlur { radius: p[0] },
+            Kind::Levels => Self::Levels {
+                black: p[0],
+                white: p[1],
+                gamma: p[2],
+                output_black: 0.,
+                output_white: 1.,
+            },
+            Kind::Threshold => Self::Threshold { level: p[0] },
+            _ => {
+                let mut original = settings.clone();
+                original.strength = 1.;
+                Self::Raster {
+                    settings: original,
+                    scale: 1.,
+                }
+            }
+        };
+        base.with_strength(settings.strength)
+    }
+    /// List every existing raster choice with scalar defaults.
+    /// Args: none. Returns unique choices, preserving the original three controls first.
+    pub(crate) fn choices() -> Vec<Self> {
+        use crate::raster::{Kind, Settings};
+        let mut out = vec![
+            Self::GaussianBlur { radius: 4. },
+            Self::from_raster(&Settings::new(Kind::Levels)),
+            Self::Threshold { level: 0.5 },
+        ];
+        out.extend(
+            Kind::ALL
+                .into_iter()
+                .filter(|k| !matches!(k, Kind::GaussianBlur | Kind::Levels | Kind::Threshold))
+                .map(|k| Self::from_raster(&Settings::new(k))),
+        );
+        out
     }
     /// Validate authored controls before allocating any output.
     /// Args: none. Returns an error without changing or clamping loaded settings.
     pub(crate) fn validate(&self) -> Result<(), String> {
         let unit = |v: f32| v.is_finite() && (0. ..=1.).contains(&v);
-        let valid = match *self {
-            Self::GaussianBlur { radius } => radius.is_finite() && (0. ..=100.).contains(&radius),
+        let valid = match self {
+            Self::GaussianBlur { radius } => radius.is_finite() && (0. ..=100.).contains(radius),
             Self::Levels {
                 black,
                 white,
@@ -43,15 +125,19 @@ impl Filter {
                 output_black,
                 output_white,
             } => {
-                unit(black)
-                    && unit(white)
+                unit(*black)
+                    && unit(*white)
                     && black < white
                     && gamma.is_finite()
-                    && (0.01..=10.).contains(&gamma)
-                    && unit(output_black)
-                    && unit(output_white)
+                    && (0.01..=10.).contains(gamma)
+                    && unit(*output_black)
+                    && unit(*output_white)
             }
-            Self::Threshold { level } => unit(level),
+            Self::Threshold { level } => unit(*level),
+            Self::Raster { settings, scale } => {
+                settings.validate().is_ok() && scale.is_finite() && *scale > 0. && *scale <= 1.
+            }
+            Self::Mix { filter, strength } => unit(*strength) && filter.validate().is_ok(),
         };
         if valid {
             Ok(())
@@ -62,10 +148,18 @@ impl Filter {
     /// Scale only spatial controls for the actual preview grid.
     /// Args: source-to-preview scale. Returns settings without changing the authored values.
     pub(crate) fn scaled(&self, scale: f32) -> Self {
-        match *self {
+        match self {
             Self::GaussianBlur { radius } => Self::GaussianBlur {
                 radius: radius * scale,
             },
+            Self::Raster {
+                settings,
+                scale: old,
+            } => Self::Raster {
+                settings: settings.clone(),
+                scale: old * scale,
+            },
+            Self::Mix { filter, strength } => filter.scaled(scale).with_strength(*strength),
             _ => self.clone(),
         }
     }
@@ -77,7 +171,7 @@ pub(crate) fn apply(
     source: &Plane,
     filter: &Filter,
     selection: Option<&[f32]>,
-    cancel: &dyn CancellationCheck,
+    cancel: &(dyn CancellationCheck + Sync),
 ) -> Result<Plane, String> {
     source.validate()?;
     filter.validate()?;
@@ -87,11 +181,27 @@ pub(crate) fn apply(
         return Err("Channel filter selection dimensions changed".into());
     }
     cancel.check()?;
-    if matches!(filter, Filter::GaussianBlur { radius } if *radius < 0.1)
+    let strength = filter.strength();
+    let filter = filter.base();
+    if strength == 0.
+        || matches!(filter, Filter::GaussianBlur { radius } if *radius < 0.1)
         || matches!(filter, Filter::Levels { black, white, gamma, output_black, output_white } if *black == 0. && *white == 1. && *gamma == 1. && *output_black == 0. && *output_white == 1.)
     {
         return Ok(source.clone());
     }
+    let rastered = if let Filter::Raster { settings, scale } = filter {
+        let mut current = settings.scaled(*scale);
+        current.strength = 1.;
+        Some(crate::raster::apply_scalar(
+            &source.samples,
+            source.width,
+            source.height,
+            &current,
+            cancel,
+        )?)
+    } else {
+        None
+    };
     let blurred = if let Filter::GaussianBlur { radius } = *filter {
         Some(crate::raster::blur_channels(
             source.samples.as_slice().as_chunks::<1>().0,
@@ -124,6 +234,10 @@ pub(crate) fn apply(
                             .powf(1. / gamma)
                             * (output_white - output_black)
                 }
+                Filter::Raster { .. } => rastered.as_ref().unwrap()[i][0].clamp(0., 1.),
+                Filter::Mix { .. } => {
+                    unreachable!("Strength wrapper is removed before evaluating samples")
+                }
                 Filter::Threshold { level } => {
                     if before >= level {
                         1.
@@ -132,7 +246,7 @@ pub(crate) fn apply(
                     }
                 }
             };
-            let weight = selection.map_or(1., |s| s[i]);
+            let weight = strength * selection.map_or(1., |s| s[i]);
             *out = if weight == 0. || before.to_bits() == mapped.to_bits() {
                 before
             } else if weight == 1. {
@@ -300,3 +414,7 @@ mod tests {
         assert_eq!(source.samples.as_slice(), &[0., 0.5, 1., 0.25]);
     }
 }
+
+#[cfg(test)]
+#[path = "filter_families_tests.rs"]
+pub(crate) mod family_tests;

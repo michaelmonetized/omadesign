@@ -52,24 +52,31 @@ pub(super) fn ready(ctx: &Context) -> bool {
 }
 
 pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
-    let scalar=studio.channel_paint_target().is_some();
-    let editable = scalar || studio.active_layer.is_some_and(|i| {
-        studio.doc.layer_editable(i)
-            && studio.doc.layers.get(i).is_some_and(|l| {
-                if studio.paint_mask {
-                    l.mask.is_some()
-                } else {
-                    l.kind.pixels().is_some()
-                }
-            })
-    });
+    let scalar = studio.channel_paint_target().is_some();
+    let editable = scalar
+        || studio.active_layer.is_some_and(|i| {
+            studio.doc.layer_editable(i)
+                && studio.doc.layers.get(i).is_some_and(|l| {
+                    if studio.paint_mask {
+                        l.mask.is_some()
+                    } else {
+                        l.kind.pixels().is_some()
+                    }
+                })
+        });
     ui.label(RichText::new("Raster studio").strong().size(12.0));
     let mut chosen = None;
     let mut remove_background = false;
     ui.add_enabled_ui(editable, |ui| {
         ui.horizontal(|ui| {
             for (label, bank) in [("Filters", Bank::Filters), ("Effects", Bank::Effects)] {
-                if scalar && !Kind::ALL.iter().any(|kind|kind.bank()==bank&&channel_filter(&Settings::new(*kind)).is_some()){continue;}
+                if scalar
+                    && !Kind::ALL.iter().any(|kind| {
+                        kind.bank() == bank && channel_filter(&Settings::new(*kind)).is_some()
+                    })
+                {
+                    continue;
+                }
                 ui.menu_button(label, |ui| {
                     for category in [
                         "Key & transparency",
@@ -79,10 +86,11 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                         "Stylize",
                         "Distort",
                     ] {
-                        if !Kind::ALL
-                            .iter()
-                            .any(|kind| kind.bank() == bank && kind.category() == category && (!scalar || channel_filter(&Settings::new(*kind)).is_some()))
-                        {
+                        if !Kind::ALL.iter().any(|kind| {
+                            kind.bank() == bank
+                                && kind.category() == category
+                                && (!scalar || channel_filter(&Settings::new(*kind)).is_some())
+                        }) {
                             continue;
                         }
                         ui.menu_button(category, |ui| {
@@ -98,10 +106,11 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
                                 remove_background = true;
                                 ui.close();
                             }
-                            for kind in Kind::ALL
-                                .into_iter()
-                                .filter(|kind| kind.bank() == bank && kind.category() == category && (!scalar || channel_filter(&Settings::new(*kind)).is_some()))
-                            {
+                            for kind in Kind::ALL.into_iter().filter(|kind| {
+                                kind.bank() == bank
+                                    && kind.category() == category
+                                    && (!scalar || channel_filter(&Settings::new(*kind)).is_some())
+                            }) {
                                 if ui
                                     .button(kind.name())
                                     .on_hover_text(kind.description())
@@ -117,7 +126,7 @@ pub(super) fn inspector(ui: &mut Ui, studio: &mut Studio) {
             }
         });
         if ui
-            .add_enabled(!scalar,egui::Button::new("Chroma key…"))
+            .button("Chroma key…")
             .on_hover_text("Remove green, blue, or any sampled background color")
             .clicked()
         {
@@ -149,14 +158,18 @@ pub(super) fn open(ctx: &Context, studio: &mut Studio, kind: Kind) {
     open_with_settings(ctx, studio, Settings::new(kind));
 }
 
-fn channel_filter(settings:&Settings)->Option<crate::channels::filter::Filter>{
-    use crate::channels::filter::Filter;
-    match settings.kind{Kind::GaussianBlur=>Some(Filter::GaussianBlur{radius:settings.values[0]}),Kind::Levels=>Some(Filter::Levels{black:settings.values[0],white:settings.values[1],gamma:settings.values[2],output_black:0.,output_white:1.}),Kind::Threshold=>Some(Filter::Threshold{level:settings.values[0]}),_=>None}
+fn channel_filter(settings: &Settings) -> Option<crate::channels::filter::Filter> {
+    Some(crate::channels::filter::Filter::from_raster(settings))
 }
+
 pub(super) fn open_with_settings(ctx: &Context, studio: &mut Studio, settings: Settings) {
     studio.end_pixel_stroke(false);
     if studio.channel_target.is_some() || studio.quick_mask_painting() {
-        if let Some(filter)=channel_filter(&settings){super::channel_adjustment::open_filter(ctx,studio,filter);}else{studio.status = "This filter is unavailable for scalar channels".into();}
+        if let Some(filter) = channel_filter(&settings) {
+            super::channel_adjustment::open_filter(ctx, studio, filter);
+        } else {
+            studio.status = "This filter is unavailable for scalar channels".into();
+        }
         return;
     }
     let Some(index) = studio.active_layer else {
@@ -236,7 +249,7 @@ pub(super) fn open_with_settings(ctx: &Context, studio: &mut Studio, settings: S
     });
 }
 
-fn thumbnail<T:Copy>(data: &[T], w: u32, h: u32, dw: u32, dh: u32, channels: usize) -> Vec<T> {
+fn thumbnail<T: Copy>(data: &[T], w: u32, h: u32, dw: u32, dh: u32, channels: usize) -> Vec<T> {
     let mut out = Vec::with_capacity(dw as usize * dh as usize * channels);
     for y in 0..dh {
         for x in 0..dw {
@@ -363,8 +376,13 @@ pub(super) fn show(ui: &mut Ui, studio: &mut Studio) {
     }
     let mut close = false;
     let busy = session.apply_job.is_some();
-    let owner=Id::new(("raster-filter-native",&session.document,session.layer_id,session.mask));
-    let mut kind_control=None;
+    let owner = Id::new((
+        "raster-filter-native",
+        &session.document,
+        session.layer_id,
+        session.mask,
+    ));
+    let mut kind_control = None;
     let dialog = egui::Modal::new(Id::new("raster-filter-modal")).show(&ctx, |ui| {
         let width = (ctx.viewport_rect().width() - 70.0).clamp(560.0, 950.0);
         ui.set_width(width);
@@ -540,77 +558,14 @@ fn controls(ui: &mut Ui, session: &mut Session) {
             }
         });
     }
-    let mut slider = |index: usize, label: &str, min: f32, max: f32| {
-        ui.add(Slider::new(&mut s.values[index], min..=max).text(label));
-    };
-    match s.kind {
-        Kind::ChromaKey => {
-            slider(0, "Similarity", 0.0, 0.8);
-            slider(1, "Falloff", 0.0, 0.8);
-            slider(2, "Hardness", 0.0, 1.0);
-            slider(3, "Spill cleanup", 0.0, 1.0);
-        }
-        Kind::BrightnessContrast => {
-            slider(0, "Brightness", -1.0, 1.0);
-            slider(1, "Contrast", -1.0, 1.0);
-        }
-        Kind::Exposure => {
-            slider(0, "Exposure (EV)", -5.0, 5.0);
-            slider(1, "Gamma", 0.1, 4.0);
-        }
-        Kind::Levels => {
-            slider(0, "Black point", 0.0, 0.99);
-            slider(1, "White point", 0.01, 1.0);
-            slider(2, "Gamma", 0.1, 4.0);
-            s.values[1] = s.values[1].max(s.values[0] + 0.001);
-        }
-        Kind::HueSaturation => {
-            slider(0, "Hue (°)", -180.0, 180.0);
-            slider(1, "Saturation", -1.0, 1.0);
-            slider(2, "Lightness", -1.0, 1.0);
-        }
-        Kind::Vibrance => slider(0, "Vibrance", -1.0, 2.0),
-        Kind::ColorBalance => {
-            slider(0, "Cyan / red", -1.0, 1.0);
-            slider(1, "Magenta / green", -1.0, 1.0);
-            slider(2, "Yellow / blue", -1.0, 1.0);
-        }
-        Kind::Temperature => {
-            slider(0, "Cool / warm", -1.0, 1.0);
-            slider(1, "Green / magenta", -1.0, 1.0);
-        }
-        Kind::Threshold | Kind::AlphaThreshold | Kind::Solarize => slider(0, "Threshold", 0.0, 1.0),
-        Kind::Posterize => slider(0, "Levels", 2.0, 32.0),
-        Kind::GaussianBlur | Kind::FeatherAlpha => slider(0, "Radius (px)", 0.0, 100.0),
-        Kind::GrowAlpha | Kind::ShrinkAlpha => slider(0, "Radius (px)", 1.0, 20.0),
-        Kind::MotionBlur => {
-            slider(0, "Distance (px)", 1.0, 100.0);
-            slider(1, "Angle (°)", -180.0, 180.0);
-        }
-        Kind::Sharpen => slider(0, "Amount", 0.0, 2.0),
-        Kind::UnsharpMask => {
-            slider(0, "Radius (px)", 0.1, 50.0);
-            slider(1, "Amount", 0.0, 5.0);
-            slider(2, "Threshold", 0.0, 0.3);
-        }
-        Kind::EdgeDetect | Kind::Emboss => slider(0, "Amount", 0.1, 5.0),
-        Kind::Pixelate | Kind::Halftone => slider(0, "Cell size (px)", 2.0, 100.0),
-        Kind::Noise => slider(0, "Grain amount", 0.0, 1.0),
-        Kind::Vignette => {
-            slider(0, "Darkness", 0.0, 1.0);
-            slider(1, "Inner radius", 0.0, 1.2);
-        }
-        Kind::Swirl => {
-            slider(0, "Twist (°)", -720.0, 720.0);
-            slider(1, "Radius", 0.05, 1.5);
-        }
-        Kind::Ripple => {
-            slider(0, "Amplitude (px)", 0.0, 50.0);
-            slider(1, "Wavelength (px)", 4.0, 200.0);
-        }
-        Kind::Grayscale | Kind::Sepia | Kind::Invert => {
-            ui.small("Use Strength to blend with the original image.");
-        }
+    for p in s.kind.parameters() {
+        ui.add(Slider::new(&mut s.values[p.index], p.min..=p.max).text(p.label));
+    }
+    if s.kind == Kind::Levels {
+        s.values[1] = s.values[1].max(s.values[0] + 0.001);
+    }
+    if matches!(s.kind, Kind::Grayscale | Kind::Sepia | Kind::Invert) {
+        ui.small("Use Strength to blend with the original image.");
     }
 }
 
@@ -634,7 +589,10 @@ fn commit(studio: &mut Studio, session: &Session, after: Vec<u8>) -> Result<(), 
         layer.kind.pixels()
     })
     .ok_or("The target image or mask changed")?;
-    if pixels.w != session.w || pixels.h != session.h || pixels.data.as_slice() != session.source.as_slice() {
+    if pixels.w != session.w
+        || pixels.h != session.h
+        || pixels.data.as_slice() != session.source.as_slice()
+    {
         return Err("The pixels changed while previewing. Cancel and reopen the filter.".into());
     }
     if after.len() != session.source.len() {
@@ -658,13 +616,20 @@ fn commit(studio: &mut Studio, session: &Session, after: Vec<u8>) -> Result<(), 
         return Ok(());
     }
     let cmd = if let Some(after) = native_after {
-        Cmd::NativePixels {layer:index, mask:session.mask, before:pixels.clone(), after}
-    } else {Cmd::Pixels {
-        layer: index,
-        mask: session.mask,
-        before: pixels.data.clone(),
-        after:crate::deep_color::storage::adopt(after)?,
-    }};
+        Cmd::NativePixels {
+            layer: index,
+            mask: session.mask,
+            before: pixels.clone(),
+            after,
+        }
+    } else {
+        Cmd::Pixels {
+            layer: index,
+            mask: session.mask,
+            before: pixels.data.clone(),
+            after: crate::deep_color::storage::adopt(after)?,
+        }
+    };
     apply_command(&mut studio.doc, &cmd);
     studio.history.push(cmd);
     studio.dirty = true;
@@ -755,25 +720,45 @@ mod tests {
         let ctx = Context::default();
         let mut studio = Studio::new();
         studio.doc.layers = vec![Layer::raster("Key", 2, 1).unwrap()];
-        studio.doc.layers[0].kind.pixels_mut().unwrap().replace_bytes(vec![0, 255, 0, 255, 255, 0, 0, 128]).unwrap();
+        studio.doc.layers[0]
+            .kind
+            .pixels_mut()
+            .unwrap()
+            .replace_bytes(vec![0, 255, 0, 255, 255, 0, 0, 128])
+            .unwrap();
         studio.active_layer = Some(0);
         let before = studio.doc.layers[0].kind.pixels().unwrap().data.to_vec();
         open(&ctx, &mut studio, Kind::ChromaKey);
         let session = ctx.data(|d| d.get_temp::<Session>(state_id())).unwrap();
         let after = crate::raster::apply(&session.source, 2, 1, &session.settings, None).unwrap();
-        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(), before);
+        assert_eq!(
+            studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(),
+            before
+        );
         assert_eq!(studio.history.len(), 0);
         commit(&mut studio, &session, after.clone()).unwrap();
-        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(), after);
+        assert_eq!(
+            studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(),
+            after
+        );
         let undo = studio.history.undo().unwrap();
         apply_command(&mut studio.doc, &undo);
-        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(), before);
+        assert_eq!(
+            studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(),
+            before
+        );
         let redo = studio.history.redo().unwrap();
         apply_command(&mut studio.doc, &redo);
-        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(), after);
+        assert_eq!(
+            studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(),
+            after
+        );
         let encoded = serde_json::to_string(&studio.doc).unwrap();
         let saved: crate::document::Document = serde_json::from_str(&encoded).unwrap();
-        assert_eq!(saved.layers[0].kind.pixels().unwrap().data.as_slice(), after);
+        assert_eq!(
+            saved.layers[0].kind.pixels().unwrap().data.as_slice(),
+            after
+        );
     }
     #[test]
     fn filter_on_mask_preserves_image_and_rejects_stale_source() {
@@ -871,7 +856,12 @@ mod tests {
         let ctx = Context::default();
         let mut studio = Studio::new();
         studio.doc.layers = vec![Layer::raster("Key", 2, 1).unwrap()];
-        studio.doc.layers[0].kind.pixels_mut().unwrap().replace_bytes(vec![0, 255, 0, 255, 220, 10, 10, 255]).unwrap();
+        studio.doc.layers[0]
+            .kind
+            .pixels_mut()
+            .unwrap()
+            .replace_bytes(vec![0, 255, 0, 255, 220, 10, 10, 255])
+            .unwrap();
         studio.active_layer = Some(0);
         let original = studio.doc.layers[0].kind.pixels().unwrap().data.to_vec();
         frame(&ctx, &mut studio, vec![]);
@@ -885,7 +875,10 @@ mod tests {
         click(&ctx, &mut studio, labels["Cancel"].center());
         assert!(!is_open(&ctx));
         assert_eq!(studio.history.len(), 0);
-        assert_eq!(studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(), original);
+        assert_eq!(
+            studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(),
+            original
+        );
         open(&ctx, &mut studio, Kind::ChromaKey);
         frame(&ctx, &mut studio, vec![]);
         let labels = frame(&ctx, &mut studio, vec![]);

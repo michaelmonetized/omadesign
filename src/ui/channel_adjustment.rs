@@ -466,23 +466,14 @@ fn graph(ui: &mut Ui, session: &mut Session) -> bool {
     edited
 }
 fn filter_controls(ui: &mut Ui, session: &mut Session) -> bool {
-    let mut filter = session.filter.clone().unwrap();
+    let mut strength = session.filter.as_ref().unwrap().strength();
+    let mut filter = session.filter.as_ref().unwrap().base().clone();
     let label = ui.label("Channel filter");
     let mut response = fields::native_scope(ui, session.scope.with("filter-choice"), |ui| {
         egui::ComboBox::from_id_salt("channel-filter")
             .selected_text(filter.name())
             .show_ui(ui, |ui| {
-                for choice in [
-                    Filter::GaussianBlur { radius: 4. },
-                    Filter::Levels {
-                        black: 0.,
-                        white: 1.,
-                        gamma: 1.,
-                        output_black: 0.,
-                        output_white: 1.,
-                    },
-                    Filter::Threshold { level: 0.5 },
-                ] {
+                for choice in Filter::choices() {
                     let selected = filter.name() == choice.name();
                     let response = ui.selectable_label(selected, choice.name());
                     welcome::name_control(
@@ -509,17 +500,7 @@ fn filter_controls(ui: &mut Ui, session: &mut Session) -> bool {
         session.scope.with("filter-label"),
         "Channel filter",
     );
-    let choices = [
-        Filter::GaussianBlur { radius: 4. },
-        Filter::Levels {
-            black: 0.,
-            white: 1.,
-            gamma: 1.,
-            output_black: 0.,
-            output_white: 1.,
-        },
-        Filter::Threshold { level: 0.5 },
-    ];
+    let choices = Filter::choices();
     let options: Vec<_> = choices
         .iter()
         .enumerate()
@@ -534,7 +515,19 @@ fn filter_controls(ui: &mut Ui, session: &mut Session) -> bool {
     if selected != before {
         filter = choices[selected].clone();
     }
-    let mut changed = filter != *session.filter.as_ref().unwrap();
+    if let Filter::Raster { settings, .. } = &mut filter {
+        if settings.kind == crate::raster::Kind::ChromaKey {
+            ui.horizontal(|ui| {
+                ui.label("Key color");
+                super::color_picker::color_edit(
+                    ui,
+                    session.scope.with("key-color"),
+                    &mut settings.color,
+                );
+            });
+        }
+    }
+    let mut changed = false;
     let mut valid = true;
     let mut responses = Vec::new();
     let mut field = |ui: &mut Ui,
@@ -600,7 +593,33 @@ fn filter_controls(ui: &mut Ui, session: &mut Session) -> bool {
             0.01,
             "",
         ),
+        Filter::Raster { settings, .. } => {
+            for parameter in settings.kind.parameters() {
+                let key = format!("{}-{}", settings.kind.name(), parameter.index);
+                field(
+                    ui,
+                    &key,
+                    parameter.label,
+                    &mut settings.values[parameter.index],
+                    parameter.min..=parameter.max,
+                    parameter.step,
+                    "",
+                );
+            }
+        }
+        Filter::Mix { .. } => unreachable!("Strength wrapper is edited separately"),
     }
+    field(
+        ui,
+        "strength",
+        "Filter strength",
+        &mut strength,
+        0. ..=1.,
+        0.01,
+        "",
+    );
+    let filter = filter.with_strength(strength);
+    changed |= filter != *session.filter.as_ref().unwrap();
     let validation = filter.validate();
     session.valid = valid && validation.is_ok();
     if let Err(error) = validation {
@@ -856,6 +875,93 @@ mod tests {
         ctx.enable_accesskit();
         super::super::theme::apply(&ctx);
         ctx
+    }
+    #[test]
+    fn craft_channel_filter_families_native_catalog_visits_every_kind_and_applies_last() {
+        let ctx = context();
+        let mut studio = crate::app::channel_adjustment::tests::fixture();
+        let before = crate::project::encode(&studio.doc).unwrap();
+        let history = studio.history.len();
+        open_filter(&ctx, &mut studio, Filter::GaussianBlur { radius: 4. });
+        wait(&ctx, &mut studio);
+        keys::tab_to(&ctx, "Channel filter", |events| {
+            frame(&ctx, &mut studio, events)
+        });
+        for (index, choice) in Filter::choices().into_iter().enumerate() {
+            if index > 0 {
+                frame(
+                    &ctx,
+                    &mut studio,
+                    keys::key(Key::ArrowDown, Modifiers::NONE),
+                );
+                wait(&ctx, &mut studio);
+            }
+            let session = ctx.data(|d| d.get_temp::<Session>(id())).unwrap();
+            assert_eq!(session.filter.as_ref().unwrap().name(), choice.name());
+            assert!(session.valid, "{}", choice.name());
+            assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+            assert_eq!(studio.history.len(), history);
+        }
+        keys::tab_to(&ctx, "Amplitude (px)", |events| {
+            frame(&ctx, &mut studio, events)
+        });
+        keys::replace("4.25", |events| frame(&ctx, &mut studio, events));
+        frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        wait(&ctx, &mut studio);
+        invoke(&ctx, &mut studio, "Apply");
+        wait(&ctx, &mut studio);
+        assert!(!is_open(&ctx));
+        assert_eq!(studio.history.len(), history + 1);
+        let after = crate::project::encode(&studio.doc).unwrap();
+        assert_ne!(after, before);
+        assert_eq!(
+            crate::project::encode(&crate::project::decode(&after).unwrap()).unwrap(),
+            after
+        );
+        studio.undo();
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+        studio.redo();
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), after);
+    }
+    #[test]
+    fn craft_channel_filter_families_native_strength_is_stable_and_blends_once() {
+        let ctx = context();
+        let mut studio = crate::app::channel_adjustment::tests::fixture();
+        let before = crate::project::encode(&studio.doc).unwrap();
+        let original = studio.doc.channels.last().unwrap().plane.clone();
+        let history = studio.history.len();
+        super::super::raster::open(&ctx, &mut studio, crate::raster::Kind::Invert);
+        wait(&ctx, &mut studio);
+        keys::tab_to(&ctx, "Filter strength", |events| {
+            frame(&ctx, &mut studio, events)
+        });
+        keys::replace("0.375", |events| frame(&ctx, &mut studio, events));
+        frame(&ctx, &mut studio, keys::key(Key::Enter, Modifiers::NONE));
+        wait(&ctx, &mut studio);
+        let session = ctx.data(|d| d.get_temp::<Session>(id())).unwrap();
+        assert_eq!(session.filter.as_ref().unwrap().strength(), 0.375);
+        let revision = session.revision;
+        for _ in 0..3 {
+            frame(&ctx, &mut studio, vec![]);
+        }
+        assert_eq!(
+            ctx.data(|d| d.get_temp::<Session>(id())).unwrap().revision,
+            revision
+        );
+        assert!(!jobs::is_running::<Rendered>(&ctx, JOB));
+        let output = preview(&ctx, &studio).unwrap().0;
+        for (input, actual) in original.samples.iter().zip(output.samples.iter()) {
+            assert_eq!(
+                actual.to_bits(),
+                (input + ((1. - input) - input) * 0.375).to_bits()
+            );
+        }
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
+        invoke(&ctx, &mut studio, "Apply");
+        wait(&ctx, &mut studio);
+        assert_eq!(studio.history.len(), history + 1);
+        studio.undo();
+        assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
     }
     #[test]
     fn craft_channel_filters_native_numeric_preview_apply_undo_and_reopen() {
