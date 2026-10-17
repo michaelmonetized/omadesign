@@ -7,6 +7,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::{Mutex, OnceLock};
 
+pub(crate) mod font_inventory;
+pub(crate) mod font_catalog;
+pub(crate) mod font_recovery;
+
 const PREFERRED: &[&str] = &[
     "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
     "/usr/share/fonts/liberation/LiberationSans-Bold.ttf",
@@ -52,6 +56,7 @@ pub fn register_memory_font(id: &str, name: &str, bytes: Arc<Vec<u8>>) -> Result
         .lock()
         .map_err(|_| "Font cache is unavailable")?;
     let path = PathBuf::from(id);
+    let added = !cache.contains_key(&path);
     if let Some(old) = cache.get(&path) {
         if **old != *bytes {
             return Err("Project font fingerprint collision".into());
@@ -64,6 +69,8 @@ pub fn register_memory_font(id: &str, name: &str, bytes: Arc<Vec<u8>>) -> Result
         .lock()
         .map_err(|_| "Font labels are unavailable")?
         .insert(id.into(), name.into());
+    drop(cache);
+    if added { FONT_REVISION.fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
     Ok(())
 }
 
@@ -218,6 +225,7 @@ fn scan_fonts() -> Vec<FontFace> {
             break;
         }
     }
+    walk_ttfs(&crate::project::data_dir().join("fonts"), &mut out, &mut seen, 0);
     out.sort_by_cached_key(|f| f.name.to_lowercase());
     out.truncate(FONT_CAP);
     out
@@ -262,6 +270,8 @@ pub fn fonts() -> &'static [FontFace] {
 
 static DYNAMIC_FONTS: OnceLock<Mutex<Vec<FontFace>>> = OnceLock::new();
 static FONT_LIST: OnceLock<Mutex<Option<Arc<[FontFace]>>>> = OnceLock::new();
+static RESCANNED_FONTS: OnceLock<Mutex<Option<Vec<FontFace>>>> = OnceLock::new();
+static INSTALLED_REVISION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static FONT_REVISION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 pub fn register_font(face: FontFace) {
@@ -283,7 +293,23 @@ pub fn register_font(face: FontFace) {
     {
         m.remove(&path);
     }
+    INSTALLED_REVISION.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     FONT_REVISION.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Rescan installed font files without changing authored text or clearing document fonts.
+/// Args: none. Returns the current installed face count.
+pub(crate) fn refresh_fonts() -> usize {
+    let found = scan_fonts();
+    let count = found.len();
+    *RESCANNED_FONTS.get_or_init(|| Mutex::new(None)).lock().unwrap_or_else(|e| e.into_inner()) = Some(found);
+    if let Some(list) = FONT_LIST.get() { *list.lock().unwrap_or_else(|e| e.into_inner()) = None; }
+    if let Some(bytes) = BYTES.get() {
+        bytes.lock().unwrap_or_else(|e| e.into_inner()).retain(|path, _| path.to_string_lossy().starts_with("omatype:"));
+    }
+    INSTALLED_REVISION.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    FONT_REVISION.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    count
 }
 
 pub fn all_fonts_cached() -> Arc<[FontFace]> {
@@ -292,11 +318,11 @@ pub fn all_fonts_cached() -> Arc<[FontFace]> {
     if let Some(list) = cached.as_ref() {
         return Arc::clone(list);
     }
-    let mut v = fonts().to_vec();
+    let mut v = RESCANNED_FONTS.get().and_then(|f| f.lock().ok()?.clone()).unwrap_or_else(|| fonts().to_vec());
     if let Some(m) = DYNAMIC_FONTS.get()
         && let Ok(g) = m.lock()
     {
-        for f in g.iter() {
+        for f in g.iter().filter(|f| f.path.is_file()) {
             if !v.iter().any(|e| e.path == f.path) {
                 v.push(f.clone());
             }

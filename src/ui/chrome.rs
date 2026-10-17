@@ -153,6 +153,7 @@ fn main_menus(ui: &mut Ui, studio: &mut Studio) {
         } else { object_menu(ui, studio); }
         let type_menu = ui.menu_button("Type", |ui| {
             super::text_geometry::menu(ui, studio);
+            super::find_font::menu(ui, studio);
             ui.separator();
             for (panel, label) in [("character", "Character panel…"), ("paragraph", "Paragraph panel…"), ("opentype", "OpenType panel…"), ("glyphs", "Glyphs panel…"), ("typography", "Typography library…")] {
                 if ui.button(label).clicked() {super::panel_workspace::open(ui.ctx(), studio, panel);ui.close();}

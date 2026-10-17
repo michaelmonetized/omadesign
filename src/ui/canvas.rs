@@ -3503,7 +3503,7 @@ fn draw_overlays(
         ));
     }
     let owns_ime = studio.owns_type_ime(p.ctx());
-    if !owns_ime && !super::find_replace::is_open(p.ctx()) {
+    if !owns_ime && !super::find_replace::is_open(p.ctx()) && !super::find_font::is_open(p.ctx()) {
         studio.cancel_type_ime();
     }
     let edit = studio.type_edit.clone();

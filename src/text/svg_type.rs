@@ -116,7 +116,7 @@ pub(crate) struct Layout {
 }
 
 pub(crate) fn paint_tree(run: &TypeRun, fill: bool) -> Option<Arc<usvg::Tree>> {
-    static CACHE: OnceLock<Mutex<HashMap<String, Arc<usvg::Tree>>>> = OnceLock::new();
+    static CACHE: OnceLock<Mutex<HashMap<(String, u64), Arc<usvg::Tree>>>> = OnceLock::new();
     let mut source = source(run)?;
     let xml = roxmltree::Document::parse(&source).ok()?;
     let mut edits = Vec::new();
@@ -135,8 +135,9 @@ pub(crate) fn paint_tree(run: &TypeRun, fill: bool) -> Option<Arc<usvg::Tree>> {
     for (range, value) in edits.into_iter().rev() {
         source.replace_range(range, &value);
     }
+    let key = (source.clone(), super::FONT_REVISION.load(std::sync::atomic::Ordering::Relaxed));
     let cache = CACHE.get_or_init(Default::default);
-    if let Some(tree) = cache.lock().unwrap().get(&source).cloned() {
+    if let Some(tree) = cache.lock().unwrap().get(&key).cloned() {
         return Some(tree);
     }
     let tree = Arc::new(usvg::Tree::from_str(&renderer_source(&source), &options_for(run)).ok()?);
@@ -144,7 +145,7 @@ pub(crate) fn paint_tree(run: &TypeRun, fill: bool) -> Option<Arc<usvg::Tree>> {
     if cache.len() >= 64 {
         cache.clear();
     }
-    cache.insert(source, tree.clone());
+    cache.insert(key, tree.clone());
     Some(tree)
 }
 
@@ -760,12 +761,17 @@ fn write_nodes(
 /// Share SVG font selection and external resource restrictions.
 /// Args: none. Returns options using one installed-font database and cached native font bytes.
 pub(crate) fn options() -> usvg::Options<'static> {
-    static DB: OnceLock<Arc<usvg::fontdb::Database>> = OnceLock::new();
+    static DB: OnceLock<std::sync::Mutex<Option<(u64, Arc<usvg::fontdb::Database>)>>> = OnceLock::new();
     let mut options = usvg::Options::default();
-    options.fontdb = DB
-        .get_or_init(|| {
+    let revision = super::INSTALLED_REVISION.load(std::sync::atomic::Ordering::Relaxed);
+    let mut cached = DB.get_or_init(|| std::sync::Mutex::new(None)).lock().unwrap_or_else(|e| e.into_inner());
+    if cached.as_ref().is_none_or(|(r, _)| *r != revision) {
             let mut db = usvg::fontdb::Database::new();
             db.load_system_fonts();
+            db.load_fonts_dir(crate::project::data_dir().join("fonts"));
+            if let Some(fonts) = super::DYNAMIC_FONTS.get() && let Ok(fonts) = fonts.lock() {
+                for font in fonts.iter() { let _ = db.load_font_file(&font.path); }
+            }
             for generic in ["serif", "sans-serif", "monospace", "cursive", "fantasy"] {
                 if let Ok(output) = std::process::Command::new("fc-match")
                     .args(["-f", "%{family[0]}", generic])
@@ -788,9 +794,10 @@ pub(crate) fn options() -> usvg::Options<'static> {
                     }
                 }
             }
-            Arc::new(db)
-        })
-        .clone();
+            *cached = Some((revision, Arc::new(db)));
+    }
+    options.fontdb = cached.as_ref().unwrap().1.clone();
+    drop(cached);
     let selector = usvg::FontResolver::default_font_selector();
     options.font_resolver.select_font = Box::new(move |font, db| {
         let requested = font.families().iter().any(|family| match family {
@@ -1301,10 +1308,11 @@ pub(crate) fn renderer_source(source: &str) -> String {
 }
 
 pub(crate) fn layout(run: &TypeRun) -> Option<Arc<Layout>> {
-    static CACHE: OnceLock<Mutex<HashMap<String, Arc<Layout>>>> = OnceLock::new();
+    static CACHE: OnceLock<Mutex<HashMap<(String, u64), Arc<Layout>>>> = OnceLock::new();
     let source = source(run)?;
+    let key = (source.clone(), super::FONT_REVISION.load(std::sync::atomic::Ordering::Relaxed));
     let cache = CACHE.get_or_init(Default::default);
-    if let Some(found) = cache.lock().unwrap().get(&source).cloned() {
+    if let Some(found) = cache.lock().unwrap().get(&key).cloned() {
         return Some(found);
     }
     let tree = usvg::Tree::from_str(&renderer_source(&source), &options_for(run)).ok()?;
@@ -1470,7 +1478,7 @@ pub(crate) fn layout(run: &TypeRun) -> Option<Arc<Layout>> {
     if cache.len() >= 64 {
         cache.clear();
     }
-    cache.insert(source, result.clone());
+    cache.insert(key, result.clone());
     Some(result)
 }
 

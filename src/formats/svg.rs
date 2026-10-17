@@ -1037,6 +1037,15 @@ impl Reader<'_> {
         let Some(face) = self.tree.fontdb().face(glyph.font) else {
             return Ok(false);
         };
+        let requested = span.font();
+        let requested_family = requested.families().first().is_none_or(|family| match family {
+            usvg::FontFamily::Named(name) => face.families.iter().any(|(alias, _)| alias.eq_ignore_ascii_case(name)),
+            _ => true,
+        });
+        if !requested_family || face.weight.0 != requested.weight()
+            || face.style != requested.style().into() || face.stretch != requested.stretch().into() {
+            return Ok(false);
+        }
         let native_axes = self
             .tree
             .fontdb()

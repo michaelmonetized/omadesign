@@ -4,6 +4,8 @@ use crate::{geom::CharSpan, text::CharacterRewrite};
 use std::ops::Range;
 #[path = "type_search.rs"]
 pub(crate) mod search;
+#[path = "type_fonts.rs"]
+pub(crate) mod fonts;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TextScope {
@@ -42,6 +44,7 @@ pub(crate) enum TypeCommand {
     Punctuation(SmartPunctuation),
     Insert(String),
     Replace(search::Replacement),
+    Font(fonts::Replacement),
 }
 pub(crate) const SPECIAL_CHARACTERS: &[(&str, &str)] = &[
     ("Bullet •", "•"),
@@ -134,6 +137,7 @@ fn rewritten_caret(at: usize, edits: &[CharacterRewrite]) -> usize {
 /// Rewrite content while carrying word/sentence/quote context across styled intervals.
 /// Args: source run, original range and command. Returns only actual character replacements.
 fn rewrites(run: &TypeRun, range: Range<usize>, command: &TypeCommand) -> Vec<CharacterRewrite> {
+    if matches!(command, TypeCommand::Font(_)) { return vec![]; }
     if let TypeCommand::Replace(replacement) = command {
         return search::rewrites(run, range, replacement);
     }
@@ -231,7 +235,7 @@ fn rewrites(run: &TypeRun, range: Range<usize>, command: &TypeCommand) -> Vec<Ch
                     c.to_string()
                 }
             }
-            TypeCommand::Insert(_) | TypeCommand::Replace(_) => unreachable!(),
+            TypeCommand::Insert(_) | TypeCommand::Replace(_) | TypeCommand::Font(_) => unreachable!(),
         };
         previous = text.chars().last().or(previous);
         if !chars[index..end].iter().copied().eq(text.chars()) {
@@ -333,6 +337,10 @@ impl Studio {
     }
 
     fn capture_type_target(&self, scope: TextScope, hidden: bool, skip_locked: bool) -> Result<TypeCommandTarget, String> {
+        self.capture_type_target_filtered(scope, hidden, skip_locked, |_| Ok(true))
+    }
+    fn capture_type_target_filtered(&self, scope: TextScope, hidden: bool, skip_locked: bool,
+        include: impl Fn(&TypeRun) -> Result<bool, String>) -> Result<TypeCommandTarget, String> {
         if !self.type_commands_available() {
             return Err("Finish the current operation before editing text".into());
         }
@@ -368,13 +376,15 @@ impl Studio {
             {
                 continue;
             }
+            let head = self.story_head(hit);
+            let Some(Geom::Text(run)) = self.doc.find_shape(head.0,head.1).map(|shape| &shape.geom) else {continue};
+            if !include(run)? {continue;}
             if !self.type_command_writable(hit, hidden) {
                 if skip_locked { continue; }
                 return Err(
                     "Unlock the text, its parent layers and every frame in its story".into(),
                 );
             }
-            let head = self.story_head(hit);
             if !hits.contains(&head) {
                 hits.push(head);
             }
@@ -382,7 +392,12 @@ impl Studio {
         if hits.is_empty() {
             return Err("Select editable text".into());
         }
-        Ok(TypeCommandTarget {
+        Ok(self.type_command_snapshot(scope,hits))
+    }
+    /// Capture the common document, selection and live-draft owner of a Type action.
+    /// Args: scope and actual story identities. Returns their immutable owner snapshot.
+    fn type_command_snapshot(&self, scope: TextScope, hits: Vec<(usize,u64)>) -> TypeCommandTarget {
+        TypeCommandTarget {
             document: self.swap_id.clone(),
             generation: self.canvas_gen,
             selection: self.selection.clone(),
@@ -390,21 +405,23 @@ impl Studio {
             scope,
             edit: self.type_edit.as_ref().map(EditOwner::new),
             hits,
-        })
+        }
     }
     /// Check the document, selection, draft and writable story identities captured by a Type action.
     /// Args: target. Returns false after any stale document/edit owner or lock change.
     pub(crate) fn type_command_current(&self, target: &TypeCommandTarget) -> bool {
+        self.type_command_owner_current(target)
+            && target.hits.iter().all(|&hit| self.type_command_writable(hit, target.scope == TextScope::Document))
+    }
+    /// Read the captured owner without granting permission to mutate its stories.
+    /// Args: target snapshot. Returns whether the same document, selection and live draft still own it.
+    fn type_command_owner_current(&self, target: &TypeCommandTarget) -> bool {
         self.type_commands_available()
             && target.document == self.swap_id
             && target.generation == self.canvas_gen
             && target.selection == self.selection
             && target.layer == self.selected_layer
             && target.edit == self.type_edit.as_ref().map(EditOwner::new)
-            && target
-                .hits
-                .iter()
-                .all(|&hit| self.type_command_writable(hit, target.scope == TextScope::Document))
     }
     /// Apply a Type content command through the current draft or one ordinary document batch.
     /// Args: captured owner and command. Returns changed story count; refusals and no-ops keep draft and redo intact.
@@ -440,7 +457,9 @@ impl Studio {
             if range.as_ref().is_some_and(|r| r.end > count) {
                 return Err("The text selection changed".into());
             }
-            let changed = if let TypeCommand::Insert(text) = &command {
+            let changed = if let TypeCommand::Font(replacement) = &command {
+                crate::text::font_inventory::replace(&mut run, &replacement.from, &replacement.to)?
+            } else if let TypeCommand::Insert(text) = &command {
                 if text.is_empty() {
                     false
                 } else {

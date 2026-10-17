@@ -74,6 +74,8 @@ mod svg_field_tests;
 mod text_geometry;
 mod type_commands;
 mod find_replace;
+mod find_font;
+mod find_font_recovery;
 mod templates;
 pub mod theme;
 mod timeline;
@@ -181,6 +183,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         && !guide_keyboard::is_open(&ctx)
         && !type_commands::is_open(&ctx)
         && !find_replace::is_open(&ctx)
+        && !find_font::is_open(&ctx)
         && !panel_keyboard::is_open(&ctx)
         && !studio.show_templates
         && !channel_adjustment::is_open(&ctx)
@@ -207,6 +210,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         && !guide_keyboard::is_open(&ctx)
         && !type_commands::is_open(&ctx)
         && !find_replace::is_open(&ctx)
+        && !find_font::is_open(&ctx)
         && !panel_keyboard::is_open(&ctx)
         && !studio.show_templates
     {
@@ -217,7 +221,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
     layout::poll_image(&ctx, studio);
 
     // Keep the canvas visible for previews while preventing edits behind the dialog.
-    if pixel_selection::is_open(&ctx) || background_removal::is_open(&ctx) || export_dialog::is_open(&ctx) || artboard_dialog::is_open(&ctx) || keyboard_authoring::is_open(&ctx) || keyboard_tools::is_open(&ctx) || guide_keyboard::is_open(&ctx) || type_commands::is_open(&ctx) || find_replace::is_open(&ctx) {
+    if pixel_selection::is_open(&ctx) || background_removal::is_open(&ctx) || export_dialog::is_open(&ctx) || artboard_dialog::is_open(&ctx) || keyboard_authoring::is_open(&ctx) || keyboard_tools::is_open(&ctx) || guide_keyboard::is_open(&ctx) || type_commands::is_open(&ctx) || find_replace::is_open(&ctx) || find_font::is_open(&ctx) {
         ui.disable();
     }
 
@@ -270,6 +274,7 @@ pub fn run(ui: &mut Ui, studio: &mut Studio) {
         guide_keyboard::show(&ctx, studio);
         type_commands::show(&ctx, studio);
         find_replace::show(&ctx, studio);
+        find_font::show(&ctx, studio);
         anim_export::show(ui, studio);
         pixel_selection::show(&ctx, studio);
 
