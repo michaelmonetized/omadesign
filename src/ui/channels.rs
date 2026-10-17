@@ -66,7 +66,7 @@ enum Change {
     Save(Plane),
     Invert(u64, Plane),
     Selection(
-        Arc<crate::resources::Allocation<u8>>,
+        Arc<crate::resources::Allocation<f32>>,
         crate::app::masking::SelectionSpace,
     ),
 }
@@ -119,12 +119,11 @@ fn start(ctx: &egui::Context, studio: &Studio, work: Work) -> Result<(), String>
         let change = match work {
             Work::Save => {
                 let (values, space) = selection.unwrap();
-                Change::Save(Plane::from_mask(
-                    &values,
+                Change::Save(Plane::from_coverage(
+                    values,
                     space.w,
                     space.h,
                     space.transform,
-                    &check,
                 )?)
             }
             Work::Invert(id) => {

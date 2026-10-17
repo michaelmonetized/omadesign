@@ -81,7 +81,7 @@ fn craft_channels_soft_combine_preserves_transformed_selection_and_owned_buffers
         )
         .unwrap();
         assert_eq!(actual, space);
-        assert_eq!(values.as_slice(), expected);
+        assert_eq!(values.as_slice(), expected.map(|v|v as f32/255.));
     }
     let target = s.capture_channels().unwrap();
     let (values, actual) = selection(&plane, None, Combine::Replace, &storage::check).unwrap();
@@ -148,14 +148,14 @@ fn craft_channels_selection_lease_travels_with_tabs_and_last_alias_then_releases
         h: 1,
         transform: tiny_skia::Transform::identity(),
     };
-    let values = storage::adopt(vec![0, 64, 128, 255]).unwrap();
+    let values = storage::adopt(vec![0., 64./255., 128./255., 1.]).unwrap();
     let lease = Arc::downgrade(values.lease());
     s.replace_pixel_selection_admitted(values.clone(), space);
     s.ensure_tabs();
     s.new_tab();
     assert!(lease.upgrade().is_some());
     s.switch_tab(0);
-    assert_eq!(s.pixel_sel.as_ref().unwrap().as_slice(), [0, 64, 128, 255]);
+    assert_eq!(s.pixel_sel.as_ref().unwrap().as_slice(), [0., 64./255., 128./255., 1.]);
     s.set_pixel_sel(None);
     assert!(lease.upgrade().is_some());
     drop(values);

@@ -51,6 +51,7 @@ pub mod project;
 pub mod raster;
 pub mod release_version;
 pub mod screen_pick;
+pub mod selection_coverage;
 pub mod screen_export;
 pub mod shape_browser;
 pub mod simplify;

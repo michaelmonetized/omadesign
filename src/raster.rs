@@ -294,7 +294,7 @@ pub fn apply(
     w: u32,
     h: u32,
     settings: &Settings,
-    selection: Option<&[u8]>,
+    selection: Option<&[f32]>,
 ) -> Result<Vec<u8>, String> {
     let count = (w as usize)
         .checked_mul(h as usize)
@@ -302,7 +302,7 @@ pub fn apply(
     if count == 0 || count.checked_mul(4) != Some(source.len()) {
         return Err("Invalid image dimensions".into());
     }
-    if selection.is_some_and(|m| m.len() != count) {
+    if selection.is_some_and(|m| m.len() != count || crate::selection_coverage::validate(m).is_err()) {
         return Err("Selection dimensions no longer match this layer".into());
     }
     let src = source
@@ -329,14 +329,14 @@ pub fn apply_float(
     w: u32,
     h: u32,
     settings: &Settings,
-    selection: Option<&[u8]>,
+    selection: Option<&[f32]>,
 ) -> Result<Allocation<[f32; 4]>, String> {
     let count = (w as usize)
         .checked_mul(h as usize)
         .ok_or("Image is too large")?;
     if count == 0
         || src.len() != count
-        || selection.is_some_and(|m| m.len() != count)
+        || selection.is_some_and(|m| m.len() != count || crate::selection_coverage::validate(m).is_err())
         || src.iter().flatten().any(|v| !v.is_finite())
     {
         return Err("Invalid native image or selection".into());
@@ -521,7 +521,7 @@ pub fn apply_float(
         .par_iter_mut()
         .enumerate()
         .for_each(|(i, pixel)| {
-            let amount = strength * selection.map_or(1.0, |mask| mask[i] as f32 / 255.0);
+            let amount = strength * selection.map_or(1.0, |mask| mask[i]);
             if amount <= 0.0 {
                 *pixel = src[i];
                 return;
@@ -906,10 +906,10 @@ mod tests {
     fn selection_limits_key_and_strength_preserves_partial_alpha() {
         let source = [0, 255, 0, 128, 0, 255, 0, 255];
         let s = Settings::new(Kind::ChromaKey);
-        let out = apply(&source, 2, 1, &s, Some(&[0, 128])).unwrap();
+        let out = apply(&source, 2, 1, &s, Some(&[0.,128./255.])).unwrap();
         assert_eq!(&out[..4], &source[..4]);
         assert!((out[7] as i32 - 127).abs() <= 1);
-        assert!(apply(&source, 2, 1, &s, Some(&[255])).is_err());
+        assert!(apply(&source, 2, 1, &s, Some(&[1.])).is_err());
     }
     #[test]
     fn blur_does_not_bleed_hidden_rgb_into_opaque_edges() {

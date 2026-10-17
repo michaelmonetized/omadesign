@@ -398,9 +398,9 @@ fn native_fill_distinguishes_adjacent_samples_sharing_one_display_byte() {
     let pixels = Pixels::from_samples(3,1,Depth::U16,vec![1000. / 65535.,0.2,0.3,1.,1001. / 65535.,0.2,0.3,1.,1000. / 65535.,0.2,0.3,1.]).unwrap();
     assert_eq!(&pixels.data[..4], &pixels.data[4..8]);
     let region = retouch::flood_region(&pixels,Pt::ZERO,0.,None).unwrap();
-    assert_eq!(region.as_slice(), &[255,0,0]);
-    let region = retouch::flood_region(&pixels,Pt::ZERO,1.,Some(&[128,0,255])).unwrap();
-    assert_eq!(region.as_slice(), &[128,0,0]);
+    assert_eq!(region.as_slice(), &[1.,0.,0.]);
+    let region = retouch::flood_region(&pixels,Pt::ZERO,1.,Some(&[128./255.,0.,1.])).unwrap();
+    assert_eq!(region.as_slice(), &[128./255.,0.,0.]);
 }
 
 #[test]
@@ -502,7 +502,7 @@ fn cmyk_profile_authoring_survives_masks_edits_projects_and_psd() {
     assert!((got[4] - 0.333333).abs() < 1e-6);
     let mut exposure = crate::raster::Settings::new(crate::raster::Kind::Exposure);
     exposure.values[0] = 0.2;
-    let edited = pixels.filtered(&exposure, Some(&[255, 0])).unwrap();
+    let edited = pixels.filtered(&exposure, Some(&[1., 0.])).unwrap();
     let got = edited.native.as_ref().unwrap().cmyk.as_ref().unwrap();
     assert_ne!(&got[..4], &inks[..4]);
     assert_eq!(&got[5..], &inks[5..]);

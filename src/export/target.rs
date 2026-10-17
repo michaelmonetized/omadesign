@@ -203,9 +203,9 @@ fn crop(mut doc: Document, bounds: Bounds) -> Result<Document, String> {
 
 /// A pixel selection clips the native layer tree through a placed group mask.
 /// Feathered coverage and rotated/scaled selection spaces stay intact.
-pub fn pixels(
+pub fn pixels<T:crate::selection_coverage::Sample>(
     doc: &Document,
-    coverage: &[u8],
+    coverage: &[T],
     w: u32,
     h: u32,
     transform: tiny_skia::Transform,
@@ -238,29 +238,14 @@ pub fn pixels(
     if mw as u64 * mh as u64 > 64_000_000 {
         return Err("The pixel selection export exceeds 64 megapixels".into());
     }
-    let source = crate::document::Pixels::from_rgba(
-        w,
-        h,
-        coverage.iter().flat_map(|a| [255, 255, 255, *a]).collect(),
-    )
-    .and_then(|p| p.to_pixmap())
-    .ok_or("Invalid selection coverage")?;
-    let mut mask = tiny_skia::Pixmap::new(mw, mh).ok_or("Could not allocate selection mask")?;
-    mask.draw_pixmap(
-        0,
-        0,
-        source.as_ref(),
-        &tiny_skia::PixmapPaint {
-            quality: tiny_skia::FilterQuality::Bilinear,
-            ..Default::default()
-        },
-        tiny_skia::Transform::from_translate(-bounds.min.x, -bounds.min.y).pre_concat(transform),
-        None,
-    );
+    let coverage=crate::deep_color::storage::collect(coverage.iter().map(|v|v.unit()))?;
+    let source=crate::app::masking::SelectionSpace{w,h,transform};
+    let target=crate::app::masking::SelectionSpace{w:mw,h:mh,transform:tiny_skia::Transform::from_translate(bounds.min.x,bounds.min.y)};
+    let mask=crate::selection_coverage::resample(&coverage,source,target,&crate::deep_color::storage::check)?;
     let mut output = doc.clone();
     let mut group = crate::document::Layer::group("Export selection");
     group.pass_through = false;
-    group.mask = Some(crate::document::Pixels::from_pixmap(&mask)?);
+    group.mask = Some(crate::selection_coverage::mask_pixels(&mask,mw,mh)?);
     group.mask_origin = bounds.min;
     group.mask_size = Pt::new(mw as f32, mh as f32);
     for layer in &mut output.layers {

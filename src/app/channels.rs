@@ -147,7 +147,7 @@ impl Studio {
     pub(crate) fn load_channel_selection(
         &mut self,
         target: &Target,
-        values: Arc<Allocation<u8>>,
+        values: Arc<Allocation<f32>>,
         space: SelectionSpace,
     ) -> Result<(), String> {
         if !self.channels_current(target) {
@@ -178,14 +178,15 @@ impl Combine {
     }
 }
 /// Combine soft channel coverage in the existing selection's actual coordinate system.
-/// Args: source plane, optional original selection, accepted operation and cancellation. Returns admitted bytes and their placement.
+/// Args: source plane, optional original selection, accepted operation and cancellation. Returns admitted float samples and their placement.
 pub(crate) fn selection(
     plane: &Plane,
-    existing: Option<(Arc<Allocation<u8>>, SelectionSpace)>,
+    existing: Option<(Arc<Allocation<f32>>, SelectionSpace)>,
     operation: Combine,
     cancel: &dyn CancellationCheck,
-) -> Result<(Arc<Allocation<u8>>, SelectionSpace), String> {
-    let next = plane.mask(cancel)?;
+) -> Result<(Arc<Allocation<f32>>, SelectionSpace), String> {
+    plane.validate()?;
+    let next = plane.samples.clone();
     let source = SelectionSpace {
         w: plane.width,
         h: plane.height,
@@ -207,7 +208,7 @@ pub(crate) fn selection(
         return Err("Selection dimensions changed".into());
     }
     let next = masking::resample_admitted(&next, source, target)?;
-    let mut out = crate::resources::global().allocate_now::<u8, _>(before.len(), cancel)?;
+    let mut out = crate::resources::global().allocate_now::<f32, _>(before.len(), cancel)?;
     for (i, ((a, b), dst)) in before
         .iter()
         .zip(next.iter())
@@ -219,7 +220,7 @@ pub(crate) fn selection(
         }
         *dst = match operation {
             Combine::Add => (*a).max(*b),
-            Combine::Subtract => a.saturating_sub(*b),
+            Combine::Subtract => (*a-*b).max(0.),
             Combine::Intersect => (*a).min(*b),
             Combine::Replace => *b,
         };

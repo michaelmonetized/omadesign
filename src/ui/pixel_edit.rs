@@ -19,7 +19,7 @@ struct Outlines {
 }
 pub fn outlines(
     ctx: &egui::Context,
-    mask: &[u8],
+    mask: &[f32],
     w: u32,
     h: u32,
     generation: u64,
@@ -51,7 +51,7 @@ pub fn outlines(
             let values = (0..sh)
                 .flat_map(|y| {
                     let input = &input;
-                    (0..sw).map(move |x| u8::from(input[(y * step * w + x * step) as usize] >= 128))
+                    (0..sw).map(move |x| u8::from(input[(y * step * w + x * step) as usize] >= 0.5))
                 })
                 .collect::<Vec<_>>();
             let contours = crate::trace::trace_mask(&values, sw, sh)
@@ -451,7 +451,7 @@ mod tests {
         settle(&ctx, &mut s);
         assert!(s.pixel_edit.as_ref().unwrap().closed());
         assert_eq!(anchors(&s).len(), 4);
-        assert!(s.pixel_sel.as_ref().unwrap()[150 * 400 + 150] > 240);
+        assert!(s.pixel_sel.as_ref().unwrap()[150 * 400 + 150] > 240./255.);
         click(
             &ctx,
             &mut s,
@@ -533,15 +533,15 @@ mod tests {
     #[test]
     fn actual_ants_include_holes_and_non_rectangular_edges() {
         let ctx = egui::Context::default();
-        let mut mask = vec![0; 100 * 100];
+        let mut mask = vec![0.; 100 * 100];
         for y in 10..90 {
             for x in 10..=y {
-                mask[y * 100 + x] = 255;
+                mask[y * 100 + x] = 1.;
             }
         }
         for y in 40..50 {
             for x in 20..30 {
-                mask[y * 100 + x] = 0;
+                mask[y * 100 + x] = 0.;
             }
         }
         let mut lines = outlines(&ctx, &mask, 100, 100, 1, false, "test");

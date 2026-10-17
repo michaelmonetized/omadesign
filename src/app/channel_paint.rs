@@ -22,7 +22,7 @@ pub struct Stroke {
     quick: bool,
     working: Arc<Allocation<f32>>,
     coverage: Surface,
-    selection: Option<Arc<Allocation<u8>>>,
+    selection: Option<Arc<Allocation<f32>>>,
     value: f32,
     opacity: f32,
     last: Option<Pt>,
@@ -233,7 +233,7 @@ impl Studio {
         Ok(())
     }
 
-    fn channel_selection(&self, plane: &Plane) -> Result<Option<Arc<Allocation<u8>>>, String> {
+    fn channel_selection(&self, plane: &Plane) -> Result<Option<Arc<Allocation<f32>>>, String> {
         let Some(values) = self.pixel_sel.as_ref() else {
             return Ok(None);
         };
@@ -428,7 +428,7 @@ impl Studio {
                             * stroke
                                 .selection
                                 .as_ref()
-                                .map_or(1., |m| f32::from(m[i]) / 255.);
+                                .map_or(1., |m| m[i]);
                         if amount > 0. {
                             let before = stroke.before.plane.samples[i];
                             values[i] = (before + (stroke.value - before) * amount).clamp(0., 1.);
@@ -499,7 +499,7 @@ impl Studio {
             let mut plane = channel.plane.clone();
             plane.samples = storage::collect(plane.samples.iter().enumerate().map(|(i, v)| {
                 if let Some(mask) = selection.as_ref() {
-                    *v * (1. - f32::from(mask[i]) / 255.)
+                    *v * (1. - mask[i])
                 } else {
                     0.
                 }

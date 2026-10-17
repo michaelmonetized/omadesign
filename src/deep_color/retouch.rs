@@ -1,4 +1,5 @@
 //! Native clone, smudge and healing edits on straight authored samples.
+use crate::resources::CancellationCheck;
 use crate::{document::Pixels, geom::Pt, paint::Brush, tools::Tool};
 
 /// Apply a retouch segment without converting authored pixels to bytes.
@@ -236,22 +237,22 @@ pub fn flood_region(
     pixels: &Pixels,
     seed: Pt,
     tolerance: f32,
-    selection: Option<&[u8]>,
-) -> Result<std::sync::Arc<crate::resources::Allocation<u8>>, String> {
+    selection: Option<&[f32]>,
+) -> Result<std::sync::Arc<crate::resources::Allocation<f32>>, String> {
     use super::storage;
     use crate::resources;
     let count = storage::count(pixels.w, pixels.h, 1)?;
     if !seed.x.is_finite() || !seed.y.is_finite() || !tolerance.is_finite() || !(0. ..=510.).contains(&tolerance)
-        || selection.is_some_and(|s| s.len() != count) {
+        || selection.is_some_and(|s| s.len() != count || crate::selection_coverage::validate(s).is_err()) {
         return Err("Invalid native fill seed, tolerance or selection".into());
     }
     let mut region = resources::global().allocate_now::<u8,_>(count, &storage::check)?;
     let (x,y) = (seed.x.round() as i64, seed.y.round() as i64);
     if x < 0 || y < 0 || x >= pixels.w as i64 || y >= pixels.h as i64 {
-        return Ok(std::sync::Arc::new(region));
+        return storage::collect(std::iter::repeat_n(0.,count));
     }
     let first = y as usize * pixels.w as usize + x as usize;
-    if selection.is_some_and(|s| s[first] == 0) {return Ok(std::sync::Arc::new(region));}
+    if selection.is_some_and(|s| s[first] == 0.) {return storage::collect(std::iter::repeat_n(0.,count));}
     let target = pixels.sample(first);
     let mut queue = resources::global().allocate_now::<usize,_>(count, &storage::check)?;
     queue.as_mut_slice()[0] = first;region.as_mut_slice()[first] = 1;
@@ -260,7 +261,7 @@ pub fn flood_region(
         let i = queue[read];read += 1;
         let sample = pixels.sample(i);
         let distance = sample.into_iter().zip(target).map(|(a,b)| ((a-b)*255.).powi(2)).sum::<f32>();
-        if distance > tolerance * tolerance || selection.is_some_and(|s| s[i] == 0) {region.as_mut_slice()[i] = 2;continue;}
+        if distance > tolerance * tolerance || selection.is_some_and(|s| s[i] == 0.) {region.as_mut_slice()[i] = 2;continue;}
         region.as_mut_slice()[i] = 255;
         let x = i % pixels.w as usize;
         for next in [
@@ -272,6 +273,7 @@ pub fn flood_region(
             if region[next] == 0 {region.as_mut_slice()[next] = 1;queue.as_mut_slice()[write] = next;write += 1;}
         }
     }
-    for (i, v) in region.as_mut_slice().iter_mut().enumerate() {*v = if *v == 255 {selection.map_or(255,|s|s[i])} else {0};}
-    Ok(std::sync::Arc::new(region))
+    drop(queue);let mut output=resources::global().allocate_now::<f32,_>(count,&storage::check)?;
+    for(i,(v,dst))in region.iter().zip(output.as_mut_slice()).enumerate(){if i%16384==0{storage::check.check()?;}*dst=if *v==255{selection.map_or(1.,|s|s[i])}else{0.};}
+    Ok(std::sync::Arc::new(output))
 }

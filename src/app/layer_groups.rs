@@ -520,6 +520,7 @@ mod tests {
                     studio.active_layer = Some(0);
                     let values: Vec<_> = (0..48).map(|i| [0, 64, 128, 255][i % 4]).collect();
                     studio.set_pixel_sel(Some(values.clone()));
+                    let values:Vec<f32>=values.iter().map(|v|f32::from(*v)/255.).collect();
                     let space = studio.pixel_sel_space.unwrap();
                     let address = studio.pixel_sel.as_ref().unwrap().as_ptr();
                     let generation = studio.pixel_sel_gen;
@@ -560,7 +561,7 @@ mod tests {
                         transform: tiny_skia::Transform::identity(),
                     };
                     let mapped = resample(&values, space, target).unwrap();
-                    assert!(mapped.iter().any(|v| *v > 0));
+                    assert!(mapped.iter().any(|v| *v > 0.));
                     assert_eq!(
                         studio.pixel_sel_mask(index).as_deref(),
                         Some(mapped.as_slice())

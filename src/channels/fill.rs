@@ -10,9 +10,9 @@ pub(crate) fn region(
     source: &Plane,
     seed: (u32, u32),
     tolerance: f32,
-    selection: Option<&[u8]>,
+    selection: Option<&[f32]>,
     cancel: &dyn CancellationCheck,
-) -> Result<Arc<Allocation<u8>>, String> {
+) -> Result<Arc<Allocation<f32>>, String> {
     source.validate()?;
     cancel.check()?;
     let n = source.samples.len();
@@ -22,14 +22,14 @@ pub(crate) fn region(
     if !tolerance.is_finite() || !(0.0..=255.0).contains(&tolerance) {
         return Err("Channel fill tolerance must be between zero and 255".into());
     }
-    if selection.is_some_and(|mask| mask.len() != n) {
+    if selection.is_some_and(|mask| mask.len() != n || crate::selection_coverage::validate(mask).is_err()) {
         return Err("Channel fill selection dimensions changed".into());
     }
     let pool = crate::resources::global();
     let mut seen = pool.allocate_now::<u8, _>(n, cancel)?;
     let start = (seed.1 * source.width + seed.0) as usize;
-    if selection.is_some_and(|mask| mask[start] == 0) {
-        return Ok(Arc::new(seen));
+    if selection.is_some_and(|mask| mask[start] == 0.) {
+        return crate::deep_color::storage::collect(std::iter::repeat_n(0.,n));
     }
     let mut queue = pool.allocate_now::<u32, _>(n, cancel)?;
     let value = source.samples[start];
@@ -62,7 +62,7 @@ pub(crate) fn region(
                 continue;
             }
             seen.as_mut_slice()[next] = 1;
-            if selection.is_none_or(|mask| mask[next] > 0)
+            if selection.is_none_or(|mask| mask[next] > 0.)
                 && (source.samples[next] - value).abs() <= threshold
             {
                 seen.as_mut_slice()[next] = 255;
@@ -71,17 +71,9 @@ pub(crate) fn region(
             }
         }
     }
-    for (at, chunk) in seen.as_mut_slice().chunks_mut(16384).enumerate() {
-        cancel.check()?;
-        for (offset, v) in chunk.iter_mut().enumerate() {
-            *v = if *v == 255 {
-                selection.map_or(255, |mask| mask[at * 16384 + offset])
-            } else {
-                0
-            };
-        }
-    }
-    Ok(Arc::new(seen))
+    drop(queue);let mut output=pool.allocate_now::<f32,_>(n,cancel)?;
+    for (i,(v,dst)) in seen.iter().zip(output.as_mut_slice()).enumerate(){if i%16384==0{cancel.check()?;}*dst=if *v==255{selection.map_or(1.,|mask|mask[i])}else{0.};}
+    Ok(Arc::new(output))
 }
 
 /// Fill one connected native region with a scalar value and opacity.
@@ -93,7 +85,7 @@ pub(crate) fn apply(
     tolerance: f32,
     value: f32,
     opacity: f32,
-    selection: Option<&[u8]>,
+    selection: Option<&[f32]>,
     cancel: &dyn CancellationCheck,
 ) -> Result<Plane, String> {
     if [value, opacity]
@@ -110,8 +102,8 @@ pub(crate) fn apply(
     {
         cancel.check()?;
         for (weight, dst) in chunk.iter().zip(out) {
-            if *weight > 0 {
-                let amount = f32::from(*weight) / 255. * opacity;
+            if *weight > 0. {
+                let amount = *weight * opacity;
                 *dst = (*dst + (value - *dst) * amount).clamp(0., 1.);
             }
         }
@@ -149,7 +141,7 @@ mod tests {
             )
             .unwrap(),
         };
-        let mask = [255, 128, 255, 255, 255, 0, 128, 255, 255, 255];
+        let mask = [1., 128./255., 1., 1., 1., 0., 128./255., 1., 1., 1.];
         let out = apply(&source, (0, 0), 0., 1., 0.5, Some(&mask), &storage::check).unwrap();
         assert_eq!(out.samples[0], 0.625);
         let partial: f32 = 0.25 + (1. - 0.25) * (128. / 255. * 0.5);
@@ -159,7 +151,7 @@ mod tests {
             assert_eq!(out.samples[i].to_bits(), source.samples[i].to_bits());
         }
         let near = region(&source, (0, 0), 1., None, &storage::check).unwrap();
-        assert_eq!(near.as_slice(), &[255, 255, 255, 0, 0, 255, 255, 255, 0, 0]);
+        assert_eq!(near.as_slice(), &[1., 1., 1., 0., 0., 1., 1., 1., 0., 0.]);
         let alias = out.clone();
         let owner = Arc::downgrade(out.samples.lease());
         drop(out);

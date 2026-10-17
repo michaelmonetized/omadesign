@@ -367,7 +367,7 @@ pub struct Studio {
     pub clone_source: Option<Pt>,
     /// Keep the source offset while painting. Off samples the same source each dab.
     pub clone_aligned: bool,
-    pub pixel_sel: Option<std::sync::Arc<crate::resources::Allocation<u8>>>,
+    pub pixel_sel: Option<std::sync::Arc<crate::resources::Allocation<f32>>>,
     pub(crate) pixel_edit: Option<pixel_edit::Editor>,
     pub(crate) pixel_path: Option<pixel_edit::SelectionPath>,
     pub pixel_sel_space: Option<masking::SelectionSpace>,

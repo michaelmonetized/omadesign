@@ -142,7 +142,7 @@ impl Studio {
                 } else {
                     masking::resample_admitted(&selected.values, source, space)?
                 };
-                Plane::from_mask(&values, width, height, space.transform, &storage::check)?
+                Plane::from_coverage(values, width, height, space.transform)?
             } else {
                 let count = storage::count(width, height, 1)?;
                 let mut samples =
@@ -180,7 +180,7 @@ impl Studio {
             } else {
                 Some(Selection::from_plane(
                     &mask.channel.plane,
-                    mask.channel.plane.mask(&storage::check)?,
+                    mask.channel.plane.samples.clone(),
                 ))
             };
             (None, selected)

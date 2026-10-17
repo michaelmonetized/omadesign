@@ -2,7 +2,7 @@
 use super::{Settings, models::Model, upscale};
 use crate::{background_removal::Source, ml::Progress};
 use image::{
-    GrayImage, RgbaImage,
+    RgbaImage,
     imageops::{FilterType, resize},
 };
 use std::sync::Arc;
@@ -88,17 +88,11 @@ pub fn prepare(
         progress,
     )?;
     let size = output.dimensions();
-    let selection = source.selection.as_ref().map(|s| {
-        Arc::new(
-            resize(
-                &GrayImage::from_raw(source.w, source.h, s.as_ref().clone()).unwrap(),
-                size.0,
-                size.1,
-                FilterType::CatmullRom,
-            )
-            .into_raw(),
-        )
-    });
+    let selection=source.selection.as_ref().map(|values|{
+        let source_space=crate::app::masking::SelectionSpace{w:source.w,h:source.h,transform:tiny_skia::Transform::identity()};
+        let target_space=crate::app::masking::SelectionSpace{w:size.0,h:size.1,transform:tiny_skia::Transform::from_scale(source.w as f32/size.0 as f32,source.h as f32/size.1 as f32)};
+        crate::selection_coverage::resample(values,source_space,target_space,&||progress.check()).map(|v|Arc::new(v.to_vec()))
+    }).transpose()?;
     let existing_mask = source
         .existing_mask
         .as_ref()
@@ -153,7 +147,7 @@ pub fn finish(
         // selection. Preserve those exact bytes (including alpha).
         if let Some(selection) = &original.selection {
             for (i, coverage) in selection.iter().enumerate() {
-                if *coverage == 0 {
+                if *coverage == 0. {
                     mask[i * 4..i * 4 + 4].copy_from_slice(
                         original
                             .existing_mask

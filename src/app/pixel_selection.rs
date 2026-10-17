@@ -1,4 +1,5 @@
 //! Edits to selection coverage, independent of the pixels being selected.
+use crate::selection_coverage::Sample;
 use super::{Studio, masking::SelectionSpace};
 use std::collections::VecDeque;
 
@@ -43,9 +44,9 @@ impl Studio {
                 .as_ref()
                 .unwrap()
                 .iter()
-                .map(|v| 255 - v)
+                .map(|v| 1. - v)
                 .collect();
-            self.replace_pixel_selection(values, space);
+            self.replace_pixel_selection_float(values, space);
         } else {
             self.select_all_pixels();
         }
@@ -58,18 +59,25 @@ impl Studio {
     /// Admit replacement coverage before changing the current selection.
     /// Args: owned mask and coordinate system. Returns false while preserving the current owner on failure.
     pub(crate) fn try_replace_pixel_selection(&mut self, values: Vec<u8>, space: SelectionSpace) -> bool {
-        match crate::deep_color::storage::adopt(values) {
+        match crate::selection_coverage::from_bytes(&values,&crate::deep_color::storage::check) {
             Ok(values) => self.replace_pixel_selection_admitted(values, space),
             Err(error) => {self.status = error;false},
         }
     }
 
+    /// Install authored float coverage without an intermediate byte mask.
+    /// Args: coverage and placement. Returns false without mutation on invalid data or admission failure.
+    pub(crate) fn replace_pixel_selection_float(&mut self,values:Vec<f32>,space:SelectionSpace)->bool{
+        if let Err(error)=crate::selection_coverage::validate(&values){self.status=error;return false;}
+        match crate::deep_color::storage::adopt(values){Ok(values)=>self.replace_pixel_selection_admitted(values,space),Err(error)=>{self.status=error;false}}
+    }
     /// Retain a complete admitted selection without copying or releasing its owner.
     /// Args: coverage and its coordinate system. Returns whether dimensions were accepted.
-    pub(crate) fn replace_pixel_selection_admitted(&mut self, values: std::sync::Arc<crate::resources::Allocation<u8>>, space: SelectionSpace) -> bool {
+    pub(crate) fn replace_pixel_selection_admitted(&mut self, values: std::sync::Arc<crate::resources::Allocation<f32>>, space: SelectionSpace) -> bool {
         if crate::deep_color::storage::count(space.w,space.h,1).ok()!=Some(values.len()) || !crate::channels::valid_placement(space.transform) {
             self.status="Selection dimensions or placement changed".into();return false;
         }
+        if let Err(error)=crate::selection_coverage::validate(&values){self.status=error;return false;}
         self.pixel_sel = Some(values);
         self.pixel_sel_space = Some(space);
         self.pixel_sel_gen = self.pixel_sel_gen.wrapping_add(1);
@@ -84,11 +92,11 @@ impl Studio {
 
 /// Preserve the native mask coordinate system, including placed/rotated rasters.
 /// Resample once on Apply, always previewing from the original coverage.
-pub fn edit(
-    values: &[u8],
+pub fn edit<T:Sample>(
+    values: &[T],
     space: SelectionSpace,
     operation: Edit,
-) -> Option<(Vec<u8>, SelectionSpace)> {
+) -> Option<(Vec<T>, SelectionSpace)> {
     crate::paint::selection_bounds(values, space.w, space.h)?;
     let (Edit::Grow { radius } | Edit::Shrink { radius } | Edit::Feather { radius }) = operation;
     Some((
@@ -105,12 +113,12 @@ pub fn edit(
 
 /// Two sliding-window passes keep even large radii linear in the mask size.
 /// Outside the mask is unselected, including for erosion and feathering.
-fn coverage(input: &[u8], w: usize, h: usize, radius: usize, operation: Edit) -> Vec<u8> {
+fn coverage<T:Sample>(input: &[T], w: usize, h: usize, radius: usize, operation: Edit) -> Vec<T> {
     if radius == 0 {
         return input.to_vec();
     }
-    let mut horizontal = vec![0; input.len()];
-    let mut result = vec![0; input.len()];
+    let mut horizontal = vec![T::default(); input.len()];
+    let mut result = vec![T::default(); input.len()];
     for y in 0..h {
         let row = line((0..w).map(|x| input[y * w + x]), radius, operation);
         horizontal[y * w..(y + 1) * w].copy_from_slice(&row);
@@ -124,27 +132,27 @@ fn coverage(input: &[u8], w: usize, h: usize, radius: usize, operation: Edit) ->
     result
 }
 
-fn line(input: impl Iterator<Item = u8>, radius: usize, operation: Edit) -> Vec<u8> {
+fn line<T:Sample>(input: impl Iterator<Item = T>, radius: usize, operation: Edit) -> Vec<T> {
     let values: Vec<_> = input.collect();
     let n = values.len();
     let window = radius * 2 + 1;
     let mut result = Vec::with_capacity(n);
-    let mut queue: VecDeque<(usize, u8)> = VecDeque::new();
-    let mut sum = 0u32;
+    let mut queue: VecDeque<(usize, T)> = VecDeque::new();
+    let mut sum = 0f64;
     for i in 0..n + radius * 2 {
         let value = i
             .checked_sub(radius)
             .and_then(|j| values.get(j))
             .copied()
-            .unwrap_or(0);
+            .unwrap_or_default();
         if matches!(operation, Edit::Feather { .. }) {
-            sum += value as u32;
+            sum += value.raw();
             if i >= window {
                 sum -= (i - window)
                     .checked_sub(radius)
                     .and_then(|j| values.get(j))
                     .copied()
-                    .unwrap_or(0) as u32;
+                    .unwrap_or_default().raw();
             }
         } else {
             while queue.back().is_some_and(|&(_, v)| {
@@ -163,13 +171,31 @@ fn line(input: impl Iterator<Item = u8>, radius: usize, operation: Edit) -> Vec<
         }
         if i + 1 >= window {
             result.push(if matches!(operation, Edit::Feather { .. }) {
-                ((sum + window as u32 / 2) / window as u32) as u8
+                T::average((sum/window as f64).max(0.))
             } else {
                 queue.front().unwrap().1
             });
         }
     }
     result
+}
+
+/// Modify full-depth selection coverage with admitted buffers and bounded line scratch.
+/// Args: original coverage, placement and operation. Returns its unchanged grid or no nonempty selection.
+pub fn edit_admitted(values:&[f32],space:SelectionSpace,operation:Edit)->Result<Option<(std::sync::Arc<crate::resources::Allocation<f32>>,SelectionSpace)>,String>{
+    use crate::{deep_color::storage,resources::{self,CancellationCheck}};
+    if values.len()!=storage::count(space.w,space.h,1)?{return Err("Selection dimensions changed".into());}crate::selection_coverage::validate(values)?;
+    if crate::paint::selection_bounds(values,space.w,space.h).is_none(){return Ok(None);}
+    let (Edit::Grow{radius}|Edit::Shrink{radius}|Edit::Feather{radius})=operation;let radius=radius.min(1024)as usize;
+    let pool=resources::global();if radius==0{return pool.copy_now(values,&storage::check).map(|v|Some((std::sync::Arc::new(v),space)));}
+    let mut horizontal=pool.allocate_now::<f32,_>(values.len(),&storage::check)?;
+    let mut output=pool.allocate_now::<f32,_>(values.len(),&storage::check)?;
+    let scratch=(space.w.max(space.h)as usize).checked_mul(8).and_then(|v|v.checked_add(65536)).ok_or("Selection scratch is too large")?;
+    let _scratch=pool.reserve_now(scratch as u64,&storage::check)?;
+    let (w,h)=(space.w as usize,space.h as usize);
+    for y in 0..h{storage::check.check()?;let row=line((0..w).map(|x|values[y*w+x]),radius,operation);horizontal.as_mut_slice()[y*w..(y+1)*w].copy_from_slice(&row);}
+    for x in 0..w{storage::check.check()?;let column=line((0..h).map(|y|horizontal[y*w+x]),radius,operation);for(y,v)in column.into_iter().enumerate(){output.as_mut_slice()[y*w+x]=v;}}
+    Ok(Some((std::sync::Arc::new(output),space)))
 }
 
 #[cfg(test)]
@@ -215,7 +241,7 @@ mod tests {
             assert_eq!(edit(&soft, space, operation).unwrap().0, soft);
         }
         assert_eq!(
-            line([32, 200, 64].into_iter(), 1, Edit::Grow { radius: 1 }),
+            line([32u8, 200, 64].into_iter(), 1, Edit::Grow { radius: 1 }),
             [200, 200, 200]
         );
         assert_eq!(
@@ -223,7 +249,7 @@ mod tests {
             [0, 32, 0]
         );
         assert_eq!(
-            line([255, 255, 255].into_iter(), 1, Edit::Feather { radius: 1 }),
+            line([255u8, 255, 255].into_iter(), 1, Edit::Feather { radius: 1 }),
             [170, 255, 170]
         );
     }
@@ -241,9 +267,9 @@ mod tests {
             480
         );
         studio.invert_pixel_selection();
-        assert!(studio.pixel_sel.as_ref().unwrap().iter().all(|v| *v == 0));
+        assert!(studio.pixel_sel.as_ref().unwrap().iter().all(|v| *v == 0.));
         studio.invert_pixel_selection();
-        assert!(studio.pixel_sel.as_ref().unwrap().iter().all(|v| *v == 255));
+        assert!(studio.pixel_sel.as_ref().unwrap().iter().all(|v| *v == 1.));
         assert_eq!(
             studio.doc.layers[0].kind.pixels().unwrap().data.as_slice(),
             original.kind.pixels().unwrap().data.as_slice()

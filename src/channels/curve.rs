@@ -217,13 +217,13 @@ impl Evaluator<'_> {
 pub(crate) fn apply(
     source: &Plane,
     curve: &Curve,
-    selection: Option<&[u8]>,
+    selection: Option<&[f32]>,
     cancel: &dyn CancellationCheck,
 ) -> Result<Plane, String> {
     source.validate()?;
     let evaluator = curve.prepare()?;
     cancel.check()?;
-    if selection.is_some_and(|mask| mask.len() != source.samples.len()) {
+    if selection.is_some_and(|mask| mask.len() != source.samples.len() || crate::selection_coverage::validate(mask).is_err()) {
         return Err("Channel curve selection dimensions changed".into());
     }
     if evaluator.identity {
@@ -240,7 +240,7 @@ pub(crate) fn apply(
         cancel.check()?;
         for (j, (before, dst)) in chunk.iter().zip(out).enumerate() {
             let i = index * 16384 + j;
-            let weight = selection.map_or(1., |mask| f32::from(mask[i]) / 255.);
+            let weight = selection.map_or(1., |mask| mask[i]);
             let mapped = evaluator.sample(*before);
             *dst = if weight == 0. || mapped.to_bits() == before.to_bits() {
                 *before
@@ -293,7 +293,7 @@ mod tests {
         let unchanged = apply(&source, &Curve::default(), None, &storage::check).unwrap();
         assert!(Arc::ptr_eq(&source.samples, &unchanged.samples));
         let inverse = Curve::Points(vec![[0., 1.], [1., 0.]]);
-        let mask = [0, 128, 255, 0];
+        let mask = [0., 128./255., 1., 0.];
         let output = apply(&source, &inverse, Some(&mask), &storage::check).unwrap();
         assert_eq!(output.samples[0].to_bits(), (-0.0f32).to_bits());
         assert_eq!(output.samples[3], 1.);
@@ -360,7 +360,7 @@ mod tests {
         let source = plane(&[0.25, 0.75]);
         let before = source.samples.clone();
         let inverse = Curve::Points(vec![[0., 1.], [1., 0.]]);
-        assert!(apply(&source, &inverse, Some(&[255]), &storage::check).is_err());
+        assert!(apply(&source, &inverse, Some(&[1.]), &storage::check).is_err());
         assert!(apply(&source, &inverse, None, &|| Err("Cancelled".into())).is_err());
         assert!(Arc::ptr_eq(&source.samples, &before));
         assert_eq!(source.samples.as_slice(), &[0.25, 0.75]);

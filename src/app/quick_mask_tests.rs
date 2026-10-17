@@ -67,7 +67,7 @@ fn craft_quick_mask_enter_exit_restores_exact_translated_selection_and_history()
     assert_eq!(bytes(&s), entered);
     assert!(s.pixel_sel.is_none());
     s.set_quick_mask(false).unwrap();
-    assert_eq!(s.pixel_sel.as_ref().unwrap().as_slice(), &expected);
+    assert_eq!(s.pixel_sel.as_ref().unwrap().as_slice(), &expected.map(|v|f32::from(v)/255.));
     assert_eq!(
         s.pixel_selection_space().unwrap().transform,
         tiny_skia::Transform::identity()
@@ -82,7 +82,7 @@ fn craft_quick_mask_enter_exit_restores_exact_translated_selection_and_history()
     s.redo();
     s.redo();
     assert_eq!(bytes(&s), before);
-    assert_eq!(s.pixel_sel.as_ref().unwrap().as_slice(), &expected);
+    assert_eq!(s.pixel_sel.as_ref().unwrap().as_slice(), &expected.map(|v|f32::from(v)/255.));
 }
 #[test]
 fn craft_quick_mask_native_brush_eraser_cancel_curves_fill_and_reopen_leave_artwork_exact() {
@@ -232,4 +232,44 @@ fn craft_quick_mask_defaults_no_selection_options_and_cancelled_owners_are_atomi
     s.set_quick_mask(false).unwrap();
     assert!(s.pixel_sel.is_none());
     assert_eq!(bytes(&s), original);
+}
+
+#[test]
+fn craft_selection_precision_quick_mask_channel_transition_preserves_every_authored_bit() {
+    let mut s=fixture();
+    s.set_quick_mask(true).unwrap();
+    let source=storage::collect((0..32).map(|i|match i{0=>-0.,1=>f32::from_bits(0x3e800001),2=>f32::from_bits(0x3eaaaaab),_=>i as f32/32.})).unwrap();
+    s.doc.quick_mask.as_mut().unwrap().channel.plane.samples=source.clone();
+    let quick=bytes(&s);
+    s.set_quick_mask(false).unwrap();
+    assert!(Arc::ptr_eq(s.pixel_sel.as_ref().unwrap(),&source));
+    for(a,b)in s.pixel_sel.as_ref().unwrap().iter().zip(source.iter()){assert_eq!(a.to_bits(),b.to_bits());}
+    let space=s.pixel_selection_space().unwrap();
+    let target=s.capture_channels().unwrap();
+    let plane=Plane::from_coverage(source.clone(),space.w,space.h,space.transform).unwrap();
+    s.save_channel(&target,plane,"Exact selection").unwrap();
+    let saved=bytes(&s);let reopened=crate::project::decode(&saved).unwrap();
+    for(a,b)in reopened.channels.last().unwrap().plane.samples.iter().zip(source.iter()){assert_eq!(a.to_bits(),b.to_bits());}
+    s.undo();s.undo();assert_eq!(bytes(&s),quick);s.redo();
+    assert!(Arc::ptr_eq(s.pixel_sel.as_ref().unwrap(),&source));
+    s.set_quick_mask(true).unwrap();assert!(Arc::ptr_eq(&s.doc.quick_mask.as_ref().unwrap().channel.plane.samples,&source));
+    if let Ok(folder)=std::env::var("OMADESIGN_SELECTION_PRECISION_QA") {std::fs::create_dir_all(&folder).unwrap();std::fs::write(format!("{folder}/exact-selection.oma"),saved).unwrap();std::fs::write(format!("{folder}/quick-mask.oma"),quick).unwrap();}
+}
+
+#[test]
+fn craft_selection_precision_float_weights_reach_scalar_curves_native_filters_and_brush() {
+    let mut s=fixture();let space=SelectionSpace{w:8,h:4,transform:tiny_skia::Transform::identity()};
+    let weight=f32::from_bits(0x3eaa8001);s.replace_pixel_selection_float(vec![weight;32],space);
+    let plane=Plane::from_coverage(storage::collect(std::iter::repeat_n(0.25,32)).unwrap(),8,4,space.transform).unwrap();
+    let target=s.capture_channels().unwrap();let id=s.save_channel(&target,plane,"Weighted alpha").unwrap();s.select_channel_target(Some(id)).unwrap();
+    s.brush.color=Rgba::WHITE;s.brush.opacity=0.6;
+    let before=s.doc.channels[0].plane.samples.clone();s.start_channel_stroke(Pt::new(3.,2.),false);s.drag_channel_stroke(Pt::new(5.,2.));s.end_pixel_stroke(false);
+    assert!(s.doc.channels[0].plane.samples.iter().zip(before.iter()).any(|(a,b)|a.to_bits()!=b.to_bits()));
+    s.undo();assert_eq!(s.doc.channels[0].plane.samples,before);
+    let result=crate::channels::curve::apply(&s.doc.channels[0].plane,&crate::channels::curve::Curve::Points(vec![[0.,1.],[1.,1.]]),Some(s.pixel_sel.as_ref().unwrap()),&storage::check).unwrap();
+    let expected=0.25+(1.-0.25)*weight;let rounded=0.25+(1.-0.25)*(weight*255.).round()/255.;
+    assert_eq!(result.samples[0].to_bits(),expected.to_bits());assert!((result.samples[0]-rounded).abs()>1e-4);
+    let pixels=crate::document::Pixels::from_samples(1,1,crate::deep_color::Depth::F32,vec![0.25,0.5,0.75,1.]).unwrap();
+    let out=pixels.filtered(&crate::raster::Settings::new(crate::raster::Kind::Invert),Some(&[weight])).unwrap();
+    for(c,a)in out.sample(0).iter().take(3).enumerate(){let v=pixels.sample(0)[c];assert!((*a-(v+(1.-v-v)*weight)).abs()<1e-7);}
 }

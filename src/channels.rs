@@ -87,6 +87,11 @@ impl Plane {
         plane.validate()?;
         Ok(plane)
     }
+    /// Retain original full-depth selection samples without copying or quantizing them.
+    /// Args: admitted coverage, dimensions and placement. Returns a validated scalar plane.
+    pub fn from_coverage(samples:Arc<Allocation<f32>>,width:u32,height:u32,transform:tiny_skia::Transform)->Result<Self,String>{
+        let plane=Self{width,height,transform:[transform.sx,transform.ky,transform.kx,transform.sy,transform.tx,transform.ty],samples};plane.validate()?;Ok(plane)
+    }
     /// Invert the actual full-resolution channel while retaining the source allocation.
     /// Args: cancellation owner. Returns a new plane; no input or history is changed on failure.
     pub fn inverted(&self, cancel: &dyn CancellationCheck) -> Result<Self, String> {

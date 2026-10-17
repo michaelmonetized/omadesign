@@ -21,12 +21,12 @@ struct Session {
     w: u32,
     h: u32,
     source: Arc<Vec<u8>>,
-    selection: Option<Arc<Vec<u8>>>,
+    selection: Option<Arc<Vec<f32>>>,
     settings: Settings,
     preview_w: u32,
     preview_h: u32,
     preview_source: Arc<Vec<u8>>,
-    preview_selection: Option<Arc<Vec<u8>>>,
+    preview_selection: Option<Arc<Vec<f32>>>,
     original_texture: TextureHandle,
     texture: TextureHandle,
     preview_job: Option<(Settings, Job)>,
@@ -230,7 +230,7 @@ pub(super) fn open_with_settings(ctx: &Context, studio: &mut Studio, settings: S
     });
 }
 
-fn thumbnail(data: &[u8], w: u32, h: u32, dw: u32, dh: u32, channels: usize) -> Vec<u8> {
+fn thumbnail<T:Copy>(data: &[T], w: u32, h: u32, dw: u32, dh: u32, channels: usize) -> Vec<T> {
     let mut out = Vec::with_capacity(dw as usize * dh as usize * channels);
     for y in 0..dh {
         for x in 0..dw {
@@ -250,7 +250,7 @@ fn thumbnail(data: &[u8], w: u32, h: u32, dw: u32, dh: u32, channels: usize) -> 
 fn render_job(
     ctx: &Context,
     source: Arc<Vec<u8>>,
-    selection: Option<Arc<Vec<u8>>>,
+    selection: Option<Arc<Vec<f32>>>,
     w: u32,
     h: u32,
     settings: Settings,

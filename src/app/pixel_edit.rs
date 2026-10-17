@@ -29,14 +29,14 @@ pub struct Drag {
     pub point: Pt,
     pub before: Geometry,
 }
-pub type Job = Arc<Mutex<Option<Option<Vec<u8>>>>>;
+pub type Job = Arc<Mutex<Option<Option<Arc<crate::resources::Allocation<f32>>>>>>;
 pub struct Editor {
     pub document: String,
     pub generation: u64,
     pub space: SelectionSpace,
     pub mode: ModeKind,
     pub geometry: Geometry,
-    pub source: Arc<crate::resources::Allocation<u8>>,
+    pub source: Arc<crate::resources::Allocation<f32>>,
     pub had_selection: bool,
     pub source_path: Option<Vec<Anchor>>,
     pub drag: Option<Drag>,
@@ -107,7 +107,7 @@ impl Studio {
         }
         let source = match self.pixel_sel.clone() {
             Some(source) => source,
-            None => match crate::resources::global().allocate_now::<u8,_>(space.w as usize*space.h as usize, &crate::deep_color::storage::check) {
+            None => match crate::resources::global().allocate_now::<f32,_>(space.w as usize*space.h as usize, &crate::deep_color::storage::check) {
                 Ok(source)=>Arc::new(source),
                 Err(error)=>{self.status=error;return;}
             }
@@ -270,7 +270,7 @@ impl Studio {
             let (geometry, _) = edit.job.take().unwrap();
             if geometry == edit.geometry {
                 if let Some(mask) = result {
-                    self.replace_pixel_selection(mask, edit.space);
+                    self.replace_pixel_selection_admitted(mask, edit.space);
                     edit.generation = self.pixel_sel_gen;
                     self.pixel_path = edit.path().map(|anchors| SelectionPath {
                         anchors,
@@ -351,20 +351,20 @@ pub fn path_mask(anchors: &[Anchor], space: SelectionSpace) -> Option<Vec<u8>> {
     Some(mask.data().to_vec())
 }
 fn render(
-    source: &[u8],
+    source: &[f32],
     space: SelectionSpace,
     geometry: &Geometry,
     path: Option<&[Anchor]>,
-) -> Option<Vec<u8>> {
+) -> Option<Arc<crate::resources::Allocation<f32>>> {
     match geometry {
         Geometry::Path {
             anchors,
             closed: true,
-        } => path_mask(anchors, space),
+        } => path_mask(anchors, space).and_then(|v|crate::selection_coverage::from_bytes(&v,&crate::deep_color::storage::check).ok()),
         Geometry::Path { .. } => None,
         Geometry::Cage(cage) => {
             if let Some(path) = path {
-                return path_mask(&mapped_path(path, cage)?, space);
+                return path_mask(&mapped_path(path, cage)?, space).and_then(|v|crate::selection_coverage::from_bytes(&v,&crate::deep_color::storage::check).ok());
             }
             let mapper = cage.mapper()?;
             let points = mapper
@@ -377,7 +377,7 @@ fn render(
             for point in points {
                 bounds.union_pt(point);
             }
-            let mut output = vec![0; source.len()];
+            let mut output = crate::resources::global().allocate_now::<f32,_>(source.len(),&crate::deep_color::storage::check).ok()?;
             for y in (bounds.min.y.floor().max(0.0) as u32)
                 ..(bounds.max.y.ceil().max(0.0) as u32).min(space.h)
             {
@@ -422,10 +422,10 @@ fn render(
                             }
                         }
                     }
-                    output[y as usize * space.w as usize + x as usize] = coverage.round() as u8;
+                    output.as_mut_slice()[y as usize * space.w as usize + x as usize] = coverage.clamp(0.,1.);
                 }
             }
-            Some(output)
+            Some(Arc::new(output))
         }
     }
 }
@@ -524,13 +524,14 @@ mod tests {
                 (mapper.unmap(mapped, bounds).unwrap() - p).length() < 0.02,
                 "{mode:?}"
             );
+            let mask:Vec<f32>=mask.iter().map(|v|f32::from(*v)/255.).collect();
             let result = render(&mask, space(), &Geometry::Cage(cage), None).unwrap();
             assert_eq!(
                 result[mapped.y as usize * 64 + mapped.x as usize],
-                0,
+                0.,
                 "hole in {mode:?}"
             );
-            assert_ne!(result, mask, "{mode:?}");
+            assert_ne!(result.as_slice(), mask.as_slice(), "{mode:?}");
         }
     }
     #[test]

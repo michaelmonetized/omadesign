@@ -20,7 +20,7 @@ pub(crate) struct Captured {
     pub(crate) id: u64,
     pub(crate) name: String,
     pub(crate) source: Plane,
-    selection: Option<(Arc<Allocation<u8>>, SelectionSpace)>,
+    selection: Option<(Arc<Allocation<f32>>, SelectionSpace)>,
 }
 impl Captured {
     /// Capture one editable saved channel and its actual selection before preview work.
@@ -81,7 +81,7 @@ impl Captured {
             let mut mask = self
                 .selection
                 .as_ref()
-                .map(|_| pool.allocate_now::<u8, _>(n, cancel))
+                .map(|_| pool.allocate_now::<f32, _>(n, cancel))
                 .transpose()?;
             let inverse = self
                 .selection
@@ -114,7 +114,7 @@ impl Captured {
                             src[point.y.floor() as usize * space.w as usize
                                 + point.x.floor() as usize]
                         } else {
-                            0
+                            0.
                         };
                     }
                 }

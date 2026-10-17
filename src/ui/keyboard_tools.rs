@@ -604,7 +604,7 @@ mod tests {
         let path = studio.pixel_selection_path().unwrap().to_vec();
         assert_eq!(path[0].h_out, Pt::new(4., -2.));
         let coverage = studio.pixel_sel.clone().unwrap();
-        assert!(coverage.iter().any(|value| *value != 0));
+        assert!(coverage.iter().any(|value| *value != 0.));
         frame(
             &ctx,
             &mut studio,
@@ -742,8 +742,8 @@ mod tests {
         let original = studio.doc.layers[layer].kind.pixels().unwrap().data.clone();
         frame(&ctx, &mut studio, key(Key::M, Modifiers::SHIFT));
         apply_points(&ctx, &mut studio, "4,4; 20,20");
-        assert!(studio.pixel_sel.as_ref().unwrap().iter().any(|n| *n > 0));
-        assert!(studio.pixel_sel.as_ref().unwrap().iter().any(|n| *n == 0));
+        assert!(studio.pixel_sel.as_ref().unwrap().iter().any(|n| *n > 0.));
+        assert!(studio.pixel_sel.as_ref().unwrap().iter().any(|n| *n == 0.));
         frame(&ctx, &mut studio, key(Key::B, Modifiers::NONE));
         let history = studio.history.len();
         apply_points(&ctx, &mut studio, "8,8; 12,8; 12,12");

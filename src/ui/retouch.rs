@@ -35,7 +35,7 @@ fn publish(
     let feathered = if !mask
         && selection
             .as_ref()
-            .is_some_and(|m| m.iter().any(|v| *v > 0 && *v < 255))
+            .is_some_and(|m| m.iter().any(|v| *v > 0. && *v < 1.))
     {
         let result = (|| {
             let original = crate::deep_color::surface::Surface::from_rgba(
@@ -106,16 +106,15 @@ fn publish_region(
     for row in region.rows(buffer.width()) {
         for i in row {
             let pixel = buffer.pixels()[i];
-            let coverage = selection.as_ref().map_or(255, |selection| selection[i]);
-            let pixel = if coverage == 255 {
+            let coverage = selection.as_ref().map_or(1., |selection| selection[i]);
+            let pixel = if coverage == 1. {
                 pixel
             } else {
                 let rgba = &before[i * 4..i * 4 + 4];
                 let old =
                     tiny_skia::ColorU8::from_rgba(rgba[0], rgba[1], rgba[2], rgba[3]).premultiply();
                 let mix = |new: u8, old: u8| {
-                    ((new as u32 * coverage as u32 + old as u32 * (255 - coverage as u32) + 127)
-                        / 255) as u8
+                    (new as f32 * coverage + old as f32 * (1.-coverage)).round() as u8
                 };
                 tiny_skia::PremultipliedColorU8::from_rgba(
                     mix(pixel.red(), old.red()),
@@ -320,7 +319,7 @@ fn clip_working(
     let width = buf.width();
     for row in region.rows(width) {
         for i in row {
-            if sel[i] == 0 {
+            if sel[i] == 0. {
                 let rgba = &before[i * 4..i * 4 + 4];
                 buf.pixels_mut()[i] =
                     tiny_skia::ColorU8::from_rgba(rgba[0], rgba[1], rgba[2], rgba[3]).premultiply();
@@ -399,7 +398,7 @@ pub(super) fn start_brush(studio: &mut Studio, world: Pt) {
     clip_overlay(studio, layer, &mut buf, region);
     let preview = (|| {
         let Some(mask) = studio.cached_pixel_sel_mask(layer) else {return Ok(None)};
-        if !mask.iter().any(|&coverage| coverage > 0 && coverage < 255) {return Ok(None);}
+        if !mask.iter().any(|&coverage| coverage > 0. && coverage < 1.) {return Ok(None);}
         let mut preview = crate::deep_color::surface::Surface::new(w, h)?;
         paint::feather_overlay_region(&mut preview, &buf, &mask, region);
         Ok::<_,String>(Some(preview))
@@ -725,7 +724,7 @@ pub(super) fn fill(studio: &mut Studio, world: Pt) {
                     before.sample(i),
                     c,
                     crate::color::Blend::Normal,
-                    region[i] as f32 / 255.,
+                    region[i],
                 )
             }),
         );
@@ -870,7 +869,7 @@ pub(super) fn brush_drag(studio: &mut Studio, world: Pt) {
     if selection_changed {
         let soft = studio
             .cached_pixel_sel_mask(layer)
-            .is_some_and(|mask| mask.iter().any(|&v| v > 0 && v < 255));
+            .is_some_and(|mask| mask.iter().any(|&v| v > 0. && v < 1.));
         if soft {
             if preview.is_none() {
                 match crate::deep_color::surface::Surface::new(buf.width(), buf.height()) {
@@ -1192,7 +1191,7 @@ mod tests {
         assert_eq!(crate::project::encode(&studio.doc).unwrap(), before);
         assert_eq!(studio.history.len(), 0);
         let selection = studio.pixel_sel_mask(0).unwrap();
-        assert_eq!(&*selection, &[255; 32 * 24]);
+        assert_eq!(&*selection, &[1.; 32 * 24]);
     }
 
     #[test]
@@ -1759,8 +1758,8 @@ mod tests {
         let mask = studio.pixel_sel.as_ref().expect("rect selection");
         assert_eq!(mask.len(), 16 * 16);
         assert!(paint::selected_count(mask) >= 25);
-        assert_eq!(mask[(2 * 16 + 2) as usize], 255);
-        assert_eq!(mask[0], 0);
+        assert_eq!(mask[(2 * 16 + 2) as usize], 1.);
+        assert_eq!(mask[0], 0.);
 
         studio.tool = Tool::EllipseMarquee;
         commit_marquee(
@@ -1771,8 +1770,8 @@ mod tests {
             paint::PixelCombine::Replace,
         );
         let ellipse = studio.pixel_sel.as_ref().unwrap();
-        assert_eq!(ellipse[(8 * 16 + 8) as usize], 255);
-        assert_eq!(ellipse[0], 0);
+        assert_eq!(ellipse[(8 * 16 + 8) as usize], 1.);
+        assert_eq!(ellipse[0], 0.);
 
         studio.tool = Tool::Lasso;
         commit_lasso(
@@ -1811,8 +1810,8 @@ mod tests {
         );
         let mask = studio.pixel_sel.as_ref().unwrap();
         assert!(paint::selected_count(mask) < before);
-        assert_eq!(mask[(1 * 16 + 1) as usize], 255);
-        assert_eq!(mask[(4 * 16 + 4) as usize], 0);
+        assert_eq!(mask[(1 * 16 + 1) as usize], 1.);
+        assert_eq!(mask[(4 * 16 + 4) as usize], 0.);
         commit_marquee(
             &mut studio,
             Pt::new(12.0, 0.0),
@@ -1821,9 +1820,9 @@ mod tests {
             paint::PixelCombine::Add,
         );
         let mask = studio.pixel_sel.as_ref().unwrap();
-        assert_eq!(mask[(1 * 16 + 1) as usize], 255);
-        assert_eq!(mask[(4 * 16 + 4) as usize], 0);
-        assert_eq!(mask[(2 * 16 + 14) as usize], 255);
+        assert_eq!(mask[(1 * 16 + 1) as usize], 1.);
+        assert_eq!(mask[(4 * 16 + 4) as usize], 0.);
+        assert_eq!(mask[(2 * 16 + 14) as usize], 1.);
         commit_lasso(
             &mut studio,
             &[
@@ -1834,7 +1833,7 @@ mod tests {
             ],
             paint::PixelCombine::Subtract,
         );
-        assert_eq!(studio.pixel_sel.as_ref().unwrap()[(1 * 16 + 1) as usize], 0);
+        assert_eq!(studio.pixel_sel.as_ref().unwrap()[(1 * 16 + 1) as usize], 0.);
     }
 
     #[test]
@@ -2042,7 +2041,7 @@ mod brush_pack_tests {
         s.select_brush(1, 0);
         s.brush.size = 20.;
         s.pixel_sel = Some(crate::deep_color::storage::adopt((0..80 * 60)
-                .map(|i| if i % 80 < 40 { 255 } else { 0 })
+                .map(|i| if i % 80 < 40 { 1. } else { 0. })
                 .collect()).unwrap());
         s.pixel_sel_gen += 1;
         let before = s.doc.layers[0].kind.pixels().unwrap().data.to_vec();
@@ -2119,7 +2118,7 @@ pub(super) fn native_drag(studio: &mut Studio, world: Pt) {
         (0..before.w as usize * before.h as usize).flat_map(|i| {
             let p = before.sample(i);
             let amount = coverage.pixels()[i].alpha() as f32 / 255.
-                * selection.as_ref().map_or(1., |m| m[i] as f32 / 255.);
+                * selection.as_ref().map_or(1., |m| m[i]);
             if erase && !mask {
                 [p[0], p[1], p[2], p[3] * (1. - amount)]
             } else {
@@ -2304,7 +2303,7 @@ mod deep_color {
             studio.brush.hardness = 0.8;
             studio.clone_source = Some(Pt::new(8., 16.));
             studio.pixel_sel = Some(crate::deep_color::storage::adopt((0..64 * 32)
-                    .map(|i| if i % 64 < 48 { 255 } else { 0 })
+                    .map(|i| if i % 64 < 48 { 1. } else { 0. })
                     .collect()).unwrap());
             studio.pixel_sel_gen += 1;
             match tool {
@@ -2444,7 +2443,7 @@ pub(super) fn native_retouch_drag(studio: &mut Studio, world: Pt) {
 
 fn native_retouch_drag_selected(
     studio: &mut Studio, world: Pt,
-    select: impl FnOnce(&Pixels, &Pixels, &[u8]) -> Result<Pixels, String>,
+    select: impl FnOnce(&Pixels, &Pixels, &[f32]) -> Result<Pixels, String>,
 ) {
     let Some(Op::NativeRetouch {
         layer,
@@ -2505,13 +2504,13 @@ fn native_retouch_drag_selected(
     studio.mark_interaction();
 }
 
-fn native_retouch_selection(before: &Pixels, edited: &Pixels, selection: &[u8]) -> Result<Pixels, String> {
+fn native_retouch_selection(before: &Pixels, edited: &Pixels, selection: &[f32]) -> Result<Pixels, String> {
     if selection.len() != before.data.len() / 4 {return Err("Selection dimensions do not match retouch pixels".into());}
     let a = &before.native.as_ref().ok_or("Missing retouch source samples")?.samples;
     let b = &edited.native.as_ref().ok_or("Missing retouch working samples")?.samples;
     let samples = crate::deep_color::storage::collect(
         a.chunks_exact(4).zip(b.chunks_exact(4)).zip(selection.iter()).flat_map(|((a,b), &m)| {
-            crate::deep_color::retouch::mix(a.try_into().unwrap(), b.try_into().unwrap(), m as f32 / 255.)
+            crate::deep_color::retouch::mix(a.try_into().unwrap(), b.try_into().unwrap(), m)
         })
     )?;
     let mut after = edited.clone();after.set_sample_allocation(samples)?;Ok(after)

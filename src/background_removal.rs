@@ -10,7 +10,7 @@ pub struct Source {
     pub w: u32,
     pub h: u32,
     pub rgba: Arc<Vec<u8>>,
-    pub selection: Option<Arc<Vec<u8>>>,
+    pub selection: Option<Arc<Vec<f32>>>,
     pub existing_mask: Option<Arc<Vec<u8>>>,
 }
 
@@ -43,7 +43,7 @@ impl Source {
             }
             let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0, 0);
             for (i, value) in selection.iter().enumerate() {
-                if *value == 0 {
+                if *value == 0. {
                     continue;
                 }
                 let (x, y) = (i % w, i / w);

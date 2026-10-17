@@ -425,7 +425,7 @@ pub fn clone_stroke(pm: &mut Pixmap, from: Pt, to: Pt, source_from: Pt, brush: &
 }
 
 /// Restore unselected pixels from the stroke-start image (both premul pixmaps).
-pub fn restrict_pixmap(dst: &mut Pixmap, original: &Pixmap, mask: &[u8]) {
+pub fn restrict_pixmap<T:crate::selection_coverage::Sample>(dst: &mut Pixmap, original: &Pixmap, mask: &[T]) {
     if dst.width() != original.width() || dst.height() != original.height() {
         return;
     }
@@ -436,7 +436,7 @@ pub fn restrict_pixmap(dst: &mut Pixmap, original: &Pixmap, mask: &[u8]) {
     let src = original.data();
     let out = dst.data_mut();
     for i in 0..n {
-        if mask[i] == 0 {
+        if mask[i].unit() == 0. {
             let o = i * 4;
             out[o..o + 4].copy_from_slice(&src[o..o + 4]);
         }
@@ -444,20 +444,20 @@ pub fn restrict_pixmap(dst: &mut Pixmap, original: &Pixmap, mask: &[u8]) {
 }
 
 /// Zero overlay pixels outside the selection.
-pub fn clip_overlay(pm: &mut Pixmap, mask: &[u8]) {
+pub fn clip_overlay<T:crate::selection_coverage::Sample>(pm: &mut Pixmap, mask: &[T]) {
     let n = (pm.width() * pm.height()) as usize;
     if mask.len() != n {
         return;
     }
     for (i, pixel) in pm.pixels_mut().iter_mut().enumerate() {
-        if mask[i] == 0 {
+        if mask[i].unit() == 0. {
             *pixel = tiny_skia::ColorU8::from_rgba(0, 0, 0, 0).premultiply();
         }
     }
 }
 
 /// Reclip only newly painted pixels; previous dabs have already been clipped.
-pub(crate) fn clip_overlay_region(pm: &mut Pixmap, mask: &[u8], region: PixelRegion) {
+pub(crate) fn clip_overlay_region<T:crate::selection_coverage::Sample>(pm: &mut Pixmap, mask: &[T], region: PixelRegion) {
     if mask.len() != pm.width() as usize * pm.height() as usize {
         return;
     }
@@ -465,7 +465,7 @@ pub(crate) fn clip_overlay_region(pm: &mut Pixmap, mask: &[u8], region: PixelReg
     let pixels = pm.pixels_mut();
     for row in region.rows(width) {
         for (pixel, &coverage) in pixels[row.clone()].iter_mut().zip(&mask[row]) {
-            if coverage == 0 {
+            if coverage.unit() == 0. {
                 *pixel = tiny_skia::ColorU8::from_rgba(0, 0, 0, 0).premultiply();
             }
         }
@@ -473,10 +473,10 @@ pub(crate) fn clip_overlay_region(pm: &mut Pixmap, mask: &[u8], region: PixelReg
 }
 
 /// Refresh the displayed soft-selection overlay from the unattenuated stroke.
-pub(crate) fn feather_overlay_region(
+pub(crate) fn feather_overlay_region<T:crate::selection_coverage::Sample>(
     output: &mut Pixmap,
     source: &Pixmap,
-    mask: &[u8],
+    mask: &[T],
     region: PixelRegion,
 ) {
     if output.width() != source.width()
@@ -493,26 +493,26 @@ pub(crate) fn feather_overlay_region(
             .zip(&mask[row])
         {
             for (channel, &value) in out.iter_mut().zip(src) {
-                *channel = ((value as u32 * coverage as u32 + 127) / 255) as u8;
+                *channel = (value as f32 * coverage.unit()).round() as u8;
             }
         }
     }
 }
 
 /// Apply soft coverage once to a completed overlay, not repeatedly to its dabs.
-pub fn feather_overlay(pm: &mut Pixmap, mask: &[u8]) {
+pub fn feather_overlay<T:crate::selection_coverage::Sample>(pm: &mut Pixmap, mask: &[T]) {
     if mask.len() != pm.width() as usize * pm.height() as usize {
         return;
     }
     for (rgba, &coverage) in pm.data_mut().chunks_exact_mut(4).zip(mask) {
         for channel in rgba {
-            *channel = ((*channel as u32 * coverage as u32 + 127) / 255) as u8;
+            *channel = (*channel as f32 * coverage.unit()).round() as u8;
         }
     }
 }
 
 /// Blend an accumulated edit with the stroke-start pixels using soft coverage.
-pub fn feather_edit(pm: &mut Pixmap, original: &Pixmap, mask: &[u8]) {
+pub fn feather_edit<T:crate::selection_coverage::Sample>(pm: &mut Pixmap, original: &Pixmap, mask: &[T]) {
     if pm.width() != original.width()
         || pm.height() != original.height()
         || mask.len() != pm.width() as usize * pm.height() as usize
@@ -525,9 +525,9 @@ pub fn feather_edit(pm: &mut Pixmap, original: &Pixmap, mask: &[u8]) {
         .zip(original.data().chunks_exact(4))
         .zip(mask)
     {
-        let amount = coverage as u32;
+        let amount = coverage.unit();
         for (channel, &old) in rgba.iter_mut().zip(before) {
-            *channel = ((*channel as u32 * amount + old as u32 * (255 - amount) + 127) / 255) as u8;
+            *channel = (*channel as f32 * amount + old as f32 * (1. - amount)).round() as u8;
         }
     }
 }
@@ -558,11 +558,11 @@ pub fn combine_masks(base: Option<&[u8]>, next: &[u8], op: PixelCombine) -> Vec<
     }
 }
 
-pub fn selected_count(mask: &[u8]) -> usize {
-    mask.iter().filter(|value| **value > 0).count()
+pub fn selected_count<T:crate::selection_coverage::Sample>(mask: &[T]) -> usize {
+    mask.iter().filter(|value| (**value).unit() > 0.).count()
 }
 
-pub fn selection_bounds(mask: &[u8], w: u32, h: u32) -> Option<(u32, u32, u32, u32)> {
+pub fn selection_bounds<T:crate::selection_coverage::Sample>(mask: &[T], w: u32, h: u32) -> Option<(u32, u32, u32, u32)> {
     if mask.len() != w as usize * h as usize {
         return None;
     }
@@ -573,7 +573,7 @@ pub fn selection_bounds(mask: &[u8], w: u32, h: u32) -> Option<(u32, u32, u32, u
     let mut any = false;
     for y in 0..h {
         for x in 0..w {
-            if mask[(y * w + x) as usize] != 0 {
+            if mask[(y * w + x) as usize].unit() != 0. {
                 any = true;
                 min_x = min_x.min(x);
                 min_y = min_y.min(y);
@@ -585,13 +585,13 @@ pub fn selection_bounds(mask: &[u8], w: u32, h: u32) -> Option<(u32, u32, u32, u
     any.then_some((min_x, min_y, max_x, max_y))
 }
 
-pub fn selection_overlay_rgba(mask: &[u8], color: [u8; 3], alpha: u8) -> Vec<u8> {
+pub fn selection_overlay_rgba<T:crate::selection_coverage::Sample>(mask: &[T], color: [u8; 3], alpha: u8) -> Vec<u8> {
     let mut out = vec![0u8; mask.len() * 4];
     for (i, &m) in mask.iter().enumerate() {
-        if m == 0 {
+        if m.unit() == 0. {
             continue;
         }
-        let a = (u16::from(alpha) * u16::from(m) / 255) as u8;
+        let a = (f32::from(alpha) * m.unit()) as u8;
         let o = i * 4;
         out[o] = color[0];
         out[o + 1] = color[1];
@@ -785,7 +785,7 @@ pub fn flood_fill_clipped(
     seed: Pt,
     color: Rgba,
     tolerance: f32,
-    clip: Option<&[u8]>,
+    clip: Option<&[f32]>,
 ) {
     let mask = wand_mask_clipped(pm, seed, tolerance, clip);
     let fill = tiny_skia::ColorU8::from_rgba(color.r, color.g, color.b, color.a).premultiply();
@@ -801,7 +801,7 @@ pub fn wand_mask(pm: &Pixmap, seed: Pt, tolerance: f32) -> Vec<u8> {
     wand_mask_clipped(pm, seed, tolerance, None)
 }
 
-pub fn wand_mask_clipped(pm: &Pixmap, seed: Pt, tolerance: f32, clip: Option<&[u8]>) -> Vec<u8> {
+pub fn wand_mask_clipped(pm: &Pixmap, seed: Pt, tolerance: f32, clip: Option<&[f32]>) -> Vec<u8> {
     let w = pm.width() as i32;
     let h = pm.height() as i32;
     let mut mask = vec![0u8; (w * h) as usize];
@@ -811,7 +811,7 @@ pub fn wand_mask_clipped(pm: &Pixmap, seed: Pt, tolerance: f32, clip: Option<&[u
         return mask;
     }
     let seed_idx = (y * w + x) as usize;
-    if clip.is_some_and(|clip| clip.get(seed_idx).copied().unwrap_or(0) == 0) {
+    if clip.is_some_and(|clip| clip.get(seed_idx).copied().unwrap_or(0.) == 0.) {
         return mask;
     }
     let target = sample(pm, x, y);
@@ -824,7 +824,7 @@ pub fn wand_mask_clipped(pm: &Pixmap, seed: Pt, tolerance: f32, clip: Option<&[u
         if mask[idx] != 0 {
             continue;
         }
-        if clip.is_some_and(|clip| clip.get(idx).copied().unwrap_or(0) == 0) {
+        if clip.is_some_and(|clip| clip.get(idx).copied().unwrap_or(0.) == 0.) {
             continue;
         }
         let px = sample(pm, cx, cy);

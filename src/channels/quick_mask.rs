@@ -69,7 +69,7 @@ impl QuickMask {
     /// Distinguish an untouched no-selection white mask from an explicit Select All.
     /// Args: none. Returns true only for the original empty masked-areas state.
     pub(crate) fn leaves_unselected(&self) -> bool {
-        self.channel.plane.samples.iter().all(|v| *v <= 0.5 / 255.)
+        self.channel.plane.samples.iter().all(|v| *v == 0.)
             || self.unselected
                 && self.options.indicates == Indicates::Masked
                 && self
@@ -77,27 +77,27 @@ impl QuickMask {
                     .plane
                     .samples
                     .iter()
-                    .all(|v| (1. - *v).abs() <= 0.5 / 255.)
+                    .all(|v| *v == 1.)
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct Selection {
-    pub values: Arc<Allocation<u8>>,
+    pub values: Arc<Allocation<f32>>,
     pub width: u32,
     pub height: u32,
     pub transform: [f32; 6],
 }
 impl Selection {
-    /// Read the original byte selection's document placement.
+    /// Read the original selection's document placement.
     /// Args: none. Returns its stored transform for exact Undo restoration.
     pub fn placement(&self) -> tiny_skia::Transform {
         let [a, b, c, d, e, f] = self.transform;
         tiny_skia::Transform::from_row(a, b, c, d, e, f)
     }
-    /// Keep a produced mask's actual grid with its admitted byte owner.
+    /// Keep a produced mask's actual grid with its admitted full-depth owner.
     /// Args: scalar plane and converted selection owner. Returns selection history state without copying samples.
-    pub(crate) fn from_plane(plane: &Plane, values: Arc<Allocation<u8>>) -> Self {
+    pub(crate) fn from_plane(plane: &Plane, values: Arc<Allocation<f32>>) -> Self {
         Self {
             values,
             width: plane.width,

@@ -17,7 +17,7 @@ pub(super) struct TabState {
     history: History,
     pub(super) live_runtime: super::live::LiveRuntime,
     clone_source: Option<Pt>,
-    pixel_sel: Option<std::sync::Arc<crate::resources::Allocation<u8>>>,
+    pixel_sel: Option<std::sync::Arc<crate::resources::Allocation<f32>>>,
     pixel_sel_space: Option<masking::SelectionSpace>,
     pixel_path: Option<pixel_edit::SelectionPath>,
     pixel_edit: Option<pixel_edit::Editor>,
@@ -514,7 +514,7 @@ mod tests {
         let selected_layer = Some(studio.doc.layers[selection[0].0].id);
         studio.selected_layer = selected_layer;
         let pixels = studio.doc.layers[0].kind.pixels().unwrap().data.as_ptr();
-        studio.pixel_sel = Some(crate::deep_color::storage::adopt(vec![255; 64]).unwrap());
+        studio.pixel_sel = Some(crate::deep_color::storage::adopt(vec![1.; 64]).unwrap());
         let mask = studio.pixel_sel.as_ref().unwrap().as_ptr();
         studio.view.scale = 2.5;
 
@@ -734,7 +734,8 @@ impl Studio {
                 selected_layer: self.selected_layer,
                 individual_object: self.individual_object,
                 expanded: self.layer_expanded.clone(),
-                pixel_selection: self.pixel_sel.as_ref().map(|values| values.to_vec()),
+                pixel_selection: None,
+                pixel_selection_float: self.pixel_sel.as_ref().map(|values| values.to_vec()),
                 selection_space: self.pixel_sel_space.map(|v| {
                     let t = v.transform;
                     (v.w, v.h, [t.sx, t.ky, t.kx, t.sy, t.tx, t.ty])
@@ -766,7 +767,7 @@ impl Studio {
                 tab.selected_layer = s.selected_layer;
                 tab.individual_object = s.individual_object;
                 tab.layer_expanded = s.expanded;
-                tab.pixel_sel = s.pixel_selection.map(crate::deep_color::storage::adopt).transpose()?;
+                tab.pixel_sel = if let Some(values)=s.pixel_selection_float{crate::selection_coverage::validate(&values)?;Some(crate::deep_color::storage::adopt(values)?)}else{s.pixel_selection.map(|values|crate::selection_coverage::from_bytes(&values,&crate::deep_color::storage::check)).transpose()?};
                 tab.pixel_sel_space =
                     s.selection_space
                         .map(|(w, h, t)| super::masking::SelectionSpace {

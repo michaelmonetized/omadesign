@@ -203,7 +203,7 @@ impl Pixels {
     pub fn filtered(
         &self,
         settings: &crate::raster::Settings,
-        selection: Option<&[u8]>,
+        selection: Option<&[f32]>,
     ) -> Result<Self, String> {
         let samples = self.samples()?;
         let source = samples.as_slice().as_chunks::<4>().0;

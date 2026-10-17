@@ -230,7 +230,7 @@ pub fn refine(
         progress.check()?;
         for x in 0..region.w {
             let i = (region.y + y) * source.w as usize + region.x + x;
-            let selection = source.selection.as_ref().map_or(1., |s| s[i] as f32 / 255.);
+            let selection = source.selection.as_ref().map_or(1., |s| s[i]);
             if selection == 0. {
                 continue;
             }
@@ -310,7 +310,7 @@ mod tests {
             w: 4,
             h: 1,
             rgba: std::sync::Arc::new(vec![255; 16]),
-            selection: Some(std::sync::Arc::new(vec![0, 128, 255, 0])),
+            selection: Some(std::sync::Arc::new(vec![0.,128./255.,1.,0.])),
             existing_mask: Some(std::sync::Arc::new([128, 128, 128, 255].repeat(4))),
         };
         let raw = RawMask {
