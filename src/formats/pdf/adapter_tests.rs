@@ -571,3 +571,99 @@ fn pdf_adapter_rejects_invalid_graphs_without_dropping_the_effect() {
     doc.layers[index].svg_filter.as_mut().unwrap().filters = vec!["missing-effect".into()];
     assert!(write(&doc).unwrap_err().contains("missing-effect"));
 }
+
+#[test]
+#[ignore = "independent nested vector PDF qualification requires qpdf and Poppler"]
+fn pdf_adapter_native_frames_keep_nested_rotation_clips_and_group_opacity_vector() {
+    let mut doc = Document::new("Vector frame hierarchy", 180., 140., 72.);
+    doc.layers = vec![Layer::vector("Nested vector frames")];
+    let mut outer = rect(Pt::new(15., 15.), Pt::new(145., 105.), Fill::None);
+    outer.layout = crate::layout::FrameLayout::frame();
+    outer.rotation = 0.12;
+    outer.opacity = 0.65;
+    let mut inner = Shape::new(
+        Geom::Ellipse {
+            center: Pt::new(90., 65.),
+            radii: Pt::new(55., 35.),
+        },
+        Style {
+            fill: Fill::None,
+            stroke: None,
+        },
+    );
+    inner.layout = crate::layout::FrameLayout::frame();
+    inner.layout.parent = Some(outer.id);
+    inner.rotation = -0.19;
+    let mut first = rect(
+        Pt::new(25., 25.),
+        Pt::new(120., 75.),
+        Fill::Linear {
+            from: [0., 0.],
+            to: [1., 0.8],
+            c0: Rgba::rgb(220, 25, 60),
+            c1: Rgba::rgb(20, 135, 225),
+        },
+    );
+    first.layout.parent = Some(inner.id);
+    let mut second = rect(
+        Pt::new(75., 55.),
+        Pt::new(70., 55.),
+        Fill::Solid(Rgba::new(10, 175, 70, 180)),
+    );
+    second.layout.parent = Some(inner.id);
+    second.blend = Blend::Multiply;
+    *doc.layers[0].kind.shapes_mut().unwrap() = vec![outer, inner, first, second];
+    backdrop(&mut doc);
+    let (pdf, _) = inspect(&doc, "nested-vector-frames", 0.6);
+    assert!(
+        !pdf.objects
+            .values()
+            .filter_map(|o| o.as_stream().ok())
+            .any(|s| s.dict.get(b"Subtype").and_then(Object::as_name).ok() == Some(b"Image"))
+    );
+}
+
+#[test]
+#[ignore = "independent frame mask-source PDF qualification requires qpdf and Poppler"]
+fn pdf_adapter_frame_artwork_mask_sources_preserve_children_as_vector() {
+    let mut doc = Document::new("Vector frame source", 160., 120., 72.);
+    doc.layers = vec![Layer::vector("Mask source hierarchy")];
+    let mut source = rect(Pt::new(25., 20.), Pt::new(95., 75.), Fill::None);
+    source.layout = crate::layout::FrameLayout::frame();
+    source.layout.clip = false;
+    source.rotation = 0.15;
+    let mut child = Shape::new(
+        Geom::Ellipse {
+            center: Pt::new(72., 58.),
+            radii: Pt::new(35., 26.),
+        },
+        Style {
+            fill: Fill::Solid(Rgba::WHITE),
+            stroke: None,
+        },
+    );
+    child.layout.parent = Some(source.id);
+    let mut target = rect(
+        Pt::new(15., 15.),
+        Pt::new(130., 90.),
+        Fill::Linear {
+            from: [0., 0.],
+            to: [1., 0.8],
+            c0: Rgba::rgb(230, 40, 70),
+            c1: Rgba::rgb(20, 125, 210),
+        },
+    );
+    target.artwork_masks.push(ArtworkMask::new(MaskSource {
+        layer: doc.layers[0].id,
+        shape: Some(source.id),
+    }));
+    *doc.layers[0].kind.shapes_mut().unwrap() = vec![source, child, target];
+    backdrop(&mut doc);
+    let (pdf, _) = inspect(&doc, "frame-vector-mask-source", 0.6);
+    assert!(
+        !pdf.objects
+            .values()
+            .filter_map(|o| o.as_stream().ok())
+            .any(|s| s.dict.get(b"Subtype").and_then(Object::as_name).ok() == Some(b"Image"))
+    );
+}

@@ -43,6 +43,12 @@ impl Studio {
             self.status = "Select an unlocked vector object to convert".into();
             return;
         }
+        if self.doc.find_shape(layer, id).is_some_and(|shape| matches!(&shape.geom, Geom::Text(run)
+            if crate::text::has_character_paint(run) || run.frame.is_some() || run.on_path.is_some() || run.svg_text.is_some()))
+        {
+            self.outline_text_targets(&[(layer, id)]);
+            return;
+        }
         self.commit_type_edit();
         self.end_deform(false);
         let Some(shape) = self.doc.find_shape(layer, id) else {

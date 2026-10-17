@@ -321,7 +321,7 @@ fn needs_pixels(layer: &Layer) -> bool {
             shapes.iter().any(|shape| {
                 shape.filters.active()
                     || shape.blend_interior
-                    || shape.layout.parent.is_some()
+                    || shape.layout.image.is_some()
                     || shape.style.stroke.as_ref().is_some_and(|s| {
                         s.alignment != crate::document::StrokeAlignment::Center
                             || s.gradient.as_ref().is_some_and(unsupported_gradient)

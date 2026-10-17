@@ -241,51 +241,17 @@ impl Writer {
         } else {
             match &layer.kind {
                 LayerKind::Vector { shapes } => {
-                    for shape in shapes {
-                        if !shape.visible
-                            || shape.guide
-                            || doc.mask_sources().contains(&MaskSource {
-                                layer: layer.id,
-                                shape: Some(shape.id),
-                            })
-                        {
-                            continue;
-                        }
-                        if shape.opacity >= 1.
-                            && shape.fill_opacity >= 1.
-                            && shape.blend == Blend::Normal
-                            && shape.mask.is_none()
-                            && shape.artwork_masks.is_empty()
-                        {
-                            op(&mut scene.ops, "q", &[]);
-                            self.shape(shape, bounds, &mut scene)?;
-                            op(&mut scene.ops, "Q", &[]);
-                            continue;
-                        }
-                        let mut object = Scene::default();
-                        self.shape(shape, bounds, &mut object)?;
-                        let id = self.form(object, bounds, true)?;
-                        let id = self.masks(
-                            doc,
-                            id,
-                            &shape.artwork_masks,
-                            shape
-                                .mask
-                                .as_ref()
-                                .map(|p| (p, crate::compositor::shape_mask_transform(shape))),
-                            bounds,
-                            depth + 1,
-                        )?;
-                        op(&mut scene.ops, "q", &[]);
-                        let state = self.state(
-                            byte(shape.opacity * shape.fill_opacity),
-                            byte(shape.opacity * shape.fill_opacity),
-                            shape.blend,
-                        );
-                        scene.invoke("gs", "ExtGState", state);
-                        scene.invoke("Do", "XObject", id);
-                        op(&mut scene.ops, "Q", &[]);
-                    }
+                    let tree = shape_tree(shapes);
+                    self.shape_children(
+                        doc,
+                        layer,
+                        &tree,
+                        None,
+                        bounds,
+                        &mut scene,
+                        depth + 1,
+                        None,
+                    )?;
                 }
                 LayerKind::Raster { pixels, .. } => {
                     let image = self.image(layer)?;
@@ -340,6 +306,115 @@ impl Writer {
         op(&mut out.ops, "Q", &[]);
         Ok(())
     }
+    /// Paint stored frame children in their native order.
+    /// Args: document/layer, indexed children, parent, bounds, output and mask source. Returns an error at excessive depth.
+    fn shape_children(
+        &mut self,
+        doc: &Document,
+        layer: &Layer,
+        tree: &HashMap<Option<u64>, Vec<&Shape>>,
+        parent: Option<u64>,
+        bounds: Bounds,
+        out: &mut Scene,
+        depth: usize,
+        source: Option<u64>,
+    ) -> Result<(), String> {
+        if depth > 64 {
+            return Err("PDF frame nesting exceeds 64".into());
+        }
+        let sources = doc.mask_sources();
+        for shape in tree.get(&parent).into_iter().flatten() {
+            if !shape.visible
+                || shape.guide
+                || source != Some(shape.id)
+                    && sources.contains(&MaskSource {
+                        layer: layer.id,
+                        shape: Some(shape.id),
+                    })
+            {
+                continue;
+            }
+            self.shape_object(doc, layer, tree, shape, bounds, out, depth, source)?;
+        }
+        Ok(())
+    }
+
+    /// Keep each frame's opacity, clip and masks on one editable transparency form.
+    /// Args: source tree, object, current coordinate bounds, output and mask traversal. Returns any paint error.
+    fn shape_object(
+        &mut self,
+        doc: &Document,
+        layer: &Layer,
+        tree: &HashMap<Option<u64>, Vec<&Shape>>,
+        shape: &Shape,
+        bounds: Bounds,
+        out: &mut Scene,
+        depth: usize,
+        source: Option<u64>,
+    ) -> Result<(), String> {
+        if depth > 64 {
+            return Err("PDF frame nesting exceeds 64".into());
+        }
+        let direct = !shape.layout.frame
+            && shape.opacity >= 1.
+            && shape.fill_opacity >= 1.
+            && shape.blend == Blend::Normal
+            && shape.mask.is_none()
+            && shape.artwork_masks.is_empty();
+        if direct {
+            op(&mut out.ops, "q", &[]);
+            self.shape(shape, bounds, out)?;
+            op(&mut out.ops, "Q", &[]);
+            return Ok(());
+        }
+        let mut content = Scene::default();
+        self.shape(shape, bounds, &mut content)?;
+        if shape.layout.frame {
+            op(&mut content.ops, "q", &[]);
+            if shape.layout.clip {
+                path(&mut content.ops, shape);
+                op(&mut content.ops, "W", &[]);
+                op(&mut content.ops, "n", &[]);
+            }
+            rotate_matrix(&mut content.ops, shape.geom.bbox().center(), shape.rotation);
+            let child_bounds =
+                paint::local_bounds(bounds, shape.geom.bbox().center(), shape.rotation);
+            self.shape_children(
+                doc,
+                layer,
+                tree,
+                Some(shape.id),
+                child_bounds,
+                &mut content,
+                depth + 1,
+                source,
+            )?;
+            op(&mut content.ops, "Q", &[]);
+        }
+        let id = self.form(content, bounds, true)?;
+        let id = self.masks(
+            doc,
+            id,
+            &shape.artwork_masks,
+            shape
+                .mask
+                .as_ref()
+                .map(|pixels| (pixels, crate::compositor::shape_mask_transform(shape))),
+            bounds,
+            depth + 1,
+        )?;
+        op(&mut out.ops, "q", &[]);
+        let state = self.state(
+            byte(shape.opacity * shape.fill_opacity),
+            byte(shape.opacity * shape.fill_opacity),
+            shape.blend,
+        );
+        out.invoke("gs", "ExtGState", state);
+        out.invoke("Do", "XObject", id);
+        op(&mut out.ops, "Q", &[]);
+        Ok(())
+    }
+
     /// Paint fill and stroke independently before object opacity is applied.
     /// Args: object, page bounds and output. Returns an error for invalid gradient data.
     fn shape(&mut self, shape: &Shape, bounds: Bounds, out: &mut Scene) -> Result<(), String> {
@@ -672,27 +747,17 @@ impl Writer {
                     .and_then(|id| source.find(id))
                     .filter(|s| s.visible && !s.guide)
                 {
-                    let mut content = Scene::default();
-                    self.shape(shape, source_bounds, &mut content)?;
-                    let form = self.form(content, source_bounds, true)?;
-                    let form = self.masks(
+                    let tree = shape_tree(source.kind.shapes().unwrap_or(&[]));
+                    self.shape_object(
                         doc,
-                        form,
-                        &shape.artwork_masks,
-                        shape
-                            .mask
-                            .as_ref()
-                            .map(|p| (p, crate::compositor::shape_mask_transform(shape))),
+                        source,
+                        &tree,
+                        shape,
                         source_bounds,
+                        &mut scene,
                         depth + 1,
+                        Some(shape.id),
                     )?;
-                    let state = self.state(
-                        byte(shape.opacity * shape.fill_opacity),
-                        byte(shape.opacity * shape.fill_opacity),
-                        shape.blend,
-                    );
-                    scene.invoke("gs", "ExtGState", state);
-                    scene.invoke("Do", "XObject", form);
                 } else if mask.source.shape.is_none() {
                     self.layer(doc, source, source_bounds, &mut scene, depth + 1, true)?;
                 }
@@ -874,6 +939,16 @@ fn stroke_style(ops: &mut Vec<Operation>, shape: &Shape) {
         ));
     }
 }
+/// Index the same stored parent identities used by the native frame painter.
+/// Args: flat layer shapes. Returns ordered immediate children for each frame.
+fn shape_tree(shapes: &[Shape]) -> HashMap<Option<u64>, Vec<&Shape>> {
+    let mut tree = HashMap::<_, Vec<_>>::new();
+    for shape in shapes {
+        tree.entry(shape.layout.parent).or_default().push(shape);
+    }
+    tree
+}
+
 /// Write an outlined stroke as exact vector segments.
 /// Args: output and Skia path. Returns no value.
 fn skia_path(ops: &mut Vec<Operation>, path: &tiny_skia::Path) {

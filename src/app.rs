@@ -50,6 +50,7 @@ pub mod startup;
 mod tabs;
 mod typography;
 mod text_geometry;
+mod text_outlines;
 pub mod updates;
 
 pub use key_hints::{KeyHint, KeyHints};

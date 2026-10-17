@@ -6,7 +6,7 @@ use std::{cell::RefCell, sync::Arc};
 // Cloud.oma uses 107 MiB per native plane set (214 MiB during fades). Retain that
 // working set, including prepared content used during fades, within a fixed
 // 256 MiB cap; cold scenes still compete through frequency admission.
-const MAX_BYTES: usize = 256 * 1024 * 1024;
+pub(super) const MAX_BYTES: usize = 256 * 1024 * 1024;
 const MAX_ENTRIES: usize = 256;
 
 #[derive(PartialEq)]
@@ -191,7 +191,10 @@ fn render_keyed(
     }
     // Do not retain a RefCell borrow while drawing (future render paths can nest).
     let pixels = Arc::new(draw()?);
-    let source_bytes = match &shape.style.fill { Fill::Pattern(pattern) => pattern.definitions.len() + pattern.id.len(), _ => 0 };
+    let source_bytes = match &shape.style.fill {
+        Fill::Pattern(pattern) => pattern.definitions.len() + pattern.id.len(),
+        _ => 0,
+    };
     let gradient_stops = match &shape.style.fill {
         Fill::Gradient(gradient) => gradient.stops.len(),
         _ => 0,

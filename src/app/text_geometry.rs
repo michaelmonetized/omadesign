@@ -31,7 +31,7 @@ impl Studio {
 
     /// Keep a compound text command's existing edits together in ordinary history.
     /// Args: synchronous validated edit. Returns nothing; one Undo reverses its accepted commands.
-    fn text_structure_transaction(&mut self, edit: impl FnOnce(&mut Self)) {
+    pub(super) fn text_structure_transaction(&mut self, edit: impl FnOnce(&mut Self)) {
         let original = std::mem::replace(&mut self.history, History::staging());
         let field = self.field_history_context.take();
         self.field_history_generation = None;

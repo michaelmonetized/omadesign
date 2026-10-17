@@ -276,3 +276,63 @@ fn craft_type_command_menus_locked_story_disables_structural_top_menu_choices() 
     assert_eq!(saved(&studio), before);
     assert_eq!(studio.history.len(), 0);
 }
+
+#[test]
+fn craft_painted_outlines_native_type_menu_creates_editable_paths_and_reopens() {
+    let (mut studio, ids) = editor(1);
+    let before = saved(&studio);
+    emit("native-outlines-before.oma", &studio);
+    let mut seat = Seat::new();
+    seat.frame(&mut studio, vec![]);
+    seat.click(&mut studio, "Type");
+    seat.invoke(&mut studio, "Create outlines");
+    assert!(
+        studio
+            .doc
+            .find_shape(ids[0].0, ids[0].1)
+            .unwrap()
+            .layout
+            .frame
+    );
+    assert!(
+        studio.doc.layers[0]
+            .kind
+            .shapes()
+            .unwrap()
+            .iter()
+            .all(|s| !matches!(s.geom, Geom::Text(_)))
+    );
+    assert!(
+        studio.doc.layers[0]
+            .kind
+            .shapes()
+            .unwrap()
+            .iter()
+            .any(|s| s.style.fill == Fill::Solid(crate::color::Rgba::rgb(215, 44, 83)))
+    );
+    assert_eq!(studio.history.len(), 1);
+    let after = saved(&studio);
+    reopen(&studio);
+    emit("native-outlines-after.oma", &studio);
+    studio.undo();
+    assert_eq!(saved(&studio), before);
+    studio.redo();
+    assert_eq!(saved(&studio), after);
+}
+
+#[test]
+fn craft_painted_outlines_native_type_menu_disables_locked_story_members() {
+    let (mut studio, ids) = threaded();
+    studio
+        .doc
+        .find_shape_mut(ids[2].0, ids[2].1)
+        .unwrap()
+        .locked = true;
+    let before = saved(&studio);
+    let mut seat = Seat::new();
+    seat.frame(&mut studio, vec![]);
+    seat.click(&mut studio, "Type");
+    assert!(keys::named(&seat.output, "Create outlines").1.is_disabled());
+    assert_eq!(saved(&studio), before);
+    assert_eq!(studio.history.len(), 0);
+}
