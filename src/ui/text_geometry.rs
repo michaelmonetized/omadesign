@@ -11,6 +11,8 @@ use eframe::egui::{self, Color32, Rect, Sense, Stroke, Ui};
 pub(super) fn edits_allowed(studio: &Studio) -> bool {
     if studio.file_dialog_pending()
         || studio.updates.freezing
+        || studio.channel_target.is_some()
+        || studio.quick_mask_painting()
         || studio.op.is_some()
         || studio.free_transform.is_some()
         || studio.deformation.is_some()
@@ -185,7 +187,8 @@ pub fn menu(ui: &mut Ui, studio: &mut Studio) {
         ui.close();
     }
     let attached =
-        edits_allowed(studio) && studio.selected_type().is_some_and(|t| t.on_path.is_some());
+        edits_allowed(studio) && studio.primary().is_some_and(|hit| studio.text_structure_editable(hit))
+            && studio.selected_type().is_some_and(|t| t.on_path.is_some());
     if ui
         .add_enabled(attached, egui::Button::new("Release text from path"))
         .clicked()
@@ -747,9 +750,10 @@ fn frame_actions(ui: &mut Ui, studio: &mut Studio) {
         ui.close();
     }
     let live = studio.selected_type();
+    let structural = studio.primary().is_some_and(|hit| studio.text_structure_editable(hit));
     if ui
         .add_enabled(
-            live.as_ref().is_some_and(|t| t.frame.is_none()),
+            structural && live.as_ref().is_some_and(|t| t.frame.is_none()),
             egui::Button::new("Convert to area text"),
         )
         .clicked()
@@ -759,7 +763,7 @@ fn frame_actions(ui: &mut Ui, studio: &mut Studio) {
     }
     if ui
         .add_enabled(
-            live.as_ref().is_some_and(|t| t.frame.is_some()),
+            structural && live.as_ref().is_some_and(|t| t.frame.is_some()),
             egui::Button::new("Convert to point text"),
         )
         .clicked()
@@ -768,6 +772,7 @@ fn frame_actions(ui: &mut Ui, studio: &mut Studio) {
         ui.close();
     }
     if let Some(&(layer, id)) = studio.selection.first()
+        && structural
         && live
             .as_ref()
             .is_some_and(|t| t.thread.as_ref().is_some_and(|t| t.next.is_some()))
@@ -787,7 +792,8 @@ fn frame_actions(ui: &mut Ui, studio: &mut Studio) {
                 .is_some_and(|shape| matches!(&shape.geom, Geom::Text(run) if run.frame.is_some()))
         })
         .collect();
-    let available = studio.selection.len() == 2 && targets.len() == 2;
+    let available = studio.selection.len() == 2 && targets.len() == 2
+        && targets.iter().all(|&hit| studio.text_structure_editable(hit));
     let response = ui.add_enabled(available, egui::Button::new("Thread selected text frames"));
     let error_id =
         ui.make_persistent_id(("thread-selection-error", &studio.swap_id, &studio.selection));

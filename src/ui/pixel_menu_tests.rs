@@ -4,13 +4,13 @@ use crate::ui::{channel_adjustment, raster, welcome::keyboard_tests as keys};
 use eframe::egui::{self, Event, Key, Modifiers, PointerButton, Pos2};
 use std::time::{Duration, Instant};
 
-struct Seat {
-    ctx: egui::Context,
+pub(super) struct Seat {
+    pub(super) ctx: egui::Context,
     time: f64,
-    output: egui::FullOutput,
+    pub(super) output: egui::FullOutput,
 }
 impl Seat {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         let ctx = egui::Context::default();
         ctx.enable_accesskit();
         crate::ui::theme::apply(&ctx);
@@ -20,7 +20,7 @@ impl Seat {
             output: Default::default(),
         }
     }
-    fn frame(&mut self, studio: &mut Studio, events: Vec<Event>) -> egui::FullOutput {
+    pub(super) fn frame(&mut self, studio: &mut Studio, events: Vec<Event>) -> egui::FullOutput {
         self.time += 0.2;
         channel_adjustment::tick(&self.ctx, studio);
         let mut output = self.ctx.run_ui(
@@ -40,7 +40,7 @@ impl Seat {
         self.output = output.clone();
         output
     }
-    fn click(&mut self, studio: &mut Studio, name: &str) {
+    pub(super) fn click(&mut self, studio: &mut Studio, name: &str) {
         for _ in 0..3 {
             self.frame(studio, vec![]);
         }
@@ -104,7 +104,7 @@ impl Seat {
         self.frame(studio, keys::key(Key::Enter, Modifiers::NONE));
         self.frame(studio, vec![]);
     }
-    fn invoke(&mut self, studio: &mut Studio, name: &str) {
+    pub(super) fn invoke(&mut self, studio: &mut Studio, name: &str) {
         let ctx = self.ctx.clone();
         keys::tab_to(&ctx, name, |events| self.frame(studio, events));
         self.frame(studio, keys::key(Key::Space, Modifiers::NONE));

@@ -3,6 +3,9 @@ pub(super) mod document_previews;
 #[cfg(test)]
 #[path = "pixel_menu_tests.rs"]
 mod pixel_menu_tests;
+#[cfg(test)]
+#[path = "type_menu_tests.rs"]
+mod type_menu_tests;
 
 use crate::app::Studio;
 use crate::geom::Pt;
@@ -148,7 +151,13 @@ fn main_menus(ui: &mut Ui, studio: &mut Studio) {
                 }
             });
         } else { object_menu(ui, studio); }
-        pane_menu(ui,studio,"Type",&["character","paragraph","opentype","glyphs","typography"]);
+        ui.menu_button("Type", |ui| {
+            super::text_geometry::menu(ui, studio);
+            ui.separator();
+            for (panel, label) in [("character", "Character panel…"), ("paragraph", "Paragraph panel…"), ("opentype", "OpenType panel…"), ("glyphs", "Glyphs panel…"), ("typography", "Typography library…")] {
+                if ui.button(label).clicked() {super::panel_workspace::open(ui.ctx(), studio, panel);ui.close();}
+            }
+        });
         ui.menu_button("Select", |ui| super::selection::menu(ui, studio));
         if studio.persona==Persona::Layout {
             pane_menu(ui,studio,"Layout",&["layout","hierarchy","components","variables","prototype"]);
@@ -520,7 +529,6 @@ fn object_menu(ui: &mut Ui, studio: &mut Studio) {
             super::keyboard_authoring::open(ui.ctx(), studio);
             ui.close();
         }
-        ui.menu_button("Type", |ui| super::text_geometry::menu(ui, studio));
         if ui.button("Symbols…").clicked() {
             super::panel_workspace::open(ui.ctx(),studio,"symbols");
             ui.close();
